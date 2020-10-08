@@ -1,0 +1,51 @@
+# -------------------------------------------------------------
+# Inconsistent reads do not acquire latches
+# -------------------------------------------------------------
+
+new-request name=inconsistentReq txn=none ts=10,1 inconsistent
+  get key=k
+----
+
+sequence req=inconsistentReq
+----
+[1] sequence inconsistentReq: sequencing request
+[1] sequence inconsistentReq: not acquiring latches
+[1] sequence inconsistentReq: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 0
+
+finish req=inconsistentReq
+----
+[-] finish inconsistentReq: finishing request
+
+reset
+----
+
+# -------------------------------------------------------------
+# Lease requests do not acquire latches
+# -------------------------------------------------------------
+
+new-request name=leaseReq txn=none ts=10,1
+  request-lease
+----
+
+sequence req=leaseReq
+----
+[1] sequence leaseReq: sequencing request
+[1] sequence leaseReq: not acquiring latches
+[1] sequence leaseReq: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 0
+
+finish req=leaseReq
+----
+[-] finish leaseReq: finishing request
+
+reset
+----

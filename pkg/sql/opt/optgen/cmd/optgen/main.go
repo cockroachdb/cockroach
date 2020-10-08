@@ -1,22 +1,17 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"go/format"
@@ -26,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
+	"github.com/cockroachdb/errors"
 )
 
 type globResolver func(pattern string) (matches []string, err error)
@@ -93,6 +89,7 @@ func (g *optgen) run(args ...string) bool {
 	cmd := args[0]
 	sources := g.cmdLine.Args()[1:]
 
+	runValidate := true
 	switch cmd {
 	case "compile":
 	case "explorer":
@@ -100,6 +97,9 @@ func (g *optgen) run(args ...string) bool {
 	case "factory":
 	case "ops":
 	case "rulenames":
+
+	case "execfactory", "execexplain":
+		runValidate = false
 
 	default:
 		g.cmdLine.Usage()
@@ -137,9 +137,10 @@ func (g *optgen) run(args ...string) bool {
 	compiled := compiler.Compile()
 	if compiled == nil {
 		errors = compiler.Errors()
-	} else {
+	} else if runValidate {
 		// Do additional validation checks.
-		errors = g.validate(compiled)
+		var v validator
+		errors = v.validate(compiled)
 	}
 
 	if errors != nil {
@@ -180,6 +181,14 @@ func (g *optgen) run(args ...string) bool {
 	case "rulenames":
 		var gen ruleNamesGen
 		err = g.generate(compiled, gen.generate)
+
+	case "execfactory":
+		var gen execFactoryGen
+		err = g.generate(compiled, gen.generate)
+
+	case "execexplain":
+		var gen execExplainGen
+		err = g.generate(compiled, gen.generate)
 	}
 
 	if err != nil {
@@ -187,61 +196,6 @@ func (g *optgen) run(args ...string) bool {
 		return false
 	}
 	return true
-}
-
-// validate performs additional checks on the compiled Optgen expression. In
-// particular, it checks the order and types of the fields in define
-// expressions. The Optgen language itself allows any field order and types, so
-// the compiler does not do these checks.
-func (g *optgen) validate(compiled *lang.CompiledExpr) []error {
-	var errors []error
-
-	for _, rule := range compiled.Rules {
-		if !rule.Tags.Contains("Normalize") && !rule.Tags.Contains("Explore") {
-			format := "%s rule is missing \"Normalize\" or \"Explore\" tag"
-			err := fmt.Errorf(format, rule.Name)
-			err = addErrorSource(err, rule.Source())
-			errors = append(errors, err)
-		}
-	}
-
-	for _, define := range compiled.Defines {
-		// Ensure that fields are defined in the following order:
-		//   Expr*
-		//   ExprList?
-		//   Private?
-		//
-		// That is, there can be zero or more expression-typed fields, followed
-		// by zero or one list-typed field, followed by zero or one private field.
-		for i, field := range define.Fields {
-			if isPrivateType(string(field.Type)) {
-				if i != len(define.Fields)-1 {
-					format := "private field '%s' is not the last field in '%s'"
-					err := fmt.Errorf(format, field.Name, define.Name)
-					err = addErrorSource(err, field.Source())
-					errors = append(errors, err)
-					break
-				}
-			}
-
-			if isListType(string(field.Type)) {
-				index := len(define.Fields) - 1
-				if privateField(define) != nil {
-					index--
-				}
-
-				if i != index {
-					format := "list field '%s' is not the last non-private field in '%s'"
-					err := fmt.Errorf(format, field.Name, define.Name)
-					err = addErrorSource(err, field.Source())
-					errors = append(errors, err)
-					break
-				}
-			}
-		}
-	}
-
-	return errors
 }
 
 func (g *optgen) generate(compiled *lang.CompiledExpr, genFunc genFunc) error {
@@ -260,7 +214,7 @@ func (g *optgen) generate(compiled *lang.CompiledExpr, genFunc genFunc) error {
 			// Write out incorrect source for easier debugging.
 			b = buf.Bytes()
 			out := g.cmdLine.Lookup("out").Value.String()
-			err = fmt.Errorf("Code formatting failed with Go parse error\n%s:%s", out, err)
+			err = fmt.Errorf("code formatting failed with Go parse error\n%s:%s", out, err)
 		}
 	} else {
 		b = buf.Bytes()
@@ -326,8 +280,4 @@ func (g *optgen) usage() {
 
 func (g *optgen) reportError(err error) {
 	fmt.Fprintf(g.stdErr, "ERROR: %v\n", err)
-}
-
-func addErrorSource(err error, src *lang.SourceLoc) error {
-	return fmt.Errorf("%s: %s", src, err)
 }

@@ -1,18 +1,15 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #include "db.h"
+#include "file_registry.h"
 #include "include/libroach.h"
 #include "status.h"
 #include "testutils.h"
@@ -25,28 +22,86 @@ TEST(Libroach, DBOpenHook) {
 
   // Try an empty extra_options.
   db_opts.extra_options = ToDBSlice("");
-  EXPECT_OK(DBOpenHook(nullptr, "", db_opts, nullptr));
+  EXPECT_OK(DBOpenHookOSS(nullptr, "", db_opts, nullptr));
 
   // Try extra_options with anything at all.
   db_opts.extra_options = ToDBSlice("blah");
-  EXPECT_ERR(DBOpenHook(nullptr, "", db_opts, nullptr),
-             "DBOptions has extra_options, but OSS code cannot handle them");
+  EXPECT_ERR(DBOpenHookOSS(nullptr, "", db_opts, nullptr),
+             "encryption options are not supported in OSS builds");
 }
 
 TEST(Libroach, DBOpen) {
-  DBOptions db_opts = defaultDBOptions();
-  DBEngine* db;
+  // Use a real directory, we need to create a file_registry.
+  TempDirHandler dir;
 
-  EXPECT_STREQ(DBOpen(&db, DBSlice(), db_opts).data, NULL);
-  DBEnvStatsResult stats;
-  EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
-  EXPECT_STREQ(stats.encryption_status.data, NULL);
-  EXPECT_EQ(stats.total_files, 0);
-  EXPECT_EQ(stats.total_bytes, 0);
-  EXPECT_EQ(stats.active_key_files, 0);
-  EXPECT_EQ(stats.active_key_bytes, 0);
+  {
+    DBOptions db_opts = defaultDBOptions();
 
-  DBClose(db);
+    DBEngine* db;
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    DBEnvStatsResult stats;
+    EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
+    EXPECT_STREQ(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.encryption_type, 0);
+    EXPECT_EQ(stats.total_files, 0);
+    EXPECT_EQ(stats.total_bytes, 0);
+    EXPECT_EQ(stats.active_key_files, 0);
+    EXPECT_EQ(stats.active_key_bytes, 0);
+
+    // Fetch registries, parse, and check that they're empty.
+    DBEncryptionRegistries result;
+    EXPECT_STREQ(DBGetEncryptionRegistries(db, &result).data, NULL);
+    EXPECT_STREQ(result.key_registry.data, NULL);
+    EXPECT_STREQ(result.file_registry.data, NULL);
+
+    DBClose(db);
+  }
+  {
+    // We're at storage version FileRegistry, but we don't have one.
+    DBOptions db_opts = defaultDBOptions();
+    db_opts.use_file_registry = true;
+
+    DBEngine* db;
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    DBClose(db);
+  }
+  {
+    // We're at storage version FileRegistry, and the file_registry file exists:
+    // this is not supported in OSS mode, or without encryption options.
+    DBOptions db_opts = defaultDBOptions();
+    db_opts.use_file_registry = true;
+
+    // Create bogus file registry.
+    ASSERT_OK(rocksdb::WriteStringToFile(rocksdb::Env::Default(), "",
+                                         dir.Path(kFileRegistryFilename), true));
+
+    DBEngine* db;
+    auto ret = DBOpen(&db, ToDBSlice(dir.Path("")), db_opts);
+    EXPECT_STREQ(std::string(ret.data, ret.len).c_str(),
+                 "Invalid argument: encryption was used on this store before, but no encryption "
+                 "flags specified. You need a CCL build and must fully specify the "
+                 "--enterprise-encryption flag");
+    free(ret.data);
+    ASSERT_OK(rocksdb::Env::Default()->DeleteFile(dir.Path(kFileRegistryFilename)));
+  }
+  {
+    // We're at storage version FileRegistry, and the file_registry file exists.
+    // We do have encryption options, but those are not supported in OSS builds.
+    DBOptions db_opts = defaultDBOptions();
+    db_opts.use_file_registry = true;
+    db_opts.extra_options = ToDBSlice("blah");
+
+    // Create bogus file registry.
+    ASSERT_OK(rocksdb::WriteStringToFile(rocksdb::Env::Default(), "",
+                                         dir.Path(kFileRegistryFilename), true));
+
+    DBEngine* db;
+    auto ret = DBOpen(&db, ToDBSlice(dir.Path("")), db_opts);
+    EXPECT_STREQ(std::string(ret.data, ret.len).c_str(),
+                 "Invalid argument: encryption options are not supported in OSS builds");
+    free(ret.data);
+    ASSERT_OK(rocksdb::Env::Default()->DeleteFile(dir.Path(kFileRegistryFilename)));
+  }
 }
 
 TEST(Libroach, BatchSSTablesForCompaction) {

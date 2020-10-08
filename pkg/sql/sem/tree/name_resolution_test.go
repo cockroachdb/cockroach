@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree_test
 
@@ -25,68 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestNormalizeTableName(t *testing.T) {
-	testCases := []struct {
-		in, out  string
-		expanded string
-		err      string
-	}{
-		{`a`, `a`, `""."".a`, ``},
-		{`a.b`, `a.b`, `"".a.b`, ``},
-		{`a.b.c`, `a.b.c`, `a.b.c`, ``},
-		{`a.b.c.d`, ``, ``, `syntax error at or near "\."`},
-		{`a.""`, ``, ``, `invalid table name: a\.""`},
-		{`a.b.""`, ``, ``, `invalid table name: a\.b\.""`},
-		{`a.b.c.""`, ``, ``, `syntax error at or near "\."`},
-		{`a."".c`, ``, ``, `invalid table name: a\.""\.c`},
-
-		// CockroachDB extension: empty catalog name.
-		{`"".b.c`, `"".b.c`, `"".b.c`, ``},
-
-		// Check keywords: disallowed in first position, ok afterwards.
-		{`user.x.y`, ``, ``, `syntax error`},
-		{`"user".x.y`, `"user".x.y`, `"user".x.y`, ``},
-		{`x.user.y`, `x."user".y`, `x."user".y`, ``},
-		{`x.user`, `x."user"`, `"".x."user"`, ``},
-
-		{`foo@bar`, ``, ``, `syntax error at or near "@"`},
-		{`test.*`, ``, ``, `syntax error at or near "\*"`},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.in, func(t *testing.T) {
-			tn, err := func() (*tree.TableName, error) {
-				stmt, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", tc.in))
-				if err != nil {
-					return nil, err
-				}
-				tn, err := stmt.(*tree.RenameTable).Name.Normalize()
-				if err != nil {
-					return nil, err
-				}
-				return tn, nil
-			}()
-			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
-			}
-			if tc.err != "" {
-				return
-			}
-			if out := tn.String(); tc.out != out {
-				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.out, out)
-			}
-			tn.ExplicitSchema = true
-			tn.ExplicitCatalog = true
-			if out := tn.String(); tc.expanded != out {
-				t.Fatalf("%s: expected full %s, but found %s", tc.in, tc.expanded, out)
-			}
-		})
-	}
-}
-
 func TestClassifyTablePattern(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		in, out  string
 		expanded string
@@ -95,10 +36,10 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`a`, `a`, `""."".a`, ``},
 		{`a.b`, `a.b`, `"".a.b`, ``},
 		{`a.b.c`, `a.b.c`, `a.b.c`, ``},
-		{`a.b.c.d`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.d`, ``, ``, `at or near "\.": syntax error`},
 		{`a.""`, ``, ``, `invalid table name: a\.""`},
 		{`a.b.""`, ``, ``, `invalid table name: a\.b\.""`},
-		{`a.b.c.""`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.""`, ``, ``, `at or near "\.": syntax error`},
 		{`a."".c`, ``, ``, `invalid table name: a\.""\.c`},
 		// CockroachDB extension: empty catalog name.
 		{`"".b.c`, `"".b.c`, `"".b.c`, ``},
@@ -112,13 +53,13 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`*`, `*`, `""."".*`, ``},
 		{`a.*`, `a.*`, `"".a.*`, ``},
 		{`a.b.*`, `a.b.*`, `a.b.*`, ``},
-		{`a.b.c.*`, ``, ``, `syntax error at or near "\."`},
-		{`a.b.*.c`, ``, ``, `syntax error at or near "\."`},
-		{`a.*.b`, ``, ``, `syntax error at or near "\."`},
-		{`*.b`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.*`, ``, ``, `at or near "\.": syntax error`},
+		{`a.b.*.c`, ``, ``, `at or near "\.": syntax error`},
+		{`a.*.b`, ``, ``, `at or near "\.": syntax error`},
+		{`*.b`, ``, ``, `at or near "\.": syntax error`},
 		{`"".*`, ``, ``, `invalid table name: "".\*`},
 		{`a."".*`, ``, ``, `invalid table name: a\.""\.\*`},
-		{`a.b."".*`, ``, ``, `syntax error at or near "\."`},
+		{`a.b."".*`, ``, ``, `invalid table name: a.b.""`},
 		// CockroachDB extension: empty catalog name.
 		{`"".b.*`, `"".b.*`, `"".b.*`, ``},
 
@@ -127,7 +68,7 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`"user".x.*`, `"user".x.*`, `"user".x.*`, ``},
 		{`x.user.*`, `x."user".*`, `x."user".*`, ``},
 
-		{`foo@bar`, ``, ``, `syntax error at or near "@"`},
+		{`foo@bar`, ``, ``, `at or near "@": syntax error`},
 	}
 
 	for _, tc := range testCases {
@@ -137,7 +78,7 @@ func TestClassifyTablePattern(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				tp, err := stmt.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
+				tp, err := stmt.AST.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
 				if err != nil {
 					return nil, err
 				}
@@ -171,6 +112,8 @@ func TestClassifyTablePattern(t *testing.T) {
 }
 
 func TestClassifyColumnName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		in, out string
 		err     string
@@ -179,12 +122,12 @@ func TestClassifyColumnName(t *testing.T) {
 		{`a.b`, `a.b`, ``},
 		{`a.b.c`, `a.b.c`, ``},
 		{`a.b.c.d`, `a.b.c.d`, ``},
-		{`a.b.c.d.e`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.e`, ``, `at or near "\.": syntax error`},
 		{`""`, ``, `invalid column name: ""`},
 		{`a.""`, ``, `invalid column name: a\.""`},
 		{`a.b.""`, ``, `invalid column name: a\.b\.""`},
 		{`a.b.c.""`, ``, `invalid column name: a\.b\.c\.""`},
-		{`a.b.c.d.""`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.""`, ``, `at or near "\.": syntax error`},
 		{`"".a`, ``, `invalid column name: ""\.a`},
 		{`"".a.b`, ``, `invalid column name: ""\.a\.b`},
 		// CockroachDB extension: empty catalog name.
@@ -203,14 +146,14 @@ func TestClassifyColumnName(t *testing.T) {
 		{`a.*`, `a.*`, ``},
 		{`a.b.*`, `a.b.*`, ``},
 		{`a.b.c.*`, `a.b.c.*`, ``},
-		{`a.b.c.d.*`, ``, `syntax error at or near "\."`},
-		{`a.b.*.c`, ``, `syntax error at or near "\."`},
-		{`a.*.b`, ``, `syntax error at or near "\."`},
-		{`*.b`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.*`, ``, `at or near "\.": syntax error`},
+		{`a.b.*.c`, ``, `at or near "\.": syntax error`},
+		{`a.*.b`, ``, `at or near "\.": syntax error`},
+		{`*.b`, ``, `at or near "\.": syntax error`},
 		{`"".*`, ``, `invalid column name: "".\*`},
 		{`a."".*`, ``, `invalid column name: a\.""\.\*`},
 		{`a.b."".*`, ``, `invalid column name: a\.b\.""\.\*`},
-		{`a.b.c."".*`, ``, `syntax error at or near "\."`},
+		{`a.b.c."".*`, ``, `at or near "\.": syntax error`},
 
 		{`"".a.*`, ``, `invalid column name: ""\.a.*`},
 		// CockroachDB extension: empty catalog name.
@@ -223,7 +166,7 @@ func TestClassifyColumnName(t *testing.T) {
 		{`"user".x.*`, `"user".x.*`, ``},
 		{`x.user.*`, `x.user.*`, ``},
 
-		{`foo@bar`, ``, `syntax error at or near "@"`},
+		{`foo@bar`, ``, `at or near "@": syntax error`},
 	}
 
 	for _, tc := range testCases {
@@ -233,7 +176,7 @@ func TestClassifyColumnName(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				v := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
+				v := stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
 				return v.NormalizeVarName()
 			}()
 			if !testutils.IsError(err, tc.err) {
@@ -288,7 +231,7 @@ func (f *fakeSource) FindSourceMatchingName(
 	var columns colsRes
 	for i := range f.knownTables {
 		t := &f.knownTables[i]
-		if t.srcName.TableName != tn.TableName {
+		if t.srcName.ObjectName != tn.ObjectName {
 			continue
 		}
 		if tn.ExplicitSchema {
@@ -432,11 +375,15 @@ func (f *fakeSource) ResolveColumnItemTestResults(res tree.ColumnResolutionResul
 }
 
 func TestResolveQualifiedStar(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	f := &fakeSource{t: t}
 	sqlutils.RunResolveQualifiedStarTest(t, f)
 }
 
 func TestResolveColumnItem(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	f := &fakeSource{t: t}
 	sqlutils.RunResolveColumnItemTest(t, f)
 }
@@ -507,7 +454,7 @@ func (fakeResResult) NameResolutionResult() {}
 
 // LookupObject implements the TableNameResolver interface.
 func (f *fakeMetadata) LookupObject(
-	_ context.Context, dbName, scName, tbName string,
+	_ context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, obMeta tree.NameResolutionResult, err error) {
 	defer func() {
 		f.t.Logf("LookupObject(%s, %s, %s) -> found %v meta %v err %v",
@@ -578,14 +525,26 @@ func newFakeMetadata() *fakeMetadata {
 				{"public", []tree.Name{"foo"}},
 				{"extended", []tree.Name{"bar", "pg_tables"}},
 			}},
+			{"db3", []knownSchema{
+				{"public", []tree.Name{"foo", "bar"}},
+				{"pg_temp_123", []tree.Name{"foo", "baz"}},
+			}},
 		},
 	}
 }
 
 func TestResolveTablePatternOrName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	type spath = sessiondata.SearchPath
 
-	var mpath = func(args ...string) spath { return sessiondata.MakeSearchPath(args) }
+	var mpath = func(args ...string) spath {
+		return sessiondata.MakeSearchPath(args)
+	}
+
+	var tpath = func(tempSchemaName string, args ...string) spath {
+		return sessiondata.MakeSearchPath(args).WithTemporarySchemaName(tempSchemaName)
+	}
 
 	testCases := []struct {
 		// Test inputs.
@@ -750,6 +709,68 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		{`db1.pg_catalog.*`, ``, mpath(), false, `db1.pg_catalog.*`, `db1.pg_catalog.*`, `db1.pg_catalog`, ``},
 		{`"".pg_catalog.*`, ``, mpath(), false, `"".pg_catalog.*`, `"".pg_catalog.*`, `.pg_catalog`, ``},
 		{`blix.pg_catalog.*`, ``, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
+
+		//
+		// Tests for temporary table resolution
+		//
+
+		// Names of length 1
+
+		{`foo`, `db3`, tpath("pg_temp_123", "public"), true, `foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
+		{`foo`, `db3`, tpath("pg_temp_123", "public", "pg_temp"), true, `foo`, `db3.public.foo`, `db3.public[0]`, ``},
+		{`baz`, `db3`, tpath("pg_temp_123", "public"), true, `baz`, `db3.pg_temp_123.baz`, `db3.pg_temp_123[1]`, ``},
+		{`bar`, `db3`, tpath("pg_temp_123", "public"), true, `bar`, `db3.public.bar`, `db3.public[1]`, ``},
+		{`bar`, `db3`, tpath("pg_temp_123", "public", "pg_temp"), true, `bar`, `db3.public.bar`, `db3.public[1]`, ``},
+
+		// Names of length 2
+
+		{`public.foo`, `db3`, tpath("pg_temp_123", "public"), true, `public.foo`, `db3.public.foo`, `db3.public[0]`, ``},
+		{`pg_temp.foo`, `db3`, tpath("pg_temp_123", "public"), true, `pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
+		{`pg_temp_123.foo`, `db3`, tpath("pg_temp_123", "public"), true, `pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
+
+		// Wrongly qualifying a TT/PT as a PT/TT results in an error.
+		{`pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
+		{`public.baz`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
+
+		// Cases where a session tries to access a temporary table of another session.
+		{`pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `cannot access temporary tables of other sessions`},
+		{`pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), false, ``, ``, ``, `cannot access temporary tables of other sessions`},
+
+		// Case where the temporary table being created has the same name as an
+		// existing persistent table.
+		{`pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `pg_temp_123.bar`, `db3.pg_temp_123.bar`, `db3.pg_temp_123`, ``},
+
+		// Case where the persistent table being created has the same name as an
+		// existing temporary table.
+		{`public.baz`, `db3`, tpath("pg_temp_123", "public"), false, `public.baz`, `db3.public.baz`, `db3.public`, ``},
+
+		// Cases where the temporary schema has not been created yet
+		{`pg_temp.foo`, `db3`, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
+
+		// Names of length 3
+
+		{`db3.public.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.public.foo`, `db3.public.foo`, `db3.public[0]`, ``},
+		{`db3.pg_temp.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
+		{`db3.pg_temp_123.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
+
+		// Wrongly qualifying a TT/PT as a PT/TT results in an error.
+		{`db3.pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
+		{`db3.public.baz`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
+
+		// Cases where a session tries to access a temporary table of another session.
+		{`db3.pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `cannot access temporary tables of other sessions`},
+		{`db3.pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), false, ``, ``, ``, `cannot access temporary tables of other sessions`},
+
+		// Case where the temporary table being created has the same name as an
+		// existing persistent table.
+		{`db3.pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `db3.pg_temp_123.bar`, `db3.pg_temp_123.bar`, `db3.pg_temp_123`, ``},
+
+		// Case where the persistent table being created has the same name as an
+		// existing temporary table.
+		{`db3.public.baz`, `db3`, tpath("pg_temp_123", "public"), false, `db3.public.baz`, `db3.public.baz`, `db3.public`, ``},
+
+		// Cases where the temporary schema has not been created yet
+		{`db3.pg_temp.foo`, `db3`, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
 	}
 
 	fakeResolver := newFakeMetadata()
@@ -761,7 +782,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 				if err != nil {
 					return nil, "", err
 				}
-				tp, err := stmt.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
+				tp, err := stmt.AST.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
 				if err != nil {
 					return nil, "", err
 				}
@@ -773,15 +794,24 @@ func TestResolveTablePatternOrName(t *testing.T) {
 				ctx := context.Background()
 				switch tpv := tp.(type) {
 				case *tree.AllTablesSelector:
-					found, scMeta, err = tpv.TableNamePrefix.Resolve(ctx, fakeResolver, tc.curDb, tc.searchPath)
+					found, scMeta, err = tpv.ObjectNamePrefix.Resolve(ctx, fakeResolver, tc.curDb, tc.searchPath)
 					scPrefix = tpv.Schema()
 					ctPrefix = tpv.Catalog()
 				case *tree.TableName:
+					var prefix tree.ObjectNamePrefix
 					if tc.expected {
-						found, obMeta, err = tpv.ResolveExisting(ctx, fakeResolver, tc.curDb, tc.searchPath)
+						flags := tree.ObjectLookupFlags{}
+						// TODO: As part of work for #34240, we should be operating on
+						//  UnresolvedObjectNames here, rather than TableNames.
+						un := tpv.ToUnresolvedObjectName()
+						found, prefix, obMeta, err = tree.ResolveExisting(ctx, un, fakeResolver, flags, tc.curDb, tc.searchPath)
 					} else {
-						found, scMeta, err = tpv.ResolveTarget(ctx, fakeResolver, tc.curDb, tc.searchPath)
+						// TODO: As part of work for #34240, we should be operating on
+						//  UnresolvedObjectNames here, rather than TableNames.
+						un := tpv.ToUnresolvedObjectName()
+						found, prefix, scMeta, err = tree.ResolveTarget(ctx, un, fakeResolver, tc.curDb, tc.searchPath)
 					}
+					tpv.ObjectNamePrefix = prefix
 					scPrefix = tpv.Schema()
 					ctPrefix = tpv.Catalog()
 				default:
@@ -824,11 +854,11 @@ func TestResolveTablePatternOrName(t *testing.T) {
 			}
 			switch tpv := tp.(type) {
 			case *tree.AllTablesSelector:
-				tpv.TableNamePrefix.ExplicitCatalog = true
-				tpv.TableNamePrefix.ExplicitSchema = true
+				tpv.ObjectNamePrefix.ExplicitCatalog = true
+				tpv.ObjectNamePrefix.ExplicitSchema = true
 			case *tree.TableName:
-				tpv.TableNamePrefix.ExplicitCatalog = true
-				tpv.TableNamePrefix.ExplicitSchema = true
+				tpv.ObjectNamePrefix.ExplicitCatalog = true
+				tpv.ObjectNamePrefix.ExplicitSchema = true
 			}
 			if out := tp.String(); tc.expanded != out {
 				t.Errorf("%s: expected full %s, but found %s", t.Name(), tc.expanded, out)

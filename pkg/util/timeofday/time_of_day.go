@@ -1,26 +1,20 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package timeofday
 
 import (
-	"math/rand"
-	"time"
-
 	"fmt"
-
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -33,8 +27,12 @@ type TimeOfDay int64
 const (
 	// Min is the minimum TimeOfDay value (midnight).
 	Min = TimeOfDay(0)
-	// Max is the maximum TimeOfDay value (1 microsecond before midnight).
-	Max = TimeOfDay(microsecondsPerDay - 1)
+
+	// Time2400 is a special value to represent the 24:00 input time
+	Time2400 = TimeOfDay(microsecondsPerDay)
+
+	// Max is the maximum TimeOfDay value (1 second before midnight)
+	Max = Time2400
 
 	microsecondsPerSecond = 1e6
 	microsecondsPerMinute = 60 * microsecondsPerSecond
@@ -81,12 +79,22 @@ func positiveMod(x, y int64) int64 {
 // FromTime constructs a TimeOfDay from a time.Time, ignoring the date and time zone.
 func FromTime(t time.Time) TimeOfDay {
 	// Adjust for timezone offset so it won't affect the time. This is necessary
-	// at times, like when casting from a TIMESTAMP WITH TIME ZONE.
+	// at times, like when casting from a TIMESTAMPTZ.
 	_, offset := t.Zone()
 	unixSeconds := t.Unix() + int64(offset)
 
 	nanos := (unixSeconds%secondsPerDay)*int64(time.Second) + int64(t.Nanosecond())
 	return FromInt(nanos / nanosPerMicro)
+}
+
+// FromTimeAllow2400 assumes 24:00 time is possible from the given input,
+// otherwise falling back to FromTime.
+// It assumes time.Time is represented as lib/pq or as unix time.
+func FromTimeAllow2400(t time.Time) TimeOfDay {
+	if t.Day() != 1 {
+		return Time2400
+	}
+	return FromTime(t)
 }
 
 // ToTime converts a TimeOfDay to a time.Time, using the Unix epoch as the date.
@@ -99,18 +107,35 @@ func Random(rng *rand.Rand) TimeOfDay {
 	return TimeOfDay(rng.Int63n(microsecondsPerDay))
 }
 
+// Round takes a TimeOfDay, and rounds it to the given precision.
+func (t TimeOfDay) Round(precision time.Duration) TimeOfDay {
+	if t == Time2400 {
+		return t
+	}
+	ret := t.ToTime().Round(precision)
+	// Rounding Max should give Time2400, not 00:00.
+	// To catch this, see if we are comparing against the same day.
+	if ret.Day() != t.ToTime().Day() {
+		return Time2400
+	}
+	return FromTime(ret)
+}
+
 // Add adds a Duration to a TimeOfDay, wrapping into the next day if necessary.
 func (t TimeOfDay) Add(d duration.Duration) TimeOfDay {
-	return FromInt(int64(t) + d.Nanos/nanosPerMicro)
+	return FromInt(int64(t) + d.Nanos()/nanosPerMicro)
 }
 
 // Difference returns the interval between t1 and t2, which may be negative.
 func Difference(t1 TimeOfDay, t2 TimeOfDay) duration.Duration {
-	return duration.Duration{Nanos: int64(t1-t2) * nanosPerMicro}
+	return duration.MakeDuration(int64(t1-t2)*nanosPerMicro, 0, 0)
 }
 
-// Hour returns the hour specified by t, in the range [0, 23].
+// Hour returns the hour specified by t, in the range [0, 24].
 func (t TimeOfDay) Hour() int {
+	if t == Time2400 {
+		return 24
+	}
 	return int(int64(t)%microsecondsPerDay) / microsecondsPerHour
 }
 

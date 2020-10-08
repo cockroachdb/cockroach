@@ -1,2 +1,2 @@
 upsert_stmt ::=
-	( ( 'WITH' ( ( common_table_expr ) ( ( ',' common_table_expr ) )* ) ) |  ) 'UPSERT' 'INTO' ( table_name | table_name 'AS' table_alias_name ) ( select_stmt | '(' ( ( ( column_name ) ) ( ( ',' ( column_name ) ) )* ) ')' select_stmt | 'DEFAULT' 'VALUES' ) ( 'RETURNING' target_list | 'RETURNING' 'NOTHING' |  )
+	( ( 'WITH' ( ( common_table_expr ) ( ( ',' common_table_expr ) )* ) | 'WITH' 'RECURSIVE' ( ( common_table_expr ) ( ( ',' common_table_expr ) )* ) ) |  ) 'UPSERT' 'INTO' ( table_name | table_name 'AS' table_alias_name ) ( select_stmt | '(' ( ( ( column_name ) ) ( ( ',' ( column_name ) ) )* ) ')' select_stmt | 'DEFAULT' 'VALUES' ) ( 'RETURNING' target_list | 'RETURNING' 'NOTHING' |  )

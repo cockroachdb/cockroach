@@ -1,0 +1,96 @@
+# =============================================================================
+# This schema is from the PostGIS tutorial at https://postgis.net/workshops/postgis-intro/.
+# =============================================================================
+
+exec-ddl
+CREATE TABLE nyc_census_blocks (
+  gid INT8 NOT NULL DEFAULT unique_rowid(),
+  blkid VARCHAR(15) NULL,
+  popn_total FLOAT8 NULL,
+  popn_white FLOAT8 NULL,
+  popn_black FLOAT8 NULL,
+  popn_nativ FLOAT8 NULL,
+  popn_asian FLOAT8 NULL,
+  popn_other FLOAT8 NULL,
+  boroname VARCHAR(32) NULL,
+  geom GEOMETRY(MULTIPOLYGON,26918) NULL,
+  CONSTRAINT "primary" PRIMARY KEY (gid ASC),
+  INVERTED INDEX nyc_census_blocks_geom_idx (geom),
+  FAMILY "primary" (gid, blkid, popn_total, popn_white, popn_black, popn_nativ, popn_asian, popn_other, boroname, geom)
+)
+----
+
+exec-ddl
+CREATE TABLE nyc_homicides (
+  gid INT8 NOT NULL DEFAULT unique_rowid(),
+  incident_d DATE NULL,
+  boroname VARCHAR(13) NULL,
+  num_victim VARCHAR(1) NULL,
+  primary_mo VARCHAR(20) NULL,
+  id FLOAT8 NULL,
+  weapon VARCHAR(16) NULL,
+  light_dark VARCHAR(1) NULL,
+  year FLOAT8 NULL,
+  geom GEOMETRY(POINT,26918) NULL,
+  CONSTRAINT "primary" PRIMARY KEY (gid ASC),
+  INVERTED INDEX nyc_homicides_geom_idx (geom),
+  FAMILY "primary" (gid, incident_d, boroname, num_victim, primary_mo, id, weapon, light_dark, year, geom)
+)
+----
+
+exec-ddl
+CREATE TABLE nyc_neighborhoods (
+  gid INT8 NOT NULL DEFAULT unique_rowid(),
+  boroname VARCHAR(43) NULL,
+  name VARCHAR(64) NULL,
+  geom GEOMETRY(MULTIPOLYGON,26918) NULL,
+  CONSTRAINT "primary" PRIMARY KEY (gid ASC),
+  INVERTED INDEX nyc_neighborhoods_geom_idx (geom),
+  FAMILY "primary" (gid, boroname, name, geom)
+)
+----
+
+exec-ddl
+CREATE TABLE nyc_streets (
+  gid INT8 NOT NULL DEFAULT unique_rowid(),
+  id FLOAT8 NULL,
+  name VARCHAR(200) NULL,
+  oneway VARCHAR(10) NULL,
+  type VARCHAR(50) NULL,
+  geom GEOMETRY(MULTILINESTRING,26918) NULL,
+  CONSTRAINT "primary" PRIMARY KEY (gid ASC),
+  INVERTED INDEX nyc_streets_geom_idx (geom),
+  FAMILY "primary" (gid, id, name, oneway, type, geom)
+)
+----
+
+exec-ddl
+CREATE TABLE nyc_subway_stations (
+  gid INT8 NOT NULL DEFAULT unique_rowid(),
+  objectid DECIMAL NULL,
+  id DECIMAL NULL,
+  name VARCHAR(31) NULL,
+  alt_name VARCHAR(38) NULL,
+  cross_st VARCHAR(27) NULL,
+  long_name VARCHAR(60) NULL,
+  label VARCHAR(50) NULL,
+  borough VARCHAR(15) NULL,
+  nghbhd VARCHAR(30) NULL,
+  routes VARCHAR(20) NULL,
+  transfers VARCHAR(25) NULL,
+  color VARCHAR(30) NULL,
+  express VARCHAR(10) NULL,
+  closed VARCHAR(10) NULL,
+  geom GEOMETRY(POINT,26918) NULL,
+  CONSTRAINT "primary" PRIMARY KEY (gid ASC),
+  INVERTED INDEX nyc_subway_stations_geom_idx (geom),
+  FAMILY "primary" (gid, objectid, id, name, alt_name, cross_st, long_name, label, borough, nghbhd, routes, transfers, color, express, closed, geom)
+)
+----
+
+exec-ddl
+CREATE TABLE subway_lines (
+  route CHAR NULL,
+  FAMILY "primary" (route, rowid)
+)
+----

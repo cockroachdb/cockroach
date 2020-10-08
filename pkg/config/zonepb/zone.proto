@@ -1,0 +1,182 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.config.zonepb;
+option go_package = "zonepb";
+
+import "gogoproto/gogo.proto";
+
+// GCPolicy defines garbage collection policies which apply to MVCC
+// values within a zone.
+//
+// TODO(spencer): flesh this out to include maximum number of values
+//   as well as whether there's an intersection between max values
+//   and TTL or a union.
+message GCPolicy {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // TTLSeconds specifies the maximum age of a value before it's
+  // garbage collected. Only older versions of values are garbage
+  // collected. Specifying <= 0 mean older versions are never GC'd.
+  optional int32 ttl_seconds = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
+}
+
+// Constraint constrains the stores that a replica can be stored on.
+message Constraint {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  enum Type {
+    // DEPRECATED_POSITIVE has no effect on a replica's placement.
+    DEPRECATED_POSITIVE = 0;
+    // REQUIRED ensures all replicas are placed on stores that match the
+    // constraint. Replication will fail if there aren't any such stores.
+    REQUIRED = 1;
+    // PROHIBITED will prevent replicas from having this key, value.
+    PROHIBITED = 2;
+  }
+  optional Type type = 1 [(gogoproto.nullable) = false];
+  // Key is only set if this is a constraint on locality.
+  optional string key = 2 [(gogoproto.nullable) = false];
+  // Value to constrain to.
+  optional string value = 3 [(gogoproto.nullable) = false];
+}
+
+// ConstraintsConjunction is a set of constraints that need to be satisfied
+// together by a replica (i.e. by the replica's store).
+message ConstraintsConjunction {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  // The number of replicas that should abide by the constraints below. If left
+  // unspecified (i.e. set to 0), the constraints will apply to all replicas of
+  // the range.
+  // As of v2.0, only REQUIRED constraints are allowed when num_replicas is
+  // set to a non-zero value.
+  optional int32 num_replicas = 7 [(gogoproto.nullable) = false];
+
+  // The set of attributes and/or localities that need to be satisfied by the
+  // store.
+  repeated Constraint constraints = 6 [(gogoproto.nullable) = false];
+}
+
+// LeasePreference specifies a preference about where range leases should be
+// located.
+message LeasePreference {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  repeated Constraint constraints = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
+}
+
+// ZoneConfig holds configuration that applies to one or more ranges.
+//
+// Note: when adding/removing fields here, be sure to update
+// supportedZoneConfigOptions in the sql package, to synchronize
+// with the code for ALTER ... CONFIGURE ZONE.
+message ZoneConfig {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  reserved 1;
+  optional int64 range_min_bytes = 2 [(gogoproto.moretags) = "yaml:\"range_min_bytes\""];
+  optional int64 range_max_bytes = 3 [(gogoproto.moretags) = "yaml:\"range_max_bytes\""];
+
+  // If GC policy is not set, uses the next highest, non-null policy
+  // in the zone config hierarchy, up to the default policy if necessary.
+  optional GCPolicy gc = 4 [(gogoproto.customname) = "GC"];
+
+  // NumReplicas specifies the desired number of replicas
+  optional int32 num_replicas = 5 [(gogoproto.moretags) = "yaml:\"num_replicas\""];
+
+  // Constraints constrains which stores the replicas can be stored on. The
+  // order in which the constraints are stored is arbitrary and may change.
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
+  //
+  // NOTE: The sum of the num_replicas fields of the Constraints must add up to
+  // ZoneConfig.num_replicas, or there must be no more than a single Constraints
+  // field with num_replicas set to 0.
+  repeated ConstraintsConjunction constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
+
+  // InheritedContraints specifies if the value in the Constraints field was
+  // inherited from the zone's parent or specified explicitly by the user.
+  optional bool inherited_constraints = 10 [(gogoproto.nullable) = false];
+
+  // LeasePreference stores information about where the user would prefer for
+  // range leases to be placed. Leases are allowed to be placed elsewhere if
+  // needed, but will follow the provided preference when possible.
+  //
+  // More than one lease preference is allowed, but they should be ordered from
+  // most preferred to lease preferred. The first preference that an existing
+  // replica of a range matches will take priority.
+  repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false,
+           (gogoproto.moretags) = "yaml:\"lease_preferences,flow\""];
+
+  // InheritedLeasePreferences specifies if the value in the LeasePreferences field
+  // was inherited from the zone's parent or specified explicitly by the user.
+  optional bool inherited_lease_preferences = 11 [(gogoproto.nullable) = false];
+
+  // Subzones stores config overrides for "subzones", each of which represents
+  // either a SQL table index or a partition of a SQL table index. Subzones are
+  // not applicable when the zone does not represent a SQL table (i.e., when the
+  // zone represents a database, a special system range, or is itself a
+  // subzone.)
+  repeated Subzone subzones = 8 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"-\""];
+
+  // SubzoneSpans maps each key span in a subzone to the slice index of an entry
+  // in SubzoneConfig. Spans are non-overlapping and sorted by start key to
+  // allow binary searching. SubzoneSpans can be easily derived from a
+  // TableDescriptor, but are denormalized here to make GetZoneConfigForKey
+  // lookups efficient.
+  repeated SubzoneSpan subzone_spans = 7 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"-\""];
+}
+
+message Subzone {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // IndexID is the ID of the SQL table index that the subzone represents.
+  // Always set.
+  optional uint32 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID"];
+
+  // PartitionName is the partition of the SQL table index that the subzone
+  // represents. It is empty when the subzone represents the entire index.
+  optional string partition_name = 2 [(gogoproto.nullable) = false];
+
+  // Config stores the ZoneConfig that applies to this Subzone. It never
+  // contains nested subzones.
+  optional ZoneConfig config = 3 [(gogoproto.nullable) = false];
+}
+
+message SubzoneSpan {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // Key stores a key suffix that represents the inclusive lower bound for this
+  // span. The SQL table prefix, like /Table/51/, is omitted.
+  //
+  // Both Key and EndKey, below, are cast to roachpb.Key for convenience, but
+  // there's no technical restriction that prevents switching them to []byte or
+  // another type that communicates their missing prefix.
+  optional bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // EndKey stores a key suffix that represents the exclusive upper bound for
+  // this span. Like with Key, the SQL table prefix is omitted. If EndKey is
+  // empty, it is assumed to be Key.PrefixEnd().
+  optional bytes end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // SubzoneIndex is the slice index of the Subzone this span belongs to in the
+  // parent ZoneConfig's Subzones field.
+  optional int32 subzone_index = 3 [(gogoproto.nullable) = false];
+}

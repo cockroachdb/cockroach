@@ -13,13 +13,13 @@ plus [type=int]
 build-scalar vars=(string)
 @1
 ----
-variable: @1 [type=string]
+variable: "@1":1 [type=string]
 
 build-scalar vars=(int)
 @1 + 2
 ----
 plus [type=int]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  └── const: 2 [type=int]
 
 build-scalar vars=(int, int)
@@ -28,13 +28,13 @@ build-scalar vars=(int, int)
 and [type=bool]
  ├── and [type=bool]
  │    ├── ge [type=bool]
- │    │    ├── variable: @1 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
  │    │    └── const: 5 [type=int]
  │    └── le [type=bool]
- │         ├── variable: @1 [type=int]
+ │         ├── variable: "@1":1 [type=int]
  │         └── const: 10 [type=int]
  └── lt [type=bool]
-      ├── variable: @2 [type=int]
+      ├── variable: "@2":2 [type=int]
       └── const: 4 [type=int]
 
 build-scalar vars=(int, int)
@@ -42,8 +42,8 @@ build-scalar vars=(int, int)
 ----
 eq [type=bool]
  ├── tuple [type=tuple{int, int}]
- │    ├── variable: @1 [type=int]
- │    └── variable: @2 [type=int]
+ │    ├── variable: "@1":1 [type=int]
+ │    └── variable: "@2":2 [type=int]
  └── tuple [type=tuple{int, int}]
       ├── const: 1 [type=int]
       └── const: 2 [type=int]
@@ -52,7 +52,7 @@ build-scalar vars=(int)
 @1 IN (1, 2)
 ----
 in [type=bool]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  └── tuple [type=tuple{int, int}]
       ├── const: 1 [type=int]
       └── const: 2 [type=int]
@@ -62,8 +62,8 @@ build-scalar vars=(int, int)
 ----
 in [type=bool]
  ├── tuple [type=tuple{int, int}]
- │    ├── variable: @1 [type=int]
- │    └── variable: @2 [type=int]
+ │    ├── variable: "@1":1 [type=int]
+ │    └── variable: "@2":2 [type=int]
  └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
       ├── tuple [type=tuple{int, int}]
       │    ├── const: 1 [type=int]
@@ -77,23 +77,23 @@ build-scalar vars=(int, int, int, int)
 ----
 eq [type=bool]
  ├── tuple [type=tuple{int, int, int}]
- │    ├── variable: @1 [type=int]
+ │    ├── variable: "@1":1 [type=int]
  │    ├── plus [type=int]
- │    │    ├── variable: @2 [type=int]
- │    │    └── variable: @3 [type=int]
+ │    │    ├── variable: "@2":2 [type=int]
+ │    │    └── variable: "@3":3 [type=int]
  │    └── plus [type=int]
  │         ├── const: 5 [type=int]
  │         └── mult [type=int]
- │              ├── variable: @4 [type=int]
+ │              ├── variable: "@4":4 [type=int]
  │              └── const: 2 [type=int]
  └── tuple [type=tuple{int, int, int}]
       ├── plus [type=int]
-      │    ├── variable: @2 [type=int]
-      │    └── variable: @3 [type=int]
+      │    ├── variable: "@2":2 [type=int]
+      │    └── variable: "@3":3 [type=int]
       ├── const: 8 [type=int]
       └── minus [type=int]
-           ├── variable: @1 [type=int]
-           └── variable: @4 [type=int]
+           ├── variable: "@1":1 [type=int]
+           └── variable: "@4":4 [type=int]
 
 build-scalar vars=(int, int, int, int)
 ((@1, @2), (@3, @4)) = ((1, 2), (3, 4))
@@ -101,11 +101,11 @@ build-scalar vars=(int, int, int, int)
 eq [type=bool]
  ├── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
  │    ├── tuple [type=tuple{int, int}]
- │    │    ├── variable: @1 [type=int]
- │    │    └── variable: @2 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
+ │    │    └── variable: "@2":2 [type=int]
  │    └── tuple [type=tuple{int, int}]
- │         ├── variable: @3 [type=int]
- │         └── variable: @4 [type=int]
+ │         ├── variable: "@3":3 [type=int]
+ │         └── variable: "@4":4 [type=int]
  └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
       ├── tuple [type=tuple{int, int}]
       │    ├── const: 1 [type=int]
@@ -119,75 +119,91 @@ build-scalar vars=(int, int, int, string)
 ----
 eq [type=bool]
  ├── tuple [type=tuple{int, tuple{int, string}, tuple{int, string, int}}]
- │    ├── variable: @1 [type=int]
+ │    ├── variable: "@1":1 [type=int]
  │    ├── tuple [type=tuple{int, string}]
- │    │    ├── variable: @2 [type=int]
+ │    │    ├── variable: "@2":2 [type=int]
  │    │    └── const: 'a' [type=string]
  │    └── tuple [type=tuple{int, string, int}]
- │         ├── variable: @3 [type=int]
+ │         ├── variable: "@3":3 [type=int]
  │         ├── const: 'b' [type=string]
  │         └── const: 5 [type=int]
  └── tuple [type=tuple{int, tuple{int, string}, tuple{int, string, int}}]
       ├── const: 9 [type=int]
       ├── tuple [type=tuple{int, string}]
       │    ├── plus [type=int]
-      │    │    ├── variable: @1 [type=int]
-      │    │    └── variable: @3 [type=int]
-      │    └── variable: @4 [type=string]
+      │    │    ├── variable: "@1":1 [type=int]
+      │    │    └── variable: "@3":3 [type=int]
+      │    └── variable: "@4":4 [type=string]
       └── tuple [type=tuple{int, string, int}]
            ├── const: 5 [type=int]
-           ├── variable: @4 [type=string]
-           └── variable: @1 [type=int]
+           ├── variable: "@4":4 [type=string]
+           └── variable: "@1":1 [type=int]
 
 build-scalar vars=(int, int)
 @1 IS NULL
 ----
 is [type=bool]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  └── null [type=unknown]
 
 build-scalar vars=(int, int)
 @1 IS NOT DISTINCT FROM NULL
 ----
 is [type=bool]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  └── null [type=unknown]
 
 build-scalar vars=(int, int)
 @1 IS NOT DISTINCT FROM @2
 ----
 is [type=bool]
- ├── variable: @1 [type=int]
- └── variable: @2 [type=int]
+ ├── variable: "@1":1 [type=int]
+ └── variable: "@2":2 [type=int]
 
 build-scalar vars=(int, int)
 @1 IS NOT NULL
 ----
 is-not [type=bool]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  └── null [type=unknown]
 
 build-scalar vars=(int, int)
 @1 IS DISTINCT FROM NULL
 ----
 is-not [type=bool]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  └── null [type=unknown]
 
 build-scalar vars=(int, int)
 @1 IS DISTINCT FROM @2
 ----
 is-not [type=bool]
- ├── variable: @1 [type=int]
- └── variable: @2 [type=int]
+ ├── variable: "@1":1 [type=int]
+ └── variable: "@2":2 [type=int]
+
+build-scalar vars=(int, int)
+(@1, @2) IS NULL
+----
+is-tuple-null [type=bool]
+ └── tuple [type=tuple{int, int}]
+      ├── variable: "@1":1 [type=int]
+      └── variable: "@2":2 [type=int]
+
+build-scalar vars=(int, int)
+(@1, @2) IS NOT NULL
+----
+is-tuple-not-null [type=bool]
+ └── tuple [type=tuple{int, int}]
+      ├── variable: "@1":1 [type=int]
+      └── variable: "@2":2 [type=int]
 
 build-scalar vars=(int, int)
 + @1 + (- @2)
 ----
 plus [type=int]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  └── unary-minus [type=int]
-      └── variable: @2 [type=int]
+      └── variable: "@2":2 [type=int]
 
 build-scalar vars=(int, int)
 CASE WHEN @1 = 2 THEN 1 ELSE 2 END
@@ -196,47 +212,120 @@ case [type=int]
  ├── true [type=bool]
  ├── when [type=int]
  │    ├── eq [type=bool]
- │    │    ├── variable: @1 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
  │    │    └── const: 2 [type=int]
  │    └── const: 1 [type=int]
  └── const: 2 [type=int]
 
+build-scalar
+if(true, 1, 2)
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+build-scalar
+if(false, NULL, 1)
+----
+case [type=int]
+ ├── false [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── cast: INT8 [type=int]
+ │         └── null [type=unknown]
+ └── const: 1 [type=int]
+
+build-scalar
+if(true, NULL, 1)
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── cast: INT8 [type=int]
+ │         └── null [type=unknown]
+ └── const: 1 [type=int]
+
+build-scalar
+if(false, 1, NULL)
+----
+case [type=int]
+ ├── false [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── const: 1 [type=int]
+ └── cast: INT8 [type=int]
+      └── null [type=unknown]
+
+build-scalar
+nullif(1, 2)
+----
+case [type=int]
+ ├── const: 1 [type=int]
+ ├── when [type=int]
+ │    ├── const: 2 [type=int]
+ │    └── null [type=int]
+ └── const: 1 [type=int]
+
+build-scalar
+nullif(NULL, 0)
+----
+case [type=int]
+ ├── cast: INT8 [type=int]
+ │    └── null [type=unknown]
+ ├── when [type=int]
+ │    ├── const: 0 [type=int]
+ │    └── null [type=int]
+ └── cast: INT8 [type=int]
+      └── null [type=unknown]
+
+build-scalar
+nullif(0, NULL)
+----
+case [type=int]
+ ├── const: 0 [type=int]
+ ├── when [type=int]
+ │    ├── null [type=unknown]
+ │    └── null [type=int]
+ └── const: 0 [type=int]
 
 build-scalar vars=(string)
 length(@1) = 2
 ----
 eq [type=bool]
  ├── function: length [type=int]
- │    └── variable: @1 [type=string]
+ │    └── variable: "@1":1 [type=string]
  └── const: 2 [type=int]
-
 
 build-scalar vars=(jsonb)
 @1 @> '{"a":1}'
 ----
 contains [type=bool]
- ├── variable: @1 [type=jsonb]
+ ├── variable: "@1":1 [type=jsonb]
  └── const: '{"a": 1}' [type=jsonb]
 
 build-scalar vars=(jsonb)
 '{"a":1}' <@ @1
 ----
 contains [type=bool]
- ├── variable: @1 [type=jsonb]
+ ├── variable: "@1":1 [type=jsonb]
  └── const: '{"a": 1}' [type=jsonb]
 
 build-scalar vars=(jsonb)
 @1 ? 'a'
 ----
 json-exists [type=bool]
- ├── variable: @1 [type=jsonb]
+ ├── variable: "@1":1 [type=jsonb]
  └── const: 'a' [type=string]
 
 build-scalar vars=(jsonb)
 @1 ?| ARRAY['a', 'b', 'c']
 ----
 json-some-exists [type=bool]
- ├── variable: @1 [type=jsonb]
+ ├── variable: "@1":1 [type=jsonb]
  └── array: [type=string[]]
       ├── const: 'a' [type=string]
       ├── const: 'b' [type=string]
@@ -246,7 +335,7 @@ build-scalar vars=(jsonb)
 @1 ?& ARRAY['a', 'b', 'c']
 ----
 json-all-exists [type=bool]
- ├── variable: @1 [type=jsonb]
+ ├── variable: "@1":1 [type=jsonb]
  └── array: [type=string[]]
       ├── const: 'a' [type=string]
       ├── const: 'b' [type=string]
@@ -266,46 +355,57 @@ false [type=bool]
 build-scalar
 1::decimal
 ----
-cast: DECIMAL [type=decimal]
- └── const: 1 [type=decimal]
+const: 1 [type=decimal]
 
 build-scalar
 1::float
 ----
-cast: FLOAT [type=float]
- └── const: 1.0 [type=float]
+const: 1.0 [type=float]
 
 build-scalar
 1.1::int
 ----
-cast: INT [type=int]
+cast: INT8 [type=int]
  └── const: 1.1 [type=decimal]
 
 build-scalar
 '2010-05-12'::timestamp
 ----
-const: '2010-05-12 00:00:00+00:00' [type=timestamp]
+const: '2010-05-12 00:00:00' [type=timestamp]
+
+build-scalar
+'now'::timestamp
+----
+cast: TIMESTAMP [type=timestamp]
+ └── const: 'now' [type=string]
+
+build-scalar
+'2010-05-12'::timestamp - 'now'
+----
+minus [type=interval]
+ ├── const: '2010-05-12 00:00:00' [type=timestamp]
+ └── cast: TIMESTAMP [type=timestamp]
+      └── const: 'now' [type=string]
 
 build-scalar
 '123'::int
 ----
-cast: INT [type=int]
- └── const: 123 [type=int]
+const: 123 [type=int]
 
 build-scalar vars=(int, int)
 IFNULL(@1, @2)
 ----
 coalesce [type=int]
- ├── variable: @1 [type=int]
- └── variable: @2 [type=int]
+ ├── variable: "@1":1 [type=int]
+ └── variable: "@2":2 [type=int]
 
 build-scalar vars=(int, int, int)
 COALESCE(@1, @2, @3)
 ----
 coalesce [type=int]
- ├── variable: @1 [type=int]
- ├── variable: @2 [type=int]
- └── variable: @3 [type=int]
+ ├── variable: "@1":1 [type=int]
+ ├── variable: "@2":2 [type=int]
+ └── variable: "@3":3 [type=int]
 
 build-scalar vars=(int)
 CASE WHEN @1 > 5 THEN 1 ELSE -1 END
@@ -314,11 +414,10 @@ case [type=int]
  ├── true [type=bool]
  ├── when [type=int]
  │    ├── gt [type=bool]
- │    │    ├── variable: @1 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
  │    │    └── const: 5 [type=int]
  │    └── const: 1 [type=int]
- └── unary-minus [type=int]
-      └── const: 1 [type=int]
+ └── const: -1 [type=int]
 
 build-scalar vars=(int)
 CASE WHEN @1 > 5 THEN 1 WHEN @1 < 0 THEN 2 ELSE -1 END
@@ -327,47 +426,44 @@ case [type=int]
  ├── true [type=bool]
  ├── when [type=int]
  │    ├── gt [type=bool]
- │    │    ├── variable: @1 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
  │    │    └── const: 5 [type=int]
  │    └── const: 1 [type=int]
  ├── when [type=int]
  │    ├── lt [type=bool]
- │    │    ├── variable: @1 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
  │    │    └── const: 0 [type=int]
  │    └── const: 2 [type=int]
- └── unary-minus [type=int]
-      └── const: 1 [type=int]
+ └── const: -1 [type=int]
 
 build-scalar vars=(int)
 CASE @1 WHEN 5 THEN 1 ELSE -1 END
 ----
 case [type=int]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  ├── when [type=int]
  │    ├── const: 5 [type=int]
  │    └── const: 1 [type=int]
- └── unary-minus [type=int]
-      └── const: 1 [type=int]
+ └── const: -1 [type=int]
 
 build-scalar vars=(int, int)
 CASE @1 + 3 WHEN 5 * @2 THEN 1 % @2 WHEN 6 THEN 2 ELSE -1 END
 ----
 case [type=int]
  ├── plus [type=int]
- │    ├── variable: @1 [type=int]
+ │    ├── variable: "@1":1 [type=int]
  │    └── const: 3 [type=int]
  ├── when [type=int]
  │    ├── mult [type=int]
  │    │    ├── const: 5 [type=int]
- │    │    └── variable: @2 [type=int]
+ │    │    └── variable: "@2":2 [type=int]
  │    └── mod [type=int]
  │         ├── const: 1 [type=int]
- │         └── variable: @2 [type=int]
+ │         └── variable: "@2":2 [type=int]
  ├── when [type=int]
  │    ├── const: 6 [type=int]
  │    └── const: 2 [type=int]
- └── unary-minus [type=int]
-      └── const: 1 [type=int]
+ └── const: -1 [type=int]
 
 # Tests for CASE with no ELSE statement
 build-scalar vars=(int)
@@ -377,30 +473,30 @@ case [type=int]
  ├── true [type=bool]
  ├── when [type=int]
  │    ├── gt [type=bool]
- │    │    ├── variable: @1 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
  │    │    └── const: 5 [type=int]
  │    └── const: 1 [type=int]
- └── null [type=unknown]
+ └── null [type=int]
 
 build-scalar vars=(int)
 CASE @1 WHEN 5 THEN 1 END
 ----
 case [type=int]
- ├── variable: @1 [type=int]
+ ├── variable: "@1":1 [type=int]
  ├── when [type=int]
  │    ├── const: 5 [type=int]
  │    └── const: 1 [type=int]
- └── null [type=unknown]
+ └── null [type=int]
 
 build-scalar vars=(int)
 @1 BETWEEN 1 AND 4
 ----
 and [type=bool]
  ├── ge [type=bool]
- │    ├── variable: @1 [type=int]
+ │    ├── variable: "@1":1 [type=int]
  │    └── const: 1 [type=int]
  └── le [type=bool]
-      ├── variable: @1 [type=int]
+      ├── variable: "@1":1 [type=int]
       └── const: 4 [type=int]
 
 build-scalar vars=(int)
@@ -409,10 +505,10 @@ build-scalar vars=(int)
 not [type=bool]
  └── and [type=bool]
       ├── ge [type=bool]
-      │    ├── variable: @1 [type=int]
+      │    ├── variable: "@1":1 [type=int]
       │    └── const: 1 [type=int]
       └── le [type=bool]
-           ├── variable: @1 [type=int]
+           ├── variable: "@1":1 [type=int]
            └── const: 4 [type=int]
 
 build-scalar vars=(int)
@@ -421,17 +517,17 @@ build-scalar vars=(int)
 or [type=bool]
  ├── and [type=bool]
  │    ├── ge [type=bool]
- │    │    ├── variable: @1 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
  │    │    └── const: 1 [type=int]
  │    └── le [type=bool]
- │         ├── variable: @1 [type=int]
+ │         ├── variable: "@1":1 [type=int]
  │         └── const: 4 [type=int]
  └── and [type=bool]
       ├── ge [type=bool]
-      │    ├── variable: @1 [type=int]
+      │    ├── variable: "@1":1 [type=int]
       │    └── const: 4 [type=int]
       └── le [type=bool]
-           ├── variable: @1 [type=int]
+           ├── variable: "@1":1 [type=int]
            └── const: 1 [type=int]
 
 build-scalar vars=(int)
@@ -441,17 +537,17 @@ not [type=bool]
  └── or [type=bool]
       ├── and [type=bool]
       │    ├── ge [type=bool]
-      │    │    ├── variable: @1 [type=int]
+      │    │    ├── variable: "@1":1 [type=int]
       │    │    └── const: 1 [type=int]
       │    └── le [type=bool]
-      │         ├── variable: @1 [type=int]
+      │         ├── variable: "@1":1 [type=int]
       │         └── const: 4 [type=int]
       └── and [type=bool]
            ├── ge [type=bool]
-           │    ├── variable: @1 [type=int]
+           │    ├── variable: "@1":1 [type=int]
            │    └── const: 4 [type=int]
            └── le [type=bool]
-                ├── variable: @1 [type=int]
+                ├── variable: "@1":1 [type=int]
                 └── const: 1 [type=int]
 
 build-scalar vars=(int, int, int)
@@ -459,11 +555,11 @@ build-scalar vars=(int, int, int)
 ----
 and [type=bool]
  ├── ge [type=bool]
- │    ├── variable: @1 [type=int]
- │    └── variable: @2 [type=int]
+ │    ├── variable: "@1":1 [type=int]
+ │    └── variable: "@2":2 [type=int]
  └── le [type=bool]
-      ├── variable: @1 [type=int]
-      └── variable: @3 [type=int]
+      ├── variable: "@1":1 [type=int]
+      └── variable: "@3":3 [type=int]
 
 build-scalar vars=(int, int, int)
 (@1 + @2) BETWEEN (@2 + @3) AND (@3 + @1)
@@ -471,18 +567,18 @@ build-scalar vars=(int, int, int)
 and [type=bool]
  ├── ge [type=bool]
  │    ├── plus [type=int]
- │    │    ├── variable: @1 [type=int]
- │    │    └── variable: @2 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
+ │    │    └── variable: "@2":2 [type=int]
  │    └── plus [type=int]
- │         ├── variable: @2 [type=int]
- │         └── variable: @3 [type=int]
+ │         ├── variable: "@2":2 [type=int]
+ │         └── variable: "@3":3 [type=int]
  └── le [type=bool]
       ├── plus [type=int]
-      │    ├── variable: @1 [type=int]
-      │    └── variable: @2 [type=int]
+      │    ├── variable: "@1":1 [type=int]
+      │    └── variable: "@2":2 [type=int]
       └── plus [type=int]
-           ├── variable: @3 [type=int]
-           └── variable: @1 [type=int]
+           ├── variable: "@3":3 [type=int]
+           └── variable: "@1":1 [type=int]
 
 build-scalar vars=(int, int, int)
 (@1 + @2) BETWEEN SYMMETRIC (@2 + @3) AND (@3 + @1)
@@ -491,33 +587,33 @@ or [type=bool]
  ├── and [type=bool]
  │    ├── ge [type=bool]
  │    │    ├── plus [type=int]
- │    │    │    ├── variable: @1 [type=int]
- │    │    │    └── variable: @2 [type=int]
+ │    │    │    ├── variable: "@1":1 [type=int]
+ │    │    │    └── variable: "@2":2 [type=int]
  │    │    └── plus [type=int]
- │    │         ├── variable: @2 [type=int]
- │    │         └── variable: @3 [type=int]
+ │    │         ├── variable: "@2":2 [type=int]
+ │    │         └── variable: "@3":3 [type=int]
  │    └── le [type=bool]
  │         ├── plus [type=int]
- │         │    ├── variable: @1 [type=int]
- │         │    └── variable: @2 [type=int]
+ │         │    ├── variable: "@1":1 [type=int]
+ │         │    └── variable: "@2":2 [type=int]
  │         └── plus [type=int]
- │              ├── variable: @3 [type=int]
- │              └── variable: @1 [type=int]
+ │              ├── variable: "@3":3 [type=int]
+ │              └── variable: "@1":1 [type=int]
  └── and [type=bool]
       ├── ge [type=bool]
       │    ├── plus [type=int]
-      │    │    ├── variable: @1 [type=int]
-      │    │    └── variable: @2 [type=int]
+      │    │    ├── variable: "@1":1 [type=int]
+      │    │    └── variable: "@2":2 [type=int]
       │    └── plus [type=int]
-      │         ├── variable: @3 [type=int]
-      │         └── variable: @1 [type=int]
+      │         ├── variable: "@3":3 [type=int]
+      │         └── variable: "@1":1 [type=int]
       └── le [type=bool]
            ├── plus [type=int]
-           │    ├── variable: @1 [type=int]
-           │    └── variable: @2 [type=int]
+           │    ├── variable: "@1":1 [type=int]
+           │    └── variable: "@2":2 [type=int]
            └── plus [type=int]
-                ├── variable: @2 [type=int]
-                └── variable: @3 [type=int]
+                ├── variable: "@2":2 [type=int]
+                └── variable: "@3":3 [type=int]
 
 build-scalar vars=(int, int, int)
 (@1, @2) BETWEEN (1, 2) AND (3, 4)
@@ -525,15 +621,15 @@ build-scalar vars=(int, int, int)
 and [type=bool]
  ├── ge [type=bool]
  │    ├── tuple [type=tuple{int, int}]
- │    │    ├── variable: @1 [type=int]
- │    │    └── variable: @2 [type=int]
+ │    │    ├── variable: "@1":1 [type=int]
+ │    │    └── variable: "@2":2 [type=int]
  │    └── tuple [type=tuple{int, int}]
  │         ├── const: 1 [type=int]
  │         └── const: 2 [type=int]
  └── le [type=bool]
       ├── tuple [type=tuple{int, int}]
-      │    ├── variable: @1 [type=int]
-      │    └── variable: @2 [type=int]
+      │    ├── variable: "@1":1 [type=int]
+      │    └── variable: "@2":2 [type=int]
       └── tuple [type=tuple{int, int}]
            ├── const: 3 [type=int]
            └── const: 4 [type=int]
@@ -546,33 +642,64 @@ not [type=bool]
       ├── and [type=bool]
       │    ├── ge [type=bool]
       │    │    ├── tuple [type=tuple{int, int}]
-      │    │    │    ├── variable: @1 [type=int]
-      │    │    │    └── variable: @2 [type=int]
+      │    │    │    ├── variable: "@1":1 [type=int]
+      │    │    │    └── variable: "@2":2 [type=int]
       │    │    └── tuple [type=tuple{int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
       │    └── le [type=bool]
       │         ├── tuple [type=tuple{int, int}]
-      │         │    ├── variable: @1 [type=int]
-      │         │    └── variable: @2 [type=int]
+      │         │    ├── variable: "@1":1 [type=int]
+      │         │    └── variable: "@2":2 [type=int]
       │         └── tuple [type=tuple{int, int}]
       │              ├── const: 3 [type=int]
       │              └── const: 4 [type=int]
       └── and [type=bool]
            ├── ge [type=bool]
            │    ├── tuple [type=tuple{int, int}]
-           │    │    ├── variable: @1 [type=int]
-           │    │    └── variable: @2 [type=int]
+           │    │    ├── variable: "@1":1 [type=int]
+           │    │    └── variable: "@2":2 [type=int]
            │    └── tuple [type=tuple{int, int}]
            │         ├── const: 3 [type=int]
            │         └── const: 4 [type=int]
            └── le [type=bool]
                 ├── tuple [type=tuple{int, int}]
-                │    ├── variable: @1 [type=int]
-                │    └── variable: @2 [type=int]
+                │    ├── variable: "@1":1 [type=int]
+                │    └── variable: "@2":2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
                      └── const: 2 [type=int]
+
+# The left side of BETWEEN is typed differently in the two comparisons.
+build-scalar
+'' BETWEEN ''::BYTES AND ''
+----
+and [type=bool]
+ ├── ge [type=bool]
+ │    ├── const: '\x' [type=bytes]
+ │    └── const: '\x' [type=bytes]
+ └── le [type=bool]
+      ├── const: '' [type=string]
+      └── const: '' [type=string]
+
+build-scalar
+'' BETWEEN SYMMETRIC ''::BYTES AND ''
+----
+or [type=bool]
+ ├── and [type=bool]
+ │    ├── ge [type=bool]
+ │    │    ├── const: '\x' [type=bytes]
+ │    │    └── const: '\x' [type=bytes]
+ │    └── le [type=bool]
+ │         ├── const: '' [type=string]
+ │         └── const: '' [type=string]
+ └── and [type=bool]
+      ├── ge [type=bool]
+      │    ├── const: '' [type=string]
+      │    └── const: '' [type=string]
+      └── le [type=bool]
+           ├── const: '\x' [type=bytes]
+           └── const: '\x' [type=bytes]
 
 build-scalar
 NULL
@@ -582,14 +709,14 @@ null [type=unknown]
 build-scalar
 NULL::int
 ----
-cast: INT [type=int]
+cast: INT8 [type=int]
  └── null [type=unknown]
 
 build-scalar vars=(int[])
 @1 = ARRAY[1, 2, 3]
 ----
 eq [type=bool]
- ├── variable: @1 [type=int[]]
+ ├── variable: "@1":1 [type=int[]]
  └── array: [type=int[]]
       ├── const: 1 [type=int]
       ├── const: 2 [type=int]
@@ -599,7 +726,7 @@ build-scalar vars=(int[])
 @1 = ARRAY[1, 1.0, '1']
 ----
 eq [type=bool]
- ├── variable: @1 [type=int[]]
+ ├── variable: "@1":1 [type=int[]]
  └── array: [type=int[]]
       ├── const: 1 [type=int]
       ├── const: 1 [type=int]
@@ -609,7 +736,7 @@ build-scalar vars=(float[])
 @1 = ARRAY[1, 1.1, '1.123']
 ----
 eq [type=bool]
- ├── variable: @1 [type=float[]]
+ ├── variable: "@1":1 [type=float[]]
  └── array: [type=float[]]
       ├── const: 1.0 [type=float]
       ├── const: 1.1 [type=float]
@@ -619,25 +746,39 @@ build-scalar vars=(int[])
 @1 = ARRAY[]
 ----
 eq [type=bool]
- ├── variable: @1 [type=int[]]
+ ├── variable: "@1":1 [type=int[]]
  └── array: [type=int[]]
 
 build-scalar vars=(string[])
 @1 = ARRAY['foo', 'bar', 'baz']
 ----
 eq [type=bool]
- ├── variable: @1 [type=string[]]
+ ├── variable: "@1":1 [type=string[]]
  └── array: [type=string[]]
       ├── const: 'foo' [type=string]
       ├── const: 'bar' [type=string]
       └── const: 'baz' [type=string]
+
+build-scalar
+'{"x": "bar"}' -> 'x'
+----
+fetch-val [type=jsonb]
+ ├── const: '{"x": "bar"}' [type=jsonb]
+ └── const: 'x' [type=string]
+
+build-scalar
+('{"x": "bar"}') -> 'x'
+----
+fetch-val [type=jsonb]
+ ├── const: '{"x": "bar"}' [type=jsonb]
+ └── const: 'x' [type=string]
 
 build-scalar vars=(json)
 @1->>'a' = 'b'
 ----
 eq [type=bool]
  ├── fetch-text [type=string]
- │    ├── variable: @1 [type=jsonb]
+ │    ├── variable: "@1":1 [type=jsonb]
  │    └── const: 'a' [type=string]
  └── const: 'b' [type=string]
 
@@ -646,7 +787,7 @@ build-scalar vars=(json)
 ----
 eq [type=bool]
  ├── fetch-val [type=jsonb]
- │    ├── variable: @1 [type=jsonb]
+ │    ├── variable: "@1":1 [type=jsonb]
  │    └── const: 'a' [type=string]
  └── const: '"b"' [type=jsonb]
 
@@ -655,7 +796,7 @@ build-scalar vars=(json)
 ----
 eq [type=bool]
  ├── fetch-val-path [type=jsonb]
- │    ├── variable: @1 [type=jsonb]
+ │    ├── variable: "@1":1 [type=jsonb]
  │    └── array: [type=string[]]
  │         └── const: 'a' [type=string]
  └── const: '"b"' [type=jsonb]
@@ -665,7 +806,7 @@ build-scalar vars=(json)
 ----
 eq [type=bool]
  ├── fetch-text-path [type=string]
- │    ├── variable: @1 [type=jsonb]
+ │    ├── variable: "@1":1 [type=jsonb]
  │    └── array: [type=string[]]
  │         └── const: 'a' [type=string]
  └── const: 'b' [type=string]
@@ -674,18 +815,19 @@ build-scalar vars=(json, json)
 @1 || @2
 ----
 concat [type=jsonb]
- ├── variable: @1 [type=jsonb]
- └── variable: @2 [type=jsonb]
+ ├── variable: "@1":1 [type=jsonb]
+ └── variable: "@2":2 [type=jsonb]
 
-build-scalar allow-unsupported
+build-scalar
 'hello' COLLATE en
 ----
-unsupported-expr: 'hello' COLLATE en [type=collatedstring{en}]
+collate [type=collatedstring{en}]
+ └── const: 'hello' [type=string]
 
 build-scalar
 random()
 ----
-error: impure functions are not supported
+function: random [type=float]
 
 build-scalar
 ARRAY[1, 2] || NULL
@@ -694,14 +836,14 @@ concat [type=int[]]
  ├── array: [type=int[]]
  │    ├── const: 1 [type=int]
  │    └── const: 2 [type=int]
- └── cast: INT[] [type=int[]]
+ └── cast: INT8[] [type=int[]]
       └── null [type=unknown]
 
 build-scalar
 NULL || ARRAY[1, 2]
 ----
 concat [type=int[]]
- ├── cast: INT[] [type=int[]]
+ ├── cast: INT8[] [type=int[]]
  │    └── null [type=unknown]
  └── array: [type=int[]]
       ├── const: 1 [type=int]
@@ -714,8 +856,9 @@ concat [type=int[]]
  ├── array: [type=int[]]
  │    ├── const: 1 [type=int]
  │    └── const: 2 [type=int]
- └── cast: SMALLINT [type=int]
-      └── null [type=unknown]
+ └── cast: INT8 [type=int]
+      └── cast: INT2 [type=int2]
+           └── null [type=unknown]
 
 build-scalar
 NULL::oid || ARRAY[1, 2]
@@ -730,20 +873,527 @@ concat [type=oid[]]
 build-scalar
 ARRAY['"foo"'::jsonb]
 ----
-error: arrays of jsonb not allowed
+error: unimplemented: arrays of jsonb not allowed
 
 build-scalar
 ARRAY['"foo"'::json]
 ----
-error: arrays of jsonb not allowed
+error: unimplemented: arrays of jsonb not allowed
 
 opt
 SELECT -((-9223372036854775808):::int)
 ----
+values
+ ├── columns: "?column?":1
+ └── (-(-9223372036854775808),)
+
+# TODO(justin): modify build-scalar to handle subqueries
+# so this can use it.
+build
+SELECT ARRAY(SELECT 1)
+----
 project
- ├── columns: "?column?":1(int)
+ ├── columns: array:2
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── unary-minus [type=int]
-           └── const: -9223372036854775808 [type=int]
+      └── array-flatten [as=array:2]
+           └── project
+                ├── columns: "?column?":1!null
+                ├── values
+                │    └── ()
+                └── projections
+                     └── 1 [as="?column?":1]
+
+exec-ddl
+CREATE TABLE x (a INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE y (b INT PRIMARY KEY)
+----
+
+build
+SELECT b, ARRAY(SELECT a FROM x WHERE x.a = y.b) FROM y
+----
+project
+ ├── columns: b:1!null array:5
+ ├── scan y
+ │    └── columns: b:1!null y.crdb_internal_mvcc_timestamp:2
+ └── projections
+      └── array-flatten [as=array:5]
+           └── project
+                ├── columns: a:3!null
+                └── select
+                     ├── columns: a:3!null x.crdb_internal_mvcc_timestamp:4
+                     ├── scan x
+                     │    └── columns: a:3!null x.crdb_internal_mvcc_timestamp:4
+                     └── filters
+                          └── a:3 = b:1
+
+build
+SELECT b, ARRAY(SELECT a FROM x ORDER BY a) FROM y
+----
+project
+ ├── columns: b:1!null array:5
+ ├── scan y
+ │    └── columns: b:1!null y.crdb_internal_mvcc_timestamp:2
+ └── projections
+      └── array-flatten [as=array:5]
+           └── project
+                ├── columns: a:3!null
+                ├── ordering: +3
+                └── scan x
+                     ├── columns: a:3!null x.crdb_internal_mvcc_timestamp:4
+                     └── ordering: +3
+
+build
+SELECT ARRAY(VALUES ('foo'), ('bar'), ('baz'))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── values
+                ├── columns: column1:1!null
+                ├── ('foo',)
+                ├── ('bar',)
+                └── ('baz',)
+
+build
+SELECT ARRAY(VALUES (ARRAY[1]))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── values
+                ├── columns: column1:1
+                └── (ARRAY[1],)
+
+build
+SELECT ARRAY(SELECT (1, 2))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── project
+                ├── columns: "?column?":1!null
+                ├── values
+                │    └── ()
+                └── projections
+                     └── (1, 2) [as="?column?":1]
+
+build
+SELECT ARRAY(VALUES ((1, 2)))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── values
+                ├── columns: column1:1
+                └── ((1, 2),)
+
+build
+SELECT ARRAY(VALUES ('{}'::JSONB))
+----
+error (0A000): unimplemented: arrays of jsonb not allowed
+
+build
+SELECT ARRAY(SELECT 1, 2)
+----
+error (42601): subquery must return only one column, found 2
+
+build
+SELECT ARRAY(SELECT generate_series(1,100) ORDER BY 1 DESC)
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── sort
+                ├── columns: generate_series:1
+                ├── ordering: -1
+                └── project-set
+                     ├── columns: generate_series:1
+                     ├── values
+                     │    └── ()
+                     └── zip
+                          └── generate_series(1, 100)
+
+build-scalar
+1 = ANY ARRAY[1, 2, 3]
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+1 > ANY ARRAY[1, 2, 3]
+----
+any-scalar: gt [type=bool]
+ ├── const: 1 [type=int]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+1 = ALL ARRAY[1, 2, 3]
+----
+not [type=bool]
+ └── any-scalar: ne [type=bool]
+      ├── const: 1 [type=int]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+build-scalar
+1 > ALL ARRAY[1, 2, 3]
+----
+not [type=bool]
+ └── any-scalar: le [type=bool]
+      ├── const: 1 [type=int]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+build-scalar
+1 = ANY (1, 2, 3)
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── tuple [type=tuple{int, int, int}]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+'foo' = ANY ('foo', 'bar', 'baz')
+----
+any-scalar: eq [type=bool]
+ ├── const: 'foo' [type=string]
+ └── tuple [type=tuple{string, string, string}]
+      ├── const: 'foo' [type=string]
+      ├── const: 'bar' [type=string]
+      └── const: 'baz' [type=string]
+
+
+build-scalar
+1 = ANY ()
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── tuple [type=tuple]
+
+build
+SELECT 1 > ALL ARRAY['foo']
+----
+error (22023): unsupported comparison operator: 1 > ALL ARRAY['foo']: could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+build-scalar vars=(int[], string[], float[], int)
+(@1[1], @2[1+1], @3[@4])
+----
+tuple [type=tuple{int, string, float}]
+ ├── indirection [type=int]
+ │    ├── variable: "@1":1 [type=int[]]
+ │    └── const: 1 [type=int]
+ ├── indirection [type=string]
+ │    ├── variable: "@2":2 [type=string[]]
+ │    └── plus [type=int]
+ │         ├── const: 1 [type=int]
+ │         └── const: 1 [type=int]
+ └── indirection [type=float]
+      ├── variable: "@3":3 [type=float[]]
+      └── variable: "@4":4 [type=int]
+
+build-scalar vars=(int,string,int[])
+(
+    (@1 IS OF (INT), @1 IS OF (INT, STRING), @1 IS OF (STRING)),
+    (@1 IS NOT OF (INT), @1 IS NOT OF (INT, STRING), @1 IS NOT OF (STRING)),
+    (@2 IS NOT OF (INT), @2 IS NOT OF (INT, STRING), @2 IS NOT OF (STRING)),
+    (@3 IS NOT OF (INT[]), @3 IS OF (INT[]), @3 IS OF (STRING[]))
+)
+----
+tuple [type=tuple{tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, bool, bool}}]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── true [type=bool]
+ │    ├── true [type=bool]
+ │    └── false [type=bool]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── false [type=bool]
+ │    ├── false [type=bool]
+ │    └── true [type=bool]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── true [type=bool]
+ │    ├── false [type=bool]
+ │    └── false [type=bool]
+ └── tuple [type=tuple{bool, bool, bool}]
+      ├── false [type=bool]
+      ├── true [type=bool]
+      └── false [type=bool]
+
+build-scalar vars=(string)
+@1 COLLATE en
+----
+collate [type=collatedstring{en}]
+ └── variable: "@1":1 [type=string]
+
+exec-ddl
+CREATE TABLE u (x INT)
+----
+
+exec-ddl
+CREATE TABLE v (y INT[])
+----
+
+build
+SELECT ARRAY(SELECT x FROM u ORDER BY x)
+----
+project
+ ├── columns: array:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:4]
+           └── sort
+                ├── columns: x:1
+                ├── ordering: +1
+                └── project
+                     ├── columns: x:1
+                     └── scan u
+                          └── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3
+
+build
+SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x)
+----
+project
+ ├── columns: y:1!null
+ └── select
+      ├── columns: y:1!null v.rowid:2!null v.crdb_internal_mvcc_timestamp:3
+      ├── scan v
+      │    └── columns: y:1 v.rowid:2!null v.crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── eq
+                ├── y:1
+                └── array-flatten
+                     └── sort
+                          ├── columns: x:4
+                          ├── ordering: +4
+                          └── project
+                               ├── columns: x:4
+                               └── scan u
+                                    └── columns: x:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6
+
+build
+SELECT ARRAY(SELECT (y, 2) FROM u ORDER BY x) FROM v
+----
+error (0A000): unimplemented: can't execute a correlated ARRAY(...) over tuple{int[], int}
+
+build
+SELECT ARRAY(SELECT y FROM u ORDER BY x) FROM v
+----
+error (0A000): unimplemented: can't execute a correlated ARRAY(...) over int[]
+
+build-scalar
+ISERROR(1/0)
+----
+if-err [type=bool]
+ └── div [type=decimal]
+      ├── const: 1 [type=int]
+      └── const: 0 [type=int]
+
+build-scalar
+ISERROR(1/0, '22012')
+----
+if-err [type=bool]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ └── err-code
+      └── const: '22012' [type=string]
+
+build-scalar vars=(decimal)
+IFERROR(1/0, @1)
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ └── else
+      └── variable: "@1":1 [type=decimal]
+
+build-scalar vars=(decimal, string)
+IFERROR(1/0, @1, @2)
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ ├── else
+ │    └── variable: "@1":1 [type=decimal]
+ └── err-code
+      └── variable: "@2":2 [type=string]
+
+build-scalar vars=(decimal)
+IFERROR(1/0, @1, '10000')
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ ├── else
+ │    └── variable: "@1":1 [type=decimal]
+ └── err-code
+      └── const: '10000' [type=string]
+
+# Verify that we build a Coalesce of the correct type when the inputs
+# are NULL (#50978).
+build-scalar
+CASE WHEN true THEN 1234:::OID ELSE COALESCE(NULL, NULL) END
+----
+case [type=oid]
+ ├── true [type=bool]
+ ├── when [type=oid]
+ │    ├── true [type=bool]
+ │    └── const: 1234 [type=oid]
+ └── coalesce [type=oid]
+      ├── cast: OID [type=oid]
+      │    └── null [type=unknown]
+      └── cast: OID [type=oid]
+           └── null [type=unknown]
+
+# Make sure NULL arguments for AND/OR/NOT are typed as boolean.
+build-scalar
+NULL AND true
+----
+and [type=bool]
+ ├── cast: BOOL [type=bool]
+ │    └── null [type=unknown]
+ └── true [type=bool]
+
+build-scalar
+false OR NULL
+----
+or [type=bool]
+ ├── false [type=bool]
+ └── cast: BOOL [type=bool]
+      └── null [type=unknown]
+
+build-scalar
+NOT NULL
+----
+not [type=bool]
+ └── cast: BOOL [type=bool]
+      └── null [type=unknown]
+
+build-scalar vars=(geometry, geometry)
+@1 ~ @2
+----
+b-box-covers [type=bool]
+ ├── variable: "@1":1 [type=geometry]
+ └── variable: "@2":2 [type=geometry]
+
+build-scalar vars=(geometry, box2d)
+@1 ~ @2
+----
+b-box-covers [type=bool]
+ ├── variable: "@1":1 [type=geometry]
+ └── variable: "@2":2 [type=box2d]
+
+build-scalar vars=(box2d, geometry)
+@1 ~ @2
+----
+b-box-covers [type=bool]
+ ├── variable: "@1":1 [type=box2d]
+ └── variable: "@2":2 [type=geometry]
+
+build-scalar vars=(box2d, box2d)
+@1 ~ @2
+----
+b-box-covers [type=bool]
+ ├── variable: "@1":1 [type=box2d]
+ └── variable: "@2":2 [type=box2d]
+
+build-scalar vars=(geometry, geometry)
+@1 && @2
+----
+b-box-intersects [type=bool]
+ ├── variable: "@1":1 [type=geometry]
+ └── variable: "@2":2 [type=geometry]
+
+build-scalar vars=(geometry, box2d)
+@1 && @2
+----
+b-box-intersects [type=bool]
+ ├── variable: "@1":1 [type=geometry]
+ └── variable: "@2":2 [type=box2d]
+
+build-scalar vars=(box2d, geometry)
+@1 && @2
+----
+b-box-intersects [type=bool]
+ ├── variable: "@1":1 [type=box2d]
+ └── variable: "@2":2 [type=geometry]
+
+build-scalar vars=(box2d, box2d)
+@1 && @2
+----
+b-box-intersects [type=bool]
+ ├── variable: "@1":1 [type=box2d]
+ └── variable: "@2":2 [type=box2d]
+
+build-scalar vars=(string, string)
+@1 ~ @2
+----
+reg-match [type=bool]
+ ├── variable: "@1":1 [type=string]
+ └── variable: "@2":2 [type=string]
+
+build-scalar vars=(inet, inet)
+@1 && @2
+----
+overlaps [type=bool]
+ ├── variable: "@1":1 [type=inet]
+ └── variable: "@2":2 [type=inet]
+
+build-scalar vars=(int[], int[])
+@1 && @2
+----
+overlaps [type=bool]
+ ├── variable: "@1":1 [type=int[]]
+ └── variable: "@2":2 [type=int[]]
+
+build-scalar vars=(geometry[], geometry[])
+@1 && @2
+----
+overlaps [type=bool]
+ ├── variable: "@1":1 [type=geometry[]]
+ └── variable: "@2":2 [type=geometry[]]
+
+build-scalar vars=(string, geometry)
+@1 ~ @2
+----
+error: unsupported comparison operator: <string> ~ <geometry>
+
+build-scalar vars=(geometry[], geometry)
+@1 && @2
+----
+error: unsupported comparison operator: <geometry[]> && <geometry>

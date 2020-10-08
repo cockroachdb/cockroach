@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 /**
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
@@ -7,6 +17,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
+import {serverToClientErrorMessageMap} from "src/util/constants";
 
 export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
 export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;
@@ -79,11 +90,17 @@ export type RangeLogRequestMessage =
 export type RangeLogResponseMessage =
   protos.cockroach.server.serverpb.RangeLogResponse;
 
-export type CommandQueueRequestMessage = protos.cockroach.server.serverpb.CommandQueueRequest;
-export type CommandQueueResponseMessage = protos.cockroach.server.serverpb.CommandQueueResponse;
-
 export type SettingsRequestMessage = protos.cockroach.server.serverpb.SettingsRequest;
 export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsResponse;
+
+export type SessionsRequestMessage = protos.cockroach.server.serverpb.ListSessionsRequest;
+export type SessionsResponseMessage = protos.cockroach.server.serverpb.ListSessionsResponse;
+
+export type CancelSessionRequestMessage = protos.cockroach.server.serverpb.CancelSessionRequest;
+export type CancelSessionResponseMessage = protos.cockroach.server.serverpb.CancelSessionResponse;
+
+export type CancelQueryRequestMessage = protos.cockroach.server.serverpb.CancelQueryRequest;
+export type CancelQueryResponseMessage = protos.cockroach.server.serverpb.CancelQueryResponse;
 
 export type UserLoginRequestMessage = protos.cockroach.server.serverpb.UserLoginRequest;
 export type UserLoginResponseMessage = protos.cockroach.server.serverpb.UserLoginResponse;
@@ -97,10 +114,27 @@ export type StatementsResponseMessage = protos.cockroach.server.serverpb.Stateme
 
 export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
 
+export type EnqueueRangeRequestMessage = protos.cockroach.server.serverpb.EnqueueRangeRequest;
+export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.EnqueueRangeResponse;
+
+export type MetricMetadataRequestMessage = protos.cockroach.server.serverpb.MetricMetadataRequest;
+export type MetricMetadataResponseMessage = protos.cockroach.server.serverpb.MetricMetadataResponse;
+
+export type StatementDiagnosticsReportsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsReportsRequest;
+export type StatementDiagnosticsReportsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
+
+export type CreateStatementDiagnosticsReportRequestMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+export type CreateStatementDiagnosticsReportResponseMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
+
+export type StatementDiagnosticsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
+export type StatementDiagnosticsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
 export const STATUS_PREFIX = "_status";
+
+const ResponseError = protos.cockroach.server.serverpb.ResponseError;
 
 // HELPER FUNCTIONS
 
@@ -127,6 +161,16 @@ interface TRequest {
 
 export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
   return encodedRequest.buffer.slice(encodedRequest.byteOffset, encodedRequest.byteOffset + encodedRequest.byteLength);
+}
+
+export class RequestError extends Error {
+  status: number;
+  constructor(statusText: string, status: number, message?: string) {
+    super(statusText);
+    this.status = status;
+    this.name = "RequestError";
+    this.message = message;
+  }
 }
 
 // timeoutFetch is a wrapper around fetch that provides timeout and protocol
@@ -160,7 +204,17 @@ function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends 
 
   return withTimeout(fetch(url, params), timeout).then((res) => {
     if (!res.ok) {
-      throw Error(res.statusText);
+      return res.arrayBuffer()
+        .then((buffer) => {
+          let respError;
+          try {
+            respError = ResponseError.decode(new Uint8Array(buffer));
+          } catch {
+            respError = new ResponseError({error: res.statusText});
+          }
+          const message = serverToClientErrorMessageMap.get(respError.error) || respError.error;
+          throw new RequestError(res.statusText, res.status, message);
+        });
     }
     return res.arrayBuffer().then((buffer) => builder.decode(new Uint8Array(buffer)));
   });
@@ -211,7 +265,7 @@ export function setUIData(req: SetUIDataRequestMessage, timeout?: moment.Duratio
 // getEvents gets event data
 export function getEvents(req: EventsRequestMessage, timeout?: moment.Duration): Promise<EventsResponseMessage> {
   const queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
-  return timeoutFetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`, null, timeout);
+  return timeoutFetch(serverpb.EventsResponse, `${API_PREFIX}/events?unredacted_events=true&${queryString}`, null, timeout);
 }
 
 export function getLocations(_req: LocationsRequestMessage, timeout?: moment.Duration): Promise<LocationsResponseMessage> {
@@ -311,14 +365,28 @@ export function getRangeLog(
   );
 }
 
-// getCommandQueue returns a representation of the command queue for a given range id
-export function getCommandQueue(req: CommandQueueRequestMessage, timeout?: moment.Duration): Promise<CommandQueueResponseMessage> {
-  return timeoutFetch(serverpb.CommandQueueResponse, `${STATUS_PREFIX}/range/${req.range_id}/cmdqueue`, null, timeout);
+// getSettings gets all cluster settings. We request unredacted_values, which will attempt
+// to obtain all values from the server. The server will only accept to do so if
+// the user also happens to have admin privilege.
+export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Duration): Promise<SettingsResponseMessage> {
+  return timeoutFetch(serverpb.SettingsResponse, `${API_PREFIX}/settings?unredacted_values=true`, null, timeout);
 }
 
-// getSettings gets all cluster settings
-export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Duration): Promise<SettingsResponseMessage> {
-  return timeoutFetch(serverpb.SettingsResponse, `${API_PREFIX}/settings`, null, timeout);
+// getSessions gets all cluster sessions.
+export function getSessions(_req: SessionsRequestMessage, timeout?: moment.Duration): Promise<SessionsResponseMessage> {
+  return timeoutFetch(serverpb.ListSessionsResponse, `${STATUS_PREFIX}/sessions`, null, timeout);
+}
+
+// cancelSession cancels the session with the given id on the given node.
+export function terminateSession(req: CancelSessionRequestMessage, timeout?: moment.Duration): Promise<CancelSessionResponseMessage> {
+  return timeoutFetch(serverpb.CancelSessionResponse,
+                      `${STATUS_PREFIX}/cancel_session/${req.node_id}`, req as any, timeout);
+}
+
+// cancelQuery cancels the query with the given id on the given node.
+export function terminateQuery(req: CancelQueryRequestMessage, timeout?: moment.Duration): Promise<CancelQueryResponseMessage> {
+  return timeoutFetch(serverpb.CancelQueryResponse,
+                      `${STATUS_PREFIX}/cancel_query/${req.node_id}`, req as any, timeout);
 }
 
 export function userLogin(req: UserLoginRequestMessage, timeout?: moment.Duration): Promise<UserLoginResponseMessage> {
@@ -339,7 +407,27 @@ export function getStatements(timeout?: moment.Duration): Promise<StatementsResp
   return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout);
 }
 
+export function getStatementDiagnosticsReports(timeout?: moment.Duration): Promise<StatementDiagnosticsReportsResponseMessage> {
+  return timeoutFetch(serverpb.StatementDiagnosticsReportsResponse, `${STATUS_PREFIX}/stmtdiagreports`, null, timeout);
+}
+
+export function createStatementDiagnosticsReport(req: CreateStatementDiagnosticsReportRequestMessage, timeout?: moment.Duration): Promise<CreateStatementDiagnosticsReportResponseMessage> {
+  return timeoutFetch(serverpb.CreateStatementDiagnosticsReportResponse, `${STATUS_PREFIX}/stmtdiagreports`, req as any, timeout);
+}
+
+export function getStatementDiagnostics(req: StatementDiagnosticsRequestMessage, timeout?: moment.Duration): Promise<StatementDiagnosticsResponseMessage> {
+  return timeoutFetch(serverpb.StatementDiagnosticsResponse, `${STATUS_PREFIX}/stmtdiag/${req.statement_diagnostics_id}`, null, timeout);
+}
+
 // getDataDistribution returns information about how replicas are distributed across nodes.
 export function getDataDistribution(timeout?: moment.Duration): Promise<DataDistributionResponseMessage> {
   return timeoutFetch(serverpb.DataDistributionResponse, `${API_PREFIX}/data_distribution`, null, timeout);
+}
+
+export function enqueueRange(req: EnqueueRangeRequestMessage, timeout?: moment.Duration): Promise<EnqueueRangeResponseMessage> {
+  return timeoutFetch(serverpb.EnqueueRangeResponse, `${API_PREFIX}/enqueue_range`, req as any, timeout);
+}
+
+export function getAllMetricMetadata(_req: MetricMetadataRequestMessage = null, timeout?: moment.Duration): Promise<MetricMetadataResponseMessage> {
+  return timeoutFetch(serverpb.MetricMetadataResponse, `${API_PREFIX}/metricmetadata`, null, timeout);
 }

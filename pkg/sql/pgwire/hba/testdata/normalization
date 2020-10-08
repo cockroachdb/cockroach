@@ -1,0 +1,92 @@
+subtest empty_conf
+
+hba
+# nothing
+----
+# (empty configuration)
+
+hba
+----
+# (empty configuration)
+
+subtest end
+
+subtest unicode_normalization
+
+hba
+host all Ὀδυσσεύς all cert-password
+----
+# Original configuration:
+# host all Ὀδυσσεύς all cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER     ADDRESS METHOD        OPTIONS
+host   all      ὀδυσσεύς all     cert-password
+
+subtest end
+
+subtest db_normalization
+
+hba
+host some foo all cert-password
+host some,more bar all cert-password
+----
+# Original configuration:
+# host some foo all cert-password
+# host some,more bar all cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      foo  all     cert-password
+host   all      bar  all     cert-password
+
+subtest end
+
+subtest quoted_all_host
+
+hba
+host all all "all" cert-password
+----
+# Original configuration:
+# host all all "all" cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      all  "all"   cert-password
+
+subtest end
+
+subtest all_in_user_list
+
+hba
+host all a,all,b all cert-password
+host all a,"all",b all cert-password
+----
+# Original configuration:
+# host all a,all,b all cert-password
+# host all a,"all",b all cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER  ADDRESS METHOD        OPTIONS
+host   all      all   all     cert-password
+host   all      a     all     cert-password
+host   all      "all" all     cert-password
+host   all      b     all     cert-password
+
+subtest end
+
+subtest rule_expansion
+
+hba
+host all a,b,c all cert-password
+----
+# Original configuration:
+# host all a,b,c all cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      a    all     cert-password
+host   all      b    all     cert-password
+host   all      c    all     cert-password
+
+subtest end

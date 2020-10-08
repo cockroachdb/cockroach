@@ -1,0 +1,27 @@
+# Empty input
+convert
+----
+
+# Pass through a few lines
+convert
+spurious make output
+and some more
+----
+spurious make output
+and some more
+
+# json2text
+convert
+{"Time":"2019-11-29T14:10:40.054177+01:00","Action":"run","Package":"github.com/fakedb/fake/pkg/util/stop","Test":"TestFakerWithCancelConcurrent"}
+{"Time":"2019-11-29T14:10:40.054181+01:00","Action":"output","Package":"github.com/fakedb/fake/pkg/util/stop","Test":"TestFakerWithCancelConcurrent","Output":"=== RUN   TestFakerWithCancelConcurrent\n"}
+{"Time":"2019-11-29T14:10:40.054874+01:00","Action":"output","Package":"github.com/fakedb/fake/pkg/util/stop","Test":"TestFakerWithCancelConcurrent","Output":"just some output\n"}
+random interspersed stuff
+{"Time":"2019-11-29T14:10:40.05494+01:00","Action":"output","Package":"github.com/fakedb/fake/pkg/util/stop","Test":"TestFakerWithCancelConcurrent","Output":"and some more\n"}
+{"Time":"2019-11-29T14:10:40.055489+01:00","Action":"output","Package":"github.com/fakedb/fake/pkg/util/stop","Test":"TestFakerWithCancelConcurrent","Output":"--- PASS: TestFakerWithCancelConcurrent (0.00s)\n"}
+{"Time":"2019-11-29T14:10:40.055889+01:00","Action":"pass","Package":"github.com/fakedb/fake/pkg/util/stop","Test":"TestFakerWithCancelConcurrent"}
+----
+=== RUN   TestFakerWithCancelConcurrent
+just some output
+random interspersed stuff
+and some more
+--- PASS: TestFakerWithCancelConcurrent (0.00s)

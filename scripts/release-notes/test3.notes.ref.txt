@@ -1,4 +1,4 @@
-### Bug Fixes
+### Bug fixes
 
 - Feature A [#1][#1] [6a84145e9][6a84145e9]
 - Feature C [#1][#1] [0ac9dc576][0ac9dc576]
@@ -9,15 +9,16 @@
 
 #### Changes without release note annotation
 
-- [#unknown][#unknown] [4f4329fdc][4f4329fdc] master update (test3)
+- [#unknown][#unknown] [4f4329fdc][4f4329fdc] master update (test3 <test3@example.com>)
 
-### Doc Updates
+### Doc updates
 
 Docs team: Please add these manually.
 
 ### Contributors
 
-This release includes 2 merged PRs by 1 author. We would like to thank the following contributors from the CockroachDB community:
+This release includes 2 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
 
 - test3
 

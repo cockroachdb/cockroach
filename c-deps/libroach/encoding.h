@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #pragma once
 
@@ -18,13 +14,14 @@
 #include <rocksdb/slice.h>
 #include <stdint.h>
 #include "defines.h"
-#include "protos/storage/engine/enginepb/mvcc.pb.h"
+#include "protos/storage/enginepb/mvcc.pb.h"
 
 namespace cockroach {
 
 const int kIntZero = 136;
 const int kIntSmall = 109;
 const int kIntMax = 253;
+const int kIntMin = 128;
 
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer.
@@ -69,8 +66,19 @@ std::string EncodeKey(DBKey k);
 // SplitKey splits an MVCC key into key and timestamp slices. See also
 // DecodeKey if you want to decode the timestamp. Returns true on
 // success and false on any decoding error.
-WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
-                                 rocksdb::Slice* timestamp);
+WARN_UNUSED_RESULT inline bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
+                                        rocksdb::Slice* timestamp) {
+  if (buf.empty()) {
+    return false;
+  }
+  const char ts_size = buf[buf.size() - 1];
+  if (ts_size >= buf.size()) {
+    return false;
+  }
+  *key = rocksdb::Slice(buf.data(), buf.size() - ts_size - 1);
+  *timestamp = rocksdb::Slice(key->data() + key->size(), ts_size);
+  return true;
+}
 
 // DecodeTimestamp an MVCC encoded timestamp. Returns true on success
 // and false on any decoding error.
@@ -105,5 +113,18 @@ WARN_UNUSED_RESULT bool DecodeRangeIDKey(rocksdb::Slice buf, int64_t* range_id,
 // a slice that is still MVCC encoded. This is used by the prefix
 // extractor used to build bloom filters on the prefix.
 rocksdb::Slice KeyPrefix(const rocksdb::Slice& src);
+
+// IsInt peeks at the type of the value encoded at the start of buf and checks
+// if it is of type int.
+WARN_UNUSED_RESULT bool IsInt(rocksdb::Slice* buf);
+
+// StripTenantPrefix validates that the given key has a tenant prefix. On
+// completion, buf holds the remainder of the key (with the prefix removed).
+WARN_UNUSED_RESULT bool StripTenantPrefix(rocksdb::Slice* buf);
+
+// DecodeTenantAndTablePrefix validates that the given key has a tenant and
+// table prefix. On completion, buf holds the remainder of the key (with the
+// prefix removed) and tbl stores the decoded descriptor ID of the table.
+WARN_UNUSED_RESULT bool DecodeTenantAndTablePrefix(rocksdb::Slice* buf, uint64_t* tbl);
 
 }  // namespace cockroach

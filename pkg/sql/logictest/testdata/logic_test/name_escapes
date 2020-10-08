@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # Check that the various things in a table definition are properly escaped when
 # printed out.
 statement ok
@@ -22,12 +20,12 @@ CREATE TABLE unused4(x INT, CONSTRAINT woo " PRIMARY KEY (x)
 query TT
 SHOW CREATE TABLE ";--notbetter"
 ----
-";--notbetter"  CREATE TABLE ";--notbetter" (
-                x INT NOT NULL,
-                y INT NULL,
+";--notbetter"  CREATE TABLE public.";--notbetter" (
+                x INT8 NOT NULL,
+                y INT8 NULL,
                 "welp INT); -- concerning much
 DROP USER dumpty;
-CREATE TABLE unused (x " INT NULL,
+CREATE TABLE unused (x " INT8 NULL,
   CONSTRAINT "getmeoutofhere PRIMARY KEY (x ASC)); -- saveme!
 DROP USER madhatter;
 CREATE TABLE unused4(x INT, CONSTRAINT woo " PRIMARY KEY (x ASC),
@@ -39,7 +37,7 @@ DROP USER queenofhearts;
 CREATE TABLE unused3(x INT, y INT, FAMILY woo " (x, y, "welp INT); -- concerning much
 DROP USER dumpty;
 CREATE TABLE unused (x ")
-) INTERLEAVE IN PARENT "woo; DROP USER humpty;" (x)
+) INTERLEAVE IN PARENT public."woo; DROP USER humpty;" (x)
 
 # Check that view creates handle strange things properly.
 statement ok
@@ -48,7 +46,7 @@ CREATE VIEW ";--alsoconcerning" AS SELECT @1 AS a, @2 AS b, @3 AS c FROM ";--not
 query TT
 SHOW CREATE VIEW ";--alsoconcerning"
 ----
-";--alsoconcerning"  CREATE VIEW ";--alsoconcerning" (a, b, c) AS SELECT @1 AS a, @2 AS b, @3 AS c FROM test.public.";--notbetter"
+";--alsoconcerning"  CREATE VIEW public.";--alsoconcerning" (a, b, c) AS SELECT @1 AS a, @2 AS b, @3 AS c FROM test.public.";--notbetter"
 
 # Check that "create table as" handles strange things properly.
 statement ok
@@ -57,9 +55,9 @@ CREATE TABLE ";--dontask" AS SELECT @1 AS a, @2 AS b, @3 AS c FROM ";--notbetter
 query TT
 SHOW CREATE TABLE ";--dontask"
 ----
-";--dontask"  CREATE TABLE ";--dontask" (
-              a INT NULL,
-              b INT NULL,
-              c INT NULL,
+";--dontask"  CREATE TABLE public.";--dontask" (
+              a INT8 NULL,
+              b INT8 NULL,
+              c INT8 NULL,
               FAMILY "primary" (a, b, c, rowid)
 )

@@ -1,0 +1,461 @@
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
+----
+
+exec-ddl
+CREATE TABLE small (m INT, n INT)
+----
+
+exec-ddl
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+----
+
+# We can only test lookup stat generation when using non-covering indexes
+# (that's when we create a group with LookupJoin). We can compare the
+# statistics with the top-level join, they should be in the same ballpark.
+
+opt
+SELECT * FROM small JOIN abcd ON a=m
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int) c:7(int)
+ ├── key columns: [8] = [8]
+ ├── lookup columns are key
+ ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int) abcd.rowid:8(int!null)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
+ │    ├── scan small
+ │    │    ├── columns: m:1(int) n:2(int)
+ │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
+ │    └── filters (true)
+ └── filters (true)
+
+# Filter that gets pushed down on both sides, but comes back into the ON
+# condition for the lookup side.
+opt
+SELECT * FROM small JOIN abcd ON a=m WHERE n > 2
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:5(int!null) b:6(int) c:7(int)
+ ├── key columns: [8] = [8]
+ ├── lookup columns are key
+ ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(5)=9.9, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:5(int!null) b:6(int) abcd.rowid:8(int!null)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(5)=9.9, null(5)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
+ │    ├── select
+ │    │    ├── columns: m:1(int) n:2(int!null)
+ │    │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0]
+ │    │    ├── scan small
+ │    │    │    ├── columns: m:1(int) n:2(int)
+ │    │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0.1]
+ │    │    └── filters
+ │    │         └── n:2 > 2 [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
+ │    └── filters (true)
+ └── filters (true)
+
+# Filter that applies to the right side and gets pulled back into the ON
+# condition.
+opt
+SELECT * FROM small JOIN abcd ON a=m WHERE b > 2
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int!null) c:7(int)
+ ├── key columns: [8] = [8]
+ ├── lookup columns are key
+ ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int!null) abcd.rowid:8(int!null)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=33, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0, distinct(6)=33, null(6)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
+ │    ├── scan small
+ │    │    ├── columns: m:1(int) n:2(int)
+ │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
+ │    └── filters
+ │         └── b:6 > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+ └── filters (true)
+
+# Filter that can only be applied after the primary index join.
+opt
+SELECT * FROM small JOIN abcd ON a=m WHERE c>2
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int) c:7(int!null)
+ ├── key columns: [8] = [8]
+ ├── lookup columns are key
+ ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int) abcd.rowid:8(int!null)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
+ │    ├── scan small
+ │    │    ├── columns: m:1(int) n:2(int)
+ │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
+ │    └── filters (true)
+ └── filters
+      └── c:7 > 2 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
+
+# Multiple equalities.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND b=n WHERE c>2
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:5(int!null) b:6(int!null) c:7(int!null)
+ ├── key columns: [8] = [8]
+ ├── lookup columns are key
+ ├── stats: [rows=0.334949339, distinct(1)=0.334949339, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(5)=0.334949339, null(5)=0, distinct(6)=1e-10, null(6)=0]
+ ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:5(int!null) b:6(int!null) abcd.rowid:8(int!null)
+ │    ├── key columns: [1 2] = [5 6]
+ │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(5)=0.970299, null(5)=0, distinct(6)=1e-10, null(6)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ │    ├── scan small
+ │    │    ├── columns: m:1(int) n:2(int)
+ │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0.1]
+ │    └── filters (true)
+ └── filters
+      └── c:7 > 2 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
+----
+
+exec-ddl
+CREATE TABLE def (d INT, e INT, f INT, g FLOAT, PRIMARY KEY (f, e), INDEX e_idx (e) STORING (d), INDEX d_idx (d))
+----
+
+# Set up the statistics as if the first table is much smaller than the second.
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# The filter a=f is selective, so we expect a lookup join.
+opt
+SELECT a, b, c, d, e, f FROM abc JOIN def ON a = f
+----
+inner-join (lookup def)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int!null) f:7(int!null)
+ ├── key columns: [1] = [7]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(7)=100, null(7)=0]
+ ├── key: (3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5), (1)==(7), (7)==(1)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
+ │    ├── key: (1,3)
+ │    └── fd: (1,3)-->(2)
+ └── filters (true)
+
+# The filter a=e is not very selective, so we do not expect a lookup join.
+opt
+SELECT a, b, c, d, e, f FROM abc JOIN def ON a = e
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int!null) f:7(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(6)=100, null(6)=0]
+ ├── key: (3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
+ │    ├── key: (1,3)
+ │    ├── fd: (1,3)-->(2)
+ │    └── ordering: +1
+ ├── scan def@e_idx
+ │    ├── columns: d:5(int) e:6(int!null) f:7(int!null)
+ │    ├── stats: [rows=10000, distinct(6)=100, null(6)=0, distinct(7)=10000, null(7)=0]
+ │    ├── key: (6,7)
+ │    ├── fd: (6,7)-->(5)
+ │    └── ordering: +6
+ └── filters (true)
+
+# Check column statistics for lookup join.
+opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=6 colstat=7 colstat=(2,6,7)
+SELECT a, b, c, d, e, f FROM abc JOIN DEF ON a = f
+----
+inner-join (lookup def)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int!null) f:7(int!null)
+ ├── key columns: [1] = [7]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=9.99954623, null(2)=1, distinct(3)=9.99954623, null(3)=0, distinct(4)=1, null(4)=0, distinct(6)=63.2138954, null(6)=0, distinct(7)=100, null(7)=0, distinct(2,6,7)=100, null(2,6,7)=0]
+ ├── key: (3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5), (1)==(7), (7)==(1)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
+ │    ├── key: (1,3)
+ │    └── fd: (1,3)-->(2)
+ └── filters (true)
+
+# Check column statistics for double lookup join.
+opt colstat=8
+SELECT * FROM abc LEFT JOIN DEF ON a = d AND b = 3
+----
+left-join (lookup def)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int) f:7(int) g:8(float)
+ ├── key columns: [7 6] = [7 6]
+ ├── lookup columns are key
+ ├── stats: [rows=100, distinct(5)=10, null(5)=90, distinct(8)=9.95021575, null(8)=91]
+ ├── key: (1,3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5,8)
+ ├── left-join (lookup def@d_idx)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int) f:7(int)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=100, distinct(5)=10, null(5)=90]
+ │    ├── key: (1,3,6,7)
+ │    ├── fd: (1,3)-->(2), (6,7)-->(5)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
+ │    │    ├── key: (1,3)
+ │    │    └── fd: (1,3)-->(2)
+ │    └── filters
+ │         └── b:2 = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ └── filters (true)
+
+# The filter a=e is not very selective, so we do not expect a lookup join, even
+# though there is an additional filter.
+opt colstat=8
+SELECT * FROM abc LEFT JOIN DEF ON a = e AND b = 3
+----
+right-join (hash)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int) f:7(int) g:8(float)
+ ├── stats: [rows=100, distinct(6)=100, null(6)=0, distinct(8)=95.1671064, null(8)=1]
+ ├── key: (1,3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5,8)
+ ├── scan def
+ │    ├── columns: d:5(int) e:6(int!null) f:7(int!null) g:8(float)
+ │    ├── stats: [rows=10000, distinct(6)=100, null(6)=0, distinct(8)=1000, null(8)=100]
+ │    ├── key: (6,7)
+ │    └── fd: (6,7)-->(5,8)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
+ │    ├── key: (1,3)
+ │    └── fd: (1,3)-->(2)
+ └── filters
+      ├── a:1 = e:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── b:2 = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+
+exec-ddl
+CREATE TABLE t (x INT, y INT, INDEX x_idx (x) STORING (y), INDEX y_idx (y) STORING (x), INDEX xy_idx (x, y))
+----
+
+exec-ddl
+CREATE TABLE u (x INT, y INT, INDEX x_idx (x) STORING (y), INDEX y_idx (y) STORING (x), INDEX xy_idx (x, y))
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE u INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 2
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 2
+  }
+]'
+----
+
+# Test that the correct index is used for the lookup join.
+opt
+SELECT * FROM u WHERE EXISTS (SELECT * FROM t WHERE u.x=t.x AND u.y=t.y);
+----
+semi-join (lookup t@xy_idx)
+ ├── columns: x:1(int) y:2(int)
+ ├── key columns: [1 2] = [5 6]
+ ├── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
+ ├── scan u
+ │    ├── columns: u.x:1(int) u.y:2(int)
+ │    └── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
+ └── filters (true)
+
+opt
+SELECT * FROM u WHERE NOT EXISTS (SELECT * FROM t WHERE u.x=t.x AND u.y=t.y);
+----
+anti-join (lookup t@xy_idx)
+ ├── columns: x:1(int) y:2(int)
+ ├── key columns: [1 2] = [5 6]
+ ├── stats: [rows=1e-10]
+ ├── scan u
+ │    ├── columns: u.x:1(int) u.y:2(int)
+ │    └── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
+ └── filters (true)
+
+
+exec-ddl
+CREATE TABLE medium (m INT, n INT)
+----
+
+exec-ddl
+ALTER TABLE medium INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 40,
+    "distinct_count": 40
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE wxyz (w INT, x INT, y INT, z INT, INDEX (x,y,z))
+----
+
+exec-ddl
+ALTER TABLE wxyz INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 11,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 50, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 50, "num_range": 900, "distinct_range": 9, "upper_bound": "10"}
+    ]
+  }
+]'
+----
+
+# Choose the lookup join due to the highly selective constant column.
+opt
+SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
+----
+inner-join (lookup wxyz)
+ ├── columns: m:1(int!null) n:2(int) w:5(int) x:6(int!null) y:7(int!null) z:8(int)
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── stats: [rows=49.3441882, distinct(1)=39.1263061, null(1)=0, distinct(6)=39.1263061, null(6)=0]
+ ├── fd: ()-->(7), (1)==(6), (6)==(1)
+ ├── inner-join (lookup wxyz@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) x:6(int!null) y:7(int!null) z:8(int) wxyz.rowid:9(int!null)
+ │    ├── key columns: [1 11] = [6 7]
+ │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, distinct(6)=19.8, null(6)=0, distinct(7)=1, null(7)=0, distinct(11)=1, null(11)=0]
+ │    ├── fd: ()-->(7), (9)-->(6,8), (1)==(6), (6)==(1)
+ │    ├── project
+ │    │    ├── columns: "project_const_col_@7":11(int!null) m:1(int) n:2(int)
+ │    │    ├── stats: [rows=40, distinct(1)=40, null(1)=0, distinct(11)=1, null(11)=0]
+ │    │    ├── fd: ()-->(11)
+ │    │    ├── scan medium
+ │    │    │    ├── columns: m:1(int) n:2(int)
+ │    │    │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
+ │    │    └── projections
+ │    │         └── 10 [as="project_const_col_@7":11, type=int]
+ │    └── filters (true)
+ └── filters (true)
+
+exec-ddl
+ALTER TABLE wxyz INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 11,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 10, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 900, "num_range": 90, "distinct_range": 9, "upper_bound": "10"}
+    ]
+  }
+]'
+----
+
+# With a less selective constant column, the hash join should be chosen instead.
+opt
+SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
+----
+inner-join (hash)
+ ├── columns: m:1(int!null) n:2(int) w:5(int) x:6(int!null) y:7(int!null) z:8(int)
+ ├── stats: [rows=356.4, distinct(1)=40, null(1)=0, distinct(6)=40, null(6)=0]
+ ├── fd: ()-->(7), (1)==(6), (6)==(1)
+ ├── select
+ │    ├── columns: w:5(int) x:6(int) y:7(int!null) z:8(int)
+ │    ├── stats: [rows=900, distinct(6)=100, null(6)=9, distinct(7)=1, null(7)=0]
+ │    │   histogram(7)=  0 900
+ │    │                <--- 10
+ │    ├── fd: ()-->(7)
+ │    ├── scan wxyz
+ │    │    ├── columns: w:5(int) x:6(int) y:7(int) z:8(int)
+ │    │    └── stats: [rows=1000, distinct(6)=100, null(6)=10, distinct(7)=11, null(7)=0]
+ │    │        histogram(7)=  0 10  90 900
+ │    │                     <--- 0 ---- 10
+ │    └── filters
+ │         └── y:7 = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+ ├── scan medium
+ │    ├── columns: m:1(int) n:2(int)
+ │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
+ └── filters
+      └── m:1 = x:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]

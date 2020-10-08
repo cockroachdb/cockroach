@@ -1,26 +1,22 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package extract
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os/exec"
 	"regexp"
@@ -28,6 +24,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -80,7 +77,7 @@ func GenerateRRNet(bnf []byte) ([]byte, error) {
 	v.Add("options", "factoring")
 	v.Add("options", "inline")
 
-	resp, err := http.Post(rrAddr, "application/x-www-form-urlencoded", strings.NewReader(v.Encode()))
+	resp, err := httputil.Post(context.TODO(), rrAddr, "application/x-www-form-urlencoded", strings.NewReader(v.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +98,7 @@ func GenerateRRNet(bnf []byte) ([]byte, error) {
 func GenerateBNF(addr string) (ebnf []byte, err error) {
 	var b []byte
 	if strings.HasPrefix(addr, "http") {
-		resp, err := http.Get(addr)
+		resp, err := httputil.Get(context.TODO(), addr)
 		if err != nil {
 			return nil, err
 		}
@@ -128,7 +125,7 @@ func GenerateBNF(addr string) (ebnf []byte, err error) {
 	for _, p := range t.Productions {
 		var impl [][]yacc.Item
 		for _, e := range p.Expressions {
-			if strings.Contains(e.Command, "unimplemented") {
+			if strings.Contains(e.Command, "unimplemented") && !strings.Contains(e.Command, "FORCE DOC") {
 				continue
 			}
 			if strings.Contains(e.Command, "SKIP DOC") {

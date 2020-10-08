@@ -68,13 +68,16 @@ spec:
       app: cockroachdb
   maxUnavailable: 1
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: cockroachdb
 spec:
   serviceName: "cockroachdb"
   replicas: 3
+  selector:
+    matchLabels:
+      app: cockroachdb
   template:
     metadata:
       labels:
@@ -94,8 +97,23 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v2.0.4
+        image: cockroachdb/cockroach:v20.1.6
         imagePullPolicy: IfNotPresent
+        # TODO: Change these to appropriate values for the hardware that you're running. You can see
+        # the amount of allocatable resources on each of your Kubernetes nodes by running:
+        #   kubectl describe nodes
+        # resources:
+        #   requests:
+        #     cpu: "16"
+        #     memory: "8Gi"
+        #   limits:
+            # NOTE: Unless you have enabled the non-default Static CPU Management Policy
+            # and are using an integer number of CPUs, we don't recommend setting a CPU limit.
+            # See:
+            #   https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/#static-policy
+            #   https://github.com/kubernetes/kubernetes/issues/51135
+            #   cpu: "16"
+            #   memory: "8Gi" 
         ports:
         - containerPort: 26257
           name: grpc
@@ -120,12 +138,31 @@ spec:
         env:
         - name: COCKROACH_CHANNEL
           value: kubernetes-insecure
+        - name: GOMAXPROCS
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.cpu
+              divisor: "1"
+        - name: MEMORY_LIMIT_MIB
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+              divisor: "1Mi"
         command:
           - "/bin/bash"
           - "-ecx"
           # The use of qualified `hostname -f` is crucial:
           # Other nodes aren't able to look up the unqualified hostname.
-          - "exec /cockroach/cockroach start --logtostderr --insecure --advertise-host $(hostname -f) --http-host 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
+          - exec
+            /cockroach/cockroach
+            start
+            --logtostderr
+            --insecure
+            --advertise-host $(hostname -f)
+            --http-addr 0.0.0.0
+            --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb
+            --cache $(expr $MEMORY_LIMIT_MIB / 4)MiB
+            --max-sql-memory $(expr $MEMORY_LIMIT_MIB / 4)MiB
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
       # needed for graceful shutdown of a node.
       terminationGracePeriodSeconds: 60
@@ -144,4 +181,4 @@ spec:
         - "ReadWriteOnce"
       resources:
         requests:
-          storage: 1Gi
+          storage: 100Gi

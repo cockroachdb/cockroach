@@ -4,181 +4,242 @@ CREATE TABLE abcde (
     b INT,
     c INT,
     d INT,
-    e INT,
+    e INT DEFAULT(10),
     UNIQUE INDEX bc (b, c)
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── e int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX bc
-      ├── b int
-      ├── c int
-      └── a int not null (storing)
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8,
+    z FLOAT8
+)
+----
 
 # --------------------------------------------------
 # SimplifyLimitOrdering
 # --------------------------------------------------
 # Remove constant column.
-opt
+norm expect=SimplifyLimitOrdering
 SELECT d, e FROM (SELECT d, 1 AS one, e FROM abcde) ORDER BY d, one, e LIMIT 10
 ----
 limit
- ├── columns: d:4(int) e:5(int)
+ ├── columns: d:4 e:5
+ ├── internal-ordering: +4,+5
  ├── cardinality: [0 - 10]
- ├── ordering: +4,+5 opt(6)
+ ├── ordering: +4,+5
  ├── sort
- │    ├── columns: d:4(int) e:5(int)
+ │    ├── columns: d:4 e:5
  │    ├── ordering: +4,+5
+ │    ├── limit hint: 10.00
  │    └── scan abcde
- │         └── columns: d:4(int) e:5(int)
- └── const: 10 [type=int]
+ │         └── columns: d:4 e:5
+ └── 10
 
 # Remove multiple constant columns.
-opt
+norm expect=SimplifyLimitOrdering
 SELECT b, c FROM abcde WHERE d=1 AND e=2 ORDER BY b, c, d, e, a LIMIT 10
 ----
 limit
- ├── columns: b:2(int) c:3(int)
+ ├── columns: b:2 c:3  [hidden: a:1!null d:4!null e:5!null]
+ ├── internal-ordering: +2,+3,+1 opt(4,5)
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: ()-->(4,5), (1)-->(2,3), (2,3)~~>(1)
- ├── ordering: +2,+3,+1 opt(4,5)
+ ├── ordering: +2,+3,+1 opt(4,5) [actual: +2,+3,+1]
  ├── sort
- │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int!null) e:5(int!null)
+ │    ├── columns: a:1!null b:2 c:3 d:4!null e:5!null
  │    ├── key: (1)
  │    ├── fd: ()-->(4,5), (1)-->(2,3), (2,3)~~>(1)
- │    ├── ordering: +2,+3,+1 opt(4,5)
+ │    ├── ordering: +2,+3,+1 opt(4,5) [actual: +2,+3,+1]
+ │    ├── limit hint: 10.00
  │    └── select
- │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int!null) e:5(int!null)
+ │         ├── columns: a:1!null b:2 c:3 d:4!null e:5!null
  │         ├── key: (1)
  │         ├── fd: ()-->(4,5), (1)-->(2,3), (2,3)~~>(1)
  │         ├── scan abcde
- │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+ │         │    ├── columns: a:1!null b:2 c:3 d:4 e:5
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
- │         └── filters [type=bool, outer=(4,5), constraints=(/4: [/1 - /1]; /5: [/2 - /2]; tight), fd=()-->(4,5)]
- │              ├── abcde.d = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
- │              └── abcde.e = 2 [type=bool, outer=(5), constraints=(/5: [/2 - /2]; tight)]
- └── const: 10 [type=int]
+ │         └── filters
+ │              ├── d:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+ │              └── e:5 = 2 [outer=(5), constraints=(/5: [/2 - /2]; tight), fd=()-->(5)]
+ └── 10
 
 # Remove functionally dependent column that's only used in ordering.
-opt
+norm expect=SimplifyLimitOrdering
 SELECT c FROM abcde ORDER BY b, c, a, d LIMIT 10
 ----
-scan abcde@bc
- ├── columns: c:3(int)
- ├── limit: 10
+limit
+ ├── columns: c:3  [hidden: a:1!null b:2]
+ ├── internal-ordering: +2,+3,+1
+ ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
- └── ordering: +2,+3,+1
+ ├── ordering: +2,+3,+1
+ ├── sort
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    ├── ordering: +2,+3,+1
+ │    ├── limit hint: 10.00
+ │    └── scan abcde
+ │         ├── columns: a:1!null b:2 c:3
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3), (2,3)~~>(1)
+ └── 10
 
 # --------------------------------------------------
 # SimplifyOffsetOrdering
 # --------------------------------------------------
 # Remove all order by columns, because all are constant.
-opt
+norm expect=SimplifyOffsetOrdering
 SELECT d, e FROM (SELECT d, 1 AS one, e FROM abcde) ORDER BY one OFFSET 10
 ----
 offset
- ├── columns: d:4(int) e:5(int)
+ ├── columns: d:4 e:5
  ├── scan abcde
- │    └── columns: d:4(int) e:5(int)
- └── const: 10 [type=int]
+ │    └── columns: d:4 e:5
+ └── 10
 
 # --------------------------------------------------
 # SimplifyGroupByOrdering
 # --------------------------------------------------
 # Remove columns functionally dependent on key.
-opt
+# TODO(justin): figure out why this doesn't trigger SimplifyGroupByOrdering (it
+# triggers SimplifyRootOrdering).
+norm
 SELECT array_agg(b), a, c FROM abcde GROUP BY b, a, c ORDER BY a, b, c
 ----
-sort
- ├── columns: array_agg:6(int[]) a:1(int!null) c:3(int)
+group-by
+ ├── columns: array_agg:7 a:1!null c:3
+ ├── grouping columns: a:1!null
  ├── key: (1)
- ├── fd: (1)-->(2,3,6), (2,3)~~>(1)
+ ├── fd: (1)-->(3,7)
  ├── ordering: +1
- └── group-by
-      ├── columns: a:1(int!null) b:2(int) c:3(int) array_agg:6(int[])
-      ├── grouping columns: a:1(int!null) b:2(int) c:3(int)
-      ├── key: (1)
-      ├── fd: (1)-->(2,3,6), (2,3)~~>(1)
-      ├── scan abcde@bc
-      │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2,3), (2,3)~~>(1)
-      └── aggregations [outer=(2)]
-           └── array-agg [type=int[], outer=(2)]
-                └── variable: abcde.b [type=int, outer=(2)]
+ ├── scan abcde
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    └── ordering: +1
+ └── aggregations
+      ├── array-agg [as=array_agg:7, outer=(2)]
+      │    └── b:2
+      └── const-agg [as=c:3, outer=(3)]
+           └── c:3
+
+# ScalarGroupBy case.
+norm expect=SimplifyGroupByOrdering
+SELECT array_agg(b) FROM (SELECT * FROM abcde ORDER BY a, b, c)
+----
+scalar-group-by
+ ├── columns: array_agg:7
+ ├── internal-ordering: +1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scan abcde
+ │    ├── columns: a:1!null b:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ └── aggregations
+      └── array-agg [as=array_agg:7, outer=(2)]
+           └── b:2
+
+# DistinctOn case.
+norm expect=SimplifyGroupByOrdering
+SELECT DISTINCT ON (b, c) a, b, c FROM abcde ORDER BY b, c, a, d, e
+----
+distinct-on
+ ├── columns: a:1!null b:2 c:3
+ ├── grouping columns: b:2 c:3
+ ├── internal-ordering: +1 opt(2,3)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)-->(1)
+ ├── ordering: +2,+3
+ ├── sort
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    ├── ordering: +2,+3,+1
+ │    └── scan abcde
+ │         ├── columns: a:1!null b:2 c:3
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3), (2,3)~~>(1)
+ └── aggregations
+      └── first-agg [as=a:1, outer=(1)]
+           └── a:1
 
 # --------------------------------------------------
-# SimplifyRowNumberOrdering
+# SimplifyOrdinalityOrdering
 # --------------------------------------------------
 # Remove column functionally dependent on multi-column key.
-opt
-SELECT * FROM abcde WITH ORDINALITY WHERE b IS NOT NULL AND c IS NOT NULL ORDER BY c, d, b, e
+norm expect=SimplifyOrdinalityOrdering
+SELECT * FROM (SELECT * FROM abcde WHERE b IS NOT NULL AND c IS NOT NULL ORDER BY c, d, b, e) WITH ORDINALITY
 ----
-sort
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) e:5(int) ordinality:6(int!null)
+ordinality
+ ├── columns: a:1!null b:2!null c:3!null d:4 e:5 ordinality:7!null
  ├── key: (1)
- ├── fd: (1)-->(2-6), (2,3)-->(1,4,5), (6)-->(1-5)
- ├── ordering: +3,+4,+2
- └── select
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) e:5(int) ordinality:6(int!null)
+ ├── fd: (1)-->(2-5,7), (2,3)-->(1,4,5), (7)-->(1-5)
+ └── sort
+      ├── columns: a:1!null b:2!null c:3!null d:4 e:5
       ├── key: (1)
-      ├── fd: (1)-->(2-6), (2,3)-->(1,4,5), (6)-->(1-5)
-      ├── row-number
-      │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) ordinality:6(int!null)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-6), (2,3)~~>(1,4,5), (6)-->(1-5)
-      │    └── scan abcde
-      │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
-      │         ├── key: (1)
-      │         └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
-      └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; tight)]
-           ├── abcde.b IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
-           └── abcde.c IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+      ├── fd: (1)-->(2-5), (2,3)-->(1,4,5)
+      ├── ordering: +3,+4,+2
+      └── select
+           ├── columns: a:1!null b:2!null c:3!null d:4 e:5
+           ├── key: (1)
+           ├── fd: (1)-->(2-5), (2,3)-->(1,4,5)
+           ├── scan abcde
+           │    ├── columns: a:1!null b:2 c:3 d:4 e:5
+           │    ├── key: (1)
+           │    └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
+           └── filters
+                ├── b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+                └── c:3 IS NOT NULL [outer=(3), constraints=(/3: (/NULL - ]; tight)]
 
 # --------------------------------------------------
 # SimplifyExplainOrdering
 # --------------------------------------------------
 # Remove functionally dependent synthesized column.
-opt
+norm expect=SimplifyExplainOrdering
 EXPLAIN SELECT b, b+1 AS plus, c FROM abcde ORDER BY b, plus, c
 ----
 explain
- ├── columns: tree:7(string) field:8(string) description:9(string)
- └── project
-      ├── columns: b:2(int) plus:6(int) c:3(int)
-      ├── fd: (2)-->(6)
+ ├── columns: tree:8 field:9 description:10
+ ├── immutable
+ └── sort
+      ├── columns: b:2 plus:7 c:3
+      ├── immutable
+      ├── lax-key: (2,3)
+      ├── fd: (2)-->(7)
       ├── ordering: +2,+3
-      ├── scan abcde@bc
-      │    ├── columns: b:2(int) c:3(int)
-      │    └── ordering: +2,+3
-      └── projections [outer=(2,3)]
-           └── abcde.b + 1 [type=int, outer=(2)]
+      └── project
+           ├── columns: plus:7 b:2 c:3
+           ├── immutable
+           ├── lax-key: (2,3)
+           ├── fd: (2)-->(7)
+           ├── scan abcde
+           │    ├── columns: b:2 c:3
+           │    └── lax-key: (2,3)
+           └── projections
+                └── b:2 + 1 [as=plus:7, outer=(2), immutable]
 
 # Regression: Explain a statement having constant column, but with no ordering.
-opt
+norm
 SELECT field FROM [EXPLAIN SELECT 123 AS k]
 ----
 project
- ├── columns: field:3(string)
- └── explain
-      ├── columns: tree:2(string) field:3(string) description:4(string)
-      └── project
-           ├── columns: k:1(int!null)
-           ├── cardinality: [1 - 1]
-           ├── key: ()
-           ├── fd: ()-->(1)
-           ├── values
-           │    ├── cardinality: [1 - 1]
-           │    ├── key: ()
-           │    └── tuple [type=tuple]
-           └── projections
-                └── const: 123 [type=int]
+ ├── columns: field:6
+ ├── explain
+ │    ├── columns: tree:2 field:3 description:4
+ │    └── values
+ │         ├── columns: k:1!null
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(1)
+ │         └── (123,)
+ └── projections
+      └── field:3 [as=field:6, outer=(3)]

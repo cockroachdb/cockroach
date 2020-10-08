@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #pragma once
 
@@ -29,6 +25,7 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus SingleDelete(DBKey key);
   virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch(bool sync);
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
@@ -36,10 +33,12 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(DBIterOptions);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBStatus GetTickersAndHistograms(DBTickersAndHistogramsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus GetEnvStats(DBEnvStatsResult* stats);
+  virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result);
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
-  virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
+  virtual DBStatus EnvOpenFile(DBSlice path, uint64_t bytes_per_sync, rocksdb::WritableFile** file);
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents);
   virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
   virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file);
@@ -47,6 +46,17 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus EnvDeleteFile(DBSlice path);
   virtual DBStatus EnvDeleteDirAndFiles(DBSlice dir);
   virtual DBStatus EnvLinkFile(DBSlice oldname, DBSlice newname);
+  virtual DBStatus EnvOpenReadableFile(DBSlice path, rocksdb::RandomAccessFile** file);
+  virtual DBStatus EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset,
+                                 int* n);
+  virtual DBStatus EnvCloseReadableFile(rocksdb::RandomAccessFile* file);
+  virtual DBStatus EnvOpenDirectory(DBSlice path, rocksdb::Directory** file);
+  virtual DBStatus EnvSyncDirectory(rocksdb::Directory* file);
+  virtual DBStatus EnvCloseDirectory(rocksdb::Directory* file);
+  virtual DBStatus EnvRenameFile(DBSlice oldname, DBSlice newname);
+  virtual DBStatus EnvCreateDir(DBSlice name);
+  virtual DBStatus EnvDeleteDir(DBSlice name);
+  virtual DBStatus EnvListDir(DBSlice name, std::vector<std::string>* result);
 };
 
 }  // namespace cockroach

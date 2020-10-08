@@ -1,0 +1,130 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+
+syntax = "proto3";
+package cockroach.protectedts;
+option go_package = "ptpb";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+
+// TODO(ajwerner): Consider splitting up Record into two pieces. It would
+// probably make for a cleaner Client API. Create with a ProtectedTimestamp
+// which returns an ID. This could also be useful if we want to store present
+// the CreatedAt timestamp inside the record itself but wanted to allow for
+// the record to be mutated. I'm not generally in favor of letting the record
+// become mutable but it might be nice to store the verification status
+// on the record one day.
+//
+// message ProtectedTimestamp {
+//     hlc.Timestamp timetamp
+//     ProtectionMode mode
+//     repeated roachpb.Span spans
+// }
+//
+// message Record
+//     uuid.UUID id = 1;
+//     string metadata_type = 2;
+//     bytes  metadata = 3;
+//     ProtectedTimestamp protected_timestamp = 4; // embed
+// }
+
+
+// ProtectionMode defines the semantics of a Record.
+enum ProtectionMode {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // PROTECT_AFTER ensures that all data values live at or after the specified
+  // timestamp will be protected from GC.
+  PROTECT_AFTER = 0;
+
+  // PROTECT_AT ensures that data values which are live at the specified
+  // timestamp will be protected but newer data which is no longer live
+  // can be GC'd.
+  // 
+  // TODO(ajwerner): Implement PROTECT_AT. This mode will be useful for
+  // incremental GC or for long-running queries. It adds substantial complexity
+  // to the GC heuristic and process. Until there is an understood strategy to
+  // deal with that complexity we leave it unimplemented.
+  // PROTECT_AT = 1;
+}
+
+// Metadata is the system metadata. The metadata is stored explicitly and all
+// operations which create or release Records increment the version and update
+// the metadata fields accordingly.
+//
+// The version provides a mechanism for cheap caching and forms the basis of
+// the implementation of the Tracker. The Tracker needs to provide a recent
+// view of the protectedts subsystem for GC to proceed. The protectedts
+// state changes rarely. The timestamp of cached state can by updated by
+// merely observing that the version has not changed.
+message Metadata {
+
+   // Version is incremented whenever a Record is created or removed.
+   uint64 version = 1;
+
+   // NumRecords is the number of records which exist in the subsystem.
+   uint64 num_records = 2;
+
+   // NumSpans is the number of spans currently being protected by the
+   // protectedts subsystem.
+   uint64 num_spans = 3;
+
+   // TotalBytes is the number of bytes currently in use by records
+   // to store their spans and metadata.
+   uint64 total_bytes = 4;
+}
+
+// Record corresponds to a protected timestamp.
+message Record {
+
+  // ID uniquely identifies this row.
+  bytes id = 1 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", (gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+
+  // Timestamp is the timestamp which is protected.
+  util.hlc.Timestamp timestamp = 2  [(gogoproto.nullable) = false];
+
+  // Mode specifies whether this record protects all values live at timestamp
+  // or all values live at or after that timestamp.
+  ProtectionMode mode = 3;
+
+  // MetaType is used to interpret the data stored in Meta.
+  // Users of Meta should set a unique value for MetaType which provides enough
+  // information to interpret the data in Meta. See the comment on Meta for how
+  // these two fields should be used in tandem.
+  string meta_type = 4;
+
+  // Meta is client-provided metadata about the record.
+  // This data allows the Record to be correlated with data from another
+  // subsystem. For example, this field may contain the ID of a job which
+  // created this record. The metadata allows an out-of-band reconciliation
+  // process to discover and remove records which no longer correspond to
+  // running jobs. Such a mechanism acts as a failsafe against unreliable
+  // jobs infrastructure.
+  bytes meta = 5;
+
+  // Verified marks that this Record is known to have successfully provided
+  // protection. It is updated after Verification. Updates to this field do not
+  // change the Version of the subsystem.
+  bool verified = 6;
+  
+  // Spans are the spans which this Record protects.
+  repeated roachpb.Span spans = 7 [(gogoproto.nullable) = false];
+}
+
+// State is the complete system state.
+message State {
+  Metadata metadata = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated Record records = 2 [(gogoproto.nullable) = false];
+}

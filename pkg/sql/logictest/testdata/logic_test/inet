@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 # Basic IPv4 tests
 
 query T
@@ -26,6 +24,11 @@ query T
 SELECT '0.0.0.0':::INET;
 ----
 0.0.0.0
+
+query T
+SELECT '::/0'::inet::text::inet;
+----
+::/0
 
 # Basic IPv6 tests
 

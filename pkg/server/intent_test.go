@@ -1,16 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package server
 
@@ -22,19 +18,22 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// TODO(benesch): move this test to somewhere more specific than package server.
 func TestIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		keys   []string
@@ -71,18 +70,18 @@ func TestIntentResolution(t *testing.T) {
 	splitKey := []byte("s")
 	for i, tc := range testCases {
 		// Use deterministic randomness to randomly put the writes in separate
-		// batches or commit them with EndTransaction.
+		// batches or commit them with EndTxn.
 		rnd, seed := randutil.NewPseudoRand()
 		log.Infof(context.Background(), "%d: using intent test seed %d", i, seed)
 
 		results := map[string]struct{}{}
 		func() {
-			var storeKnobs storage.StoreTestingKnobs
+			var storeKnobs kvserver.StoreTestingKnobs
 			var mu syncutil.Mutex
 			closer := make(chan struct{}, 2)
 			var done bool
 			storeKnobs.EvalKnobs.TestingEvalFilter =
-				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 					mu.Lock()
 					defer mu.Unlock()
 					header := filterArgs.Req.Header()
@@ -112,15 +111,17 @@ func TestIntentResolution(t *testing.T) {
 					return nil
 				}
 
+			// TODO(benesch): starting a test server for every test case is needlessly
+			// inefficient.
 			s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 				Knobs: base.TestingKnobs{Store: &storeKnobs}})
-			defer s.Stopper().Stop(context.TODO())
+			defer s.Stopper().Stop(context.Background())
 			// Split the Range. This should not have any asynchronous intents.
-			if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
+			if err := kvDB.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 				t.Fatal(err)
 			}
 
-			if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)
@@ -155,7 +156,7 @@ func TestIntentResolution(t *testing.T) {
 			// Use Raft to make it likely that any straddling intent
 			// resolutions have come in. Don't touch existing data; that could
 			// generate unexpected intent resolutions.
-			if _, err := kvDB.Scan(context.TODO(), "z\x00", "z\x00\x00", 0); err != nil {
+			if _, err := kvDB.Scan(context.Background(), "z\x00", "z\x00\x00", 0); err != nil {
 				t.Fatal(err)
 			}
 		}()

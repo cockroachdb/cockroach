@@ -1,0 +1,254 @@
+# Setup:
+# k1: value  @ ts 10
+# k2: intent @ ts 10
+
+run ok
+put k=k1 v=v ts=10,0
+----
+>> at end:
+data: "k1"/0.000000010,0 -> /BYTES/v
+
+run ok
+with t=A
+  txn_begin ts=10,0
+  put k=k2 v=v
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000010,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000010,0 wto=false max=0,0
+data: "k1"/0.000000010,0 -> /BYTES/v
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000010,0 min=0,0 seq=0} ts=0.000000010,0 del=false klen=12 vlen=6
+data: "k2"/0.000000010,0 -> /BYTES/v
+
+# Test cases:
+# 
+# for k in (k1, k2):
+#   for op in (get, scan):
+#     for ts in (9, 10, 11):
+#       for failOnMoreRecent in (false, true):
+#         testCase()
+#
+
+run ok
+get k=k1 ts=9,0
+----
+get: "k1" -> <no data>
+
+run error
+get k=k1 ts=9,0 failOnMoreRecent
+----
+get: "k1" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000009,0 too old; wrote at 0.000000010,1
+
+run ok
+get k=k1 ts=10,0
+----
+get: "k1" -> /BYTES/v @0.000000010,0
+
+run ok
+get k=k1 ts=10,0 failOnMoreRecent
+----
+get: "k1" -> /BYTES/v @0.000000010,0
+
+run ok
+get k=k1 ts=11,0
+----
+get: "k1" -> /BYTES/v @0.000000010,0
+
+run ok
+get k=k1 ts=11,0 failOnMoreRecent
+----
+get: "k1" -> /BYTES/v @0.000000010,0
+
+run ok
+scan k=k1 end=k2 ts=9,0
+----
+scan: "k1"-"k2" -> <no data>
+
+run error
+scan k=k1 end=k2 ts=9,0 failOnMoreRecent
+----
+scan: "k1"-"k2" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000009,0 too old; wrote at 0.000000010,1
+
+run ok
+scan k=k1 end=k2 ts=10,0
+----
+scan: "k1" -> /BYTES/v @0.000000010,0
+
+run ok
+scan k=k1 end=k2 ts=10,0 failOnMoreRecent
+----
+scan: "k1" -> /BYTES/v @0.000000010,0
+
+run ok
+scan k=k1 end=k2 ts=11,0
+----
+scan: "k1" -> /BYTES/v @0.000000010,0
+
+run ok
+scan k=k1 end=k2 ts=11,0 failOnMoreRecent
+----
+scan: "k1" -> /BYTES/v @0.000000010,0
+
+run ok
+get k=k2 ts=9,0
+----
+get: "k2" -> <no data>
+
+run error
+get k=k2 ts=9,0 failOnMoreRecent
+----
+get: "k2" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+get k=k2 ts=10,0
+----
+get: "k2" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+get k=k2 ts=10,0 failOnMoreRecent
+----
+get: "k2" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+get k=k2 ts=11,0
+----
+get: "k2" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+get k=k2 ts=11,0 failOnMoreRecent
+----
+get: "k2" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run ok
+scan k=k2 end=k3 ts=9,0
+----
+scan: "k2"-"k3" -> <no data>
+
+run error
+scan k=k2 end=k3 ts=9,0 failOnMoreRecent
+----
+scan: "k2"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+scan k=k2 end=k3 ts=10,0
+----
+scan: "k2"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+scan k=k2 end=k3 ts=10,0 failOnMoreRecent
+----
+scan: "k2"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+scan k=k2 end=k3 ts=11,0
+----
+scan: "k2"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+scan k=k2 end=k3 ts=11,0 failOnMoreRecent
+----
+scan: "k2"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+# More test cases:
+# 
+# span = [k1, k3)
+# op   = scan
+# for ts in (9, 10, 11):
+#   for failOnMoreRecent in (false, true):
+#     testCase()
+#
+
+run ok
+scan k=k1 end=k3 ts=9,0
+----
+scan: "k1"-"k3" -> <no data>
+
+run error
+scan k=k1 end=k3 ts=9,0 failOnMoreRecent
+----
+scan: "k1"-"k3" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000009,0 too old; wrote at 0.000000010,1
+
+run error
+scan k=k1 end=k3 ts=10,0
+----
+scan: "k1"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+scan k=k1 end=k3 ts=10,0 failOnMoreRecent
+----
+scan: "k1"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+scan k=k1 end=k3 ts=11,0
+----
+scan: "k1"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+run error
+scan k=k1 end=k3 ts=11,0 failOnMoreRecent
+----
+scan: "k1"-"k3" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+
+# The failOnMoreRecent and inconsistent options cannot be used together.
+
+run error
+get k=k1 ts=9,0 inconsistent failOnMoreRecent
+----
+get: "k1" -> <no data>
+error: (*withstack.withStack:) cannot allow inconsistent reads with fail on more recent option
+
+run error
+scan k=k1 end=k2 ts=9,0 inconsistent failOnMoreRecent
+----
+scan: "k1"-"k2" -> <no data>
+error: (*withstack.withStack:) cannot allow inconsistent reads with fail on more recent option
+
+# If a failOnMoreRecent scan observes multiple values above its timestamp, it
+# should return a WriteTooOld error with a timestamp based on the most recent
+# value it saw.
+
+run ok
+put k=a v=v ts=11,0
+put k=b v=v ts=13,0
+put k=c v=v ts=12,0
+----
+>> at end:
+data: "a"/0.000000011,0 -> /BYTES/v
+data: "b"/0.000000013,0 -> /BYTES/v
+data: "c"/0.000000012,0 -> /BYTES/v
+data: "k1"/0.000000010,0 -> /BYTES/v
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000010,0 min=0,0 seq=0} ts=0.000000010,0 del=false klen=12 vlen=6
+data: "k2"/0.000000010,0 -> /BYTES/v
+
+run error
+scan k=a end=b_next ts=9,0 failOnMoreRecent
+----
+scan: "a"-"b_next" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000009,0 too old; wrote at 0.000000013,1
+
+run error
+scan k=a end=c_next ts=9,0 failOnMoreRecent
+----
+scan: "a"-"c_next" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000009,0 too old; wrote at 0.000000013,1
+
+run error
+scan k=b end=c_next ts=9,0 failOnMoreRecent
+----
+scan: "b"-"c_next" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000009,0 too old; wrote at 0.000000013,1

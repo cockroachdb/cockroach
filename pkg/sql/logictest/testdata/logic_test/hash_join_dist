@@ -1,0 +1,73 @@
+# LogicTest: 5node-default-configs
+
+statement ok
+CREATE TABLE t (k INT, v INT)
+
+statement ok
+INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 1)
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO xy VALUES (2, 200), (3, 300), (4, 400)
+
+statement ok
+ALTER TABLE t SPLIT AT VALUES (3), (4)
+
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2), (ARRAY[2], 3), (ARRAY[3], 4)
+
+# Test that LEFT SEMI hash join outputs batches only with the columns from the
+# left side.
+query II rowsort
+SELECT * FROM t WHERE EXISTS(SELECT * FROM xy WHERE x=t.k)
+----
+2  20
+3  30
+
+# Regression test for #39303.
+statement ok
+CREATE TABLE small (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TABLE large (c INT, d INT)
+
+statement ok
+INSERT INTO small SELECT x, 3*x FROM
+  generate_series(1, 10) AS a(x)
+
+statement ok
+INSERT INTO large SELECT 2*x, 4*x FROM
+  generate_series(1, 10) AS a(x)
+
+statement ok
+ALTER TABLE small SPLIT AT SELECT a FROM small
+
+statement ok
+ALTER TABLE small EXPERIMENTAL_RELOCATE SELECT ARRAY[mod(i, 3) + 1], i FROM generate_series(1, 10) AS g(i)
+
+statement ok
+ALTER TABLE large SPLIT AT SELECT 2*i FROM generate_series(1, 10) AS g(i)
+
+statement ok
+ALTER TABLE large EXPERIMENTAL_RELOCATE SELECT ARRAY[mod(i, 3) + 1], 2*i FROM generate_series(1, 10) as g(i)
+
+# Test that RIGHT OUTER hash join correctly sets probeRowUnmatched on
+# subsequent batches.
+query II rowsort
+SELECT small.b, large.d FROM large RIGHT HASH JOIN small ON small.b = large.c AND large.d < 30 ORDER BY 1 LIMIT 5
+----
+3   NULL
+6   12
+9   NULL
+12  24
+15  NULL
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.query.is-distributed' AND usage_count > 0
+----
+sql.exec.query.is-distributed

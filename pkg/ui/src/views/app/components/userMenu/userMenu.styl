@@ -1,0 +1,38 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+@require '~src/components/core/index'
+
+.user-menu
+  display flex
+  flex-direction column
+  font-size 14px
+  min-width 174px
+  text-transform none
+  text-align left
+  font-weight normal
+  font-family $font-family--base
+
+.user-menu__item
+  padding 0 16px
+
+.user-menu__username
+  color $colors--neutral-7
+  padding 10px 16px
+  font-weight bold
+
+.user-menu__logout-menu-item
+  color $colors--primary-blue-3
+  border-top-width 1px
+  border-top-color $popover-border-color
+  border-top-style solid
+  padding 10px 16px 14px
+

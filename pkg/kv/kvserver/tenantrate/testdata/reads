@@ -1,0 +1,85 @@
+# This tests bursting and how requests above the burst limit put the limiter
+# into debt
+
+init
+readrequests: { rate: 1, burst: 2 }
+readbytes:    { rate: 10, burst: 100 }
+----
+00:00:00.000
+
+get_tenants
+- 1
+- 2
+----
+[2#1, system#1]
+
+# Read the entire burst worth of bytes plus 4 which should put the limiter
+# in debt by 4. Also record a system read. We'll verify both show up in metrics.
+
+record_read
+- { tenant: 1, readbytes: 10 }
+- { tenant: 2, readbytes: 104 }
+----
+[]
+
+# Verify that the above reads made it to the metrics.
+
+metrics
+kv_tenant_rate_limit_read_bytes_admitted
+----
+kv_tenant_rate_limit_read_bytes_admitted 114
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 104
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="system"} 10
+
+# Launch a request which will block on the lack of available readbytes as it
+# tries to read its 1 courtesy byte.
+
+launch
+- { id: g1, tenant: 2 }
+----
+[g1@2]
+
+timers
+----
+00:00:00.500
+
+# Record more reads, putting the limiter further into debt
+
+record_read
+- { tenant: 2, readbytes: 5 }
+----
+[g1@2]
+
+# Note that the head of the queue will not be notified immediately but rather
+# will be notified when its previous timer expires. If it were notified every
+# time reads occurred it could be quite inefficient.
+
+timers
+----
+00:00:00.500
+
+# Note that the head of the queue notices the removal of readbytes and sets a
+# new timer.
+
+advance
+501ms
+----
+00:00:00.501
+
+timers
+----
+00:00:01.000
+
+advance
+500ms
+----
+00:00:01.001
+
+await
+- g1
+----
+[]
+
+
+
+

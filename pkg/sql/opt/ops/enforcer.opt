@@ -14,7 +14,14 @@
 # be sorted by one or more of the input columns, each of which can be sorted in
 # either ascending or descending order. See the Ordering field in the
 # PhysicalProps struct.
-[Enforcer]
+[Enforcer, Telemetry]
 define Sort {
-    Input Expr
+    # InputOrdering specifies the ordering that the sort requires
+    # from its input. It allows the optimizer and DistSQL to plan
+    # the sort using the segmented/chunk sort strategy.
+    #
+    # For a regular sort, this is empty. If it is not empty, this
+    # is a segmented sort where the input is already sorted on the
+    # specified prefix of columns.
+    InputOrdering OrderingChoice
 }

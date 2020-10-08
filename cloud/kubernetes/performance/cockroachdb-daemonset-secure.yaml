@@ -117,13 +117,16 @@ spec:
       app: cockroachdb
   maxUnavailable: 1
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: cockroachdb
   labels:
     app: cockroachdb
 spec:
+  selector:
+    matchLabels:
+      app: cockroachdb
   template:
     metadata:
       labels:
@@ -162,12 +165,12 @@ spec:
       # In addition to the node certificate and key, the init-certs entrypoint will symlink
       # the cluster CA to the certs directory.
       - name: init-certs
-        image: cockroachdb/cockroach-k8s-request-cert:0.3
+        image: cockroachdb/cockroach-k8s-request-cert:0.4
         imagePullPolicy: IfNotPresent
         command:
         - "/bin/ash"
         - "-ecx"
-        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname),$(hostname -f),$(hostname -i),cockroachdb-public,cockroachdb-public.${POD_NAMESPACE}.svc.cluster.local -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname),$(hostname -f),$(hostname -i),cockroachdb-public,cockroachdb-public.${POD_NAMESPACE}.svc.cluster.local,cockroachdb-public.${POD_NAMESPACE}.svc,cockroachdb-public.${POD_NAMESPACE} -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -194,7 +197,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v2.0.4
+        image: cockroachdb/cockroach:v20.1.6
         imagePullPolicy: IfNotPresent
         # TODO: If you configured taints to give CockroachDB exclusive access to nodes, feel free
         # to remove the requests and limits sections. If you didn't, you'll need to change these to
@@ -240,11 +243,14 @@ spec:
           mountPath: /cockroach/cockroach-data
         - name: certs
           mountPath: /cockroach/cockroach-certs
+        env:
+        - name: COCKROACH_CHANNEL
+          value: kubernetes-secure
         command:
           - "/bin/bash"
           - "-ecx"
           # TODO: Replace "YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE" with a list of a few of the IP addresses or hostnames of the machines on which CockroachDB will be running.
-          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --http-host 0.0.0.0 --cache 25% --max-sql-memory 25% --join=YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE"
+          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --http-addr 0.0.0.0 --cache 25% --max-sql-memory 25% --join=YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE"
       terminationGracePeriodSeconds: 60
       volumes:
       - name: datadir

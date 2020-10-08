@@ -1,27 +1,24 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
 import (
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -121,7 +118,7 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 		err = cmd.Root().GenZshCompletionFile(autoCompletePath)
 	}
 	if err != nil {
-		return nil
+		return err
 	}
 
 	fmt.Printf("Generated %s completion file: %s\n", shell, autoCompletePath)
@@ -129,16 +126,15 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 }
 
 var aesSize int
+var overwriteKey bool
 
 var genEncryptionKeyCmd = &cobra.Command{
 	Use:   "encryption-key <key-file>",
 	Short: "generate store key for encryption at rest",
 	Long: `Generate store key for encryption at rest.
 
-If no AES key size is specified through "-s=256", the key size used for AES
-algorithm will be 128 by default. AES key size should only be 128, 192, or 256.
-
-Users are required to provide a filename for the key to be stored.
+Generates a key suitable for use as a store key for Encryption At Rest.
+The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -150,14 +146,31 @@ Users are required to provide a filename for the key to be stored.
 		}
 
 		// 32 bytes are reserved for key ID.
-		keySize := aesSize/8 + 32
-		b := make([]byte, keySize)
+		kSize := aesSize/8 + 32
+		b := make([]byte, kSize)
 		if _, err := rand.Read(b); err != nil {
-			return fmt.Errorf("failed to create key with size %d bytes", keySize)
+			return fmt.Errorf("failed to create key with size %d bytes", kSize)
 		}
 
 		// Write key to the file with owner read/write permission.
-		if err := ioutil.WriteFile(encryptionKeyPath, b, 0600); err != nil {
+		openMode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		if !overwriteKey {
+			openMode |= os.O_EXCL
+		}
+
+		f, err := os.OpenFile(encryptionKeyPath, openMode, 0600)
+		if err != nil {
+			return err
+		}
+		n, err := f.Write(b)
+		if err == nil && n < len(b) {
+			err = io.ErrShortWrite
+		}
+		if err1 := f.Close(); err == nil {
+			err = err1
+		}
+
+		if err != nil {
 			return err
 		}
 
@@ -186,32 +199,46 @@ Output the list of cluster settings known to this binary.
 
 		var rows [][]string
 		for _, name := range settings.Keys() {
-			setting, ok := settings.Lookup(name)
+			setting, ok := settings.Lookup(name, settings.LookupForLocalAccess)
 			if !ok {
 				panic(fmt.Sprintf("could not find setting %q", name))
 			}
+			if setting.Visibility() != settings.Public {
+				// We don't document non-public settings at this time.
+				continue
+			}
+
 			typ, ok := settings.ReadableTypes[setting.Typ()]
 			if !ok {
 				panic(fmt.Sprintf("unknown setting type %q", setting.Typ()))
 			}
-			defaultVal := setting.String(&s.SV)
-			if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
-				defaultVal = override
+			var defaultVal string
+			if sm, ok := setting.(*settings.StateMachineSetting); ok {
+				defaultVal = sm.SettingsListDefault()
+			} else {
+				defaultVal = setting.String(&s.SV)
+				if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
+					defaultVal = override
+				}
 			}
 			row := []string{wrapCode(name), typ, wrapCode(defaultVal), setting.Description()}
 			rows = append(rows, row)
 		}
 
-		reporter, err := makeReporter()
+		reporter, cleanup, err := makeReporter(os.Stdout)
 		if err != nil {
 			return err
+		}
+		if cleanup != nil {
+			defer cleanup()
 		}
 		if hr, ok := reporter.(*htmlReporter); ok {
 			hr.escape = false
 			hr.rowStats = false
 		}
 		cols := []string{"Setting", "Type", "Default", "Description"}
-		return render(reporter, os.Stdout, cols, newRowSliceIter(rows, "dddd"), nil /* noRowsHook*/)
+		return render(reporter, os.Stdout,
+			cols, newRowSliceIter(rows, "dddd"), nil /* completedHook */, nil /* noRowsHook*/)
 	},
 }
 
@@ -219,9 +246,7 @@ var genCmd = &cobra.Command{
 	Use:   "gen [command]",
 	Short: "generate auxiliary files",
 	Long:  "Generate manpages, example shell settings, example databases, etc.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 var genCmds = []*cobra.Command{
@@ -240,8 +265,11 @@ func init() {
 		"path to generated autocomplete file")
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
+	varFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
 	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
-		"AES key size for encryption at rest")
+		"AES key size for encryption at rest (one of: 128, 192, 256)")
+	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
+		"Overwrite key if it exists")
 
 	genCmd.AddCommand(genCmds...)
 }

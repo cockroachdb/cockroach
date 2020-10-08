@@ -1,4 +1,6 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+# TODO(mjibson): The fakedist-disk config produces an error. When fixed,
+# remove this config line. See #38985.
+# LogicTest: local fakedist fakedist-metadata 3node-tenant
 
 ## This test file contains various complex queries that ORMs issue during
 ## startup or general use.
@@ -17,20 +19,21 @@ SELECT a.attname, format_type(a.atttypid, a.atttypmod), pg_get_expr(d.adbin, d.a
     AND a.attnum > 0 AND NOT a.attisdropped
     ORDER BY a.attnum
 ----
-id   bigint  NULL  false  20  -1
-name text    NULL  false  25  -1
+id     bigint  NULL            false  20  -1
+name   text    NULL            false  25  -1
+rowid  bigint  unique_rowid()  true   20  -1
 
 
+# Ordered aggregations are possible.
 # #12115
-# Skipped until #25148 is solved
-#query TT
-#SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value
-#    FROM pg_type t
-#    JOIN pg_enum e ON t.oid = e.enumtypid
-#    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-#    WHERE n.nspname = 'public'
-#    GROUP BY 1
-#----
+query TT
+SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value
+    FROM pg_type t
+    JOIN pg_enum e ON t.oid = e.enumtypid
+    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+    GROUP BY 1
+----
 
 
 ## 12207
@@ -68,9 +71,9 @@ GROUP BY i.relname,
          ix.indkey
 ORDER BY i.relname
 ----
-name              primary  unique  indkey  column_indexes  column_names   definition
-customers_id_idx  false    false   2       {1,2}           {"name","id"}  CREATE INDEX customers_id_idx ON test.public.customers (id ASC)
-primary           true     true    1       {1,2}           {"name","id"}  CREATE UNIQUE INDEX "primary" ON test.public.customers (name ASC)
+name              primary  unique  indkey  column_indexes  column_names  definition
+customers_id_idx  false    false   2       {1,2}           {name,id}     CREATE INDEX customers_id_idx ON test.public.customers USING btree (id ASC)
+primary           true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX "primary" ON test.public.customers USING btree (name ASC)
 
 
 query TT colnames
@@ -82,6 +85,7 @@ JOIN   pg_attribute a ON a.attrelid = i.indrelid
                      AND    i.indisprimary
 ----
 attname  data_type
+rowid    bigint
 
 statement ok
 CREATE TABLE b (id INT, a_id INT, FOREIGN KEY (a_id) REFERENCES a (id))
@@ -109,10 +113,13 @@ SELECT 'decimal(18,2)'::regtype::oid
 ----
 1700
 
+# NOTE: Before 19.2, this returned 25 (oid.T_text), but due to updates to the
+# type system to more correctly handle OIDs, this now returns 1043
+# (oid.T_varchar), which is what PG returns.
 query O
 SELECT 'character varying'::regtype::oid
 ----
-25
+1043
 
 statement ok
 CREATE INDEX b_idx ON b(a_id);
@@ -130,3 +137,204 @@ AND t.relname = 'b'
 AND i.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = ANY (current_schemas(false)))
 ----
 1
+
+statement ok
+CREATE TABLE c (a INT, b INT, PRIMARY KEY (a, b))
+
+# ActiveRecord query for determining primary key cols.
+query T
+SELECT
+    a.attname
+FROM
+    (
+        SELECT
+            indrelid, indkey, generate_subscripts(indkey, 1) AS idx
+        FROM
+            pg_index
+        WHERE
+            indrelid = '"c"'::REGCLASS AND indisprimary
+    )
+        AS i
+    JOIN pg_attribute AS a ON
+            a.attrelid = i.indrelid AND a.attnum = i.indkey[i.idx]
+ORDER BY
+    i.idx
+----
+a
+b
+
+statement ok
+CREATE TABLE metatest (a INT PRIMARY KEY)
+
+# ActiveRecord query that needs apply join.
+query TTTBTITT
+SELECT a.attname,
+  format_type(a.atttypid, a.atttypmod),
+  pg_get_expr(d.adbin, d.adrelid),
+  a.attnotnull,
+  a.atttypid,
+  a.atttypmod,
+  (SELECT c.collname
+   FROM pg_collation c, pg_type t
+   WHERE c.oid = a.attcollation
+   AND t.oid = a.atttypid
+   AND a.attcollation <> t.typcollation),
+   col_description(a.attrelid, a.attnum) AS comment
+FROM pg_attribute a LEFT JOIN pg_attrdef d
+ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+WHERE a.attrelid = '"metatest"'::regclass
+AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum
+----
+a  bigint  NULL  true  20  -1  NULL  NULL
+
+# Navicat metadata query.
+
+query TTBBB
+SELECT
+    attname AS name,
+    attrelid AS tid,
+    COALESCE(
+        (
+            SELECT
+                attnum = ANY conkey
+            FROM
+                pg_constraint
+            WHERE
+                contype = 'p' AND conrelid = attrelid
+        ),
+        false
+    )
+        AS primarykey,
+    NOT (attnotnull) AS allownull,
+    (
+        SELECT
+            seq.oid
+        FROM
+            pg_class AS seq
+            LEFT JOIN pg_depend AS dep
+            ON seq.oid = dep.objid
+        WHERE
+            (
+                seq.relkind = 'S'::CHAR
+                AND dep.refobjsubid = attnum
+            )
+            AND dep.refobjid = attrelid
+    )
+    IS NOT NULL
+        AS autoincrement
+FROM
+    pg_attribute
+WHERE
+    (
+        attisdropped = false
+        AND attrelid
+            = (
+                    SELECT
+                        tbl.oid
+                    FROM
+                        pg_class AS tbl
+                        LEFT JOIN pg_namespace AS sch
+                        ON tbl.relnamespace = sch.oid
+                    WHERE
+                        (
+                            tbl.relkind = 'r'::"char"
+                            AND tbl.relname = 'metatest'
+                        )
+                        AND sch.nspname = 'public'
+                )
+    )
+    AND attname = 'a';
+----
+a  57  true  false  false
+
+# Hibernate query.
+
+query TTTOBIIITTOT
+SELECT * FROM (SELECT n.nspname, c.relname, a.attname, a.atttypid, a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull) AS attnotnull, a.atttypmod, a.attlen, row_number() OVER (PARTITION BY a.attrelid ORDER BY a.attnum) AS attnum, pg_get_expr(def.adbin, def.adrelid) AS adsrc, dsc.description, t.typbasetype, t.typtype FROM pg_catalog.pg_namespace AS n JOIN pg_catalog.pg_class AS c ON (c.relnamespace = n.oid) JOIN pg_catalog.pg_attribute AS a ON (a.attrelid = c.oid) JOIN pg_catalog.pg_type AS t ON (a.atttypid = t.oid) LEFT JOIN pg_catalog.pg_attrdef AS def ON ((a.attrelid = def.adrelid) AND (a.attnum = def.adnum)) LEFT JOIN pg_catalog.pg_description AS dsc ON ((c.oid = dsc.objoid) AND (a.attnum = dsc.objsubid)) LEFT JOIN pg_catalog.pg_class AS dc ON ((dc.oid = dsc.classoid) AND (dc.relname = 'pg_class')) LEFT JOIN pg_catalog.pg_namespace AS dn ON ((dc.relnamespace = dn.oid) AND (dn.nspname = 'pg_catalog')) WHERE (((c.relkind IN ('r', 'v', 'f', 'm')) AND (a.attnum > 0)) AND (NOT a.attisdropped)) AND (n.nspname LIKE 'public')) AS c;
+----
+public  a          id     20  false  -1  8   1  NULL            NULL  0  b
+public  a          name   25  false  -1  -1  2  NULL            NULL  0  b
+public  a          rowid  20  true   -1  8   3  unique_rowid()  NULL  0  b
+public  customers  name   25  true   -1  -1  1  NULL            NULL  0  b
+public  customers  id     20  false  -1  8   2  NULL            NULL  0  b
+public  b          id     20  false  -1  8   1  NULL            NULL  0  b
+public  b          a_id   20  false  -1  8   2  NULL            NULL  0  b
+public  b          rowid  20  true   -1  8   3  unique_rowid()  NULL  0  b
+public  c          a      20  true   -1  8   1  NULL            NULL  0  b
+public  c          b      20  true   -1  8   2  NULL            NULL  0  b
+public  metatest   a      20  true   -1  8   1  NULL            NULL  0  b
+
+
+# Regression test for windower not using EncDatum.Fingerprint.
+statement ok
+SELECT
+	array_agg(t_pk.table_name ORDER BY t_pk.table_name)
+FROM
+	information_schema.statistics AS i
+	LEFT JOIN (
+			SELECT
+				array_agg(c.column_name) AS table_primary_key_columns,
+				c.table_name
+			FROM
+				information_schema.columns AS c
+			GROUP BY
+				c.table_name
+		)
+			AS t_pk ON i.table_name = t_pk.table_name
+GROUP BY
+	t_pk.table_primary_key_columns
+
+# Regression test for pgcli's foreign key query.
+query TTTTTT
+SELECT
+  s_p.nspname AS parentschema,
+  t_p.relname AS parenttable,
+  unnest(
+    (
+      SELECT
+        array_agg(attname ORDER BY i)
+      FROM
+        (
+          SELECT
+            unnest(confkey) AS attnum,
+            generate_subscripts(confkey, 1) AS i
+        )
+          AS x
+        JOIN pg_catalog.pg_attribute AS c USING (attnum)
+      WHERE
+        c.attrelid = fk.confrelid
+    )
+  )
+    AS parentcolumn,
+  s_c.nspname AS childschema,
+  t_c.relname AS childtable,
+  unnest(
+    (
+      SELECT
+        array_agg(attname ORDER BY i)
+      FROM
+        (
+          SELECT
+            unnest(conkey) AS attnum,
+            generate_subscripts(conkey, 1) AS i
+        )
+          AS x
+        JOIN pg_catalog.pg_attribute AS c USING (attnum)
+      WHERE
+        c.attrelid = fk.conrelid
+    )
+  )
+    AS childcolumn
+FROM
+  pg_catalog.pg_constraint AS fk
+  JOIN pg_catalog.pg_class AS t_p ON t_p.oid = fk.confrelid
+  JOIN pg_catalog.pg_namespace AS s_p ON
+      s_p.oid = t_p.relnamespace
+  JOIN pg_catalog.pg_class AS t_c ON t_c.oid = fk.conrelid
+  JOIN pg_catalog.pg_namespace AS s_c ON
+      s_c.oid = t_c.relnamespace
+WHERE
+  fk.contype = 'f';
+----
+public  a  id  public  b  a_id

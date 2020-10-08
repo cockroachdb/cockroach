@@ -1,60 +1,87 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
 	"context"
-
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // rowSourceToPlanNode wraps a RowSource and presents it as a PlanNode. It must
 // be constructed with Create(), after which it is a PlanNode and can be treated
 // as such.
 type rowSourceToPlanNode struct {
-	source distsqlrun.RowSource
+	source    execinfra.RowSource
+	forwarder metadataForwarder
+
+	// originalPlanNode is the original planNode that the wrapped RowSource got
+	// planned for.
+	originalPlanNode planNode
+
+	planCols colinfo.ResultColumns
 
 	// Temporary variables
-	row      sqlbase.EncDatumRow
-	da       sqlbase.DatumAlloc
+	row      rowenc.EncDatumRow
+	da       rowenc.DatumAlloc
 	datumRow tree.Datums
 }
 
 var _ planNode = &rowSourceToPlanNode{}
 
-func makeRowSourceToPlanNode(s distsqlrun.RowSource) *rowSourceToPlanNode {
-	row := make(tree.Datums, len(s.OutputTypes()))
+// makeRowSourceToPlanNode creates a new planNode that wraps a RowSource. It
+// takes an optional metadataForwarder, which if non-nil is invoked for every
+// piece of metadata this wrapper receives from the wrapped RowSource.
+// It also takes an optional planNode, which is the planNode that the RowSource
+// that this rowSourceToPlanNode is wrapping originally replaced. That planNode
+// will be closed when this one is closed.
+func makeRowSourceToPlanNode(
+	s execinfra.RowSource,
+	forwarder metadataForwarder,
+	planCols colinfo.ResultColumns,
+	originalPlanNode planNode,
+) *rowSourceToPlanNode {
+	row := make(tree.Datums, len(planCols))
 
 	return &rowSourceToPlanNode{
-		source:   s,
-		datumRow: row,
+		source:           s,
+		datumRow:         row,
+		forwarder:        forwarder,
+		planCols:         planCols,
+		originalPlanNode: originalPlanNode,
 	}
+}
+
+func (r *rowSourceToPlanNode) startExec(params runParams) error {
+	r.source.Start(params.ctx)
+	return nil
 }
 
 func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 	for {
-		var p *distsqlrun.ProducerMetadata
+		var p *execinfrapb.ProducerMetadata
 		r.row, p = r.source.Next()
 
 		if p != nil {
 			if p.Err != nil {
 				return false, p.Err
+			}
+			if r.forwarder != nil {
+				r.forwarder.forwardMetadata(p)
+				continue
 			}
 			if p.TraceData != nil {
 				// We drop trace metadata since we have no reasonable way to propagate
@@ -68,9 +95,16 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 			return false, nil
 		}
 
-		if err := sqlbase.EncDatumRowToDatums(r.source.OutputTypes(), r.datumRow, r.row, &r.da); err != nil {
-			return false, err
+		types := r.source.OutputTypes()
+		for i := range r.planCols {
+			encDatum := r.row[i]
+			err := encDatum.EnsureDecoded(types[i], &r.da)
+			if err != nil {
+				return false, err
+			}
+			r.datumRow[i] = encDatum.Datum
 		}
+
 		return true, nil
 	}
 }
@@ -82,5 +116,9 @@ func (r *rowSourceToPlanNode) Values() tree.Datums {
 func (r *rowSourceToPlanNode) Close(ctx context.Context) {
 	if r.source != nil {
 		r.source.ConsumerClosed()
+		r.source = nil
+	}
+	if r.originalPlanNode != nil {
+		r.originalPlanNode.Close(ctx)
 	}
 }

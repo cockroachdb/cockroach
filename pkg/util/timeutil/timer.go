@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package timeutil
 
@@ -94,6 +90,8 @@ func (t *Timer) Reset(d time.Duration) {
 // the timer, false if the timer has already expired, been stopped previously,
 // or had never been initialized with a call to Timer.Reset. Stop does not
 // close the channel, to prevent a read from succeeding incorrectly.
+// Note that a Timer must never be used again after calls to Stop as the timer
+// object will be put into an object pool for reuse.
 func (t *Timer) Stop() bool {
 	var res bool
 	if t.timer != nil {

@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 //
 // This file provides generic interfaces that allow tests to set up test
 // clusters without importing the testcluster (and indirectly server) package
@@ -32,6 +28,12 @@ import (
 
 // TestClusterInterface defines TestCluster functionality used by tests.
 type TestClusterInterface interface {
+	// Start is used to start up the servers that were instantiated when
+	// creating this cluster.
+	Start(t testing.TB)
+
+	// NumServers returns the number of servers this test cluster is configured
+	// with.
 	NumServers() int
 
 	// Server returns the TestServerInterface corresponding to a specific node.
@@ -56,10 +58,27 @@ type TestClusterInterface interface {
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
+	// AddReplicasMulti is the same as AddReplicas but will execute multiple jobs.
+	AddReplicasMulti(
+		kts ...KeyAndTargets,
+	) ([]roachpb.RangeDescriptor, []error)
+
+	// AddReplicasOrFatal is the same as AddReplicas but will Fatal the test on
+	// error.
+	AddReplicasOrFatal(
+		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) roachpb.RangeDescriptor
+
 	// RemoveReplicas removes one or more replicas from a range.
 	RemoveReplicas(
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
+
+	// RemoveReplicasOrFatal is the same as RemoveReplicas but will Fatal the test on
+	// error.
+	RemoveReplicasOrFatal(
+		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) roachpb.RangeDescriptor
 
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
 	// In particular, it returns one particular node's (the hint, if specified) view
@@ -90,15 +109,23 @@ type TestClusterInterface interface {
 	// LookupRange returns the descriptor of the range containing key.
 	LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error)
 
+	// LookupRangeOrFatal is the same as LookupRange but will Fatal the test on
+	// error.
+	LookupRangeOrFatal(t testing.TB, key roachpb.Key) roachpb.RangeDescriptor
+
 	// Target returns a roachpb.ReplicationTarget for the specified server.
 	Target(serverIdx int) roachpb.ReplicationTarget
+
+	// ReplicationMode returns the ReplicationMode that the test cluster was
+	// configured with.
+	ReplicationMode() base.TestClusterReplicationMode
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim
 // service.
 type TestClusterFactory interface {
-	// New instantiates a test server.
-	StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface
+	// NewTestCluster creates a test cluster without starting it.
+	NewTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface
 }
 
 var clusterFactoryImpl TestClusterFactory
@@ -110,12 +137,29 @@ func InitTestClusterFactory(impl TestClusterFactory) {
 	clusterFactoryImpl = impl
 }
 
-// StartTestCluster starts up a TestCluster made up of numNodes in-memory
-// testing servers. The cluster should be stopped using Stopper().Stop().
-func StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface {
+// StartNewTestCluster creates and starts up a TestCluster made up of numNodes
+// in-memory testing servers. The cluster should be stopped using
+// Stopper().Stop().
+func StartNewTestCluster(
+	t testing.TB, numNodes int, args base.TestClusterArgs,
+) TestClusterInterface {
+	cluster := NewTestCluster(t, numNodes, args)
+	cluster.Start(t)
+	return cluster
+}
+
+// NewTestCluster creates TestCluster made up of numNodes in-memory testing
+// servers. It can be started using the return type.
+func NewTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface {
 	if clusterFactoryImpl == nil {
 		panic("TestClusterFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
 	}
-	return clusterFactoryImpl.StartTestCluster(t, numNodes, args)
+	return clusterFactoryImpl.NewTestCluster(t, numNodes, args)
+}
+
+// KeyAndTargets contains replica startKey and targets.
+type KeyAndTargets struct {
+	StartKey roachpb.Key
+	Targets  []roachpb.ReplicationTarget
 }

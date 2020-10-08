@@ -4,9 +4,13 @@ source [file join [file dirname $argv0] common.tcl]
 
 set recordfile "temp-dirs-record.txt"
 set tempprefix "cockroach-temp"
-set storedir "mystore"
-set tempdir "mystore/temp"
+set storedir "logs/mystore"
+set tempdir "logs/mystore/temp"
 set cwd ""
+# Ensure that pwd will only return absolute paths.
+cd [file normalize [pwd]]
+set ::env(PWD) [pwd]
+
 # We want cwd to be "" if pwd is root since it will mess up our pattern matching.
 if {! [string match "/" [pwd]]} {
   set cwd [pwd]
@@ -46,7 +50,7 @@ eexpect ":/# "
 
 start_test "Check that on node startup a temporary subdirectory is created under --temp-dir and recorded to a record file, and on node shutdown the directory is removed."
 send "mkdir -p $tempdir\r"
-send "$argv start --insecure --store=$storedir --temp-dir=$tempdir\r"
+send "$argv start-single-node --insecure --store=$storedir --temp-dir=$tempdir\r"
 eexpect "node starting"
 eexpect "temp dir:*$tempdir/$tempprefix"
 # Verify the temp directory under first store is created.
@@ -71,7 +75,7 @@ end_test
 
 start_test "Check that on node startup a temporary subdirectory is created under --temp-dir even if store is in-memory and removed on shutdown."
 send "mkdir -p $tempdir\r"
-send "$argv start --insecure --store=type=mem,size=1GB --temp-dir=$tempdir\r"
+send "$argv start-single-node --insecure --store=type=mem,size=1GB --temp-dir=$tempdir\r"
 eexpect "node starting"
 eexpect "temp dir:*$tempdir/$tempprefix"
 # Verify the temp directory under first store is created.
@@ -87,7 +91,7 @@ send "mkdir -p $tempdir $storedir/temp1 $storedir/temp2\r"
 send "echo foobartext >  $storedir/temp1/foo.txt\r"
 # We add the temp directories to the record file.
 send "cat > $storedir/$recordfile <<EOF\r$cwd/$storedir/temp1\r$cwd/$storedir/temp2\rEOF\r"
-send "$argv start --insecure --store=$storedir --temp-dir=$tempdir\r"
+send "$argv start-single-node --insecure --store=$storedir --temp-dir=$tempdir\r"
 eexpect "node starting"
 eexpect "temp dir:*$cwd/$tempdir/$tempprefix"
 # Verify temp1 and temp2 are removed shortly after startup.
@@ -102,7 +106,7 @@ file_exists $storedir
 end_test
 
 start_test "Check that if --temp-dir is unspecified, a temporary directory is created under --store"
-send "$argv start --insecure --store=$storedir\r"
+send "$argv start-single-node --insecure --store=$storedir\r"
 eexpect "node starting"
 eexpect "temp dir:*$cwd/$storedir/$tempprefix"
 # Verify the temp directory under first store is created.
@@ -116,16 +120,16 @@ file_exists $storedir
 end_test
 
 start_test "Check that temp directory does not get wiped upon subsequent failed cockroach start attempt and that a cockroach instance can be subsequently started up after a shutdown"
-send "$argv start --insecure --store=$storedir --background\r"
-eexpect "node starting"
+send "$argv start-single-node --insecure --store=$storedir --background\r"
+eexpect ":/# "
 # Try to start up a second cockroach instance with the same store path.
-send "$argv start --insecure --store=$storedir\r"
+send "$argv start-single-node --insecure --store=$storedir\r"
 eexpect "ERROR: could not cleanup temporary directories from record file: could not lock temporary directory $cwd/$storedir/$tempprefix*"
 # Verify the temp directory still exists.
 glob_exists "$storedir/$tempprefix*"
 send "pkill -9 cockroach\r"
 # We should be able to start the cockroach instance again.
-send "$argv start --insecure --store=$storedir\r"
+send "$argv start-single-node --insecure --store=$storedir\r"
 eexpect "node starting"
 interrupt
 eexpect "shutdown completed"

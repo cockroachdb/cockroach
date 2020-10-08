@@ -1,30 +1,33 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package builtins
 
 import (
-	"fmt"
-	"sort"
+	"bytes"
+	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
 // See the comments at the start of generators.go for details about
@@ -36,11 +39,12 @@ var _ tree.ValueGenerator = &arrayValueGenerator{}
 func initGeneratorBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
 	for k, v := range generators {
-		if !v.props.Impure {
-			panic(fmt.Sprintf("generator functions should all be impure, found %v", v))
+		if _, exists := builtins[k]; exists {
+			panic("duplicate builtin: " + k)
 		}
+
 		if v.props.Class != tree.GeneratorClass {
-			panic(fmt.Sprintf("generator functions should be marked with the tree.GeneratorClass "+
+			panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
 				"function class, found %v", v))
 		}
 
@@ -48,14 +52,34 @@ func initGeneratorBuiltins() {
 	}
 }
 
-func genProps(labels []string) tree.FunctionProperties {
+func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Impure:       true,
-		Class:        tree.GeneratorClass,
-		Category:     categoryGenerator,
-		ReturnLabels: labels,
+		Class:    tree.GeneratorClass,
+		Category: categoryGenerator,
 	}
 }
+
+func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
+	return tree.FunctionProperties{
+		Class:        tree.GeneratorClass,
+		Category:     categoryGenerator,
+		ReturnLabels: returnLabels,
+	}
+}
+
+var aclexplodeGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Oid, types.Oid, types.String, types.Bool},
+	[]string{"grantor", "grantee", "privilege_type", "is_grantable"},
+)
+
+// aclExplodeGenerator supports the execution of aclexplode.
+type aclexplodeGenerator struct{}
+
+func (aclexplodeGenerator) ResolvedType() *types.T                   { return aclexplodeGeneratorType }
+func (aclexplodeGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+func (aclexplodeGenerator) Close()                                   {}
+func (aclexplodeGenerator) Next(_ context.Context) (bool, error)     { return false, nil }
+func (aclexplodeGenerator) Values() (tree.Datums, error)             { return nil, nil }
 
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
@@ -63,98 +87,180 @@ func genProps(labels []string) tree.FunctionProperties {
 // These functions are identified with Class == tree.GeneratorClass.
 // The properties are reachable via tree.FunctionDefinition.
 var generators = map[string]builtinDefinition{
-	"generate_series": makeBuiltin(genProps(seriesValueGeneratorLabels),
+	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
+	"aclexplode": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ArgTypes{{"aclitems", types.StringArray}},
+			aclexplodeGeneratorType,
+			func(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+				return aclexplodeGenerator{}, nil
+			},
+			"Produces a virtual table containing aclitem stuff ("+
+				"returns no rows as this feature is unsupported in CockroachDB)",
+			tree.VolatilityStable,
+		),
+	),
+	"generate_series": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Int}, {"end", types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
+			tree.VolatilityImmutable,
 		),
 		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Int}, {"end", types.Int}, {"step", types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
+			tree.VolatilityImmutable,
 		),
 		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Timestamp}, {"end", types.Timestamp}, {"step", types.Interval}},
 			seriesTSValueGeneratorType,
 			makeTSSeriesGenerator,
 			"Produces a virtual table containing the timestamp values from `start` to `end`, inclusive, by increment of `step`.",
+			tree.VolatilityImmutable,
+		),
+	),
+	// crdb_internal.testing_callback is a generator function intended for internal unit tests.
+	// You give it a name and it calls a callback that had to have been installed
+	// on a TestServer through its EvalContextTestingKnobs.CallbackGenerators.
+	"crdb_internal.testing_callback": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ArgTypes{{"name", types.String}},
+			types.Int,
+			func(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+				name := string(*args[0].(*tree.DString))
+				gen, ok := ctx.TestingKnobs.CallbackGenerators[name]
+				if !ok {
+					return nil, errors.Errorf("callback %q not registered", name)
+				}
+				return gen, nil
+			},
+			"For internal CRDB testing only. "+
+				"The function calls a callback identified by `name` registered with the server by "+
+				"the test.",
+			tree.VolatilityVolatile,
 		),
 	),
 
-	"pg_get_keywords": makeBuiltin(genProps(keywordsValueGeneratorType.Labels),
+	"pg_get_keywords": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/10/static/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
 		makeGeneratorOverload(
 			tree.ArgTypes{},
 			keywordsValueGeneratorType,
 			makeKeywordsGenerator,
 			"Produces a virtual table containing the keywords known to the SQL parser.",
+			tree.VolatilityImmutable,
 		),
 	),
 
-	"unnest": makeBuiltin(genProps(arrayValueGeneratorLabels),
+	"regexp_split_to_table": makeBuiltin(
+		genProps(),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"string", types.String},
+				{"pattern", types.String},
+			},
+			types.String,
+			makeRegexpSplitToTableGeneratorFactory(false /* hasFlags */),
+			"Split string using a POSIX regular expression as the delimiter.",
+			tree.VolatilityImmutable,
+		),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"string", types.String},
+				{"pattern", types.String},
+				{"flags", types.String},
+			},
+			types.String,
+			makeRegexpSplitToTableGeneratorFactory(true /* hasFlags */),
+			"Split string using a POSIX regular expression as the delimiter with flags."+regexpFlagInfo,
+			tree.VolatilityImmutable,
+		),
+	),
+
+	"unnest": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
-			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
+			func(args []tree.TypedExpr) *types.T {
+				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
 					return tree.UnknownReturnType
 				}
-				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
-				return types.TTuple{
-					Types:  []types.T{t},
-					Labels: arrayValueGeneratorLabels,
-				}
+				return args[0].ResolvedType().ArrayContents()
 			},
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",
+			tree.VolatilityImmutable,
+		),
+		makeGeneratorOverloadWithReturnType(
+			tree.VariadicType{
+				FixedTypes: []*types.T{types.AnyArray, types.AnyArray},
+				VarType:    types.AnyArray,
+			},
+			func(args []tree.TypedExpr) *types.T {
+				returnTypes := make([]*types.T, len(args))
+				labels := make([]string, len(args))
+				for i, arg := range args {
+					if arg.ResolvedType().Family() == types.UnknownFamily {
+						return tree.UnknownReturnType
+					}
+					returnTypes[i] = arg.ResolvedType().ArrayContents()
+					labels[i] = "unnest"
+				}
+				return types.MakeLabeledTuple(returnTypes, labels)
+			},
+			makeVariadicUnnestGenerator,
+			"Returns the input arrays as a set of rows",
+			tree.VolatilityImmutable,
 		),
 	),
 
-	"information_schema._pg_expandarray": makeBuiltin(genProps(expandArrayValueGeneratorLabels),
+	"information_schema._pg_expandarray": makeBuiltin(genProps(),
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
-			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
+			func(args []tree.TypedExpr) *types.T {
+				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
 					return tree.UnknownReturnType
 				}
-				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
-				return types.TTuple{
-					Types:  []types.T{t, types.Int},
-					Labels: expandArrayValueGeneratorLabels,
-				}
+				t := args[0].ResolvedType().ArrayContents()
+				return types.MakeLabeledTuple([]*types.T{t, types.Int}, expandArrayValueGeneratorLabels)
 			},
 			makeExpandArrayGenerator,
 			"Returns the input array as a set of rows with an index",
+			tree.VolatilityImmutable,
 		),
 	),
 
-	"crdb_internal.unary_table": makeBuiltin(genProps(nil /* no labels */),
+	"crdb_internal.unary_table": makeBuiltin(genProps(),
 		makeGeneratorOverload(
 			tree.ArgTypes{},
 			unaryValueGeneratorType,
 			makeUnaryGenerator,
 			"Produces a virtual table containing a single row with no values.\n\n"+
 				"This function is used only by CockroachDB's developers for testing purposes.",
+			tree.VolatilityVolatile,
 		),
 	),
 
-	"generate_subscripts": makeBuiltin(genProps(subscriptsValueGeneratorLabels),
+	"generate_subscripts": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SUBSCRIPTS
 		makeGeneratorOverload(
 			tree.ArgTypes{{"array", types.AnyArray}},
 			subscriptsValueGeneratorType,
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.",
+			tree.VolatilityImmutable,
 		),
 		makeGeneratorOverload(
 			tree.ArgTypes{{"array", types.AnyArray}, {"dim", types.Int}},
 			subscriptsValueGeneratorType,
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.",
+			tree.VolatilityImmutable,
 		),
 		makeGeneratorOverload(
 			tree.ArgTypes{{"array", types.AnyArray}, {"dim", types.Int}, {"reverse", types.Bool}},
@@ -162,42 +268,118 @@ var generators = map[string]builtinDefinition{
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.\n\n"+
 				"When reverse is true, the series is returned in reverse order.",
+			tree.VolatilityImmutable,
 		),
 	),
 
-	"json_array_elements":       makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
-	"jsonb_array_elements":      makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
-	"json_array_elements_text":  makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
-	"jsonb_array_elements_text": makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
-	"json_object_keys":          makeBuiltin(genProps(jsonObjectKeysGeneratorLabels), jsonObjectKeysImpl),
-	"jsonb_object_keys":         makeBuiltin(genProps(jsonObjectKeysGeneratorLabels), jsonObjectKeysImpl),
-	"json_each":                 makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachImpl),
-	"jsonb_each":                makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachImpl),
-	"json_each_text":            makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachTextImpl),
-	"jsonb_each_text":           makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"json_array_elements":       makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
+	"jsonb_array_elements":      makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
+	"json_array_elements_text":  makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
+	"jsonb_array_elements_text": makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
+	"json_object_keys":          makeBuiltin(genProps(), jsonObjectKeysImpl),
+	"jsonb_object_keys":         makeBuiltin(genProps(), jsonObjectKeysImpl),
+	"json_each":                 makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
+	"jsonb_each":                makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
+	"json_each_text":            makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"jsonb_each_text":           makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
+
+	"crdb_internal.check_consistency": makeBuiltin(
+		tree.FunctionProperties{
+			Class:    tree.GeneratorClass,
+			Category: categorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{Name: "stats_only", Typ: types.Bool},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			checkConsistencyGeneratorType,
+			makeCheckConsistencyGenerator,
+			"Runs a consistency check on ranges touching the specified key range. "+
+				"an empty start or end key is treated as the minimum and maximum possible, "+
+				"respectively. stats_only should only be set to false when targeting a "+
+				"small number of ranges to avoid overloading the cluster. Each returned row "+
+				"contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), "+
+				"and verbose detail.\n\n"+
+				"Example usage:\n"+
+				"SELECT * FROM crdb_internal.check_consistency(true, '\\x02', '\\x04')",
+			tree.VolatilityVolatile,
+		),
+	),
 }
 
 func makeGeneratorOverload(
-	in tree.ArgTypes, ret types.TTuple, g tree.GeneratorFactory, info string,
+	in tree.TypeList, ret *types.T, g tree.GeneratorFactory, info string, volatility tree.Volatility,
 ) tree.Overload {
-	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info)
+	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info, volatility)
 }
 
-var errUnsuitableUseOfGenerator = pgerror.NewErrorf(pgerror.CodeInternalError,
-	"programming error: generator functions cannot be evaluated as scalars")
+func newUnsuitableUseOfGeneratorError() error {
+	return errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
+}
 
 func makeGeneratorOverloadWithReturnType(
-	in tree.ArgTypes, retType tree.ReturnTyper, g tree.GeneratorFactory, info string,
+	in tree.TypeList,
+	retType tree.ReturnTyper,
+	g tree.GeneratorFactory,
+	info string,
+	volatility tree.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      in,
 		ReturnType: retType,
 		Generator:  g,
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			return nil, errUnsuitableUseOfGenerator
+			return nil, newUnsuitableUseOfGeneratorError()
 		},
-		Info: info,
+		Info:       info,
+		Volatility: volatility,
 	}
+}
+
+// regexpSplitToTableGenerator supports regexp_split_to_table.
+type regexpSplitToTableGenerator struct {
+	words []string
+	curr  int
+}
+
+func makeRegexpSplitToTableGeneratorFactory(hasFlags bool) tree.GeneratorFactory {
+	return func(
+		ctx *tree.EvalContext, args tree.Datums,
+	) (tree.ValueGenerator, error) {
+		words, err := regexpSplit(ctx, args, hasFlags)
+		if err != nil {
+			return nil, err
+		}
+		return &regexpSplitToTableGenerator{
+			words: words,
+			curr:  -1,
+		}, nil
+	}
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (*regexpSplitToTableGenerator) ResolvedType() *types.T { return types.String }
+
+// Close implements the tree.ValueGenerator interface.
+func (*regexpSplitToTableGenerator) Close() {}
+
+// Start implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	g.curr = -1
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Next(_ context.Context) (bool, error) {
+	g.curr++
+	return g.curr < len(g.words), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{tree.NewDString(g.words[g.curr])}, nil
 }
 
 // keywordsValueGenerator supports the execution of pg_get_keywords().
@@ -205,38 +387,39 @@ type keywordsValueGenerator struct {
 	curKeyword int
 }
 
-var keywordsValueGeneratorType = types.TTuple{
-	Types:  []types.T{types.String, types.String, types.String},
-	Labels: []string{"word", "catcode", "catdesc"},
-}
+var keywordsValueGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.String, types.String},
+	[]string{"word", "catcode", "catdesc"},
+)
 
 func makeKeywordsGenerator(_ *tree.EvalContext, _ tree.Datums) (tree.ValueGenerator, error) {
 	return &keywordsValueGenerator{}, nil
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (*keywordsValueGenerator) ResolvedType() types.TTuple { return keywordsValueGeneratorType }
+func (*keywordsValueGenerator) ResolvedType() *types.T { return keywordsValueGeneratorType }
 
 // Close implements the tree.ValueGenerator interface.
 func (*keywordsValueGenerator) Close() {}
 
 // Start implements the tree.ValueGenerator interface.
-func (k *keywordsValueGenerator) Start() error {
+func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	k.curKeyword = -1
 	return nil
 }
-func (k *keywordsValueGenerator) Next() (bool, error) {
+
+// Next implements the tree.ValueGenerator interface.
+func (k *keywordsValueGenerator) Next(_ context.Context) (bool, error) {
 	k.curKeyword++
-	return k.curKeyword < len(keywordNames), nil
+	return k.curKeyword < len(lex.KeywordNames), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
-func (k *keywordsValueGenerator) Values() tree.Datums {
-	kw := keywordNames[k.curKeyword]
-	info := lex.Keywords[kw]
-	cat := info.Cat
+func (k *keywordsValueGenerator) Values() (tree.Datums, error) {
+	kw := lex.KeywordNames[k.curKeyword]
+	cat := lex.KeywordsCategories[kw]
 	desc := keywordCategoryDescriptions[cat]
-	return tree.Datums{tree.NewDString(kw), tree.NewDString(cat), tree.NewDString(desc)}
+	return tree.Datums{tree.NewDString(kw), tree.NewDString(cat), tree.NewDString(desc)}, nil
 }
 
 var keywordCategoryDescriptions = map[string]string{
@@ -246,40 +429,21 @@ var keywordCategoryDescriptions = map[string]string{
 	"U": "unreserved",
 }
 
-// keywordNames contains all the keys in the `keywords` map, sorted so
-// that pg_get_keywords returns deterministic results.
-var keywordNames = func() []string {
-	ret := make([]string, 0, len(lex.Keywords))
-	for k := range lex.Keywords {
-		ret = append(ret, k)
-	}
-	sort.Strings(ret)
-	return ret
-}()
-
 // seriesValueGenerator supports the execution of generate_series()
 // with integer bounds.
 type seriesValueGenerator struct {
 	origStart, value, start, stop, step interface{}
 	nextOK                              bool
-	genType                             types.TTuple
+	genType                             *types.T
 	next                                func(*seriesValueGenerator) (bool, error)
-	genValue                            func(*seriesValueGenerator) tree.Datums
+	genValue                            func(*seriesValueGenerator) (tree.Datums, error)
 }
 
-var seriesValueGeneratorLabels = []string{"generate_series"}
+var seriesValueGeneratorType = types.Int
 
-var seriesValueGeneratorType = types.TTuple{
-	Types:  []types.T{types.Int},
-	Labels: seriesValueGeneratorLabels,
-}
+var seriesTSValueGeneratorType = types.Timestamp
 
-var seriesTSValueGeneratorType = types.TTuple{
-	Types:  []types.T{types.Timestamp},
-	Labels: seriesValueGeneratorLabels,
-}
-
-var errStepCannotBeZero = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
+var errStepCannotBeZero = pgerror.New(pgcode.InvalidParameterValue, "step cannot be 0")
 
 func seriesIntNext(s *seriesValueGenerator) (bool, error) {
 	step := s.step.(int64)
@@ -300,12 +464,13 @@ func seriesIntNext(s *seriesValueGenerator) (bool, error) {
 	return true, nil
 }
 
-func seriesGenIntValue(s *seriesValueGenerator) tree.Datums {
-	return tree.Datums{tree.NewDInt(tree.DInt(s.value.(int64)))}
+func seriesGenIntValue(s *seriesValueGenerator) (tree.Datums, error) {
+	return tree.Datums{tree.NewDInt(tree.DInt(s.value.(int64)))}, nil
 }
 
+// seriesTSNext performs calendar-aware math.
 func seriesTSNext(s *seriesValueGenerator) (bool, error) {
-	step := s.step.(time.Duration)
+	step := s.step.(duration.Duration)
 	start := s.start.(time.Time)
 	stop := s.stop.(time.Time)
 
@@ -313,20 +478,25 @@ func seriesTSNext(s *seriesValueGenerator) (bool, error) {
 		return false, nil
 	}
 
-	if step < 0 && (start.Before(stop)) {
+	stepForward := step.Compare(duration.Duration{}) > 0
+	if !stepForward && (start.Before(stop)) {
 		return false, nil
 	}
-	if step > 0 && (stop.Before(start)) {
+	if stepForward && (stop.Before(start)) {
 		return false, nil
 	}
 
 	s.value = start
-	s.start = start.Add(step)
+	s.start = duration.Add(start, step)
 	return true, nil
 }
 
-func seriesGenTSValue(s *seriesValueGenerator) tree.Datums {
-	return tree.Datums{tree.MakeDTimestamp(s.value.(time.Time), time.Microsecond)}
+func seriesGenTSValue(s *seriesValueGenerator) (tree.Datums, error) {
+	ts, err := tree.MakeDTimestamp(s.value.(time.Time), time.Microsecond)
+	if err != nil {
+		return nil, err
+	}
+	return tree.Datums{ts}, nil
 }
 
 func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
@@ -352,9 +522,9 @@ func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGener
 func makeTSSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	start := args[0].(*tree.DTimestamp).Time
 	stop := args[1].(*tree.DTimestamp).Time
-	step := time.Duration(args[2].(*tree.DInterval).Nanos) * time.Nanosecond
+	step := args[2].(*tree.DInterval).Duration
 
-	if step == 0 {
+	if step.Compare(duration.Duration{}) == 0 {
 		return nil, errStepCannotBeZero
 	}
 
@@ -369,12 +539,12 @@ func makeTSSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGen
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) ResolvedType() types.TTuple {
+func (s *seriesValueGenerator) ResolvedType() *types.T {
 	return s.genType
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) Start() error {
+func (s *seriesValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.nextOK = true
 	s.start = s.origStart
 	s.value = s.origStart
@@ -385,13 +555,77 @@ func (s *seriesValueGenerator) Start() error {
 func (s *seriesValueGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) Next() (bool, error) {
+func (s *seriesValueGenerator) Next(_ context.Context) (bool, error) {
 	return s.next(s)
 }
 
 // Values implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) Values() tree.Datums {
+func (s *seriesValueGenerator) Values() (tree.Datums, error) {
 	return s.genValue(s)
+}
+
+func makeVariadicUnnestGenerator(
+	_ *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	var arrays []*tree.DArray
+	for _, a := range args {
+		arrays = append(arrays, tree.MustBeDArray(a))
+	}
+	g := &multipleArrayValueGenerator{arrays: arrays}
+	return g, nil
+}
+
+// multipleArrayValueGenerator is a value generator that returns each element of a
+// list of arrays.
+type multipleArrayValueGenerator struct {
+	arrays    []*tree.DArray
+	nextIndex int
+	datums    tree.Datums
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) ResolvedType() *types.T {
+	arraysN := len(s.arrays)
+	returnTypes := make([]*types.T, arraysN)
+	labels := make([]string, arraysN)
+	for i, arr := range s.arrays {
+		returnTypes[i] = arr.ParamTyp
+		labels[i] = "unnest"
+	}
+	return types.MakeLabeledTuple(returnTypes, labels)
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	s.datums = make(tree.Datums, len(s.arrays))
+	s.nextIndex = -1
+	return nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) Close() {}
+
+// Next implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) Next(_ context.Context) (bool, error) {
+	s.nextIndex++
+	for _, arr := range s.arrays {
+		if s.nextIndex < arr.Len() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
+	for i, arr := range s.arrays {
+		if s.nextIndex < arr.Len() {
+			s.datums[i] = arr.Array[s.nextIndex]
+		} else {
+			s.datums[i] = tree.DNull
+		}
+	}
+	return s.datums, nil
 }
 
 func makeArrayGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
@@ -406,18 +640,13 @@ type arrayValueGenerator struct {
 	nextIndex int
 }
 
-var arrayValueGeneratorLabels = []string{"unnest"}
-
 // ResolvedType implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) ResolvedType() types.TTuple {
-	return types.TTuple{
-		Types:  []types.T{s.array.ParamTyp},
-		Labels: arrayValueGeneratorLabels,
-	}
+func (s *arrayValueGenerator) ResolvedType() *types.T {
+	return s.array.ParamTyp
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) Start() error {
+func (s *arrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.nextIndex = -1
 	return nil
 }
@@ -426,7 +655,7 @@ func (s *arrayValueGenerator) Start() error {
 func (s *arrayValueGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) Next() (bool, error) {
+func (s *arrayValueGenerator) Next(_ context.Context) (bool, error) {
 	s.nextIndex++
 	if s.nextIndex >= s.array.Len() {
 		return false, nil
@@ -435,8 +664,8 @@ func (s *arrayValueGenerator) Next() (bool, error) {
 }
 
 // Values implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) Values() tree.Datums {
-	return tree.Datums{s.array.Array[s.nextIndex]}
+func (s *arrayValueGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{s.array.Array[s.nextIndex]}, nil
 }
 
 func makeExpandArrayGenerator(
@@ -458,15 +687,15 @@ type expandArrayValueGenerator struct {
 var expandArrayValueGeneratorLabels = []string{"x", "n"}
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (s *expandArrayValueGenerator) ResolvedType() types.TTuple {
-	return types.TTuple{
-		Types:  []types.T{s.avg.array.ParamTyp, types.Int},
-		Labels: expandArrayValueGeneratorLabels,
-	}
+func (s *expandArrayValueGenerator) ResolvedType() *types.T {
+	return types.MakeLabeledTuple(
+		[]*types.T{s.avg.array.ParamTyp, types.Int},
+		expandArrayValueGeneratorLabels,
+	)
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *expandArrayValueGenerator) Start() error {
+func (s *expandArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.avg.nextIndex = -1
 	return nil
 }
@@ -475,17 +704,17 @@ func (s *expandArrayValueGenerator) Start() error {
 func (s *expandArrayValueGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
-func (s *expandArrayValueGenerator) Next() (bool, error) {
+func (s *expandArrayValueGenerator) Next(_ context.Context) (bool, error) {
 	s.avg.nextIndex++
 	return s.avg.nextIndex < s.avg.array.Len(), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
-func (s *expandArrayValueGenerator) Values() tree.Datums {
+func (s *expandArrayValueGenerator) Values() (tree.Datums, error) {
 	// Expand array's index is 1 based.
 	s.buf[0] = s.avg.array.Array[s.avg.nextIndex]
 	s.buf[1] = tree.NewDInt(tree.DInt(s.avg.nextIndex + 1))
-	return s.buf[:]
+	return s.buf[:], nil
 }
 
 func makeGenerateSubscriptsGenerator(
@@ -517,30 +746,30 @@ func makeGenerateSubscriptsGenerator(
 // subscriptsValueGenerator is a value generator that returns a series
 // comprising the given array's subscripts.
 type subscriptsValueGenerator struct {
-	avg     arrayValueGenerator
-	buf     [1]tree.Datum
-	reverse bool
+	avg arrayValueGenerator
+	buf [1]tree.Datum
+	// firstIndex is normally 1, since arrays are normally 1-indexed. But the
+	// special Postgres vector types are 0-indexed.
+	firstIndex int
+	reverse    bool
 }
 
-var subscriptsValueGeneratorLabels = []string{"generate_subscripts"}
-
-var subscriptsValueGeneratorType = types.TTuple{
-	Types:  []types.T{types.Int},
-	Labels: subscriptsValueGeneratorLabels,
-}
+var subscriptsValueGeneratorType = types.Int
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (s *subscriptsValueGenerator) ResolvedType() types.TTuple {
+func (s *subscriptsValueGenerator) ResolvedType() *types.T {
 	return subscriptsValueGeneratorType
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *subscriptsValueGenerator) Start() error {
+func (s *subscriptsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	if s.reverse {
 		s.avg.nextIndex = s.avg.array.Len()
 	} else {
 		s.avg.nextIndex = -1
 	}
+	// Most arrays are 1-indexed, but not all.
+	s.firstIndex = s.avg.array.FirstIndex()
 	return nil
 }
 
@@ -548,7 +777,7 @@ func (s *subscriptsValueGenerator) Start() error {
 func (s *subscriptsValueGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
-func (s *subscriptsValueGenerator) Next() (bool, error) {
+func (s *subscriptsValueGenerator) Next(_ context.Context) (bool, error) {
 	if s.reverse {
 		s.avg.nextIndex--
 		return s.avg.nextIndex >= 0, nil
@@ -558,10 +787,9 @@ func (s *subscriptsValueGenerator) Next() (bool, error) {
 }
 
 // Values implements the tree.ValueGenerator interface.
-func (s *subscriptsValueGenerator) Values() tree.Datums {
-	// Generate Subscript's indexes are 1 based.
-	s.buf[0] = tree.NewDInt(tree.DInt(s.avg.nextIndex + 1))
-	return s.buf[:]
+func (s *subscriptsValueGenerator) Values() (tree.Datums, error) {
+	s.buf[0] = tree.NewDInt(tree.DInt(s.avg.nextIndex + s.firstIndex))
+	return s.buf[:], nil
 }
 
 // EmptyGenerator returns a new, empty generator. Used when a SRF
@@ -575,17 +803,17 @@ type unaryValueGenerator struct {
 	done bool
 }
 
-var unaryValueGeneratorType = types.TTuple{}
+var unaryValueGeneratorType = types.EmptyTuple
 
 func makeUnaryGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	return &unaryValueGenerator{}, nil
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (*unaryValueGenerator) ResolvedType() types.TTuple { return unaryValueGeneratorType }
+func (*unaryValueGenerator) ResolvedType() *types.T { return unaryValueGeneratorType }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *unaryValueGenerator) Start() error {
+func (s *unaryValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.done = false
 	return nil
 }
@@ -594,7 +822,7 @@ func (s *unaryValueGenerator) Start() error {
 func (s *unaryValueGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
-func (s *unaryValueGenerator) Next() (bool, error) {
+func (s *unaryValueGenerator) Next(_ context.Context) (bool, error) {
 	if !s.done {
 		s.done = true
 		return true, nil
@@ -605,7 +833,7 @@ func (s *unaryValueGenerator) Next() (bool, error) {
 var noDatums tree.Datums
 
 // Values implements the tree.ValueGenerator interface.
-func (s *unaryValueGenerator) Values() tree.Datums { return noDatums }
+func (s *unaryValueGenerator) Values() (tree.Datums, error) { return noDatums, nil }
 
 func jsonAsText(j json.JSON) (tree.Datum, error) {
 	text, err := j.AsText()
@@ -619,37 +847,32 @@ func jsonAsText(j json.JSON) (tree.Datum, error) {
 }
 
 var (
-	errJSONObjectKeysOnArray         = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot call json_object_keys on an array")
-	errJSONObjectKeysOnScalar        = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "cannot call json_object_keys on a scalar")
-	errJSONDeconstructArrayAsObject  = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot deconstruct an array as an object")
-	errJSONDeconstructScalarAsObject = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "cannot deconstruct a scalar")
+	errJSONObjectKeysOnArray         = pgerror.New(pgcode.InvalidParameterValue, "cannot call json_object_keys on an array")
+	errJSONObjectKeysOnScalar        = pgerror.Newf(pgcode.InvalidParameterValue, "cannot call json_object_keys on a scalar")
+	errJSONDeconstructArrayAsObject  = pgerror.New(pgcode.InvalidParameterValue, "cannot deconstruct an array as an object")
+	errJSONDeconstructScalarAsObject = pgerror.Newf(pgcode.InvalidParameterValue, "cannot deconstruct a scalar")
 )
 
 var jsonArrayElementsImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonArrayGeneratorType,
 	makeJSONArrayAsJSONGenerator,
 	"Expands a JSON array to a set of JSON values.",
+	tree.VolatilityImmutable,
 )
 
 var jsonArrayElementsTextImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonArrayTextGeneratorType,
 	makeJSONArrayAsTextGenerator,
 	"Expands a JSON array to a set of text values.",
+	tree.VolatilityImmutable,
 )
 
 var jsonArrayGeneratorLabels = []string{"value"}
+var jsonArrayGeneratorType = types.Jsonb
 
-var jsonArrayGeneratorType = types.TTuple{
-	Types:  []types.T{types.JSON},
-	Labels: jsonArrayGeneratorLabels,
-}
-
-var jsonArrayTextGeneratorType = types.TTuple{
-	Types:  []types.T{types.String},
-	Labels: jsonArrayGeneratorLabels,
-}
+var jsonArrayTextGeneratorType = types.String
 
 type jsonArrayGenerator struct {
 	json      tree.DJSON
@@ -658,7 +881,7 @@ type jsonArrayGenerator struct {
 	buf       [1]tree.Datum
 }
 
-var errJSONCallOnNonArray = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+var errJSONCallOnNonArray = pgerror.New(pgcode.InvalidParameterValue,
 	"cannot be called on a non-array")
 
 func makeJSONArrayAsJSONGenerator(
@@ -685,7 +908,7 @@ func makeJSONArrayGenerator(args tree.Datums, asText bool) (tree.ValueGenerator,
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) ResolvedType() types.TTuple {
+func (g *jsonArrayGenerator) ResolvedType() *types.T {
 	if g.asText {
 		return jsonArrayTextGeneratorType
 	}
@@ -693,7 +916,7 @@ func (g *jsonArrayGenerator) ResolvedType() types.TTuple {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) Start() error {
+func (g *jsonArrayGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	g.nextIndex = -1
 	g.json.JSON = g.json.JSON.MaybeDecode()
 	g.buf[0] = nil
@@ -704,7 +927,7 @@ func (g *jsonArrayGenerator) Start() error {
 func (g *jsonArrayGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) Next() (bool, error) {
+func (g *jsonArrayGenerator) Next(_ context.Context) (bool, error) {
 	g.nextIndex++
 	next, err := g.json.FetchValIdx(g.nextIndex)
 	if err != nil || next == nil {
@@ -721,24 +944,20 @@ func (g *jsonArrayGenerator) Next() (bool, error) {
 }
 
 // Values implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) Values() tree.Datums {
-	return g.buf[:]
+func (g *jsonArrayGenerator) Values() (tree.Datums, error) {
+	return g.buf[:], nil
 }
 
 // jsonObjectKeysImpl is a key generator of a JSON object.
 var jsonObjectKeysImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonObjectKeysGeneratorType,
 	makeJSONObjectKeysGenerator,
 	"Returns sorted set of keys in the outermost JSON object.",
+	tree.VolatilityImmutable,
 )
 
-var jsonObjectKeysGeneratorLabels = []string{"json_object_keys"}
-
-var jsonObjectKeysGeneratorType = types.TTuple{
-	Types:  []types.T{types.String},
-	Labels: jsonObjectKeysGeneratorLabels,
-}
+var jsonObjectKeysGeneratorType = types.String
 
 type jsonObjectKeysGenerator struct {
 	iter *json.ObjectIterator
@@ -766,52 +985,54 @@ func makeJSONObjectKeysGenerator(
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) ResolvedType() types.TTuple {
+func (g *jsonObjectKeysGenerator) ResolvedType() *types.T {
 	return jsonObjectKeysGeneratorType
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Start() error { return nil }
+func (g *jsonObjectKeysGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
 
 // Close implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Next() (bool, error) {
+func (g *jsonObjectKeysGenerator) Next(_ context.Context) (bool, error) {
 	return g.iter.Next(), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Values() tree.Datums {
-	return tree.Datums{tree.NewDString(g.iter.Key())}
+func (g *jsonObjectKeysGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{tree.NewDString(g.iter.Key())}, nil
 }
 
 var jsonEachImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonEachGeneratorType,
 	makeJSONEachImplGenerator,
 	"Expands the outermost JSON or JSONB object into a set of key/value pairs.",
+	tree.VolatilityImmutable,
 )
 
 var jsonEachTextImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonEachTextGeneratorType,
 	makeJSONEachTextImplGenerator,
 	"Expands the outermost JSON or JSONB object into a set of key/value pairs. "+
 		"The returned values will be of type text.",
+	tree.VolatilityImmutable,
 )
 
 var jsonEachGeneratorLabels = []string{"key", "value"}
 
-var jsonEachGeneratorType = types.TTuple{
-	Types:  []types.T{types.String, types.JSON},
-	Labels: jsonEachGeneratorLabels,
-}
+var jsonEachGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.Jsonb},
+	jsonEachGeneratorLabels,
+)
 
-var jsonEachTextGeneratorType = types.TTuple{
-	Types:  []types.T{types.String, types.String},
-	Labels: jsonEachGeneratorLabels,
-}
+var jsonEachTextGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.String},
+	jsonEachGeneratorLabels,
+)
 
 type jsonEachGenerator struct {
 	target tree.DJSON
@@ -842,7 +1063,7 @@ func makeJSONEachGenerator(args tree.Datums, asText bool) (tree.ValueGenerator, 
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) ResolvedType() types.TTuple {
+func (g *jsonEachGenerator) ResolvedType() *types.T {
 	if g.asText {
 		return jsonEachTextGeneratorType
 	}
@@ -850,7 +1071,7 @@ func (g *jsonEachGenerator) ResolvedType() types.TTuple {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) Start() error {
+func (g *jsonEachGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	iter, err := g.target.ObjectIter()
 	if err != nil {
 		return err
@@ -871,7 +1092,7 @@ func (g *jsonEachGenerator) Start() error {
 func (g *jsonEachGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) Next() (bool, error) {
+func (g *jsonEachGenerator) Next(_ context.Context) (bool, error) {
 	if !g.iter.Next() {
 		return false, nil
 	}
@@ -888,6 +1109,116 @@ func (g *jsonEachGenerator) Next() (bool, error) {
 }
 
 // Values implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) Values() tree.Datums {
-	return tree.Datums{g.key, g.value}
+func (g *jsonEachGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{g.key, g.value}, nil
 }
+
+type checkConsistencyGenerator struct {
+	db       *kv.DB
+	from, to roachpb.Key
+	mode     roachpb.ChecksumMode
+	// remainingRows is populated by Start(). Each Next() call peels of the first
+	// row and moves it to curRow.
+	remainingRows []roachpb.CheckConsistencyResponse_Result
+	curRow        roachpb.CheckConsistencyResponse_Result
+}
+
+var _ tree.ValueGenerator = &checkConsistencyGenerator{}
+
+func makeCheckConsistencyGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	if !ctx.Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy(
+			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+	}
+
+	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
+	keyTo := roachpb.Key(*args[2].(*tree.DBytes))
+
+	if len(keyFrom) == 0 {
+		keyFrom = keys.LocalMax
+	}
+	if len(keyTo) == 0 {
+		keyTo = roachpb.KeyMax
+	}
+
+	if bytes.Compare(keyFrom, keys.LocalMax) < 0 {
+		return nil, errors.Errorf("start key must be >= %q", []byte(keys.LocalMax))
+	}
+	if bytes.Compare(keyTo, roachpb.KeyMax) > 0 {
+		return nil, errors.Errorf("end key must be < %q", []byte(roachpb.KeyMax))
+	}
+	if bytes.Compare(keyFrom, keyTo) >= 0 {
+		return nil, errors.New("start key must be less than end key")
+	}
+
+	mode := roachpb.ChecksumMode_CHECK_FULL
+	if statsOnly := bool(*args[0].(*tree.DBool)); statsOnly {
+		mode = roachpb.ChecksumMode_CHECK_STATS
+	}
+
+	return &checkConsistencyGenerator{
+		db:   ctx.DB,
+		from: keyFrom,
+		to:   keyTo,
+		mode: mode,
+	}, nil
+}
+
+var checkConsistencyGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Bytes, types.String, types.String, types.String},
+	[]string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
+)
+
+// ResolvedType is part of the tree.ValueGenerator interface.
+func (*checkConsistencyGenerator) ResolvedType() *types.T {
+	return checkConsistencyGeneratorType
+}
+
+// Start is part of the tree.ValueGenerator interface.
+func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	var b kv.Batch
+	b.AddRawRequest(&roachpb.CheckConsistencyRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    c.from,
+			EndKey: c.to,
+		},
+		Mode: c.mode,
+		// No meaningful diff can be created if we're checking the stats only,
+		// so request one only if a full check is run.
+		WithDiff: c.mode == roachpb.ChecksumMode_CHECK_FULL,
+	})
+	// NB: DistSender has special code to avoid parallelizing the request if
+	// we're requesting CHECK_FULL.
+	if err := c.db.Run(ctx, &b); err != nil {
+		return err
+	}
+	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)
+	c.remainingRows = resp.Result
+	return nil
+}
+
+// Next is part of the tree.ValueGenerator interface.
+func (c *checkConsistencyGenerator) Next(_ context.Context) (bool, error) {
+	if len(c.remainingRows) == 0 {
+		return false, nil
+	}
+	c.curRow = c.remainingRows[0]
+	c.remainingRows = c.remainingRows[1:]
+	return true, nil
+}
+
+// Values is part of the tree.ValueGenerator interface.
+func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{
+		tree.NewDInt(tree.DInt(c.curRow.RangeID)),
+		tree.NewDBytes(tree.DBytes(c.curRow.StartKey)),
+		tree.NewDString(roachpb.Key(c.curRow.StartKey).String()),
+		tree.NewDString(c.curRow.Status.String()),
+		tree.NewDString(c.curRow.Detail),
+	}, nil
+}
+
+// Close is part of the tree.ValueGenerator interface.
+func (c *checkConsistencyGenerator) Close() {}

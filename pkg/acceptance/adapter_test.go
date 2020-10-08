@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//	 http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package acceptance
 
@@ -19,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -42,8 +39,6 @@ func TestDockerC(t *testing.T) {
 }
 
 func TestDockerCSharp(t *testing.T) {
-	// TODO(justin): figure out what's going on here.
-	t.Skip()
 	s := log.Scope(t)
 	defer s.Close(t)
 
@@ -59,6 +54,17 @@ func TestDockerJava(t *testing.T) {
 	ctx := context.Background()
 	testDockerSuccess(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o test"})
 	testDockerFail(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o foobar"})
+}
+
+func TestDockerElixir(t *testing.T) {
+	skip.IgnoreLint(t, "Elixir requires network to run, which can flake. When attempting to update this (#52341), the new Elixir version does not work with CRDB/TLS.")
+
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	ctx := context.Background()
+	testDockerSuccess(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && psql -c 'CREATE DATABASE IF NOT EXISTS testdb' && mix test"})
+	testDockerFail(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && mix thisshouldfail"})
 }
 
 func TestDockerNodeJS(t *testing.T) {

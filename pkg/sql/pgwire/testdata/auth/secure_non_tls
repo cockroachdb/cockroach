@@ -1,0 +1,71 @@
+config secure
+----
+
+# By default, neither root nor testuser can connect without TLS.
+
+connect user=root sslmode=disable
+----
+ERROR: node is running secure mode, SSL connection required (SQLSTATE 08P01)
+
+connect user=testuser sslmode=disable
+----
+ERROR: node is running secure mode, SSL connection required (SQLSTATE 08P01)
+
+# Enable non-TLS secure connections.
+accept_sql_without_tls
+----
+
+# Since root and testuser do not have a password, they still
+# cannot log in.
+
+connect user=root sslmode=disable
+----
+ERROR: password authentication failed for user root
+
+connect user=testuser sslmode=disable
+----
+ERROR: password authentication failed for user testuser
+
+# set the password for testuser.
+sql
+ALTER USER testuser WITH PASSWORD 'abc'
+----
+ok
+
+# Now testuser can log in.
+
+connect password=abc user=testuser sslmode=disable
+----
+ok defaultdb
+
+# But not with the wrong password.
+
+connect password=wrongpass user=testuser sslmode=disable
+----
+ERROR: password authentication failed for user testuser
+
+# Now disable all non-TLS conns via HBA.
+set_hba
+hostnossl all all  all reject
+host      all all  all cert-password
+local     all all      password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# hostnossl all all  all reject
+# host      all all  all cert-password
+# local     all all      password
+#
+# Interpreted configuration:
+# TYPE    DATABASE USER ADDRESS METHOD        OPTIONS
+host      all      root all     cert-password
+hostnossl all      all  all     reject
+host      all      all  all     cert-password
+local     all      all          password
+
+# Now testuser cannot log in any more (rejected by HBA).
+
+connect password=abc user=testuser sslmode=disable
+----
+ERROR: authentication rejected by configuration

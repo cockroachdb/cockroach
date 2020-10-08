@@ -1,0 +1,128 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvnemesis;
+option go_package = "kvnemesis";
+
+import "errorspb/errors.proto";
+import "gogoproto/gogo.proto";
+import "roachpb/api.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+message BatchOperation {
+  repeated Operation ops = 1 [(gogoproto.nullable) = false];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+enum ClosureTxnType {
+  Commit = 0;
+  Rollback = 1;
+  // TODO(dan): Ambiguous = 2;
+}
+
+message ClosureTxnOperation {
+  string txn_id = 1 [(gogoproto.customname) = 'TxnID'];
+  repeated Operation ops = 2 [(gogoproto.nullable) = false];
+  BatchOperation commit_in_batch = 3;
+  ClosureTxnType type = 4;
+  Result result = 5 [(gogoproto.nullable) = false];
+  roachpb.Transaction txn = 6;
+}
+
+message GetOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message ScanOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  bool for_update = 3;
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
+message PutOperation {
+  bytes key = 1;
+  bytes value = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message SplitOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message MergeOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message ChangeReplicasOperation {
+  bytes key = 1;
+  repeated roachpb.ReplicationChange changes = 2 [(gogoproto.nullable) = false];
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message Operation {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.onlyone) = true;
+
+  BatchOperation batch = 1;
+
+  // TODO(dan): The original prototype of kvnemesis had separate operations for
+  // {Begin,Use,Commit,Rollback}Txn, which helped generate more interesting
+  // concurrency traffic. This had some issues with deadlock in the txn wait
+  // queue, but it seems like it should be possible to bring it back somehow.
+  ClosureTxnOperation closure_txn = 2;
+
+  GetOperation get = 7;
+  PutOperation put = 8;
+  ScanOperation scan = 9;
+  SplitOperation split = 10;
+  MergeOperation merge = 11;
+  ChangeReplicasOperation change_replicas = 12;
+}
+
+enum ResultType {
+  Unknown = 0;
+  NoError = 1;
+  Error = 2;
+  Value = 3;
+  Values = 4;
+}
+
+message KeyValue {
+  bytes key = 1;
+  // The RawBytes of a roachpb.Value.
+  bytes value = 2;
+}
+
+message Result {
+  ResultType type = 1;
+  // Only set if Type is ResultType_Error.
+  errorspb.EncodedError err = 2;
+  // Only set if Type is ResultType_Value. The RawBytes of a roachpb.Value.
+  bytes value = 3;
+  // Only set if Type is ResultType_Values. The RawBytes of a roachpb.Value.
+  repeated KeyValue values = 4 [(gogoproto.nullable) = false];
+}
+
+message Step {
+  option (gogoproto.goproto_stringer) = false;
+  Operation op = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp before = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp after = 3 [(gogoproto.nullable) = false];
+  int32 db_id = 4 [(gogoproto.customname) = 'DBID'];
+  // Trace will contain the recording of the Step's execution. Used to print it
+  // out when the test fails.
+  string trace = 5;
+}

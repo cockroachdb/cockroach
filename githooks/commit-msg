@@ -19,7 +19,14 @@ reset=$([ -t 2 ] && { tput sgr0 || tput me; } 2>/dev/null)
 warn() {
     echo >&2
     echo "${red}$*${reset}" >&2
+    echo >&2
 }
+
+if ! test -s "$1"; then
+	warn "commit message is empty!"
+	# nothing to check further.
+	exit 0
+fi
 
 # First lint test: give a friendly reminder on long lines.
 
@@ -43,8 +50,12 @@ saveIFS=$IFS
 IFS='
 '
 notes=($($grep -iE '^release note' "$1"))
-IFS=$saveIFS
 
+# Set this to 1 to require a release justification note.
+require_justification=0
+justification=($($grep -iE '^release justification: \S+' "$1"))
+
+IFS=$saveIFS
 
 informed=
 inform() {
@@ -59,6 +70,12 @@ hint() {
     inform
     echo "- $*" >&2
 }
+
+if [ "$require_justification" = 1 -a  0 = ${#justification[*]} ]; then
+    warn "No release justification specified."
+    echo "Try: 'Release justification: This commit is safe for this release because..." >&2
+    echo >&2
+fi
 
 if [ 0 = ${#notes[*]} ]; then
     warn "No release note specified."
@@ -122,6 +139,7 @@ else
                 case $lcat in
                     "cli change") ;;
                     "sql change") ;;
+                    "api change") ;;
                     "admin ui change") ;;
                     "general change") ;;
                     "build change") ;;
@@ -129,10 +147,15 @@ else
                     "backward-incompatible change") ;;
                     "performance improvement") ;;
                     "bug fix") ;;
+                    "security update") ;;
                     bugfix)
                         hint "Try 'Release note (bugfix)' -> 'Release note (bug fix)'" ;;
+                    security*)
+                        hint "Try 'Release note ($lcat)' -> 'Release note (security update)'" ;;
                     sql*)
                         hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
+                    api*)
+                        hint "Try 'Release note ($lcat)' -> 'Release note (api change)'" ;;
                     "backwards-incompatible"*|"backward incompatible"*)
                         hint "Try '$lcat' -> 'backward-incompatible change'" ;;
                     *) hint "unknown category '$lcat'" ;;

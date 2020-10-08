@@ -1,0 +1,24 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.diagnostics-history-view
+  &__table-container
+    background $colors--white
+    padding $spacing-medium-small
+
+  & .crl-table-wrapper .sort-table__row:hover .nodes-table__link
+    color $colors--primary-blue-3
+    text-decoration underline
+
+  &__table-header
+    margin-top: $spacing-medium-small
+    margin-bottom $spacing-x-small

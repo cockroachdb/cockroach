@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package ts
 
@@ -19,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -30,34 +26,64 @@ import (
 
 var (
 	resolution1nsDefaultRollupThreshold = time.Second
-	// The prune threshold for the 10s resolution was created before time series
-	// rollups were enabled. It is still used in the transition period during
-	// an upgrade before the cluster version is finalized. After the version
-	// upgrade, the rollup threshold is used instead.
-	resolution10sDefaultPruneThreshold  = 30 * 24 * time.Hour
-	resolution10sDefaultRollupThreshold = 7 * 24 * time.Hour
-	resolution30mDefaultPruneThreshold  = 365 * 24 * time.Hour
-	resolution50nsDefaultPruneThreshold = 1 * time.Millisecond
+	// The deprecated prune threshold for the 10s resolution was created before
+	// time series rollups were enabled. It is still used in the transition period
+	// during an upgrade before the cluster version is finalized. After the
+	// version upgrade, the rollup threshold is used instead.
+	deprecatedResolution10sDefaultPruneThreshold = 30 * 24 * time.Hour
+	resolution10sDefaultRollupThreshold          = 10 * 24 * time.Hour
+	resolution30mDefaultPruneThreshold           = 90 * 24 * time.Hour
+	resolution50nsDefaultPruneThreshold          = 1 * time.Millisecond
 )
 
 // TimeseriesStorageEnabled controls whether to store timeseries data to disk.
-var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
+var TimeseriesStorageEnabled = settings.RegisterPublicBoolSetting(
 	"timeseries.storage.enabled",
 	"if set, periodic timeseries data is stored within the cluster; disabling is not recommended "+
 		"unless you are storing the data elsewhere",
 	true,
 )
 
-// Resolution10StoreDuration defines the amount of time to store internal metrics
-var Resolution10StoreDuration = settings.RegisterDurationSetting(
-	"timeseries.resolution_10s.storage_duration",
-	"the amount of time to store timeseries data",
-	resolution10sDefaultPruneThreshold,
+// Resolution10sStorageTTL defines the maximum age of data that will be retained
+// at he 10 second resolution. Data older than this is subject to being "rolled
+// up" into the 30 minute resolution and then deleted.
+var Resolution10sStorageTTL = settings.RegisterPublicDurationSetting(
+	"timeseries.storage.resolution_10s.ttl",
+	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
+		"is subject to rollup and deletion.",
+	resolution10sDefaultRollupThreshold,
+)
+
+// deprecatedResolution30StoreDuration is retained for backward compatibility during a version upgrade.
+var deprecatedResolution30StoreDuration = func() *settings.DurationSetting {
+	s := settings.RegisterDurationSetting(
+		"timeseries.storage.30m_resolution_ttl", "replaced by timeseries.storage.resolution_30m.ttl",
+		resolution30mDefaultPruneThreshold,
+	)
+	s.SetRetired()
+	return s
+}()
+
+func init() {
+	// The setting is not used any more, but we need to keep its
+	// definition for backward compatibility until the next release
+	// cycle.
+	_ = deprecatedResolution30StoreDuration
+}
+
+// Resolution30mStorageTTL defines the maximum age of data that will be
+// retained at he 30 minute resolution. Data older than this is subject to
+// deletion.
+var Resolution30mStorageTTL = settings.RegisterPublicDurationSetting(
+	"timeseries.storage.resolution_30m.ttl",
+	"the maximum age of time series data stored at the 30 minute resolution. Data older than this "+
+		"is subject to deletion.",
+	resolution30mDefaultPruneThreshold,
 )
 
 // DB provides Cockroach's Time Series API.
 type DB struct {
-	db      *client.DB
+	db      *kv.DB
 	st      *cluster.Settings
 	metrics *TimeSeriesMetrics
 
@@ -73,15 +99,12 @@ type DB struct {
 }
 
 // NewDB creates a new DB instance.
-func NewDB(db *client.DB, settings *cluster.Settings) *DB {
+func NewDB(db *kv.DB, settings *cluster.Settings) *DB {
 	pruneThresholdByResolution := map[Resolution]func() int64{
 		Resolution10s: func() int64 {
-			if settings.Version.IsMinSupported(cluster.VersionColumnarTimeSeries) {
-				return resolution10sDefaultRollupThreshold.Nanoseconds()
-			}
-			return Resolution10StoreDuration.Get(&settings.SV).Nanoseconds()
+			return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
 		},
-		Resolution30m:  func() int64 { return resolution30mDefaultPruneThreshold.Nanoseconds() },
+		Resolution30m:  func() int64 { return Resolution30mStorageTTL.Get(&settings.SV).Nanoseconds() },
 		resolution1ns:  func() int64 { return resolution1nsDefaultRollupThreshold.Nanoseconds() },
 		resolution50ns: func() int64 { return resolution50nsDefaultPruneThreshold.Nanoseconds() },
 	}
@@ -171,7 +194,7 @@ func (p *poller) poll() {
 			log.Warningf(ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warning(bgCtx, err)
+		log.Warningf(bgCtx, "%v", err)
 	}
 }
 
@@ -271,7 +294,7 @@ func (db *DB) tryStoreRollup(ctx context.Context, r Resolution, data []rollupDat
 }
 
 func (db *DB) storeKvs(ctx context.Context, kvs []roachpb.KeyValue) error {
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	for _, kv := range kvs {
 		b.AddRawRequest(&roachpb.MergeRequest{
 			RequestHeader: roachpb.RequestHeader{
@@ -314,11 +337,11 @@ func (db *DB) Metrics() *TimeSeriesMetrics {
 // WriteColumnar returns true if this DB should write data in the newer columnar
 // format.
 func (db *DB) WriteColumnar() bool {
-	return !db.forceRowFormat && db.st.Version.IsMinSupported(cluster.VersionColumnarTimeSeries)
+	return !db.forceRowFormat
 }
 
 // WriteRollups returns true if this DB should write rollups for resolutions
 // targeted for a rollup resolution.
 func (db *DB) WriteRollups() bool {
-	return !db.forceRowFormat && db.st.Version.IsMinSupported(cluster.VersionColumnarTimeSeries)
+	return !db.forceRowFormat
 }

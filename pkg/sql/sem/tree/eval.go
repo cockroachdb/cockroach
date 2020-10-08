@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -24,20 +20,25 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -45,107 +46,101 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 var (
-	errIntOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
-	errFloatOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
-	errDecOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "decimal out of range")
+	// ErrIntOutOfRange is reported when integer arithmetic overflows.
+	ErrIntOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")
+	// ErrFloatOutOfRange is reported when float arithmetic overflows.
+	ErrFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
+	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
 
 	// ErrDivByZero is reported on a division by zero.
-	ErrDivByZero = pgerror.NewError(pgerror.CodeDivisionByZeroError, "division by zero")
-	// ErrZeroModulus is reported when computing the rest of a division by zero.
-	ErrZeroModulus = pgerror.NewError(pgerror.CodeDivisionByZeroError, "zero modulus")
+	ErrDivByZero       = pgerror.New(pgcode.DivisionByZero, "division by zero")
+	errSqrtOfNegNumber = pgerror.New(pgcode.InvalidArgumentForPowerFunction, "cannot take square root of a negative number")
+
+	// ErrShiftArgOutOfRange is reported when a shift argument is out of range.
+	ErrShiftArgOutOfRange = pgerror.New(pgcode.InvalidParameterValue, "shift argument out of range")
 
 	big10E6  = big.NewInt(1e6)
 	big10E10 = big.NewInt(1e10)
 )
 
-// SecondsInDay is the number of seconds in a Day.
-const SecondsInDay = 24 * 60 * 60
+// NewCannotMixBitArraySizesError creates an error for the case when a bitwise
+// aggregate function is called on bit arrays with different sizes.
+func NewCannotMixBitArraySizesError(op string) error {
+	return pgerror.Newf(pgcode.StringDataLengthMismatch,
+		"cannot %s bit strings of different sizes", op)
+}
 
 // UnaryOp is a unary operator.
 type UnaryOp struct {
-	Typ        types.T
-	ReturnType types.T
+	Typ        *types.T
+	ReturnType *types.T
 	Fn         func(*EvalContext, Datum) (Datum, error)
+	Volatility Volatility
 
 	types   TypeList
 	retType ReturnTyper
+
+	// counter, if non-nil, should be incremented every time the
+	// operator is type checked.
+	counter telemetry.Counter
 }
 
-func (op UnaryOp) params() TypeList {
+func (op *UnaryOp) params() TypeList {
 	return op.types
 }
 
-func (op UnaryOp) returnType() ReturnTyper {
+func (op *UnaryOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (UnaryOp) preferred() bool {
+func (*UnaryOp) preferred() bool {
 	return false
 }
 
-func init() {
-	for op, overload := range UnaryOps {
+func unaryOpFixups(ops map[UnaryOperator]unaryOpOverload) map[UnaryOperator]unaryOpOverload {
+	for op, overload := range ops {
 		for i, impl := range overload {
-			casted := impl.(UnaryOp)
+			casted := impl.(*UnaryOp)
 			casted.types = ArgTypes{{"arg", casted.Typ}}
 			casted.retType = FixedReturnType(casted.ReturnType)
-			UnaryOps[op][i] = casted
+			ops[op][i] = casted
 		}
 	}
+	return ops
 }
 
 // unaryOpOverload is an overloaded set of unary operator implementations.
 type unaryOpOverload []overloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
-var UnaryOps = map[UnaryOperator]unaryOpOverload{
-	UnaryPlus: {
-		UnaryOp{
-			Typ:        types.Int,
-			ReturnType: types.Int,
-			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return d, nil
-			},
-		},
-		UnaryOp{
-			Typ:        types.Float,
-			ReturnType: types.Float,
-			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return d, nil
-			},
-		},
-		UnaryOp{
-			Typ:        types.Decimal,
-			ReturnType: types.Decimal,
-			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return d, nil
-			},
-		},
-	},
-
+var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 	UnaryMinus: {
-		UnaryOp{
+		&UnaryOp{
 			Typ:        types.Int,
 			ReturnType: types.Int,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := MustBeDInt(d)
 				if i == math.MinInt64 {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(-i), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		UnaryOp{
+		&UnaryOp{
 			Typ:        types.Float,
 			ReturnType: types.Float,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDFloat(-*d.(*DFloat)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		UnaryOp{
+		&UnaryOp{
 			Typ:        types.Decimal,
 			ReturnType: types.Decimal,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
@@ -154,70 +149,131 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 				dd.Decimal.Neg(dec)
 				return dd, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		UnaryOp{
+		&UnaryOp{
 			Typ:        types.Interval,
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := d.(*DInterval).Duration
-				i.Nanos = -i.Nanos
+				i.SetNanos(-i.Nanos())
 				i.Days = -i.Days
 				i.Months = -i.Months
 				return &DInterval{Duration: i}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	UnaryComplement: {
-		UnaryOp{
+		&UnaryOp{
 			Typ:        types.Int,
 			ReturnType: types.Int,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDInt(^MustBeDInt(d)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		UnaryOp{
+		&UnaryOp{
+			Typ:        types.VarBit,
+			ReturnType: types.VarBit,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				p := MustBeDBitArray(d)
+				return &DBitArray{BitArray: bitarray.Not(p.BitArray)}, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&UnaryOp{
 			Typ:        types.INet,
 			ReturnType: types.INet,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(d).IPAddr
 				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
-}
+
+	UnarySqrt: {
+		&UnaryOp{
+			Typ:        types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				return Sqrt(float64(*d.(*DFloat)))
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&UnaryOp{
+			Typ:        types.Decimal,
+			ReturnType: types.Decimal,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				dec := &d.(*DDecimal).Decimal
+				return DecimalSqrt(dec)
+			},
+			Volatility: VolatilityImmutable,
+		},
+	},
+
+	UnaryCbrt: {
+		&UnaryOp{
+			Typ:        types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				return Cbrt(float64(*d.(*DFloat)))
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&UnaryOp{
+			Typ:        types.Decimal,
+			ReturnType: types.Decimal,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				dec := &d.(*DDecimal).Decimal
+				return DecimalCbrt(dec)
+			},
+			Volatility: VolatilityImmutable,
+		},
+	},
+})
+
+// TwoArgFn is a function that operates on two Datum arguments.
+type TwoArgFn func(*EvalContext, Datum, Datum) (Datum, error)
 
 // BinOp is a binary operator.
 type BinOp struct {
-	LeftType     types.T
-	RightType    types.T
-	ReturnType   types.T
+	LeftType     *types.T
+	RightType    *types.T
+	ReturnType   *types.T
 	NullableArgs bool
-	fn           func(*EvalContext, Datum, Datum) (Datum, error)
+	Fn           TwoArgFn
+	Volatility   Volatility
 
 	types   TypeList
 	retType ReturnTyper
+
+	// counter, if non-nil, should be incremented every time the
+	// operator is type checked.
+	counter telemetry.Counter
 }
 
-func (op BinOp) params() TypeList {
+func (op *BinOp) params() TypeList {
 	return op.types
 }
 
-func (op BinOp) matchParams(l, r types.T) bool {
+func (op *BinOp) matchParams(l, r *types.T) bool {
 	return op.params().MatchAt(l, 0) && op.params().MatchAt(r, 1)
 }
 
-func (op BinOp) returnType() ReturnTyper {
+func (op *BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (BinOp) preferred() bool {
+func (*BinOp) preferred() bool {
 	return false
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
 // argument is NULL, an array of one element is created.
-func AppendToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
+func AppendToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
 	if left != DNull {
 		for _, e := range MustBeDArray(left).Array {
@@ -234,7 +290,7 @@ func AppendToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error)
 
 // PrependToMaybeNullArray prepends an element in the front of an arrray.
 // If the argument is NULL, an array of one element is created.
-func PrependToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
+func PrependToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
 	if err := result.Append(left); err != nil {
 		return nil, err
@@ -254,32 +310,34 @@ func PrependToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error
 // existing arrays. This would optimize the common case of appending an element
 // (or array) to an array from O(n) to O(1).
 func initArrayElementConcatenation() {
-	for _, t := range types.AnyNonArray {
+	for _, t := range types.Scalar {
 		typ := t
-		BinOps[Concat] = append(BinOps[Concat], BinOp{
-			LeftType:     types.TArray{Typ: typ},
+		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+			LeftType:     types.MakeArray(typ),
 			RightType:    typ,
-			ReturnType:   types.TArray{Typ: typ},
+			ReturnType:   types.MakeArray(typ),
 			NullableArgs: true,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return AppendToMaybeNullArray(typ, left, right)
 			},
+			Volatility: VolatilityImmutable,
 		})
 
-		BinOps[Concat] = append(BinOps[Concat], BinOp{
+		BinOps[Concat] = append(BinOps[Concat], &BinOp{
 			LeftType:     typ,
-			RightType:    types.TArray{Typ: typ},
-			ReturnType:   types.TArray{Typ: typ},
+			RightType:    types.MakeArray(typ),
+			ReturnType:   types.MakeArray(typ),
 			NullableArgs: true,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return PrependToMaybeNullArray(typ, left, right)
 			},
+			Volatility: VolatilityImmutable,
 		})
 	}
 }
 
 // ConcatArrays concatenates two arrays.
-func ConcatArrays(typ types.T, left Datum, right Datum) (Datum, error) {
+func ConcatArrays(typ *types.T, left Datum, right Datum) (Datum, error) {
 	if left == DNull && right == DNull {
 		return DNull, nil
 	}
@@ -301,17 +359,60 @@ func ConcatArrays(typ types.T, left Datum, right Datum) (Datum, error) {
 	return result, nil
 }
 
+// ArrayContains return true if the haystack contains all needles.
+func ArrayContains(ctx *EvalContext, haystack *DArray, needles *DArray) (*DBool, error) {
+	if !haystack.ParamTyp.Equivalent(needles.ParamTyp) {
+		return DBoolFalse, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+	}
+	for _, needle := range needles.Array {
+		// Nulls don't compare to each other in @> syntax.
+		if needle == DNull {
+			return DBoolFalse, nil
+		}
+		var found bool
+		for _, hay := range haystack.Array {
+			if needle.Compare(ctx, hay) == 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return DBoolFalse, nil
+		}
+	}
+	return DBoolTrue, nil
+}
+
+// JSONExistsAny return true if any value in dArray is exist in the json
+func JSONExistsAny(_ *EvalContext, json DJSON, dArray *DArray) (*DBool, error) {
+	// TODO(justin): this can be optimized.
+	for _, k := range dArray.Array {
+		if k == DNull {
+			continue
+		}
+		e, err := json.JSON.Exists(string(MustBeDString(k)))
+		if err != nil {
+			return nil, err
+		}
+		if e {
+			return DBoolTrue, nil
+		}
+	}
+	return DBoolFalse, nil
+}
+
 func initArrayToArrayConcatenation() {
-	for _, t := range types.AnyNonArray {
+	for _, t := range types.Scalar {
 		typ := t
-		BinOps[Concat] = append(BinOps[Concat], BinOp{
-			LeftType:     types.TArray{Typ: typ},
-			RightType:    types.TArray{Typ: typ},
-			ReturnType:   types.TArray{Typ: typ},
+		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+			LeftType:     types.MakeArray(typ),
+			RightType:    types.MakeArray(typ),
+			ReturnType:   types.MakeArray(typ),
 			NullableArgs: true,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return ConcatArrays(typ, left, right)
 			},
+			Volatility: VolatilityImmutable,
 		})
 	}
 }
@@ -324,7 +425,7 @@ func init() {
 func init() {
 	for op, overload := range BinOps {
 		for i, impl := range overload {
-			casted := impl.(BinOp)
+			casted := impl.(*BinOp)
 			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
 			casted.retType = FixedReturnType(casted.ReturnType)
 			BinOps[op][i] = casted
@@ -335,14 +436,14 @@ func init() {
 // binOpOverload is an overloaded set of binary operator implementations.
 type binOpOverload []overloadImpl
 
-func (o binOpOverload) lookupImpl(left, right types.T) (BinOp, bool) {
+func (o binOpOverload) lookupImpl(left, right *types.T) (*BinOp, bool) {
 	for _, fn := range o {
-		casted := fn.(BinOp)
+		casted := fn.(*BinOp)
 		if casted.matchParams(left, right) {
 			return casted, true
 		}
 	}
-	return BinOp{}, false
+	return nil, false
 }
 
 // getJSONPath is used for the #> and #>> operators.
@@ -351,6 +452,9 @@ func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 	// a new array since the JSON package isn't aware of DArray.
 	path := make([]string, len(ary.Array))
 	for i, v := range ary.Array {
+		if v == DNull {
+			return DNull, nil
+		}
 		path[i] = string(MustBeDString(v))
 	}
 	result, err := json.FetchPath(j.JSON, path)
@@ -366,550 +470,685 @@ func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 // BinOps contains the binary operations indexed by operation type.
 var BinOps = map[BinaryOperator]binOpOverload{
 	Bitand: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) & MustBeDInt(right)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
+			LeftType:   types.VarBit,
+			RightType:  types.VarBit,
+			ReturnType: types.VarBit,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDBitArray(right)
+				if lhs.BitLen() != rhs.BitLen() {
+					return nil, NewCannotMixBitArraySizesError("AND")
+				}
+				return &DBitArray{
+					BitArray: bitarray.And(lhs.BitArray, rhs.BitArray),
+				}, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			ReturnType: types.INet,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.And(&other)
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Bitor: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) | MustBeDInt(right)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
+			LeftType:   types.VarBit,
+			RightType:  types.VarBit,
+			ReturnType: types.VarBit,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDBitArray(right)
+				if lhs.BitLen() != rhs.BitLen() {
+					return nil, NewCannotMixBitArraySizesError("OR")
+				}
+				return &DBitArray{
+					BitArray: bitarray.Or(lhs.BitArray, rhs.BitArray),
+				}, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			ReturnType: types.INet,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.Or(&other)
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Bitxor: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) ^ MustBeDInt(right)), nil
 			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
+			LeftType:   types.VarBit,
+			RightType:  types.VarBit,
+			ReturnType: types.VarBit,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDBitArray(right)
+				if lhs.BitLen() != rhs.BitLen() {
+					return nil, NewCannotMixBitArraySizesError("XOR")
+				}
+				return &DBitArray{
+					BitArray: bitarray.Xor(lhs.BitArray, rhs.BitArray),
+				}, nil
+			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Plus: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				r, ok := arith.AddWithOverflow(int64(a), int64(b))
 				if !ok {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(DInt(r)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) + *right.(*DFloat)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
 				_, err := ExactCtx.Add(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(r))
+				dd.SetInt64(int64(r))
 				_, err := ExactCtx.Add(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(l))
+				dd.SetInt64(int64(l))
 				_, err := ExactCtx.Add(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Int,
 			ReturnType: types.Date,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDDate(*left.(*DDate) + DDate(MustBeDInt(right))), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				d, err := left.(*DDate).AddDays(int64(MustBeDInt(right)))
+				if err != nil {
+					return nil, err
+				}
+				return NewDDate(d), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Date,
 			ReturnType: types.Date,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDDate(DDate(MustBeDInt(left)) + *right.(*DDate)), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				d, err := right.(*DDate).AddDays(int64(MustBeDInt(left)))
+				if err != nil {
+					return nil, err
+				}
+				return NewDDate(d), nil
+
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Time,
 			ReturnType: types.Timestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(time.UTC, left.(*DDate))
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				leftTime, err := left.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
 				t := time.Duration(*right.(*DTime)) * time.Microsecond
-				return MakeDTimestamp(d.Add(t), time.Microsecond), nil
+				return MakeDTimestamp(leftTime.Add(t), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Date,
 			ReturnType: types.Timestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(time.UTC, right.(*DDate))
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				rightTime, err := right.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
 				t := time.Duration(*left.(*DTime)) * time.Microsecond
-				return MakeDTimestamp(d.Add(t), time.Microsecond), nil
+				return MakeDTimestamp(rightTime.Add(t), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
+			LeftType:   types.Date,
+			RightType:  types.TimeTZ,
+			ReturnType: types.TimestampTZ,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				leftTime, err := left.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				t := leftTime.Add(right.(*DTimeTZ).ToDuration())
+				return MakeDTimestampTZ(t, time.Microsecond)
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
+			LeftType:   types.TimeTZ,
+			RightType:  types.Date,
+			ReturnType: types.TimestampTZ,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				rightTime, err := right.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				t := rightTime.Add(left.(*DTimeTZ).ToDuration())
+				return MakeDTimestampTZ(t, time.Microsecond)
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Interval,
 			ReturnType: types.Time,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := timeofday.TimeOfDay(*left.(*DTime))
 				return MakeDTime(t.Add(right.(*DInterval).Duration)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Time,
 			ReturnType: types.Time,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := timeofday.TimeOfDay(*right.(*DTime))
 				return MakeDTime(t.Add(left.(*DInterval).Duration)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.Date,
-			RightType:  types.TimeTZ,
-			ReturnType: types.TimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(right.(*DTimeTZ).Location, left.(*DDate))
-				t := time.Duration(right.(*DTimeTZ).TimeOfDay) * time.Microsecond
-				return MakeDTimestampTZ(d.Add(t), time.Microsecond), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Date,
-			ReturnType: types.TimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(left.(*DTimeTZ).Location, right.(*DDate))
-				t := time.Duration(left.(*DTimeTZ).TimeOfDay) * time.Microsecond
-				return MakeDTimestampTZ(d.Add(t), time.Microsecond), nil
-			},
-		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.TimeTZ,
 			RightType:  types.Interval,
 			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := left.(*DTimeTZ).TimeOfDay
-				return MakeDTimeTZ(t.Add(right.(*DInterval).Duration), left.(*DTimeTZ).Location), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := left.(*DTimeTZ)
+				duration := right.(*DInterval).Duration
+				return NewDTimeTZFromOffset(t.Add(duration), t.OffsetSecs), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.TimeTZ,
 			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := right.(*DTimeTZ).TimeOfDay
-				return MakeDTimeTZ(t.Add(left.(*DInterval).Duration), right.(*DTimeTZ).Location), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := right.(*DTimeTZ)
+				duration := left.(*DInterval).Duration
+				return NewDTimeTZFromOffset(t.Add(duration), t.OffsetSecs), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Time,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t1 := left.(*DTimeTZ).TimeOfDay
-				t2 := timeofday.TimeOfDay(*right.(*DTime))
-				return MakeDTimeTZ(timeofday.FromInt(int64(t1+t2)), left.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.Time,
-			RightType:  types.TimeTZ,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t1 := right.(*DTimeTZ).TimeOfDay
-				t2 := timeofday.TimeOfDay(*left.(*DTime))
-				return MakeDTimeTZ(timeofday.FromInt(int64(t1+t2)), right.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Interval,
 			ReturnType: types.Timestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return MakeDTimestamp(duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration), time.Microsecond), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return MakeDTimestamp(duration.Add(
+					left.(*DTimestamp).Time, right.(*DInterval).Duration), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Timestamp,
 			ReturnType: types.Timestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return MakeDTimestamp(duration.Add(right.(*DTimestamp).Time, left.(*DInterval).Duration), time.Microsecond), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return MakeDTimestamp(duration.Add(
+					right.(*DTimestamp).Time, left.(*DInterval).Duration), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.Interval,
 			ReturnType: types.TimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				// Convert time to be in the given timezone, as math relies on matching timezones..
+				t := duration.Add(left.(*DTimestampTZ).Time.In(ctx.GetLocation()), right.(*DInterval).Duration)
+				return MakeDTimestampTZ(t, time.Microsecond)
 			},
+			Volatility: VolatilityStable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.TimestampTZ,
 			ReturnType: types.TimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := duration.Add(right.(*DTimestampTZ).Time, left.(*DInterval).Duration)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				// Convert time to be in the given timezone, as math relies on matching timezones..
+				t := duration.Add(right.(*DTimestampTZ).Time.In(ctx.GetLocation()), left.(*DInterval).Duration)
+				return MakeDTimestampTZ(t, time.Microsecond)
 			},
+			Volatility: VolatilityStable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Interval,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Add(right.(*DInterval).Duration)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Interval,
-			ReturnType: types.TimestampTZ,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
-				t := duration.Add(leftTZ.Time, right.(*DInterval).Duration)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+			ReturnType: types.Timestamp,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				leftTime, err := left.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				t := duration.Add(leftTime, right.(*DInterval).Duration)
+				return MakeDTimestamp(t, time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Date,
-			ReturnType: types.TimestampTZ,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
-				t := duration.Add(rightTZ.Time, left.(*DInterval).Duration)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+			ReturnType: types.Timestamp,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				rightTime, err := right.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				t := duration.Add(rightTime, left.(*DInterval).Duration)
+				return MakeDTimestamp(t, time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.Int,
 			ReturnType: types.INet,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				i := MustBeDInt(right)
 				newIPAddr, err := ipAddr.Add(int64(i))
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.INet,
 			ReturnType: types.INet,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				i := MustBeDInt(left)
 				ipAddr := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.Add(int64(i))
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Minus: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
-				if b < 0 && a > math.MaxInt64+b {
-					return nil, errIntOutOfRange
+				r, ok := arith.SubWithOverflow(int64(a), int64(b))
+				if !ok {
+					return nil, ErrIntOutOfRange
 				}
-				if b > 0 && a < math.MinInt64+b {
-					return nil, errIntOutOfRange
-				}
-				return NewDInt(a - b), nil
+				return NewDInt(DInt(r)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) - *right.(*DFloat)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
 				_, err := ExactCtx.Sub(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(r))
+				dd.SetInt64(int64(r))
 				_, err := ExactCtx.Sub(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(l))
+				dd.SetInt64(int64(l))
 				_, err := ExactCtx.Sub(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Int,
 			ReturnType: types.Date,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDDate(*left.(*DDate) - DDate(MustBeDInt(right))), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				d, err := left.(*DDate).SubDays(int64(MustBeDInt(right)))
+				if err != nil {
+					return nil, err
+				}
+				return NewDDate(d), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Date,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(DInt(*left.(*DDate) - *right.(*DDate))), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l, r := left.(*DDate).Date, right.(*DDate).Date
+				if !l.IsFinite() || !r.IsFinite() {
+					return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "cannot subtract infinite dates")
+				}
+				a := l.PGEpochDays()
+				b := r.PGEpochDays()
+				// This can't overflow because they are upconverted from int32 to int64.
+				return NewDInt(DInt(int64(a) - int64(b))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Time,
 			ReturnType: types.Timestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(time.UTC, left.(*DDate))
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				leftTime, err := left.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
 				t := time.Duration(*right.(*DTime)) * time.Microsecond
-				return MakeDTimestamp(d.Add(-1*t), time.Microsecond), nil
+				return MakeDTimestamp(leftTime.Add(-1*t), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Time,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t1 := timeofday.TimeOfDay(*left.(*DTime))
 				t2 := timeofday.TimeOfDay(*right.(*DTime))
 				diff := timeofday.Difference(t1, t2)
 				return &DInterval{Duration: diff}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Time,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t1 := left.(*DTimeTZ).TimeOfDay
-				t2 := timeofday.TimeOfDay(*right.(*DTime))
-				diff := timeofday.FromInt(int64(t1 - t2))
-				return MakeDTimeTZ(diff, left.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Interval,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := left.(*DTimeTZ).TimeOfDay
-				return MakeDTimeTZ(t.Add(right.(*DInterval).Duration.Mul(-1)), left.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Timestamp,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.TimestampTZ,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
-				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.TimestampTZ,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				nanos := left.(*DTimestamp).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
-				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				// These two quantities aren't directly comparable. Convert the
+				// TimestampTZ to a timestamp first.
+				stripped, err := right.(*DTimestampTZ).stripTimeZone(ctx)
+				if err != nil {
+					return nil, err
+				}
+				nanos := left.(*DTimestamp).Sub(stripped.Time).Nanoseconds()
+				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
 			},
+			Volatility: VolatilityStable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.Timestamp,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				// These two quantities aren't directly comparable. Convert the
+				// TimestampTZ to a timestamp first.
+				stripped, err := left.(*DTimestampTZ).stripTimeZone(ctx)
+				if err != nil {
+					return nil, err
+				}
+				nanos := stripped.Sub(right.(*DTimestamp).Time).Nanoseconds()
+				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
 			},
+			Volatility: VolatilityStable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Interval,
 			ReturnType: types.Time,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := timeofday.TimeOfDay(*left.(*DTime))
 				return MakeDTime(t.Add(right.(*DInterval).Duration.Mul(-1))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
+			LeftType:   types.TimeTZ,
+			RightType:  types.Interval,
+			ReturnType: types.TimeTZ,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := left.(*DTimeTZ)
+				duration := right.(*DInterval).Duration
+				return NewDTimeTZFromOffset(t.Add(duration.Mul(-1)), t.OffsetSecs), nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Interval,
 			ReturnType: types.Timestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return MakeDTimestamp(duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1)), time.Microsecond), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return MakeDTimestamp(duration.Add(
+					left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1)), time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.Interval,
 			ReturnType: types.TimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration.Mul(-1))
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := duration.Add(
+					left.(*DTimestampTZ).Time.In(ctx.GetLocation()),
+					right.(*DInterval).Duration.Mul(-1),
+				)
+				return MakeDTimestampTZ(t, time.Microsecond)
 			},
+			Volatility: VolatilityStable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Interval,
-			ReturnType: types.TimestampTZ,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
-				t := duration.Add(leftTZ.Time, right.(*DInterval).Duration.Mul(-1))
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+			ReturnType: types.Timestamp,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				leftTime, err := left.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				t := duration.Add(leftTime, right.(*DInterval).Duration.Mul(-1))
+				return MakeDTimestamp(t, time.Microsecond)
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Interval,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Sub(right.(*DInterval).Duration)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.JSON,
+		&BinOp{
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.JSON,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			ReturnType: types.Jsonb,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, _, err := left.(*DJSON).JSON.RemoveString(string(MustBeDString(right)))
 				if err != nil {
 					return nil, err
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.JSON,
+		&BinOp{
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.JSON,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			ReturnType: types.Jsonb,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, _, err := left.(*DJSON).JSON.RemoveIndex(int(MustBeDInt(right)))
 				if err != nil {
 					return nil, err
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+		&BinOp{
+			LeftType:   types.Jsonb,
+			RightType:  types.MakeArray(types.String),
+			ReturnType: types.Jsonb,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j := left.(*DJSON).JSON
 				arr := *MustBeDArray(right)
 
 				for _, str := range arr.Array {
+					if str == DNull {
+						continue
+					}
 					var err error
 					j, _, err = j.RemoveString(string(MustBeDString(str)))
 					if err != nil {
@@ -918,38 +1157,41 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			ReturnType: types.Int,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				diff, err := ipAddr.SubIPAddr(&other)
 				return NewDInt(DInt(diff)), err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			// Note: postgres ver 10 does NOT have Int - INet. Throws ERROR: 42883.
 			LeftType:   types.INet,
 			RightType:  types.Int,
 			ReturnType: types.INet,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				i := MustBeDInt(right)
 				newIPAddr, err := ipAddr.Sub(int64(i))
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Mult: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// See Rob Pike's implementation from
 				// https://groups.google.com/d/msg/golang-nuts/h5oSN5t3Au4/KaNQREhZh0QJ
 
@@ -959,101 +1201,110 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					// ignore
 				} else if a == math.MinInt64 || b == math.MinInt64 {
 					// This test is required to detect math.MinInt64 * -1.
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				} else if c/b != a {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(c), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) * *right.(*DFloat)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
 				_, err := ExactCtx.Mul(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 		// The following two overloads are needed because DInt/DInt = DDecimal. Due
 		// to this operation, normalization may sometimes create a DInt * DDecimal
 		// operation.
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(r))
+				dd.SetInt64(int64(r))
 				_, err := ExactCtx.Mul(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(l))
+				dd.SetInt64(int64(l))
 				_, err := ExactCtx.Mul(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Interval,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: right.(*DInterval).Duration.Mul(int64(MustBeDInt(left)))}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Int,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Mul(int64(MustBeDInt(right)))}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Float,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := float64(*right.(*DFloat))
 				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(r)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Interval,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := float64(*left.(*DFloat))
 				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(l)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Interval,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				t, err := l.Float64()
 				if err != nil {
@@ -1061,12 +1312,13 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(t)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Decimal,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := &right.(*DDecimal).Decimal
 				t, err := r.Float64()
 				if err != nil {
@@ -1074,375 +1326,478 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(t)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Div: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Decimal,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
-				div := ctx.getTmpDec().SetCoefficient(int64(rInt)).SetExponent(0)
-				dd := &DDecimal{}
-				dd.SetCoefficient(int64(MustBeDInt(left)))
-				cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
+				if rInt == 0 {
+					return nil, ErrDivByZero
 				}
+				div := ctx.getTmpDec().SetInt64(int64(rInt))
+				dd := &DDecimal{}
+				dd.SetInt64(int64(MustBeDInt(left)))
+				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDFloat(*left.(*DFloat) / *right.(*DFloat)), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				r := *right.(*DFloat)
+				if r == 0.0 {
+					return nil, ErrDivByZero
+				}
+				return NewDFloat(*left.(*DFloat) / r), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
-				dd := &DDecimal{}
-				cond, err := DecimalCtx.Quo(&dd.Decimal, l, r)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
+				if r.IsZero() {
+					return nil, ErrDivByZero
 				}
+				dd := &DDecimal{}
+				_, err := DecimalCtx.Quo(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
-				dd := &DDecimal{}
-				dd.SetCoefficient(int64(r))
-				cond, err := DecimalCtx.Quo(&dd.Decimal, l, &dd.Decimal)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
+				if r == 0 {
+					return nil, ErrDivByZero
 				}
+				dd := &DDecimal{}
+				dd.SetInt64(int64(r))
+				_, err := DecimalCtx.Quo(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
-				dd := &DDecimal{}
-				dd.SetCoefficient(int64(l))
-				cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
+				if r.IsZero() {
+					return nil, ErrDivByZero
 				}
+				dd := &DDecimal{}
+				dd.SetInt64(int64(l))
+				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Int,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
 					return nil, ErrDivByZero
 				}
 				return &DInterval{Duration: left.(*DInterval).Duration.Div(int64(rInt))}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Float,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := float64(*right.(*DFloat))
 				if r == 0.0 {
 					return nil, ErrDivByZero
 				}
 				return &DInterval{Duration: left.(*DInterval).Duration.DivFloat(r)}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	FloorDiv: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
 					return nil, ErrDivByZero
 				}
 				return NewDInt(MustBeDInt(left) / rInt), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := float64(*left.(*DFloat))
 				r := float64(*right.(*DFloat))
+				if r == 0.0 {
+					return nil, ErrDivByZero
+				}
 				return NewDFloat(DFloat(math.Trunc(l / r))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
+				if r.IsZero() {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				if r == 0 {
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(r))
+				dd.SetInt64(int64(r))
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
-				if r.Sign() == 0 {
+				if r.IsZero() {
 					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(l))
+				dd.SetInt64(int64(l))
 				_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Mod: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := MustBeDInt(right)
 				if r == 0 {
-					return nil, ErrZeroModulus
+					return nil, ErrDivByZero
 				}
 				return NewDInt(MustBeDInt(left) % r), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDFloat(DFloat(math.Mod(float64(*left.(*DFloat)), float64(*right.(*DFloat))))), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := float64(*left.(*DFloat))
+				r := float64(*right.(*DFloat))
+				if r == 0.0 {
+					return nil, ErrDivByZero
+				}
+				return NewDFloat(DFloat(math.Mod(l, r))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
+				if r.IsZero() {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
+				if r == 0 {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(r))
+				dd.SetInt64(int64(r))
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
+				if r.IsZero() {
+					return nil, ErrDivByZero
+				}
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(l))
+				dd.SetInt64(int64(l))
 				_, err := HighPrecisionCtx.Rem(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Concat: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.String,
 			RightType:  types.String,
 			ReturnType: types.String,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDString(string(MustBeDString(left) + MustBeDString(right))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Bytes,
 			RightType:  types.Bytes,
 			ReturnType: types.Bytes,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDBytes(*left.(*DBytes) + *right.(*DBytes)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.JSON,
-			ReturnType: types.JSON,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+		&BinOp{
+			LeftType:   types.VarBit,
+			RightType:  types.VarBit,
+			ReturnType: types.VarBit,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDBitArray(right)
+				return &DBitArray{
+					BitArray: bitarray.Concat(lhs.BitArray, rhs.BitArray),
+				}, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
+			LeftType:   types.Jsonb,
+			RightType:  types.Jsonb,
+			ReturnType: types.Jsonb,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := MustBeDJSON(left).JSON.Concat(MustBeDJSON(right).JSON)
 				if err != nil {
 					return nil, err
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	// TODO(pmattis): Check that the shift is valid.
 	LShift: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) << uint(MustBeDInt(right))), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				rval := MustBeDInt(right)
+				if rval < 0 || rval >= 64 {
+					telemetry.Inc(sqltelemetry.LargeLShiftArgumentCounter)
+					return nil, ErrShiftArgOutOfRange
+				}
+				return NewDInt(MustBeDInt(left) << uint(rval)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
+			LeftType:   types.VarBit,
+			RightType:  types.Int,
+			ReturnType: types.VarBit,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDInt(right)
+				return &DBitArray{
+					BitArray: lhs.BitArray.LeftShiftAny(int64(rhs)),
+				}, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			ReturnType: types.Bool,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				return MakeDBool(DBool(ipAddr.ContainedBy(&other))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	RShift: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) >> uint(MustBeDInt(right))), nil
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				rval := MustBeDInt(right)
+				if rval < 0 || rval >= 64 {
+					telemetry.Inc(sqltelemetry.LargeRShiftArgumentCounter)
+					return nil, ErrShiftArgOutOfRange
+				}
+				return NewDInt(MustBeDInt(left) >> uint(rval)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
+			LeftType:   types.VarBit,
+			RightType:  types.Int,
+			ReturnType: types.VarBit,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDInt(right)
+				return &DBitArray{
+					BitArray: lhs.BitArray.LeftShiftAny(-int64(rhs)),
+				}, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			ReturnType: types.Bool,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				return MakeDBool(DBool(ipAddr.Contains(&other))), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Pow: {
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return IntPow(MustBeDInt(left), MustBeDInt(right))
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				f := math.Pow(float64(*left.(*DFloat)), float64(*right.(*DFloat)))
 				return NewDFloat(DFloat(f)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
 				_, err := DecimalCtx.Pow(&dd.Decimal, l, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(r))
+				dd.SetInt64(int64(r))
 				_, err := DecimalCtx.Pow(&dd.Decimal, l, &dd.Decimal)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
+		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Decimal,
 			ReturnType: types.Decimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				dd.SetCoefficient(int64(l))
+				dd.SetInt64(int64(l))
 				_, err := DecimalCtx.Pow(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	JSONFetchVal: {
-		BinOp{
-			LeftType:   types.JSON,
+		&BinOp{
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.JSON,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			ReturnType: types.Jsonb,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
 				if err != nil {
 					return nil, err
@@ -1452,12 +1807,13 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.JSON,
+		&BinOp{
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.JSON,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			ReturnType: types.Jsonb,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
 				if err != nil {
 					return nil, err
@@ -1467,26 +1823,28 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	JSONFetchValPath: {
-		BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+		&BinOp{
+			LeftType:   types.Jsonb,
+			RightType:  types.MakeArray(types.String),
+			ReturnType: types.Jsonb,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	JSONFetchText: {
-		BinOp{
-			LeftType:   types.JSON,
+		&BinOp{
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
 			ReturnType: types.String,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
 				if err != nil {
 					return nil, err
@@ -1503,12 +1861,13 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
-		BinOp{
-			LeftType:   types.JSON,
+		&BinOp{
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
 			ReturnType: types.String,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
 				if err != nil {
 					return nil, err
@@ -1525,15 +1884,16 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	JSONFetchTextPath: {
-		BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.TArray{Typ: types.String},
+		&BinOp{
+			LeftType:   types.Jsonb,
+			RightType:  types.MakeArray(types.String),
 			ReturnType: types.String,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 				if err != nil {
 					return nil, err
@@ -1550,19 +1910,20 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 }
 
 // timestampMinusBinOp is the implementation of the subtraction
 // between types.TimestampTZ operands.
-var timestampMinusBinOp BinOp
+var timestampMinusBinOp *BinOp
 
 // TimestampDifference computes the interval difference between two
 // TimestampTZ datums. The result is a DInterval. The caller must
 // ensure that the arguments are of the proper Datum type.
 func TimestampDifference(ctx *EvalContext, start, end Datum) (Datum, error) {
-	return timestampMinusBinOp.fn(ctx, start, end)
+	return timestampMinusBinOp.Fn(ctx, start, end)
 }
 
 func init() {
@@ -1571,377 +1932,474 @@ func init() {
 
 // CmpOp is a comparison operator.
 type CmpOp struct {
-	LeftType  types.T
-	RightType types.T
+	LeftType  *types.T
+	RightType *types.T
 
 	// If NullableArgs is false, the operator returns NULL
 	// whenever either argument is NULL.
 	NullableArgs bool
 
 	// Datum return type is a union between *DBool and dNull.
-	fn func(*EvalContext, Datum, Datum) (Datum, error)
+	Fn TwoArgFn
+
+	Volatility Volatility
 
 	types       TypeList
 	isPreferred bool
+
+	// counter, if non-nil, should be incremented every time the
+	// operator is type checked.
+	counter telemetry.Counter
 }
 
-func (op CmpOp) params() TypeList {
+func (op *CmpOp) params() TypeList {
 	return op.types
 }
 
-func (op CmpOp) matchParams(l, r types.T) bool {
+func (op *CmpOp) matchParams(l, r *types.T) bool {
 	return op.params().MatchAt(l, 0) && op.params().MatchAt(r, 1)
 }
 
 var cmpOpReturnType = FixedReturnType(types.Bool)
 
-func (op CmpOp) returnType() ReturnTyper {
+func (op *CmpOp) returnType() ReturnTyper {
 	return cmpOpReturnType
 }
 
-func (op CmpOp) preferred() bool {
+func (op *CmpOp) preferred() bool {
 	return op.isPreferred
 }
 
-func init() {
+func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOperator]cmpOpOverload {
+	findVolatility := func(op ComparisonOperator, t *types.T) Volatility {
+		for _, impl := range cmpOps[EQ] {
+			o := impl.(*CmpOp)
+			if o.LeftType.Equivalent(t) && o.RightType.Equivalent(t) {
+				return o.Volatility
+			}
+		}
+		panic(errors.AssertionFailedf("could not find cmp op %s(%s,%s)", op, t, t))
+	}
+
 	// Array equality comparisons.
-	for _, t := range types.AnyNonArray {
-		CmpOps[EQ] = append(CmpOps[EQ], CmpOp{
-			LeftType:  types.TArray{Typ: t},
-			RightType: types.TArray{Typ: t},
-			fn:        cmpOpScalarEQFn,
+	for _, t := range types.Scalar {
+		cmpOps[EQ] = append(cmpOps[EQ], &CmpOp{
+			LeftType:   types.MakeArray(t),
+			RightType:  types.MakeArray(t),
+			Fn:         cmpOpScalarEQFn,
+			Volatility: findVolatility(EQ, t),
+		})
+		cmpOps[LE] = append(cmpOps[LE], &CmpOp{
+			LeftType:   types.MakeArray(t),
+			RightType:  types.MakeArray(t),
+			Fn:         cmpOpScalarLEFn,
+			Volatility: findVolatility(LE, t),
+		})
+		cmpOps[LT] = append(cmpOps[LT], &CmpOp{
+			LeftType:   types.MakeArray(t),
+			RightType:  types.MakeArray(t),
+			Fn:         cmpOpScalarLTFn,
+			Volatility: findVolatility(LT, t),
 		})
 
-		CmpOps[IsNotDistinctFrom] = append(CmpOps[IsNotDistinctFrom], CmpOp{
-			LeftType:     types.TArray{Typ: t},
-			RightType:    types.TArray{Typ: t},
-			fn:           cmpOpScalarIsFn,
+		cmpOps[IsNotDistinctFrom] = append(cmpOps[IsNotDistinctFrom], &CmpOp{
+			LeftType:     types.MakeArray(t),
+			RightType:    types.MakeArray(t),
+			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
+			Volatility:   findVolatility(IsNotDistinctFrom, t),
 		})
 	}
-}
 
-func init() {
-	for op, overload := range CmpOps {
+	for op, overload := range cmpOps {
 		for i, impl := range overload {
-			casted := impl.(CmpOp)
+			casted := impl.(*CmpOp)
 			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
-			CmpOps[op][i] = casted
+			cmpOps[op][i] = casted
 		}
 	}
+
+	return cmpOps
 }
 
 // cmpOpOverload is an overloaded set of comparison operator implementations.
 type cmpOpOverload []overloadImpl
 
-func (o cmpOpOverload) lookupImpl(left, right types.T) (CmpOp, bool) {
+func (o cmpOpOverload) LookupImpl(left, right *types.T) (*CmpOp, bool) {
 	for _, fn := range o {
-		casted := fn.(CmpOp)
+		casted := fn.(*CmpOp)
 		if casted.matchParams(left, right) {
 			return casted, true
 		}
 	}
-	return CmpOp{}, false
+	return nil, false
 }
 
 func makeCmpOpOverload(
-	fn func(ctx *EvalContext, left, right Datum) (Datum, error), a, b types.T, nullableArgs bool,
-) CmpOp {
-	return CmpOp{
+	fn func(ctx *EvalContext, left, right Datum) (Datum, error),
+	a, b *types.T,
+	nullableArgs bool,
+	v Volatility,
+) *CmpOp {
+	return &CmpOp{
 		LeftType:     a,
 		RightType:    b,
-		fn:           fn,
+		Fn:           fn,
 		NullableArgs: nullableArgs,
+		Volatility:   v,
 	}
 }
 
-func makeEqFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* NullableArgs */)
+func makeEqFn(a, b *types.T, v Volatility) *CmpOp {
+	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* NullableArgs */, v)
 }
-func makeLtFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* NullableArgs */)
+func makeLtFn(a, b *types.T, v Volatility) *CmpOp {
+	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* NullableArgs */, v)
 }
-func makeLeFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* NullableArgs */)
+func makeLeFn(a, b *types.T, v Volatility) *CmpOp {
+	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* NullableArgs */, v)
 }
-func makeIsFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* NullableArgs */)
+func makeIsFn(a, b *types.T, v Volatility) *CmpOp {
+	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* NullableArgs */, v)
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
-var CmpOps = map[ComparisonOperator]cmpOpOverload{
+var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	EQ: {
 		// Single-type comparisons.
-		makeEqFn(types.Bool, types.Bool),
-		makeEqFn(types.Bytes, types.Bytes),
-		makeEqFn(types.Date, types.Date),
-		makeEqFn(types.Decimal, types.Decimal),
-		makeEqFn(types.FamCollatedString, types.FamCollatedString),
-		makeEqFn(types.Float, types.Float),
-		makeEqFn(types.INet, types.INet),
-		makeEqFn(types.Int, types.Int),
-		makeEqFn(types.Interval, types.Interval),
-		makeEqFn(types.JSON, types.JSON),
-		makeEqFn(types.Oid, types.Oid),
-		makeEqFn(types.String, types.String),
-		makeEqFn(types.Time, types.Time),
-		makeEqFn(types.TimeTZ, types.TimeTZ),
-		makeEqFn(types.Timestamp, types.Timestamp),
-		makeEqFn(types.TimestampTZ, types.TimestampTZ),
-		makeEqFn(types.UUID, types.UUID),
+		makeEqFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
+		makeEqFn(types.Bool, types.Bool, VolatilityLeakProof),
+		makeEqFn(types.Bytes, types.Bytes, VolatilityLeakProof),
+		makeEqFn(types.Date, types.Date, VolatilityLeakProof),
+		makeEqFn(types.Decimal, types.Decimal, VolatilityImmutable),
+		// Note: it is an error to compare two strings with different collations;
+		// the operator is leak proof under the assumption that these cases will be
+		// detected during type checking.
+		makeEqFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
+		makeEqFn(types.Float, types.Float, VolatilityLeakProof),
+		makeEqFn(types.Box2D, types.Box2D, VolatilityLeakProof),
+		makeEqFn(types.Geography, types.Geography, VolatilityLeakProof),
+		makeEqFn(types.Geometry, types.Geometry, VolatilityLeakProof),
+		makeEqFn(types.INet, types.INet, VolatilityLeakProof),
+		makeEqFn(types.Int, types.Int, VolatilityLeakProof),
+		makeEqFn(types.Interval, types.Interval, VolatilityLeakProof),
+		makeEqFn(types.Jsonb, types.Jsonb, VolatilityImmutable),
+		makeEqFn(types.Oid, types.Oid, VolatilityLeakProof),
+		makeEqFn(types.String, types.String, VolatilityLeakProof),
+		makeEqFn(types.Time, types.Time, VolatilityLeakProof),
+		makeEqFn(types.TimeTZ, types.TimeTZ, VolatilityLeakProof),
+		makeEqFn(types.Timestamp, types.Timestamp, VolatilityLeakProof),
+		makeEqFn(types.TimestampTZ, types.TimestampTZ, VolatilityLeakProof),
+		makeEqFn(types.Uuid, types.Uuid, VolatilityLeakProof),
+		makeEqFn(types.VarBit, types.VarBit, VolatilityLeakProof),
 
 		// Mixed-type comparisons.
-		makeEqFn(types.Date, types.Timestamp),
-		makeEqFn(types.Date, types.TimestampTZ),
-		makeEqFn(types.Decimal, types.Float),
-		makeEqFn(types.Decimal, types.Int),
-		makeEqFn(types.Float, types.Decimal),
-		makeEqFn(types.Float, types.Int),
-		makeEqFn(types.Int, types.Decimal),
-		makeEqFn(types.Int, types.Float),
-		makeEqFn(types.Timestamp, types.Date),
-		makeEqFn(types.Timestamp, types.TimestampTZ),
-		makeEqFn(types.TimestampTZ, types.Date),
-		makeEqFn(types.TimestampTZ, types.Timestamp),
-		makeEqFn(types.TimeTZ, types.Time),
-		makeEqFn(types.Time, types.TimeTZ),
+		makeEqFn(types.Date, types.Timestamp, VolatilityImmutable),
+		makeEqFn(types.Date, types.TimestampTZ, VolatilityStable),
+		makeEqFn(types.Decimal, types.Float, VolatilityLeakProof),
+		makeEqFn(types.Decimal, types.Int, VolatilityLeakProof),
+		makeEqFn(types.Float, types.Decimal, VolatilityLeakProof),
+		makeEqFn(types.Float, types.Int, VolatilityLeakProof),
+		makeEqFn(types.Int, types.Decimal, VolatilityLeakProof),
+		makeEqFn(types.Int, types.Float, VolatilityLeakProof),
+		makeEqFn(types.Int, types.Oid, VolatilityLeakProof),
+		makeEqFn(types.Oid, types.Int, VolatilityLeakProof),
+		makeEqFn(types.Timestamp, types.Date, VolatilityImmutable),
+		makeEqFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
+		makeEqFn(types.TimestampTZ, types.Date, VolatilityStable),
+		makeEqFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
+		makeEqFn(types.Time, types.TimeTZ, VolatilityStable),
+		makeEqFn(types.TimeTZ, types.Time, VolatilityStable),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+		&CmpOp{
+			LeftType:  types.AnyTuple,
+			RightType: types.AnyTuple,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	LT: {
 		// Single-type comparisons.
-		makeLtFn(types.Bool, types.Bool),
-		makeLtFn(types.Bytes, types.Bytes),
-		makeLtFn(types.Date, types.Date),
-		makeLtFn(types.Decimal, types.Decimal),
-		makeLtFn(types.FamCollatedString, types.FamCollatedString),
-		makeLtFn(types.Float, types.Float),
-		makeLtFn(types.INet, types.INet),
-		makeLtFn(types.Int, types.Int),
-		makeLtFn(types.Interval, types.Interval),
-		makeLtFn(types.Oid, types.Oid),
-		makeLtFn(types.String, types.String),
-		makeLtFn(types.Time, types.Time),
-		makeLtFn(types.TimeTZ, types.TimeTZ),
-		makeLtFn(types.Timestamp, types.Timestamp),
-		makeLtFn(types.TimestampTZ, types.TimestampTZ),
-		makeLtFn(types.UUID, types.UUID),
+		makeLtFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
+		makeLtFn(types.Bool, types.Bool, VolatilityLeakProof),
+		makeLtFn(types.Bytes, types.Bytes, VolatilityLeakProof),
+		makeLtFn(types.Date, types.Date, VolatilityLeakProof),
+		makeLtFn(types.Decimal, types.Decimal, VolatilityImmutable),
+		makeLtFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
+		// Note: it is an error to compare two strings with different collations;
+		// the operator is leak proof under the assumption that these cases will be
+		// detected during type checking.
+		makeLtFn(types.Float, types.Float, VolatilityLeakProof),
+		makeLtFn(types.Box2D, types.Box2D, VolatilityLeakProof),
+		makeLtFn(types.Geography, types.Geography, VolatilityLeakProof),
+		makeLtFn(types.Geometry, types.Geometry, VolatilityLeakProof),
+		makeLtFn(types.INet, types.INet, VolatilityLeakProof),
+		makeLtFn(types.Int, types.Int, VolatilityLeakProof),
+		makeLtFn(types.Interval, types.Interval, VolatilityLeakProof),
+		makeLtFn(types.Oid, types.Oid, VolatilityLeakProof),
+		makeLtFn(types.String, types.String, VolatilityLeakProof),
+		makeLtFn(types.Time, types.Time, VolatilityLeakProof),
+		makeLtFn(types.TimeTZ, types.TimeTZ, VolatilityLeakProof),
+		makeLtFn(types.Timestamp, types.Timestamp, VolatilityLeakProof),
+		makeLtFn(types.TimestampTZ, types.TimestampTZ, VolatilityLeakProof),
+		makeLtFn(types.Uuid, types.Uuid, VolatilityLeakProof),
+		makeLtFn(types.VarBit, types.VarBit, VolatilityLeakProof),
 
 		// Mixed-type comparisons.
-		makeLtFn(types.Date, types.Timestamp),
-		makeLtFn(types.Date, types.TimestampTZ),
-		makeLtFn(types.Decimal, types.Float),
-		makeLtFn(types.Decimal, types.Int),
-		makeLtFn(types.Float, types.Decimal),
-		makeLtFn(types.Float, types.Int),
-		makeLtFn(types.Int, types.Decimal),
-		makeLtFn(types.Int, types.Float),
-		makeLtFn(types.Timestamp, types.Date),
-		makeLtFn(types.Timestamp, types.TimestampTZ),
-		makeLtFn(types.TimestampTZ, types.Date),
-		makeLtFn(types.TimestampTZ, types.Timestamp),
-		makeLtFn(types.TimeTZ, types.Time),
-		makeLtFn(types.Time, types.TimeTZ),
+		makeLtFn(types.Date, types.Timestamp, VolatilityImmutable),
+		makeLtFn(types.Date, types.TimestampTZ, VolatilityStable),
+		makeLtFn(types.Decimal, types.Float, VolatilityLeakProof),
+		makeLtFn(types.Decimal, types.Int, VolatilityLeakProof),
+		makeLtFn(types.Float, types.Decimal, VolatilityLeakProof),
+		makeLtFn(types.Float, types.Int, VolatilityLeakProof),
+		makeLtFn(types.Int, types.Decimal, VolatilityLeakProof),
+		makeLtFn(types.Int, types.Float, VolatilityLeakProof),
+		makeLtFn(types.Int, types.Oid, VolatilityLeakProof),
+		makeLtFn(types.Oid, types.Int, VolatilityLeakProof),
+		makeLtFn(types.Timestamp, types.Date, VolatilityImmutable),
+		makeLtFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
+		makeLtFn(types.TimestampTZ, types.Date, VolatilityStable),
+		makeLtFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
+		makeLtFn(types.Time, types.TimeTZ, VolatilityStable),
+		makeLtFn(types.TimeTZ, types.Time, VolatilityStable),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+		&CmpOp{
+			LeftType:  types.AnyTuple,
+			RightType: types.AnyTuple,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	LE: {
 		// Single-type comparisons.
-		makeLeFn(types.Bool, types.Bool),
-		makeLeFn(types.Bytes, types.Bytes),
-		makeLeFn(types.Date, types.Date),
-		makeLeFn(types.Decimal, types.Decimal),
-		makeLeFn(types.FamCollatedString, types.FamCollatedString),
-		makeLeFn(types.Float, types.Float),
-		makeLeFn(types.INet, types.INet),
-		makeLeFn(types.Int, types.Int),
-		makeLeFn(types.Interval, types.Interval),
-		makeLeFn(types.Oid, types.Oid),
-		makeLeFn(types.String, types.String),
-		makeLeFn(types.Time, types.Time),
-		makeLeFn(types.TimeTZ, types.TimeTZ),
-		makeLeFn(types.Timestamp, types.Timestamp),
-		makeLeFn(types.TimestampTZ, types.TimestampTZ),
-		makeLeFn(types.UUID, types.UUID),
+		makeLeFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
+		makeLeFn(types.Bool, types.Bool, VolatilityLeakProof),
+		makeLeFn(types.Bytes, types.Bytes, VolatilityLeakProof),
+		makeLeFn(types.Date, types.Date, VolatilityLeakProof),
+		makeLeFn(types.Decimal, types.Decimal, VolatilityImmutable),
+		// Note: it is an error to compare two strings with different collations;
+		// the operator is leak proof under the assumption that these cases will be
+		// detected during type checking.
+		makeLeFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
+		makeLeFn(types.Float, types.Float, VolatilityLeakProof),
+		makeLeFn(types.Box2D, types.Box2D, VolatilityLeakProof),
+		makeLeFn(types.Geography, types.Geography, VolatilityLeakProof),
+		makeLeFn(types.Geometry, types.Geometry, VolatilityLeakProof),
+		makeLeFn(types.INet, types.INet, VolatilityLeakProof),
+		makeLeFn(types.Int, types.Int, VolatilityLeakProof),
+		makeLeFn(types.Interval, types.Interval, VolatilityLeakProof),
+		makeLeFn(types.Oid, types.Oid, VolatilityLeakProof),
+		makeLeFn(types.String, types.String, VolatilityLeakProof),
+		makeLeFn(types.Time, types.Time, VolatilityLeakProof),
+		makeLeFn(types.TimeTZ, types.TimeTZ, VolatilityLeakProof),
+		makeLeFn(types.Timestamp, types.Timestamp, VolatilityLeakProof),
+		makeLeFn(types.TimestampTZ, types.TimestampTZ, VolatilityLeakProof),
+		makeLeFn(types.Uuid, types.Uuid, VolatilityLeakProof),
+		makeLeFn(types.VarBit, types.VarBit, VolatilityLeakProof),
 
 		// Mixed-type comparisons.
-		makeLeFn(types.Date, types.Timestamp),
-		makeLeFn(types.Date, types.TimestampTZ),
-		makeLeFn(types.Decimal, types.Float),
-		makeLeFn(types.Decimal, types.Int),
-		makeLeFn(types.Float, types.Decimal),
-		makeLeFn(types.Float, types.Int),
-		makeLeFn(types.Int, types.Decimal),
-		makeLeFn(types.Int, types.Float),
-		makeLeFn(types.Timestamp, types.Date),
-		makeLeFn(types.Timestamp, types.TimestampTZ),
-		makeLeFn(types.TimestampTZ, types.Date),
-		makeLeFn(types.TimestampTZ, types.Timestamp),
-		makeLeFn(types.TimeTZ, types.Time),
-		makeLeFn(types.Time, types.TimeTZ),
+		makeLeFn(types.Date, types.Timestamp, VolatilityImmutable),
+		makeLeFn(types.Date, types.TimestampTZ, VolatilityStable),
+		makeLeFn(types.Decimal, types.Float, VolatilityLeakProof),
+		makeLeFn(types.Decimal, types.Int, VolatilityLeakProof),
+		makeLeFn(types.Float, types.Decimal, VolatilityLeakProof),
+		makeLeFn(types.Float, types.Int, VolatilityLeakProof),
+		makeLeFn(types.Int, types.Decimal, VolatilityLeakProof),
+		makeLeFn(types.Int, types.Float, VolatilityLeakProof),
+		makeLeFn(types.Int, types.Oid, VolatilityLeakProof),
+		makeLeFn(types.Oid, types.Int, VolatilityLeakProof),
+		makeLeFn(types.Timestamp, types.Date, VolatilityImmutable),
+		makeLeFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
+		makeLeFn(types.TimestampTZ, types.Date, VolatilityStable),
+		makeLeFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
+		makeLeFn(types.Time, types.TimeTZ, VolatilityStable),
+		makeLeFn(types.TimeTZ, types.Time, VolatilityStable),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+		&CmpOp{
+			LeftType:  types.AnyTuple,
+			RightType: types.AnyTuple,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	IsNotDistinctFrom: {
-		CmpOp{
+		&CmpOp{
 			LeftType:     types.Unknown,
 			RightType:    types.Unknown,
-			fn:           cmpOpScalarIsFn,
+			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
 			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
 			isPreferred: true,
+			Volatility:  VolatilityLeakProof,
 		},
 		// Single-type comparisons.
-		makeIsFn(types.Bool, types.Bool),
-		makeIsFn(types.Bytes, types.Bytes),
-		makeIsFn(types.Date, types.Date),
-		makeIsFn(types.Decimal, types.Decimal),
-		makeIsFn(types.FamCollatedString, types.FamCollatedString),
-		makeIsFn(types.Float, types.Float),
-		makeIsFn(types.INet, types.INet),
-		makeIsFn(types.Int, types.Int),
-		makeIsFn(types.Interval, types.Interval),
-		makeIsFn(types.JSON, types.JSON),
-		makeIsFn(types.Oid, types.Oid),
-		makeIsFn(types.String, types.String),
-		makeIsFn(types.Time, types.Time),
-		makeIsFn(types.TimeTZ, types.TimeTZ),
-		makeIsFn(types.Timestamp, types.Timestamp),
-		makeIsFn(types.TimestampTZ, types.TimestampTZ),
-		makeIsFn(types.UUID, types.UUID),
+		makeIsFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
+		makeIsFn(types.Bool, types.Bool, VolatilityLeakProof),
+		makeIsFn(types.Bytes, types.Bytes, VolatilityLeakProof),
+		makeIsFn(types.Date, types.Date, VolatilityLeakProof),
+		makeIsFn(types.Decimal, types.Decimal, VolatilityImmutable),
+		// Note: it is an error to compare two strings with different collations;
+		// the operator is leak proof under the assumption that these cases will be
+		// detected during type checking.
+		makeIsFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
+		makeIsFn(types.Float, types.Float, VolatilityLeakProof),
+		makeIsFn(types.Box2D, types.Box2D, VolatilityLeakProof),
+		makeIsFn(types.Geography, types.Geography, VolatilityLeakProof),
+		makeIsFn(types.Geometry, types.Geometry, VolatilityLeakProof),
+		makeIsFn(types.INet, types.INet, VolatilityLeakProof),
+		makeIsFn(types.Int, types.Int, VolatilityLeakProof),
+		makeIsFn(types.Interval, types.Interval, VolatilityLeakProof),
+		makeIsFn(types.Jsonb, types.Jsonb, VolatilityImmutable),
+		makeIsFn(types.Oid, types.Oid, VolatilityLeakProof),
+		makeIsFn(types.String, types.String, VolatilityLeakProof),
+		makeIsFn(types.Time, types.Time, VolatilityLeakProof),
+		makeIsFn(types.TimeTZ, types.TimeTZ, VolatilityLeakProof),
+		makeIsFn(types.Timestamp, types.Timestamp, VolatilityLeakProof),
+		makeIsFn(types.TimestampTZ, types.TimestampTZ, VolatilityLeakProof),
+		makeIsFn(types.Uuid, types.Uuid, VolatilityLeakProof),
+		makeIsFn(types.VarBit, types.VarBit, VolatilityLeakProof),
 
 		// Mixed-type comparisons.
-		makeIsFn(types.Date, types.Timestamp),
-		makeIsFn(types.Date, types.TimestampTZ),
-		makeIsFn(types.Decimal, types.Float),
-		makeIsFn(types.Decimal, types.Int),
-		makeIsFn(types.Float, types.Decimal),
-		makeIsFn(types.Float, types.Int),
-		makeIsFn(types.Int, types.Decimal),
-		makeIsFn(types.Int, types.Float),
-		makeIsFn(types.Timestamp, types.Date),
-		makeIsFn(types.Timestamp, types.TimestampTZ),
-		makeIsFn(types.TimestampTZ, types.Date),
-		makeIsFn(types.TimestampTZ, types.Timestamp),
-		makeIsFn(types.TimeTZ, types.Time),
-		makeIsFn(types.Time, types.TimeTZ),
+		makeIsFn(types.Date, types.Timestamp, VolatilityImmutable),
+		makeIsFn(types.Date, types.TimestampTZ, VolatilityStable),
+		makeIsFn(types.Decimal, types.Float, VolatilityLeakProof),
+		makeIsFn(types.Decimal, types.Int, VolatilityLeakProof),
+		makeIsFn(types.Float, types.Decimal, VolatilityLeakProof),
+		makeIsFn(types.Float, types.Int, VolatilityLeakProof),
+		makeIsFn(types.Int, types.Decimal, VolatilityLeakProof),
+		makeIsFn(types.Int, types.Float, VolatilityLeakProof),
+		makeIsFn(types.Int, types.Oid, VolatilityLeakProof),
+		makeIsFn(types.Oid, types.Int, VolatilityLeakProof),
+		makeIsFn(types.Timestamp, types.Date, VolatilityImmutable),
+		makeIsFn(types.Timestamp, types.TimestampTZ, VolatilityStable),
+		makeIsFn(types.TimestampTZ, types.Date, VolatilityStable),
+		makeIsFn(types.TimestampTZ, types.Timestamp, VolatilityStable),
+		makeIsFn(types.Time, types.TimeTZ, VolatilityStable),
+		makeIsFn(types.TimeTZ, types.Time, VolatilityStable),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+		&CmpOp{
+			LeftType:     types.AnyTuple,
+			RightType:    types.AnyTuple,
+			NullableArgs: true,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				if left == DNull || right == DNull {
 					return MakeDBool(left == DNull && right == DNull), nil
 				}
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), IsNotDistinctFrom), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	In: {
-		makeEvalTupleIn(types.Bool),
-		makeEvalTupleIn(types.Bytes),
-		makeEvalTupleIn(types.Date),
-		makeEvalTupleIn(types.Decimal),
-		makeEvalTupleIn(types.FamCollatedString),
-		makeEvalTupleIn(types.FamTuple),
-		makeEvalTupleIn(types.Float),
-		makeEvalTupleIn(types.INet),
-		makeEvalTupleIn(types.Int),
-		makeEvalTupleIn(types.Interval),
-		makeEvalTupleIn(types.JSON),
-		makeEvalTupleIn(types.Oid),
-		makeEvalTupleIn(types.String),
-		makeEvalTupleIn(types.Time),
-		makeEvalTupleIn(types.TimeTZ),
-		makeEvalTupleIn(types.Timestamp),
-		makeEvalTupleIn(types.TimestampTZ),
-		makeEvalTupleIn(types.UUID),
+		makeEvalTupleIn(types.AnyEnum, VolatilityLeakProof),
+		makeEvalTupleIn(types.Bool, VolatilityLeakProof),
+		makeEvalTupleIn(types.Bytes, VolatilityLeakProof),
+		makeEvalTupleIn(types.Date, VolatilityLeakProof),
+		makeEvalTupleIn(types.Decimal, VolatilityLeakProof),
+		makeEvalTupleIn(types.AnyCollatedString, VolatilityLeakProof),
+		makeEvalTupleIn(types.AnyTuple, VolatilityLeakProof),
+		makeEvalTupleIn(types.Float, VolatilityLeakProof),
+		makeEvalTupleIn(types.Box2D, VolatilityLeakProof),
+		makeEvalTupleIn(types.Geography, VolatilityLeakProof),
+		makeEvalTupleIn(types.Geometry, VolatilityLeakProof),
+		makeEvalTupleIn(types.INet, VolatilityLeakProof),
+		makeEvalTupleIn(types.Int, VolatilityLeakProof),
+		makeEvalTupleIn(types.Interval, VolatilityLeakProof),
+		makeEvalTupleIn(types.Jsonb, VolatilityLeakProof),
+		makeEvalTupleIn(types.Oid, VolatilityLeakProof),
+		makeEvalTupleIn(types.String, VolatilityLeakProof),
+		makeEvalTupleIn(types.Time, VolatilityLeakProof),
+		makeEvalTupleIn(types.TimeTZ, VolatilityLeakProof),
+		makeEvalTupleIn(types.Timestamp, VolatilityLeakProof),
+		makeEvalTupleIn(types.TimestampTZ, VolatilityLeakProof),
+		makeEvalTupleIn(types.Uuid, VolatilityLeakProof),
+		makeEvalTupleIn(types.VarBit, VolatilityLeakProof),
 	},
 
 	Like: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, false)
 			},
+			Volatility: VolatilityLeakProof,
 		},
 	},
 
 	ILike: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, true)
 			},
+			Volatility: VolatilityLeakProof,
 		},
 	},
 
 	SimilarTo: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := similarToKey{s: string(MustBeDString(right)), escape: '\\'}
 				return matchRegexpWithKey(ctx, left, key)
 			},
+			Volatility: VolatilityLeakProof,
 		},
 	},
 
-	RegMatch: {
-		CmpOp{
-			LeftType:  types.String,
-			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: false}
-				return matchRegexpWithKey(ctx, left, key)
+	RegMatch: append(
+		cmpOpOverload{
+			&CmpOp{
+				LeftType:  types.String,
+				RightType: types.String,
+				Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+					key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: false}
+					return matchRegexpWithKey(ctx, left, key)
+				},
+				Volatility: VolatilityImmutable,
 			},
 		},
-	},
+		makeBox2DComparisonOperators(
+			func(lhs, rhs *geo.CartesianBoundingBox) bool {
+				return lhs.Covers(rhs)
+			},
+		)...,
+	),
 
 	RegIMatch: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: true}
 				return matchRegexpWithKey(ctx, left, key)
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	JSONExists: {
-		CmpOp{
-			LeftType:  types.JSON,
+		&CmpOp{
+			LeftType:  types.Jsonb,
 			RightType: types.String,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(right)))
 				if err != nil {
 					return nil, err
@@ -1951,36 +2409,31 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 				}
 				return DBoolFalse, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	JSONSomeExists: {
-		CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.TArray{Typ: types.String},
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				// TODO(justin): this can be optimized.
-				for _, k := range MustBeDArray(right).Array {
-					e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(k)))
-					if err != nil {
-						return nil, err
-					}
-					if e {
-						return DBoolTrue, nil
-					}
-				}
-				return DBoolFalse, nil
+		&CmpOp{
+			LeftType:  types.Jsonb,
+			RightType: types.StringArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				return JSONExistsAny(ctx, MustBeDJSON(left), MustBeDArray(right))
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	JSONAllExists: {
-		CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.TArray{Typ: types.String},
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+		&CmpOp{
+			LeftType:  types.Jsonb,
+			RightType: types.StringArray,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
+					if k == DNull {
+						continue
+					}
 					e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(k)))
 					if err != nil {
 						return nil, err
@@ -1991,36 +2444,189 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 				}
 				return DBoolTrue, nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	Contains: {
-		CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.JSON,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+		&CmpOp{
+			LeftType:  types.AnyArray,
+			RightType: types.AnyArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				haystack := MustBeDArray(left)
+				needles := MustBeDArray(right)
+				return ArrayContains(ctx, haystack, needles)
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&CmpOp{
+			LeftType:  types.Jsonb,
+			RightType: types.Jsonb,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				c, err := json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON)
 				if err != nil {
 					return nil, err
 				}
 				return MakeDBool(DBool(c)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
 
 	ContainedBy: {
-		CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.JSON,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+		&CmpOp{
+			LeftType:  types.AnyArray,
+			RightType: types.AnyArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				needles := MustBeDArray(left)
+				haystack := MustBeDArray(right)
+				return ArrayContains(ctx, haystack, needles)
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&CmpOp{
+			LeftType:  types.Jsonb,
+			RightType: types.Jsonb,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				c, err := json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON)
 				if err != nil {
 					return nil, err
 				}
 				return MakeDBool(DBool(c)), nil
 			},
+			Volatility: VolatilityImmutable,
 		},
 	},
+	Overlaps: append(
+		cmpOpOverload{
+			&CmpOp{
+				LeftType:  types.AnyArray,
+				RightType: types.AnyArray,
+				Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+					array := MustBeDArray(left)
+					other := MustBeDArray(right)
+					if !array.ParamTyp.Equivalent(other.ParamTyp) {
+						return nil, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+					}
+					for _, needle := range array.Array {
+						// Nulls don't compare to each other in && syntax.
+						if needle == DNull {
+							continue
+						}
+						for _, hay := range other.Array {
+							if needle.Compare(ctx, hay) == 0 {
+								return DBoolTrue, nil
+							}
+						}
+					}
+					return DBoolFalse, nil
+				},
+				Volatility: VolatilityImmutable,
+			},
+			&CmpOp{
+				LeftType:  types.INet,
+				RightType: types.INet,
+				Fn: func(_ *EvalContext, left, right Datum) (Datum, error) {
+					ipAddr := MustBeDIPAddr(left).IPAddr
+					other := MustBeDIPAddr(right).IPAddr
+					return MakeDBool(DBool(ipAddr.ContainsOrContainedBy(&other))), nil
+				},
+				Volatility: VolatilityImmutable,
+			},
+		},
+		makeBox2DComparisonOperators(
+			func(lhs, rhs *geo.CartesianBoundingBox) bool {
+				return lhs.Intersects(rhs)
+			},
+		)...,
+	),
+})
+
+const experimentalBox2DClusterSettingName = "sql.spatial.experimental_box2d_comparison_operators.enabled"
+
+var experimentalBox2DClusterSetting = settings.RegisterPublicBoolSetting(
+	experimentalBox2DClusterSettingName,
+	"enables the use of certain experimental box2d comparison operators",
+	false,
+)
+
+func checkExperimentalBox2DComparisonOperatorEnabled(ctx *EvalContext) error {
+	if !experimentalBox2DClusterSetting.Get(&ctx.Settings.SV) {
+		return errors.WithHintf(
+			pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"this box2d comparison operator is experimental",
+			),
+			"To enable box2d comparators, use `SET CLUSTER SETTING %s = on`.",
+			experimentalBox2DClusterSettingName,
+		)
+	}
+	return nil
+}
+
+func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bool) cmpOpOverload {
+	return cmpOpOverload{
+		&CmpOp{
+			LeftType:  types.Box2D,
+			RightType: types.Box2D,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if err := checkExperimentalBox2DComparisonOperatorEnabled(ctx); err != nil {
+					return nil, err
+				}
+				ret := op(
+					&MustBeDBox2D(left).CartesianBoundingBox,
+					&MustBeDBox2D(right).CartesianBoundingBox,
+				)
+				return MakeDBool(DBool(ret)), nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&CmpOp{
+			LeftType:  types.Box2D,
+			RightType: types.Geometry,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if err := checkExperimentalBox2DComparisonOperatorEnabled(ctx); err != nil {
+					return nil, err
+				}
+				ret := op(
+					&MustBeDBox2D(left).CartesianBoundingBox,
+					MustBeDGeometry(right).CartesianBoundingBox(),
+				)
+				return MakeDBool(DBool(ret)), nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&CmpOp{
+			LeftType:  types.Geometry,
+			RightType: types.Box2D,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if err := checkExperimentalBox2DComparisonOperatorEnabled(ctx); err != nil {
+					return nil, err
+				}
+				ret := op(
+					MustBeDGeometry(left).CartesianBoundingBox(),
+					&MustBeDBox2D(right).CartesianBoundingBox,
+				)
+				return MakeDBool(DBool(ret)), nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&CmpOp{
+			LeftType:  types.Geometry,
+			RightType: types.Geometry,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if err := checkExperimentalBox2DComparisonOperatorEnabled(ctx); err != nil {
+					return nil, err
+				}
+				ret := op(
+					MustBeDGeometry(left).CartesianBoundingBox(),
+					MustBeDGeometry(right).CartesianBoundingBox(),
+				)
+				return MakeDBool(DBool(ret)), nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+	}
 }
 
 // This map contains the inverses for operators in the CmpOps map that have
@@ -2031,7 +2637,7 @@ func init() {
 	cmpOpsInverse = make(map[ComparisonOperator]ComparisonOperator)
 	for cmpOpIdx := range comparisonOpName {
 		cmpOp := ComparisonOperator(cmpOpIdx)
-		newOp, _, _, _, _ := foldComparisonExpr(cmpOp, DNull, DNull)
+		newOp, _, _, _, _ := FoldComparisonExpr(cmpOp, DNull, DNull)
 		if newOp != cmpOp {
 			cmpOpsInverse[newOp] = cmpOp
 			cmpOpsInverse[cmpOp] = newOp
@@ -2048,7 +2654,7 @@ func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
 	case LE:
 		return MakeDBool(cmp <= 0)
 	default:
-		panic(fmt.Sprintf("unexpected ComparisonOperator in boolFromCmp: %v", op))
+		panic(errors.AssertionFailedf("unexpected ComparisonOperator in boolFromCmp: %v", errors.Safe(op)))
 	}
 }
 
@@ -2131,11 +2737,11 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 	return b
 }
 
-func makeEvalTupleIn(typ types.T) CmpOp {
-	return CmpOp{
+func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
+	return &CmpOp{
 		LeftType:  typ,
-		RightType: types.FamTuple,
-		fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
+		RightType: types.AnyTuple,
+		Fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
 			vtuple := values.(*DTuple)
 			// If the tuple was sorted during normalization, we can perform an
 			// efficient binary search to find if the arg is in the tuple (as
@@ -2173,11 +2779,17 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 			} else {
 				// The left-hand side is a tuple, e.g. `(1, 2) IN ((1, 2), (3, 4))`.
 				for _, val := range vtuple.D {
-					// Use the EQ function which properly handles NULLs.
-					if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ); res == DNull {
+					if val == DNull {
+						// We allow for a null value to be in the list of tuples, so we
+						// need to check that upfront.
 						sawNull = true
-					} else if res == DBoolTrue {
-						return DBoolTrue, nil
+					} else {
+						// Use the EQ function which properly handles NULLs.
+						if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ); res == DNull {
+							sawNull = true
+						} else if res == DBoolTrue {
+							return DBoolTrue, nil
+						}
 					}
 				}
 			}
@@ -2187,6 +2799,7 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 			return DBoolFalse, nil
 		},
 		NullableArgs: true,
+		Volatility:   v,
 	}
 }
 
@@ -2205,7 +2818,7 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 // evalArrayCmp would be called with:
 //   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
 func evalDatumsCmp(
-	ctx *EvalContext, op, subOp ComparisonOperator, fn CmpOp, left Datum, right Datums,
+	ctx *EvalContext, op, subOp ComparisonOperator, fn *CmpOp, left Datum, right Datums,
 ) (Datum, error) {
 	all := op == All
 	any := !all
@@ -2216,8 +2829,8 @@ func evalDatumsCmp(
 			continue
 		}
 
-		_, newLeft, newRight, _, not := foldComparisonExpr(subOp, left, elem)
-		d, err := fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
+		_, newLeft, newRight, _, not := FoldComparisonExpr(subOp, left, elem)
+		d, err := fn.Fn(ctx, newLeft.(Datum), newRight.(Datum))
 		if err != nil {
 			return nil, err
 		}
@@ -2259,46 +2872,90 @@ func MatchLikeEscape(
 		var width int
 		escapeRune, width = utf8.DecodeRuneInString(escape)
 		if len(escape) > width {
-			return DBoolFalse, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
+			return DBoolFalse, pgerror.Newf(pgcode.InvalidEscapeSequence, "invalid escape string")
 		}
+	}
+
+	if len(unescaped) == 0 {
+		// An empty string only matches with an empty pattern or a pattern
+		// consisting only of '%' (if this wildcard is not used as a custom escape
+		// character). To match PostgreSQL's behavior, we have a special handling
+		// of this case.
+		for _, c := range pattern {
+			if c != '%' || (c == '%' && escape == `%`) {
+				return DBoolFalse, nil
+			}
+		}
+		return DBoolTrue, nil
 	}
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, escapeRune)
 	if err != nil {
-		return DBoolFalse, pgerror.NewErrorf(
-			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Newf(
+			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
 	}
 
 	if like == nil {
-		key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escapeRune}
-		re, err := ctx.ReCache.GetRegexp(key)
+		re, err := ConvertLikeToRegexp(ctx, pattern, caseInsensitive, escapeRune)
 		if err != nil {
-			return DBoolFalse, pgerror.NewErrorf(
-				pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+			return DBoolFalse, err
 		}
-		like = re.MatchString
+		like = func(s string) (bool, error) {
+			return re.MatchString(s), nil
+		}
 	}
-	return MakeDBool(DBool(like(unescaped))), nil
+	matches, err := like(unescaped)
+	return MakeDBool(DBool(matches)), err
+}
+
+// ConvertLikeToRegexp compiles the specified LIKE pattern as an equivalent
+// regular expression.
+func ConvertLikeToRegexp(
+	ctx *EvalContext, pattern string, caseInsensitive bool, escape rune,
+) (*regexp.Regexp, error) {
+	key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
+	re, err := ctx.ReCache.GetRegexp(key)
+	if err != nil {
+		return nil, pgerror.Newf(
+			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+	}
+	return re, nil
 }
 
 func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
-	pattern := string(MustBeDString(right))
+	if left == DNull || right == DNull {
+		return DNull, nil
+	}
+	s, pattern := string(MustBeDString(left)), string(MustBeDString(right))
+	if len(s) == 0 {
+		// An empty string only matches with an empty pattern or a pattern
+		// consisting only of '%'. To match PostgreSQL's behavior, we have a
+		// special handling of this case.
+		for _, c := range pattern {
+			if c != '%' {
+				return DBoolFalse, nil
+			}
+		}
+		return DBoolTrue, nil
+	}
+
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, '\\')
 	if err != nil {
-		return DBoolFalse, pgerror.NewErrorf(
-			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Newf(
+			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
 	}
 
 	if like == nil {
-		key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: '\\'}
-		re, err := ctx.ReCache.GetRegexp(key)
+		re, err := ConvertLikeToRegexp(ctx, pattern, caseInsensitive, '\\')
 		if err != nil {
-			return DBoolFalse, pgerror.NewErrorf(
-				pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+			return DBoolFalse, err
 		}
-		like = re.MatchString
+		like = func(s string) (bool, error) {
+			return re.MatchString(s), nil
+		}
 	}
-	return MakeDBool(DBool(like(string(MustBeDString(left))))), nil
+	matches, err := like(s)
+	return MakeDBool(DBool(matches)), err
 }
 
 func matchRegexpWithKey(ctx *EvalContext, str Datum, key RegexpCacheKey) (Datum, error) {
@@ -2324,14 +2981,15 @@ func (e *MultipleResultsError) Error() string {
 type EvalDatabase interface {
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
-	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
+	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.
+	ParseQualifiedTableName(sql string) (*TableName, error)
 
 	// ResolveTableName expands the given table name and
 	// makes it point to a valid object.
 	// If the database name is not given, it uses the search path to find it, and
 	// sets it on the returned TableName.
-	// It returns an error if the table doesn't exist.
-	ResolveTableName(ctx context.Context, tn *TableName) error
+	// It returns the ID of the resolved table, and an error if the table doesn't exist.
+	ResolveTableName(ctx context.Context, tn *TableName) (ID, error)
 
 	// LookupSchema looks up the schema with the given name in the given
 	// database.
@@ -2341,28 +2999,99 @@ type EvalDatabase interface {
 // EvalPlanner is a limited planner that can be used from EvalContext.
 type EvalPlanner interface {
 	EvalDatabase
+	TypeReferenceResolver
 	// ParseType parses a column type.
-	ParseType(sql string) (coltypes.CastTargetType, error)
+	ParseType(sql string) (*types.T, error)
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *Subquery) (Datum, error)
 }
 
-// SessionBoundInternalExecutor is a subset of sqlutil.InternalExecutor used by
-// this sem/tree package which can't even import sqlutil. Executor used through
-// this interface are always "session-bound" - they inherit session variables
-// from a parent session.
-type SessionBoundInternalExecutor interface {
+// EvalSessionAccessor is a limited interface to access session variables.
+type EvalSessionAccessor interface {
+	// SetConfig sets a session variable to a new value.
+	//
+	// This interface only supports strings as this is sufficient for
+	// pg_catalog.set_config().
+	SetSessionVar(ctx context.Context, settingName, newValue string) error
+
+	// GetSessionVar retrieves the current value of a session variable.
+	GetSessionVar(ctx context.Context, settingName string, missingOk bool) (bool, string, error)
+
+	// HasAdminRole returns true iff the current session user has the admin role.
+	HasAdminRole(ctx context.Context) (bool, error)
+
+	// HasAdminRole returns nil iff the current session user has the specified
+	// role option.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+}
+
+// ClientNoticeSender is a limited interface to send notices to the
+// client.
+//
+// TODO(knz): as of this writing, the implementations of this
+// interface only work on the gateway node (i.e. not from
+// distributed processors).
+type ClientNoticeSender interface {
+	// BufferClientNotice buffers the notice to send to the client.
+	// This is flushed before the connection is closed.
+	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
+}
+
+// InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is
+// implemented by sql.InternalExecutor) used by this sem/tree package which
+// can't even import sqlutil.
+//
+// Note that the functions offered here should be avoided when possible. They
+// execute the query as root if an user hadn't been previously set on the
+// executor through SetSessionData(). These functions are deprecated in
+// sql.InternalExecutor in favor of a safer interface. Unfortunately, those
+// safer functions cannot be exposed through this interface because they depend
+// on sqlbase, and this package cannot import sqlbase. When possible, downcast
+// this to sqlutil.InternalExecutor or sql.InternalExecutor, and use the
+// alternatives.
+type InternalExecutor interface {
+	// Query is part of the sqlutil.InternalExecutor interface.
+	Query(
+		ctx context.Context, opName string, txn *kv.Txn,
+		stmt string, qargs ...interface{},
+	) ([]Datums, error)
+
 	// QueryRow is part of the sqlutil.InternalExecutor interface.
 	QueryRow(
-		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (Datums, error)
+}
+
+// PrivilegedAccessor gives access to certain queries that would otherwise
+// require someone with RootUser access to query a given data source.
+// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
+type PrivilegedAccessor interface {
+	// LookupNamespaceID returns the id of the namespace given it's parent id and name.
+	// It is meant as a replacement for looking up the system.namespace directly.
+	// Returns the id, a bool representing whether the namespace exists, and an error
+	// if there is one.
+	LookupNamespaceID(
+		ctx context.Context, parentID int64, name string,
+	) (DInt, bool, error)
+
+	// LookupZoneConfig returns the zone config given a namespace id.
+	// It is meant as a replacement for looking up system.zones directly.
+	// Returns the config byte array, a bool representing whether the namespace exists,
+	// and an error if there is one.
+	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (DBytes, bool, error)
 }
 
 // SequenceOperators is used for various sql related functions that can
 // be used from EvalContext.
 type SequenceOperators interface {
 	EvalDatabase
+
+	// GetSerialSequenceNameFromColumn returns the sequence name for a given table and column
+	// provided it is part of a SERIAL sequence.
+	// Returns an empty string if the sequence name does not exist.
+	GetSerialSequenceNameFromColumn(ctx context.Context, tableName *TableName, columnName Name) (*TableName, error)
+
 	// IncrementSequence increments the given sequence and returns the result.
 	// It returns an error if the given name is not a sequence.
 	// The caller must ensure that seqName is fully qualified already.
@@ -2379,30 +3108,18 @@ type SequenceOperators interface {
 	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
 }
 
-// CtxProvider is anything that can return a Context.
-//
-// TODO(andrei): I think this whole CtxProvider business might not be needed any
-// more. I think it was needed back in the day to indirect dereferencing a
-// context to a session, whose context used to change willy-nilly when entering
-// and exiting a transaction. More recently, the points where that context
-// changes are clear; uses of an EvalContext don't straddle context changes, so
-// we should bind EvalCtx.Ctx to a context.Context directly.
-type CtxProvider interface {
-	// Ctx returns this provider's context.
-	Ctx() context.Context
-}
+// TenantOperator is capable of interacting with tenant state, allowing SQL
+// builtin functions to create and destroy tenants. The methods will return
+// errors when run by any tenant other than the system tenant.
+type TenantOperator interface {
+	// CreateTenant attempts to install a new tenant in the system. It returns
+	// an error if the tenant already exists.
+	CreateTenant(ctx context.Context, tenantID uint64) error
 
-// FixedCtxProvider returns a given Context.
-type FixedCtxProvider struct {
-	context.Context
+	// DestroyTenant attempts to uninstall an existing tenant from the system.
+	// It returns an error if the tenant does not exist.
+	DestroyTenant(ctx context.Context, tenantID uint64) error
 }
-
-// Ctx implements CtxProvider.
-func (s FixedCtxProvider) Ctx() context.Context {
-	return s.Context
-}
-
-var _ CtxProvider = FixedCtxProvider{}
 
 // EvalContextTestingKnobs contains test knobs.
 type EvalContextTestingKnobs struct {
@@ -2418,6 +3135,15 @@ type EvalContextTestingKnobs struct {
 	// evaluations should assert that the returned Datum matches the
 	// expected ReturnType of the function.
 	AssertBinaryExprReturnTypes bool
+	// DisableOptimizerRuleProbability is the probability that any given
+	// transformation rule in the optimizer is disabled.
+	DisableOptimizerRuleProbability float64
+	// OptimizerCostPerturbation is used to randomly perturb the estimated
+	// cost of each expression in the query tree for the purpose of creating
+	// alternate query plans in the optimizer.
+	OptimizerCostPerturbation float64
+
+	CallbackGenerators map[string]*CallbackValueGenerator
 }
 
 var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
@@ -2429,7 +3155,7 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 // the retrieval of state such as the node ID or statement start time.
 //
 // ATTENTION: Some fields from this struct (particularly, but not exclusively,
-// from SessionData) are also represented in distsqlrun.EvalContext. Whenever
+// from SessionData) are also represented in execinfrapb.EvalContext. Whenever
 // something that affects DistSQL execution is added, it needs to be marshaled
 // through that proto too.
 // TODO(andrei): remove or limit the duplication.
@@ -2450,9 +3176,20 @@ type EvalContext struct {
 	TxnReadOnly bool
 	TxnImplicit bool
 
-	Settings  *cluster.Settings
-	ClusterID uuid.UUID
-	NodeID    roachpb.NodeID
+	Settings    *cluster.Settings
+	ClusterID   uuid.UUID
+	ClusterName string
+	NodeID      *base.SQLIDContainer
+	Codec       keys.SQLCodec
+
+	// Locality contains the location of the current node as a set of user-defined
+	// key/value pairs, ordered from most inclusive to least inclusive. If there
+	// are no tiers, then the node's location is not known. Example:
+	//
+	//   [region=us,dc=east]
+	//
+	Locality roachpb.Locality
+
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
 	StmtTimestamp time.Time
@@ -2468,6 +3205,11 @@ type EvalContext struct {
 	// underlying datum, if available.
 	Placeholders *PlaceholderInfo
 
+	// Annotations augments the AST with extra information. This pointer should
+	// always be set to the location of the Annotations in the corresponding
+	// SemaContext.
+	Annotations *Annotations
+
 	// IVarContainer is used to evaluate IndexedVars.
 	IVarContainer IndexedVarContainer
 	// iVarContainerStack is used when we swap out IVarContainers in order to
@@ -2475,28 +3217,32 @@ type EvalContext struct {
 	// need to restore once we finish evaluating it.
 	iVarContainerStack []IndexedVarContainer
 
-	// CtxProvider holds the context in which the expression is evaluated. This
-	// will point to the session, which is itself a provider of contexts.
-	// NOTE: seems a bit lazy to hold a pointer to the session's context here,
-	// instead of making sure the right context is explicitly set before the
-	// EvalContext is used. But there's already precedent with the Location field,
-	// and also at the time of writing, EvalContexts are initialized with the
-	// planner and not mutated.
-	CtxProvider CtxProvider
+	// Context holds the context in which the expression is evaluated.
+	Context context.Context
 
 	// InternalExecutor gives access to an executor to be used for running
 	// "internal" statements. It may seem bizarre that "expression evaluation" may
-	// need to run a statement, and yet many builting function do it.
+	// need to run a statement, and yet many builtin functions do it.
 	// Note that the executor will be "session-bound" - it will inherit session
 	// variables from a parent session.
-	InternalExecutor SessionBoundInternalExecutor
+	InternalExecutor InternalExecutor
 
 	Planner EvalPlanner
 
+	PrivilegedAccessor PrivilegedAccessor
+
+	SessionAccessor EvalSessionAccessor
+
+	ClientNoticeSender ClientNoticeSender
+
 	Sequence SequenceOperators
 
-	// Ths transaction in which the statement is executing.
-	Txn *client.Txn
+	Tenant TenantOperator
+
+	// The transaction in which the statement is executing.
+	Txn *kv.Txn
+	// A handle to the database.
+	DB *kv.DB
 
 	ReCache *RegexpCache
 	tmpDec  apd.Decimal
@@ -2510,21 +3256,28 @@ type EvalContext struct {
 	// EXPLAIN(TYPES[, NORMALIZE]).
 	SkipNormalize bool
 
-	collationEnv CollationEnvironment
+	CollationEnv CollationEnvironment
 
 	TestingKnobs EvalContextTestingKnobs
 
 	Mon *mon.BytesMonitor
 
-	// ActiveMemAcc is the account to which values are allocated during
-	// evaluation. It can change over the course of evaluation, such as on a
-	// per-row basis.
-	ActiveMemAcc *mon.BoundAccount
+	// SingleDatumAggMemAccount is a memory account that all aggregate builtins
+	// that store a single datum will share to account for the memory needed to
+	// perform the aggregation (i.e. memory not reported by AggregateFunc.Size
+	// method). This memory account exists so that such aggregate functions
+	// could "batch" their reservations - otherwise, we end up a situation
+	// where each aggregate function struct grows its own memory account by
+	// tiny amount, yet the account reserves a lot more resulting in
+	// significantly overestimating the memory usage.
+	SingleDatumAggMemAccount *mon.BoundAccount
+
+	SQLLivenessReader sqlliveness.Reader
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
-	monitor := mon.MakeMonitor(
+	monitor := mon.NewMonitor(
 		"test-monitor",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -2533,7 +3286,7 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	return MakeTestingEvalContextWithMon(st, &monitor)
+	return MakeTestingEvalContextWithMon(st, monitor)
 }
 
 // MakeTestingEvalContextWithMon returns an EvalContext with the given
@@ -2541,20 +3294,27 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
 	ctx := EvalContext{
-		Txn:         &client.Txn{},
-		SessionData: &sessiondata.SessionData{},
+		Codec:       keys.SystemSQLCodec,
+		Txn:         &kv.Txn{},
+		SessionData: &sessiondata.SessionData{VectorizeMode: sessiondata.VectorizeOn},
 		Settings:    st,
+		NodeID:      base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
-	ctx.CtxProvider = FixedCtxProvider{context.TODO()}
-	acc := monitor.MakeBoundAccount()
-	ctx.ActiveMemAcc = &acc
+	ctx.Context = context.TODO()
 	now := timeutil.Now()
-	ctx.Txn.Proto().OrigTimestamp = hlc.Timestamp{WallTime: now.Unix()}
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
 	return ctx
+}
+
+// Copy returns a deep copy of ctx.
+func (ctx *EvalContext) Copy() *EvalContext {
+	ctxCopy := *ctx
+	ctxCopy.iVarContainerStack = make([]IndexedVarContainer, len(ctx.iVarContainerStack), cap(ctx.iVarContainerStack))
+	copy(ctxCopy.iVarContainerStack, ctx.iVarContainerStack)
+	return &ctxCopy
 }
 
 // PushIVarContainer replaces the current IVarContainer with a different one -
@@ -2590,7 +3350,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.StmtTimestamp.IsZero() {
-		panic("zero statement timestamp in EvalContext")
+		panic(errors.AssertionFailedf("zero statement timestamp in EvalContext"))
 	}
 	return ctx.StmtTimestamp
 }
@@ -2600,9 +3360,9 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	ts := ctx.Txn.CommitTimestamp()
 	if ts == (hlc.Timestamp{}) {
-		panic("zero cluster timestamp in txn")
+		panic(errors.AssertionFailedf("zero cluster timestamp in txn"))
 	}
-	return TimestampToDecimal(ts)
+	return TimestampToDecimalDatum(ts)
 }
 
 // HasPlaceholders returns true if this EvalContext's placeholders have been
@@ -2614,31 +3374,65 @@ func (ctx *EvalContext) HasPlaceholders() bool {
 // TimestampToDecimal converts the logical timestamp into a decimal
 // value with the number of nanoseconds in the integer part and the
 // logical counter in the decimal part.
-func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
+func TimestampToDecimal(ts hlc.Timestamp) apd.Decimal {
 	// Compute Walltime * 10^10 + Logical.
 	// We need 10 decimals for the Logical field because its maximum
 	// value is 4294967295 (2^32-1), a value with 10 decimal digits.
-	var res DDecimal
+	var res apd.Decimal
 	val := &res.Coeff
 	val.SetInt64(ts.WallTime)
 	val.Mul(val, big10E10)
 	val.Add(val, big.NewInt(int64(ts.Logical)))
 
+	// val must be positive. If it was set to a negative value above,
+	// transfer the sign to res.Negative.
+	res.Negative = val.Sign() < 0
+	val.Abs(val)
+
 	// Shift 10 decimals to the right, so that the logical
 	// field appears as fractional part.
-	res.Decimal.Exponent = -10
-	return &res
+	res.Exponent = -10
+	return res
 }
 
-// GetTxnTime retrieves the current transaction time as per
-// the evaluation context. The time is guaranteed to be nonzero.
-func (ctx *EvalContext) GetTxnTime() *DTimeTZ {
-	// TODO(knz): a zero timestamp should never be read, even during
-	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
+// DecimalToInexactDTimestamp is the inverse of TimestampToDecimal. It converts
+// a decimal constructed from an hlc.Timestamp into an approximate DTimestamp
+// containing the walltime of the hlc.Timestamp.
+func DecimalToInexactDTimestamp(d *DDecimal) (*DTimestamp, error) {
+	var coef big.Int
+	coef.Set(&d.Decimal.Coeff)
+	// The physical portion of the HLC is stored shifted up by 10^10, so shift
+	// it down and clear out the logical component.
+	coef.Div(&coef, big10E10)
+	if !coef.IsInt64() {
+		return nil, pgerror.Newf(pgcode.DatetimeFieldOverflow, "timestamp value out of range: %s", d.String())
 	}
-	return MakeDTimeTZ(timeofday.FromTime(ctx.TxnTimestamp), ctx.TxnTimestamp.Location())
+	return TimestampToInexactDTimestamp(hlc.Timestamp{WallTime: coef.Int64()}), nil
+}
+
+// TimestampToDecimalDatum is the same as TimestampToDecimal, but
+// returns a datum.
+func TimestampToDecimalDatum(ts hlc.Timestamp) *DDecimal {
+	res := TimestampToDecimal(ts)
+	return &DDecimal{
+		Decimal: res,
+	}
+}
+
+// TimestampToInexactDTimestamp converts the logical timestamp into an
+// inexact DTimestamp by dropping the logical counter and using the wall
+// time at the microsecond precision.
+func TimestampToInexactDTimestamp(ts hlc.Timestamp) *DTimestamp {
+	return MustMakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)
+}
+
+// GetRelativeParseTime implements ParseTimeContext.
+func (ctx *EvalContext) GetRelativeParseTime() time.Time {
+	ret := ctx.TxnTimestamp
+	if ret.IsZero() {
+		ret = timeutil.Now()
+	}
+	return ret.In(ctx.GetLocation())
 }
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per
@@ -2647,9 +3441,9 @@ func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
+		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return MakeDTimestampTZ(ctx.TxnTimestamp, precision)
+	return MustMakeDTimestampTZ(ctx.GetRelativeParseTime(), precision)
 }
 
 // GetTxnTimestampNoZone retrieves the current transaction timestamp as per
@@ -2658,9 +3452,34 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
+		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return MakeDTimestamp(ctx.TxnTimestamp, precision)
+	// Move the time to UTC, but keeping the location's time.
+	t := ctx.GetRelativeParseTime()
+	_, offsetSecs := t.Zone()
+	return MustMakeDTimestamp(t.Add(time.Second*time.Duration(offsetSecs)).In(time.UTC), precision)
+}
+
+// GetTxnTime retrieves the current transaction time as per
+// the evaluation context.
+func (ctx *EvalContext) GetTxnTime(precision time.Duration) *DTimeTZ {
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
+	}
+	return NewDTimeTZFromTime(ctx.GetRelativeParseTime().Round(precision))
+}
+
+// GetTxnTimeNoZone retrieves the current transaction time as per
+// the evaluation context.
+func (ctx *EvalContext) GetTxnTimeNoZone(precision time.Duration) *DTime {
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
+	}
+	return MakeDTime(timeofday.FromTime(ctx.GetRelativeParseTime().Round(precision)))
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
@@ -2675,15 +3494,15 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 
 // GetLocation returns the session timezone.
 func (ctx *EvalContext) GetLocation() *time.Location {
-	if ctx.SessionData.Location == nil {
+	if ctx.SessionData == nil || ctx.SessionData.DataConversion.Location == nil {
 		return time.UTC
 	}
-	return ctx.SessionData.Location
+	return ctx.SessionData.DataConversion.Location
 }
 
 // Ctx returns the session's context.
 func (ctx *EvalContext) Ctx() context.Context {
-	return ctx.CtxProvider.Ctx()
+	return ctx.Context
 }
 
 func (ctx *EvalContext) getTmpDec() *apd.Decimal {
@@ -2724,23 +3543,24 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	if left == DNull && !expr.fn.NullableArgs {
+	if left == DNull && !expr.Fn.NullableArgs {
 		return DNull, nil
 	}
 	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if right == DNull && !expr.fn.NullableArgs {
+	if right == DNull && !expr.Fn.NullableArgs {
 		return DNull, nil
 	}
-	res, err := expr.fn.fn(ctx, left, right)
+	res, err := expr.Fn.Fn(ctx, left, right)
 	if err != nil {
 		return nil, err
 	}
 	if ctx.TestingKnobs.AssertBinaryExprReturnTypes {
-		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
-			return nil, errors.Wrapf(err, "binary op %q", expr.String())
+		if err := ensureExpectedType(expr.Fn.ReturnType, res); err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				"binary op %q", expr)
 		}
 	}
 	return res, err
@@ -2806,32 +3626,32 @@ type regTypeInfo struct {
 	// objName is a human-readable name describing the objects in the table.
 	objName string
 	// errType is the pg error code in case the object does not exist.
-	errType string
+	errType pgcode.Code
 }
 
-// regTypeInfos maps an coltypes.TOid to a regTypeInfo that describes the
-// pg_catalog table that contains the entities of the type of the key.
-var regTypeInfos = map[*coltypes.TOid]regTypeInfo{
-	coltypes.RegClass:     {"pg_class", "relname", "relation", pgerror.CodeUndefinedTableError},
-	coltypes.RegType:      {"pg_type", "typname", "type", pgerror.CodeUndefinedObjectError},
-	coltypes.RegProc:      {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
-	coltypes.RegProcedure: {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
-	coltypes.RegNamespace: {"pg_namespace", "nspname", "namespace", pgerror.CodeUndefinedObjectError},
+// regTypeInfos maps an oid.Oid to a regTypeInfo that describes the pg_catalog
+// table that contains the entities of the type of the key.
+var regTypeInfos = map[oid.Oid]regTypeInfo{
+	oid.T_regclass:     {"pg_class", "relname", "relation", pgcode.UndefinedTable},
+	oid.T_regtype:      {"pg_type", "typname", "type", pgcode.UndefinedObject},
+	oid.T_regproc:      {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
+	oid.T_regprocedure: {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
+	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgcode.UndefinedObject},
 }
 
 // queryOidWithJoin looks up the name or OID of an input OID or string in the
-// pg_catalog table that the input coltypes.TOid belongs to. If the input Datum
+// pg_catalog table that the input oid.Oid belongs to. If the input Datum
 // is a DOid, the relevant table will be queried by OID; if the input is a
 // DString, the table will be queried by its name column.
 //
-// The return value is a fresh DOid of the input coltypes.TOid with name and OID
+// The return value is a fresh DOid of the input oid.Oid with name and OID
 // set to the result of the query. If there was not exactly one result to the
 // query, an error will be returned.
 func queryOidWithJoin(
-	ctx *EvalContext, typ *coltypes.TOid, d Datum, joinClause string, additionalWhere string,
+	ctx *EvalContext, typ *types.T, d Datum, joinClause string, additionalWhere string,
 ) (*DOid, error) {
 	ret := &DOid{semanticType: typ}
-	info := regTypeInfos[typ]
+	info := regTypeInfos[typ.Oid()]
 	var queryCol string
 	switch d.(type) {
 	case *DOid:
@@ -2839,7 +3659,7 @@ func queryOidWithJoin(
 	case *DString:
 		queryCol = info.nameCol
 	default:
-		panic(fmt.Sprintf("invalid argument to OID cast: %s", d))
+		return nil, errors.AssertionFailedf("invalid argument to OID cast: %s", d)
 	}
 	results, err := ctx.InternalExecutor.QueryRow(
 		ctx.Ctx(), "queryOidWithJoin",
@@ -2849,21 +3669,21 @@ func queryOidWithJoin(
 			info.tableName, info.nameCol, info.tableName, joinClause, queryCol, additionalWhere),
 		d)
 	if err != nil {
-		if _, ok := err.(*MultipleResultsError); ok {
-			return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+		if errors.HasType(err, (*MultipleResultsError)(nil)) {
+			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
 				"more than one %s named %s", info.objName, d)
 		}
 		return nil, err
 	}
 	if results.Len() == 0 {
-		return nil, pgerror.NewErrorf(info.errType, "%s %s does not exist", info.objName, d)
+		return nil, pgerror.Newf(info.errType, "%s %s does not exist", info.objName, d)
 	}
 	ret.DInt = results[0].(*DOid).DInt
 	ret.name = AsStringWithFlags(results[1], FmtBareStrings)
 	return ret, nil
 }
 
-func queryOid(ctx *EvalContext, typ *coltypes.TOid, d Datum) (*DOid, error) {
+func queryOid(ctx *EvalContext, typ *types.T, d Datum) (*DOid, error) {
 	return queryOidWithJoin(ctx, typ, d, "", "")
 }
 
@@ -2879,518 +3699,15 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return d, nil
 	}
 	d = UnwrapDatum(ctx, d)
-	return PerformCast(ctx, d, expr.Type)
-}
-
-// PerformCast performs a cast from the provided Datum to the specified
-// CastTargetType.
-func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, error) {
-	switch typ := t.(type) {
-	case *coltypes.TBool:
-		switch v := d.(type) {
-		case *DBool:
-			return d, nil
-		case *DInt:
-			return MakeDBool(*v != 0), nil
-		case *DFloat:
-			return MakeDBool(*v != 0), nil
-		case *DDecimal:
-			return MakeDBool(v.Sign() != 0), nil
-		case *DString:
-			return ParseDBool(string(*v))
-		case *DCollatedString:
-			return ParseDBool(v.Contents)
-		}
-
-	case *coltypes.TInt:
-		var res *DInt
-		switch v := d.(type) {
-		case *DBool:
-			if *v {
-				res = NewDInt(1)
-			} else {
-				res = DZero
-			}
-		case *DInt:
-			res = v
-		case *DFloat:
-			f := float64(*v)
-			// Use `<=` and `>=` here instead of just `<` and `>` because when
-			// math.MaxInt64 and math.MinInt64 are converted to float64s, they are
-			// rounded to numbers with larger absolute values. Note that the first
-			// next FP value after and strictly greater than float64(math.MinInt64)
-			// is -9223372036854774784 (= float64(math.MinInt64)+513) and the first
-			// previous value and strictly smaller than float64(math.MaxInt64)
-			// is 9223372036854774784 (= float64(math.MaxInt64)-513), and both are
-			// convertible to int without overflow.
-			if math.IsNaN(f) || f <= float64(math.MinInt64) || f >= float64(math.MaxInt64) {
-				return nil, errIntOutOfRange
-			}
-			res = NewDInt(DInt(f))
-		case *DDecimal:
-			d := ctx.getTmpDec()
-			_, err := DecimalCtx.RoundToIntegralValue(d, &v.Decimal)
-			if err != nil {
-				return nil, err
-			}
-			i, err := d.Int64()
-			if err != nil {
-				return nil, errIntOutOfRange
-			}
-			res = NewDInt(DInt(i))
-		case *DString:
-			var err error
-			if res, err = ParseDInt(string(*v)); err != nil {
-				return nil, err
-			}
-		case *DCollatedString:
-			var err error
-			if res, err = ParseDInt(v.Contents); err != nil {
-				return nil, err
-			}
-		case *DTimestamp:
-			res = NewDInt(DInt(v.Unix()))
-		case *DTimestampTZ:
-			res = NewDInt(DInt(v.Unix()))
-		case *DDate:
-			res = NewDInt(DInt(int64(*v)))
-		case *DInterval:
-			iv, ok := v.AsInt64()
-			if !ok {
-				return nil, errIntOutOfRange
-			}
-			res = NewDInt(DInt(iv))
-		case *DOid:
-			res = &v.DInt
-		}
-		if res != nil {
-			return res, nil
-		}
-
-	case *coltypes.TFloat:
-		switch v := d.(type) {
-		case *DBool:
-			if *v {
-				return NewDFloat(1), nil
-			}
-			return NewDFloat(0), nil
-		case *DInt:
-			return NewDFloat(DFloat(*v)), nil
-		case *DFloat:
-			return d, nil
-		case *DDecimal:
-			f, err := v.Float64()
-			if err != nil {
-				return nil, errFloatOutOfRange
-			}
-			return NewDFloat(DFloat(f)), nil
-		case *DString:
-			return ParseDFloat(string(*v))
-		case *DCollatedString:
-			return ParseDFloat(v.Contents)
-		case *DTimestamp:
-			micros := float64(v.Nanosecond() / int(time.Microsecond))
-			return NewDFloat(DFloat(float64(v.Unix()) + micros*1e-6)), nil
-		case *DTimestampTZ:
-			micros := float64(v.Nanosecond() / int(time.Microsecond))
-			return NewDFloat(DFloat(float64(v.Unix()) + micros*1e-6)), nil
-		case *DDate:
-			return NewDFloat(DFloat(float64(*v))), nil
-		case *DInterval:
-			return NewDFloat(DFloat(v.AsFloat64())), nil
-		}
-
-	case *coltypes.TDecimal:
-		var dd DDecimal
-		var err error
-		unset := false
-		switch v := d.(type) {
-		case *DBool:
-			if *v {
-				dd.SetCoefficient(1)
-			}
-		case *DInt:
-			dd.SetCoefficient(int64(*v))
-		case *DDate:
-			dd.SetCoefficient(int64(*v))
-		case *DFloat:
-			_, err = dd.SetFloat64(float64(*v))
-		case *DDecimal:
-			// Small optimization to avoid copying into dd in normal case.
-			if typ.Prec == 0 {
-				return d, nil
-			}
-			dd = *v
-		case *DString:
-			err = dd.SetString(string(*v))
-		case *DCollatedString:
-			err = dd.SetString(v.Contents)
-		case *DTimestamp:
-			val := &dd.Coeff
-			val.SetInt64(v.Unix())
-			val.Mul(val, big10E6)
-			micros := v.Nanosecond() / int(time.Microsecond)
-			val.Add(val, big.NewInt(int64(micros)))
-			dd.Exponent = -6
-		case *DTimestampTZ:
-			val := &dd.Coeff
-			val.SetInt64(v.Unix())
-			val.Mul(val, big10E6)
-			micros := v.Nanosecond() / int(time.Microsecond)
-			val.Add(val, big.NewInt(int64(micros)))
-			dd.Exponent = -6
-		case *DInterval:
-			v.AsBigInt(&dd.Coeff)
-			dd.Exponent = -9
-		default:
-			unset = true
-		}
-		if err != nil {
-			return nil, err
-		}
-		if !unset {
-			err = LimitDecimalWidth(&dd.Decimal, typ.Prec, typ.Scale)
-			return &dd, err
-		}
-
-	case *coltypes.TString, *coltypes.TCollatedString, *coltypes.TName:
-		var s string
-		switch t := d.(type) {
-		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
-			s = d.String()
-		case *DTimestamp, *DTimestampTZ, *DDate, *DTime, *DTimeTZ:
-			s = AsStringWithFlags(d, FmtBareStrings)
-		case *DInterval:
-			// When converting an interval to string, we need a string representation
-			// of the duration (e.g. "5s") and not of the interval itself (e.g.
-			// "INTERVAL '5s'").
-			s = t.ValueAsString()
-		case *DUuid:
-			s = t.UUID.String()
-		case *DIPAddr:
-			s = t.String()
-		case *DString:
-			s = string(*t)
-		case *DCollatedString:
-			s = t.Contents
-		case *DBytes:
-			s = lex.EncodeByteArrayToRawBytes(string(*t),
-				ctx.SessionData.BytesEncodeFormat, false /* skipHexPrefix */)
-		case *DOid:
-			s = t.name
-		case *DJSON:
-			s = t.JSON.String()
-		}
-		switch c := t.(type) {
-		case *coltypes.TString:
-			// If the CHAR type specifies a limit we truncate to that limit:
-			//   'hello'::CHAR(2) -> 'he'
-			if c.N > 0 && c.N < len(s) {
-				s = s[:c.N]
-			}
-			return NewDString(s), nil
-		case *coltypes.TCollatedString:
-			if c.N > 0 && c.N < len(s) {
-				s = s[:c.N]
-			}
-			return NewDCollatedString(s, c.Locale, &ctx.collationEnv), nil
-		case *coltypes.TName:
-			return NewDName(s), nil
-		}
-
-	case *coltypes.TBytes:
-		switch t := d.(type) {
-		case *DString:
-			return ParseDByte(string(*t))
-		case *DCollatedString:
-			return NewDBytes(DBytes(t.Contents)), nil
-		case *DUuid:
-			return NewDBytes(DBytes(t.GetBytes())), nil
-		case *DBytes:
-			return d, nil
-		}
-
-	case *coltypes.TUUID:
-		switch t := d.(type) {
-		case *DString:
-			return ParseDUuidFromString(string(*t))
-		case *DCollatedString:
-			return ParseDUuidFromString(t.Contents)
-		case *DBytes:
-			return ParseDUuidFromBytes([]byte(*t))
-		case *DUuid:
-			return d, nil
-		}
-
-	case *coltypes.TIPAddr:
-		switch t := d.(type) {
-		case *DString:
-			return ParseDIPAddrFromINetString(string(*t))
-		case *DCollatedString:
-			return ParseDIPAddrFromINetString(t.Contents)
-		case *DIPAddr:
-			return d, nil
-		}
-
-	case *coltypes.TDate:
-		switch d := d.(type) {
-		case *DString:
-			return ParseDDate(string(*d), ctx.GetLocation())
-		case *DCollatedString:
-			return ParseDDate(d.Contents, ctx.GetLocation())
-		case *DDate:
-			return d, nil
-		case *DInt:
-			return NewDDate(DDate(int64(*d))), nil
-		case *DTimestampTZ:
-			return NewDDateFromTime(d.Time, ctx.GetLocation()), nil
-		case *DTimestamp:
-			return NewDDateFromTime(d.Time, time.UTC), nil
-		}
-
-	case *coltypes.TTime:
-		switch d := d.(type) {
-		case *DString:
-			return ParseDTime(string(*d))
-		case *DCollatedString:
-			return ParseDTime(d.Contents)
-		case *DTime:
-			return d, nil
-		case *DTimeTZ:
-			return MakeDTime(d.TimeOfDay), nil
-		case *DTimestamp:
-			return MakeDTime(timeofday.FromTime(d.Time)), nil
-		case *DTimestampTZ:
-			return MakeDTime(timeofday.FromTime(d.Time)), nil
-		case *DInterval:
-			return MakeDTime(timeofday.Min.Add(d.Duration)), nil
-		}
-
-	case *coltypes.TTimeTZ:
-		switch d := d.(type) {
-		case *DString:
-			return ParseDTimeTZ(string(*d), ctx.GetLocation())
-		case *DCollatedString:
-			return ParseDTimeTZ(d.Contents, ctx.GetLocation())
-		case *DTime:
-			return MakeDTimeTZ(timeofday.TimeOfDay(*d), ctx.GetLocation()), nil
-		case *DTimeTZ:
-			return d, nil
-		case *DTimestampTZ:
-			return MakeDTimeTZ(timeofday.FromTime(d.Time), d.Time.Location()), nil
-		}
-
-	case *coltypes.TTimestamp:
-		// TODO(knz): Timestamp from float, decimal.
-		switch d := d.(type) {
-		case *DString:
-			return ParseDTimestamp(string(*d), time.Microsecond)
-		case *DCollatedString:
-			return ParseDTimestamp(d.Contents, time.Microsecond)
-		case *DDate:
-			year, month, day := timeutil.Unix(int64(*d)*SecondsInDay, 0).Date()
-			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, time.UTC), time.Microsecond), nil
-		case *DInt:
-			return MakeDTimestamp(timeutil.Unix(int64(*d), 0), time.Second), nil
-		case *DTimestamp:
-			return d, nil
-		case *DTimestampTZ:
-			return MakeDTimestamp(d.Time.In(ctx.GetLocation()), time.Microsecond), nil
-		}
-
-	case *coltypes.TTimestampTZ:
-		// TODO(knz): TimestampTZ from float, decimal.
-		switch d := d.(type) {
-		case *DString:
-			return ParseDTimestampTZ(string(*d), ctx.GetLocation(), time.Microsecond)
-		case *DCollatedString:
-			return ParseDTimestampTZ(d.Contents, ctx.GetLocation(), time.Microsecond)
-		case *DDate:
-			return MakeDTimestampTZFromDate(ctx.GetLocation(), d), nil
-		case *DTimestamp:
-			_, before := d.Time.Zone()
-			_, after := d.Time.In(ctx.GetLocation()).Zone()
-			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), time.Microsecond), nil
-		case *DInt:
-			return MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), time.Second), nil
-		case *DTimestampTZ:
-			return d, nil
-		}
-
-	case *coltypes.TInterval:
-		switch v := d.(type) {
-		case *DString:
-			return ParseDInterval(string(*v))
-		case *DCollatedString:
-			return ParseDInterval(v.Contents)
-		case *DInt:
-			return &DInterval{Duration: duration.FromInt64(int64(*v))}, nil
-		case *DFloat:
-			return &DInterval{Duration: duration.FromFloat64(float64(*v))}, nil
-		case *DTime:
-			return &DInterval{Duration: duration.Duration{Nanos: int64(*v) * 1000}}, nil
-		case *DDecimal:
-			d := ctx.getTmpDec()
-			dnanos := v.Decimal
-			dnanos.Exponent += 9
-			// We need HighPrecisionCtx because duration values can contain
-			// upward of 35 decimal digits and DecimalCtx only provides 25.
-			_, err := HighPrecisionCtx.Quantize(d, &dnanos, 0)
-			if err != nil {
-				return nil, err
-			}
-			if dnanos.Negative {
-				d.Coeff.Neg(&d.Coeff)
-			}
-			dv, ok := duration.FromBigInt(&d.Coeff)
-			if !ok {
-				return nil, errDecOutOfRange
-			}
-			return &DInterval{Duration: dv}, nil
-		case *DInterval:
-			return d, nil
-		}
-	case *coltypes.TJSON:
-		switch v := d.(type) {
-		case *DString:
-			return ParseDJSON(string(*v))
-		case *DJSON:
-			return v, nil
-		}
-	case *coltypes.TArray:
-		switch v := d.(type) {
-		case *DString:
-			return ParseDArrayFromString(ctx, string(*v), typ.ParamType)
-		case *DArray:
-			paramType := coltypes.CastTargetToDatumType(typ.ParamType)
-			dcast := NewDArray(paramType)
-			for _, e := range v.Array {
-				ecast, err := PerformCast(ctx, e, typ.ParamType)
-				if err != nil {
-					return nil, err
-				}
-				if err = dcast.Append(ecast); err != nil {
-					return nil, err
-				}
-			}
-			return dcast, nil
-		}
-	case *coltypes.TOid:
-		switch v := d.(type) {
-		case *DOid:
-			switch typ {
-			case coltypes.Oid:
-				return &DOid{semanticType: typ, DInt: v.DInt}, nil
-			default:
-				oid, err := queryOid(ctx, typ, v)
-				if err != nil {
-					oid = NewDOid(v.DInt)
-					oid.semanticType = typ
-				}
-				return oid, nil
-			}
-		case *DInt:
-			switch typ {
-			case coltypes.Oid:
-				return &DOid{semanticType: typ, DInt: *v}, nil
-			default:
-				tmpOid := NewDOid(*v)
-				oid, err := queryOid(ctx, typ, tmpOid)
-				if err != nil {
-					oid = tmpOid
-					oid.semanticType = typ
-				}
-				return oid, nil
-			}
-		case *DString:
-			s := string(*v)
-			// Trim whitespace and unwrap outer quotes if necessary.
-			// This is required to mimic postgres.
-			s = strings.TrimSpace(s)
-			origS := s
-			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
-				s = s[1 : len(s)-1]
-			}
-
-			switch typ {
-			case coltypes.Oid:
-				i, err := ParseDInt(s)
-				if err != nil {
-					return nil, err
-				}
-				return &DOid{semanticType: typ, DInt: *i}, nil
-			case coltypes.RegProc, coltypes.RegProcedure:
-				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
-				// Postgres only does this when the cast is ::regprocedure, but we're
-				// going to always do it.
-				// We additionally do not yet implement disambiguation based on type
-				// parameters: we return the match iff there is exactly one.
-				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
-				// Resolve function name.
-				substrs := strings.Split(s, ".")
-				if len(substrs) > 3 {
-					// A fully qualified function name in pg's dialect can contain
-					// at most 3 parts: db.schema.funname.
-					// For example mydb.pg_catalog.max().
-					// Anything longer is always invalid.
-					return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
-						"invalid function name: %s", s)
-				}
-				name := UnresolvedName{NumParts: len(substrs)}
-				for i := 0; i < len(substrs); i++ {
-					name.Parts[i] = substrs[len(substrs)-1-i]
-				}
-				funcDef, err := name.ResolveFunction(ctx.SessionData.SearchPath)
-				if err != nil {
-					return nil, err
-				}
-				return queryOid(ctx, typ, NewDString(funcDef.Name))
-			case coltypes.RegType:
-				colType, err := ctx.Planner.ParseType(s)
-				if err == nil {
-					datumType := coltypes.CastTargetToDatumType(colType)
-					return &DOid{semanticType: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
-				}
-				// Fall back to searching pg_type, since we don't provide syntax for
-				// every postgres type that we understand OIDs for.
-				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
-				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
-				return queryOid(ctx, typ, NewDString(s))
-
-			case coltypes.RegClass:
-				tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), origS)
-				if err != nil {
-					return nil, err
-				}
-				if err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
-					return nil, err
-				}
-				// Determining the table's OID requires joining against the databases
-				// table because we only have the database name, not its OID, which is
-				// what is stored in pg_class. This extra join means we can't use
-				// queryOid like everyone else.
-				return queryOidWithJoin(ctx, typ, NewDString(tn.Table()),
-					"JOIN pg_catalog.pg_namespace ON relnamespace = pg_namespace.oid",
-					fmt.Sprintf("AND nspname = '%s'", tn.Schema()))
-			default:
-				return queryOid(ctx, typ, NewDString(s))
-			}
-		}
-	}
-
-	return nil, pgerror.NewErrorf(
-		pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", d.ResolvedType(), t)
+	return PerformCast(ctx, d, expr.ResolvedType())
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	var subscriptIdx int
 	for i, t := range expr.Indirection {
-		if t.Slice {
-			return nil, pgerror.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
-		}
-		if i > 0 {
-			return nil, pgerror.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
+		if t.Slice || i > 0 {
+			return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
 		}
 
 		d, err := t.Begin.(TypedExpr).Eval(ctx)
@@ -3415,11 +3732,9 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	arr := MustBeDArray(d)
 
 	// VECTOR types use 0-indexing.
-	if w, ok := d.(*DOidWrapper); ok {
-		switch w.Oid {
-		case oid.T_oidvector, oid.T_int2vector:
-			subscriptIdx++
-		}
+	switch arr.customOid {
+	case oid.T_oidvector, oid.T_int2vector:
+		subscriptIdx++
 	}
 	if subscriptIdx < 1 || subscriptIdx > arr.Len() {
 		return DNull, nil
@@ -3439,11 +3754,11 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	switch d := unwrapped.(type) {
 	case *DString:
-		return NewDCollatedString(string(*d), expr.Locale, &ctx.collationEnv), nil
+		return NewDCollatedString(string(*d), expr.Locale, &ctx.CollationEnv)
 	case *DCollatedString:
-		return NewDCollatedString(d.Contents, expr.Locale, &ctx.collationEnv), nil
+		return NewDCollatedString(d.Contents, expr.Locale, &ctx.CollationEnv)
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", d)
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", d)
 	}
 }
 
@@ -3471,6 +3786,8 @@ func (expr *CoalesceExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+// Note: if you're modifying this function, please make sure to adjust
+// colexec.comparisonExprAdapter implementations accordingly.
 func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
@@ -3482,39 +3799,49 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	op := expr.Operator
-	if op.hasSubOperator() {
-		var datums Datums
-		// Right is either a tuple or an array of Datums.
-		if tuple, ok := AsDTuple(right); ok {
-			datums = tuple.D
-		} else if array, ok := AsDArray(right); ok {
-			datums = array.Array
-		} else {
-			return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled right expression %s", right)
-		}
-		return evalDatumsCmp(ctx, op, expr.SubOperator, expr.fn, left, datums)
+	if op.HasSubOperator() {
+		return EvalComparisonExprWithSubOperator(ctx, expr, left, right)
 	}
 
-	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)
-	if !expr.fn.NullableArgs && (newLeft == DNull || newRight == DNull) {
+	_, newLeft, newRight, _, not := FoldComparisonExpr(op, left, right)
+	if !expr.Fn.NullableArgs && (newLeft == DNull || newRight == DNull) {
 		return DNull, nil
 	}
-	d, err := expr.fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
-	if err != nil {
-		return nil, err
+	d, err := expr.Fn.Fn(ctx, newLeft.(Datum), newRight.(Datum))
+	if d == DNull || err != nil {
+		return d, err
 	}
-	if b, ok := d.(*DBool); ok {
-		return MakeDBool(*b != DBool(not)), nil
+	b, ok := d.(*DBool)
+	if !ok {
+		return nil, errors.AssertionFailedf("%v is %T and not *DBool", d, d)
 	}
-	return d, nil
+	return MakeDBool(*b != DBool(not)), nil
+}
+
+// EvalComparisonExprWithSubOperator evaluates a comparison expression that has
+// sub-operator.
+func EvalComparisonExprWithSubOperator(
+	ctx *EvalContext, expr *ComparisonExpr, left, right Datum,
+) (Datum, error) {
+	var datums Datums
+	// Right is either a tuple or an array of Datums.
+	if !expr.Fn.NullableArgs && right == DNull {
+		return DNull, nil
+	} else if tuple, ok := AsDTuple(right); ok {
+		datums = tuple.D
+	} else if array, ok := AsDArray(right); ok {
+		datums = array.Array
+	} else {
+		return nil, errors.AssertionFailedf("unhandled right expression %s", right)
+	}
+	return evalDatumsCmp(ctx, expr.Operator, expr.SubOperator, expr.Fn, left, datums)
 }
 
 // EvalArgsAndGetGenerator evaluates the arguments and instanciates a
 // ValueGenerator for use by set projections.
 func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator, error) {
 	if expr.fn == nil || expr.fnProps.Class != GeneratorClass {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
+		return nil, errors.AssertionFailedf("cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
 	}
 	nullArg, args, err := expr.evalArgs(ctx)
 	if err != nil || nullArg {
@@ -3552,22 +3879,25 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	res, err := expr.fn.Fn(ctx, args)
 	if err != nil {
-		// If we are facing a retry error, in particular those generated
-		// by crdb_internal.force_retry(), propagate it unchanged, so that
-		// the executor can see it with the right type.
-		if _, ok := err.(*roachpb.HandledRetryableTxnError); ok {
-			return nil, err
-		}
 		// If we are facing an explicit error, propagate it unchanged.
 		fName := expr.Func.String()
 		if fName == `crdb_internal.force_error` {
 			return nil, err
 		}
-		return nil, errors.Wrapf(err, "%s()", fName)
+		// Otherwise, wrap it with context.
+		newErr := errors.Wrapf(err, "%s()", errors.Safe(fName))
+		// Count function errors as it flows out of the system.  We need
+		// to have this inside a if because if we are facing a retry
+		// error, in particular those generated by
+		// crdb_internal.force_retry(), Wrap() will propagate it as a
+		// non-pgerror error (so that the executor can see it with the
+		// right type).
+		newErr = errors.WithTelemetry(newErr, fName+"()")
+		return nil, newErr
 	}
 	if ctx.TestingKnobs.AssertFuncExprReturnTypes {
 		if err := ensureExpectedType(expr.fn.FixedReturnType(), res); err != nil {
-			return nil, errors.Wrapf(err, "function %q", expr.String())
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "function %q", expr)
 		}
 	}
 	return res, nil
@@ -3576,10 +3906,11 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 // ensureExpectedType will return an error if a datum does not match the
 // provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
-func ensureExpectedType(exp types.T, d Datum) error {
-	if !(exp.FamilyEqual(types.Any) || d.ResolvedType().Equivalent(types.Unknown) ||
+func ensureExpectedType(exp *types.T, d Datum) error {
+	if !(exp.Family() == types.AnyFamily || d.ResolvedType().Family() == types.UnknownFamily ||
 		d.ResolvedType().Equivalent(exp)) {
-		return errors.Errorf("expected return type %q, got: %q", exp, d.ResolvedType())
+		return errors.AssertionFailedf(
+			"expected return type %q, got: %q", errors.Safe(exp), errors.Safe(d.ResolvedType()))
 	}
 	return nil
 }
@@ -3602,8 +3933,7 @@ func (expr *IfErrExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return nil, evalErr
 		}
 		errpatStr := string(MustBeDString(errpat))
-		pqErr, ok := pgerror.GetPGCause(evalErr)
-		if !ok || pqErr.Code != errpatStr {
+		if code := pgerror.GetPGCode(evalErr); code != pgcode.MakeCode(errpatStr) {
 			return nil, evalErr
 		}
 	}
@@ -3633,9 +3963,8 @@ func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	datumTyp := d.ResolvedType()
 
-	for _, t := range expr.Types {
-		wantTyp := coltypes.CastTargetToDatumType(t)
-		if datumTyp.FamilyEqual(wantTyp) {
+	for _, t := range expr.ResolvedTypes() {
+		if datumTyp.Equivalent(t) {
 			return MakeDBool(DBool(!expr.Not)), nil
 		}
 	}
@@ -3656,6 +3985,48 @@ func (expr *NotExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return nil, err
 	}
 	return MakeDBool(!v), nil
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *IsNullExpr) Eval(ctx *EvalContext) (Datum, error) {
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if d == DNull {
+		return MakeDBool(true), nil
+	}
+	if t, ok := d.(*DTuple); ok {
+		// A tuple IS NULL if all elements are NULL.
+		for _, tupleDatum := range t.D {
+			if tupleDatum != DNull {
+				return MakeDBool(false), nil
+			}
+		}
+		return MakeDBool(true), nil
+	}
+	return MakeDBool(false), nil
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *IsNotNullExpr) Eval(ctx *EvalContext) (Datum, error) {
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if d == DNull {
+		return MakeDBool(false), nil
+	}
+	if t, ok := d.(*DTuple); ok {
+		// A tuple IS NOT NULL if all elements are not NULL.
+		for _, tupleDatum := range t.D {
+			if tupleDatum == DNull {
+				return MakeDBool(false), nil
+			}
+		}
+		return MakeDBool(true), nil
+	}
+	return MakeDBool(true), nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -3716,7 +4087,7 @@ func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *RangeCond) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, errors.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -3734,7 +4105,7 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	if ctx.TestingKnobs.AssertUnaryExprReturnTypes {
 		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
-			return nil, errors.Wrapf(err, "unary op %q", expr.String())
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unary op %q", expr)
 		}
 	}
 	return res, err
@@ -3742,32 +4113,32 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr DefaultVal) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, errors.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, errors.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, errors.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *AllColumnsSelector) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, errors.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *TupleStar) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, errors.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, errors.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -3784,16 +4155,14 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // arrayOfType returns a fresh DArray of the input type.
-func arrayOfType(typ types.T) (*DArray, error) {
-	arrayTyp, ok := typ.(types.TArray)
-	if !ok {
-		return nil, pgerror.NewErrorf(
-			pgerror.CodeInternalError, "array node type (%v) is not types.TArray", typ)
+func arrayOfType(typ *types.T) (*DArray, error) {
+	if typ.Family() != types.ArrayFamily {
+		return nil, errors.AssertionFailedf("array node type (%v) is not types.TArray", typ)
 	}
-	if !types.IsValidArrayElementType(arrayTyp.Typ) {
-		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", arrayTyp.Typ)
+	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {
+		return nil, err
 	}
-	return NewDArray(arrayTyp.Typ), nil
+	return NewDArray(typ.ArrayContents()), nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -3834,11 +4203,15 @@ func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
 
 	tuple, ok := d.(*DTuple)
 	if !ok {
-		return nil, pgerror.NewErrorf(
-			pgerror.CodeInternalError, "array subquery result (%v) is not DTuple", d)
+		return nil, errors.AssertionFailedf("array subquery result (%v) is not DTuple", d)
 	}
 	array.Array = tuple.D
 	return array, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DBitArray) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -3893,6 +4266,26 @@ func (t *DInt) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DInterval) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DBox2D) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DGeography) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DGeometry) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DEnum) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
@@ -3953,17 +4346,17 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 		// placeholder evaluates to itself at this point.
 		return t, nil
 	}
-	e, ok := ctx.Placeholders.Value(t.Name)
+	e, ok := ctx.Placeholders.Value(t.Idx)
 	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedParameterError,
-			"no value provided for placeholder: $%s", t.Name)
+		return nil, pgerror.Newf(pgcode.UndefinedParameter,
+			"no value provided for placeholder: %s", t)
 	}
 	// Placeholder expressions cannot contain other placeholders, so we do
 	// not need to recurse.
-	typ, typed := ctx.Placeholders.Type(t.Name, false)
-	if !typed {
+	typ := ctx.Placeholders.Types[t.Idx]
+	if typ == nil {
 		// All placeholders should be typed at this point.
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "missing type for placeholder %s", t.Name)
+		return nil, errors.AssertionFailedf("missing type for placeholder %s", t)
 	}
 	if !e.ResolvedType().Equivalent(typ) {
 		// This happens when we overrode the placeholder's type during type
@@ -3971,11 +4364,7 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 		// type for the placeholder. In this case, we cast the expression to
 		// the desired type.
 		// TODO(jordan): introduce a restriction on what casts are allowed here.
-		colType, err := coltypes.DatumTypeToColumnType(typ)
-		if err != nil {
-			return nil, err
-		}
-		cast := &CastExpr{Expr: e, Type: colType}
+		cast := NewTypedCastExpr(e, typ)
 		return cast.Eval(ctx)
 	}
 	return e.Eval(ctx)
@@ -3987,18 +4376,18 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 	}
 	ltype := left.ResolvedType()
 	rtype := right.ResolvedType()
-	if fn, ok := CmpOps[op].lookupImpl(ltype, rtype); ok {
-		return fn.fn(ctx, left, right)
+	if fn, ok := CmpOps[op].LookupImpl(ltype, rtype); ok {
+		return fn.Fn(ctx, left, right)
 	}
-	return nil, pgerror.NewErrorf(
-		pgerror.CodeUndefinedFunctionError, "unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
+	return nil, pgerror.Newf(
+		pgcode.UndefinedFunction, "unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
 }
 
-// foldComparisonExpr folds a given comparison operation and its expressions
+// FoldComparisonExpr folds a given comparison operation and its expressions
 // into an equivalent operation that will hit in the CmpOps map, returning
 // this new operation, along with potentially flipped operands and "flipped"
 // and "not" flags.
-func foldComparisonExpr(
+func FoldComparisonExpr(
 	op ComparisonOperator, left, right Expr,
 ) (newOp ComparisonOperator, newLeft Expr, newRight Expr, flipped bool, not bool) {
 	switch op {
@@ -4059,40 +4448,49 @@ func hasUnescapedSuffix(s string, suffix byte, escapeToken string) bool {
 // if a string starts with a given pattern.
 func optimizedLikeFunc(
 	pattern string, caseInsensitive bool, escape rune,
-) (func(string) bool, error) {
+) (func(string) (bool, error), error) {
 	switch len(pattern) {
 	case 0:
-		return func(s string) bool {
-			return s == ""
+		return func(s string) (bool, error) {
+			return s == "", nil
 		}, nil
 	case 1:
 		switch pattern[0] {
 		case '%':
 			if escape == '%' {
-				return nil, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return nil, pgerror.Newf(pgcode.InvalidEscapeSequence, "LIKE pattern must not end with escape character")
 			}
-			return func(s string) bool {
-				return true
+			return func(s string) (bool, error) {
+				return true, nil
 			}, nil
 		case '_':
 			if escape == '_' {
-				return nil, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return nil, pgerror.Newf(pgcode.InvalidEscapeSequence, "LIKE pattern must not end with escape character")
 			}
-			return func(s string) bool {
-				return len(s) == 1
+			return func(s string) (bool, error) {
+				if len(s) == 0 {
+					return false, nil
+				}
+				firstChar, _ := utf8.DecodeRuneInString(s)
+				if firstChar == utf8.RuneError {
+					return false, errors.Errorf("invalid encoding of the first character in string %s", s)
+				}
+				return len(s) == len(string(firstChar)), nil
 			}, nil
 		}
 	default:
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
-			// Patterns with even number of escape characters preceding the ending `%` will have
-			// anyEnd set to true. Otherwise anyEnd will be set to false.
-			anyEnd := hasUnescapedSuffix(pattern, '%', string(escape))
+			// Patterns with even number of escape characters preceding the ending
+			// `%` will have anyEnd set to true (if `%` itself is not an escape
+			// character). Otherwise anyEnd will be set to false.
+			anyEnd := hasUnescapedSuffix(pattern, '%', string(escape)) && escape != '%'
 			// If '%' is the escape character, then it's not a wildcard.
 			anyStart := pattern[0] == '%' && escape != '%'
 
-			// Patterns with even number of escape characters preceding the ending `_` will have
-			// singleAnyEnd set to true. Otherwise singleAnyEnd will be set to false.
-			singleAnyEnd := hasUnescapedSuffix(pattern, '_', string(escape))
+			// Patterns with even number of escape characters preceding the ending
+			// `_` will have singleAnyEnd set to true (if `_` itself is not an escape
+			// character). Otherwise singleAnyEnd will be set to false.
+			singleAnyEnd := hasUnescapedSuffix(pattern, '_', string(escape)) && escape != '_'
 			// If '_' is the escape character, then it's not a wildcard.
 			singleAnyStart := pattern[0] == '_' && escape != '_'
 
@@ -4101,67 +4499,85 @@ func optimizedLikeFunc(
 			// This is required since we do direct string
 			// comparison.
 			var err error
-			if pattern, err = unescapePattern(pattern, string(escape), escape == '\\'); err != nil {
+			if pattern, err = unescapePattern(pattern, string(escape), true /* emitEscapeCharacterLastError */); err != nil {
 				return nil, err
 			}
 			switch {
 			case anyEnd && anyStart:
-				return func(s string) bool {
+				return func(s string) (bool, error) {
 					substr := pattern[1 : len(pattern)-1]
 					if caseInsensitive {
 						s, substr = strings.ToUpper(s), strings.ToUpper(substr)
 					}
-					return strings.Contains(s, substr)
+					return strings.Contains(s, substr), nil
 				}, nil
 
 			case anyEnd:
-				return func(s string) bool {
+				return func(s string) (bool, error) {
 					prefix := pattern[:len(pattern)-1]
 					if singleAnyStart {
 						if len(s) == 0 {
-							return false
+							return false, nil
 						}
-
 						prefix = prefix[1:]
-						s = s[1:]
+						firstChar, _ := utf8.DecodeRuneInString(s)
+						if firstChar == utf8.RuneError {
+							return false, errors.Errorf("invalid encoding of the first character in string %s", s)
+						}
+						s = s[len(string(firstChar)):]
 					}
 					if caseInsensitive {
 						s, prefix = strings.ToUpper(s), strings.ToUpper(prefix)
 					}
-					return strings.HasPrefix(s, prefix)
+					return strings.HasPrefix(s, prefix), nil
 				}, nil
 
 			case anyStart:
-				return func(s string) bool {
+				return func(s string) (bool, error) {
 					suffix := pattern[1:]
 					if singleAnyEnd {
 						if len(s) == 0 {
-							return false
+							return false, nil
 						}
 
 						suffix = suffix[:len(suffix)-1]
-						s = s[:len(s)-1]
+						lastChar, _ := utf8.DecodeLastRuneInString(s)
+						if lastChar == utf8.RuneError {
+							return false, errors.Errorf("invalid encoding of the last character in string %s", s)
+						}
+						s = s[:len(s)-len(string(lastChar))]
 					}
 					if caseInsensitive {
 						s, suffix = strings.ToUpper(s), strings.ToUpper(suffix)
 					}
-					return strings.HasSuffix(s, suffix)
+					return strings.HasSuffix(s, suffix), nil
 				}, nil
 
 			case singleAnyStart || singleAnyEnd:
-				return func(s string) bool {
-					if len(s) < 1 || (singleAnyStart && singleAnyEnd && len(s) < 2) {
-						return false
+				return func(s string) (bool, error) {
+					if len(s) < 1 {
+						return false, nil
+					}
+					firstChar, _ := utf8.DecodeRuneInString(s)
+					if firstChar == utf8.RuneError {
+						return false, errors.Errorf("invalid encoding of the first character in string %s", s)
+					}
+					lastChar, _ := utf8.DecodeLastRuneInString(s)
+					if lastChar == utf8.RuneError {
+						return false, errors.Errorf("invalid encoding of the last character in string %s", s)
+					}
+					if singleAnyStart && singleAnyEnd && len(string(firstChar))+len(string(lastChar)) > len(s) {
+						return false, nil
 					}
 
 					if singleAnyStart {
 						pattern = pattern[1:]
-						s = s[1:]
+						s = s[len(string(firstChar)):]
 					}
 
 					if singleAnyEnd {
 						pattern = pattern[:len(pattern)-1]
-						s = s[:len(s)-1]
+						s = s[:len(s)-len(string(lastChar))]
 					}
 
 					if caseInsensitive {
@@ -4175,7 +4591,7 @@ func optimizedLikeFunc(
 					//    in case anyStart
 					//  - singleAnyStart && anyEnd handled
 					//    in case anyEnd
-					return s == pattern
+					return s == pattern, nil
 				}, nil
 			}
 		}
@@ -4204,7 +4620,9 @@ type likeKey struct {
 // We need to convert
 //    `\\` --> ``
 //    `\\\\` --> `\\`
-func unescapePattern(pattern, escapeToken string, isEscapeTokenCustom bool) (string, error) {
+func unescapePattern(
+	pattern, escapeToken string, emitEscapeCharacterLastError bool,
+) (string, error) {
 	escapedEscapeToken := escapeToken + escapeToken
 
 	// We need to subtract the escaped escape tokens to avoid double
@@ -4219,8 +4637,8 @@ func unescapePattern(pattern, escapeToken string, isEscapeTokenCustom bool) (str
 	retWidth := 0
 	for i := 0; i < nEscapes; i++ {
 		nextIdx := strings.Index(pattern, escapeToken)
-		if nextIdx == len(pattern)-len(escapeToken) && !isEscapeTokenCustom {
-			return "", pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, `LIKE pattern must not end with escape character`)
+		if nextIdx == len(pattern)-len(escapeToken) && emitEscapeCharacterLastError {
+			return "", pgerror.Newf(pgcode.InvalidEscapeSequence, `LIKE pattern must not end with escape character`)
 		}
 
 		retWidth += copy(ret[retWidth:], pattern[:nextIdx])
@@ -4342,7 +4760,7 @@ OldLoop:
 // 1. we replace '@' with '\\' since it's unescaped;
 // 2. we escape single original backslash ('\' is not our escape character, so we want
 // the pattern to understand it) by putting an extra backslash in front of it. However,
-// we later will call unescapePattern, so we need to double our double backslahes.
+// we later will call unescapePattern, so we need to double our double backslashes.
 // Therefore, '\\' is converted into '\\\\'.
 // 3. '@@' is replaced by '@' because it is escaped escape character.
 // 4. '@' is replaced with '\\' since it's unescaped.
@@ -4390,31 +4808,75 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 			} else {
 				// Escape character is the last character in s which is an error
 				// that must have been caught in calculateLengthAfterReplacingCustomEscape.
-				panic("unexpected: escape character is the last one in replaceCustomEscape.")
+				return "", errors.AssertionFailedf(
+					"unexpected: escape character is the last one in replaceCustomEscape.")
 			}
 		} else if s[sIndex] == '\\' {
-			// We encountered a backslash which after QuoteMeta should have been doubled.
-			if sIndex+1 == sLen || s[sIndex+1] != '\\' {
-				// This case should never be reached, and it should
+			// We encountered a backslash, so we need to look ahead to figure out how
+			// to process it.
+			if sIndex+1 == sLen {
+				// This case should never be reached since it should
 				// have been caught in calculateLengthAfterReplacingCustomEscape.
-				panic("unexpected: a backslash is not doubled in replaceCustomEscape.")
+				return "", errors.AssertionFailedf(
+					"unexpected: a single backslash encountered in replaceCustomEscape.")
+			} else if s[sIndex+1] == '\\' {
+				// We want to escape '\\' to `\\\\` for correct processing later by unescapePattern. See (3).
+				// Since we've added four characters to ret, we advance retIndex by 4.
+				// Since we've already processed two characters in s, we advance sIndex by 2.
+				ret[retIndex] = '\\'
+				ret[retIndex+1] = '\\'
+				ret[retIndex+2] = '\\'
+				ret[retIndex+3] = '\\'
+				retIndex += 4
+				sIndex += 2
+			} else {
+				// A metacharacter other than a backslash is escaped here.
+				// Note: all metacharacters are encoded as a single byte, so it is
+				// correct to just convert it to string and to compare against a char
+				// in s.
+				if string(s[sIndex+1]) == string(escape) {
+					// The metacharacter is our custom escape character. We need to look
+					// ahead to process it.
+					if sIndex+2 == sLen {
+						// Escape character is the last character in s which is an error
+						// that must have been caught in calculateLengthAfterReplacingCustomEscape.
+						return "", errors.AssertionFailedf(
+							"unexpected: escape character is the last one in replaceCustomEscape.")
+					}
+					if sIndex+4 <= sLen {
+						if s[sIndex+2] == '\\' && string(s[sIndex+3]) == string(escape) {
+							// We have a sequence of `\`+escape+`\`+escape which is replaced
+							// by `\`+escape.
+							ret[retIndex] = '\\'
+							// Note: all metacharacters are encoded as a single byte, so it
+							// is safe to just convert it to string and take the first
+							// character.
+							ret[retIndex+1] = string(escape)[0]
+							retIndex += 2
+							sIndex += 4
+							continue
+						}
+					}
+					// The metacharacter is escaping something different than itself, so
+					// `\`+escape will be replaced by `\`.
+					ret[retIndex] = '\\'
+					retIndex++
+					sIndex += 2
+				} else {
+					// The metacharacter is not our custom escape character, so we're
+					// simply copying the backslash and the metacharacter.
+					ret[retIndex] = '\\'
+					ret[retIndex+1] = s[sIndex+1]
+					retIndex += 2
+					sIndex += 2
+				}
 			}
-			// We want to escape '\\' to `\\\\` for correct processing later by unescapePattern. See (3).
-			// Since we've added four characters to ret, we advance retIndex by 4.
-			// Since we've already processed two characters in s, we advance sIndex by 2.
-			ret[retIndex] = '\\'
-			ret[retIndex+1] = '\\'
-			ret[retIndex+2] = '\\'
-			ret[retIndex+3] = '\\'
-			retIndex += 4
-			sIndex += 2
 		} else {
-			// Regular character, so we simply copy it.
-			ret[retIndex] = s[sIndex]
-			retIndex++
-			sIndex++
+			// Regular symbol, so we simply copy it.
+			copy(ret[retIndex:], s[sIndex:sIndex+w])
+			retIndex += w
+			sIndex += w
 		}
-
 	}
 	return string(ret), nil
 }
@@ -4447,23 +4909,56 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 				}
 			} else {
 				// Escape character is the last character in s, so we need to return an error.
-				return false, 0, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return false, 0, pgerror.Newf(pgcode.InvalidEscapeSequence, "LIKE pattern must not end with escape character")
 			}
 		} else if s[i] == '\\' {
-			// We encountered a backslash which after QuoteMeta should have been doubled.
-			if i+1 == sLen || s[i+1] != '\\' {
-				// This case should never be reached.
-				return false, 0, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "Unexpected behavior during processing custom escape character.")
+			// We encountered a backslash, so we need to look ahead to figure out how
+			// to process it.
+			if i+1 == sLen {
+				// This case should never be reached because the backslash should be
+				// escaping one of regexp metacharacters.
+				return false, 0, pgerror.Newf(pgcode.InvalidEscapeSequence, "Unexpected behavior during processing custom escape character.")
+			} else if s[i+1] == '\\' {
+				// We'll want to escape '\\' to `\\\\` for correct processing later by
+				// unescapePattern. See (3) in the comment above replaceCustomEscape.
+				changed = true
+				retLen += 4
+				i += 2
+			} else {
+				// A metacharacter other than a backslash is escaped here.
+				if string(s[i+1]) == string(escape) {
+					// The metacharacter is our custom escape character. We need to look
+					// ahead to process it.
+					if i+2 == sLen {
+						// Escape character is the last character in s, so we need to return an error.
+						return false, 0, pgerror.Newf(pgcode.InvalidEscapeSequence, "LIKE pattern must not end with escape character")
+					}
+					if i+4 <= sLen {
+						if s[i+2] == '\\' && string(s[i+3]) == string(escape) {
+							// We have a sequence of `\`+escape+`\`+escape which will be
+							// replaced by `\`+escape.
+							changed = true
+							retLen += 2
+							i += 4
+							continue
+						}
+					}
+					// The metacharacter is escaping something different than itself, so
+					// `\`+escape will be replaced by `\`.
+					changed = true
+					retLen++
+					i += 2
+				} else {
+					// The metacharacter is not our custom escape character, so we're
+					// simply copying the backslash and the metacharacter.
+					retLen += 2
+					i += 2
+				}
 			}
-			// We'll want to escape '\\' to `\\\\` for correct processing later by unescapePattern.
-			// See (3) in the comment above replaceCustomEscape.
-			changed = true
-			retLen += 4
-			i += 2
 		} else {
-			// Regular character, so we'll simply copy it.
-			retLen++
-			i++
+			// Regular symbol, so we'll simply copy it.
+			retLen += w
+			i += w
 		}
 	}
 	return changed, retLen, nil
@@ -4474,7 +4969,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 // is to convert all unescaped escape character into '\'.
 // k.escape can either be empty or a single character.
 func (k likeKey) Pattern() (string, error) {
-	// QuoteMeta escapes `\` to `\\`.
+	// QuoteMeta escapes all regexp metacharacters (`\.+*?()|[]{}^$`) with a `\`.
 	pattern := regexp.QuoteMeta(k.s)
 	var err error
 	if k.escape == 0 {
@@ -4493,18 +4988,34 @@ func (k likeKey) Pattern() (string, error) {
 		// If `%` is escape character, then it's not a wildcard.
 		if k.escape != '%' {
 			// Replace LIKE/ILIKE specific wildcards '%' only if it's unescaped.
-			pattern = replaceUnescaped(pattern, `%`, `.*`, string(k.escape))
+			if k.escape == '.' {
+				// '.' is the escape character, so for correct processing later by
+				// replaceCustomEscape we need to escape it by itself.
+				pattern = replaceUnescaped(pattern, `%`, `..*`, regexp.QuoteMeta(string(k.escape)))
+			} else if k.escape == '*' {
+				// '*' is the escape character, so for correct processing later by
+				// replaceCustomEscape we need to escape it by itself.
+				pattern = replaceUnescaped(pattern, `%`, `.**`, regexp.QuoteMeta(string(k.escape)))
+			} else {
+				pattern = replaceUnescaped(pattern, `%`, `.*`, regexp.QuoteMeta(string(k.escape)))
+			}
 		}
 		// If `_` is escape character, then it's not a wildcard.
 		if k.escape != '_' {
 			// Replace LIKE/ILIKE specific wildcards '_' only if it's unescaped.
-			pattern = replaceUnescaped(pattern, `_`, `.`, string(k.escape))
+			if k.escape == '.' {
+				// '.' is the escape character, so for correct processing later by
+				// replaceCustomEscape we need to escape it by itself.
+				pattern = replaceUnescaped(pattern, `_`, `..`, regexp.QuoteMeta(string(k.escape)))
+			} else {
+				pattern = replaceUnescaped(pattern, `_`, `.`, regexp.QuoteMeta(string(k.escape)))
+			}
 		}
 
 		// If a sequence of symbols ` escape+`\\` ` is unescaped, then that escape
 		// character escapes backslash in the original pattern (we need to use double
 		// backslash because of QuoteMeta behavior), so we want to "consume" the escape character.
-		pattern = replaceUnescaped(pattern, string(k.escape)+`\\`, `\\`, string(k.escape))
+		pattern = replaceUnescaped(pattern, string(k.escape)+`\\`, `\\`, regexp.QuoteMeta(string(k.escape)))
 
 		// We want to replace all escape characters with `\\` only
 		// when they are unescaped. When an escape character is escaped,
@@ -4525,7 +5036,11 @@ func (k likeKey) Pattern() (string, error) {
 		// an actual escape character is handled in replaceCustomEscape. For example, with '-' as
 		// the escape character on pattern 'abc\\' we do not want to return an error 'pattern ends
 		// with escape character' because '\\' is not an escape character in this case.
-		if pattern, err = unescapePattern(pattern, `\\`, k.escape == '\\'); err != nil {
+		if pattern, err = unescapePattern(
+			pattern,
+			`\\`,
+			k.escape == '\\', /* emitEscapeCharacterLastError */
+		); err != nil {
 			return "", err
 		}
 	}
@@ -4552,7 +5067,7 @@ func SimilarToEscape(ctx *EvalContext, unescaped, pattern, escape string) (Datum
 		var width int
 		escapeRune, width = utf8.DecodeRuneInString(escape)
 		if len(escape) > width {
-			return DBoolFalse, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
+			return DBoolFalse, pgerror.Newf(pgcode.InvalidEscapeSequence, "invalid escape string")
 		}
 	}
 	key := similarToKey{s: pattern, escape: escapeRune}
@@ -4650,7 +5165,7 @@ func caseInsensitive(pattern string) string {
 }
 
 // anchorPattern surrounds the transformed input string with
-//   ^(?: ... )$
+//   ^(?s: ... )$
 // which requires some explanation.  We need "^" and "$" to force
 // the pattern to match the entire input string as per SQL99 spec.
 // The "(?:" and ")" are a non-capturing set of parens; we have to have
@@ -4658,21 +5173,22 @@ func caseInsensitive(pattern string) string {
 // be bound into the first and last alternatives which is not what we
 // want, and the parens must be non capturing because we don't want them
 // to count when selecting output for SUBSTRING.
+// "?s" turns on "dot all" mode meaning a dot will match any single character
+// (without turning this mode on, the dot matches any single character except
+// for line breaks).
 func anchorPattern(pattern string, caseInsensitive bool) string {
 	if caseInsensitive {
-		return fmt.Sprintf("^(?i:%s)$", pattern)
+		return fmt.Sprintf("^(?si:%s)$", pattern)
 	}
-	return fmt.Sprintf("^(?:%s)$", pattern)
+	return fmt.Sprintf("^(?s:%s)$", pattern)
 }
 
 // FindEqualComparisonFunction looks up an overload of the "=" operator
 // for a given pair of input operand types.
-func FindEqualComparisonFunction(
-	leftType, rightType types.T,
-) (func(*EvalContext, Datum, Datum) (Datum, error), bool) {
-	fn, found := CmpOps[EQ].lookupImpl(leftType, rightType)
+func FindEqualComparisonFunction(leftType, rightType *types.T) (TwoArgFn, bool) {
+	fn, found := CmpOps[EQ].LookupImpl(leftType, rightType)
 	if found {
-		return fn.fn, true
+		return fn.Fn, true
 	}
 	return nil, false
 }
@@ -4687,7 +5203,7 @@ func IntPow(x, y DInt) (*DInt, error) {
 	}
 	i, err := xd.Int64()
 	if err != nil {
-		return nil, errIntOutOfRange
+		return nil, ErrIntOutOfRange
 	}
 	return NewDInt(DInt(i)), nil
 }
@@ -4713,4 +5229,90 @@ func PickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) 
 		}
 	}
 	return g, nil
+}
+
+// CallbackValueGenerator is a ValueGenerator that calls a supplied callback for
+// producing the values. To be used with
+// EvalContextTestingKnobs.CallbackGenerators.
+type CallbackValueGenerator struct {
+	// cb is the callback to be called for producing values. It gets passed in 0
+	// as prev initially, and the value it previously returned for subsequent
+	// invocations. Once it returns -1 or an error, it will not be invoked any
+	// more.
+	cb  func(ctx context.Context, prev int, txn *kv.Txn) (int, error)
+	val int
+	txn *kv.Txn
+}
+
+var _ ValueGenerator = &CallbackValueGenerator{}
+
+// NewCallbackValueGenerator creates a new CallbackValueGenerator.
+func NewCallbackValueGenerator(
+	cb func(ctx context.Context, prev int, txn *kv.Txn) (int, error),
+) *CallbackValueGenerator {
+	return &CallbackValueGenerator{
+		cb: cb,
+	}
+}
+
+// ResolvedType is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) ResolvedType() *types.T {
+	return types.Int
+}
+
+// Start is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) Start(_ context.Context, txn *kv.Txn) error {
+	c.txn = txn
+	return nil
+}
+
+// Next is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) Next(ctx context.Context) (bool, error) {
+	var err error
+	c.val, err = c.cb(ctx, c.val, c.txn)
+	if err != nil {
+		return false, err
+	}
+	if c.val == -1 {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Values is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) Values() (Datums, error) {
+	return Datums{NewDInt(DInt(c.val))}, nil
+}
+
+// Close is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) Close() {}
+
+// Sqrt returns the square root of x.
+func Sqrt(x float64) (*DFloat, error) {
+	if x < 0.0 {
+		return nil, errSqrtOfNegNumber
+	}
+	return NewDFloat(DFloat(math.Sqrt(x))), nil
+}
+
+// DecimalSqrt returns the square root of x.
+func DecimalSqrt(x *apd.Decimal) (*DDecimal, error) {
+	if x.Sign() < 0 {
+		return nil, errSqrtOfNegNumber
+	}
+	dd := &DDecimal{}
+	_, err := DecimalCtx.Sqrt(&dd.Decimal, x)
+	return dd, err
+}
+
+// Cbrt returns the cube root of x.
+func Cbrt(x float64) (*DFloat, error) {
+	return NewDFloat(DFloat(math.Cbrt(x))), nil
+}
+
+// DecimalCbrt returns the cube root of x.
+func DecimalCbrt(x *apd.Decimal) (*DDecimal, error) {
+	dd := &DDecimal{}
+	_, err := DecimalCtx.Cbrt(&dd.Decimal, x)
+	return dd, err
 }

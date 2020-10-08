@@ -1,0 +1,109 @@
+init
+readrequests:  { rate: 1, burst: 2 }
+writerequests: { rate: 1, burst: 2 }
+readbytes:     { rate: 1024, burst: 2048 }
+writebytes:    { rate: 1024, burst: 2048 }
+----
+00:00:00.000
+
+# Set up three tenants with refcounts 2, 1, and 3 respectively.
+
+get_tenants
+[1, 2, 2, 3, 5, 5, 5]
+----
+[2#2, 3#1, 5#3, system#1]
+
+# Launch four requests on behalf of tenant 2, one on behalf of 3, and one on
+# behalf of the system tenant.
+
+launch
+- { id: g0, tenant: 1 }
+- { id: g1, tenant: 2 }
+- { id: g2, tenant: 2 }
+- { id: g3, tenant: 2, iswrite: true }
+- { id: g4, tenant: 2, iswrite: true }
+- { id: g5, tenant: 3 }
+----
+[g0@system, g1@2, g2@2, g3@2, g4@2, g5@3]
+
+# Ensure that none of the above requests get blocked because they use less
+# than the configured burst for their respective limiters.
+
+await
+[g0, g1, g2, g3, g4, g5]
+----
+[]
+
+# Launch another read and another write request on behalf of tenant 2, it will
+# block due to the request rate limit.
+
+launch
+- { id: g6, tenant: 2 }
+- { id: g7, tenant: 2, iswrite: true }
+----
+[g6@2, g7@2]
+
+# Ensure that it the above request was blocked by observing the timer it creates
+# to wait for available quota.
+
+timers
+----
+00:00:01.000
+
+# Observe that the "current_blocked" counter has appropriate values to indicate
+# that there are two blocked request for tenant 2 and total.
+
+metrics
+current_blocked
+----
+kv_tenant_rate_limit_current_blocked 2
+kv_tenant_rate_limit_current_blocked{tenant_id="2"} 2
+kv_tenant_rate_limit_current_blocked{tenant_id="3"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="5"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
+
+
+# Observe that the "requests_admitted" counters has appropriate values to
+# indicate that requests have been admitted.
+
+metrics
+kv_tenant_rate_limit_.*_requests_admitted
+----
+kv_tenant_rate_limit_read_requests_admitted 4
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 2
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="3"} 1
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="5"} 0
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 1
+kv_tenant_rate_limit_write_requests_admitted 2
+kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 2
+kv_tenant_rate_limit_write_requests_admitted{tenant_id="3"} 0
+kv_tenant_rate_limit_write_requests_admitted{tenant_id="5"} 0
+kv_tenant_rate_limit_write_requests_admitted{tenant_id="system"} 0
+
+# Release the tenant 3 rate limiter.
+
+release_tenants
+[3]
+----
+[2#2, 5#3, system#1]
+
+# Observe that tenant 3 no longer appears in the metrics.
+
+metrics
+\{tenant_id="3"\}
+----
+
+
+# Advance time to the timer deadline.
+
+advance
+1s1ms
+----
+00:00:01.001
+
+# Observe that the blocked requests are now unblocked.
+
+await
+[g6, g7]
+----
+[]

@@ -1,0 +1,59 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+$side-panel-width = 140px
+$top-bar-height = 50px
+$container-top-offset = 120px
+
+.layout-panel
+  display flex
+  flex-direction column
+  width 100vw
+  height 100vh
+  min-width 100vw
+  max-width 100vw
+  min-height 100vh
+  max-height 100vh
+  overflow hidden
+
+.layout-panel__header
+  height $top-bar-height
+  min-height $top-bar-height
+  background-color $colors--white
+  box-shadow 0 0 4px 0 #9aa1ab54
+  z-index 0
+
+.layout-panel__header > *
+  margin 0 $spacing-small
+
+.layout-panel__navigation-bar
+  background-color $colors--white
+  color $colors--title
+
+.layout-panel__navigation-bar > *
+  margin 0 $spacing-xx-large
+
+.layout-panel__body
+  display flex
+  flex-direction row
+  flex 1
+  overflow hidden
+  height "calc(100% - %s)" % $container-top-offset
+
+.layout-panel__content
+  width "calc(100% - %s)" % $side-panel-width
+  overflow auto
+  margin $spacing-large 0 0
+
+.layout-panel__sidebar
+  min-width $side-panel-width
+  margin $spacing-large $spacing-medium $spacing-large $spacing-xx-large

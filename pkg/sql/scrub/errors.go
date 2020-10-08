@@ -1,21 +1,19 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package scrub
 
 import (
 	"fmt"
+
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -56,6 +54,14 @@ func (s *Error) Error() string {
 	return fmt.Sprintf("%s: %+v", s.Code, s.underlying)
 }
 
+// Cause unwraps the error.
+func (s *Error) Cause() error {
+	return s.underlying
+}
+
+// Format implements fmt.Formatter.
+func (s *Error) Format(st fmt.State, verb rune) { errors.FormatError(s, st, verb) }
+
 // WrapError wraps an error with a Error.
 func WrapError(code string, err error) *Error {
 	return &Error{
@@ -66,15 +72,15 @@ func WrapError(code string, err error) *Error {
 
 // IsScrubError checks if an error is a Error.
 func IsScrubError(err error) bool {
-	_, ok := err.(*Error)
-	return ok
+	return errors.HasType(err, (*Error)(nil))
 }
 
 // UnwrapScrubError gets the underlying error if err is a scrub.Error.
-// If err is not a scrub.Error nil is returned.
+// If err is not a scrub.Error, the error is returned unchanged.
 func UnwrapScrubError(err error) error {
-	if IsScrubError(err) {
-		return err.(*Error).underlying
+	var e *Error
+	if errors.As(err, &e) {
+		return e.underlying
 	}
 	return err
 }

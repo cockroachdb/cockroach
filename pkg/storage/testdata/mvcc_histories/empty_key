@@ -1,0 +1,33 @@
+run error
+get ts=0,1 k=
+----
+get: /Min -> <no data>
+error: (*withstack.withStack:) attempted access to empty key
+
+run error
+put ts=0,1 k= v=a
+----
+>> at end:
+<no data>
+error: (*withstack.withStack:) attempted access to empty key
+
+run ok
+scan ts=0,1 k= end=a
+----
+scan: /Min-"a" -> <no data>
+
+
+run error
+scan ts=0,1 k=a end=
+----
+scan: "a"-/Min -> <no data>
+error: (*withstack.withStack:) attempted access to empty key
+
+run error
+txn_begin t=A
+resolve_intent t=A k=
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=true stat=PENDING rts=0,0 wto=false max=0,0
+<no data>
+error: (*withstack.withStack:) attempted access to empty key

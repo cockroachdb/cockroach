@@ -16,7 +16,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+const testdataGlob = "testdata/logic_test/[^.]*"
+const logictestPkg = "../../sql/logictest/"
+
 func TestCCLLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	logictest.RunLogicTest(t, "testdata/logic_test/[^.]*")
+	logictest.RunLogicTest(t, logictest.TestServerArgs{}, testdataGlob)
+}
+
+// TestTenantLogic runs all non-CCL logic test files under the 3node-tenant
+// configuration, which constructs a secondary tenant and runs the test within
+// that secondary tenant's sandbox. Test files that blocklist the 3node-tenant
+// configuration (i.e. "# LogicTest: !3node-tenant") are not run.
+func TestTenantLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "3node-tenant", true /* runCCLConfigs */, logictestPkg+testdataGlob)
+}
+
+func TestTenantSQLLiteLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	logictest.RunSQLLiteLogicTest(t, "3node-tenant")
 }

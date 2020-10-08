@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This file generates batch_generated.go. It can be run via:
 //    go run -tags gen-batch gen_batch.go
@@ -41,6 +37,7 @@ type variantInfo struct {
 	msgType string
 }
 
+var errVariants []variantInfo
 var reqVariants []variantInfo
 var resVariants []variantInfo
 var reqResVariantMapping map[variantInfo]variantInfo
@@ -56,6 +53,12 @@ func initVariant(varInstance interface{}) variantInfo {
 }
 
 func initVariants() {
+	_, _, _, errVars := (&roachpb.ErrorDetail{}).XXX_OneofFuncs()
+	for _, v := range errVars {
+		errInfo := initVariant(v)
+		errVariants = append(errVariants, errInfo)
+	}
+
 	_, _, _, resVars := (&roachpb.ResponseUnion{}).XXX_OneofFuncs()
 	resVarInfos := make(map[string]variantInfo, len(resVars))
 	for _, v := range resVars {
@@ -85,12 +88,12 @@ func initVariants() {
 	}
 }
 
-func genGetInner(w io.Writer, unionName string, variants []variantInfo) {
+func genGetInner(w io.Writer, unionName, variantName string, variants []variantInfo) {
 	fmt.Fprintf(w, `
-// GetInner returns the %[1]s contained in the union.
-func (ru %[1]sUnion) GetInner() %[1]s {
+// GetInner returns the %[2]s contained in the union.
+func (ru %[1]s) GetInner() %[2]s {
 	switch t := ru.GetValue().(type) {
-`, unionName)
+`, unionName, variantName)
 
 	for _, v := range variants {
 		fmt.Fprintf(w, `	case *%s:
@@ -105,13 +108,13 @@ func (ru %[1]sUnion) GetInner() %[1]s {
 `)
 }
 
-func genSetInner(w io.Writer, unionName string, variants []variantInfo) {
+func genSetInner(w io.Writer, unionName, variantName string, variants []variantInfo) {
 	fmt.Fprintf(w, `
-// SetInner sets the %[1]s in the union.
-func (ru *%[1]sUnion) SetInner(r %[1]s) bool {
-	var union is%[1]sUnion_Value
+// SetInner sets the %[2]s in the union.
+func (ru *%[1]s) SetInner(r %[2]s) bool {
+	var union is%[1]s_Value
 	switch t := r.(type) {
-`, unionName)
+`, unionName, variantName)
 
 	for _, v := range variants {
 		fmt.Fprintf(w, `	case *%s:
@@ -146,19 +149,21 @@ func main() {
 package roachpb
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 )
 `)
 
 	// Generate GetInner methods.
-	genGetInner(f, "Request", reqVariants)
-	genGetInner(f, "Response", resVariants)
+	genGetInner(f, "ErrorDetail", "error", errVariants)
+	genGetInner(f, "RequestUnion", "Request", reqVariants)
+	genGetInner(f, "ResponseUnion", "Response", resVariants)
 
 	// Generate SetInner methods.
-	genSetInner(f, "Request", reqVariants)
-	genSetInner(f, "Response", resVariants)
+	genSetInner(f, "ErrorDetail", "error", errVariants)
+	genSetInner(f, "RequestUnion", "Request", reqVariants)
+	genSetInner(f, "ResponseUnion", "Response", resVariants)
 
 	fmt.Fprintf(f, `
 type reqCounts [%d]int32
@@ -221,25 +226,33 @@ var requestNames = []string{`)
 	fmt.Fprint(f, `
 // Summary prints a short summary of the requests in a batch.
 func (ba *BatchRequest) Summary() string {
+	var b strings.Builder
+	ba.WriteSummary(&b)
+	return b.String()
+}
+
+// WriteSummary writes a short summary of the requests in a batch
+// to the provided builder.
+func (ba *BatchRequest) WriteSummary(b *strings.Builder) {
 	if len(ba.Requests) == 0 {
-		return "empty batch"
+		b.WriteString("empty batch")
+		return
 	}
 	counts := ba.getReqCounts()
-	var buf struct {
-		bytes.Buffer
-		tmp [10]byte
-	}
+	var tmp [10]byte
+	var comma bool
 	for i, v := range counts {
 		if v != 0 {
-			if buf.Len() > 0 {
-				buf.WriteString(", ")
+			if comma {
+				b.WriteString(", ")
 			}
-			buf.Write(strconv.AppendInt(buf.tmp[:0], int64(v), 10))
-			buf.WriteString(" ")
-			buf.WriteString(requestNames[i])
+			comma = true
+
+			b.Write(strconv.AppendInt(tmp[:0], int64(v), 10))
+			b.WriteString(" ")
+			b.WriteString(requestNames[i])
 		}
 	}
-	return buf.String()
 }
 `)
 
@@ -305,6 +318,22 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		}
 	}
 	return br
+}
+`)
+
+	fmt.Fprint(f, `
+// CreateRequest creates an empty Request for each of the Method types.
+func CreateRequest(method Method) Request {
+	switch method {`)
+	for _, v := range reqVariants {
+		fmt.Fprintf(f, `
+	case %s:
+		return &%s{}`, v.msgType[:len(v.msgType)-7], v.msgType)
+	}
+	fmt.Fprintf(f, "%s", `
+	default:
+		panic(fmt.Sprintf("unsupported method: %+v", method))
+	}
 }
 `)
 

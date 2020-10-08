@@ -1,46 +1,22 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package roachpb
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
-
-// CanBump computes whether an update from version v to version o is possible.
-// The main constraint is that either nothing changes; or the major version is
-// bumped by one (and the new minor is zero); or the major version remains
-// constant and the minor version is bumped by one. The unstable version may
-// change without restrictions.
-func (v Version) CanBump(o Version) bool {
-	if o.Less(v) {
-		return false
-	}
-	if o.Patch != 0 {
-		// Reminder that we don't use Patch versions at all. It's just a
-		// placeholder.
-		return false
-	}
-	if o.Major == v.Major {
-		return o.Minor <= v.Minor+1
-	}
-	return o.Major == v.Major+1 && o.Minor == 0
-}
 
 // Less compares two Versions.
 func (v Version) Less(otherV Version) bool {
@@ -67,11 +43,16 @@ func (v Version) Less(otherV Version) bool {
 	return false
 }
 
-func (v Version) String() string {
+// String implements the fmt.Stringer interface.
+func (v Version) String() string { return redact.StringWithoutMarkers(v) }
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 	if v.Unstable == 0 {
-		return fmt.Sprintf("%d.%d", v.Major, v.Minor)
+		p.Printf("%d.%d", v.Major, v.Minor)
+		return
 	}
-	return fmt.Sprintf("%d.%d-%d", v.Major, v.Minor, v.Unstable)
+	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Unstable)
 }
 
 // ParseVersion parses a Version from a string of the form

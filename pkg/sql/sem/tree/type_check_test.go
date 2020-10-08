@@ -1,34 +1,43 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree_test
 
 import (
+	"context"
 	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // The following tests need both the type checking infrastructure and also
 // all the built-in function definitions to be active.
 
 func TestTypeCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	typeMap := map[string]*types.T{
+		"d.t1":   types.Int,
+		"t2":     types.String,
+		"d.s.t3": types.Decimal,
+	}
+	mapResolver := tree.MakeTestingMapTypeResolver(typeMap)
+
 	testData := []struct {
 		expr string
 		// The expected serialized expression after type-checking. This tests both
@@ -42,132 +51,165 @@ func TestTypeCheck(t *testing.T) {
 		{`NULL + '1h'::interval`, `NULL`},
 		{`NULL || 'hello'`, `NULL`},
 		{`NULL || 'hello'::bytes`, `NULL`},
-		{`NULL::int`, `NULL::INT`},
-		{`INTERVAL '1s'`, `'1s':::INTERVAL`},
-		{`(1.1::decimal)::decimal`, `1.1:::DECIMAL::DECIMAL::DECIMAL`},
+		{`NULL::int4`, `NULL::INT4`},
+		{`NULL::int8`, `NULL::INT8`},
+		{`INTERVAL '1s'`, `'00:00:01':::INTERVAL`},
+		{`(1.1::decimal)::decimal`, `1.1:::DECIMAL`},
 		{`NULL = 1`, `NULL`},
 		{`1 = NULL`, `NULL`},
 		{`true AND NULL`, `true AND NULL`},
 		{`NULL OR false`, `NULL OR false`},
-		{`1 IN (1, 2, 3)`, `1:::INT IN (1:::INT, 2:::INT, 3:::INT)`},
-		{`IF(true, 2, 3)`, `IF(true, 2:::INT, 3:::INT)`},
-		{`IF(false, 2, 3)`, `IF(false, 2:::INT, 3:::INT)`},
-		{`IF(NULL, 2, 3)`, `IF(NULL, 2:::INT, 3:::INT)`},
+		{`1 IN (1, 2, 3)`, `1:::INT8 IN (1:::INT8, 2:::INT8, 3:::INT8)`},
+		{`IF(true, 2, 3)`, `IF(true, 2:::INT8, 3:::INT8)`},
+		{`IF(false, 2, 3)`, `IF(false, 2:::INT8, 3:::INT8)`},
+		{`IF(NULL, 2, 3)`, `IF(NULL, 2:::INT8, 3:::INT8)`},
 		{`IF(NULL, 2, 3.0)`, `IF(NULL, 2:::DECIMAL, 3.0:::DECIMAL)`},
-		{`IF(true, (1, 2), (1, 3))`, `IF(true, (1:::INT, 2:::INT), (1:::INT, 3:::INT))`},
+		{`IF(true, (1, 2), (1, 3))`, `IF(true, (1:::INT8, 2:::INT8), (1:::INT8, 3:::INT8))`},
 		{`IFERROR(1, 1.2, '')`, `IFERROR(1:::DECIMAL, 1.2:::DECIMAL, '':::STRING)`},
-		{`IFERROR(NULL, 3, '')`, `IFERROR(NULL, 3:::INT, '':::STRING)`},
-		{`ISERROR(123)`, `ISERROR(123:::INT)`},
+		{`IFERROR(NULL, 3, '')`, `IFERROR(NULL, 3:::INT8, '':::STRING)`},
+		{`ISERROR(123)`, `ISERROR(123:::INT8)`},
 		{`ISERROR(NULL)`, `ISERROR(NULL)`},
-		{`IFNULL(1, 2)`, `IFNULL(1:::INT, 2:::INT)`},
+		{`IFNULL(1, 2)`, `IFNULL(1:::INT8, 2:::INT8)`},
 		{`IFNULL(1, 2.0)`, `IFNULL(1:::DECIMAL, 2.0:::DECIMAL)`},
-		{`IFNULL(NULL, 2)`, `IFNULL(NULL, 2:::INT)`},
-		{`IFNULL(2, NULL)`, `IFNULL(2:::INT, NULL)`},
-		{`IFNULL((1, 2), (1, 3))`, `IFNULL((1:::INT, 2:::INT), (1:::INT, 3:::INT))`},
-		{`NULLIF(1, 2)`, `NULLIF(1:::INT, 2:::INT)`},
+		{`IFNULL(NULL, 2)`, `IFNULL(NULL, 2:::INT8)`},
+		{`IFNULL(2, NULL)`, `IFNULL(2:::INT8, NULL)`},
+		{`IFNULL((1, 2), (1, 3))`, `IFNULL((1:::INT8, 2:::INT8), (1:::INT8, 3:::INT8))`},
+		{`NULLIF(1, 2)`, `NULLIF(1:::INT8, 2:::INT8)`},
 		{`NULLIF(1, 2.0)`, `NULLIF(1:::DECIMAL, 2.0:::DECIMAL)`},
-		{`NULLIF(NULL, 2)`, `NULLIF(NULL, 2:::INT)`},
-		{`NULLIF(2, NULL)`, `NULLIF(2:::INT, NULL)`},
-		{`NULLIF((1, 2), (1, 3))`, `NULLIF((1:::INT, 2:::INT), (1:::INT, 3:::INT))`},
-		{`COALESCE(1, 2, 3, 4, 5)`, `COALESCE(1:::INT, 2:::INT, 3:::INT, 4:::INT, 5:::INT)`},
+		{`NULLIF(NULL, 2)`, `NULLIF(NULL, 2:::INT8)`},
+		{`NULLIF(2, NULL)`, `NULLIF(2:::INT8, NULL)`},
+		{`NULLIF((1, 2), (1, 3))`, `NULLIF((1:::INT8, 2:::INT8), (1:::INT8, 3:::INT8))`},
+		{`COALESCE(1, 2, 3, 4, 5)`, `COALESCE(1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8)`},
 		{`COALESCE(1, 2.0)`, `COALESCE(1:::DECIMAL, 2.0:::DECIMAL)`},
-		{`COALESCE(NULL, 2)`, `COALESCE(NULL, 2:::INT)`},
-		{`COALESCE(2, NULL)`, `COALESCE(2:::INT, NULL)`},
-		{`COALESCE((1, 2), (1, 3))`, `COALESCE((1:::INT, 2:::INT), (1:::INT, 3:::INT))`},
+		{`COALESCE(NULL, 2)`, `COALESCE(NULL, 2:::INT8)`},
+		{`COALESCE(2, NULL)`, `COALESCE(2:::INT8, NULL)`},
+		{`COALESCE((1, 2), (1, 3))`, `COALESCE((1:::INT8, 2:::INT8), (1:::INT8, 3:::INT8))`},
 		{`true IS NULL`, `true IS NULL`},
 		{`true IS NOT NULL`, `true IS NOT NULL`},
 		{`true IS TRUE`, `true IS true`},
 		{`true IS NOT TRUE`, `true IS NOT true`},
 		{`true IS FALSE`, `true IS false`},
 		{`true IS NOT FALSE`, `true IS NOT false`},
-		{`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`, `CASE 1:::INT WHEN 1:::INT THEN (1:::INT, 2:::INT) ELSE (1:::INT, 3:::INT) END`},
-		{`1 BETWEEN 2 AND 3`, `1:::INT BETWEEN 2:::INT AND 3:::INT`},
-		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT::FLOAT`},
-		{`count(3)`, `count(3:::INT)`},
-		{`ARRAY['a', 'b', 'c']`, `ARRAY['a':::STRING, 'b':::STRING, 'c':::STRING]`},
-		{`ARRAY[1.5, 2.5, 3.5]`, `ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]`},
+		{`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`, `CASE 1:::INT8 WHEN 1:::INT8 THEN (1:::INT8, 2:::INT8) ELSE (1:::INT8, 3:::INT8) END`},
+		{`1 BETWEEN 2 AND 3`, `1:::INT8 BETWEEN 2:::INT8 AND 3:::INT8`},
+		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT8 BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT8`},
+		{`count(3)`, `count(3:::INT8)`},
+		{`ARRAY['a', 'b', 'c']`, `ARRAY['a':::STRING, 'b':::STRING, 'c':::STRING]:::STRING[]`},
+		{`ARRAY[1.5, 2.5, 3.5]`, `ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]:::DECIMAL[]`},
 		{`ARRAY[NULL]`, `ARRAY[NULL]`},
-		{`1 = ANY ARRAY[1.5, 2.5, 3.5]`, `1:::DECIMAL = ANY ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]`},
-		{`true = SOME (ARRAY[true, false])`, `true = SOME ARRAY[true, false]`},
-		{`1.3 = ALL ARRAY[1, 2, 3]`, `1.3:::DECIMAL = ALL ARRAY[1:::DECIMAL, 2:::DECIMAL, 3:::DECIMAL]`},
-		{`1.3 = ALL ((ARRAY[]))`, `1.3:::DECIMAL = ALL ARRAY[]`},
+		{`ARRAY[NULL]:::int[]`, `ARRAY[NULL]:::INT8[]`},
+		{`ARRAY[NULL, NULL]:::int[]`, `ARRAY[NULL, NULL]:::INT8[]`},
+		{`ARRAY[]::INT8[]`, `ARRAY[]:::INT8[]`},
+		{`ARRAY[]:::INT8[]`, `ARRAY[]:::INT8[]`},
+		{`1 = ANY ARRAY[1.5, 2.5, 3.5]`, `1:::DECIMAL = ANY ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]:::DECIMAL[]`},
+		{`true = SOME (ARRAY[true, false])`, `true = SOME ARRAY[true, false]:::BOOL[]`},
+		{`1.3 = ALL ARRAY[1, 2, 3]`, `1.3:::DECIMAL = ALL ARRAY[1:::DECIMAL, 2:::DECIMAL, 3:::DECIMAL]:::DECIMAL[]`},
+		{`1.3 = ALL ((ARRAY[]))`, `1.3:::DECIMAL = ALL ARRAY[]:::DECIMAL[]`},
 		{`NULL = ALL ARRAY[1.5, 2.5, 3.5]`, `NULL`},
 		{`NULL = ALL ARRAY[NULL, NULL]`, `NULL`},
 		{`1 = ALL NULL`, `NULL`},
 		{`'a' = ALL current_schemas(true)`, `'a':::STRING = ALL current_schemas(true)`},
 		{`NULL = ALL current_schemas(true)`, `NULL`},
 
-		{`INTERVAL '1'`, `'1s':::INTERVAL`},
-		{`DECIMAL '1.0'`, `1.0:::DECIMAL::DECIMAL`},
+		{`INTERVAL '1'`, `'00:00:01':::INTERVAL`},
+		{`DECIMAL '1.0'`, `1.0:::DECIMAL`},
 
-		{`1 + 2`, `3:::INT`},
+		{`1 + 2`, `1:::INT8 + 2:::INT8`},
 		{`1:::decimal + 2`, `1:::DECIMAL + 2:::DECIMAL`},
-		{`1:::float + 2`, `1.0:::FLOAT + 2.0:::FLOAT`},
-		{`INTERVAL '1.5s' * 2`, `'1s500ms':::INTERVAL * 2:::INT`},
-		{`2 * INTERVAL '1.5s'`, `2:::INT * '1s500ms':::INTERVAL`},
+		{`1:::float + 2`, `1.0:::FLOAT8 + 2.0:::FLOAT8`},
+		{`INTERVAL '1.5s' * 2`, `'00:00:01.5':::INTERVAL * 2:::INT8`},
+		{`2 * INTERVAL '1.5s'`, `2:::INT8 * '00:00:01.5':::INTERVAL`},
 
-		{`1 + $1`, `1:::INT + $1:::INT`},
+		{`1 + $1`, `1:::INT8 + $1:::INT8`},
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},
-		{`$1:::INT`, `$1:::INT`},
+		{`$1:::INT8`, `$1:::INT8`},
 
 		// Tuples with labels
-		{`(ROW (1) AS a)`, `(ROW(1:::INT) AS a)`},
-		{`(ROW(1:::INT) AS a)`, `(ROW(1:::INT) AS a)`},
-		{`((1,2) AS a,b)`, `((1:::INT, 2:::INT) AS a, b)`},
-		{`((1:::INT, 2:::INT) AS a, b)`, `((1:::INT, 2:::INT) AS a, b)`},
-		{`(ROW (1,2) AS a,b)`, `(ROW(1:::INT, 2:::INT) AS a, b)`},
-		{`(ROW(1:::INT, 2:::INT) AS a, b)`, `(ROW(1:::INT, 2:::INT) AS a, b)`},
+		{`(ROW (1) AS a)`, `((1:::INT8,) AS a)`},
+		{`(ROW(1:::INT8) AS a)`, `((1:::INT8,) AS a)`},
+		{`((1,2) AS a,b)`, `((1:::INT8, 2:::INT8) AS a, b)`},
+		{`((1:::INT8, 2:::INT8) AS a, b)`, `((1:::INT8, 2:::INT8) AS a, b)`},
+		{`(ROW (1,2) AS a,b)`, `((1:::INT8, 2:::INT8) AS a, b)`},
+		{`(ROW(1:::INT8, 2:::INT8) AS a, b)`, `((1:::INT8, 2:::INT8) AS a, b)`},
 		{
 			`((1,2,3) AS "One","Two","Three")`,
-			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", "Two", "Three")`,
 		},
 		{
-			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
-			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", "Two", "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", "Two", "Three")`,
 		},
 		{
 			`(ROW (1,2,3) AS "One",Two,"Three")`,
-			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", two, "Three")`,
 		},
 		{
-			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
-			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`(ROW(1:::INT8, 2:::INT8, 3:::INT8) AS "One", two, "Three")`,
+			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", two, "Three")`,
 		},
+		// Tuples with duplicate labels are allowed, but raise error when accessed by a duplicate label name.
+		// This satisfies a postgres-compatible implementation of unnest(array, array...), where all columns
+		// have the same label (unnest).
+		{`((1,2) AS a,a)`, `((1:::INT8, 2:::INT8) AS a, a)`},
+		{`((1,2,3) AS a,a,a)`, `((1:::INT8, 2:::INT8, 3:::INT8) AS a, a, a)`},
 		// And tuples without labels still work as advertized
-		{`(ROW (1))`, `ROW(1:::INT)`},
-		{`ROW(1:::INT)`, `ROW(1:::INT)`},
-		{`((1,2))`, `(1:::INT, 2:::INT)`},
-		{`(1:::INT, 2:::INT)`, `(1:::INT, 2:::INT)`},
-		{`(ROW (1,2))`, `ROW(1:::INT, 2:::INT)`},
-		{`ROW(1:::INT, 2:::INT)`, `ROW(1:::INT, 2:::INT)`},
+		{`(ROW (1))`, `(1:::INT8,)`},
+		{`ROW(1:::INT8)`, `(1:::INT8,)`},
+		{`((1,2))`, `(1:::INT8, 2:::INT8)`},
+		{`(1:::INT8, 2:::INT8)`, `(1:::INT8, 2:::INT8)`},
+		{`(ROW (1,2))`, `(1:::INT8, 2:::INT8)`},
+		{`ROW(1:::INT8, 2:::INT8)`, `(1:::INT8, 2:::INT8)`},
 
-		{`((ROW (1) AS a)).a`, `1:::INT`},
+		{`((ROW (1) AS a)).a`, `1:::INT8`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
-		{`((('1', 2) AS a, b)).b`, `2:::INT`},
+		{`((('1', 2) AS a, b)).b`, `2:::INT8`},
+		{`((('1', 2) AS a, b)).@2`, `2:::INT8`},
 		{`(pg_get_keywords()).word`, `(pg_get_keywords()).word`},
-		{`(generate_series(1,3)).generate_series`, `(generate_series(1:::INT, 3:::INT)).generate_series`},
-		{`(generate_series(1,3)).*`, `generate_series(1:::INT, 3:::INT)`},
-		{`((ROW (1) AS a)).*`, `(ROW(1:::INT) AS a)`},
-		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING, 2:::INT) AS a, b)`},
+		{
+			`(information_schema._pg_expandarray(ARRAY[1,3])).x`,
+			`(information_schema._pg_expandarray(ARRAY[1:::INT8, 3:::INT8]:::INT8[])).x`,
+		},
+		{
+			`(information_schema._pg_expandarray(ARRAY[1:::INT8, 3:::INT8])).*`,
+			`information_schema._pg_expandarray(ARRAY[1:::INT8, 3:::INT8]:::INT8[])`,
+		},
+		{`((ROW (1) AS a)).*`, `((1:::INT8,) AS a)`},
+		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING || '':::STRING, 1:::INT8 + 1:::INT8) AS a, b)`},
+
+		{`'{"x": "bar"}' -> 'x'`, `'{"x": "bar"}':::JSONB->'x':::STRING`},
+		{`('{"x": "bar"}') -> 'x'`, `'{"x": "bar"}':::JSONB->'x':::STRING`},
 
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the
 		// output using the Parseable formatter which inserts type annotations
 		// at the end of all well-typed datums. And the second cast is caused by
 		// the test itself.
-		{`'NaN'::decimal`, `'NaN':::DECIMAL::DECIMAL`},
-		{`'-NaN'::decimal`, `'NaN':::DECIMAL::DECIMAL`},
-		{`'Inf'::decimal`, `'Infinity':::DECIMAL::DECIMAL`},
-		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL::DECIMAL`},
+		{`'NaN'::decimal`, `'NaN':::DECIMAL`},
+		{`'-NaN'::decimal`, `'NaN':::DECIMAL`},
+		{`'Inf'::decimal`, `'Infinity':::DECIMAL`},
+		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL`},
+
+		// Test type checking with some types to resolve.
+		// Because the resolvable types right now are just aliases, the
+		// pre-resolution name is not going to get formatted.
+		{`1:::d.t1`, `1:::INT8`},
+		{`1:::d.s.t3 + 1.4`, `1:::DECIMAL + 1.4:::DECIMAL`},
+		{`1 IS OF (d.t1, t2)`, `1:::INT8 IS OF (INT8, STRING)`},
+		{`1::d.t1`, `1:::INT8`},
 	}
+	ctx := context.Background()
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
 			expr, err := parser.ParseExpr(d.expr)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			ctx := tree.MakeSemaContext(false)
-			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			semaCtx := tree.MakeSemaContext()
+			if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
+				t.Fatal(err)
+			}
+			semaCtx.TypeResolver = mapResolver
+			typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: unexpected error %s", d.expr, err)
 			}
@@ -179,6 +221,16 @@ func TestTypeCheck(t *testing.T) {
 }
 
 func TestTypeCheckError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	typeMap := map[string]*types.T{
+		"d.t1":   types.Int,
+		"t2":     types.String,
+		"d.s.t3": types.Decimal,
+	}
+	mapResolver := tree.MakeTestingMapTypeResolver(typeMap)
+
 	testData := []struct {
 		expr     string
 		expected string
@@ -200,7 +252,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`lower(1, 2)`, `unknown signature: lower(int, int)`},
 		{`lower(1)`, `unknown signature: lower(int)`},
 		{`lower('FOO') OVER ()`, `OVER specified, but lower() is neither a window function nor an aggregate function`},
-		{`count(1) FILTER (WHERE true) OVER ()`, `FILTER within a window function call is not yet supported`},
+		{`count(1) FILTER (WHERE 1) OVER ()`, `incompatible FILTER expression type: int`},
 		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
@@ -212,6 +264,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`1 = ANY ARRAY[2, 'a']`, `unsupported comparison operator: 1 = ANY ARRAY[2, 'a']: could not parse "a" as type int`},
 		{`1 = ALL current_schemas(true)`, `unsupported comparison operator: <int> = ALL <string[]>`},
 		{`1.0 BETWEEN 2 AND 'a'`, `unsupported comparison operator: <decimal> < <string>`},
+		{`NULL BETWEEN 2 AND 'a'`, `unsupported comparison operator: <int> < <string>`},
 		{`IF(1, 2, 3)`, `incompatible IF condition type: int`},
 		{`IF(true, 'a', 2)`, `incompatible IF expressions: could not parse "a" as type int`},
 		{`IF(true, 2, 'a')`, `incompatible IF expressions: could not parse "a" as type int`},
@@ -220,9 +273,14 @@ func TestTypeCheckError(t *testing.T) {
 		{`COALESCE(1, 2, 3, 4, 'a')`, `incompatible COALESCE expressions: could not parse "a" as type int`},
 		{`ARRAY[]`, `cannot determine type of empty array`},
 		{`ANNOTATE_TYPE('a', int)`, `could not parse "a" as type int`},
-		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
+		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int8), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT8) as decimal, found type: int`},
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
-
+		{`B'1001'::decimal`, `invalid cast: varbit -> decimal`},
+		{`101.3::bit`, `invalid cast: decimal -> bit`},
+		{`ARRAY[1] = ARRAY['foo']`, `could not parse "foo" as type int`},
+		{`ARRAY[1]::int[] = ARRAY[1.0]::decimal[]`, `unsupported comparison operator: <int[]> = <decimal[]>`},
+		{`ARRAY[1] @> ARRAY['foo']`, `unsupported comparison operator: <int[]> @> <string[]>`},
+		{`ARRAY[1]::int[] @> ARRAY[1.0]::decimal[]`, `unsupported comparison operator: <int[]> @> <decimal[]>`},
 		{
 			`((1,2) AS a)`,
 			`mismatch in tuple definition: 2 expressions, 1 labels`,
@@ -232,12 +290,12 @@ func TestTypeCheckError(t *testing.T) {
 			`mismatch in tuple definition: 1 expressions, 2 labels`,
 		},
 		{
-			`((1,2) AS a,a)`,
-			`duplicate tuple label: "a"`,
+			`(((1,2) AS a,a)).a`,
+			`column reference "a" is ambiguous`,
 		},
 		{
-			`((1,2,3) AS a,b,a)`,
-			`duplicate tuple label: "a"`,
+			`((ROW (1, '2') AS b,b)).b`,
+			`column reference "b" is ambiguous`,
 		},
 		{
 			`((ROW (1, '2') AS a,b)).x`,
@@ -251,14 +309,109 @@ func TestTypeCheckError(t *testing.T) {
 			`(pg_get_keywords()).foo`,
 			`could not identify column "foo" in tuple{string AS word, string AS catcode, string AS catdesc}`,
 		},
+		{
+			`1::d.notatype`,
+			`type "d.notatype" does not exist`,
+		},
+		{
+			`1 + 2::d.s.typ`,
+			`type "d.s.typ" does not exist`,
+		},
 	}
+	ctx := context.Background()
 	for _, d := range testData {
-		expr, err := parser.ParseExpr(d.expr)
+		t.Run(d.expr, func(t *testing.T) {
+			// Test with a nil and non-nil semaCtx.
+			t.Run("semaCtx not nil", func(t *testing.T) {
+				semaCtx := tree.MakeSemaContext()
+				semaCtx.TypeResolver = mapResolver
+				expr, err := parser.ParseExpr(d.expr)
+				if err != nil {
+					t.Fatalf("%s: %v", d.expr, err)
+				}
+				if _, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+					t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+				}
+			})
+			t.Run("semaCtx is nil", func(t *testing.T) {
+				expr, err := parser.ParseExpr(d.expr)
+				if err != nil {
+					t.Fatalf("%s: %v", d.expr, err)
+				}
+				if _, err := tree.TypeCheck(ctx, expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+					t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+				}
+			})
+		})
+	}
+}
+
+func TestTypeCheckVolatility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// $1 has type timestamptz.
+	placeholderTypes := []*types.T{types.TimestampTZ}
+
+	testCases := []struct {
+		expr       string
+		volatility tree.Volatility
+	}{
+		{"1 + 1", tree.VolatilityImmutable},
+		{"random()", tree.VolatilityVolatile},
+		{"now()", tree.VolatilityStable},
+		{"'2020-01-01 01:02:03'::timestamp", tree.VolatilityImmutable},
+		{"'now'::timestamp", tree.VolatilityStable},
+		{"'2020-01-01 01:02:03'::timestamptz", tree.VolatilityStable},
+		{"'1 hour'::interval", tree.VolatilityImmutable},
+		{"$1", tree.VolatilityImmutable},
+
+		// Stable cast with immutable input.
+		{"$1::string", tree.VolatilityStable},
+
+		// Stable binary operator with immutable inputs.
+		{"$1 + '1 hour'::interval", tree.VolatilityStable},
+
+		// Stable comparison operator with immutable inputs.
+		{"$1 = '2020-01-01 01:02:03'::timestamp", tree.VolatilityStable},
+	}
+
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+	if err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes); err != nil {
+		t.Fatal(err)
+	}
+
+	typeCheck := func(sql string) error {
+		expr, err := parser.ParseExpr(sql)
 		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
+			t.Fatalf("%s: %v", sql, err)
 		}
-		if _, err := tree.TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
-			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+		_, err = tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
+		return err
+	}
+
+	for _, tc := range testCases {
+		// First, typecheck without any restrictions.
+		semaCtx.Properties.Require("", 0 /* flags */)
+		if err := typeCheck(tc.expr); err != nil {
+			t.Fatalf("%s: %v", tc.expr, err)
+		}
+
+		semaCtx.Properties.Require("", tree.RejectVolatileFunctions)
+		expectErr := tc.volatility == tree.VolatilityVolatile
+		if err := typeCheck(tc.expr); err == nil && expectErr {
+			t.Fatalf("%s: should have rejected volatile function", tc.expr)
+		} else if err != nil && !expectErr {
+			t.Fatalf("%s: %v", tc.expr, err)
+		}
+
+		semaCtx.Properties.Require("", tree.RejectStableOperators|tree.RejectVolatileFunctions)
+		expectErr = tc.volatility >= tree.VolatilityStable
+		if err := typeCheck(tc.expr); err == nil && expectErr {
+			t.Fatalf("%s: should have rejected stable operator", tc.expr)
+		} else if err != nil && !expectErr {
+			t.Fatalf("%s: %v", tc.expr, err)
 		}
 	}
 }

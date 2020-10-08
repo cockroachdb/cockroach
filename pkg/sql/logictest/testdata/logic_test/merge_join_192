@@ -1,0 +1,20 @@
+# LogicTest: local
+
+# Test to make sure that vectorized engine is used when merge joiner is
+# streaming when vectorize=201auto.
+statement ok
+SET vectorize='201auto'; SET vectorize_row_count_threshold=0
+
+statement ok
+CREATE TABLE t (k INT NOT NULL)
+
+statement ok
+INSERT INTO t VALUES (1), (2), (3)
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT t1.k FROM t AS t1, t AS t2 WHERE t1.k = t2.k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEkl9v0zAUxd_5FFf3aZPMFqdvlia1QNAKpR1NJf5MefDqS2ctiYN9I1ZV_e4oztBotoHGC2_28e8451xnh-F7iQrzbJa9XkHrS3i7XHyAy-zzxWwyncNkPpl9-ZrB0Ztpvso_zo7hDmV5ctOzDJMcWIq7RQqfzrNl1gNnwOnJTYECa2dorisKqC5RYiGw8W5NITjfSbsITM0tqkSgrZuWO7kQuHaeUO2QLZeEClf6qqQlaUP-NEGBhljbMl7L48bbSvstCswbXQcFL1HgomUFY4kCvfsRwJM2CkYoMLAuS2BbkYIkoMCrLdMvQEoJr7DYC3Qt38cJrDeESu7Fv0WW_y1y-mTk-6Rt7bwhT-YgZdE5_4Y80vtch-t3ztbkT9PD2iV946OxPD7zdnMdVwelu2MYNI_ag_rRP0R78QEb2HkyEKwhBZFBgZW-hYoq57fQBjIK0gTe26enOHrOwy8pNK4ONJzmozcn3QjJbKh_kuBav6YL79bxM_12EX1RMBS4P037zbSOR_HP_N0sn2FOh-b0j-bRgTnZF_sXPwMAAP__3wthfA==
+
+statement ok
+RESET vectorize; RESET vectorize_row_count_threshold

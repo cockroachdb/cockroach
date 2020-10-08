@@ -1,30 +1,29 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package props
 
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/olekukonko/tablewriter"
 )
 
 // Statistics is a collection of measurements and statistics that is used by
 // the coster to estimate the cost of expressions. Statistics are collected
-// for tables and indexes and are exposed to the optimizer via opt.Catalog
+// for tables and indexes and are exposed to the optimizer via cat.Catalog
 // interfaces.
 //
 // As logical properties are derived bottom-up for each expression, the
@@ -43,6 +42,12 @@ import (
 // See memo/statistics_builder.go for more information about how statistics are
 // calculated.
 type Statistics struct {
+	// Available indicates whether the underlying table statistics for this
+	// expression were available. If true, RowCount contains a real estimate.
+	// If false, RowCount does not represent reality, and should only be used
+	// for relative cost comparison.
+	Available bool
+
 	// RowCount is the estimated number of rows returned by the expression.
 	// Note that - especially when there are no stats available - the scaling of
 	// the row counts can be unpredictable; thus, a row count of 0.001 should be
@@ -50,16 +55,10 @@ type Statistics struct {
 	// a true row count they would be pretty much the same thing.
 	RowCount float64
 
-	// ColStats contains statistics that pertain to individual columns
-	// in an expression or table. It is keyed by column ID, and it is separated
-	// from the MultiColStats to minimize serialization costs and to efficiently
-	// iterate through all single-column stats.
-	ColStats map[opt.ColumnID]*ColumnStatistic
-
-	// MultiColStats contains statistics that pertain to multi-column subsets
-	// of the columns in an expression or table. It is keyed by the column set,
-	// which has been serialized to a string to make it a legal map key.
-	MultiColStats map[string]*ColumnStatistic
+	// ColStats is a collection of statistics that pertain to columns in an
+	// expression or table. It is keyed by a set of one or more columns over which
+	// the statistic is defined.
+	ColStats ColStatsMap
 
 	// Selectivity is a value between 0 and 1 representing the estimated
 	// reduction in number of rows for the top-level operator in this
@@ -67,22 +66,74 @@ type Statistics struct {
 	Selectivity float64
 }
 
+// Init initializes the data members of Statistics.
+func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
+	if relProps.Cardinality.IsZero() {
+		s.RowCount = 0
+		s.Selectivity = 0
+		s.Available = true
+		return true
+	}
+	s.Selectivity = 1
+	return false
+}
+
+// CopyFrom copies a Statistics object which can then be modified independently.
+func (s *Statistics) CopyFrom(other *Statistics) {
+	s.Available = other.Available
+	s.RowCount = other.RowCount
+	s.ColStats.CopyFrom(&other.ColStats)
+	s.Selectivity = other.Selectivity
+}
+
+// ApplySelectivity applies a given selectivity to the statistics. RowCount and
+// Selectivity are updated. Note that DistinctCounts, NullCounts, and
+// Histograms are not updated.
+// See ColumnStatistic.ApplySelectivity for updating distinct counts, null
+// counts, and histograms.
+func (s *Statistics) ApplySelectivity(selectivity float64) {
+	s.RowCount *= selectivity
+	s.Selectivity *= selectivity
+}
+
+// UnionWith unions this Statistics object with another Statistics object. It
+// updates the RowCount and Selectivity, and represents the result of unioning
+// two relational expressions with the given statistics. Note that
+// DistinctCounts, NullCounts, and Histograms are not updated.
+func (s *Statistics) UnionWith(other *Statistics) {
+	s.Available = s.Available && other.Available
+	s.RowCount += other.RowCount
+	s.Selectivity += other.Selectivity
+}
+
 func (s *Statistics) String() string {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
-	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
-	for _, colStat := range s.ColStats {
-		colStats = append(colStats, *colStat)
-	}
-	for _, colStat := range s.MultiColStats {
-		colStats = append(colStats, *colStat)
+	colStats := make(ColumnStatistics, s.ColStats.Count())
+	for i := 0; i < s.ColStats.Count(); i++ {
+		colStats[i] = s.ColStats.Get(i)
 	}
 	sort.Sort(colStats)
 	for _, col := range colStats {
 		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
+		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
 	}
 	buf.WriteString("]")
+	for _, col := range colStats {
+		if col.Histogram != nil {
+			label := fmt.Sprintf("histogram%s=", col.Cols.String())
+			indent := strings.Repeat(" ", tablewriter.DisplayWidth(label))
+			fmt.Fprintf(&buf, "\n%s", label)
+			histLines := strings.Split(strings.TrimRight(col.Histogram.String(), "\n"), "\n")
+			for i, line := range histLines {
+				if i != 0 {
+					fmt.Fprintf(&buf, "\n%s", indent)
+				}
+				fmt.Fprintf(&buf, "%s", strings.TrimRight(line, " "))
+			}
+		}
+	}
 
 	return buf.String()
 }
@@ -92,18 +143,69 @@ func (s *Statistics) String() string {
 // for every possible subset of columns. In practice, it is only worth
 // maintaining statistics on a few columns and column sets that are frequently
 // used in predicates, group by columns, etc.
+//
+// ColumnStatistiscs can be copied by value.
 type ColumnStatistic struct {
 	// Cols is the set of columns whose data are summarized by this
-	// ColumnStatistic struct.
+	// ColumnStatistic struct. The ColSet is never modified in-place.
 	Cols opt.ColSet
 
 	// DistinctCount is the estimated number of distinct values of this
-	// set of columns for this expression.
+	// set of columns for this expression. Includes null values.
 	DistinctCount float64
+
+	// NullCount is the estimated number of null values of this set of
+	// columns for this expression. For multi-column stats, this null
+	// count tracks only the rows in which all columns in the set are null.
+	NullCount float64
+
+	// Histogram is only used when the size of Cols is one. It contains
+	// the approximate distribution of values for that column, represented
+	// by a slice of histogram buckets.
+	Histogram *Histogram
 }
 
-// ColumnStatistics is a slice of ColumnStatistic values.
-type ColumnStatistics []ColumnStatistic
+// ApplySelectivity updates the distinct count, null count, and histogram
+// according to a given selectivity.
+func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
+	// Since the null count is a simple count of all null rows, we can
+	// just multiply the selectivity with it.
+	c.NullCount *= selectivity
+
+	if c.Histogram != nil {
+		c.Histogram = c.Histogram.ApplySelectivity(selectivity)
+	}
+
+	if selectivity == 1 || c.DistinctCount == 0 {
+		return
+	}
+	if selectivity == 0 {
+		c.DistinctCount = 0
+		return
+	}
+
+	n := inputRows
+	d := c.DistinctCount
+
+	// If each distinct value appears n/d times, and the probability of a
+	// row being filtered out is (1 - selectivity), the probability that all
+	// n/d rows are filtered out is (1 - selectivity)^(n/d). So the expected
+	// number of values that are filtered out is d*(1 - selectivity)^(n/d).
+	//
+	// This formula returns d * selectivity when d=n but is closer to d
+	// when d << n.
+	c.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
+	const epsilon = 1e-10
+	if c.DistinctCount < epsilon {
+		// Avoid setting the distinct count to 0 (since the row count is
+		// non-zero).
+		c.DistinctCount = epsilon
+	}
+
+}
+
+// ColumnStatistics is a slice of pointers to ColumnStatistic values.
+type ColumnStatistics []*ColumnStatistic
 
 // Len returns the number of ColumnStatistic values.
 func (c ColumnStatistics) Len() int { return len(c) }
@@ -114,7 +216,7 @@ func (c ColumnStatistics) Less(i, j int) bool {
 		return c[i].Cols.Len() < c[j].Cols.Len()
 	}
 
-	prev := 0
+	prev := opt.ColumnID(0)
 	for {
 		nextI, ok := c[i].Cols.Next(prev)
 		if !ok {

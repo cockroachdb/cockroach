@@ -1,0 +1,245 @@
+# LogicTest: local
+# Set to local as SET CLUSTER SETTING can take a while to propagate
+# on the fakedist and hence causing flakes.
+
+statement ok
+CREATE TABLE box2d_encoding_test(
+  id int primary key,
+  box_a box2d,
+  orphan box2d,
+  arr box2d array,
+  family f(orphan)
+)
+
+statement ok
+INSERT INTO box2d_encoding_test VALUES
+  (1, 'BOX(1 2,3 4)', 'BOX(3 4,5 6)', array['BOX(-1 -2,-3 -4)']),
+  (2, 'BOX(10.1 20.1,30.5 40.6)', 'BOX(30 40,50 60)', array['BOX(-1 -2,-3 -4)'::box2d, 'BOX(3 -4,5 -6)'::box2d])
+
+query ITTT
+SELECT * FROM box2d_encoding_test ORDER BY id ASC
+----
+1  BOX(1 2,3 4)              BOX(3 4,5 6)      {"BOX(-1 -2,-3 -4)"}
+2  BOX(10.1 20.1,30.5 40.6)  BOX(30 40,50 60)  {"BOX(-1 -2,-3 -4)","BOX(3 -4,5 -6)"}
+
+subtest st_makebox2d
+
+statement error first argument is not a POINT
+SELECT ST_MakeBox2D('LINESTRING(0 0, 1 1)', 'POINT(1 0)')
+
+statement error second argument is not a POINT
+SELECT ST_MakeBox2D('POINT(1 0)', 'LINESTRING(0 0, 1 1)')
+
+statement error cannot use POINT EMPTY
+SELECT ST_MakeBox2D('POINT(1 0)', 'POINT EMPTY')
+
+statement error cannot use POINT EMPTY
+SELECT ST_MakeBox2D('POINT EMPTY', 'POINT (1 0)')
+
+statement error operation on mixed SRIDs forbidden
+SELECT ST_MakeBox2D('SRID=4326;POINT(1 0)', 'SRID=3857;POINT(1 0)')
+
+query T
+SELECT ST_MakeBox2D(a::geometry, b::geometry) FROM ( VALUES
+  ('POINT (1 0)', 'POINT(5 6)'),
+  ('POINT (1 0)', 'POINT(1 0)')
+) tbl(a, b)
+----
+BOX(1 0,5 6)
+BOX(1 0,1 0)
+
+subtest comparison_ops
+
+statement ok
+CREATE TABLE geometry_tbl(
+  dsc string PRIMARY KEY,
+  g GEOMETRY
+)
+
+statement ok
+INSERT INTO geometry_tbl VALUES
+  ('NULL', NULL),
+  ('empty point', 'POINT EMPTY'),
+  ('point 0.5 0.5', 'POINT(0.5 0.5)'),
+  ('linestring from origin to 1 1', 'LINESTRING(0 0, 1 1)');
+
+statement ok
+CREATE TABLE box2d_tbl (
+  dsc string PRIMARY KEY,
+  b box2d
+)
+
+statement ok
+INSERT INTO box2d_tbl VALUES
+  ('NULL', NULL),
+  ('box at origin', 'box(0 0, 0 0)'),
+  ('box from origin to 1 1', 'box(0 0, 1 1)');
+
+statement error this box2d comparison operator is experimental
+SELECT 'box(0 0,1 1)'::box2d && 'box(1 1,2 2)'::box2d
+
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
+
+query TTBBBB
+SELECT
+  a.dsc,
+  b.dsc,
+  a.g && b.g,
+  b.g && a.g,
+  a.g ~ b.g,
+  b.g ~ a.g
+FROM geometry_tbl a
+JOIN geometry_tbl b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+NULL                           NULL                           NULL   NULL   NULL   NULL
+NULL                           empty point                    NULL   NULL   NULL   NULL
+NULL                           linestring from origin to 1 1  NULL   NULL   NULL   NULL
+NULL                           point 0.5 0.5                  NULL   NULL   NULL   NULL
+empty point                    NULL                           NULL   NULL   NULL   NULL
+empty point                    empty point                    false  false  false  false
+empty point                    linestring from origin to 1 1  false  false  false  false
+empty point                    point 0.5 0.5                  false  false  false  false
+linestring from origin to 1 1  NULL                           NULL   NULL   NULL   NULL
+linestring from origin to 1 1  empty point                    false  false  false  false
+linestring from origin to 1 1  linestring from origin to 1 1  true   true   true   true
+linestring from origin to 1 1  point 0.5 0.5                  true   true   true   false
+point 0.5 0.5                  NULL                           NULL   NULL   NULL   NULL
+point 0.5 0.5                  empty point                    false  false  false  false
+point 0.5 0.5                  linestring from origin to 1 1  true   true   false  true
+point 0.5 0.5                  point 0.5 0.5                  true   true   true   true
+
+query TTBBBB
+SELECT
+  a.dsc,
+  b.dsc,
+  a.b && b.b,
+  b.b && a.b,
+  a.b ~ b.b,
+  b.b ~ a.b
+FROM box2d_tbl a
+JOIN box2d_tbl b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+NULL                    NULL                    NULL  NULL  NULL   NULL
+NULL                    box at origin           NULL  NULL  NULL   NULL
+NULL                    box from origin to 1 1  NULL  NULL  NULL   NULL
+box at origin           NULL                    NULL  NULL  NULL   NULL
+box at origin           box at origin           true  true  true   true
+box at origin           box from origin to 1 1  true  true  false  true
+box from origin to 1 1  NULL                    NULL  NULL  NULL   NULL
+box from origin to 1 1  box at origin           true  true  true   false
+box from origin to 1 1  box from origin to 1 1  true  true  true   true
+
+query TTBBBB
+SELECT
+  geometry_tbl.dsc,
+  box2d_tbl.dsc,
+  geometry_tbl.g && box2d_tbl.b,
+  box2d_tbl.b && geometry_tbl.g,
+  geometry_tbl.g ~ box2d_tbl.b,
+  box2d_tbl.b ~ geometry_tbl.g
+FROM geometry_tbl
+JOIN box2d_tbl ON (1=1)
+ORDER BY geometry_tbl.dsc, box2d_tbl.dsc
+----
+NULL                           NULL                    NULL   NULL   NULL   NULL
+NULL                           box at origin           NULL   NULL   NULL   NULL
+NULL                           box from origin to 1 1  NULL   NULL   NULL   NULL
+empty point                    NULL                    NULL   NULL   NULL   NULL
+empty point                    box at origin           false  false  false  false
+empty point                    box from origin to 1 1  false  false  false  false
+linestring from origin to 1 1  NULL                    NULL   NULL   NULL   NULL
+linestring from origin to 1 1  box at origin           true   true   true   false
+linestring from origin to 1 1  box from origin to 1 1  true   true   true   true
+point 0.5 0.5                  NULL                    NULL   NULL   NULL   NULL
+point 0.5 0.5                  box at origin           false  false  false  false
+point 0.5 0.5                  box from origin to 1 1  true   true   false  true
+
+subtest st_combinebbox
+
+query T
+SELECT st_combinebbox(b::box2d, g::geometry) FROM ( VALUES
+  (NULL, NULL),
+  ('box(-1 -1, 1 1)', NULL),
+  (NULL, st_makepoint(4, -5)),
+  ('box(-1 -1, 1 1)', st_makepoint(4, -5))
+) tbl(b, g)
+----
+NULL
+BOX(-1 -1,1 1)
+BOX(4 -5,4 -5)
+BOX(-1 -5,4 1)
+
+query T
+select st_combinebbox(st_expand(NULL::BOX2D, 0.7845514859561931:::FLOAT8::FLOAT8)::BOX2D::BOX2D, '010200000000000000':::GEOMETRY::GEOMETRY)::BOX2D;
+----
+NULL
+
+subtest st_expand
+
+query TT
+SELECT
+  st_expand(b::box2d, 10),
+  st_expand(b::box2d, 10, 20)
+FROM ( VALUES
+  ('box(-1 -1, 1 1)'),
+  ('box(-10 -20, 15 30)'),
+  (NULL)
+) tbl(b)
+----
+BOX(-11 -11,11 11)  BOX(-11 -21,11 21)
+BOX(-20 -30,25 40)  BOX(-20 -40,25 50)
+NULL                NULL
+
+subtest cast_test
+
+query T
+SELECT
+  ST_AsEWKT(b::box2d::geometry)
+FROM ( VALUES
+  (NULL),
+  ('box(-1 -1,-1 -1)'),
+  ('box(1 3,20 3)'),
+  ('box(5.5 -10, 5.5 60)'),
+  ('box(-1 -2, 4 6)')
+) tbl(b)
+----
+NULL
+POINT (-1 -1)
+LINESTRING (1 3, 20 3)
+LINESTRING (5.5 -10, 5.5 60)
+POLYGON ((-1 -2, -1 6, 4 6, 4 -2, -1 -2))
+
+query T
+SELECT
+  g::geometry::box2d
+FROM ( VALUES
+  ('point empty'),
+  (null),
+  ('point(5 5)'),
+  ('linestring(4 5, 9 10)')
+) tbl(g)
+----
+NULL
+NULL
+BOX(5 5,5 5)
+BOX(4 5,9 10)
+
+subtest st_box2dfromgeohash
+
+query T
+SELECT
+  g
+FROM ( VALUES
+  (ST_Box2DFromGeoHash('s000000000000000')),
+  (ST_Box2DFromGeoHash('kkqnpkue9ktbpe5')),
+  (ST_Box2DFromGeoHash('w000000000000000')),
+  (ST_Box2DFromGeoHash('w000000000000000',5))
+) tbl(g)
+----
+BOX(0 0,0.00000000032741809263825417 0.00000000016370904631912708)
+BOX(20.012344998976914 -20.012345000286587,20.012345000286587 -20.012344998976914)
+BOX(90 0,90.00000000032742 0.00000000016370904631912708)
+BOX(90 0,90.0439453125 0.0439453125)

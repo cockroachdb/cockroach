@@ -83,7 +83,8 @@ KV values consist of
 2.  A one-byte value type (see the enumeration `ValueType` in
     [pkg/roachpb/data.proto])
 3.  Data from where the row specified in the KV key intersects the
-    specified column family, excluding primary key data.
+    specified column family, including composite encodings of primary
+    key columns that are members of the specified column family.
 
 The value type defaults to `TUPLE`, which indicates the following
 encoding. (For other values, see subsection Single-column column
@@ -117,6 +118,9 @@ understand SQL value encoding so that the sequence could be encoded
 consistently with tables, but that would break the KV/SQL abstraction
 barrier.
 
+The code that performs generation of keys and values for primary indexes
+can be found in `prepareInsertOrUpdateBatch`([pkg/sql/row/writer.go]).
+
 ### Sentinel KV pairs
 
 The column family with ID 0 is special because it contains the primary
@@ -125,6 +129,13 @@ sentinel KV pairs. CRDB emits sentinel KV pairs regardless of whether
 the KV value has other data, to guarantee that primary keys appear in at
 least one KV pair. (Even if there are other column families, their KV
 pairs may be suppressed; see subsection NULL below.)
+
+Note that in system tables that use multiple column families, such as
+system.zones or system.namespace, there may not be any sentinel KV pair at all.
+This is because of the fact that the database writes to these system tables
+using raw KV puts and does not include the logic to write a sentinel KV. KV
+decoding code that needs to understand system tables must be aware of this
+possibility.
 
 ### Single-column column families
 
@@ -276,6 +287,12 @@ Users also specify whether a secondary index should be unique. Unique
 secondary indexes constrain the table data not to have two rows where,
 for each indexed column, the data therein are non-null and equal.
 
+As of #42073 (after version 19.2), secondary indexes have been extended to
+include support for column families. These families are the same as the ones
+defined upon the table. Families will apply to the stored columns in the index.
+Like in primary indexes, column family 0 on a secondary index will always be
+present for a row so that each row in the index has at least one k/v entry.
+
 ### Key encoding
 
 The main encoding function for secondary indexes is
@@ -292,8 +309,8 @@ mirroring the primary index encoding:
 5.  If the index is non-unique or the row has a NULL in an indexed
     column, and the index uses the old format for stored columns, data
     from where the row intersects the stored columns
-6.  Zero (instead of the column family ID; all secondary KV pairs are
-    sentinels).
+6.  The column family ID.
+7.  When the previous field is nonzero (non-sentinel), its length in bytes.
 
 Unique indexes relegate the data in extra columns to KV values so that
 the KV layer detects constraint violations. The special case for an
@@ -304,21 +321,40 @@ achieved by including the non-indexed primary key data. For the sake of
 simplicity, data in stored columns are also included.
 
 ### Value encoding
+KV values for secondary indexes are encoded using the following rules:
 
-KV values for secondary indexes have value type `BYTES` and consist of:
+If the value corresponds to column family 0:
 
+The KV value will have value type bytes, and will consist of
 1.  If the index is unique, data from where the row intersects the
     non-indexed primary key (implicit) columns, encoded as in the KV key
 2.  If the index is unique, and the index uses the old format for stored
     columns, data from where the row intersects the stored columns,
     encoded as in the KV key
 3.  If needed, `TUPLE`-encoded bytes for non-null composite and stored
-    column data (new format).
+    column data in family 0 (new format).
 
-All of these fields are optional, so the `BYTES` value may be empty.
-Note that, in a unique index, rows with a NULL in an indexed column have
-their implicit column data stored in both the KV key and the KV value.
-(Ditto for stored column data in the old format.)
+Since column family 0 is always included, it contains extra information
+that the index stores in the value, such as composite column values and
+stored primary key columns. Note that this is different than the encoding of
+composite indexed columns values in primary key columns, where the composite
+value component of an indexed column is placed in the KV pair corresponding
+to the column family of the indexed column. All of these fields are optional,
+so the `BYTES` value may be empty. Note that, in a unique index, rows with
+a NULL in an indexed column have their implicit column data stored in both the
+KV key and the KV value. (Ditto for stored column data in the old format.)
+
+For indexes with more than one column family, the remaining column families'
+KV values will have value type `TUPLE` and will consist of all stored
+columns in that family in the `TUPLE` encoded format.
+
+### Backwards Compatibility With Indexes Encoded Without Families
+
+Index descriptors hold on to a version bit that denotes what encoding
+format the descriptor was written in. The default value of the bit denotes
+the original secondary index encoding, and indexes created when all
+nodes in a cluster are version 20.1 or greater will have the version representing
+secondary indexes with column families.
 
 ### Example dump
 
@@ -445,6 +481,26 @@ Index ID 3 is the non-unique secondary index `i3`.
     /Table/51/3/"Carol"/3/0/1492010940.897101344,0 : 0x45C61B8403
                 ^------ ^                                      ^-
          Indexed column Implicit column                    BYTES
+
+### Example dump with families
+```
+CREATE TABLE t (
+	a INT, b INT, c INT, d INT, e INT, f INT,
+	PRIMARY KEY (a, b),
+	UNIQUE INDEX i (d, e) STORING (c, f),
+	FAMILY (a, b, c), FAMILY (d, e), FAMILY (f)
+);
+
+INSERT INTO t VALUES (1, 2, 3, 4, 5, 6);
+
+/Table/52/2/4/5/0/1572546219.386986000,0 : 0xBDD6D93003898A3306
+            ^-- ^                                    ^_^_______      
+ Indexed cols   Column family 0                  BYTES Stored PK cols + column c
+// Notice that /Table/52/2/4/5/1/1/ is not present, because these values are already indexed
+/Table/52/2/4/5/2/1/1572546219.386986000,0 : 0x46CC99AE0A630C
+                ^__                                    ^_^___ 
+         Column Family 2                            TUPLE  column f
+```
 
 ### Composite encoding
 

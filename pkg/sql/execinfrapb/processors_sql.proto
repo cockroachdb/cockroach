@@ -1,0 +1,891 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "execinfrapb";
+
+import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/descpb/join_type.proto";
+import "sql/catalog/descpb/locking.proto";
+import "sql/types/types.proto";
+import "sql/execinfrapb/data.proto";
+import "sql/execinfrapb/processors_base.proto";
+import "sql/opt/invertedexpr/span_expression.proto";
+import "gogoproto/gogo.proto";
+
+// ValuesCoreSpec is the core of a processor that has no inputs and generates
+// "pre-canned" rows. This is not intended to be used for very large datasets.
+message ValuesCoreSpec {
+  // There is one DatumInfo for each element in a row. Can be empty, in which
+  // case raw_bytes must be empty.
+  repeated DatumInfo columns = 1 [(gogoproto.nullable) = false];
+
+  // The number of rows is especially useful when we have zero columns.
+  optional uint64 num_rows = 3 [(gogoproto.nullable) = false];
+
+  // Each raw block encodes one or more data rows; each datum is encoded
+  // according to the corresponding DatumInfo.
+  repeated bytes raw_bytes = 2;
+}
+
+// ScanVisibility controls which columns are seen by scans - just normal
+// columns, or normal columns and also in-progress schema change columns.
+enum ScanVisibility {
+  PUBLIC = 0;
+  PUBLIC_AND_NOT_PUBLIC = 1;
+}
+
+// TableReaderSpec is the specification for a "table reader". A table reader
+// performs KV operations to retrieve rows for a table and outputs the desired
+// columns of the rows that pass a filter expression.
+//
+// The "internal columns" of a TableReader (see ProcessorSpec) are all the
+// columns of the table. Internally, only the values for the columns needed by
+// the post-processing stage are to be populated. If is_check is set, the
+// TableReader will run additional data checking procedures and the
+// "internal columns" are:
+//  - Error type (string).
+//  - Primary key as a string, if it was obtainable.
+//  - JSON of all decoded column values.
+message TableReaderSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
+  // i.e. table.indexes[index_idx-1]
+  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+  optional bool reverse = 3 [(gogoproto.nullable) = false];
+  repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
+
+  // A hint for how many rows the consumer of the table reader output might
+  // need. This is used to size the initial KV batches to try to avoid reading
+  // many more rows than needed by the processor receiving the output.
+  //
+  // Not used if there is a limit set in the PostProcessSpec of this processor
+  // (that value will be used for sizing batches instead).
+  optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
+
+  // Indicates whether the TableReader is being run as an exhaustive
+  // check. This is only true during SCRUB commands.
+  optional bool is_check = 6 [(gogoproto.nullable) = false];
+
+  // Indicates the visibility level of the columns that should be returned.
+  // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
+  // the consumer of this TableReader expects to be able to see in-progress
+  // schema changes.
+  optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
+
+  // This field used to be an upper bound for the number of rows we will read;
+  // replaced by the parallelize field. 
+  reserved 8;
+
+  // If set, the TableReader can read all the spans in parallel, without any
+  // batch limits. This should only be the case when there is a known upper
+  // bound on the number of rows we can read, and when there is no limit or
+  // limit hint.
+  optional bool parallelize = 12 [(gogoproto.nullable) = false];
+
+  // If non-zero, this enables inconsistent historical scanning where different
+  // batches can be read with different timestamps. This is used for
+  // long-running table statistics which may outlive the TTL. Using this setting
+  // will cause inconsistencies across rows and even within rows.
+  //
+  // The value is a duration (in nanoseconds), which is the maximum "age" of the
+  // timestamp. If the scan takes long enough for the timestamp to become older,
+  // the timestamp is advanced by however much time passed.
+  //
+  // Example:
+  //
+  //     current time:      10
+  //     initial timestamp: 0
+  //     max timestamp age: 30
+  //
+  //     time
+  //     10:    start scan, timestamp=0
+  //     10-29: continue scanning at timestamp=0
+  //     30:    bump timestamp to 20
+  //     30-49: continue scanning at timestamp=20
+  //     50:    bump timestamp to 40
+  //     ...
+  //
+  // Note: it is an error to perform a historical read at an initial timestamp
+  // older than this value.
+  //
+  optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
+
+  // Indicates the row-level locking strength to be used by the scan. If set to
+  // FOR_NONE, no row-level locking should be performed.
+  optional sqlbase.ScanLockingStrength locking_strength = 10 [(gogoproto.nullable) = false];
+
+  // Indicates the policy to be used by the scan for handling conflicting locks
+  // held by other active transactions when attempting to lock rows. Always set
+  // to BLOCK when locking_stength is FOR_NONE.
+  optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
+
+  reserved 13;
+  // Indicates whether or not this TableReader is expected to produce any
+  // system columns in its output.
+  optional bool has_system_columns = 14 [(gogoproto.nullable) = false];
+}
+
+// IndexSkipTableReaderSpec is the specification for a table reader that
+// is performing a loose index scan over rows in the table. This means that
+// this reader will return distinct rows from the table while using the index
+// to skip unnecessary rows. This reader is used for different optimizations
+// when operating on a prefix of a compound key.
+message IndexSkipTableReaderSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
+  // i.e. table.indexes[index_idx-1]
+  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+
+  repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
+
+  // Indicates the visibility level of the columns that should be returned.
+  // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
+  // the consumer of this TableReader expects to be able to see in-progress
+  // schema changes.
+  optional ScanVisibility visibility = 4 [(gogoproto.nullable) = false];
+
+  optional bool reverse = 5 [(gogoproto.nullable) = false];
+
+  // Indicates the row-level locking strength to be used by the scan. If set to
+  // FOR_NONE, no row-level locking should be performed.
+  optional sqlbase.ScanLockingStrength locking_strength = 6 [(gogoproto.nullable) = false];
+
+  // Indicates the policy to be used by the scan for handling conflicting locks
+  // held by other active transactions when attempting to lock rows. Always set
+  // to BLOCK when locking_stength is FOR_NONE.
+  optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 7 [(gogoproto.nullable) = false];
+}
+
+// JoinReaderSpec is the specification for a "join reader". A join reader
+// performs KV operations to retrieve specific rows that correspond to the
+// values in the input stream (join by lookup). The output always preserves the
+// order of the input rows.
+//
+// The "internal columns" of a JoinReader (see ProcessorSpec) are either:
+//  - the columns of the table, if we are performing an index join (no lookup
+//    columns) or if we are performing a semi or anti join, or
+//  - the concatenation of the columns of the input stream with the table
+//    columns.
+//
+// Internally, only the values for the columns needed by the post-processing
+// stage are populated.
+//
+// Example:
+// Input stream columns: | a | b |              Table columns: | c | d | e |
+//
+// If performing a lookup join on a = c (lookup columns is [0]):
+//        Internal columns: | a | b | c | d | e |
+//
+// If performing an index join (where a = c and b = d) (lookup columns is []):
+//        Internal columns: | c | d | e |
+//
+// There is a special case when a "join reader" is used as the second join in
+// a pair of joins to accomplish a LEFT_OUTER, LEFT_SEMI or LEFT_ANTI join.
+// The first join in this pair of joins is unable to precisely evaluate the
+// join condition and produces false positives. This is typical when the first
+// join is an inverted join (see InvertedJoinerSpec), but can also be the case
+// when the first join is being evaluated over an index that does not have all
+// the columns needed to evaluate the join condition. The first join outputs
+// rows in sorted order of the original left columns. The input stream columns
+// for the second join are a combination of the original left columns and the
+// lookup columns. The first join additionally adds a continuation column that
+// demarcates a group of successive rows that correspond to an original left
+// row. The first row in a group contains false (since it is not a
+// continuation of the group) and successive rows contain true.
+//
+// The mapping from the original join to the pair of joins is:
+// LEFT_OUTER => LEFT_OUTER, LEFT_OUTER
+// LEFT_SEMI  => INNER, LEFT_SEMI (better than doing INNER, INNER, SORT, DISTINCT)
+// LEFT_ANTI  => LEFT_OUTER, LEFT_ANTI.
+// where the first join always preserves order.
+//
+// More specifically, consider a lookup join example where the input stream
+// columns are: | a | b | c | d | cont |.
+// The lookup column is | d |. And the table columns are | e | f | with
+// d = e.
+// This join reader can see input of the form
+// a1, b1, c1, d1,   false
+// a1, b1, c1, d2,   true
+// a1, b2, c1, null, false // when the first join is LEFT_OUTER
+// a2, b1, c1, d3,   false
+// a2, b1, c1, d4,   true
+//
+// Say both the results for (a1, b1, c1) are false positives, and the first
+// of the (a2, b1, c1) result is a false positive.
+// The output for LEFT_OUTER:
+// a1, b1, c1, d1,   false, null, null
+// a1, b2, c1, null, false, null, null
+// a2, b1, c1, d4,   true,  d4,   f1
+// The d, cont columns are not part of the original left row, so will be
+// projected away after the join.
+//
+// The output for LEFT_ANTI:
+// a1, b1, c1, d1,   false
+// a1, b2, c1, null, false
+// Again, the d, cont columns will be projected away after the join.
+//
+// The output for LEFT_SEMI:
+// a2, b1, c1, d4, true
+// Again, the d, cont columns will be projected away after the join.
+message JoinReaderSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+
+  // If 0, we use the primary index; each row in the input stream has a value
+  // for each primary key. The index must provide all lookup columns.
+  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+
+  // Column indexes in the input stream specifying the columns which match with
+  // the index columns. These are the equality columns of the join.
+  //
+  // If empty (index join), the start of the input stream schema is assumed to
+  // match the index columns. The joinReader will perform an index join and the
+  // "internal columns" will be the columns of the table.
+  //
+  // If populated (lookup join), the `joinReader` will perform a lookup join
+  // and the "internal columns" will be the concatenation of the input stream
+  // columns followed by the table columns (except for semi/anti join, which
+  // don't output any table columns).
+  repeated uint32 lookup_columns = 3 [packed = true];
+
+  // If set, the lookup columns form a key in the target table and thus each
+  // lookup has at most one result.
+  optional bool lookup_columns_are_key = 8 [(gogoproto.nullable) = false];
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). Assuming that the left stream has N columns and the right
+  // stream has M columns, in this expression variables @1 to @N refer to
+  // columns of the left stream and variables @N to @(N+M) refer to columns in
+  // the right stream.
+  optional Expression on_expr = 4 [(gogoproto.nullable) = false];
+
+  // This used to be used for an extra index filter expression. It was removed
+  // in DistSQL version 24.
+  reserved 5;
+
+  // For lookup joins. Only JoinType_INNER and JoinType_LEFT_OUTER are
+  // supported.
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // For index joins that are sources to mutation statements - what visibility
+  // of columns should we return? Mutations sometimes need to see in-progress
+  // schema change columns, in which case this field will be changed from its
+  // default PUBLIC state. Causes the index join to return these schema change
+  // columns.
+  optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
+
+  // Indicates the row-level locking strength to be used by the join. If set to
+  // FOR_NONE, no row-level locking should be performed.
+  optional sqlbase.ScanLockingStrength locking_strength = 9 [(gogoproto.nullable) = false];
+
+  // Indicates the policy to be used by the join for handling conflicting locks
+  // held by other active transactions when attempting to lock rows. Always set
+  // to BLOCK when locking_stength is FOR_NONE.
+  optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 10 [(gogoproto.nullable) = false];
+
+  // Indicates that the join reader should maintain the ordering of the input
+  // stream. This is applicable to both lookup joins and index joins.
+  // Maintaining ordering with lookup joins is expensive. With index joins,
+  // not maintaining ordering allows for optimizations at lower layers.
+  optional bool maintain_ordering = 11 [(gogoproto.nullable) = false];
+
+  reserved 12;
+  // Indicates whether or not this JoinReader is expected to produce any
+  // system columns in its output.
+  //
+  // This is only used in the special case of index joins, where the final
+  // result of the secondary index joined against the primary index is
+  // expected to contain the materialized system columns.
+  optional bool has_system_columns = 13 [(gogoproto.nullable) = false];
+
+  // LeftJoinWithPairedJoiner is used when a left {outer,anti,semi} join is
+  // being achieved by pairing two joins. See the comment above.
+  optional bool left_join_with_paired_joiner = 14 [(gogoproto.nullable) = false];
+}
+
+// SorterSpec is the specification for a "sorting aggregator". A sorting
+// processor sorts elements in the input stream providing a certain output
+// order guarantee regardless of the input ordering. The output ordering is
+// according to a configurable set of columns.
+//
+// The "internal columns" of a Sorter (see ProcessorSpec) are the same as the
+// input columns.
+message SorterSpec {
+  optional Ordering output_ordering = 1 [(gogoproto.nullable) = false];
+
+  // Ordering match length, specifying that the input is already sorted by the
+  // first 'n' output ordering columns, can be optionally specified for
+  // possible speed-ups taking advantage of the partial orderings.
+  optional uint32 ordering_match_len = 2 [(gogoproto.nullable) = false];
+}
+
+message DistinctSpec {
+  // The ordered columns in the input stream can be optionally specified for
+  // possible optimizations. The specific ordering (ascending/descending) of
+  // the column itself is not important nor is the order in which the columns
+  // are specified. The ordered columns must be a subset of the distinct
+  // columns.
+  repeated uint32 ordered_columns = 1;
+  // The distinct columns in the input stream are those columns on which we
+  // check for distinct rows. If A,B,C are in distinct_columns and there is a
+  // 4th column D which is not included in distinct_columns, its values are not
+  // considered, so rows A1,B1,C1,D1 and A1,B1,C1,D2 are considered equal and
+  // only one of them (the first) is output.
+  repeated uint32 distinct_columns = 2;
+  // If true, then NULL values are treated as not equal to one another. Each NULL
+  // value will cause a new row group to be created. For example:
+  //
+  //   c
+  //   ----
+  //   NULL
+  //   NULL
+  //
+  // A distinct operation on column "c" will result in one output row if
+  // NullsAreDistinct is false, or two output rows if true. This is set to true
+  // for UPSERT and INSERT..ON CONFLICT statements, since they must treat NULL
+  // values as distinct.
+  optional bool nulls_are_distinct = 3 [(gogoproto.nullable) = false];
+  // If not empty, then an error with this text will be raised if there are two
+  // rows with duplicate distinct column values. This is used to implement the
+  // UPSERT and INSERT..ON CONFLICT statements, both of which prohibit the same
+  // row from being changed twice.
+  optional string error_on_dup = 4 [(gogoproto.nullable) = false];
+}
+
+// The specification for a WITH ORDINALITY processor. It adds a new column to
+// each resulting row that contains the ordinal number of the row. Since there
+// are no arguments for this operator, the spec is empty.
+message OrdinalitySpec {
+  // Currently empty
+}
+
+// ZigzagJoinerSpec is the specification for a zigzag join processor. The
+// processor's current implementation fetches the rows using internal
+// rowFetchers.
+//
+// The "internal columns" of a ZigzagJoiner (see ProcessorSpec) are the
+// concatenation of all of the columns of the tables specified. The columns
+// are populated if they are contained in the index specified for that table.
+message ZigzagJoinerSpec {
+  // TODO(pbardea): Replace these with inputs that conform to a RowSource-like
+  // interface.
+  repeated sqlbase.TableDescriptor tables = 1 [(gogoproto.nullable) = false];
+
+  // An array of arrays. The array at eq_columns[side_idx] contains the
+  // equality columns for that side. All arrays in eq_columns should have
+  // equal length.
+  repeated Columns eq_columns = 2 [(gogoproto.nullable) = false];
+
+  // Each value indicates an index: if 0, primary index; otherwise the n-th
+  // secondary index, i.e. tables[side_idx].indexes[index_ordinals[side_idx]].
+  repeated uint32 index_ordinals = 3 [packed = true];
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). Assuming that the left stream has N columns and the right
+  // stream has M columns, in this expression ordinal references @1 to @N refer
+  // to columns of the left stream and variables @(N+1) to @(N+M) refer to
+  // columns in the right stream.
+  optional Expression on_expr = 4 [(gogoproto.nullable) = false];
+
+  // Fixed values at the start of indices.
+  repeated ValuesCoreSpec fixed_values = 5;
+
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+}
+
+// MergeJoinerSpec is the specification for a merge join processor. The processor
+// has two inputs and one output. The inputs must have the same ordering on the
+// columns that have equality constraints. For example:
+//   SELECT * FROM T1 INNER JOIN T2 ON T1.C1 = T2.C5 AND T1.C2 = T2.C4
+//
+// To perform a merge join, the streams corresponding to T1 and T2 must have the
+// same ordering on columns C1, C2 and C5, C4 respectively. For example: C1+,C2-
+// and C5+,C4-.
+//
+// The "internal columns" of a MergeJoiner (see ProcessorSpec) are the
+// concatenation of left input columns and right input columns. If the left
+// input has N columns and the right input has M columns, the first N columns
+// contain values from the left side and the following M columns contain values
+// from the right side.
+//
+// In the case of semi-join and anti-join, the processor core outputs only the
+// left columns.
+message MergeJoinerSpec {
+  // The streams must be ordered according to the columns that have equality
+  // constraints. The first column of the left ordering is constrained to be
+  // equal to the first column in the right ordering and so on. The ordering
+  // lengths and directions must match.
+  // In the example above, left ordering describes C1+,C2- and right ordering
+  // describes C5+,C4-.
+  optional Ordering left_ordering = 1 [(gogoproto.nullable) = false];
+  optional Ordering right_ordering = 2 [(gogoproto.nullable) = false];
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). Assuming that the left stream has N columns and the right
+  // stream has M columns, in this expression ordinal references @1 to @N refer
+  // to columns of the left stream and variables @(N+1) to @(N+M) refer to
+  // columns in the right stream.
+  optional Expression on_expr = 5 [(gogoproto.nullable) = false];
+
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // NullEquality indicates that NULL = NULL should be considered true.
+  // This allows OUTER JOINs to consider NULL values meaningfully. An
+  // example of this is during SCRUB checks on secondary indexes.
+  optional bool null_equality = 7 [(gogoproto.nullable) = false];
+
+  // If true, it is guaranteed that the left equality columns form a key for
+  // the left input. In other words, no two rows from the left input have the
+  // same set of values on the left equality columns.
+  optional bool left_eq_columns_are_key = 8 [(gogoproto.nullable) = false];
+
+  // If true, it is guaranteed that the right equality columns form a key for
+  // the right input. In other words, no two rows from the right input have the
+  // same set of values on the right equality columns.
+  optional bool right_eq_columns_are_key = 9 [(gogoproto.nullable) = false];
+}
+
+// HashJoinerSpec is the specification for a hash join processor. The processor
+// has two inputs and one output.
+//
+// The processor works by reading the entire right input and putting it in a hash
+// table. Thus, there is no guarantee on the ordering of results that stem only
+// from the right input (in the case of RIGHT_OUTER, FULL_OUTER). However, it is
+// guaranteed that results that involve the left stream preserve the ordering;
+// i.e. all results that stem from left row (i) precede results that stem from
+// left row (i+1).
+//
+// The "internal columns" of a HashJoiner (see ProcessorSpec) are the
+// concatenation of merged columns (if present), left input columns and right
+// input columns. Each merged column corresponds to a left and a right equality
+// column; its value is the value on the left if it is not NULL, otherwise it is
+// the value on the right. There are either zero or
+// E=len(left_eq_columns)=len(right_eq_columns) merged columns.
+//
+// If the left input has N columns and the right input has M columns, the
+// first N columns contain values from the left side and the following M columns
+// contain values from the right side. If merged columns are present, they
+// occupy first E positions followed by N values from the left side and M values
+// from the right side.
+//
+// In the case of semi-join and anti-join, the processor core outputs only the
+// left columns.
+message HashJoinerSpec {
+  // The join constraints certain columns from the left stream to equal
+  // corresponding columns on the right stream. These must have the same length.
+  repeated uint32 left_eq_columns = 1 [packed = true];
+  repeated uint32 right_eq_columns = 2 [packed = true];
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). Assuming that the left stream has N columns and the right
+  // stream has M columns, in this expression variables @1 to @N refer to
+  // columns of the left stream and variables @N to @(N+M) refer to columns in
+  // the right stream.
+  // Having "ON" expression implies no merged columns.
+  optional Expression on_expr = 5 [(gogoproto.nullable) = false];
+
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // If true, it is guaranteed that the left equality columns form a key for
+  // the left input. In other words, no two rows from the left input have the
+  // same set of values on the left equality columns.
+  optional bool left_eq_columns_are_key = 8 [(gogoproto.nullable) = false];
+
+  // If true, it is guaranteed that the right equality columns form a key for
+  // the right input. In other words, no two rows from the right input have the
+  // same set of values on the right equality columns.
+  optional bool right_eq_columns_are_key = 9 [(gogoproto.nullable) = false];
+
+  // DEPRECATED
+  //
+  // Extra merged columns that are added in case of OUTER JOINS. These
+  // columns occupy first positions in a row amd it's the left value if it's not
+  // NULL, otherwise it's the right value. In INNER JOIN case no merged columns are
+  // needed since left stream values are guaranteed to be not NULL.
+  //
+  // This has been deprecated; the distsqlrun layer still supports it for
+  // backward compatibility during upgrade.
+  optional bool merged_columns = 7 [(gogoproto.nullable) = false];
+}
+
+// InvertedJoinerSpec is the specification for an inverted join. The processor
+// has two inputs and one output.
+//
+// The processor uses the inverted index on a column of the right input to
+// join with a column of the left input. In addition to the InvertedExpr which
+// is specified on these two columns, it also evaluates an OnExpr on the
+// joined rows that satisfy the InvertedExpr. The "internal columns" of an
+// InvertedJoiner for INNER and LEFT_OUTER joins are a concatenation of the
+// columns of left and right input. The only columns of the right input that
+// are populated are the columns present in the inverted index, except for the
+// inverted column (since it does not represent a complete value for the datum
+// that was indexed). For LEFT_SEMI and LEFT_ANTI, the "internal columns" are
+// the columns of the left input.
+//
+// In many cases, the inverted join will contain false positives wrt the
+// original join condition. This is handled by pairing it with a lookup join.
+// This pairing works naturally when the user query specified INNER, by
+// running an INNER inverted join followed by INNER lookup join. For a user
+// query with LEFT_OUTER/LEFT_ANTI, the inverted join is run as a LEFT_OUTER
+// with a special mode that outputs an additional bool column that represents
+// whether this row is a continuation of a group, where a group is defined as
+// rows corresponding to the same original left row. This is paired with a
+// lookup join that also knows about the semantics of this bool column. For a
+// user query with LEFT_SEMI, the inverted join is run as an INNER join with
+// the same special mode. See the JoinReaderSpec for an example.
+//
+// Example:
+// Input stream columns: | a | b |
+// Table columns: | c | d | e |
+// The InvertedExpr involves columns b, e and the primary key for the right
+// input is c.
+// The inverted index has columns: | e' | c |
+// where e' is derived from e. For instance, if e is an array, e' will
+// correspond to elements of the array.
+// The OnExpr can use columns a, b, c, since they are the other columns that
+// are present in the input stream and the inverted index.
+//
+// Internal columns for INNER and LEFT_OUTER: | a | b | c | d | e |
+// where d, e are not populated.
+// Internal columns for LEFT_SEMI and LEFT_ANTI: | a | b |
+//
+// For INNER/LEFT_OUTER with OutputGroupContinuationForLeftRow = true, the
+// internal columns include an additional bool column as the last column.
+message InvertedJoinerSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+
+  // The ID of the inverted index. The first column in the index is the
+  // inverted column, and the the remaining columns are the primary key.
+  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+
+  reserved 3;
+
+  // The join expression is a conjunction of inverted_expr and on_expr.
+
+  // Expression involving the indexed column and columns from the input.
+  // Assuming that the input stream has N columns and the table that has been
+  // indexed has M columns, in this expression variables @1 to @N refer to
+  // columns of the input stream and variables @(N+1) to @(N+M) refer to
+  // columns in the table. Although the numbering includes all columns, only
+  // columns corresponding to the indexed column and the input columns may be
+  // present in this expression. Note that the column numbering matches the
+  // numbering used below by the on expression.
+  //
+  // The expression is passed to xform.NewDatumToInvertedExpr to construct an
+  // implementation of invertedexpr.DatumToInvertedExpr, which will be fed each
+  // input row and output an expression to evaluate over the inverted index.
+  optional Expression inverted_expr = 4 [(gogoproto.nullable) = false];
+
+  // Optional expression involving the columns in the index (other than the
+  // inverted column) and the columns in the input stream. Assuming that the
+  // input stream has N columns and the table that has been indexed has M
+  // columns, in this expression variables @1 to @N refer to columns of the
+  // input stream and variables @(N+1) to @(N+M) refer to columns in the
+  // table. The numbering does not omit the column in the table corresponding
+  // to the inverted column, or other table columns absent from the index, but
+  // they cannot be present in this expression. Note that the column numbering
+  // matches the numbering used above by the inverted expression.
+  optional Expression on_expr = 5 [(gogoproto.nullable) = false];
+
+  // Only INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI are supported. For indexes
+  // that produce false positives for user expressions, like geospatial
+  // indexes, only INNER and LEFT_OUTER are actually useful -- LEFT_SEMI will
+  // be mapped to INNER by the optimizer, and LEFT_ANTI to LEFT_OUTER, to
+  // allow the false positives to be eliminated by evaluating the exact
+  // expression on the rows output by this join.
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // Indicates that the inverted joiner should maintain the ordering of the
+  // input stream.
+  optional bool maintain_ordering = 7 [(gogoproto.nullable) = false];
+
+  // Indicates that the join should output a continuation column that
+  // indicates whether a row is a continuation of a group corresponding to a
+  // left row.
+  optional bool output_group_continuation_for_left_row = 8 [(gogoproto.nullable) = false];
+}
+
+// InvertedFiltererSpec is the specification of a processor that does filtering
+// on a table by evaluating an invertedexpr.SpanExpressionProto on an inverted
+// index of the table. The input consists of the inverted index rows from
+// InvertedExpr.SpansToRead. It is acceptable for a filter on the primary key
+// to be pushed down between the scan and the inverted filterer.
+//
+// Example:
+// Table columns: | a | b | c | d |
+// where a, d are the primary key and b is the column with the inverted index.
+// Inverted index columns: | a | b' | d |
+// where b' is derived from b. For instance, if b is an array, b' will be
+// elements of the array.
+//
+// Internal columns are | a | b | d |. The output sets b to NULL, since it does
+// not have the value of the original column that was indexed in the inverted
+// column.
+//
+// Optionally, there can be a pre-filtering spec that describes an expression
+// (derived from the original expression that was converted to inverted_expr),
+// that must evaluate to true on each inverted row. This is a performance
+// optimization -- for more details see invertedidx.PreFilterer (geometry
+// and geography inverted indexes are the only ones that currently use
+// pre-filtering).
+message InvertedFiltererSpec {
+  // The index in the input row of the inverted column.
+  optional uint32 inverted_col_idx = 1 [(gogoproto.nullable) = false];
+
+  // The expression to evaluate. The SpansToRead are ignored since they
+  // have already been used to setup the input.
+  optional opt.invertedexpr.SpanExpressionProto inverted_expr = 2 [(gogoproto.nullable) = false];
+
+  // Optional pre-filtering expression.
+  message PreFiltererSpec {
+    // Expression has only one variable, @1, which refers to the column with
+    // the inverted index.
+    optional Expression expression = 1 [(gogoproto.nullable) = false];
+    // The type of the original column that was indexed in the inverted index.
+    optional sql.sem.types.T type = 2;
+  }
+  optional PreFiltererSpec pre_filterer_spec = 6;
+}
+
+// AggregatorSpec is the specification for an "aggregator" (processor core
+// type, not the logical plan computation stage). An aggregator performs
+// 'aggregation' in the SQL sense in that it groups rows and computes an aggregate
+// for each group. The group is configured using the group key. The aggregator
+// can be configured with one or more aggregation functions.
+//
+// The "internal columns" of an Aggregator map 1-1 to the aggregations.
+message AggregatorSpec {
+  // These mirror the aggregate functions supported by sql/parser. See
+  // sql/parser/aggregate_builtins.go.
+  enum Func {
+    ANY_NOT_NULL = 0;
+    AVG = 1;
+    BOOL_AND = 2;
+    BOOL_OR = 3;
+    CONCAT_AGG = 4;
+    COUNT = 5;
+    MAX = 7;
+    MIN = 8;
+    STDDEV = 9;
+    SUM = 10;
+    SUM_INT = 11;
+    VARIANCE = 12;
+    XOR_AGG = 13;
+    COUNT_ROWS = 14;
+    SQRDIFF = 15;
+    FINAL_VARIANCE = 16;
+    FINAL_STDDEV = 17;
+    ARRAY_AGG = 18;
+    JSON_AGG = 19;
+    // JSONB_AGG is an alias for JSON_AGG, they do the same thing.
+    JSONB_AGG = 20;
+    STRING_AGG = 21;
+    BIT_AND = 22;
+    BIT_OR = 23;
+    CORR = 24;
+    PERCENTILE_DISC_IMPL = 25;
+    PERCENTILE_CONT_IMPL = 26;
+    JSON_OBJECT_AGG = 27;
+    JSONB_OBJECT_AGG = 28;
+    VAR_POP = 29;
+    STDDEV_POP = 30;
+    ST_MAKELINE = 31;
+    ST_EXTENT = 32;
+    ST_UNION = 33;
+    ST_COLLECT = 34;
+  }
+
+  enum Type {
+    // This setting exists just for backwards compatibility; it's equivalent to
+    // SCALAR when there are no grouping columns, and to NON_SCALAR when there
+    // are grouping columns.
+    AUTO = 0;
+    // A scalar aggregation has no grouping columns and always returns one
+    // result row.
+    SCALAR = 1;
+    // A non-scalar aggregation returns no rows if there are no input rows; it
+    // may or may not have grouping columns.
+    NON_SCALAR = 2;
+  }
+
+  message Aggregation {
+    optional Func func = 1 [(gogoproto.nullable) = false];
+
+    // Aggregation functions with distinct = true functions like you would
+    // expect '<FUNC> DISTINCT' to operate, the default behavior would be
+    // the '<FUNC> ALL' operation.
+    optional bool distinct = 2 [(gogoproto.nullable) = false];
+
+    // The column index specifies the argument(s) to the aggregator function.
+    //
+    // Most aggregations take one argument
+    // COUNT_ROWS takes no arguments.
+    // FINAL_STDDEV and FINAL_VARIANCE take three arguments (SQRDIFF, SUM,
+    // COUNT).
+    repeated uint32 col_idx = 5;
+
+    // If set, this column index specifies a boolean argument; rows for which
+    // this value is not true don't contribute to this aggregation. This enables
+    // the filter clause, e.g.:
+    //   SELECT SUM(x) FILTER (WHERE y > 1), SUM(x) FILTER (WHERE y < 1) FROM t
+    optional uint32 filter_col_idx = 4;
+
+    // Arguments are const expressions passed to aggregation functions.
+    repeated Expression arguments = 6 [(gogoproto.nullable) = false];
+
+    reserved 3;
+  }
+
+  optional Type type = 5 [(gogoproto.nullable) = false];
+
+  // The group key is a subset of the columns in the input stream schema on the
+  // basis of which we define our groups.
+  repeated uint32 group_cols = 2 [packed = true];
+
+  repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
+
+  // A subset of the GROUP BY columns which are ordered in the input.
+  repeated uint32 ordered_group_cols = 4 [packed = true];
+}
+
+// ProjectSetSpec is the specification of a processor which applies a set of
+// expressions, which may be set-returning functions, to its input.
+message ProjectSetSpec {
+  // Expressions to be applied
+  repeated Expression exprs = 1 [(gogoproto.nullable) = false];
+
+  // Column types for the generated values
+  repeated sql.sem.types.T generated_columns = 2;
+
+  // The number of columns each expression returns. Same length as exprs.
+  repeated uint32 num_cols_per_gen = 3;
+}
+
+// WindowerSpec is the specification of a processor that performs computations
+// of window functions that have the same PARTITION BY clause. For a particular
+// windowFn, the processor puts result at windowFn.ArgIdxStart and "consumes"
+// all arguments to windowFn (windowFn.ArgCount of them). So if windowFn takes
+// no arguments, an extra column is added; if windowFn takes more than one
+// argument, (windowFn.ArgCount - 1) columns are removed.
+message WindowerSpec {
+  enum WindowFunc {
+    // These mirror window functions from window_builtins.go.
+    ROW_NUMBER = 0;
+    RANK = 1;
+    DENSE_RANK = 2;
+    PERCENT_RANK = 3;
+    CUME_DIST = 4;
+    NTILE = 5;
+    LAG = 6;
+    LEAD = 7;
+    FIRST_VALUE = 8;
+    LAST_VALUE = 9;
+    NTH_VALUE = 10;
+  }
+
+  // Func specifies which function to compute. It can either be built-in
+  // aggregate or built-in window function.
+  message Func {
+    option (gogoproto.onlyone) = true;
+
+    optional AggregatorSpec.Func aggregateFunc = 1;
+    optional WindowFunc windowFunc = 2;
+  }
+
+  // Frame is the specification of a single window frame for a window function.
+  message Frame {
+    // Mode indicates which mode of framing is used.
+    enum Mode {
+      // RANGE specifies frame in terms of logical range (e.g. 1 unit cheaper).
+      RANGE = 0;
+      // ROWS specifies frame in terms of physical offsets (e.g. 1 row before).
+      ROWS = 1;
+      // GROUPS specifies frame in terms of peer groups (where "peers" mean
+      // rows not distinct in the ordering columns).
+      GROUPS = 2;
+    }
+
+    // BoundType indicates which type of boundary is used.
+    enum BoundType {
+      UNBOUNDED_PRECEDING = 0;
+      UNBOUNDED_FOLLOWING = 1;
+      // Offsets are stored within Bound.
+      OFFSET_PRECEDING = 2;
+      OFFSET_FOLLOWING = 3;
+      CURRENT_ROW = 4;
+    }
+
+    // Exclusion specifies the type of frame exclusion.
+    enum Exclusion {
+      NO_EXCLUSION = 0;
+      EXCLUDE_CURRENT_ROW = 1;
+      EXCLUDE_GROUP = 2;
+      EXCLUDE_TIES = 3;
+    }
+
+    // Bound specifies the type of boundary and the offset (if present).
+    message Bound {
+      optional BoundType boundType = 1 [(gogoproto.nullable) = false];
+      // For UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, and CURRENT_ROW offset
+      // is ignored. Integer offset for ROWS and GROUPS modes is stored in
+      // int_offset while an encoded datum and the type information are stored
+      // for RANGE mode.
+      optional uint64 int_offset = 2 [(gogoproto.nullable) = false];
+      optional bytes typed_offset = 3;
+      optional DatumInfo offset_type = 4 [(gogoproto.nullable) = false];
+    }
+    // Bounds specifies boundaries of the window frame.
+    message Bounds {
+      // Start bound must always be present whereas end bound might be omitted.
+      optional Bound start = 1 [(gogoproto.nullable) = false];
+      optional Bound end = 2;
+    }
+
+    optional Mode mode = 1 [(gogoproto.nullable) = false];
+    optional Bounds bounds = 2 [(gogoproto.nullable) = false];
+    optional Exclusion exclusion = 3 [(gogoproto.nullable) = false];
+  }
+
+  // WindowFn is the specification of a single window function.
+  message WindowFn {
+    // Func is which function to compute.
+    optional Func func = 1 [(gogoproto.nullable) = false];
+    // ArgsIdxs contains indices of the columns that are arguments to the
+    // window function.
+    repeated uint32 argsIdxs = 7;
+    // Ordering specifies in which order rows should be considered by this
+    // window function. Its contents come from ORDER BY clause of the window
+    // function.
+    optional Ordering ordering = 4 [(gogoproto.nullable) = false];
+    // Frame specifies over which frame this window function is computed.
+    optional Frame frame = 5;
+    // Optional index of a column over which filtering of rows will be done.
+    // Special value -1 indicates that filter is not present.
+    optional int32 filterColIdx = 6 [(gogoproto.nullable) = false];
+    // OutputColIdx specifies the column index which the window function should
+    // put its output into.
+    optional uint32 outputColIdx = 8 [(gogoproto.nullable) = false];
+
+    reserved 2, 3;
+  }
+
+  // PartitionBy specifies how to partition rows for all window functions.
+  repeated uint32 partitionBy = 1;
+  // WindowFns is the specification of all window functions to be computed.
+  repeated WindowFn windowFns = 2 [(gogoproto.nullable) = false];
+}

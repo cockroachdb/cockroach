@@ -1,57 +1,52 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
 ----
-TABLE a
- ├── x int not null
- ├── y float
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT, y FLOAT)
 ----
-TABLE b
- ├── x int
- ├── y float
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT 5 r
 ----
 project
- ├── columns: r:1(int!null)
+ ├── columns: r:1!null
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── const: 5 [type=int]
+      └── 5 [as=r:1]
 
 build
 SELECT a.x FROM a
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── scan a
-      └── columns: x:1(int!null) y:2(float)
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT a.x, a.y FROM a
 ----
-scan a
- └── columns: x:1(int!null) y:2(float)
+project
+ ├── columns: x:1!null y:2
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT a.y, a.x FROM a
 ----
-scan a
- └── columns: y:2(float) x:1(int!null)
+project
+ ├── columns: y:2 x:1!null
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT * FROM a
 ----
-scan a
- └── columns: x:1(int!null) y:2(float)
+project
+ ├── columns: x:1!null y:2
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 # Note that an explicit projection operator is added for table b (unlike for
 # table a) to avoid projecting the hidden rowid column.
@@ -59,80 +54,64 @@ build
 SELECT * FROM b
 ----
 project
- ├── columns: x:1(int) y:2(float)
+ ├── columns: x:1 y:2
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
 
 build
 SELECT (a.x + 3) AS "X", false AS "Y" FROM a
 ----
 project
- ├── columns: X:3(int) Y:4(bool!null)
+ ├── columns: X:4!null Y:5!null
  ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      ├── plus [type=int]
-      │    ├── variable: a.x [type=int]
-      │    └── const: 3 [type=int]
-      └── false [type=bool]
+      ├── x:1 + 3 [as=X:4]
+      └── false [as=Y:5]
 
 build
 SELECT *, ((x < y) OR x > 1000) AS r FROM a
 ----
 project
- ├── columns: x:1(int!null) y:2(float) r:3(bool)
+ ├── columns: x:1!null y:2 r:4
  ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      └── or [type=bool]
-           ├── lt [type=bool]
-           │    ├── variable: a.x [type=int]
-           │    └── variable: a.y [type=float]
-           └── gt [type=bool]
-                ├── variable: a.x [type=int]
-                └── const: 1000 [type=int]
+      └── (x:1 < y:2) OR (x:1 > 1000) [as=r:4]
 
 build
 SELECT a.*, true FROM a
 ----
 project
- ├── columns: x:1(int!null) y:2(float) bool:3(bool!null)
+ ├── columns: x:1!null y:2 bool:4!null
  ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      └── true [type=bool]
+      └── true [as=bool:4]
 
 build
 SELECT u + 1 AS r, v + 1 AS s FROM (SELECT a.x + 3 AS t, a.y + 1.0 AS u FROM a) AS foo(u, v)
 ----
 project
- ├── columns: r:5(int) s:6(float)
+ ├── columns: r:6!null s:7
  ├── project
- │    ├── columns: t:3(int) u:4(float)
+ │    ├── columns: t:4!null u:5
  │    ├── scan a
- │    │    └── columns: x:1(int!null) y:2(float)
+ │    │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
  │    └── projections
- │         ├── plus [type=int]
- │         │    ├── variable: a.x [type=int]
- │         │    └── const: 3 [type=int]
- │         └── plus [type=float]
- │              ├── variable: a.y [type=float]
- │              └── const: 1.0 [type=float]
+ │         ├── x:1 + 3 [as=t:4]
+ │         └── y:2 + 1.0 [as=u:5]
  └── projections
-      ├── plus [type=int]
-      │    ├── variable: t [type=int]
-      │    └── const: 1 [type=int]
-      └── plus [type=float]
-           ├── variable: u [type=float]
-           └── const: 1.0 [type=float]
+      ├── t:4 + 1 [as=r:6]
+      └── u:5 + 1.0 [as=s:7]
 
 build
 SELECT rowid FROM b;
 ----
 project
- ├── columns: rowid:3(int!null)
+ ├── columns: rowid:3!null
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
 
 build
 SELECT rowid FROM (SELECT * FROM b)
@@ -143,35 +122,29 @@ build
 SELECT rowid FROM (SELECT rowid FROM b)
 ----
 project
- ├── columns: rowid:3(int!null)
+ ├── columns: rowid:3!null
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
 
 build
 SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
 ----
 project
- ├── columns: r:3(int!null)
+ ├── columns: r:3!null
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
 
 build
 SELECT r FROM (SELECT rowid FROM b) AS q(r)
 ----
 project
- ├── columns: r:3(int!null)
+ ├── columns: r:3!null
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
 
 exec-ddl
 CREATE TABLE c (x INT, y FLOAT)
 ----
-TABLE c
- ├── x int
- ├── y float
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT rowid FROM b, c
@@ -181,53 +154,48 @@ error (42702): column reference "rowid" is ambiguous (candidates: b.rowid, c.row
 build
 SELECT x, y, rowid FROM c WHERE rowid > 0
 ----
-select
- ├── columns: x:1(int) y:2(float) rowid:3(int!null)
- ├── scan c
- │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
- └── filters [type=bool]
-      └── gt [type=bool]
-           ├── variable: c.rowid [type=int]
-           └── const: 0 [type=int]
+project
+ ├── columns: x:1 y:2 rowid:3!null
+ └── select
+      ├── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+      ├── scan c
+      │    └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+      └── filters
+           └── rowid:3 > 0
 
 build
 SELECT r FROM (SELECT x, y, rowid AS r FROM c)
 ----
 project
- ├── columns: r:3(int!null)
- └── scan c
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+ ├── columns: r:3!null
+ └── project
+      ├── columns: x:1 y:2 rowid:3!null
+      └── scan c
+           └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
 
 build
 SELECT rowid::string FROM b
 ----
 project
- ├── columns: rowid:4(string)
+ ├── columns: rowid:5!null
  ├── scan b
- │    └── columns: x:1(int) y:2(float) b.rowid:3(int!null)
+ │    └── columns: x:1 y:2 b.rowid:3!null crdb_internal_mvcc_timestamp:4
  └── projections
-      └── cast: STRING [type=string]
-           └── variable: b.rowid [type=int]
+      └── b.rowid:3::STRING [as=rowid:5]
 
 build
 SELECT (x, y)::timestamp FROM b
 ----
-error (42846): invalid cast: tuple{int, float} -> TIMESTAMP
+error (42846): invalid cast: tuple{int, float} -> timestamp
 
 build
 SELECT CAST(x AS int[]) FROM b
 ----
-error (42846): invalid cast: int -> INT[]
+error (42846): invalid cast: int -> int[]
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT c FROM (SELECT a FROM abc)
@@ -247,35 +215,41 @@ error (42703): column "c" does not exist
 build fully-qualify-names
 SELECT t.kv.k FROM abc AS kv
 ----
-error (42P01): no data source matches prefix: t.kv
+error (42P01): no data source matches prefix: t.kv in this context
 
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 ----
-TABLE kv
- ├── k int not null
- ├── v int
- └── INDEX primary
-      └── k int not null
 
 build fully-qualify-names
 SELECT t.kv.k FROM kv
 ----
 project
- ├── columns: k:1(int!null)
- └── scan kv
-      └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int)
+ ├── columns: k:1!null
+ └── scan t.public.kv
+      └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.crdb_internal_mvcc_timestamp:3
 
 # Check that tuple type includes labels.
 build
 SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
 ----
 project
- ├── columns: x:3(tuple{int AS a, int AS b, int AS c})
+ ├── columns: x:4
  ├── scan kv
- │    └── columns: k:1(int!null) v:2(int)
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      └── tuple [type=tuple{int AS a, int AS b, int AS c}]
-           ├── variable: kv.v [type=int]
-           ├── variable: kv.v [type=int]
-           └── variable: kv.v [type=int]
+      └── ((v:2, v:2, v:2) AS a, b, c) [as=x:4]
+
+# Regression test for #48179. Star expansion of un-labeled tuple must project
+# all columns from the tuple.
+build
+SELECT (b).* FROM (VALUES (((1, 2)))) as a(b)
+----
+project
+ ├── columns: "?column?":2 "?column?":3
+ ├── values
+ │    ├── columns: column1:1
+ │    └── ((1, 2),)
+ └── projections
+      ├── (column1:1).@1 [as="?column?":2]
+      └── (column1:1).@2 [as="?column?":3]

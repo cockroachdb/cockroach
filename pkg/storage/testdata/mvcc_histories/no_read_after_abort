@@ -1,0 +1,28 @@
+## Simple txn that aborts.
+
+run trace ok
+with t=A k=a
+  txn_begin      ts=22
+  put            v=cde
+  resolve_intent status=ABORTED
+  txn_remove
+----
+>> txn_begin ts=22 t=A k=a
+txn: "A" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000022,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000022,0 wto=false max=0,0
+>> put v=cde t=A k=a
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000022,0 min=0,0 seq=0} ts=0.000000022,0 del=false klen=12 vlen=8
+data: "a"/0.000000022,0 -> /BYTES/cde
+>> resolve_intent status=ABORTED t=A k=a
+<no data>
+>> txn_remove t=A k=a
+
+# Cannot read aborted value.
+
+run ok
+with t=A
+  txn_begin  ts=23
+  get   k=a
+  txn_remove
+----
+get: "a" -> <no data>
+>> at end:

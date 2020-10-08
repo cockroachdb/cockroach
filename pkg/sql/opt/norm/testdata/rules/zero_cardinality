@@ -1,0 +1,134 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
+----
+
+exec-ddl
+CREATE TABLE c (k INT PRIMARY KEY, v INT, INDEX partial_v (v) WHERE k > 0 AND k < 0)
+----
+
+# --------------------------------------------------
+# SimplifyZeroCardinalityGroup
+# --------------------------------------------------
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT k FROM b WHERE false
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT k FROM b WHERE k<1 AND k>2
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT k FROM b WHERE i=5 AND k<1 AND k>2 AND s='foo'
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM (VALUES (1) OFFSET 1)
+----
+values
+ ├── columns: column1:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM b INNER JOIN b b2 ON False
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null k:7!null i:8!null f:9!null s:10!null j:11!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5,7-11)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM a INNER JOIN b ON a.k=b.k WHERE False
+----
+values
+ ├── columns: k:1!null k:3!null i:4!null f:5!null s:6!null j:7!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,3-7)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM b LIMIT 0
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM (SELECT * FROM b WHERE i=1) WHERE False
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM (SELECT * FROM b WHERE False) WHERE s='foo'
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM (SELECT * FROM b WHERE False) WHERE s='foo'
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
+----
+project
+ ├── columns: case:7!null
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── values
+ │    ├── columns: k:1!null
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── projections
+      └── CASE WHEN k:1 < 0 THEN 3 / 0 ELSE 3 END [as=case:7, outer=(1), immutable]
+
+# Building the partial index predicate should trigger the rule.
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM c
+----
+scan c
+ ├── columns: k:1!null v:2
+ ├── partial index predicates
+ │    └── partial_v: filters
+ │         └── false [constraints=(contradiction; tight)]
+ ├── key: (1)
+ └── fd: (1)-->(2)

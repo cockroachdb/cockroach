@@ -1,21 +1,19 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
 import (
 	"bytes"
+	"context"
+	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -27,19 +25,21 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/spf13/pflag"
-
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDumpData uses the testdata/dump directory to execute SQL statements
@@ -64,7 +64,7 @@ func TestDumpData(t *testing.T) {
 		c.omitArgs = true
 		defer c.cleanup()
 
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			args := []string{d.Cmd}
 			switch d.Cmd {
 			case "sql":
@@ -89,7 +89,8 @@ func TestDumpData(t *testing.T) {
 				if out, err := c.RunWithCaptureArgs([]string{"sql", "-d", "tmp", "-e", s}); err != nil {
 					d.Fatalf(t, "%v", err)
 				} else {
-					t.Logf("executed SQL: %s\nresult: %s", s, out)
+					log.Infof(context.Background(),
+						"TestDumpData: executed SQL: %s\nresult: %s", s, out)
 				}
 				args[1] = "tmp"
 				roundtrip, err := c.RunWithCaptureArgs(args)
@@ -106,14 +107,18 @@ func TestDumpData(t *testing.T) {
 }
 
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
-	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName}, "")
+	clusterTS, err := getAsOf(conn, "" /* asOf */)
+	if err != nil {
+		return err
+	}
+	mds, err := getDumpMetadata(conn, dbName, []string{tName}, clusterTS)
 	if err != nil {
 		return err
 	}
 	if err := dumpCreateTable(w, mds[0]); err != nil {
 		return err
 	}
-	return dumpTableData(w, conn, ts, mds[0])
+	return dumpTableData(w, conn, nil /* typContext */, mds[0])
 }
 
 func TestDumpBytes(t *testing.T) {
@@ -122,7 +127,7 @@ func TestDumpBytes(t *testing.T) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -186,7 +191,7 @@ func TestDumpRandom(t *testing.T) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -198,9 +203,13 @@ func TestDumpRandom(t *testing.T) {
 		CREATE TABLE d.t (
 			rowid int,
 			i int,
+			si smallint,
+			bi bigint,
 			f float,
+			fr real,
 			d date,
 			m timestamp,
+			mtz timestamptz,
 			n interval,
 			o bool,
 			e decimal,
@@ -209,8 +218,9 @@ func TestDumpRandom(t *testing.T) {
 			u uuid,
 			ip inet,
 			j json,
-			PRIMARY KEY (rowid, i, f, d, m, n, o, e, s, b, u, ip)
+			PRIMARY KEY (rowid, i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip)
 		);
+		SET extra_float_digits = 3;
 	`, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -231,14 +241,10 @@ func TestDumpRandom(t *testing.T) {
 			// Generate a random number of random inserts.
 			i := rnd.Int63()
 			f := rnd.Float64()
-			d := timeutil.Unix(0, rnd.Int63()).Round(time.Hour * 24)
+			d, _ := pgdate.MakeCompatibleDateFromDisk(rnd.Int63n(10000)).ToTime()
 			m := timeutil.Unix(0, rnd.Int63()).Round(time.Microsecond)
 			sign := 1 - rnd.Int63n(2)*2
-			dur := duration.Duration{
-				Months: sign * rnd.Int63n(1000),
-				Days:   sign * rnd.Int63n(1000),
-				Nanos:  sign * rnd.Int63(),
-			}
+			dur := duration.MakeDuration(sign*rnd.Int63(), sign*rnd.Int63n(1000), sign*rnd.Int63n(1000))
 			n := dur.String()
 			o := rnd.Intn(2) == 1
 			e := apd.New(rnd.Int63(), rnd.Int31n(20)-10).String()
@@ -277,8 +283,12 @@ func TestDumpRandom(t *testing.T) {
 			vals := []driver.Value{
 				_i,
 				i,
+				i & 0x7fff, // si
+				i,          // bi
 				f,
+				f, // fr
 				d,
+				m,
 				m,
 				[]byte(n), // intervals come out as `[]byte`s
 				o,
@@ -289,14 +299,14 @@ func TestDumpRandom(t *testing.T) {
 				[]byte(ip.String()),
 				[]byte(j.String()),
 			}
-			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", vals); err != nil {
+			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)", vals); err != nil {
 				t.Fatal(err)
 			}
 			generatedRows = append(generatedRows, vals[1:])
 		}
 
 		check := func(table string) {
-			q := fmt.Sprintf("SELECT i, f, d, m, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
+			q := fmt.Sprintf("SELECT i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
 			nrows, err := conn.Query(q, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -368,7 +378,7 @@ func TestDumpAsOf(t *testing.T) {
 
 	const create = `
 	CREATE DATABASE d;
-	CREATE TABLE d.t (i int);
+	CREATE TABLE d.t (i int8);
 	INSERT INTO d.t VALUES (1);
 	SELECT now();
 `
@@ -388,12 +398,12 @@ func TestDumpAsOf(t *testing.T) {
 	}
 
 	const want1 = `dump d t
-CREATE TABLE t (
-	i INT NULL,
+CREATE TABLE public.t (
+	i INT8 NULL,
 	FAMILY "primary" (i, rowid)
 );
 
-INSERT INTO t (i) VALUES
+INSERT INTO public.t (i) VALUES
 	(1);
 `
 	if dump1 != want1 {
@@ -401,7 +411,7 @@ INSERT INTO t (i) VALUES
 	}
 
 	c.RunWithArgs([]string{"sql", "-e", `
-		ALTER TABLE d.t ADD COLUMN j int DEFAULT 2;
+		ALTER TABLE d.t ADD COLUMN j int8 DEFAULT 2;
 		INSERT INTO d.t VALUES (3, 4);
 	`})
 
@@ -409,14 +419,15 @@ INSERT INTO t (i) VALUES
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	const want2 = `dump d t
-CREATE TABLE t (
-	i INT NULL,
-	j INT NULL DEFAULT 2:::INT,
+CREATE TABLE public.t (
+	i INT8 NULL,
+	j INT8 NULL DEFAULT 2:::INT8,
 	FAMILY "primary" (i, rowid, j)
 );
 
-INSERT INTO t (i, j) VALUES
+INSERT INTO public.t (i, j) VALUES
 	(1, 2),
 	(3, 4);
 `
@@ -436,7 +447,592 @@ INSERT INTO t (i, j) VALUES
 
 	if out, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", "2000-01-01 00:00:00"}); err != nil {
 		t.Fatal(err)
-	} else if !strings.Contains(out, `relation d.public.t does not exist`) {
+	} else if !strings.Contains(out, `database "d" does not exist`) {
 		t.Fatalf("unexpected output: %s", out)
+	}
+}
+
+func TestDumpInterleavedTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+CREATE DATABASE d;
+CREATE TABLE d.customers (id INT PRIMARY KEY, name STRING(50));
+CREATE TABLE d.orders (
+	customer INT,
+	id INT,
+	total DECIMAL(20, 5),
+	PRIMARY KEY (customer, id),
+	CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES d.customers
+) INTERLEAVE IN PARENT d.customers (customer);
+CREATE INDEX i ON d.orders (customer, total) INTERLEAVE IN PARENT d.customers (customer);
+`
+
+	_, err := c.RunWithCaptureArgs([]string{"sql", "-e", create})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dump1, err := c.RunWithCaptureArgs([]string{"dump", "d", "orders"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const want1 = `dump d orders
+CREATE TABLE public.orders (
+	customer INT8 NOT NULL,
+	id INT8 NOT NULL,
+	total DECIMAL(20,5) NULL,
+	CONSTRAINT "primary" PRIMARY KEY (customer ASC, id ASC),
+	FAMILY "primary" (customer, id, total)
+) INTERLEAVE IN PARENT public.customers (customer);
+
+ALTER TABLE public.orders ADD CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES public.customers(id);
+CREATE INDEX i ON public.orders (customer ASC, total ASC) INTERLEAVE IN PARENT public.customers (customer);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public.orders VALIDATE CONSTRAINT fk_customer;
+`
+
+	if dump1 != want1 {
+		t.Fatalf("expected: %s\ngot: %s", want1, dump1)
+	}
+}
+
+func TestDatabaseDumpCommand(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name     string
+		create   string
+		expected string
+	}{
+		{
+			name: "columnsless_table",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo ();
+`,
+			expected: `CREATE TABLE public.foo (FAMILY "primary" (rowid)
+);
+`,
+		},
+		{
+			name: "table_with_columns",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo (id int primary key, text string not null);
+`,
+			expected: `CREATE TABLE public.foo (
+	id INT8 NOT NULL,
+	text STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, text)
+);
+`,
+		},
+		{
+			name: "autogenerate_hidden_colum",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo(id int);
+`,
+			expected: `CREATE TABLE public.foo (
+	id INT8 NULL,
+	FAMILY "primary" (id, rowid)
+);
+`,
+		},
+		{
+			name: "columns_less_table_with_data",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo(id int);
+
+INSERT INTO foo(id) VALUES(1);
+INSERT INTO foo(id) VALUES(2);
+INSERT INTO foo(id) VALUES(3);
+
+ALTER TABLE foo DROP COLUMN id; 
+`,
+			expected: `CREATE TABLE public.foo (FAMILY "primary" (rowid)
+);
+`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := newCLITest(cliTestParams{t: t})
+			c.omitArgs = true
+			defer c.cleanup()
+
+			_, err := c.RunWithCaptureArgs([]string{"sql", "-e", test.create})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			dump, err := c.RunWithCaptureArgs([]string{"dump", "bar", "--dump-mode=schema"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if dump != test.expected {
+				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+
+			dumpWithData, err := c.RunWithCaptureArgs([]string{"dump", "bar", "--dump-mode=data"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// check we can actually reuse dump output
+			_, err = c.RunWithCaptureArgs([]string{"sql", "-e", fmt.Sprintf(`CREATE DATABASE TEST;
+USE TEST;
+%s
+%s`, dump, dumpWithData)})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			result1, err := c.RunWithCaptureArgs([]string{"sql", "-e", "select * from bar.foo"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			result2, err := c.RunWithCaptureArgs([]string{"sql", "-e", "select * from test.foo"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if result1 != result2 {
+				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+		})
+	}
+}
+
+func TestDumpAllTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name     string
+		args     []string
+		recreate bool
+		create   string
+		expected string
+		clean    string
+	}{
+		{
+			name: " dump_all",
+			create: `
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t1(id, pkey) VALUES(1, 'db1-aaaa');
+INSERT INTO t1(id, pkey) VALUES(2, 'db1-bbbb');
+
+CREATE DATABASE db2;
+USE db2;
+CREATE TABLE t2(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t2(id, pkey) VALUES(1, 'db2-aaaa');
+INSERT INTO t2(id, pkey) VALUES(2, 'db2-bbbb');
+`,
+			expected: `
+CREATE DATABASE IF NOT EXISTS db1;
+USE db1;
+
+CREATE TABLE public.t1 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO public.t1 (id, pkey) VALUES
+	(1, 'db1-aaaa'),
+	(2, 'db1-bbbb');
+
+CREATE DATABASE IF NOT EXISTS db2;
+USE db2;
+
+CREATE TABLE public.t2 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO public.t2 (id, pkey) VALUES
+	(1, 'db2-aaaa'),
+	(2, 'db2-bbbb');
+`,
+		},
+		{
+			name: " dump_all_only_data",
+			args: []string{"--dump-mode=data"},
+			create: `
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t1(id, pkey) VALUES(1, 'db1-aaaa');
+INSERT INTO t1(id, pkey) VALUES(2, 'db1-bbbb');
+
+CREATE DATABASE db2;
+USE db2;
+CREATE TABLE t2(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t2(id, pkey) VALUES(1, 'db2-aaaa');
+INSERT INTO t2(id, pkey) VALUES(2, 'db2-bbbb');
+`,
+			expected: `
+INSERT INTO public.t1 (id, pkey) VALUES
+	(1, 'db1-aaaa'),
+	(2, 'db1-bbbb');
+
+INSERT INTO public.t2 (id, pkey) VALUES
+	(1, 'db2-aaaa'),
+	(2, 'db2-bbbb');
+`,
+		},
+		{
+			name:     "dump_cross_references",
+			recreate: true,
+			create: `
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE;
+CREATE DATABASE dbB;
+USE dbB;
+
+CREATE TABLE person(
+	id int PRIMARY KEY,
+	name string NOT NULL);
+
+INSERT INTO person(id, name) VALUES(1, 'John Smith');
+INSERT INTO person(id, name) VALUES(2, 'Joe Dow');
+
+CREATE DATABASE dbA;
+USE dbA;
+
+CREATE TABLE account(
+	id int PRIMARY KEY,
+	person_id int REFERENCES dbB.person(id),
+	accountNo int NOT NULL);
+
+INSERT INTO account(id, person_id, accountNo) VALUES(1, 1, 1111); 
+INSERT INTO account(id, person_id, accountNo) VALUES(2, 2, 2222); 
+`,
+			expected: `
+CREATE DATABASE IF NOT EXISTS dba;
+USE dba;
+
+CREATE TABLE public.account (
+	id INT8 NOT NULL,
+	person_id INT8 NULL,
+	accountno INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, person_id, accountno)
+);
+
+INSERT INTO public.account (id, person_id, accountno) VALUES
+	(1, 1, 1111),
+	(2, 2, 2222);
+
+CREATE DATABASE IF NOT EXISTS dbb;
+USE dbb;
+
+CREATE TABLE public.person (
+	id INT8 NOT NULL,
+	name STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, name)
+);
+
+INSERT INTO public.person (id, name) VALUES
+	(1, 'John Smith'),
+	(2, 'Joe Dow');
+
+ALTER TABLE public.account ADD CONSTRAINT fk_person_id_ref_person FOREIGN KEY (person_id) REFERENCES dbb.public.person(id);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public.account VALIDATE CONSTRAINT fk_person_id_ref_person;
+`,
+			clean: `
+DROP DATABASE dba;
+DROP DATABASE dbb;
+`,
+		},
+		{
+			name: "verify_defaultdb_dump",
+			create: `
+CREATE TABLE foo(id INT NOT NULL);
+
+INSERT INTO foo(id) VALUES(1);
+INSERT INTO foo(id) VALUES(2);
+INSERT INTO foo(id) VALUES(3);
+
+CREATE DATABASE dba;
+USE dba;
+
+CREATE TABLE bar(id INT NOT NULL);
+
+INSERT INTO bar(id) VALUES(1);
+INSERT INTO bar(id) VALUES(2);
+`,
+			clean: `
+	USE defaultdb;
+	DROP TABLE foo;
+	DROP DATABASE dba;
+`,
+			recreate: true,
+			expected: `
+CREATE DATABASE IF NOT EXISTS dba;
+USE dba;
+
+CREATE TABLE public.bar (
+	id INT8 NOT NULL,
+	FAMILY "primary" (id, rowid)
+);
+
+INSERT INTO public.bar (id) VALUES
+	(1),
+	(2);
+
+CREATE DATABASE IF NOT EXISTS defaultdb;
+USE defaultdb;
+
+CREATE TABLE public.foo (
+	id INT8 NOT NULL,
+	FAMILY "primary" (id, rowid)
+);
+
+INSERT INTO public.foo (id) VALUES
+	(1),
+	(2),
+	(3);
+`,
+		},
+	}
+	for _, test := range tests {
+		tt := test
+		t.Run(tt.name, func(t *testing.T) {
+
+			c := newCLITest(cliTestParams{t: t})
+			c.omitArgs = true
+			defer c.cleanup()
+
+			_, err := c.RunWithCaptureArgs([]string{"sql", "-e", tt.create})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			args := []string{"dump", "--dump-all"}
+			args = append(args, tt.args...)
+			dump, err := c.RunWithCaptureArgs(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if dump != tt.expected {
+				t.Fatalf("expected: %s\ngot: %s", tt.expected, dump)
+			}
+
+			// attempt to recreate from dump if test case defines
+			//clean up procedure
+			if tt.recreate {
+				_, err := c.RunWithCaptureArgs([]string{"sql", "-e", tt.clean})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				_, err = c.RunWithCaptureArgs([]string{"sql", "-e", dump})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// TestDumpTempTables tests how `cockroach dump` handles temporary tables, views
+// and sequences.
+// This could not be written as a datadriven test because temp objects do not
+// persist across RunWithCaptureArgs() invocations. Therefore, the datadriven
+// infra cannot test our handling of temp objects since they get deleted between
+// sql and dump runs anyways.
+func TestDumpTempTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testInput := []struct {
+		name     string
+		create   string
+		expected string
+		args     []string
+	}{
+		{
+			name: "dump_db_only_temp",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+CREATE TEMP TABLE tmpbar (id INT PRIMARY KEY);
+INSERT INTO tmpbar VALUES (1);
+
+CREATE TEMP VIEW tmpview (id) AS SELECT id FROM tmpbar;
+CREATE TEMP SEQUENCE tmpseq START 1 INCREMENT 1;
+`,
+			expected: ``,
+			args:     []string{"foo"},
+		},
+		{
+			name: "dump_db_mix_permanent_and_temp",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+CREATE TABLE bar (id int primary key, text string not null);
+INSERT INTO bar VALUES (1, 'a');
+
+CREATE TEMP TABLE tmpbar (id int primary key);
+`,
+			expected: `CREATE TABLE public.bar (
+	id INT8 NOT NULL,
+	text STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, text)
+);
+
+INSERT INTO public.bar (id, text) VALUES
+	(1, 'a');
+`,
+			args: []string{"foo"},
+		},
+		{
+			name: "dump_tmp_table_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+		
+CREATE TABLE bar (id INT PRIMARY KEY);
+		
+CREATE TEMP TABLE tmpbar (id INT PRIMARY KEY);
+INSERT INTO tmpbar VALUES (1);
+`,
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpbar does not exist\n",
+			args:     []string{"foo", "bar", "tmpbar"},
+		},
+		{
+			name: "dump_tmp_view_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+		
+CREATE TABLE bar (id INT PRIMARY KEY);
+		
+CREATE TEMP VIEW tmpview (id) AS SELECT id FROM bar;
+`,
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpview does not exist\n",
+			args:     []string{"foo", "tmpview"},
+		},
+		{
+			name: "dump_tmp_sequence_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+
+CREATE TEMP SEQUENCE tmpseq START 1 INCREMENT 1;
+`,
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpseq does not exist\n",
+			args:     []string{"foo", "tmpseq"},
+		},
+		{
+			name: "dump_all_with_tmp",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t1(id, pkey) VALUES(1, 'db1-aaaa');
+
+CREATE DATABASE db2;
+USE db2;
+CREATE TEMP TABLE t2(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+CREATE TABLE t3(id INT NOT NULL, pkey STRING PRIMARY KEY);
+INSERT INTO t3(id, pkey) VALUES(1, 'db2-aaaa');
+`,
+			expected: `
+CREATE DATABASE IF NOT EXISTS db1;
+USE db1;
+
+CREATE TABLE public.t1 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO public.t1 (id, pkey) VALUES
+	(1, 'db1-aaaa');
+
+CREATE DATABASE IF NOT EXISTS db2;
+USE db2;
+
+CREATE TABLE public.t3 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO public.t3 (id, pkey) VALUES
+	(1, 'db2-aaaa');
+`,
+			args: []string{"--dump-all"},
+		},
+	}
+
+	for _, test := range testInput {
+		t.Run(test.name, func(t *testing.T) {
+			c := newCLITest(cliTestParams{t: t})
+			c.omitArgs = true
+			defer c.cleanup()
+
+			pgURL, cleanupFunc := sqlutils.PGUrl(
+				t, c.ServingSQLAddr(), t.Name(),
+				url.User(security.RootUser),
+			)
+			defer cleanupFunc()
+			db, err := gosql.Open("postgres", pgURL.String())
+			require.NoError(t, err)
+
+			// Create the tables.
+			_, err = db.Exec(test.create)
+			require.NoError(t, err)
+
+			var args []string
+			args = append(args, "dump")
+			args = append(args, test.args...)
+			args = append(args, "--dump-mode=both")
+			dump, err := c.RunWithCaptureArgs(args)
+			require.NoError(t, err)
+			if dump != test.expected {
+				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+
+			require.NoError(t, db.Close())
+		})
 	}
 }

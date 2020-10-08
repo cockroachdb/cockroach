@@ -1,55 +1,125 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
+
+	crdblog "github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// The flags used by the internal loggers.
+const logFlags = log.Lshortfile | log.Ltime | log.LUTC
+
+type loggerConfig struct {
+	// prefix, if set, will be applied to lines passed to Printf()/Errorf().
+	// It will not be applied to lines written directly to stdout/stderr (not for
+	// a particular reason, but because it's not worth the extra code to do so).
+	prefix         string
+	stdout, stderr io.Writer
+}
+
+type loggerOption interface {
+	apply(*loggerConfig)
+}
+
+type logPrefix string
+
+var _ logPrefix // silence unused lint
+
+func (p logPrefix) apply(cfg *loggerConfig) {
+	cfg.prefix = string(p)
+}
+
+type quietStdoutOption struct {
+}
+
+func (quietStdoutOption) apply(cfg *loggerConfig) {
+	cfg.stdout = ioutil.Discard
+}
+
+type quietStderrOption struct {
+}
+
+func (quietStderrOption) apply(cfg *loggerConfig) {
+	cfg.stderr = ioutil.Discard
+}
+
+var quietStdout quietStdoutOption
+var quietStderr quietStderrOption
 
 // logger logs to a file in artifacts and stdio simultaneously. This makes it
 // possible to observe progress of multiple tests from the terminal (or the
 // TeamCity build log, if running in CI), while creating a non-interleaved
 // record in the build artifacts.
 type logger struct {
-	name           string
-	file           *os.File
+	path string
+	file *os.File
+	// stdoutL and stderrL are the loggers used internally by Printf()/Errorf().
+	// They write to stdout/stderr (below), but prefix the messages with
+	// logger-specific formatting (file/line, time), plus an optional configurable
+	// prefix.
+	// stderrL is nil in case stdout == stderr. In that case, stdoutL is always
+	// used. We do this in order to take advantage of the logger's internal
+	// synchronization so that concurrent Printf()/Error() calls don't step over
+	// each other.
+	stdoutL, stderrL *log.Logger
+	// stdout, stderr are the raw Writers used by the loggers.
+	// If path/file is set, then they might Multiwriters, outputting to both a
+	// file and os.Stdout.
+	// They can be used directly by clients when a writer is required (e.g. when
+	// piping output from a subcommand).
 	stdout, stderr io.Writer
+
+	mu struct {
+		syncutil.Mutex
+		closed bool
+	}
 }
 
-// TODO(peter): put all of the logs for a test in a directory named by the
-// test.
-func newLogger(name, filename, prefix string, stdout, stderr io.Writer) (*logger, error) {
-	if artifacts == "" {
-		// Log to stdout/stderr if there is no artifacts directory.
+// newLogger constructs a new logger object. Not intended for direct
+// use. Please use logger.ChildLogger instead.
+//
+// If path is empty, logs will go to stdout/stderr.
+func (cfg *loggerConfig) newLogger(path string) (*logger, error) {
+	if path == "" {
+		// Log to os.Stdout/Stderr is no other options are passed in.
+		stdout := cfg.stdout
+		if stdout == nil {
+			stdout = os.Stdout
+		}
+		stderr := cfg.stderr
+		if stderr == nil {
+			stderr = os.Stderr
+		}
 		return &logger{
-			stdout: os.Stdout,
-			stderr: os.Stderr,
+			stdout:  stdout,
+			stderr:  stderr,
+			stdoutL: log.New(os.Stdout, cfg.prefix, logFlags),
+			stderrL: log.New(os.Stderr, cfg.prefix, logFlags),
 		}, nil
 	}
 
-	path := filepath.Join(artifacts, teamCityNameEscape(name), filename)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return nil, err
 	}
 
-	f, err := os.Create(path + ".log")
+	f, err := os.Create(path)
 	if err != nil {
 		return nil, err
 	}
@@ -58,89 +128,152 @@ func newLogger(name, filename, prefix string, stdout, stderr io.Writer) (*logger
 		if w == nil {
 			return f
 		}
-		if prefix != "" {
-			w = &prefixWriter{out: w, prefix: []byte(prefix)}
-		}
 		return io.MultiWriter(f, w)
 	}
 
+	stdout := newWriter(cfg.stdout)
+	stderr := newWriter(cfg.stderr)
+	stdoutL := log.New(stdout, cfg.prefix, logFlags)
+	var stderrL *log.Logger
+	if cfg.stdout != cfg.stderr {
+		stderrL = log.New(stderr, cfg.prefix, logFlags)
+	} else {
+		stderrL = stdoutL
+	}
 	return &logger{
-		name:   name,
-		file:   f,
-		stdout: newWriter(stdout),
-		stderr: newWriter(stderr),
+		path:    path,
+		file:    f,
+		stdout:  stdout,
+		stderr:  stderr,
+		stdoutL: stdoutL,
+		stderrL: stderrL,
 	}, nil
 }
 
-func rootLogger(name string) (*logger, error) {
+type teeOptType bool
+
+const (
+	teeToStdout teeOptType = true
+	noTee       teeOptType = false
+)
+
+// rootLogger creates a logger.
+//
+// If path is empty, all logs go to stdout/stderr regardless of teeOpt.
+func rootLogger(path string, teeOpt teeOptType) (*logger, error) {
 	var stdout, stderr io.Writer
-	// Log to stdout/stderr if we're not running tests in parallel.
-	if parallelism == 1 {
+	if teeOpt == teeToStdout {
 		stdout = os.Stdout
 		stderr = os.Stderr
 	}
-	return newLogger(name, "test", "" /* prefix */, stdout, stderr)
+	cfg := &loggerConfig{stdout: stdout, stderr: stderr}
+	return cfg.newLogger(path)
 }
 
+// close closes the logger. It is idempotent.
 func (l *logger) close() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.mu.closed {
+		return
+	}
+	l.mu.closed = true
 	if l.file != nil {
 		l.file.Close()
+		l.file = nil
 	}
 }
 
-func (l *logger) childLogger(name string) (*logger, error) {
+// closed returns true if close() was previously called.
+func (l *logger) closed() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.mu.closed
+}
+
+// ChildLogger constructs a new logger which logs to the specified file. The
+// prefix and teeing of stdout/stdout can be controlled by logger options.
+// If the parent logger was logging to a file, the new logger will log to a file
+// in the same dir called <name>.log.
+func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error) {
+	// If the parent logger is not logging to a file, then the child will not
+	// either. However, the child will write to stdout/stderr with a prefix.
 	if l.file == nil {
-		p := []byte(name + ": ")
+		p := name + ": "
+
+		stdoutL := log.New(l.stdout, p, logFlags)
+		var stderrL *log.Logger
+		if l.stdout != l.stderr {
+			stderrL = log.New(l.stderr, p, logFlags)
+		} else {
+			stderrL = stdoutL
+		}
 		return &logger{
-			name:   name,
-			stdout: &prefixWriter{out: l.stdout, prefix: p},
-			stderr: &prefixWriter{out: l.stderr, prefix: p},
+			path:    l.path,
+			stdout:  l.stdout,
+			stderr:  l.stderr,
+			stdoutL: stdoutL,
+			stderrL: stderrL,
 		}, nil
 	}
-	return newLogger(l.name, name, name+": " /* prefix */, l.stdout, l.stderr)
-}
 
-func (l *logger) printf(f string, args ...interface{}) {
-	fmt.Fprintf(l.stdout, f, args...)
-}
-
-func (l *logger) errorf(f string, args ...interface{}) {
-	fmt.Fprintf(l.stderr, f, args...)
-}
-
-type prefixWriter struct {
-	out    io.Writer
-	prefix []byte
-	buf    []byte
-}
-
-func (w *prefixWriter) Write(data []byte) (int, error) {
-	// Note that we only output data to the underlying writer when we see a
-	// newline. No newline and the data is buffered. We don't have a signal for
-	// when the end of data is reached, which means we won't output any trailing
-	// data if it isn't terminated with a newline.
-	var count int
-	for len(data) > 0 {
-		if len(w.buf) == 0 {
-			w.buf = append(w.buf, w.prefix...)
-		}
-
-		i := bytes.IndexByte(data, '\n')
-		if i == -1 {
-			// No newline, buffer the partial line.
-			w.buf = append(w.buf, data...)
-			count += len(data)
-			break
-		}
-
-		// Output the buffered line including prefix.
-		w.buf = append(w.buf, data[:i+1]...)
-		if _, err := w.out.Write(w.buf); err != nil {
-			return 0, err
-		}
-		w.buf = w.buf[:0]
-		data = data[i+1:]
-		count += i + 1
+	cfg := &loggerConfig{
+		prefix: name + ": ", // might be overridden by opts
+		stdout: l.stdout,
+		stderr: l.stderr,
 	}
-	return count, nil
+	for _, opt := range opts {
+		opt.apply(cfg)
+	}
+
+	var path string
+	if l.path != "" {
+		path = filepath.Join(filepath.Dir(l.path), name+".log")
+	}
+	return cfg.newLogger(path)
+}
+
+// PrintfCtx prints a message to the logger's stdout. The context's log tags, if
+// any, will be prepended to the message. A newline is appended if the last
+// character is not already a newline.
+func (l *logger) PrintfCtx(ctx context.Context, f string, args ...interface{}) {
+	l.PrintfCtxDepth(ctx, 2 /* depth */, f, args...)
+}
+
+// Printf is like PrintfCtx, except it doesn't take a ctx and thus no log tags
+// can be passed.
+func (l *logger) Printf(f string, args ...interface{}) {
+	l.PrintfCtxDepth(context.Background(), 2 /* depth */, f, args...)
+}
+
+// PrintfCtxDepth is like PrintfCtx, except that it allows the caller to control
+// which stack frame is reported as the file:line in the message. depth=1 is
+// equivalent to PrintfCtx. E.g. pass 2 to ignore the caller's frame.
+func (l *logger) PrintfCtxDepth(ctx context.Context, depth int, f string, args ...interface{}) {
+	msg := crdblog.FormatWithContextTags(ctx, f, args...)
+	if err := l.stdoutL.Output(depth+1, msg); err != nil {
+		// Changing our interface to return an Error from a logging method seems too
+		// onerous. Let's yell to the default logger and if that fails, oh well.
+		_ = log.Output(depth+1, fmt.Sprintf("failed to log message: %v: %s", err, msg))
+	}
+}
+
+// ErrorfCtx is like PrintfCtx, except the logger outputs to its stderr.
+func (l *logger) ErrorfCtx(ctx context.Context, f string, args ...interface{}) {
+	l.ErrorfCtxDepth(ctx, 2 /* depth */, f, args...)
+}
+
+func (l *logger) ErrorfCtxDepth(ctx context.Context, depth int, f string, args ...interface{}) {
+	msg := crdblog.FormatWithContextTags(ctx, f, args...)
+	if err := l.stderrL.Output(depth+1, msg); err != nil {
+		// Changing our interface to return an Error from a logging method seems too
+		// onerous. Let's yell to the default logger and if that fails, oh well.
+		_ = log.Output(depth+1, fmt.Sprintf("failed to log error: %v: %s", err, msg))
+	}
+}
+
+// Errorf is like ErrorfCtx, except it doesn't take a ctx and thus no log tags
+// can be passed.
+func (l *logger) Errorf(f string, args ...interface{}) {
+	l.ErrorfCtxDepth(context.Background(), 2 /* depth */, f, args...)
 }

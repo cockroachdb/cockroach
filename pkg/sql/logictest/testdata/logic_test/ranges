@@ -1,24 +1,24 @@
-# LogicTest: 5node-local 5node-dist-opt
+# LogicTest: 5node
 
 statement ok
 CREATE TABLE t (k1 INT, k2 INT, v INT, w INT, PRIMARY KEY (k1, k2))
 
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE t
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       NULL     1         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
 
 statement ok
 ALTER TABLE t SPLIT AT VALUES (1), (10)
 
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE t
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       /1       1         {1}       1
-/1         /10      2         {1}       1
-/10        NULL     3         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /10      {1}       1
+/10        NULL     {1}       1
 
 statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[4], 1, 12)
@@ -26,19 +26,19 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[4], 1, 12)
 statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (4, 1, 12)
 
-query TTITI colnames
-SHOW EXPERIMENTAL_RANGES FROM TABLE t
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       /1       1         {1}       1
-/1         /10      2         {4}       4
-/10        NULL     3         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /10      {4}       4
+/10        NULL     {1}       1
 
 statement ok
 ALTER TABLE t SPLIT AT VALUES (5,1), (5,2), (5,3)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -49,7 +49,7 @@ NULL       /1       {1}       1
 /10        NULL     {1}       1
 
 statement ok
-ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 5, 1), (ARRAY[5,2,3], 5, 2), (ARRAY[4,1,2], 5, 3)
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 5, 1), (ARRAY[5,2,3], 5, 2), (ARRAY[4,2,1], 5, 3)
 
 statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[3,4], 4)
@@ -57,8 +57,8 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[3,4], 4)
 statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (1, 5, 1), (5, 5, 2)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -71,8 +71,8 @@ NULL       /1       {1}       1
 statement ok
 CREATE INDEX idx ON t(v, w)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
@@ -80,8 +80,8 @@ NULL       NULL     {1}       1
 statement ok
 ALTER INDEX t@idx SPLIT AT VALUES (100,1), (100,50)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /100/1   {1}       1
@@ -91,8 +91,8 @@ NULL       /100/1   {1}       1
 statement ok
 ALTER INDEX t@idx SPLIT AT VALUES (8), (9)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /8       {1}       1
@@ -104,8 +104,8 @@ NULL       /8       {1}       1
 statement ok
 ALTER INDEX t@idx EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 100, 10), (ARRAY[3], 100, 11)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /8       {1}       1
@@ -122,8 +122,8 @@ CREATE TABLE t0 (
 ) INTERLEAVE IN PARENT t(k1, k2)
 
 # We expect the splits for t0 to be the same as the splits for t.
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t0]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t0]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -136,8 +136,8 @@ NULL       /1       {1}       1
 statement ok
 ALTER TABLE t0 SPLIT AT VALUES (7, 8, 9)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t0]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t0]
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -151,8 +151,8 @@ NULL           /1             {1}       1
 statement ok
 ALTER TABLE t0 SPLIT AT VALUES (11)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t0]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t0]
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -164,8 +164,8 @@ NULL           /1             {1}       1
 /10            /11            {1}       1
 /11            NULL           {1}       1
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -185,8 +185,8 @@ statement ok
 CREATE INDEX idx on t1(v1,v2,v3) INTERLEAVE IN PARENT t(v1,v2)
 
 # We expect the splits for the index to be the same as the splits for t.
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t1@idx]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t1@idx]
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -201,8 +201,8 @@ NULL           /1             {1}       1
 statement ok
 ALTER INDEX t1@idx SPLIT AT VALUES (15,16)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t1@idx]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t1@idx]
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -227,7 +227,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1, 2, 3)
 statement error could not parse "foo" as type int
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[4], 'foo')
 
-statement error EXPERIMENTAL_RELOCATE data column 1 \(relocation array\) must be of type int\[\], not type string
+statement error pq: could not parse "foo" as type int\[\]: array must be enclosed in \{ and \}
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES ('foo', 1)
 
 statement error too many columns in EXPERIMENTAL_RELOCATE LEASE data
@@ -271,23 +271,284 @@ ALTER TABLE d.c SPLIT AT VALUES (123)
 statement ok
 ALTER INDEX d.c@c_i_idx SPLIT AT VALUES (0)
 
-query ITTTTTTTTI colnames
-SELECT * FROM crdb_internal.ranges
+query TTTTTTTTI colnames
+SELECT  start_key, start_pretty, end_key, end_pretty, database_name, table_name, index_name, replicas, crdb_internal.lease_holder(start_key) FROM crdb_internal.ranges_no_leases;
 ----
-range_id  start_key                          start_pretty              end_key                            end_pretty                database  table  index    replicas  lease_holder
-1         ·                                  /Min                      [189 137 137]                      /Table/53/1/1             ·         ·      ·        {1}       1
-2         [189 137 137]                      /Table/53/1/1             [189 137 141 137]                  /Table/53/1/5/1           test      t      ·        {4,3}     3
-11        [189 137 141 137]                  /Table/53/1/5/1           [189 137 141 138]                  /Table/53/1/5/2           test      t      ·        {3,1,2}   1
-12        [189 137 141 138]                  /Table/53/1/5/2           [189 137 141 139]                  /Table/53/1/5/3           test      t      ·        {3,5,2}   5
-13        [189 137 141 139]                  /Table/53/1/5/3           [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  test      t      ·        {4,1,2}   4
-14        [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  [189 137 146]                      /Table/53/1/10            test      t      ·        {4,1,2}   4
-3         [189 137 146]                      /Table/53/1/10            [189 137 147]                      /Table/53/1/11            test      t      ·        {1}       1
-8         [189 137 147]                      /Table/53/1/11            [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2  test      t      ·        {1}       1
-9         [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2  [189 138 144]                      /Table/53/2/8             test      t      ·        {1}       1
-6         [189 138 144]                      /Table/53/2/8             [189 138 145]                      /Table/53/2/9             test      t      idx      {1}       1
-7         [189 138 145]                      /Table/53/2/9             [189 138 236 137]                  /Table/53/2/100/1         test      t      idx      {1}       1
-4         [189 138 236 137]                  /Table/53/2/100/1         [189 138 236 186]                  /Table/53/2/100/50        test      t      idx      {3}       3
-5         [189 138 236 186]                  /Table/53/2/100/50        [195 137 136]                      /Table/59/1/0             test      t      idx      {1}       1
-10        [195 137 136]                      /Table/59/1/0             [196 137 246 123]                  /Table/60/1/123           ·         b      ·        {1}       1
-21        [196 137 246 123]                  /Table/60/1/123           [196 138 136]                      /Table/60/2/0             d         c      ·        {1}       1
-22        [196 138 136]                      /Table/60/2/0             [255 255]                          /Max                      d         c      c_i_idx  {1}       1
+start_key                          start_pretty                   end_key                            end_pretty                     database_name  table_name                       index_name  replicas  crdb_internal.lease_holder
+·                                  /Min                            liveness-                        /System/NodeLiveness           ·              ·                                ·           {1}       1
+ liveness-                        /System/NodeLiveness            liveness.                        /System/NodeLivenessMax        ·              ·                                ·           {1}       1
+ liveness.                        /System/NodeLivenessMax        tsd                               /System/tsd                    ·              ·                                ·           {1}       1
+tsd                               /System/tsd                    tse                               /System/"tse"                  ·              ·                                ·           {1}       1
+tse                               /System/"tse"                  [136]                              /Table/SystemConfigSpan/Start  ·              ·                                ·           {1}       1
+[136]                              /Table/SystemConfigSpan/Start  [147]                              /Table/11                      ·              ·                                ·           {1}       1
+[147]                              /Table/11                      [148]                              /Table/12                      system         lease                            ·           {1}       1
+[148]                              /Table/12                      [149]                              /Table/13                      system         eventlog                         ·           {1}       1
+[149]                              /Table/13                      [150]                              /Table/14                      system         rangelog                         ·           {1}       1
+[150]                              /Table/14                      [151]                              /Table/15                      system         ui                               ·           {1}       1
+[151]                              /Table/15                      [152]                              /Table/16                      system         jobs                             ·           {1}       1
+[152]                              /Table/16                      [153]                              /Table/17                      ·              ·                                ·           {1}       1
+[153]                              /Table/17                      [154]                              /Table/18                      ·              ·                                ·           {1}       1
+[154]                              /Table/18                      [155]                              /Table/19                      ·              ·                                ·           {1}       1
+[155]                              /Table/19                      [156]                              /Table/20                      system         web_sessions                     ·           {1}       1
+[156]                              /Table/20                      [157]                              /Table/21                      system         table_statistics                 ·           {1}       1
+[157]                              /Table/21                      [158]                              /Table/22                      system         locations                        ·           {1}       1
+[158]                              /Table/22                      [159]                              /Table/23                      ·              ·                                ·           {1}       1
+[159]                              /Table/23                      [160]                              /Table/24                      system         role_members                     ·           {1}       1
+[160]                              /Table/24                      [161]                              /Table/25                      system         comments                         ·           {1}       1
+[161]                              /Table/25                      [162]                              /Table/26                      system         replication_constraint_stats     ·           {1}       1
+[162]                              /Table/26                      [163]                              /Table/27                      system         replication_critical_localities  ·           {1}       1
+[163]                              /Table/27                      [164]                              /Table/28                      system         replication_stats                ·           {1}       1
+[164]                              /Table/28                      [165]                              /Table/29                      system         reports_meta                     ·           {1}       1
+[165]                              /Table/29                      [166]                              /NamespaceTable/30             ·              ·                                ·           {1}       1
+[166]                              /NamespaceTable/30             [167]                              /NamespaceTable/Max            system         namespace2                       ·           {1}       1
+[167]                              /NamespaceTable/Max            [168]                              /Table/32                      system         protected_ts_meta                ·           {1}       1
+[168]                              /Table/32                      [169]                              /Table/33                      system         protected_ts_records             ·           {1}       1
+[169]                              /Table/33                      [170]                              /Table/34                      system         role_options                     ·           {1}       1
+[170]                              /Table/34                      [171]                              /Table/35                      system         statement_bundle_chunks          ·           {1}       1
+[171]                              /Table/35                      [172]                              /Table/36                      system         statement_diagnostics_requests   ·           {1}       1
+[172]                              /Table/36                      [173]                              /Table/37                      system         statement_diagnostics            ·           {1}       1
+[173]                              /Table/37                      [174]                              /Table/38                      system         scheduled_jobs                   ·           {1}       1
+[174]                              /Table/38                      [175]                              /Table/39                      ·              ·                                ·           {1}       1
+[175]                              /Table/39                      [189 137]                          /Table/53/1                    system         sqlliveness                      ·           {1}       1
+[189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
+[189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
+[189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
+[189 137 141 138]                  /Table/53/1/5/2                [189 137 141 139]                  /Table/53/1/5/3                test           t                                ·           {2,3,5}   5
+[189 137 141 139]                  /Table/53/1/5/3                [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9       test           t                                ·           {1,2,4}   4
+[189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9       [189 137 146]                      /Table/53/1/10                 test           t                                ·           {1,2,4}   4
+[189 137 146]                      /Table/53/1/10                 [189 137 147]                      /Table/53/1/11                 test           t                                ·           {1}       1
+[189 137 147]                      /Table/53/1/11                 [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2       test           t                                ·           {1}       1
+[189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2       [189 138]                          /Table/53/2                    test           t                                ·           {1}       1
+[189 138]                          /Table/53/2                    [189 138 144]                      /Table/53/2/8                  test           t                                idx         {1}       1
+[189 138 144]                      /Table/53/2/8                  [189 138 145]                      /Table/53/2/9                  test           t                                idx         {1}       1
+[189 138 145]                      /Table/53/2/9                  [189 138 236 137]                  /Table/53/2/100/1              test           t                                idx         {1}       1
+[189 138 236 137]                  /Table/53/2/100/1              [189 138 236 186]                  /Table/53/2/100/50             test           t                                idx         {3}       3
+[189 138 236 186]                  /Table/53/2/100/50             [195 137 136]                      /Table/59/1/0                  test           t                                idx         {1}       1
+[195 137 136]                      /Table/59/1/0                  [196 137 246 123]                  /Table/60/1/123                ·              b                                ·           {1}       1
+[196 137 246 123]                  /Table/60/1/123                Ċ                                  /Table/60/2                    d              c                                ·           {1}       1
+Ċ                                  /Table/60/2                    [196 138 136]                      /Table/60/2/0                  d              c                                c_i_idx     {1}       1
+[196 138 136]                      /Table/60/2/0                  [255 255]                          /Max                           d              c                                c_i_idx     {1}       1
+
+query TTTTTTTTI colnames
+SELECT start_key, start_pretty, end_key, end_pretty, database_name, table_name, index_name, replicas, lease_holder FROM crdb_internal.ranges
+----
+start_key                          start_pretty                   end_key                            end_pretty                     database_name  table_name                       index_name  replicas  lease_holder
+·                                  /Min                            liveness-                        /System/NodeLiveness           ·              ·                                ·           {1}       1
+ liveness-                        /System/NodeLiveness            liveness.                        /System/NodeLivenessMax        ·              ·                                ·           {1}       1
+ liveness.                        /System/NodeLivenessMax        tsd                               /System/tsd                    ·              ·                                ·           {1}       1
+tsd                               /System/tsd                    tse                               /System/"tse"                  ·              ·                                ·           {1}       1
+tse                               /System/"tse"                  [136]                              /Table/SystemConfigSpan/Start  ·              ·                                ·           {1}       1
+[136]                              /Table/SystemConfigSpan/Start  [147]                              /Table/11                      ·              ·                                ·           {1}       1
+[147]                              /Table/11                      [148]                              /Table/12                      system         lease                            ·           {1}       1
+[148]                              /Table/12                      [149]                              /Table/13                      system         eventlog                         ·           {1}       1
+[149]                              /Table/13                      [150]                              /Table/14                      system         rangelog                         ·           {1}       1
+[150]                              /Table/14                      [151]                              /Table/15                      system         ui                               ·           {1}       1
+[151]                              /Table/15                      [152]                              /Table/16                      system         jobs                             ·           {1}       1
+[152]                              /Table/16                      [153]                              /Table/17                      ·              ·                                ·           {1}       1
+[153]                              /Table/17                      [154]                              /Table/18                      ·              ·                                ·           {1}       1
+[154]                              /Table/18                      [155]                              /Table/19                      ·              ·                                ·           {1}       1
+[155]                              /Table/19                      [156]                              /Table/20                      system         web_sessions                     ·           {1}       1
+[156]                              /Table/20                      [157]                              /Table/21                      system         table_statistics                 ·           {1}       1
+[157]                              /Table/21                      [158]                              /Table/22                      system         locations                        ·           {1}       1
+[158]                              /Table/22                      [159]                              /Table/23                      ·              ·                                ·           {1}       1
+[159]                              /Table/23                      [160]                              /Table/24                      system         role_members                     ·           {1}       1
+[160]                              /Table/24                      [161]                              /Table/25                      system         comments                         ·           {1}       1
+[161]                              /Table/25                      [162]                              /Table/26                      system         replication_constraint_stats     ·           {1}       1
+[162]                              /Table/26                      [163]                              /Table/27                      system         replication_critical_localities  ·           {1}       1
+[163]                              /Table/27                      [164]                              /Table/28                      system         replication_stats                ·           {1}       1
+[164]                              /Table/28                      [165]                              /Table/29                      system         reports_meta                     ·           {1}       1
+[165]                              /Table/29                      [166]                              /NamespaceTable/30             ·              ·                                ·           {1}       1
+[166]                              /NamespaceTable/30             [167]                              /NamespaceTable/Max            system         namespace2                       ·           {1}       1
+[167]                              /NamespaceTable/Max            [168]                              /Table/32                      system         protected_ts_meta                ·           {1}       1
+[168]                              /Table/32                      [169]                              /Table/33                      system         protected_ts_records             ·           {1}       1
+[169]                              /Table/33                      [170]                              /Table/34                      system         role_options                     ·           {1}       1
+[170]                              /Table/34                      [171]                              /Table/35                      system         statement_bundle_chunks          ·           {1}       1
+[171]                              /Table/35                      [172]                              /Table/36                      system         statement_diagnostics_requests   ·           {1}       1
+[172]                              /Table/36                      [173]                              /Table/37                      system         statement_diagnostics            ·           {1}       1
+[173]                              /Table/37                      [174]                              /Table/38                      system         scheduled_jobs                   ·           {1}       1
+[174]                              /Table/38                      [175]                              /Table/39                      ·              ·                                ·           {1}       1
+[175]                              /Table/39                      [189 137]                          /Table/53/1                    system         sqlliveness                      ·           {1}       1
+[189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
+[189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
+[189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
+[189 137 141 138]                  /Table/53/1/5/2                [189 137 141 139]                  /Table/53/1/5/3                test           t                                ·           {2,3,5}   5
+[189 137 141 139]                  /Table/53/1/5/3                [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9       test           t                                ·           {1,2,4}   4
+[189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9       [189 137 146]                      /Table/53/1/10                 test           t                                ·           {1,2,4}   4
+[189 137 146]                      /Table/53/1/10                 [189 137 147]                      /Table/53/1/11                 test           t                                ·           {1}       1
+[189 137 147]                      /Table/53/1/11                 [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2       test           t                                ·           {1}       1
+[189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2       [189 138]                          /Table/53/2                    test           t                                ·           {1}       1
+[189 138]                          /Table/53/2                    [189 138 144]                      /Table/53/2/8                  test           t                                idx         {1}       1
+[189 138 144]                      /Table/53/2/8                  [189 138 145]                      /Table/53/2/9                  test           t                                idx         {1}       1
+[189 138 145]                      /Table/53/2/9                  [189 138 236 137]                  /Table/53/2/100/1              test           t                                idx         {1}       1
+[189 138 236 137]                  /Table/53/2/100/1              [189 138 236 186]                  /Table/53/2/100/50             test           t                                idx         {3}       3
+[189 138 236 186]                  /Table/53/2/100/50             [195 137 136]                      /Table/59/1/0                  test           t                                idx         {1}       1
+[195 137 136]                      /Table/59/1/0                  [196 137 246 123]                  /Table/60/1/123                ·              b                                ·           {1}       1
+[196 137 246 123]                  /Table/60/1/123                Ċ                                  /Table/60/2                    d              c                                ·           {1}       1
+Ċ                                  /Table/60/2                    [196 138 136]                      /Table/60/2/0                  d              c                                c_i_idx     {1}       1
+[196 138 136]                      /Table/60/2/0                  [255 255]                          /Max                           d              c                                c_i_idx     {1}       1
+
+
+# Due to asynchronous splitting of ranges, we cannot guarantee the output
+# of the show ranges from database command. The test below just ensures that
+# the command gets parsed and evaluated correctly.
+
+# Regression tests for #40450.
+statement ok
+CREATE DATABASE "show ranges"
+
+statement ok
+CREATE TABLE "show ranges".t (x INT PRIMARY KEY)
+
+statement ok
+SHOW RANGES FROM DATABASE "show ranges"
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES FROM TABLE "show ranges".t]
+----
+NULL NULL
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES FROM INDEX "show ranges".t@primary]
+----
+NULL NULL
+
+statement ok
+CREATE DATABASE """"
+
+statement ok
+CREATE TABLE """".t (x INT PRIMARY KEY)
+
+statement ok
+SHOW RANGES FROM DATABASE """"
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES FROM TABLE """".t]
+----
+NULL NULL
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES FROM INDEX """".t@primary]
+----
+NULL NULL
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.ranges' AND usage_count > 0
+----
+sql.show.ranges
+
+subtest range_for_row
+
+statement ok
+CREATE TABLE simple_range_for_row(x INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE simple_range_for_row SPLIT AT VALUES (1), (2)
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE simple_range_for_row FOR ROW (1)]
+----
+/1 /2
+
+statement ok
+CREATE TABLE range_for_row(x INT, y INT, z INT, w INT, PRIMARY KEY (x, y), INDEX i (z, w))
+
+statement ok
+ALTER TABLE range_for_row SPLIT AT VALUES (1, 2), (1, 3)
+
+statement ok
+ALTER INDEX range_for_row@i SPLIT AT VALUES (3, 4), (3, 5)
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 2)]
+----
+/1/2 /1/3
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 3)]
+----
+/1/3 NULL
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 1)]
+----
+NULL /1/2
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (1, 2, 1, 2)]
+----
+NULL /3/4
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (3, 4, 1, 2)]
+----
+/3/4 /3/5
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (3, 5, 1, 2)]
+----
+/3/5 NULL
+
+statement ok
+CREATE TABLE range_for_row_string(x STRING PRIMARY KEY)
+
+statement ok
+ALTER TABLE range_for_row_string SPLIT AT VALUES ('hello')
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row_string FOR ROW ('he')]
+----
+NULL /"hello"
+
+statement ok
+CREATE TABLE range_for_row_decimal(x DECIMAL PRIMARY KEY)
+
+statement ok
+ALTER TABLE range_for_row_decimal SPLIT AT VALUES (1), (2)
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row_decimal FOR ROW (1)]
+----
+/1 /2
+
+statement ok
+CREATE TABLE range_for_row_nulls(x INT PRIMARY KEY, y INT, INDEX i (y))
+
+statement ok
+ALTER INDEX range_for_row_nulls@i SPLIT AT VALUES (NULL)
+
+query TT
+SELECT start_key, end_key from [SHOW RANGE FROM INDEX range_for_row_nulls@i FOR ROW (NULL, 1)]
+----
+/NULL NULL
+
+# Regression for #42456
+statement ok
+CREATE TABLE t42456 (x int primary key);
+
+statement ok
+CREATE INDEX i1 on t42456 (x);
+CREATE INDEX i2 on t42456 (x);
+DROP INDEX t42456@i1;
+DROP INDEX t42456@i2;
+CREATE INDEX i3 on t42456 (x)
+
+query T
+SELECT crdb_internal.pretty_key(crdb_internal.encode_key(70, 4, (1, )), 0)
+----
+/70/4/1
+
+# Regression test for #44326. SHOW RANGES on a virtual table should cause
+# an error, not a panic.
+query error SHOW RANGES may not be called on a virtual table
+SHOW RANGES FROM TABLE crdb_internal.tables
+
+query error SHOW RANGE FOR ROW may not be called on a virtual table
+SHOW RANGE FROM TABLE crdb_internal.tables FOR ROW (0, 0)
+
+# Test that SHOW RANGE FOR ROW returns a nice error message for hidden columns
+# in a secondary index.
+statement ok
+CREATE TABLE err_msg (x INT, y INT, z INT, PRIMARY KEY (x, y), INDEX i (z))
+
+statement error HINT: columns \[x y\] are implicitly part of index "i"'s key, include columns \[z x y\] in this order
+SHOW RANGE FROM INDEX err_msg@i FOR ROW (1)

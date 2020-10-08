@@ -1,4 +1,5 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
 statement error pgcode 42P01 relation "foo" does not exist
 ALTER VIEW foo RENAME TO bar
@@ -24,11 +25,11 @@ SELECT * FROM v
 1 2
 3 4
 
-query T
+query TTTTI
 SHOW TABLES
 ----
-kv
-v
+public  kv  table  root  0
+public  v   view   root  0
 
 statement error pgcode 42809 "kv" is not a view
 ALTER VIEW kv RENAME TO new_kv
@@ -46,11 +47,11 @@ SELECT * FROM new_v
 1 2
 3 4
 
-query T
+query TTTTI
 SHOW TABLES
 ----
-kv
-new_v
+public  kv     table  root  0
+public  new_v  view   root  0
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
 query TTTTT
@@ -109,13 +110,13 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER VIEW test.v RENAME TO v2
 
-query T
+query TTTTI
 SHOW TABLES FROM test
 ----
-kv
-new_v
-t
-v2
+public  kv     table  root  0
+public  new_v  view   root  0
+public  t      table  root  0
+public  v2     view   root  0
 
 user testuser
 
@@ -138,15 +139,15 @@ ALTER VIEW test.new_v RENAME TO test2.v
 statement ok
 ALTER VIEW test.v2 RENAME TO test2.v2
 
-query T
+query TTTTI
 SHOW TABLES FROM test
 ----
 
-query T
+query TTTTI
 SHOW TABLES FROM test2
 ----
-v
-v2
+public  v   view  root  NULL
+public  v2  view  root  NULL
 
 user root
 

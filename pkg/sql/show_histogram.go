@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -18,20 +14,25 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Ideally, we would want upper_bound to have the type of the column the
 // histogram is on. However, we don't want to have a SHOW statement for which
 // the schema depends on its parameters.
-var showHistogramColumns = sqlbase.ResultColumns{
+var showHistogramColumns = colinfo.ResultColumns{
 	{Name: "upper_bound", Typ: types.String},
 	{Name: "range_rows", Typ: types.Int},
+	{Name: "distinct_range_rows", Typ: types.Float},
 	{Name: "equal_rows", Typ: types.Int},
 }
 
@@ -43,10 +44,11 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		columns: showHistogramColumns,
 
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+			row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 				ctx,
 				"read-histogram",
 				p.txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUser},
 				`SELECT histogram
 				 FROM system.table_statistics
 				 WHERE "statisticID" = $1`,
@@ -59,7 +61,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				return nil, fmt.Errorf("histogram %d not found", n.HistogramID)
 			}
 			if len(row) != 1 {
-				return nil, errors.Errorf("programming error: expected 1 column from internal query")
+				return nil, errors.AssertionFailedf("expected 1 column from internal query")
 			}
 			if row[0] == tree.DNull {
 				// We found a statistic, but it has no histogram.
@@ -74,16 +76,17 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 
 			v := p.newContainerValuesNode(showHistogramColumns, 0)
 			for _, b := range histogram.Buckets {
-				ed, _, err := sqlbase.EncDatumFromBuffer(
-					&histogram.ColumnType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+				ed, _, err := rowenc.EncDatumFromBuffer(
+					histogram.ColumnType, descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					v.Close(ctx)
 					return nil, err
 				}
 				row := tree.Datums{
-					tree.NewDString(ed.String(&histogram.ColumnType)),
+					tree.NewDString(ed.String(histogram.ColumnType)),
 					tree.NewDInt(tree.DInt(b.NumRange)),
+					tree.NewDFloat(tree.DFloat(b.DistinctRange)),
 					tree.NewDInt(tree.DInt(b.NumEq)),
 				}
 				if _, err := v.rows.AddRow(ctx, row); err != nil {

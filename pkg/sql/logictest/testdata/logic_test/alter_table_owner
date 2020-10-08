@@ -1,0 +1,61 @@
+statement ok
+CREATE SCHEMA s;
+CREATE TABLE t ();
+CREATE TABLE s.t ();
+CREATE USER testuser2
+
+# Ensure user must exist for set owner.
+statement error pq: role/user "fake_user" does not exist
+ALTER TABLE t OWNER TO fake_user
+
+# Superusers can alter owner to any user which has CREATE privileges on the
+# parent schema (or in the case of the public schema on the parent database.)
+statement error pq: user testuser does not have CREATE privilege on database test
+ALTER TABLE t OWNER TO testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema s
+ALTER TABLE s.t OWNER TO testuser
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser, testuser2;
+GRANT CREATE ON SCHEMA s TO testuser, testuser2
+
+statement ok
+ALTER TABLE t OWNER TO testuser;
+ALTER TABLE s.t OWNER TO testuser;
+ALTER TABLE t OWNER TO root;
+ALTER TABLE s.t OWNER TO root
+
+# Other users must be owner to alter the owner.
+user testuser
+
+statement error must be owner of table t
+ALTER TABLE t OWNER TO testuser2
+
+# Non-superusers also must be a member of the new owning role.
+user root
+
+statement ok
+ALTER TABLE t OWNER TO testuser
+
+user testuser
+
+statement error must be member of role "testuser2"
+ALTER TABLE t OWNER TO testuser2
+
+user root
+
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE t OWNER TO testuser2
+
+user root
+
+query T
+SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = 't'
+----
+testuser2

@@ -1,55 +1,54 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package ts_test
 
 import (
 	"context"
 	"fmt"
+	"io"
+	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 )
 
 func TestServerQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	// Populate data directly.
 	tsdb := tsrv.TsDB()
-	if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:   "test.metric",
 			Source: "source1",
@@ -175,7 +174,8 @@ func TestServerQuery(t *testing.T) {
 		},
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.Background())
+	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestServerQueryStarvation(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		TimeSeriesQueryWorkerMax: workerCount,
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	seriesCount := workerCount * 2
@@ -270,7 +270,8 @@ func TestServerQueryStarvation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.Background())
+	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,14 +319,15 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 		TimeSeriesQueryWorkerMax:    workerCount,
 		TimeSeriesQueryMemoryBudget: budget,
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
 		t.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.Background())
+	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,9 +349,101 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 	}
 }
 
+func TestServerDump(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+	tsrv := s.(*server.TestServer)
+
+	seriesCount := 10
+	sourceCount := 5
+	// Number of slabs (hours) of data we want to generate
+	slabCount := 5
+	// Generated datapoints every 100 seconds, so compute how many we want to
+	// generate data across the target number of hours.
+	valueCount := int(ts.Resolution10s.SlabDuration()/(100*1e9)) * slabCount
+
+	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+
+	dumpClient, err := client.Dump(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read data from dump command.
+	resultMap := make(map[string]map[string]tspb.TimeSeriesData)
+	totalMsgCount := 0
+	for {
+		msg, err := dumpClient.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The dump will include all of the real time series metrics recorded by the
+		// server. Filter out everything other than the metrics we are creating
+		// for this test.
+		if !strings.HasPrefix(msg.Name, "metric.") {
+			continue
+		}
+		sourceMap, ok := resultMap[msg.Name]
+		if !ok {
+			sourceMap = make(map[string]tspb.TimeSeriesData)
+			resultMap[msg.Name] = sourceMap
+		}
+		if data, ok := sourceMap[msg.Source]; !ok {
+			sourceMap[msg.Source] = *msg
+		} else {
+			data.Datapoints = append(data.Datapoints, msg.Datapoints...)
+			sourceMap[msg.Source] = data
+		}
+		totalMsgCount++
+	}
+
+	// Generate expected data.
+	expectedMap := make(map[string]map[string]tspb.TimeSeriesData)
+	for series := 0; series < seriesCount; series++ {
+		sourceMap := make(map[string]tspb.TimeSeriesData)
+		expectedMap[seriesName(series)] = sourceMap
+		for source := 0; source < sourceCount; source++ {
+			sourceMap[sourceName(source)] = tspb.TimeSeriesData{
+				Name:       seriesName(series),
+				Source:     sourceName(source),
+				Datapoints: generateTimeSeriesDatapoints(valueCount),
+			}
+		}
+	}
+
+	if a, e := totalMsgCount, seriesCount*sourceCount*slabCount; a != e {
+		t.Fatalf("dump returned %d messages, expected %d", a, e)
+	}
+	if a, e := resultMap, expectedMap; !reflect.DeepEqual(a, e) {
+		for _, diff := range pretty.Diff(a, e) {
+			t.Error(diff)
+		}
+	}
+}
+
 func BenchmarkServerQuery(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	// Populate data for large number of time series.
@@ -359,7 +453,8 @@ func BenchmarkServerQuery(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.Background())
+	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -407,7 +502,7 @@ func generateTimeSeriesDatapoints(valueCount int) []tspb.TimeSeriesDatapoint {
 func populateSeries(seriesCount, sourceCount, valueCount int, tsdb *ts.DB) error {
 	for series := 0; series < seriesCount; series++ {
 		for source := 0; source < sourceCount; source++ {
-			if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+			if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 				{
 					Name:       seriesName(series),
 					Source:     sourceName(source),

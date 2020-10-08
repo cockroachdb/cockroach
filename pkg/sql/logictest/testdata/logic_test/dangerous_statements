@@ -1,19 +1,17 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE foo(x INT)
 
 statement ok
 SET sql_safe_updates = true
 
-statement error rejected: UPDATE without WHERE clause
+statement error rejected.*: UPDATE without WHERE clause
 UPDATE foo SET x = 3
 
-statement error rejected: DELETE without WHERE clause
+statement error rejected.*: DELETE without WHERE clause
 DELETE FROM foo
 
-statement error rejected: ALTER TABLE DROP COLUMN
+statement error rejected.*: ALTER TABLE DROP COLUMN
 ALTER TABLE foo DROP COLUMN x
 
-statement error rejected: SET database to empty string
+statement error rejected.*: SET database to empty string
 SET database = ''

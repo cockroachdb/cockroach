@@ -7,87 +7,82 @@ CREATE TABLE t (
   c BOOLEAN
 )
 ----
-TABLE t
- ├── a int not null
- ├── b int
- ├── c bool
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT c FROM t ORDER BY c
 ----
 sort
- ├── columns: c:3(bool)
+ ├── columns: c:3
  ├── ordering: +3
  └── project
-      ├── columns: c:3(bool)
+      ├── columns: c:3
       └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT c FROM t ORDER BY c DESC
 ----
 sort
- ├── columns: c:3(bool)
+ ├── columns: c:3
  ├── ordering: -3
  └── project
-      ├── columns: c:3(bool)
+      ├── columns: c:3
       └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b FROM t ORDER BY b
 ----
 sort
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  ├── ordering: +2
  └── project
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b FROM t ORDER BY b DESC
 ----
 sort
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  ├── ordering: -2
  └── project
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 ----
 limit
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
+ ├── internal-ordering: -2
  ├── ordering: -2
  ├── sort
- │    ├── columns: a:1(int!null) b:2(int)
+ │    ├── columns: a:1!null b:2
  │    ├── ordering: -2
+ │    ├── limit hint: 2.00
  │    └── project
- │         ├── columns: a:1(int!null) b:2(int)
+ │         ├── columns: a:1!null b:2
  │         └── scan t
- │              └── columns: a:1(int!null) b:2(int) c:3(bool)
- └── const: 2 [type=int]
+ │              └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ └── 2
 
 build
 SELECT a FROM t ORDER BY 1 DESC
 ----
-sort
- ├── columns: a:1(int!null)
+project
+ ├── columns: a:1!null
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── ordering: -1
 
-# TODO(rytaft): This query causes an error in Postgres, but it is supported by
-# CockroachDB with the semantics:
+# This query causes an error in Postgres, and the optimizer has followed
+# that lead. However, it is supported by the heuristic planner in CockroachDB
+# with the semantics:
 #   SELECT c FROM t GROUP BY c ORDER BY max(b) DESC;
-# We may decide to support this later, but for now this should cause an error.
 build
 SELECT DISTINCT c FROM t ORDER BY b DESC
 ----
@@ -96,13 +91,12 @@ error (42P10): for SELECT DISTINCT, ORDER BY expressions must appear in select l
 build
 SELECT a AS foo, b FROM t ORDER BY foo DESC
 ----
-sort
- ├── columns: foo:1(int!null) b:2(int)
+project
+ ├── columns: foo:1!null b:2
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── ordering: -1
 
 # Check that ambiguous references to renders are properly reported.
 build
@@ -116,15 +110,18 @@ build
 SELECT a AS foo, (a) AS foo FROM t ORDER BY foo LIMIT 1
 ----
 limit
- ├── columns: foo:1(int!null) foo:1(int!null)
+ ├── columns: foo:1!null foo:1!null
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── project
- │    ├── columns: a:1(int!null)
+ │    ├── columns: a:1!null
  │    ├── ordering: +1
+ │    ├── limit hint: 1.00
  │    └── scan t
- │         ├── columns: a:1(int!null) b:2(int) c:3(bool)
- │         └── ordering: +1
- └── const: 1 [type=int]
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ │         ├── ordering: +1
+ │         └── limit hint: 1.00
+ └── 1
 
 # Check that this orders by the aliased column b (i.e., column a), not the
 # original column b.
@@ -132,230 +129,238 @@ build
 SELECT a AS b, b AS c FROM t ORDER BY b
 ----
 project
- ├── columns: b:1(int!null) c:2(int)
+ ├── columns: b:1!null c:2
  ├── ordering: +1
  └── scan t
-      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: +1
 
 build
 SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
 ----
-sort
- ├── columns: bar:1(int!null) b:2(int)
+project
+ ├── columns: foo.bar:1!null b:2
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── ordering: -1
 
 build
 SELECT a AS foo, b FROM t ORDER BY a DESC
 ----
-sort
- ├── columns: foo:1(int!null) b:2(int)
+project
+ ├── columns: foo:1!null b:2
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── ordering: -1
 
 build
 SELECT b FROM t ORDER BY a DESC
 ----
-sort
- ├── columns: b:2(int)
+project
+ ├── columns: b:2  [hidden: a:1!null]
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── ordering: -1
 
 build
 SELECT b FROM t ORDER BY a LIMIT 1
 ----
 limit
- ├── columns: b:2(int)
+ ├── columns: b:2  [hidden: a:1!null]
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── project
- │    ├── columns: a:1(int!null) b:2(int)
+ │    ├── columns: a:1!null b:2
  │    ├── ordering: +1
+ │    ├── limit hint: 1.00
  │    └── scan t
- │         ├── columns: a:1(int!null) b:2(int) c:3(bool)
- │         └── ordering: +1
- └── const: 1 [type=int]
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ │         ├── ordering: +1
+ │         └── limit hint: 1.00
+ └── 1
 
 build
 SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-sort
- ├── columns: b:2(int)
+project
+ ├── columns: b:2  [hidden: a:1!null]
  ├── ordering: -1,+2
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── ordering: -1
 
 build
 SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-sort
- ├── columns: b:2(int)
+project
+ ├── columns: b:2  [hidden: a:1!null]
  ├── ordering: -1,-2
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── ordering: -1
 
 # both presentation and ordering
 build
 SELECT a, b, b FROM t ORDER BY c
 ----
 sort
- ├── columns: a:1(int!null) b:2(int) b:2(int)
+ ├── columns: a:1!null b:2 b:2  [hidden: c:3]
  ├── ordering: +3
- └── scan t
-      └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── project
+      ├── columns: a:1!null b:2 c:3
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM t ORDER BY (b, t.*)
 ----
-sort
- ├── columns: a:1(int!null) b:2(int) c:3(bool)
+project
+ ├── columns: a:1!null b:2 c:3
  ├── ordering: +2,+1,+2,+3
- └── scan t
-      └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── sort
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +2,+1
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM t ORDER BY (b, a), c
 ----
-sort
- ├── columns: a:1(int!null) b:2(int) c:3(bool)
+project
+ ├── columns: a:1!null b:2 c:3
  ├── ordering: +2,+1,+3
- └── scan t
-      └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── sort
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +2,+1
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM t ORDER BY b, (a, c)
 ----
-sort
- ├── columns: a:1(int!null) b:2(int) c:3(bool)
+project
+ ├── columns: a:1!null b:2 c:3
  ├── ordering: +2,+1,+3
- └── scan t
-      └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── sort
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +2,+1
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM t ORDER BY (b, (a, c))
 ----
-sort
- ├── columns: a:1(int!null) b:2(int) c:3(bool)
+project
+ ├── columns: a:1!null b:2 c:3
  ├── ordering: +2,+1,+3
- └── scan t
-      └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── sort
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +2,+1
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
 ----
-sort
- ├── columns: a:1(int!null) b:2(int!null)
+project
+ ├── columns: a:1!null b:2!null
  ├── ordering: +2,+1
- └── project
-      ├── columns: a:1(int!null) b:2(int!null)
-      └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
-           ├── scan t
-           │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: t.b [type=int]
-                     └── const: 7 [type=int]
+ └── select
+      ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +1 opt(2)
+      ├── scan t
+      │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      │    └── ordering: +1 opt(2)
+      └── filters
+           └── b:2 = 7
 
 build
 SELECT a, b FROM t ORDER BY b, a DESC
 ----
 sort
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  ├── ordering: +2,-1
  └── project
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null) ab:4(int)
- ├── ordering: -4,+1
+ ├── columns: a:1!null b:2!null ab:5!null
+ ├── ordering: -5,+1
  └── project
-      ├── columns: ab:4(int) a:1(int!null) b:2(int!null)
+      ├── columns: ab:5!null a:1!null b:2!null
       ├── select
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
+      │    ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4
       │    ├── scan t
-      │    │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      │    └── filters [type=bool]
-      │         └── eq [type=bool]
-      │              ├── variable: t.b [type=int]
-      │              └── const: 7 [type=int]
+      │    │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      │    └── filters
+      │         └── b:2 = 7
       └── projections
-           └── plus [type=int]
-                ├── variable: t.a [type=int]
-                └── variable: t.b [type=int]
+           └── a:1 + b:2 [as=ab:5]
 
 build
 SELECT a FROM t ORDER BY a+b DESC, a
 ----
 sort
- ├── columns: a:1(int!null)
- ├── ordering: -4,+1
+ ├── columns: a:1!null  [hidden: column5:5]
+ ├── ordering: -5,+1
  └── project
-      ├── columns: column4:4(int) a:1(int!null)
+      ├── columns: column5:5 a:1!null
       ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── plus [type=int]
-                ├── variable: t.a [type=int]
-                └── variable: t.b [type=int]
+           └── a:1 + b:2 [as=column5:5]
 
 build
 SELECT a FROM t ORDER BY (((a)))
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  ├── ordering: +1
  └── scan t
-      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: +1
 
 build
 (((SELECT a FROM t))) ORDER BY a DESC LIMIT 4
 ----
 limit
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
+ ├── internal-ordering: -1
  ├── ordering: -1
- ├── sort
- │    ├── columns: a:1(int!null)
+ ├── project
+ │    ├── columns: a:1!null
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: a:1(int!null)
- │         └── scan t
- │              └── columns: a:1(int!null) b:2(int) c:3(bool)
- └── const: 4 [type=int]
+ │    ├── limit hint: 4.00
+ │    └── scan t,rev
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ │         ├── ordering: -1
+ │         └── limit hint: 4.00
+ └── 4
 
 build
 (((SELECT a FROM t ORDER BY a DESC LIMIT 4)))
 ----
 limit
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
+ ├── internal-ordering: -1
  ├── ordering: -1
- ├── sort
- │    ├── columns: a:1(int!null)
+ ├── project
+ │    ├── columns: a:1!null
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: a:1(int!null)
- │         └── scan t
- │              └── columns: a:1(int!null) b:2(int) c:3(bool)
- └── const: 4 [type=int]
+ │    ├── limit hint: 4.00
+ │    └── scan t,rev
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ │         ├── ordering: -1
+ │         └── limit hint: 4.00
+ └── 4
 
 build
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
@@ -365,7 +370,7 @@ error (42601): multiple ORDER BY clauses not allowed
 build
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 ----
-error: incompatible value type: expected c to be of type int, found type bool
+error (22023): incompatible value type: expected c to be of type int, found type bool
 
 build
 SELECT * FROM t ORDER BY 0
@@ -395,188 +400,228 @@ error (42703): column "foo" does not exist
 build
 SELECT a FROM t ORDER BY a.b
 ----
-error (42P01): no data source matches prefix: a
+error (42P01): no data source matches prefix: a in this context
 
 build
 SELECT generate_series FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
-error (0A000): can't order by column type int[]
+sort
+ ├── columns: generate_series:1  [hidden: column2:2]
+ ├── ordering: +2
+ └── project
+      ├── columns: column2:2 generate_series:1
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 100)
+      └── projections
+           └── ARRAY[generate_series:1] [as=column2:2]
 
 build
 SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
-error (0A000): can't order by column type int[]
+sort
+ ├── columns: array:2
+ ├── ordering: +2
+ └── project
+      ├── columns: array:2
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 100)
+      └── projections
+           └── ARRAY[generate_series:1] [as=array:2]
 
 build
 SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY 1
 ----
-error (0A000): can't order by column type int[]
+sort
+ ├── columns: array:2
+ ├── ordering: +2
+ └── project
+      ├── columns: array:2
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 100)
+      └── projections
+           └── ARRAY[generate_series:1] [as=array:2]
 
 build
 SELECT ARRAY[generate_series] AS a FROM generate_series(1, 100) ORDER BY a
 ----
-error (0A000): can't order by column type int[]
+sort
+ ├── columns: a:2
+ ├── ordering: +2
+ └── project
+      ├── columns: a:2
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 100)
+      └── projections
+           └── ARRAY[generate_series:1] [as=a:2]
 
 build
 SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY 1
 ----
 sort
- ├── columns: generate_series:1(int) array:2(int[])
+ ├── columns: generate_series:1 array:2
  ├── ordering: +1
  └── project
-      ├── columns: array:2(int[]) generate_series:1(int)
-      ├── zip
-      │    ├── columns: generate_series:1(int)
-      │    └── function: generate_series [type=tuple{int AS generate_series}]
-      │         ├── const: 1 [type=int]
-      │         └── const: 1 [type=int]
+      ├── columns: array:2 generate_series:1
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 1)
       └── projections
-           └── array: [type=int[]]
-                └── variable: generate_series [type=int]
+           └── ARRAY[generate_series:1] [as=array:2]
 
 build
 SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY generate_series
 ----
 sort
- ├── columns: generate_series:1(int) array:2(int[])
+ ├── columns: generate_series:1 array:2
  ├── ordering: +1
  └── project
-      ├── columns: array:2(int[]) generate_series:1(int)
-      ├── zip
-      │    ├── columns: generate_series:1(int)
-      │    └── function: generate_series [type=tuple{int AS generate_series}]
-      │         ├── const: 1 [type=int]
-      │         └── const: 1 [type=int]
+      ├── columns: array:2 generate_series:1
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 1)
       └── projections
-           └── array: [type=int[]]
-                └── variable: generate_series [type=int]
+           └── ARRAY[generate_series:1] [as=array:2]
 
 build
 SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY -generate_series
 ----
 sort
- ├── columns: generate_series:1(int) array:2(int[])
+ ├── columns: generate_series:1 array:2  [hidden: column3:3]
  ├── ordering: +3
  └── project
-      ├── columns: array:2(int[]) column3:3(int) generate_series:1(int)
-      ├── zip
-      │    ├── columns: generate_series:1(int)
-      │    └── function: generate_series [type=tuple{int AS generate_series}]
-      │         ├── const: 1 [type=int]
-      │         └── const: 1 [type=int]
+      ├── columns: array:2 column3:3 generate_series:1
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 1)
       └── projections
-           ├── array: [type=int[]]
-           │    └── variable: generate_series [type=int]
-           └── unary-minus [type=int]
-                └── variable: generate_series [type=int]
+           ├── ARRAY[generate_series:1] [as=array:2]
+           └── -generate_series:1 [as=column3:3]
 
 
 # Sort should be skipped if the ORDER BY clause is constant.
-# (This skipping will probably happen later during optimization. The below
-# tests should just show that the ordering column is constant.)
 build
 SELECT * FROM t ORDER BY 1+2
 ----
-sort
- ├── columns: a:1(int!null) b:2(int) c:3(bool)
- ├── ordering: +4
- └── project
-      ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
-      ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── projections
-           └── const: 3 [type=int]
+project
+ ├── columns: a:1!null b:2 c:3  [hidden: column5:5!null]
+ ├── ordering: +5
+ ├── scan t
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ └── projections
+      └── 1 + 2 [as=column5:5]
 
 build
 SELECT 1 AS r, * FROM t ORDER BY 1
 ----
-sort
- ├── columns: r:4(int!null) a:1(int!null) b:2(int) c:3(bool)
- ├── ordering: +4
- └── project
-      ├── columns: r:4(int!null) a:1(int!null) b:2(int) c:3(bool)
-      ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── projections
-           └── const: 1 [type=int]
+project
+ ├── columns: r:5!null a:1!null b:2 c:3
+ ├── ordering: +5
+ ├── scan t
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ └── projections
+      └── 1 [as=r:5]
 
 build
 SELECT * FROM t ORDER BY length('abc')
 ----
-sort
- ├── columns: a:1(int!null) b:2(int) c:3(bool)
- ├── ordering: +4
- └── project
-      ├── columns: column4:4(int) a:1(int!null) b:2(int) c:3(bool)
-      ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── projections
-           └── function: length [type=int]
-                └── const: 'abc' [type=string]
+project
+ ├── columns: a:1!null b:2 c:3  [hidden: column5:5]
+ ├── ordering: +5
+ ├── scan t
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ └── projections
+      └── length('abc') [as=column5:5]
 
 build
 SELECT b+2 AS r FROM t ORDER BY b+2
 ----
 sort
- ├── columns: r:4(int)
- ├── ordering: +4
+ ├── columns: r:5
+ ├── ordering: +5
  └── project
-      ├── columns: r:4(int)
+      ├── columns: r:5
       ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── plus [type=int]
-                ├── variable: t.b [type=int]
-                └── const: 2 [type=int]
+           └── b:2 + 2 [as=r:5]
 
 # Check that the sort picks up a renamed render properly.
 build
 SELECT b+2 AS y FROM t ORDER BY y
 ----
 sort
- ├── columns: y:4(int)
- ├── ordering: +4
+ ├── columns: y:5
+ ├── ordering: +5
  └── project
-      ├── columns: y:4(int)
+      ├── columns: y:5
       ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── plus [type=int]
-                ├── variable: t.b [type=int]
-                └── const: 2 [type=int]
+           └── b:2 + 2 [as=y:5]
 
 build
 SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 sort
- ├── columns: y:4(int)
- ├── ordering: +4
+ ├── columns: y:5
+ ├── ordering: +5
  └── project
-      ├── columns: y:4(int)
+      ├── columns: y:5
       ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── plus [type=int]
-                ├── variable: t.b [type=int]
-                └── const: 2 [type=int]
+           └── b:2 + 2 [as=y:5]
 
 build
 SELECT b, c FROM t ORDER BY @2
 ----
 sort
- ├── columns: b:2(int) c:3(bool)
- ├── ordering: +4
+ ├── columns: b:2 c:3  [hidden: column5:5]
+ ├── ordering: +5
  └── project
-      ├── columns: column4:4(int) b:2(int) c:3(bool)
+      ├── columns: column5:5 b:2 c:3
       ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── variable: t.b [type=int]
+           └── b:2 [as=column5:5]
 
 build
 SELECT b, c FROM t ORDER BY @4
 ----
-error (42703): invalid column ordinal: @4
+sort
+ ├── columns: b:2 c:3  [hidden: column5:5]
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5 b:2 c:3
+      ├── scan t
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── projections
+           └── crdb_internal_mvcc_timestamp:4 [as=column5:5]
 
 exec-ddl
 CREATE TABLE abc (
@@ -591,204 +636,193 @@ CREATE TABLE abc (
   FAMILY (d)
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b int not null
- ├── c int not null
- ├── d string
- ├── INDEX primary
- │    ├── a int not null
- │    ├── b int not null
- │    └── c int not null
- ├── INDEX bc
- │    ├── b int not null
- │    ├── c int not null
- │    └── a int not null (storing)
- └── INDEX ba
-      ├── b int not null
-      ├── a int not null
-      └── c int not null
+
+exec-ddl
+CREATE VIEW abcview AS SELECT * FROM abc
+----
 
 build
 SELECT d FROM abc ORDER BY lower(d)
 ----
 sort
- ├── columns: d:4(string)
- ├── ordering: +5
+ ├── columns: d:4  [hidden: column6:6]
+ ├── ordering: +6
  └── project
-      ├── columns: column5:5(string) d:4(string)
+      ├── columns: column6:6 d:4
       ├── scan abc
-      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+      │    └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
       └── projections
-           └── function: lower [type=string]
-                └── variable: abc.d [type=string]
+           └── lower(d:4) [as=column6:6]
 
 build
 SELECT * FROM abc ORDER BY a
 ----
-scan abc
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
- └── ordering: +1
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── ordering: +1
+ └── scan abc
+      ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+      └── ordering: +1
 
 build
 SELECT a, b FROM abc ORDER BY b, a
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null)
+ ├── columns: a:1!null b:2!null
  ├── ordering: +2,+1
  └── project
-      ├── columns: a:1(int!null) b:2(int!null)
+      ├── columns: a:1!null b:2!null
       └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a, b FROM abc ORDER BY b, c
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null)
+ ├── columns: a:1!null b:2!null  [hidden: c:3!null]
  ├── ordering: +2,+3
  └── project
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── columns: a:1!null b:2!null c:3!null
       └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-sort
- ├── columns: a:1(int!null) b:2(int!null)
+project
+ ├── columns: a:1!null b:2!null  [hidden: c:3!null]
  ├── ordering: +2,+3,-1
- └── project
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ └── sort
+      ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+      ├── ordering: +2,+3
       └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abc ORDER BY a DESC
 ----
-sort
- ├── columns: a:1(int!null)
+project
+ ├── columns: a:1!null
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null)
-      └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ └── scan abc,rev
+      ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+      └── ordering: -1
 
 build
 SELECT a FROM abc ORDER BY a DESC LIMIT 1
 ----
 limit
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
+ ├── internal-ordering: -1
  ├── ordering: -1
- ├── sort
- │    ├── columns: a:1(int!null)
+ ├── project
+ │    ├── columns: a:1!null
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: a:1(int!null)
- │         └── scan abc
- │              └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
- └── const: 1 [type=int]
+ │    ├── limit hint: 1.00
+ │    └── scan abc,rev
+ │         ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+ │         ├── ordering: -1
+ │         └── limit hint: 1.00
+ └── 1
 
 build
 SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
 offset
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
+ ├── internal-ordering: -1
  ├── ordering: -1
- ├── sort
- │    ├── columns: a:1(int!null)
+ ├── project
+ │    ├── columns: a:1!null
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: a:1(int!null)
- │         └── scan abc
- │              └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
- └── const: 1 [type=int]
+ │    └── scan abc,rev
+ │         ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+ │         └── ordering: -1
+ └── 1
 
 build
 SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 sort
- ├── columns: c:3(int!null)
+ ├── columns: c:3!null
  ├── ordering: +3
  └── project
-      ├── columns: c:3(int!null)
+      ├── columns: c:3!null
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
            ├── scan abc
-           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: abc.b [type=int]
-                     └── const: 2 [type=int]
+           │    └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+           └── filters
+                └── b:2 = 2
 
 build
 SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 sort
- ├── columns: c:3(int!null)
+ ├── columns: c:3!null
  ├── ordering: -3
  └── project
-      ├── columns: c:3(int!null)
+      ├── columns: c:3!null
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
            ├── scan abc
-           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: abc.b [type=int]
-                     └── const: 2 [type=int]
+           │    └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+           └── filters
+                └── b:2 = 2
 
-# Verify that the ordering of the primary index is still used for the outer sort.
-# TODO(rytaft): Verify that the sort node is removed before execution.
 build
 SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-sort
- ├── columns: b:2(int!null) c:3(int!null)
+project
+ ├── columns: b:2!null c:3!null
  ├── ordering: +2,+3
  └── project
-      ├── columns: b:2(int!null) c:3(int!null)
-      └── project
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-           └── select
-                ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-                ├── scan abc
-                │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-                └── filters [type=bool]
-                     └── eq [type=bool]
-                          ├── variable: abc.a [type=int]
-                          └── const: 1 [type=int]
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── ordering: +2,+3 opt(1)
+      └── select
+           ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+           ├── ordering: +2,+3 opt(1)
+           ├── scan abc
+           │    ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+           │    └── ordering: +2,+3 opt(1)
+           └── filters
+                └── a:1 = 1
 
 build
 SELECT a FROM abc ORDER BY INDEX abc@bc
 ----
-error (0A000): ORDER BY index not supported
+sort
+ ├── columns: a:1!null  [hidden: b:2!null c:3!null]
+ ├── ordering: +2,+3
+ └── project
+      ├── columns: a:1!null b:2!null c:3!null
+      └── scan abc
+           └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abc ORDER BY PRIMARY KEY a
 ----
-error (0A000): ORDER BY index not supported
+error (42P01): no data source matches prefix: "a"
+
+build
+SELECT a FROM abcview ORDER BY INDEX abcview@bc
+----
+error (42809): "abcview" is not a table
 
 exec-ddl
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 ----
-TABLE bar
- ├── id int not null
- ├── baz string
- ├── INDEX primary
- │    └── id int not null
- └── INDEX i_bar
-      ├── baz string
-      └── id int not null (storing)
 
 build
 SELECT * FROM bar ORDER BY baz, id
 ----
 sort
- ├── columns: id:1(int!null) baz:2(string)
+ ├── columns: id:1!null baz:2
  ├── ordering: +2,+1
- └── scan bar
-      └── columns: id:1(int!null) baz:2(string)
+ └── project
+      ├── columns: id:1!null baz:2
+      └── scan bar
+           └── columns: id:1!null baz:2 crdb_internal_mvcc_timestamp:3
 
 exec-ddl
 CREATE TABLE abcd (
@@ -796,20 +830,10 @@ CREATE TABLE abcd (
   b INT,
   c INT,
   d INT,
-  INDEX abc (a, b, c)
+  INDEX abc (a, b, c),
+  INDEX bcd (b, c DESC, d)
 )
 ----
-TABLE abcd
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX abc
-      ├── a int not null
-      ├── b int
-      └── c int
 
 # Verify that projections after ORDER BY perform correctly (i.e., the outer
 # expression does not guarantee it will apply the ORDER BY).
@@ -818,52 +842,46 @@ build
 SELECT a+b AS r FROM (SELECT * FROM abcd ORDER BY d)
 ----
 project
- ├── columns: r:5(int)
- ├── scan abcd
- │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+ ├── columns: r:6
+ ├── project
+ │    ├── columns: a:1!null b:2 c:3 d:4
+ │    └── scan abcd
+ │         └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── plus [type=int]
-           ├── variable: abcd.a [type=int]
-           └── variable: abcd.b [type=int]
+      └── a:1 + b:2 [as=r:6]
 
 build
 SELECT b+d AS r FROM (SELECT * FROM abcd ORDER BY a,d)
 ----
 project
- ├── columns: r:5(int)
- ├── scan abcd
- │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+ ├── columns: r:6
+ ├── project
+ │    ├── columns: a:1!null b:2 c:3 d:4
+ │    └── scan abcd
+ │         └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── plus [type=int]
-           ├── variable: abcd.b [type=int]
-           └── variable: abcd.d [type=int]
+      └── b:2 + d:4 [as=r:6]
 
 build
 SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
 ----
 sort
- ├── columns: x:1(string)
+ ├── columns: x:1!null
  ├── ordering: +1
  └── values
-      ├── columns: column1:1(string)
-      ├── tuple [type=tuple{string}]
-      │    └── const: 'a' [type=string]
-      ├── tuple [type=tuple{string}]
-      │    └── const: 'b' [type=string]
-      └── tuple [type=tuple{string}]
-           └── const: 'c' [type=string]
+      ├── columns: column1:1!null
+      ├── ('a',)
+      ├── ('b',)
+      └── ('c',)
 
 build
 SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
 values
- ├── columns: x:1(string)
- ├── tuple [type=tuple{string}]
- │    └── const: 'a' [type=string]
- ├── tuple [type=tuple{string}]
- │    └── const: 'b' [type=string]
- └── tuple [type=tuple{string}]
-      └── const: 'c' [type=string]
+ ├── columns: x:1!null
+ ├── ('a',)
+ ├── ('b',)
+ └── ('c',)
 
 exec-ddl
 CREATE TABLE blocks (
@@ -874,30 +892,141 @@ CREATE TABLE blocks (
   PRIMARY KEY (block_id, writer_id, block_num)
 )
 ----
-TABLE blocks
- ├── block_id int not null
- ├── writer_id string not null
- ├── block_num int not null
- ├── raw_bytes bytes
- └── INDEX primary
-      ├── block_id int not null
-      ├── writer_id string not null
-      └── block_num int not null
 
 # Regression test for #13696.
 build
 SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
 limit
- ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) block_id:1(int!null)
+ ├── columns: block_id:1!null writer_id:2!null block_num:3!null block_id:1!null
+ ├── internal-ordering: +1,+2,+3
  ├── ordering: +1,+2,+3
  ├── project
- │    ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null)
+ │    ├── columns: block_id:1!null writer_id:2!null block_num:3!null
  │    ├── ordering: +1,+2,+3
+ │    ├── limit hint: 1.00
  │    └── scan blocks
- │         ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) raw_bytes:4(bytes)
- │         └── ordering: +1,+2,+3
- └── const: 1 [type=int]
+ │         ├── columns: block_id:1!null writer_id:2!null block_num:3!null raw_bytes:4 crdb_internal_mvcc_timestamp:5
+ │         ├── ordering: +1,+2,+3
+ │         └── limit hint: 1.00
+ └── 1
+
+build
+SELECT a FROM abcd ORDER BY PRIMARY KEY abcd
+----
+project
+ ├── columns: a:1!null
+ ├── ordering: +1
+ └── scan abcd
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+      └── ordering: +1
+
+build
+SELECT a FROM abcd ORDER BY b, PRIMARY KEY abcd
+----
+sort
+ ├── columns: a:1!null  [hidden: b:2]
+ ├── ordering: +2,+1
+ └── project
+      ├── columns: a:1!null b:2
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@abc
+----
+project
+ ├── columns: a:1!null  [hidden: b:2 c:3]
+ ├── ordering: +1,+2,+3
+ └── scan abcd
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+      └── ordering: +1
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@abc DESC
+----
+project
+ ├── columns: a:1!null  [hidden: b:2 c:3]
+ ├── ordering: -1,-2,-3
+ └── scan abcd,rev
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+      └── ordering: -1
+
+build
+SELECT a FROM abcd AS foo ORDER BY INDEX abcd@abc DESC
+----
+error (42P01): no data source matches prefix: t.public.abcd in this context
+
+build
+SELECT a FROM abcd AS foo ORDER BY INDEX foo@abc DESC
+----
+error (42P01): no data source matches prefix: "foo"
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@bcd
+----
+sort
+ ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
+ ├── ordering: +2,-3,+4,+1
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@bcd DESC
+----
+sort
+ ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
+ ├── ordering: -2,+3,-4,-1
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@nonexistent
+----
+error (42704): index "nonexistent" not found
+
+build
+SELECT a FROM t.public.abcd ORDER BY INDEX t.public.abcd@bcd
+----
+sort
+ ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
+ ├── ordering: +2,-3,+4,+1
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan t.public.abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+
+build
+SELECT a FROM t.abcd ORDER BY INDEX t.abcd@bcd
+----
+sort
+ ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
+ ├── ordering: +2,-3,+4,+1
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan t.public.abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+
+build
+SELECT a FROM public.abcd ORDER BY INDEX public.abcd@bcd
+----
+sort
+ ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
+ ├── ordering: +2,-3,+4,+1
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan public.abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+
+build
+SELECT a FROM (SELECT a FROM abcd) ORDER BY INDEX abcd@bcd
+----
+error (42P01): no data source matches prefix: t.public.abcd in this context
 
 # Drop previous table with same name, but different schema.
 exec-ddl
@@ -912,48 +1041,48 @@ CREATE TABLE abcd (
   d INT
 )
 ----
-TABLE abcd
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT a, b FROM abcd ORDER BY b, c
 ----
 sort
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2  [hidden: c:3]
  ├── ordering: +2,+3
  └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      ├── columns: a:1!null b:2 c:3
       └── scan abcd
-           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abcd ORDER BY b, c
 ----
 sort
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null  [hidden: b:2 c:3]
  ├── ordering: +2,+3
  └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      ├── columns: a:1!null b:2 c:3
       └── scan abcd
-           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abcd ORDER BY a, b, c
 ----
-sort
- ├── columns: a:1(int!null)
+project
+ ├── columns: a:1!null  [hidden: b:2 c:3]
  ├── ordering: +1,+2,+3
- └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
-      └── scan abcd
-           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+ └── scan abcd
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+      └── ordering: +1
 
 build
 SELECT ARRAY[a] FROM abcd ORDER BY 1
 ----
-error (0A000): can't order by column type int[]
+sort
+ ├── columns: array:6!null
+ ├── ordering: +6
+ └── project
+      ├── columns: array:6!null
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+      └── projections
+           └── ARRAY[a:1] [as=array:6]

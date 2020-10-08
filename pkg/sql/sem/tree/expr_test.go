@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree_test
 
@@ -23,11 +19,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 // TestUnresolvedNameString tests the string representation of tree.UnresolvedName and thus tree.Name.
 func TestUnresolvedNameString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		in, out string
 	}{
@@ -56,10 +57,24 @@ func TestUnresolvedNameString(t *testing.T) {
 	}
 }
 
+// TestCastFromNull checks every type can be cast from NULL.
+func TestCastFromNull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	for _, typ := range types.Scalar {
+		castExpr := tree.CastExpr{Expr: tree.DNull, Type: typ}
+		res, err := castExpr.Eval(nil)
+		require.NoError(t, err)
+		require.Equal(t, tree.DNull, res)
+	}
+}
+
 // TestExprString verifies that converting an expression to a string and back
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
-	defer tree.MockNameTypes(map[string]types.T{
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer tree.MockNameTypes(map[string]*types.T{
 		"a": types.Bool,
 		"b": types.Bool,
 		"c": types.Bool,
@@ -98,12 +113,13 @@ func TestExprString(t *testing.T) {
 		`(1 >= 2) = (2 IS OF (BOOL))`,
 		`count(1) FILTER (WHERE true)`,
 	}
+	ctx := context.Background()
 	for _, exprStr := range testExprs {
 		expr, err := parser.ParseExpr(exprStr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
+		typedExpr, err := tree.TypeCheck(ctx, expr, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -113,7 +129,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := tree.TypeCheck(expr2, nil, types.Any)
+		typedExpr2, err := tree.TypeCheck(ctx, expr2, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}
@@ -145,6 +161,8 @@ func TestExprString(t *testing.T) {
 }
 
 func TestStripParens(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testExprs := []struct {
 		in, out string
 	}{

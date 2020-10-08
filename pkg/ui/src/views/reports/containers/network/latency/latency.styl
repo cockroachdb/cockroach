@@ -1,0 +1,131 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+@require "~styl/base/palette.styl"
+@require '~src/components/core/index'
+
+.latency-table
+  width 100%
+  table-layout fixed
+  margin-top 17px
+  border-radius 3px
+  box-shadow: 0 0 1px 0 rgba(67, 90, 111, 0.41)
+  background-color $colors--white
+  thead
+    border-bottom 2px solid $colors--neutral-2
+  tbody
+    .latency-table__cell
+      &:not(:nth-child(1))
+        border-right 1px solid $colors--neutral-2
+        border-bottom 1px solid $colors--neutral-2
+    .latency-table__cell--end
+      &:not(:nth-child(1))
+        border-right 2px solid $colors--neutral-2
+   .latency-table__row
+      &:last-child
+        .latency-table__cell
+          border-bottom none
+  &__cell
+    text-transform uppercase
+    text-align center
+    width 95px
+    padding 9px 0
+    a
+      font-family SourceSansPro-SemiBold
+      font-size 12px
+      font-weight 600
+      line-height 1.67
+      letter-spacing 0.3px
+      color $adminui-grey-2
+      &:hover
+        color $colors--primary-blue-3
+        text-decoration underline
+    &:first-child
+      border-right 2px solid $colors--neutral-2
+    .Chip
+      text-transform lowercase
+
+.latency-table__multiple
+  .latency-table__cell--start
+    border-left 2px solid $colors--neutral-2
+  th
+    font-family SourceSansPro-SemiBold
+    font-size $font-size--small
+    font-weight $font-weight--bold
+    line-height 1.67
+    letter-spacing 0.3px
+    color $colors--neutral-6
+  thead
+    .region-name
+      border-left 2px solid $colors--neutral-2
+      text-align center
+      padding-top 30px
+  tbody
+    th
+      width 115px
+      border-bottom 2px solid $colors--neutral-2
+      padding-left 22px
+    .latency-table__cell
+      &--header
+        &:nth-child(1), &:nth-child(2)
+          width 45px
+          border-bottom none
+          border-right 2px solid $colors--neutral-2
+    .latency-table__row--end
+        border-bottom 2px solid $colors--neutral-2
+
+.latency-table__empty
+  padding: 30px;
+
+
+.ant-tooltip.Chip--tooltip
+  min-width 384px
+  .ant-tooltip-inner
+    background-color black
+    padding 12px 18px
+  .ant-tooltip-content
+    width 100%
+  span, p
+    font-family $font-family--base
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
+    color $table-border-color
+  .Chip--tooltip__latency
+     margin-top 25px
+  .Chip--tooltip__nodes
+    display flex
+    justify-content space-between
+    &--item
+      width 45%
+      &:first-child
+        margin-right 8px
+      &:last-child
+        margin-left 8px
+    .ant-divider
+      background #3b4a60
+      margin 0
+    &--item-title, &--item-description
+      font-family $font-family--base
+      font-size 14px
+      line-height 1.57
+      letter-spacing 0.1px
+      color $table-border-color
+      margin 0
+    &--item-title
+      line-height 1.71
+  .color
+    &--green, &--lightgreen
+      color $colors--primary-green-2
+    &--grey
+      color $colors--neutral-2
+    &--blue, &--lightblue
+      color $colors--primary-blue-2
+    &--yellow
+      color $colors--functional-yellow-3

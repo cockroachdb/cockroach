@@ -1,26 +1,24 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package bench
 
 import (
-	gosql "database/sql"
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
 	"net/url"
 	"os/exec"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 // This is the TPC-B(ish) query that pgbench runs.
@@ -35,14 +33,15 @@ INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (%[3]d, %[4]d, 
 END;` // vars: 1 delta, 2 aid, 3 tid, 4 bid
 
 // RunOne executes one iteration of the query batch that `pgbench` executes.
-func RunOne(db *gosql.DB, r *rand.Rand, accounts int) error {
+// Calls b.Fatalf if it encounters an error.
+func RunOne(db sqlutils.DBHandle, r *rand.Rand, accounts int) error {
 	account := r.Intn(accounts)
 	delta := r.Intn(5000)
 	teller := r.Intn(tellers)
 	branch := 1
 
 	q := fmt.Sprintf(tpcbQuery, delta, account, teller, branch)
-	_, err := db.Exec(q)
+	_, err := db.ExecContext(context.TODO(), q)
 	return err
 }
 

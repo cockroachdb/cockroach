@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package roachpb
 
@@ -18,14 +14,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 type testError struct{}
 
-func (t *testError) Error() string              { return "test" }
-func (t *testError) message(pErr *Error) string { return "test" }
+func (t *testError) Error() string { return "test" }
 
 // TestNewError verifies that a test error that
 // implements retryable or indexed is converted properly into a generic error.
@@ -47,10 +44,11 @@ func TestNewErrorNil(t *testing.T) {
 
 // TestSetTxn vefifies that SetTxn updates the error message.
 func TestSetTxn(t *testing.T) {
-	e := NewError(NewTransactionAbortedError())
-	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, hlc.Timestamp{}, 0)
+	e := NewError(NewTransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND))
+	txn := MakeTransaction("test", Key("a"), 1, hlc.Timestamp{}, 0)
 	e.SetTxn(&txn)
-	if !strings.HasPrefix(e.Message, "TransactionAbortedError: txn aborted \"test\"") {
+	if !strings.HasPrefix(
+		e.Message, "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
 		t.Errorf("unexpected message: %s", e.Message)
 	}
 }
@@ -95,4 +93,36 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 			t.Fatalf("expected: %s\ngot: %s", a, expOld)
 		}
 	}
+}
+
+func TestErrorRedaction(t *testing.T) {
+	t.Run("nil", func(t *testing.T) {
+		var pErr *Error
+		var s redact.StringBuilder
+		s.Print(pErr)
+		const exp = "<nil>"
+		act := s.RedactableString()
+		require.EqualValues(t, exp, act)
+	})
+	t.Run("uncertainty-restart", func(t *testing.T) {
+		// NB: most other errors don't redact properly. More elbow grease is needed.
+		wrappedPErr := NewError(NewReadWithinUncertaintyIntervalError(
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+			&Transaction{
+				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
+				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.Timestamp{WallTime: 4}}},
+			}))
+		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1)
+		txn.ID = uuid.Nil
+		txn.Priority = 1234
+		wrappedPErr.UnexposedTxn = &txn
+		r := &UnhandledRetryableError{
+			PErr: *wrappedPErr,
+		}
+		var s redact.StringBuilder
+		s.Print(r)
+		act := s.RedactableString()
+		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= 0.000000003,0`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000002,0"
+		require.Equal(t, exp, string(act))
+	})
 }

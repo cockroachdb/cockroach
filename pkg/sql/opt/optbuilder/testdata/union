@@ -4,366 +4,292 @@ build
 VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
 ----
 union
- ├── columns: column1:3(int)
- ├── left columns: column1:1(int)
- ├── right columns: column1:2(int)
+ ├── columns: column1:3!null
+ ├── left columns: column1:1
+ ├── right columns: column1:2
  ├── values
- │    ├── columns: column1:1(int)
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 2 [type=int]
- │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
  └── values
-      ├── columns: column1:2(int)
-      ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
-      ├── tuple [type=tuple{int}]
-      │    └── const: 3 [type=int]
-      └── tuple [type=tuple{int}]
-           └── const: 1 [type=int]
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
 
 build
 VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)
 ----
 union-all
- ├── columns: column1:3(int)
- ├── left columns: column1:1(int)
- ├── right columns: column1:2(int)
+ ├── columns: column1:3!null
+ ├── left columns: column1:1
+ ├── right columns: column1:2
  ├── values
- │    ├── columns: column1:1(int)
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 2 [type=int]
- │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
  └── values
-      ├── columns: column1:2(int)
-      ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
-      ├── tuple [type=tuple{int}]
-      │    └── const: 3 [type=int]
-      └── tuple [type=tuple{int}]
-           └── const: 1 [type=int]
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
 
 build
 VALUES (1), (1), (1), (2), (2) INTERSECT VALUES (1), (3), (1)
 ----
 intersect
- ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
- ├── right columns: column1:2(int)
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
  ├── values
- │    ├── columns: column1:1(int)
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 2 [type=int]
- │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
  └── values
-      ├── columns: column1:2(int)
-      ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
-      ├── tuple [type=tuple{int}]
-      │    └── const: 3 [type=int]
-      └── tuple [type=tuple{int}]
-           └── const: 1 [type=int]
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
 
 build
 VALUES (1), (1), (1), (2), (2) INTERSECT ALL VALUES (1), (3), (1)
 ----
 intersect-all
- ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
- ├── right columns: column1:2(int)
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
  ├── values
- │    ├── columns: column1:1(int)
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 2 [type=int]
- │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
  └── values
-      ├── columns: column1:2(int)
-      ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
-      ├── tuple [type=tuple{int}]
-      │    └── const: 3 [type=int]
-      └── tuple [type=tuple{int}]
-           └── const: 1 [type=int]
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
 
 build
 VALUES (1), (1), (1), (2), (2) EXCEPT VALUES (1), (3), (1)
 ----
 except
- ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
- ├── right columns: column1:2(int)
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
  ├── values
- │    ├── columns: column1:1(int)
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 2 [type=int]
- │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
  └── values
-      ├── columns: column1:2(int)
-      ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
-      ├── tuple [type=tuple{int}]
-      │    └── const: 3 [type=int]
-      └── tuple [type=tuple{int}]
-           └── const: 1 [type=int]
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
 
 build
 VALUES (1), (1), (1), (2), (2) EXCEPT ALL VALUES (1), (3), (1)
 ----
 except-all
- ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
- ├── right columns: column1:2(int)
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
  ├── values
- │    ├── columns: column1:1(int)
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 2 [type=int]
- │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
  └── values
-      ├── columns: column1:2(int)
-      ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
-      ├── tuple [type=tuple{int}]
-      │    └── const: 3 [type=int]
-      └── tuple [type=tuple{int}]
-           └── const: 1 [type=int]
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
 
 build
 VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
 ----
 union
- ├── columns: column1:5(int) column2:6(int)
- ├── left columns: column1:1(int) column2:2(int)
- ├── right columns: column1:3(int) column2:4(int)
+ ├── columns: column1:5!null column2:6!null
+ ├── left columns: column1:1 column2:2
+ ├── right columns: column1:3 column2:4
  ├── values
- │    ├── columns: column1:1(int) column2:2(int)
- │    ├── tuple [type=tuple{int, int}]
- │    │    ├── const: 1 [type=int]
- │    │    └── const: 2 [type=int]
- │    ├── tuple [type=tuple{int, int}]
- │    │    ├── const: 1 [type=int]
- │    │    └── const: 1 [type=int]
- │    ├── tuple [type=tuple{int, int}]
- │    │    ├── const: 1 [type=int]
- │    │    └── const: 2 [type=int]
- │    ├── tuple [type=tuple{int, int}]
- │    │    ├── const: 2 [type=int]
- │    │    └── const: 1 [type=int]
- │    └── tuple [type=tuple{int, int}]
- │         ├── const: 2 [type=int]
- │         └── const: 1 [type=int]
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── (1, 2)
+ │    ├── (1, 1)
+ │    ├── (1, 2)
+ │    ├── (2, 1)
+ │    └── (2, 1)
  └── values
-      ├── columns: column1:3(int) column2:4(int)
-      ├── tuple [type=tuple{int, int}]
-      │    ├── const: 1 [type=int]
-      │    └── const: 3 [type=int]
-      ├── tuple [type=tuple{int, int}]
-      │    ├── const: 3 [type=int]
-      │    └── const: 4 [type=int]
-      └── tuple [type=tuple{int, int}]
-           ├── const: 1 [type=int]
-           └── const: 1 [type=int]
+      ├── columns: column1:3!null column2:4!null
+      ├── (1, 3)
+      ├── (3, 4)
+      └── (1, 1)
 
 build
 (VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
 ----
 limit
- ├── columns: column1:3(int)
+ ├── columns: column1:3!null
+ ├── internal-ordering: -3
  ├── ordering: -3
  ├── sort
- │    ├── columns: column1:3(int)
+ │    ├── columns: column1:3!null
  │    ├── ordering: -3
+ │    ├── limit hint: 2.00
  │    └── union-all
- │         ├── columns: column1:3(int)
- │         ├── left columns: column1:1(int)
- │         ├── right columns: column1:2(int)
+ │         ├── columns: column1:3!null
+ │         ├── left columns: column1:1
+ │         ├── right columns: column1:2
  │         ├── values
- │         │    ├── columns: column1:1(int)
- │         │    ├── tuple [type=tuple{int}]
- │         │    │    └── const: 1 [type=int]
- │         │    ├── tuple [type=tuple{int}]
- │         │    │    └── const: 1 [type=int]
- │         │    ├── tuple [type=tuple{int}]
- │         │    │    └── const: 1 [type=int]
- │         │    ├── tuple [type=tuple{int}]
- │         │    │    └── const: 2 [type=int]
- │         │    └── tuple [type=tuple{int}]
- │         │         └── const: 2 [type=int]
+ │         │    ├── columns: column1:1!null
+ │         │    ├── (1,)
+ │         │    ├── (1,)
+ │         │    ├── (1,)
+ │         │    ├── (2,)
+ │         │    └── (2,)
  │         └── values
- │              ├── columns: column1:2(int)
- │              ├── tuple [type=tuple{int}]
- │              │    └── const: 1 [type=int]
- │              ├── tuple [type=tuple{int}]
- │              │    └── const: 3 [type=int]
- │              └── tuple [type=tuple{int}]
- │                   └── const: 1 [type=int]
- └── const: 2 [type=int]
+ │              ├── columns: column1:2!null
+ │              ├── (1,)
+ │              ├── (3,)
+ │              └── (1,)
+ └── 2
 
 # The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
 build
 VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
 ----
 limit
- ├── columns: column1:3(int)
+ ├── columns: column1:3!null
+ ├── internal-ordering: -3
  ├── ordering: -3
  ├── sort
- │    ├── columns: column1:3(int)
+ │    ├── columns: column1:3!null
  │    ├── ordering: -3
+ │    ├── limit hint: 2.00
  │    └── union-all
- │         ├── columns: column1:3(int)
- │         ├── left columns: column1:1(int)
- │         ├── right columns: column1:2(int)
+ │         ├── columns: column1:3!null
+ │         ├── left columns: column1:1
+ │         ├── right columns: column1:2
  │         ├── values
- │         │    ├── columns: column1:1(int)
- │         │    ├── tuple [type=tuple{int}]
- │         │    │    └── const: 1 [type=int]
- │         │    ├── tuple [type=tuple{int}]
- │         │    │    └── const: 1 [type=int]
- │         │    ├── tuple [type=tuple{int}]
- │         │    │    └── const: 1 [type=int]
- │         │    ├── tuple [type=tuple{int}]
- │         │    │    └── const: 2 [type=int]
- │         │    └── tuple [type=tuple{int}]
- │         │         └── const: 2 [type=int]
+ │         │    ├── columns: column1:1!null
+ │         │    ├── (1,)
+ │         │    ├── (1,)
+ │         │    ├── (1,)
+ │         │    ├── (2,)
+ │         │    └── (2,)
  │         └── values
- │              ├── columns: column1:2(int)
- │              ├── tuple [type=tuple{int}]
- │              │    └── const: 1 [type=int]
- │              ├── tuple [type=tuple{int}]
- │              │    └── const: 3 [type=int]
- │              └── tuple [type=tuple{int}]
- │                   └── const: 1 [type=int]
- └── const: 2 [type=int]
+ │              ├── columns: column1:2!null
+ │              ├── (1,)
+ │              ├── (3,)
+ │              └── (1,)
+ └── 2
 
 # UNION with NULL columns in operands works.
 build
 VALUES (NULL) UNION ALL VALUES (1) ORDER BY 1
 ----
 sort
- ├── columns: column1:3(int)
- ├── ordering: +3
+ ├── columns: column1:4
+ ├── ordering: +4
  └── union-all
-      ├── columns: column1:3(int)
-      ├── left columns: column1:1(unknown)
-      ├── right columns: column1:2(int)
-      ├── values
-      │    ├── columns: column1:1(unknown)
-      │    └── tuple [type=tuple{unknown}]
-      │         └── null [type=unknown]
+      ├── columns: column1:4
+      ├── left columns: column1:3
+      ├── right columns: column1:2
+      ├── project
+      │    ├── columns: column1:3
+      │    ├── values
+      │    │    ├── columns: column1:1
+      │    │    └── (NULL,)
+      │    └── projections
+      │         └── column1:1::INT8 [as=column1:3]
       └── values
-           ├── columns: column1:2(int)
-           └── tuple [type=tuple{int}]
-                └── const: 1 [type=int]
+           ├── columns: column1:2!null
+           └── (1,)
 
 build
 VALUES (NULL) UNION ALL VALUES (NULL)
 ----
 union-all
- ├── columns: column1:3(unknown)
- ├── left columns: column1:1(unknown)
- ├── right columns: column1:2(unknown)
+ ├── columns: column1:3
+ ├── left columns: column1:1
+ ├── right columns: column1:2
  ├── values
- │    ├── columns: column1:1(unknown)
- │    └── tuple [type=tuple{unknown}]
- │         └── null [type=unknown]
+ │    ├── columns: column1:1
+ │    └── (NULL,)
  └── values
-      ├── columns: column1:2(unknown)
-      └── tuple [type=tuple{unknown}]
-           └── null [type=unknown]
+      ├── columns: column1:2
+      └── (NULL,)
 
 build
 SELECT x, pg_typeof(y) FROM (SELECT 1 AS a, NULL AS b UNION ALL SELECT 2 AS a, 4 AS b) AS t(x, y)
 ----
 project
- ├── columns: x:5(int!null) pg_typeof:7(string)
+ ├── columns: x:6!null pg_typeof:8
  ├── union-all
- │    ├── columns: a:5(int!null) b:6(int)
- │    ├── left columns: a:1(int) b:2(unknown)
- │    ├── right columns: a:3(int) b:4(int)
+ │    ├── columns: a:6!null b:7
+ │    ├── left columns: a:1 b:5
+ │    ├── right columns: a:3 b:4
  │    ├── project
- │    │    ├── columns: a:1(int!null) b:2(unknown)
- │    │    ├── values
- │    │    │    └── tuple [type=tuple]
+ │    │    ├── columns: b:5 a:1!null
+ │    │    ├── project
+ │    │    │    ├── columns: a:1!null b:2
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── projections
+ │    │    │         ├── 1 [as=a:1]
+ │    │    │         └── NULL [as=b:2]
  │    │    └── projections
- │    │         ├── const: 1 [type=int]
- │    │         └── null [type=unknown]
+ │    │         └── b:2::INT8 [as=b:5]
  │    └── project
- │         ├── columns: a:3(int!null) b:4(int!null)
+ │         ├── columns: a:3!null b:4!null
  │         ├── values
- │         │    └── tuple [type=tuple]
+ │         │    └── ()
  │         └── projections
- │              ├── const: 2 [type=int]
- │              └── const: 4 [type=int]
+ │              ├── 2 [as=a:3]
+ │              └── 4 [as=b:4]
  └── projections
-      └── function: pg_typeof [type=string]
-           └── variable: b [type=int]
+      └── pg_typeof(b:7) [as=pg_typeof:8]
 
 build
 SELECT x, pg_typeof(y) FROM (SELECT 1 AS a, 3 AS b UNION ALL SELECT 2 AS a, NULL AS b) AS t(x, y)
 ----
 project
- ├── columns: x:5(int!null) pg_typeof:7(string)
+ ├── columns: x:5!null pg_typeof:7
  ├── union-all
- │    ├── columns: a:5(int!null) b:6(int)
- │    ├── left columns: a:1(int) b:2(int)
- │    ├── right columns: a:3(int) b:4(unknown)
+ │    ├── columns: a:5!null b:6
+ │    ├── left columns: a:1 b:2
+ │    ├── right columns: a:3 b:4
  │    ├── project
- │    │    ├── columns: a:1(int!null) b:2(int!null)
+ │    │    ├── columns: a:1!null b:2!null
  │    │    ├── values
- │    │    │    └── tuple [type=tuple]
+ │    │    │    └── ()
  │    │    └── projections
- │    │         ├── const: 1 [type=int]
- │    │         └── const: 3 [type=int]
+ │    │         ├── 1 [as=a:1]
+ │    │         └── 3 [as=b:2]
  │    └── project
- │         ├── columns: a:3(int!null) b:4(unknown)
+ │         ├── columns: a:3!null b:4
  │         ├── values
- │         │    └── tuple [type=tuple]
+ │         │    └── ()
  │         └── projections
- │              ├── const: 2 [type=int]
- │              └── null [type=unknown]
+ │              ├── 2 [as=a:3]
+ │              └── NULL::INT8 [as=b:4]
  └── projections
-      └── function: pg_typeof [type=string]
-           └── variable: b [type=int]
+      └── pg_typeof(b:6) [as=pg_typeof:7]
 
 exec-ddl
 CREATE TABLE uniontest (
@@ -371,335 +297,291 @@ CREATE TABLE uniontest (
   v INT
 )
 ----
-TABLE uniontest
- ├── k int
- ├── v int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT v FROM uniontest WHERE k = 1 UNION SELECT v FROM uniontest WHERE k = 2
 ----
 union
- ├── columns: v:7(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── columns: v:9
+ ├── left columns: uniontest.v:2
+ ├── right columns: uniontest.v:6
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: uniontest.v:2
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1!null uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
- │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
- │                   └── const: 1 [type=int]
+ │         │    └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── k:1 = 1
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: uniontest.v:6
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:5!null uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
-                     └── const: 2 [type=int]
+           │    └── columns: k:5 uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+           └── filters
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2
 ----
 union-all
- ├── columns: v:7(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── columns: v:9
+ ├── left columns: uniontest.v:2
+ ├── right columns: uniontest.v:6
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: uniontest.v:2
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1!null uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
- │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
- │                   └── const: 1 [type=int]
+ │         │    └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── k:1 = 1
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: uniontest.v:6
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:5!null uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
-                     └── const: 2 [type=int]
+           │    └── columns: k:5 uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+           └── filters
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 2
 ----
 intersect
- ├── columns: v:2(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── columns: v:2
+ ├── left columns: v:2
+ ├── right columns: v:6
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: v:2
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1!null v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
- │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
- │                   └── const: 1 [type=int]
+ │         │    └── columns: k:1 v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── k:1 = 1
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: v:6
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:5!null v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
-                     └── const: 2 [type=int]
+           │    └── columns: k:5 v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+           └── filters
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE k = 2
 ----
 intersect-all
- ├── columns: v:2(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── columns: v:2
+ ├── left columns: v:2
+ ├── right columns: v:6
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: v:2
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1!null v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
- │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
- │                   └── const: 1 [type=int]
+ │         │    └── columns: k:1 v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── k:1 = 1
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: v:6
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:5!null v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
-                     └── const: 2 [type=int]
+           │    └── columns: k:5 v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+           └── filters
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
 ----
 except
- ├── columns: v:2(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── columns: v:2
+ ├── left columns: v:2
+ ├── right columns: v:6
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: v:2
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1!null v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
- │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
- │                   └── const: 1 [type=int]
+ │         │    └── columns: k:1 v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── k:1 = 1
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: v:6
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:5!null v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
-                     └── const: 2 [type=int]
+           │    └── columns: k:5 v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+           └── filters
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k = 2
 ----
 except-all
- ├── columns: v:2(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── columns: v:2
+ ├── left columns: v:2
+ ├── right columns: v:6
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: v:2
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1!null v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
- │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
- │                   └── const: 1 [type=int]
+ │         │    └── columns: k:1 v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── k:1 = 1
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: v:6
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:5!null v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
-                     └── const: 2 [type=int]
+           │    └── columns: k:5 v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+           └── filters
+                └── k:5 = 2
 
 build
 (SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
 ----
 limit
- ├── columns: v:7(int)
- ├── ordering: -7
+ ├── columns: v:9
+ ├── internal-ordering: -9
+ ├── ordering: -9
  ├── sort
- │    ├── columns: v:7(int)
- │    ├── ordering: -7
+ │    ├── columns: v:9
+ │    ├── ordering: -9
+ │    ├── limit hint: 2.00
  │    └── union-all
- │         ├── columns: v:7(int)
- │         ├── left columns: uniontest.v:2(int)
- │         ├── right columns: uniontest.v:5(int)
+ │         ├── columns: v:9
+ │         ├── left columns: uniontest.v:2
+ │         ├── right columns: uniontest.v:6
  │         ├── project
- │         │    ├── columns: uniontest.v:2(int)
+ │         │    ├── columns: uniontest.v:2
  │         │    └── select
- │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         │         ├── columns: k:1!null uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  │         │         ├── scan uniontest
- │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         │         └── filters [type=bool]
- │         │              └── eq [type=bool]
- │         │                   ├── variable: uniontest.k [type=int]
- │         │                   └── const: 1 [type=int]
+ │         │         │    └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         │         └── filters
+ │         │              └── k:1 = 1
  │         └── project
- │              ├── columns: uniontest.v:5(int)
+ │              ├── columns: uniontest.v:6
  │              └── select
- │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+ │                   ├── columns: k:5!null uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
  │                   ├── scan uniontest
- │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
- │                   └── filters [type=bool]
- │                        └── eq [type=bool]
- │                             ├── variable: uniontest.k [type=int]
- │                             └── const: 2 [type=int]
- └── const: 2 [type=int]
+ │                   │    └── columns: k:5 uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+ │                   └── filters
+ │                        └── k:5 = 2
+ └── 2
 
 # The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
 build
 SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
 ----
 limit
- ├── columns: v:7(int)
- ├── ordering: -7
+ ├── columns: v:9
+ ├── internal-ordering: -9
+ ├── ordering: -9
  ├── sort
- │    ├── columns: v:7(int)
- │    ├── ordering: -7
+ │    ├── columns: v:9
+ │    ├── ordering: -9
+ │    ├── limit hint: 2.00
  │    └── union-all
- │         ├── columns: v:7(int)
- │         ├── left columns: uniontest.v:2(int)
- │         ├── right columns: uniontest.v:5(int)
+ │         ├── columns: v:9
+ │         ├── left columns: uniontest.v:2
+ │         ├── right columns: uniontest.v:6
  │         ├── project
- │         │    ├── columns: uniontest.v:2(int)
+ │         │    ├── columns: uniontest.v:2
  │         │    └── select
- │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         │         ├── columns: k:1!null uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  │         │         ├── scan uniontest
- │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         │         └── filters [type=bool]
- │         │              └── eq [type=bool]
- │         │                   ├── variable: uniontest.k [type=int]
- │         │                   └── const: 1 [type=int]
+ │         │         │    └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         │         └── filters
+ │         │              └── k:1 = 1
  │         └── project
- │              ├── columns: uniontest.v:5(int)
+ │              ├── columns: uniontest.v:6
  │              └── select
- │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+ │                   ├── columns: k:5!null uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
  │                   ├── scan uniontest
- │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
- │                   └── filters [type=bool]
- │                        └── eq [type=bool]
- │                             ├── variable: uniontest.k [type=int]
- │                             └── const: 2 [type=int]
- └── const: 2 [type=int]
+ │                   │    └── columns: k:5 uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+ │                   └── filters
+ │                        └── k:5 = 2
+ └── 2
 
 build
 SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 union
- ├── columns: v:7(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.k:4(int)
+ ├── columns: v:9
+ ├── left columns: uniontest.v:2
+ ├── right columns: k:5
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: uniontest.v:2
  │    └── scan uniontest
- │         └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  └── project
-      ├── columns: uniontest.k:4(int)
+      ├── columns: k:5
       └── scan uniontest
-           └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           └── columns: k:5 uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
 
 build
 SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
 union-all
- ├── columns: v:7(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.k:4(int)
+ ├── columns: v:9
+ ├── left columns: uniontest.v:2
+ ├── right columns: k:5
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: uniontest.v:2
  │    └── scan uniontest
- │         └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4
  └── project
-      ├── columns: uniontest.k:4(int)
+      ├── columns: k:5
       └── scan uniontest
-           └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           └── columns: k:5 uniontest.v:6 rowid:7!null crdb_internal_mvcc_timestamp:8
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
 ----
-left-join
- ├── columns: column1:1(int) column1:4(int)
+left-join (hash)
+ ├── columns: column1:1!null column1:4
  ├── values
- │    ├── columns: column1:1(int)
- │    └── tuple [type=tuple{int}]
- │         └── const: 1 [type=int]
+ │    ├── columns: column1:1!null
+ │    └── (1,)
  ├── union
- │    ├── columns: column1:4(int)
- │    ├── left columns: column1:2(int)
- │    ├── right columns: column1:3(int)
+ │    ├── columns: column1:4!null
+ │    ├── left columns: column1:2
+ │    ├── right columns: column1:3
  │    ├── values
- │    │    ├── columns: column1:2(int)
- │    │    └── tuple [type=tuple{int}]
- │    │         └── const: 1 [type=int]
+ │    │    ├── columns: column1:2!null
+ │    │    └── (1,)
  │    └── values
- │         ├── columns: column1:3(int)
- │         └── tuple [type=tuple{int}]
- │              └── const: 2 [type=int]
- └── filters [type=bool]
-      └── eq [type=bool]
-           ├── variable: column1 [type=int]
-           └── variable: column1 [type=int]
+ │         ├── columns: column1:3!null
+ │         └── (2,)
+ └── filters
+      └── column1:1 = column1:4
 
 build
 SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
 ----
-left-join
- ├── columns: column1:1(int) column1:4(int)
+left-join (hash)
+ ├── columns: column1:1!null column1:4
  ├── values
- │    ├── columns: column1:1(int)
- │    └── tuple [type=tuple{int}]
- │         └── const: 1 [type=int]
+ │    ├── columns: column1:1!null
+ │    └── (1,)
  ├── union
- │    ├── columns: column1:4(int)
- │    ├── left columns: column1:2(int)
- │    ├── right columns: column1:3(int)
+ │    ├── columns: column1:4!null
+ │    ├── left columns: column1:2
+ │    ├── right columns: column1:3
  │    ├── values
- │    │    ├── columns: column1:2(int)
- │    │    └── tuple [type=tuple{int}]
- │    │         └── const: 1 [type=int]
+ │    │    ├── columns: column1:2!null
+ │    │    └── (1,)
  │    └── values
- │         ├── columns: column1:3(int)
- │         └── tuple [type=tuple{int}]
- │              └── const: 2 [type=int]
- └── filters [type=bool]
-      └── eq [type=bool]
-           ├── variable: column1 [type=int]
-           └── variable: column1 [type=int]
+ │         ├── columns: column1:3!null
+ │         └── (2,)
+ └── filters
+      └── column1:1 = column1:4
 
 build
 SELECT 1, 2 UNION SELECT 3
@@ -719,19 +601,63 @@ error (42601): each EXCEPT query must have the same number of columns: 2 vs 1
 build
 SELECT 1 UNION SELECT '3'
 ----
-error (42804): UNION types int and string cannot be matched
+union
+ ├── columns: "?column?":3!null
+ ├── left columns: "?column?":1
+ ├── right columns: "?column?":2
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── project
+      ├── columns: "?column?":2!null
+      ├── values
+      │    └── ()
+      └── projections
+           └── 3 [as="?column?":2]
 
 build
 SELECT 1 INTERSECT SELECT '3'
 ----
-error (42804): INTERSECT types int and string cannot be matched
+intersect
+ ├── columns: "?column?":1!null
+ ├── left columns: "?column?":1!null
+ ├── right columns: "?column?":2
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── project
+      ├── columns: "?column?":2!null
+      ├── values
+      │    └── ()
+      └── projections
+           └── 3 [as="?column?":2]
 
 build
 SELECT 1 EXCEPT SELECT '3'
 ----
-error (42804): EXCEPT types int and string cannot be matched
+except
+ ├── columns: "?column?":1!null
+ ├── left columns: "?column?":1!null
+ ├── right columns: "?column?":2
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── project
+      ├── columns: "?column?":2!null
+      ├── values
+      │    └── ()
+      └── projections
+           └── 3 [as="?column?":2]
 
-# TODO(rytaft): Error message should be `pgcode 42703 column "z" does not exist`
 build
 SELECT 1 UNION SELECT 3 ORDER BY z
 ----
@@ -740,17 +666,21 @@ error (42703): column "z" does not exist
 build
 SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
 ----
-error (42804): UNION types int[] and string[] cannot be matched
+error (22P02): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+build
+SELECT ARRAY['foo'] UNION ALL SELECT ARRAY[1]
+----
+error (42804): UNION types string[] and int[] cannot be matched
+
+build
+SELECT ARRAY[1] UNION ALL SELECT ARRAY[1.2]
+----
+error (42804): UNION types int[] and decimal[] cannot be matched
 
 exec-ddl
 CREATE TABLE t.xy (x STRING NOT NULL, y STRING NOT NULL)
 ----
-TABLE xy
- ├── x string not null
- ├── y string not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE t.abc (
@@ -759,80 +689,188 @@ CREATE TABLE t.abc (
   c string NOT NULL
 )
 ----
-TABLE abc
- ├── a string
- ├── b string not null
- ├── c string not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 (SELECT x, x, y FROM xy) UNION (SELECT a, b, c FROM abc)
 ----
 union
- ├── columns: x:8(string) x:9(string!null) y:10(string!null)
- ├── left columns: xy.x:1(string) xy.x:1(string) xy.y:2(string)
- ├── right columns: a:4(string) b:5(string) c:6(string)
+ ├── columns: x:10 x:11!null y:12!null
+ ├── left columns: xy.x:1 xy.x:1 xy.y:2
+ ├── right columns: a:5 b:6 c:7
  ├── project
- │    ├── columns: xy.x:1(string!null) xy.y:2(string!null)
+ │    ├── columns: xy.x:1!null xy.y:2!null
  │    └── scan xy
- │         └── columns: xy.x:1(string!null) xy.y:2(string!null) xy.rowid:3(int!null)
+ │         └── columns: xy.x:1!null xy.y:2!null xy.rowid:3!null xy.crdb_internal_mvcc_timestamp:4
  └── project
-      ├── columns: a:4(string) b:5(string!null) c:6(string!null)
+      ├── columns: a:5 b:6!null c:7!null
       └── scan abc
-           └── columns: a:4(string) b:5(string!null) c:6(string!null) abc.rowid:7(int!null)
+           └── columns: a:5 b:6!null c:7!null abc.rowid:8!null abc.crdb_internal_mvcc_timestamp:9
 
 build
 (SELECT a FROM abc ORDER BY b) UNION ALL (SELECT b FROM abc) ORDER BY a
 ----
 sort
- ├── columns: a:9(string)
- ├── ordering: +9
+ ├── columns: a:11
+ ├── ordering: +11
  └── union-all
-      ├── columns: a:9(string)
-      ├── left columns: abc.a:1(string)
-      ├── right columns: abc.b:6(string)
+      ├── columns: a:11
+      ├── left columns: abc.a:1
+      ├── right columns: b:7
       ├── project
-      │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+      │    ├── columns: abc.a:1 b:2!null
       │    └── scan abc
-      │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+      │         └── columns: abc.a:1 b:2!null c:3!null rowid:4!null crdb_internal_mvcc_timestamp:5
       └── project
-           ├── columns: abc.b:6(string!null)
+           ├── columns: b:7!null
            └── scan abc
-                └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)
+                └── columns: abc.a:6 b:7!null c:8!null rowid:9!null crdb_internal_mvcc_timestamp:10
 
 build
 (SELECT a FROM abc ORDER BY b) UNION ALL (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
 sort
- ├── columns: a:9(string)
- ├── ordering: +9
+ ├── columns: a:11
+ ├── ordering: +11
  └── union-all
-      ├── columns: a:9(string)
-      ├── left columns: abc.a:1(string)
-      ├── right columns: abc.a:5(string)
+      ├── columns: a:11
+      ├── left columns: abc.a:1
+      ├── right columns: abc.a:6
       ├── project
-      │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+      │    ├── columns: abc.a:1 b:2!null
       │    └── scan abc
-      │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+      │         └── columns: abc.a:1 b:2!null c:3!null rowid:4!null crdb_internal_mvcc_timestamp:5
       └── project
-           ├── columns: abc.a:5(string) abc.c:7(string!null)
+           ├── columns: abc.a:6 c:8!null
            └── scan abc
-                └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)
+                └── columns: abc.a:6 b:7!null c:8!null rowid:9!null crdb_internal_mvcc_timestamp:10
 
 build
 (SELECT a FROM abc ORDER BY b) EXCEPT (SELECT b FROM abc ORDER BY c, b, a)
 ----
 except
- ├── columns: a:1(string)
- ├── left columns: abc.a:1(string)
- ├── right columns: abc.b:6(string)
+ ├── columns: a:1
+ ├── left columns: a:1
+ ├── right columns: b:7
  ├── project
- │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+ │    ├── columns: a:1 b:2!null
  │    └── scan abc
- │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+ │         └── columns: a:1 b:2!null c:3!null rowid:4!null crdb_internal_mvcc_timestamp:5
  └── project
-      ├── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null)
+      ├── columns: a:6 b:7!null c:8!null
       └── scan abc
-           └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)
+           └── columns: a:6 b:7!null c:8!null rowid:9!null crdb_internal_mvcc_timestamp:10
+
+# Tests for type propagation.
+
+build
+VALUES (NULL, NULL), (NULL, 'x') UNION VALUES (1, 'a'), (2, 'b')
+----
+union
+ ├── columns: column1:6 column2:7
+ ├── left columns: column1:5 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── project
+ │    ├── columns: column1:5 column2:2
+ │    ├── values
+ │    │    ├── columns: column1:1 column2:2
+ │    │    ├── (NULL, NULL::STRING)
+ │    │    └── (NULL, 'x')
+ │    └── projections
+ │         └── column1:1::INT8 [as=column1:5]
+ └── values
+      ├── columns: column1:3!null column2:4!null
+      ├── (1, 'a')
+      └── (2, 'b')
+
+build
+VALUES (3, NULL), (NULL, 'x') INTERSECT VALUES (1, NULL), (2, NULL)
+----
+intersect
+ ├── columns: column1:1 column2:2
+ ├── left columns: column1:1 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── values
+ │    ├── columns: column1:1 column2:2
+ │    ├── (3, NULL::STRING)
+ │    └── (NULL::INT8, 'x')
+ └── values
+      ├── columns: column1:3!null column2:4
+      ├── (1, NULL::STRING)
+      └── (2, NULL::STRING)
+
+build
+VALUES (NULL, NULL), (NULL, 'x') UNION ALL VALUES (1, NULL), (2, NULL)
+----
+union-all
+ ├── columns: column1:6 column2:7
+ ├── left columns: column1:5 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── project
+ │    ├── columns: column1:5 column2:2
+ │    ├── values
+ │    │    ├── columns: column1:1 column2:2
+ │    │    ├── (NULL, NULL::STRING)
+ │    │    └── (NULL, 'x')
+ │    └── projections
+ │         └── column1:1::INT8 [as=column1:5]
+ └── values
+      ├── columns: column1:3!null column2:4
+      ├── (1, NULL::STRING)
+      └── (2, NULL::STRING)
+
+build
+VALUES (NULL, NULL), (NULL, NULL) UNION ALL VALUES (NULL, NULL), (NULL, NULL)
+----
+union-all
+ ├── columns: column1:5 column2:6
+ ├── left columns: column1:1 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── values
+ │    ├── columns: column1:1 column2:2
+ │    ├── (NULL, NULL)
+ │    └── (NULL, NULL)
+ └── values
+      ├── columns: column1:3 column2:4
+      ├── (NULL, NULL)
+      └── (NULL, NULL)
+
+exec-ddl
+CREATE TABLE a (a INT PRIMARY KEY)
+----
+
+# Regression test for #34524.
+build
+(SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
+----
+except
+ ├── columns: "?column?":8
+ ├── left columns: "?column?":8
+ ├── right columns: column1:7
+ ├── project
+ │    ├── columns: "?column?":8
+ │    ├── project
+ │    │    ├── columns: "?column?":3
+ │    │    ├── scan a
+ │    │    │    └── columns: a:1!null crdb_internal_mvcc_timestamp:2
+ │    │    └── projections
+ │    │         └── NULL [as="?column?":3]
+ │    └── projections
+ │         └── "?column?":3::INT8 [as="?column?":8]
+ └── values
+      ├── columns: column1:7
+      ├── tuple
+      │    └── subquery
+      │         └── max1-row
+      │              ├── columns: "?column?":6!null
+      │              └── limit
+      │                   ├── columns: "?column?":6!null
+      │                   ├── project
+      │                   │    ├── columns: "?column?":6!null
+      │                   │    ├── limit hint: 1.00
+      │                   │    ├── scan a
+      │                   │    │    ├── columns: a:4!null crdb_internal_mvcc_timestamp:5
+      │                   │    │    └── limit hint: 1.00
+      │                   │    └── projections
+      │                   │         └── 1 [as="?column?":6]
+      │                   └── 1
+      └── (1,)

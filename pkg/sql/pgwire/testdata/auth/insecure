@@ -1,0 +1,57 @@
+config insecure
+----
+
+subtest check_ssl_disabled_error
+
+# Check that an attempt to use SSL fails with "SSL not enabled".
+connect user=root sslmode=require
+----
+ERROR: pq: SSL is not enabled on the server
+
+subtest end
+
+subtest root_always_enabled
+
+# Regardless of the contents of hba.conf,
+# all users can always log in, even without a cert.
+
+set_hba
+host all root 0.0.0.0/0 cert
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all root 0.0.0.0/0 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
+host   all      root all       cert-password
+host   all      root 0.0.0.0/0 cert
+
+connect user=root sslmode=disable
+----
+ok defaultdb
+
+subtest end
+
+subtest regular_login
+
+connect user=testuser sslmode=disable
+----
+ok defaultdb
+
+# If a password is provided, it is ignored.
+
+connect user=testuser password=abc sslmode=disable
+----
+ok defaultdb
+
+subtest end
+
+subtest user_does_not_exist
+
+connect user=nonexistent sslmode=disable
+----
+ERROR: password authentication failed for user nonexistent
+
+subtest end

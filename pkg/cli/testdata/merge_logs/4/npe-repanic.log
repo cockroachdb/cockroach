@@ -1,0 +1,69 @@
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  i was created via the following code:
+func main() {
+	defer cleanup()
+	defer cleanup()
+	defer cleanup()
+	defer cleanup()
+	defer cleanup()
+	defer cleanup()
+	defer cleanup()
+	func() { func() { func() { func() { func() {
+		func() { func() { panic("boom")
+	}()}()}()}()}()}()}()
+}
+
+and here we go:
+
+	panic: boom [recovered]
+	panic: boom [recovered]
+	panic: boom [recovered]
+	panic: boom [recovered]
+	panic: boom [recovered]
+	panic: boom [recovered]
+	panic: boom
+
+goroutine 1 [running]:
+main.cleanup()
+	/tmp/sandbox881972553/main.go:20 +0x60
+panic(0x122540, 0x16aa50)
+	/usr/local/go/src/runtime/panic.go:522 +0x240
+main.cleanup()
+	/tmp/sandbox881972553/main.go:20 +0x60
+panic(0x122540, 0x16aa50)
+	/usr/local/go/src/runtime/panic.go:522 +0x240
+main.cleanup()
+	/tmp/sandbox881972553/main.go:20 +0x60
+panic(0x122540, 0x16aa50)
+	/usr/local/go/src/runtime/panic.go:522 +0x240
+main.cleanup()
+	/tmp/sandbox881972553/main.go:20 +0x60
+panic(0x122540, 0x16aa50)
+	/usr/local/go/src/runtime/panic.go:522 +0x240
+main.cleanup()
+	/tmp/sandbox881972553/main.go:20 +0x60
+panic(0x122540, 0x16aa50)
+	/usr/local/go/src/runtime/panic.go:522 +0x240
+main.cleanup()
+	/tmp/sandbox881972553/main.go:20 +0x60
+panic(0x122540, 0x16aa50)
+	/usr/local/go/src/runtime/panic.go:522 +0x240
+main.cleanup()
+	/tmp/sandbox881972553/main.go:20 +0x60
+panic(0x122540, 0x16aa50)
+	/usr/local/go/src/runtime/panic.go:522 +0x240
+main.main.func1.1.1.1.1.1.1(...)
+	/tmp/sandbox881972553/main.go:42
+main.main.func1.1.1.1.1.1()
+	/tmp/sandbox881972553/main.go:43 +0x40
+main.main.func1.1.1.1.1()
+	/tmp/sandbox881972553/main.go:44 +0x20
+main.main.func1.1.1.1()
+	/tmp/sandbox881972553/main.go:45 +0x20
+main.main.func1.1.1()
+	/tmp/sandbox881972553/main.go:46 +0x20
+main.main.func1.1()
+	/tmp/sandbox881972553/main.go:47 +0x20
+main.main.func1()
+	/tmp/sandbox881972553/main.go:48 +0x20
+main.main()
+	/tmp/sandbox881972553/main.go:49 +0x200

@@ -1,28 +1,35 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
 // With represents a WITH statement.
 type With struct {
-	CTEList []*CTE
+	Recursive bool
+	CTEList   []*CTE
 }
 
 // CTE represents a common table expression inside of a WITH clause.
 type CTE struct {
 	Name AliasClause
+	Mtr  MaterializeClause
 	Stmt Statement
+}
+
+// MaterializeClause represents a materialize clause inside of a WITH clause.
+type MaterializeClause struct {
+	// Set controls whether to use the Materialize bool instead of the default.
+	Set bool
+
+	// Materialize overrides the default materialization behavior.
+	Materialize bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -31,13 +38,24 @@ func (node *With) Format(ctx *FmtCtx) {
 		return
 	}
 	ctx.WriteString("WITH ")
+	if node.Recursive {
+		ctx.WriteString("RECURSIVE ")
+	}
 	for i, cte := range node.CTEList {
 		if i != 0 {
 			ctx.WriteString(", ")
 		}
 		ctx.FormatNode(&cte.Name)
-		ctx.WriteString(" AS (")
+		ctx.WriteString(" AS ")
+		if cte.Mtr.Set {
+			if !cte.Mtr.Materialize {
+				ctx.WriteString("NOT ")
+			}
+			ctx.WriteString("MATERIALIZED ")
+		}
+		ctx.WriteString("(")
 		ctx.FormatNode(cte.Stmt)
-		ctx.WriteString(") ")
+		ctx.WriteString(")")
 	}
+	ctx.WriteByte(' ')
 }

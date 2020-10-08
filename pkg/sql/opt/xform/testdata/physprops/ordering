@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE t.a
+CREATE TABLE a
 (
     x INT,
     y FLOAT,
@@ -8,14 +8,18 @@ CREATE TABLE t.a
     PRIMARY KEY (x, y DESC)
 )
 ----
-TABLE a
- ├── x int not null
- ├── y float not null
- ├── z decimal
- ├── s string not null
- └── INDEX primary
-      ├── x int not null
-      └── y float not null desc
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
+----
+
+exec-ddl
+CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY (x, y, z))
+----
+
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, INDEX ab(a, b) STORING (c, d), INDEX cd(c, d) STORING (a, b))
+----
 
 # --------------------------------------------------
 # Scan operator.
@@ -26,7 +30,9 @@ opt
 SELECT * FROM a ORDER BY x, y DESC
 ----
 scan a
- ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ ├── columns: x:1!null y:2!null z:3 s:4!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
  └── ordering: +1,-2
 
 # Order by prefix.
@@ -34,7 +40,9 @@ opt
 SELECT * FROM a ORDER BY x
 ----
 scan a
- ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ ├── columns: x:1!null y:2!null z:3 s:4!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
  └── ordering: +1
 
 # Order by additional column (should be dropped by optimizer).
@@ -42,7 +50,9 @@ opt
 SELECT * FROM a ORDER BY x, y DESC, z
 ----
 scan a
- ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ ├── columns: x:1!null y:2!null z:3 s:4!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
  └── ordering: +1,-2
 
 # Order by suffix (scan shouldn't be able to provide).
@@ -50,20 +60,24 @@ opt
 SELECT * FROM a ORDER BY y DESC
 ----
 sort
- ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ ├── columns: x:1!null y:2!null z:3 s:4!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
  ├── ordering: -2
  └── scan a
-      └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+      ├── columns: x:1!null y:2!null z:3 s:4!null
+      ├── key: (1,2)
+      └── fd: (1,2)-->(3,4)
 
 # Order by suffix, don't project prefix (scan shouldn't be able to provide).
 opt
 SELECT y FROM a ORDER BY y DESC
 ----
 sort
- ├── columns: y:2(float!null)
+ ├── columns: y:2!null
  ├── ordering: -2
  └── scan a
-      └── columns: y:2(float!null)
+      └── columns: y:2!null
 
 # --------------------------------------------------
 # Select operator (pass through).
@@ -74,27 +88,37 @@ opt
 SELECT * FROM a WHERE x>y ORDER BY x, y DESC
 ----
 select
- ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ ├── columns: x:1!null y:2!null z:3 s:4!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
  ├── ordering: +1,-2
  ├── scan a
- │    ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ │    ├── columns: x:1!null y:2!null z:3 s:4!null
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3,4)
  │    └── ordering: +1,-2
- └── filters [type=bool]
-      └── a.x > a.y [type=bool]
+ └── filters
+      └── x:1 > y:2 [outer=(1,2)]
 
 # Pass through ordering to scan operator that can't support it.
 opt
 SELECT * FROM a WHERE x>y ORDER BY z DESC
 ----
 sort
- ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ ├── columns: x:1!null y:2!null z:3 s:4!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
  ├── ordering: -3
  └── select
-      ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+      ├── columns: x:1!null y:2!null z:3 s:4!null
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(3,4)
       ├── scan a
-      │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
-      └── filters [type=bool]
-           └── a.x > a.y [type=bool]
+      │    ├── columns: x:1!null y:2!null z:3 s:4!null
+      │    ├── key: (1,2)
+      │    └── fd: (1,2)-->(3,4)
+      └── filters
+           └── x:1 > y:2 [outer=(1,2)]
 
 # --------------------------------------------------
 # Project operator (pass through).
@@ -105,41 +129,114 @@ opt
 SELECT x+1 AS r, y FROM a ORDER BY x, y DESC
 ----
 project
- ├── columns: r:5(int) y:2(float!null)
+ ├── columns: r:6!null y:2!null  [hidden: x:1!null]
+ ├── immutable
+ ├── key: (1,2)
+ ├── fd: (1)-->(6)
  ├── ordering: +1,-2
  ├── scan a
- │    ├── columns: x:1(int!null) y:2(float!null)
+ │    ├── columns: x:1!null y:2!null
+ │    ├── key: (1,2)
  │    └── ordering: +1,-2
  └── projections
-      └── a.x + 1 [type=int]
+      └── x:1 + 1 [as=r:6, outer=(1), immutable]
 
 # Pass through ordering to scan operator that can't support it.
 opt
 SELECT y, x, z+1 AS r FROM a ORDER BY x, y
 ----
-sort
- ├── columns: y:2(float!null) x:1(int!null) r:5(decimal)
+sort (segmented)
+ ├── columns: y:2!null x:1!null r:6
+ ├── immutable
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(6)
  ├── ordering: +1,+2
  └── project
-      ├── columns: r:5(decimal) x:1(int!null) y:2(float!null)
+      ├── columns: r:6 x:1!null y:2!null
+      ├── immutable
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(6)
+      ├── ordering: +1
       ├── scan a
-      │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
+      │    ├── columns: x:1!null y:2!null z:3
+      │    ├── key: (1,2)
+      │    ├── fd: (1,2)-->(3)
+      │    └── ordering: +1
       └── projections
-           └── a.z + 1 [type=decimal]
+           └── z:3 + 1 [as=r:6, outer=(3), immutable]
 
 # Ordering cannot be passed through because it includes computed column.
 opt
 SELECT x, y+1 AS computed, y FROM a ORDER BY x, computed
 ----
-sort
- ├── columns: x:1(int!null) computed:5(float) y:2(float!null)
- ├── ordering: +1,+5
+sort (segmented)
+ ├── columns: x:1!null computed:6!null y:2!null
+ ├── immutable
+ ├── key: (1,2)
+ ├── fd: (2)-->(6)
+ ├── ordering: +1,+6
  └── project
-      ├── columns: computed:5(float) x:1(int!null) y:2(float!null)
+      ├── columns: computed:6!null x:1!null y:2!null
+      ├── immutable
+      ├── key: (1,2)
+      ├── fd: (2)-->(6)
+      ├── ordering: +1
       ├── scan a
-      │    └── columns: x:1(int!null) y:2(float!null)
+      │    ├── columns: x:1!null y:2!null
+      │    ├── key: (1,2)
+      │    └── ordering: +1
       └── projections
-           └── a.y + 1.0 [type=float]
+           └── y:2 + 1.0 [as=computed:6, outer=(2), immutable]
+
+# Ordering on an expression that gets constant-folded to a simple variable.
+# Example from #43360: a boolean (possibly a placeholder) indicates the sort
+# direction.
+opt
+SELECT * FROM a ORDER BY CASE WHEN false THEN x END ASC, CASE WHEN NOT false THEN x END DESC
+----
+project
+ ├── columns: x:1!null y:2!null z:3 s:4!null  [hidden: column7:7!null]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4), (1)==(7), (7)==(1)
+ ├── ordering: -(1|7) [actual: -1]
+ ├── scan a,rev
+ │    ├── columns: x:1!null y:2!null z:3 s:4!null
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3,4)
+ │    └── ordering: -1
+ └── projections
+      └── x:1 [as=column7:7, outer=(1)]
+
+opt
+SELECT * FROM a ORDER BY CASE WHEN true THEN x END ASC, CASE WHEN NOT true THEN x END DESC
+----
+project
+ ├── columns: x:1!null y:2!null z:3 s:4!null  [hidden: column6:6!null]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4), (1)==(6), (6)==(1)
+ ├── ordering: +(1|6) [actual: +1]
+ ├── scan a
+ │    ├── columns: x:1!null y:2!null z:3 s:4!null
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3,4)
+ │    └── ordering: +1
+ └── projections
+      └── x:1 [as=column6:6, outer=(1)]
+
+# Similar case, except the equivalent input column is not being projected.
+opt
+SELECT 1 FROM a ORDER BY CASE WHEN false THEN x END ASC, CASE WHEN NOT false THEN x END DESC
+----
+project
+ ├── columns: "?column?":6!null  [hidden: column8:8!null]
+ ├── fd: ()-->(6)
+ ├── ordering: -8 opt(6) [actual: -8]
+ ├── scan a,rev
+ │    ├── columns: x:1!null
+ │    └── ordering: -1
+ └── projections
+      ├── 1 [as="?column?":6]
+      └── x:1 [as=column8:8, outer=(1)]
 
 # --------------------------------------------------
 # Select + Project operators (pass through both).
@@ -150,98 +247,372 @@ opt
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
 project
- ├── columns: y:2(float!null) z:5(int)
+ ├── columns: y:2!null z:6!null  [hidden: x:1!null]
+ ├── immutable
+ ├── key: (1,2)
+ ├── fd: (1)-->(6)
  ├── ordering: +1,-2
  ├── select
- │    ├── columns: x:1(int!null) y:2(float!null)
+ │    ├── columns: x:1!null y:2!null
+ │    ├── key: (1,2)
  │    ├── ordering: +1,-2
  │    ├── scan a
- │    │    ├── columns: x:1(int!null) y:2(float!null)
+ │    │    ├── columns: x:1!null y:2!null
+ │    │    ├── key: (1,2)
  │    │    └── ordering: +1,-2
- │    └── filters [type=bool]
- │         └── a.x > a.y [type=bool]
+ │    └── filters
+ │         └── x:1 > y:2 [outer=(1,2)]
  └── projections
-      └── a.x - 1 [type=int]
+      └── x:1 - 1 [as=z:6, outer=(1), immutable]
 
 memo
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
-memo (optimized)
- ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2,z:5] [ordering: +1,-2]"
- │    │    ├── best: (project G2="[ordering: +1,-2]" G3)
- │    │    └── cost: 1070.00
- │    └── ""
- │         ├── best: (project G2 G3)
- │         └── cost: 1070.00
+memo (optimized, ~5KB, required=[presentation: y:2,z:6] [ordering: +1,-2])
+ ├── G1: (project G2 G3 x y)
+ │    ├── [presentation: y:2,z:6] [ordering: +1,-2]
+ │    │    ├── best: (project G2="[ordering: +1,-2]" G3 x y)
+ │    │    └── cost: 1080.72
+ │    └── []
+ │         ├── best: (project G2 G3 x y)
+ │         └── cost: 1080.72
  ├── G2: (select G4 G5)
- │    ├── ""
- │    │    ├── best: (select G4 G5)
- │    │    └── cost: 1070.00
- │    └── "[ordering: +1,-2]"
- │         ├── best: (select G4="[ordering: +1,-2]" G5)
- │         └── cost: 1070.00
- ├── G3: (projections G6 a.x a.y)
- ├── G4: (scan a,cols=(1,2)) (scan a,rev,cols=(1,2))
- │    ├── ""
+ │    ├── [ordering: +1,-2]
+ │    │    ├── best: (select G4="[ordering: +1,-2]" G5)
+ │    │    └── cost: 1074.04
+ │    └── []
+ │         ├── best: (select G4 G5)
+ │         └── cost: 1074.04
+ ├── G3: (projections G6)
+ ├── G4: (scan a,cols=(1,2))
+ │    ├── [ordering: +1,-2]
  │    │    ├── best: (scan a,cols=(1,2))
- │    │    └── cost: 1060.00
- │    └── "[ordering: +1,-2]"
+ │    │    └── cost: 1064.02
+ │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1060.00
+ │         └── cost: 1064.02
  ├── G5: (filters G7)
- ├── G6: (minus G9 G8)
- ├── G7: (gt G9 G10)
- ├── G8: (const 1)
- ├── G9: (variable a.x)
- └── G10: (variable a.y)
+ ├── G6: (minus G8 G9)
+ ├── G7: (gt G8 G10)
+ ├── G8: (variable x)
+ ├── G9: (const 1)
+ └── G10: (variable y)
 
 # Pass through ordering to scan operator that can't support it.
 opt
 SELECT y, z FROM a WHERE x>y ORDER BY y
 ----
 sort
- ├── columns: y:2(float!null) z:3(decimal)
+ ├── columns: y:2!null z:3
  ├── ordering: +2
  └── project
-      ├── columns: y:2(float!null) z:3(decimal)
+      ├── columns: y:2!null z:3
       └── select
-           ├── columns: x:1(int!null) y:2(float!null) z:3(decimal)
+           ├── columns: x:1!null y:2!null z:3
+           ├── key: (1,2)
+           ├── fd: (1,2)-->(3)
            ├── scan a
-           │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
-           └── filters [type=bool]
-                └── a.x > a.y [type=bool]
+           │    ├── columns: x:1!null y:2!null z:3
+           │    ├── key: (1,2)
+           │    └── fd: (1,2)-->(3)
+           └── filters
+                └── x:1 > y:2 [outer=(1,2)]
 
 memo
 SELECT y, z FROM a WHERE x>y ORDER BY y
 ----
-memo (optimized)
- ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2,z:3] [ordering: +2]"
+memo (optimized, ~5KB, required=[presentation: y:2,z:3] [ordering: +2])
+ ├── G1: (project G2 G3 y z)
+ │    ├── [presentation: y:2,z:3] [ordering: +2]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1087.55
- │    └── ""
- │         ├── best: (project G2 G3)
- │         └── cost: 1080.00
+ │    │    └── cost: 1149.93
+ │    └── []
+ │         ├── best: (project G2 G3 y z)
+ │         └── cost: 1087.38
  ├── G2: (select G4 G5)
- │    ├── ""
- │    │    ├── best: (select G4 G5)
- │    │    └── cost: 1080.00
- │    └── "[ordering: +2]"
- │         ├── best: (sort G2)
- │         └── cost: 1087.55
- ├── G3: (projections a.y a.z)
- ├── G4: (scan a,cols=(1-3)) (scan a,rev,cols=(1-3))
- │    ├── ""
- │    │    ├── best: (scan a,cols=(1-3))
- │    │    └── cost: 1070.00
- │    └── "[ordering: +2]"
- │         ├── best: (sort G4)
- │         └── cost: 1169.66
+ │    ├── [ordering: +2]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1146.59
+ │    └── []
+ │         ├── best: (select G4 G5)
+ │         └── cost: 1084.04
+ ├── G3: (projections)
+ ├── G4: (scan a,cols=(1-3))
+ │    ├── [ordering: +2]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1293.35
+ │    └── []
+ │         ├── best: (scan a,cols=(1-3))
+ │         └── cost: 1074.02
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
- ├── G7: (variable a.x)
- └── G8: (variable a.y)
+ ├── G7: (variable x)
+ └── G8: (variable y)
+
+# --------------------------------------------------
+# GroupBy operator.
+# --------------------------------------------------
+
+# Verify that the internal ordering is required of the input.
+opt
+SELECT array_agg(z) FROM (SELECT * FROM a ORDER BY y)
+----
+scalar-group-by
+ ├── columns: array_agg:6
+ ├── internal-ordering: +2
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── sort
+ │    ├── columns: y:2!null z:3
+ │    ├── ordering: +2
+ │    └── scan a
+ │         └── columns: y:2!null z:3
+ └── aggregations
+      └── array-agg [as=array_agg:6, outer=(3)]
+           └── z:3
+
+opt
+SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY x, y DESC)
+----
+scalar-group-by
+ ├── columns: array_agg:6
+ ├── internal-ordering: +1,-2
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan a
+ │    ├── columns: x:1!null y:2!null
+ │    ├── key: (1,2)
+ │    └── ordering: +1,-2
+ └── aggregations
+      └── array-agg [as=array_agg:6, outer=(1)]
+           └── x:1
+
+# Pass through ordering on grouping columns.
+opt
+SELECT a, min(b) FROM abc GROUP BY a ORDER BY a
+----
+group-by
+ ├── columns: a:1!null min:5!null
+ ├── grouping columns: a:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(5)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null
+ │    └── ordering: +1
+ └── aggregations
+      └── min [as=min:5, outer=(2)]
+           └── b:2
+
+opt
+SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a
+----
+group-by
+ ├── columns: a:1!null b:2!null min:5!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── internal-ordering: +1,+2
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(5)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── min [as=min:5, outer=(3)]
+           └── c:3
+
+opt
+SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a, b
+----
+group-by
+ ├── columns: a:1!null b:2!null min:5!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(5)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── min [as=min:5, outer=(3)]
+           └── c:3
+
+opt
+SELECT a, b, min(c) FROM abc GROUP BY b, a ORDER BY a, b
+----
+group-by
+ ├── columns: a:1!null b:2!null min:5!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(5)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── min [as=min:5, outer=(3)]
+           └── c:3
+
+# We can't pass through the ordering if it refers to aggregation results.
+opt
+SELECT a, b, min(c) AS m FROM abc GROUP BY a, b ORDER BY a, m
+----
+sort (segmented)
+ ├── columns: a:1!null b:2!null m:5!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(5)
+ ├── ordering: +1,+5
+ └── group-by
+      ├── columns: a:1!null b:2!null min:5!null
+      ├── grouping columns: a:1!null b:2!null
+      ├── internal-ordering: +1,+2
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(5)
+      ├── ordering: +1
+      ├── scan abc
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2
+      └── aggregations
+           └── min [as=min:5, outer=(3)]
+                └── c:3
+
+# Satisfy both the required and the internal orderings by requiring a+,b+,c+.
+opt
+SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY c) GROUP BY a, b ORDER BY a, b
+----
+group-by
+ ├── columns: a:1!null b:2!null array_agg:5!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── internal-ordering: +3 opt(1,2)
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(5)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── aggregations
+      └── array-agg [as=array_agg:5, outer=(3)]
+           └── c:3
+
+opt
+SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY a, b, c) GROUP BY a, b ORDER BY a, b
+----
+group-by
+ ├── columns: a:1!null b:2!null array_agg:5!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── internal-ordering: +3 opt(1,2)
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(5)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── aggregations
+      └── array-agg [as=array_agg:5, outer=(3)]
+           └── c:3
+
+opt
+SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY b, c, a) GROUP BY b, a ORDER BY a, b
+----
+group-by
+ ├── columns: a:1!null b:2!null array_agg:5!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── internal-ordering: +3 opt(1,2)
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(5)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── aggregations
+      └── array-agg [as=array_agg:5, outer=(3)]
+           └── c:3
+
+# Verify that the GroupBy child ordering is simplified according to the child's
+# FD set.
+opt
+SELECT sum(c) FROM abc WHERE a = 1 GROUP BY b ORDER BY b
+----
+group-by
+ ├── columns: sum:5!null  [hidden: b:2!null]
+ ├── grouping columns: b:2!null
+ ├── key: (2)
+ ├── fd: (2)-->(5)
+ ├── ordering: +2
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── constraint: /1/2/3: [/1 - /1]
+ │    ├── key: (2,3)
+ │    ├── fd: ()-->(1)
+ │    └── ordering: +2 opt(1) [actual: +2]
+ └── aggregations
+      └── sum [as=sum:5, outer=(3)]
+           └── c:3
+
+# Verify we do a streaming group-by using the a, b ordering.
+opt
+SELECT sum(d) FROM abcd GROUP BY a, b, c
+----
+project
+ ├── columns: sum:7
+ └── group-by
+      ├── columns: a:1 b:2 c:3 sum:7
+      ├── grouping columns: a:1 b:2 c:3
+      ├── internal-ordering: +1,+2
+      ├── key: (1-3)
+      ├── fd: (1-3)-->(7)
+      ├── scan abcd@ab
+      │    ├── columns: a:1 b:2 c:3 d:4
+      │    └── ordering: +1,+2
+      └── aggregations
+           └── sum [as=sum:7, outer=(4)]
+                └── d:4
+
+# Verify we do a streaming group-by using the c, d ordering.
+opt
+SELECT sum(a) FROM abcd GROUP BY b, c, d
+----
+project
+ ├── columns: sum:7
+ └── group-by
+      ├── columns: b:2 c:3 d:4 sum:7
+      ├── grouping columns: b:2 c:3 d:4
+      ├── internal-ordering: +3,+4
+      ├── key: (2-4)
+      ├── fd: (2-4)-->(7)
+      ├── scan abcd@cd
+      │    ├── columns: a:1 b:2 c:3 d:4
+      │    └── ordering: +3,+4
+      └── aggregations
+           └── sum [as=sum:7, outer=(1)]
+                └── a:1
+
+opt
+SELECT array_agg(d) FROM (SELECT * FROM abcd ORDER BY c) GROUP BY a, b
+----
+project
+ ├── columns: array_agg:7
+ └── group-by
+      ├── columns: a:1 b:2 array_agg:7
+      ├── grouping columns: a:1 b:2
+      ├── internal-ordering: +3 opt(1,2)
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(7)
+      ├── scan abcd@cd
+      │    ├── columns: a:1 b:2 c:3 d:4
+      │    └── ordering: +3 opt(1,2) [actual: +3]
+      └── aggregations
+           └── array-agg [as=array_agg:7, outer=(4)]
+                └── d:4
 
 # --------------------------------------------------
 # Explain operator.
@@ -250,28 +621,33 @@ opt
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
 explain
- ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
+ ├── columns: tree:6 field:9 description:10 columns:11 ordering:12  [hidden: level:7 node_type:8]
+ ├── mode: verbose
  └── sort
-      ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+      ├── columns: x:1!null y:2!null z:3 s:4!null
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(3,4)
       ├── ordering: +2
       └── scan a
-           └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+           ├── columns: x:1!null y:2!null z:3 s:4!null
+           ├── key: (1,2)
+           └── fd: (1,2)-->(3,4)
 
 memo
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
-memo (optimized)
+memo (optimized, ~3KB, required=[presentation: tree:6,field:9,description:10,columns:11,ordering:12])
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │    └── "[presentation: tree:5,field:8,description:9,columns:10,ordering:11]"
+ │    └── [presentation: tree:6,field:9,description:10,columns:11,ordering:12]
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │         └── cost: 1179.66
- └── G2: (scan a) (scan a,rev)
-      ├── ""
-      │    ├── best: (scan a)
-      │    └── cost: 1080.00
-      └── "[presentation: x:1,y:2,z:3,s:4] [ordering: +2]"
-           ├── best: (sort G2)
-           └── cost: 1179.66
+ │         └── cost: 1303.36
+ └── G2: (scan a,cols=(1-4))
+      ├── [presentation: x:1,y:2,z:3,s:4] [ordering: +2]
+      │    ├── best: (sort G2)
+      │    └── cost: 1303.35
+      └── []
+           ├── best: (scan a,cols=(1-4))
+           └── cost: 1084.02
 
 # --------------------------------------------------
 # With Ordinality
@@ -280,108 +656,1446 @@ memo (optimized)
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality
 ----
-memo (optimized)
- ├── G1: (row-number G2)
- │    ├── "[presentation: y:2] [ordering: +5]"
- │    │    ├── best: (row-number G2)
- │    │    └── cost: 1050.00
- │    └── ""
- │         ├── best: (row-number G2)
- │         └── cost: 1050.00
- └── G2: (scan a,cols=(2)) (scan a,rev,cols=(2))
-      └── ""
+memo (optimized, ~4KB, required=[presentation: y:2] [ordering: +6])
+ ├── G1: (ordinality G2)
+ │    ├── [presentation: y:2] [ordering: +6]
+ │    │    ├── best: (ordinality G2)
+ │    │    └── cost: 1064.03
+ │    └── []
+ │         ├── best: (ordinality G2)
+ │         └── cost: 1064.03
+ └── G2: (scan a,cols=(2))
+      └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1050.00
+           └── cost: 1054.02
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
 ----
-memo (optimized)
- ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2] [ordering: +6]"
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
+ ├── G1: (project G2 G3 y)
+ │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1149.66
- │    └── ""
- │         ├── best: (project G2 G3)
- │         └── cost: 1050.00
- ├── G2: (row-number G4)
- │    └── ""
- │         ├── best: (row-number G4)
- │         └── cost: 1050.00
- ├── G3: (projections G5 a.y)
- ├── G4: (scan a,cols=(2)) (scan a,rev,cols=(2))
- │    └── ""
+ │    │    └── cost: 1303.37
+ │    └── []
+ │         ├── best: (project G2 G3 y)
+ │         └── cost: 1084.04
+ ├── G2: (ordinality G4)
+ │    └── []
+ │         ├── best: (ordinality G4)
+ │         └── cost: 1064.03
+ ├── G3: (projections G5)
+ ├── G4: (scan a,cols=(2))
+ │    └── []
  │         ├── best: (scan a,cols=(2))
- │         └── cost: 1050.00
+ │         └── cost: 1054.02
  ├── G5: (unary-minus G6)
  └── G6: (variable ordinality)
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
 ----
-memo (optimized)
- ├── G1: (row-number G2)
- │    ├── "[presentation: y:2] [ordering: +5]"
- │    │    ├── best: (row-number G2)
- │    │    └── cost: 1050.00
- │    └── ""
- │         ├── best: (row-number G2)
- │         └── cost: 1050.00
- └── G2: (scan a,cols=(2)) (scan a,rev,cols=(2))
-      └── ""
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +6])
+ ├── G1: (ordinality G2)
+ │    ├── [presentation: y:2] [ordering: +6]
+ │    │    ├── best: (ordinality G2)
+ │    │    └── cost: 1064.03
+ │    └── []
+ │         ├── best: (ordinality G2)
+ │         └── cost: 1064.03
+ └── G2: (scan a,cols=(2))
+      └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1050.00
+           └── cost: 1054.02
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinality
 ----
-memo (optimized)
- ├── G1: (row-number G2 ordering=+2)
- │    ├── "[presentation: y:2] [ordering: +2,+5]"
- │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1149.66
- │    └── ""
- │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1149.66
- └── G2: (scan a,cols=(2)) (scan a,rev,cols=(2))
-      ├── ""
-      │    ├── best: (scan a,cols=(2))
-      │    └── cost: 1050.00
-      └── "[ordering: +2]"
-           ├── best: (sort G2)
-           └── cost: 1149.66
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +2,+6])
+ ├── G1: (ordinality G2 ordering=+2)
+ │    ├── [presentation: y:2] [ordering: +2,+6]
+ │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
+ │    │    └── cost: 1283.36
+ │    └── []
+ │         ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
+ │         └── cost: 1283.36
+ └── G2: (scan a,cols=(2))
+      ├── [ordering: +2]
+      │    ├── best: (sort G2)
+      │    └── cost: 1273.35
+      └── []
+           ├── best: (scan a,cols=(2))
+           └── cost: 1054.02
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, y
 ----
-memo (optimized)
- ├── G1: (row-number G2 ordering=+2)
- │    ├── "[presentation: y:2] [ordering: +5]"
- │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1149.66
- │    └── ""
- │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1149.66
- └── G2: (scan a,cols=(2)) (scan a,rev,cols=(2))
-      ├── ""
-      │    ├── best: (scan a,cols=(2))
-      │    └── cost: 1050.00
-      └── "[ordering: +2]"
-           ├── best: (sort G2)
-           └── cost: 1149.66
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +6])
+ ├── G1: (ordinality G2 ordering=+2)
+ │    ├── [presentation: y:2] [ordering: +6]
+ │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
+ │    │    └── cost: 1283.36
+ │    └── []
+ │         ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
+ │         └── cost: 1283.36
+ └── G2: (scan a,cols=(2))
+      ├── [ordering: +2]
+      │    ├── best: (sort G2)
+      │    └── cost: 1273.35
+      └── []
+           ├── best: (scan a,cols=(2))
+           └── cost: 1054.02
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
 ----
-memo (optimized)
- ├── G1: (row-number G2)
- │    ├── "[presentation: y:2] [ordering: -5]"
+memo (optimized, ~4KB, required=[presentation: y:2] [ordering: -6])
+ ├── G1: (ordinality G2)
+ │    ├── [presentation: y:2] [ordering: -6]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1149.66
- │    └── ""
- │         ├── best: (row-number G2)
- │         └── cost: 1050.00
- └── G2: (scan a,cols=(2)) (scan a,rev,cols=(2))
-      └── ""
+ │    │    └── cost: 1283.36
+ │    └── []
+ │         ├── best: (ordinality G2)
+ │         └── cost: 1064.03
+ └── G2: (scan a,cols=(2))
+      └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1050.00
+           └── cost: 1054.02
+
+# --------------------------------------------------
+# Merge Join
+# --------------------------------------------------
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x ORDER BY a
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2!null c:3!null x:5!null y:6!null z:7!null
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── key: (2,3,5-7)
+ ├── fd: (1)==(5), (5)==(1)
+ ├── ordering: +(1|5) [actual: +1]
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:5!null y:6!null z:7!null
+ │    ├── key: (5-7)
+ │    └── ordering: +5
+ └── filters (true)
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x ORDER BY x
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2!null c:3!null x:5!null y:6!null z:7!null
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── key: (2,3,5-7)
+ ├── fd: (1)==(5), (5)==(1)
+ ├── ordering: +(1|5) [actual: +1]
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:5!null y:6!null z:7!null
+ │    ├── key: (5-7)
+ │    └── ordering: +5
+ └── filters (true)
+
+# A left join guarantees an ordering on the left side.
+opt
+SELECT * FROM abc LEFT JOIN xyz ON a=x ORDER BY a
+----
+left-join (merge)
+ ├── columns: a:1!null b:2!null c:3!null x:5 y:6 z:7
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── key: (1-3,5-7)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:5!null y:6!null z:7!null
+ │    ├── key: (5-7)
+ │    └── ordering: +5
+ └── filters (true)
+
+# A left join doesn't guarantee an ordering on x (some rows will have NULLs).
+opt
+SELECT * FROM abc LEFT JOIN xyz ON a=x ORDER BY x
+----
+sort
+ ├── columns: a:1!null b:2!null c:3!null x:5 y:6 z:7
+ ├── key: (1-3,5-7)
+ ├── ordering: +5
+ └── left-join (merge)
+      ├── columns: a:1!null b:2!null c:3!null x:5 y:6 z:7
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── key: (1-3,5-7)
+      ├── scan abc
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1
+      ├── scan xyz
+      │    ├── columns: x:5!null y:6!null z:7!null
+      │    ├── key: (5-7)
+      │    └── ordering: +5
+      └── filters (true)
+
+# A right join doesn't guarantee an ordering on a (some rows will have NULLs).
+opt
+SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY a
+----
+sort
+ ├── columns: a:1 b:2 c:3 x:5!null y:6!null z:7!null
+ ├── key: (1-3,5-7)
+ ├── ordering: +1
+ └── left-join (merge)
+      ├── columns: a:1 b:2 c:3 x:5!null y:6!null z:7!null
+      ├── left ordering: +5
+      ├── right ordering: +1
+      ├── key: (1-3,5-7)
+      ├── scan xyz
+      │    ├── columns: x:5!null y:6!null z:7!null
+      │    ├── key: (5-7)
+      │    └── ordering: +5
+      ├── scan abc
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1
+      └── filters (true)
+
+opt
+SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY x
+----
+left-join (merge)
+ ├── columns: a:1 b:2 c:3 x:5!null y:6!null z:7!null
+ ├── left ordering: +5
+ ├── right ordering: +1
+ ├── key: (1-3,5-7)
+ ├── ordering: +5
+ ├── scan xyz
+ │    ├── columns: x:5!null y:6!null z:7!null
+ │    ├── key: (5-7)
+ │    └── ordering: +5
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1
+ └── filters (true)
+
+opt
+SELECT * FROM abc FULL OUTER JOIN xyz ON a=x ORDER BY a
+----
+sort
+ ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
+ ├── key: (1-3,5-7)
+ ├── ordering: +1
+ └── full-join (merge)
+      ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── key: (1-3,5-7)
+      ├── scan abc
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1
+      ├── scan xyz
+      │    ├── columns: x:5!null y:6!null z:7!null
+      │    ├── key: (5-7)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2!null c:3!null x:5!null y:6!null z:7!null
+ ├── left ordering: +1,+2
+ ├── right ordering: +5,+6
+ ├── key: (3,5-7)
+ ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── ordering: +(1|5) [actual: +1]
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ ├── scan xyz
+ │    ├── columns: x:5!null y:6!null z:7!null
+ │    ├── key: (5-7)
+ │    └── ordering: +5,+6
+ └── filters (true)
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, b
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2!null c:3!null x:5!null y:6!null z:7!null
+ ├── left ordering: +1,+2
+ ├── right ordering: +5,+6
+ ├── key: (3,5-7)
+ ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── ordering: +(1|5),+(2|6) [actual: +1,+2]
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ ├── scan xyz
+ │    ├── columns: x:5!null y:6!null z:7!null
+ │    ├── key: (5-7)
+ │    └── ordering: +5,+6
+ └── filters (true)
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, y
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2!null c:3!null x:5!null y:6!null z:7!null
+ ├── left ordering: +1,+2
+ ├── right ordering: +5,+6
+ ├── key: (3,5-7)
+ ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── ordering: +(1|5),+(2|6) [actual: +1,+2]
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ ├── scan xyz
+ │    ├── columns: x:5!null y:6!null z:7!null
+ │    ├── key: (5-7)
+ │    └── ordering: +5,+6
+ └── filters (true)
+
+# --------------------------------------------------
+# Limit / Offset
+# --------------------------------------------------
+
+# Basic cases.
+
+opt
+SELECT * FROM abc ORDER BY a, b LIMIT 10
+----
+scan abc
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── limit: 10
+ ├── key: (1-3)
+ └── ordering: +1,+2
+
+# The filter prevents pushing of the limit into the scan.
+opt
+SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── internal-ordering: +1,+2
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (1-3)
+ ├── ordering: +1,+2
+ ├── select
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── immutable
+ │    ├── key: (1-3)
+ │    ├── ordering: +1,+2
+ │    ├── limit hint: 10.00
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null b:2!null c:3!null
+ │    │    ├── key: (1-3)
+ │    │    ├── ordering: +1,+2
+ │    │    └── limit hint: 30.00
+ │    └── filters
+ │         └── c:3 < (a:1 + b:2) [outer=(1-3), immutable]
+ └── 10
+
+opt
+SELECT * FROM abc ORDER BY a, b OFFSET 10 
+----
+offset
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── internal-ordering: +1,+2
+ ├── key: (1-3)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ └── 10
+
+
+# Cases where the requirement on Limit/Offset is incompatible with the
+# internal requirement.
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b LIMIT 10) ORDER BY b
+----
+sort
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1-3)
+ ├── ordering: +2
+ └── scan abc
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── limit: 10
+      └── key: (1-3)
+
+opt
+SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY b
+----
+sort
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (1-3)
+ ├── ordering: +2
+ └── limit
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── internal-ordering: +1,+2
+      ├── cardinality: [0 - 10]
+      ├── immutable
+      ├── key: (1-3)
+      ├── select
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── immutable
+      │    ├── key: (1-3)
+      │    ├── ordering: +1,+2
+      │    ├── limit hint: 10.00
+      │    ├── scan abc
+      │    │    ├── columns: a:1!null b:2!null c:3!null
+      │    │    ├── key: (1-3)
+      │    │    ├── ordering: +1,+2
+      │    │    └── limit hint: 30.00
+      │    └── filters
+      │         └── c:3 < (a:1 + b:2) [outer=(1-3), immutable]
+      └── 10
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY b
+----
+sort
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── key: (1-3)
+ ├── ordering: +2
+ └── offset
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── internal-ordering: +1,+2
+      ├── key: (1-3)
+      ├── scan abc
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2
+      └── 10
+
+
+# Cases where the requirement on Limit/Offset is weaker than the
+# internal requirement.
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b LIMIT 10) ORDER BY a
+----
+scan abc
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── limit: 10
+ ├── key: (1-3)
+ └── ordering: +1
+
+opt
+SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY a
+----
+limit
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── internal-ordering: +1,+2
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (1-3)
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── immutable
+ │    ├── key: (1-3)
+ │    ├── ordering: +1,+2
+ │    ├── limit hint: 10.00
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null b:2!null c:3!null
+ │    │    ├── key: (1-3)
+ │    │    ├── ordering: +1,+2
+ │    │    └── limit hint: 30.00
+ │    └── filters
+ │         └── c:3 < (a:1 + b:2) [outer=(1-3), immutable]
+ └── 10
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY a
+----
+offset
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── internal-ordering: +1,+2
+ ├── key: (1-3)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ └── 10
+
+# Cases where the requirement on Limit/Offset is stronger than the
+# internal requirement.
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b LIMIT 10) ORDER BY a, b, c
+----
+scan abc
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── limit: 10
+ ├── key: (1-3)
+ └── ordering: +1,+2,+3
+
+opt
+SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY a, b, c
+----
+limit
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── internal-ordering: +1,+2
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (1-3)
+ ├── ordering: +1,+2,+3
+ ├── select
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── immutable
+ │    ├── key: (1-3)
+ │    ├── ordering: +1,+2,+3
+ │    ├── limit hint: 10.00
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null b:2!null c:3!null
+ │    │    ├── key: (1-3)
+ │    │    ├── ordering: +1,+2,+3
+ │    │    └── limit hint: 30.00
+ │    └── filters
+ │         └── c:3 < (a:1 + b:2) [outer=(1-3), immutable]
+ └── 10
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY a, b, c
+----
+offset
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── internal-ordering: +1,+2
+ ├── key: (1-3)
+ ├── ordering: +1,+2,+3
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── 10
+
+# --------------------------------------------------
+# DistinctOn
+# --------------------------------------------------
+
+# DISTINCT doesn't require any particular ordering of its input. It could pass
+# through the requirement, but that doesn't improve the estimated cost in this
+# case.
+opt
+SELECT DISTINCT b, c FROM abc ORDER BY b
+----
+distinct-on
+ ├── columns: b:2!null c:3!null
+ ├── grouping columns: b:2!null c:3!null
+ ├── key: (2,3)
+ ├── ordering: +2
+ └── sort
+      ├── columns: b:2!null c:3!null
+      ├── ordering: +2
+      └── scan abc
+           └── columns: b:2!null c:3!null
+
+# In this case the ordering is passed through.
+opt
+SELECT DISTINCT a, b, c FROM abc ORDER BY a, b
+----
+scan abc
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── key: (1-3)
+ └── ordering: +1,+2
+
+# DISTINCT ON requires the ordering of its input, as it affects the results
+# (values of a in this case).
+opt
+SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b
+----
+distinct-on
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── grouping columns: b:2!null c:3!null
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(1)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    ├── ordering: +2
+ │    └── scan abc
+ │         ├── columns: a:1!null b:2!null c:3!null
+ │         └── key: (1-3)
+ └── aggregations
+      └── first-agg [as=a:1, outer=(1)]
+           └── a:1
+
+opt
+SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b, c, a
+----
+distinct-on
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── grouping columns: b:2!null c:3!null
+ ├── internal-ordering: +1 opt(2,3)
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(1)
+ ├── ordering: +2,+3
+ ├── sort
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    ├── ordering: +2,+3,+1
+ │    └── scan abc
+ │         ├── columns: a:1!null b:2!null c:3!null
+ │         └── key: (1-3)
+ └── aggregations
+      └── first-agg [as=a:1, outer=(1)]
+           └── a:1
+
+opt
+SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
+----
+distinct-on
+ ├── columns: a:1!null c:3!null
+ ├── grouping columns: a:1!null
+ ├── internal-ordering: -3,+2 opt(1)
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: +1
+ ├── sort (segmented)
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    ├── ordering: +1,-3,+2
+ │    └── scan abc
+ │         ├── columns: a:1!null b:2!null c:3!null
+ │         ├── key: (1-3)
+ │         └── ordering: +1
+ └── aggregations
+      └── first-agg [as=c:3, outer=(3)]
+           └── c:3
+
+# Pass through the ordering from above.
+opt
+SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc) ORDER BY a
+----
+distinct-on
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── internal-ordering: +1,+2
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── first-agg [as=c:3, outer=(3)]
+           └── c:3
+
+# Internal orderings that refer just to ON columns can be ignored.
+opt
+SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a) ORDER BY a, b
+----
+distinct-on
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── first-agg [as=c:3, outer=(3)]
+           └── c:3
+
+opt
+SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a, b) ORDER BY a
+----
+distinct-on
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── grouping columns: a:1!null b:2!null
+ ├── internal-ordering: +1,+2
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── first-agg [as=c:3, outer=(3)]
+           └── c:3
+
+# The c,b part of the inner ordering can be ignored.
+opt
+SELECT * FROM (SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY c, b, a) ORDER BY a
+----
+distinct-on
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── grouping columns: b:2!null c:3!null
+ ├── internal-ordering: +1 opt(2,3)
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(1)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1
+ └── aggregations
+      └── first-agg [as=a:1, outer=(1)]
+           └── a:1
+
+# There is no ordering that satisfies both the intra-group ordering of c+ and the
+# inter-group ordering of a+; we have to sort twice.
+opt
+SELECT * FROM (SELECT DISTINCT ON (b) a, b, c FROM abc ORDER BY b, c) ORDER BY a
+----
+sort
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── key: (2)
+ ├── fd: (2)-->(1,3)
+ ├── ordering: +1
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: b:2!null
+      ├── internal-ordering: +3 opt(2)
+      ├── key: (2)
+      ├── fd: (2)-->(1,3)
+      ├── sort
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── key: (1-3)
+      │    ├── ordering: +3 opt(2) [actual: +3]
+      │    └── scan abc
+      │         ├── columns: a:1!null b:2!null c:3!null
+      │         └── key: (1-3)
+      └── aggregations
+           ├── first-agg [as=a:1, outer=(1)]
+           │    └── a:1
+           └── first-agg [as=c:3, outer=(3)]
+                └── c:3
+
+# Same as above, except we can use the index ordering for the distinct input.
+opt
+SELECT * FROM (SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b) ORDER BY c
+----
+sort
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +3
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── internal-ordering: +1,+2
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan abc
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2
+      └── aggregations
+           ├── first-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── first-agg [as=c:3, outer=(3)]
+                └── c:3
+
+# Verify that we simplify the child ordering of DistinctOn.
+opt
+SELECT DISTINCT ON(a) a, b FROM abc WHERE a=c ORDER BY a
+----
+distinct-on
+ ├── columns: a:1!null b:2!null
+ ├── grouping columns: a:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (2,3)
+ │    ├── fd: (1)==(3), (3)==(1)
+ │    ├── ordering: +(1|3) [actual: +1]
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null b:2!null c:3!null
+ │    │    ├── key: (1-3)
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── a:1 = c:3 [outer=(1,3), fd=(1)==(3), (3)==(1)]
+ └── aggregations
+      └── first-agg [as=b:2, outer=(2)]
+           └── b:2
+
+# --------------------------------------------------
+# Insert operator.
+# --------------------------------------------------
+
+# Verify that external ordering is passed through to input.
+opt
+SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z LIMIT 2 RETURNING *] ORDER BY b
+----
+sort
+ ├── columns: a:9!null b:10!null c:11!null
+ ├── cardinality: [0 - 2]
+ ├── volatile, mutations
+ ├── key: (9-11)
+ ├── ordering: +10
+ └── with &1
+      ├── columns: a:9!null b:10!null c:11!null
+      ├── cardinality: [0 - 2]
+      ├── volatile, mutations
+      ├── key: (9-11)
+      ├── insert abc
+      │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
+      │    ├── insert-mapping:
+      │    │    ├── x:5 => abc.a:1
+      │    │    ├── y:6 => abc.b:2
+      │    │    └── z:7 => abc.c:3
+      │    ├── cardinality: [0 - 2]
+      │    ├── volatile, mutations
+      │    ├── key: (1-3)
+      │    └── limit
+      │         ├── columns: x:5!null y:6!null z:7!null
+      │         ├── internal-ordering: +6,+7
+      │         ├── cardinality: [0 - 2]
+      │         ├── key: (5-7)
+      │         ├── sort
+      │         │    ├── columns: x:5!null y:6!null z:7!null
+      │         │    ├── key: (5-7)
+      │         │    ├── ordering: +6,+7
+      │         │    ├── limit hint: 2.00
+      │         │    └── scan xyz
+      │         │         ├── columns: x:5!null y:6!null z:7!null
+      │         │         └── key: (5-7)
+      │         └── 2
+      └── with-scan &1
+           ├── columns: a:9!null b:10!null c:11!null
+           ├── mapping:
+           │    ├──  abc.a:1 => a:9
+           │    ├──  abc.b:2 => b:10
+           │    └──  abc.c:3 => c:11
+           ├── cardinality: [0 - 2]
+           └── key: (9-11)
+
+# Verify that provided orderings are derived correctly.
+opt
+SELECT *
+FROM [INSERT INTO xyz SELECT b, c, d FROM abcd ORDER BY c, d LIMIT 2 RETURNING *]
+ORDER BY y
+----
+sort
+ ├── columns: x:11!null y:12!null z:13!null
+ ├── cardinality: [0 - 2]
+ ├── volatile, mutations
+ ├── ordering: +12
+ └── with &1
+      ├── columns: x:11!null y:12!null z:13!null
+      ├── cardinality: [0 - 2]
+      ├── volatile, mutations
+      ├── insert xyz
+      │    ├── columns: xyz.x:1!null xyz.y:2!null xyz.z:3!null
+      │    ├── insert-mapping:
+      │    │    ├── b:6 => xyz.x:1
+      │    │    ├── c:7 => xyz.y:2
+      │    │    └── d:8 => xyz.z:3
+      │    ├── cardinality: [0 - 2]
+      │    ├── volatile, mutations
+      │    └── scan abcd@cd
+      │         ├── columns: b:6 c:7 d:8
+      │         └── limit: 2
+      └── with-scan &1
+           ├── columns: x:11!null y:12!null z:13!null
+           ├── mapping:
+           │    ├──  xyz.x:1 => x:11
+           │    ├──  xyz.y:2 => y:12
+           │    └──  xyz.z:3 => z:13
+           └── cardinality: [0 - 2]
+
+# Verify that provided orderings are derived correctly with equivalence FD.
+# TODO(radu): Use interesting orderings to get rid of top-level sort.
+opt
+SELECT *
+FROM [INSERT INTO xyz SELECT b, c, d FROM abcd ORDER BY c, d LIMIT 2 RETURNING *]
+WHERE x=y
+ORDER BY y
+----
+sort
+ ├── columns: x:11!null y:12!null z:13!null
+ ├── cardinality: [0 - 2]
+ ├── volatile, mutations
+ ├── fd: (11)==(12), (12)==(11)
+ ├── ordering: +(11|12) [actual: +11]
+ └── with &1
+      ├── columns: x:11!null y:12!null z:13!null
+      ├── cardinality: [0 - 2]
+      ├── volatile, mutations
+      ├── fd: (11)==(12), (12)==(11)
+      ├── insert xyz
+      │    ├── columns: xyz.x:1!null xyz.y:2!null xyz.z:3!null
+      │    ├── insert-mapping:
+      │    │    ├── b:6 => xyz.x:1
+      │    │    ├── c:7 => xyz.y:2
+      │    │    └── d:8 => xyz.z:3
+      │    ├── cardinality: [0 - 2]
+      │    ├── volatile, mutations
+      │    └── scan abcd@cd
+      │         ├── columns: b:6 c:7 d:8
+      │         └── limit: 2
+      └── select
+           ├── columns: x:11!null y:12!null z:13!null
+           ├── cardinality: [0 - 2]
+           ├── fd: (11)==(12), (12)==(11)
+           ├── with-scan &1
+           │    ├── columns: x:11!null y:12!null z:13!null
+           │    ├── mapping:
+           │    │    ├──  xyz.x:1 => x:11
+           │    │    ├──  xyz.y:2 => y:12
+           │    │    └──  xyz.z:3 => z:13
+           │    └── cardinality: [0 - 2]
+           └── filters
+                └── x:11 = y:12 [outer=(11,12), fd=(11)==(12), (12)==(11)]
+
+# Ignore internal ordering.
+opt
+SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *]
+----
+with &1
+ ├── columns: a:9!null b:10!null c:11!null
+ ├── volatile, mutations
+ ├── key: (9-11)
+ ├── insert abc
+ │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
+ │    ├── insert-mapping:
+ │    │    ├── x:5 => abc.a:1
+ │    │    ├── y:6 => abc.b:2
+ │    │    └── z:7 => abc.c:3
+ │    ├── volatile, mutations
+ │    ├── key: (1-3)
+ │    └── scan xyz
+ │         ├── columns: x:5!null y:6!null z:7!null
+ │         └── key: (5-7)
+ └── with-scan &1
+      ├── columns: a:9!null b:10!null c:11!null
+      ├── mapping:
+      │    ├──  abc.a:1 => a:9
+      │    ├──  abc.b:2 => b:10
+      │    └──  abc.c:3 => c:11
+      └── key: (9-11)
+
+# --------------------------------------------------
+# Update operator.
+# --------------------------------------------------
+
+# Verify that the external ordering is passed through to input.
+opt
+SELECT * FROM [UPDATE abcd SET (a, b)=(1, 2) RETURNING *] ORDER BY c
+----
+sort
+ ├── columns: a:15!null b:16!null c:17 d:18
+ ├── volatile, mutations
+ ├── fd: ()-->(15,16)
+ ├── ordering: +17 opt(15,16) [actual: +17]
+ └── with &1
+      ├── columns: a:15!null b:16!null c:17 d:18
+      ├── volatile, mutations
+      ├── fd: ()-->(15,16)
+      ├── project
+      │    ├── columns: abcd.a:1!null abcd.b:2!null abcd.c:3 abcd.d:4
+      │    ├── volatile, mutations
+      │    ├── fd: ()-->(1,2)
+      │    └── update abcd
+      │         ├── columns: abcd.a:1!null abcd.b:2!null abcd.c:3 abcd.d:4 rowid:5!null
+      │         ├── fetch columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11
+      │         ├── update-mapping:
+      │         │    ├── a_new:13 => abcd.a:1
+      │         │    └── b_new:14 => abcd.b:2
+      │         ├── volatile, mutations
+      │         ├── key: (5)
+      │         ├── fd: ()-->(1,2), (5)-->(3,4)
+      │         └── project
+      │              ├── columns: a_new:13!null b_new:14!null abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              ├── key: (11)
+      │              ├── fd: ()-->(13,14), (11)-->(7-10)
+      │              ├── scan abcd
+      │              │    ├── columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              │    ├── key: (11)
+      │              │    └── fd: (11)-->(7-10)
+      │              └── projections
+      │                   ├── 1 [as=a_new:13]
+      │                   └── 2 [as=b_new:14]
+      └── with-scan &1
+           ├── columns: a:15!null b:16!null c:17 d:18
+           ├── mapping:
+           │    ├──  abcd.a:1 => a:15
+           │    ├──  abcd.b:2 => b:16
+           │    ├──  abcd.c:3 => c:17
+           │    └──  abcd.d:4 => d:18
+           └── fd: ()-->(15,16)
+
+# Verify that provided orderings are derived correctly.
+opt
+SELECT *
+FROM [UPDATE abcd SET b=b+1 ORDER BY c LIMIT 10 RETURNING *]
+ORDER BY c, d
+----
+sort
+ ├── columns: a:14 b:15 c:16 d:17
+ ├── cardinality: [0 - 10]
+ ├── volatile, mutations
+ ├── ordering: +16,+17
+ └── with &1
+      ├── columns: a:14 b:15 c:16 d:17
+      ├── cardinality: [0 - 10]
+      ├── volatile, mutations
+      ├── project
+      │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
+      │    ├── cardinality: [0 - 10]
+      │    ├── volatile, mutations
+      │    └── update abcd
+      │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
+      │         ├── fetch columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11
+      │         ├── update-mapping:
+      │         │    └── b_new:13 => abcd.b:2
+      │         ├── cardinality: [0 - 10]
+      │         ├── volatile, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── project
+      │              ├── columns: b_new:13 abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              ├── cardinality: [0 - 10]
+      │              ├── immutable
+      │              ├── key: (11)
+      │              ├── fd: (11)-->(7-10), (8)-->(13)
+      │              ├── scan abcd@cd
+      │              │    ├── columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              │    ├── limit: 10
+      │              │    ├── key: (11)
+      │              │    └── fd: (11)-->(7-10)
+      │              └── projections
+      │                   └── abcd.b:8 + 1 [as=b_new:13, outer=(8), immutable]
+      └── with-scan &1
+           ├── columns: a:14 b:15 c:16 d:17
+           ├── mapping:
+           │    ├──  abcd.a:1 => a:14
+           │    ├──  abcd.b:2 => b:15
+           │    ├──  abcd.c:3 => c:16
+           │    └──  abcd.d:4 => d:17
+           └── cardinality: [0 - 10]
+
+# Verify that provided orderings are derived correctly with equivalence FD.
+# TODO(radu): Use interesting orderings to get rid of top-level sort.
+opt
+SELECT *
+FROM [UPDATE abcd SET b=b+1 ORDER BY c, d LIMIT 10 RETURNING *]
+WHERE b=c
+ORDER BY b, d
+----
+sort
+ ├── columns: a:14 b:15!null c:16!null d:17
+ ├── cardinality: [0 - 10]
+ ├── volatile, mutations
+ ├── fd: (15)==(16), (16)==(15)
+ ├── ordering: +(15|16),+17 [actual: +15,+17]
+ └── with &1
+      ├── columns: a:14 b:15!null c:16!null d:17
+      ├── cardinality: [0 - 10]
+      ├── volatile, mutations
+      ├── fd: (15)==(16), (16)==(15)
+      ├── project
+      │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
+      │    ├── cardinality: [0 - 10]
+      │    ├── volatile, mutations
+      │    └── update abcd
+      │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
+      │         ├── fetch columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11
+      │         ├── update-mapping:
+      │         │    └── b_new:13 => abcd.b:2
+      │         ├── cardinality: [0 - 10]
+      │         ├── volatile, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── project
+      │              ├── columns: b_new:13 abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              ├── cardinality: [0 - 10]
+      │              ├── immutable
+      │              ├── key: (11)
+      │              ├── fd: (11)-->(7-10), (8)-->(13)
+      │              ├── scan abcd@cd
+      │              │    ├── columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              │    ├── limit: 10
+      │              │    ├── key: (11)
+      │              │    └── fd: (11)-->(7-10)
+      │              └── projections
+      │                   └── abcd.b:8 + 1 [as=b_new:13, outer=(8), immutable]
+      └── select
+           ├── columns: a:14 b:15!null c:16!null d:17
+           ├── cardinality: [0 - 10]
+           ├── fd: (15)==(16), (16)==(15)
+           ├── with-scan &1
+           │    ├── columns: a:14 b:15 c:16 d:17
+           │    ├── mapping:
+           │    │    ├──  abcd.a:1 => a:14
+           │    │    ├──  abcd.b:2 => b:15
+           │    │    ├──  abcd.c:3 => c:16
+           │    │    └──  abcd.d:4 => d:17
+           │    └── cardinality: [0 - 10]
+           └── filters
+                └── b:15 = c:16 [outer=(15,16), fd=(15)==(16), (16)==(15)]
+
+# --------------------------------------------------
+# Upsert operator.
+# --------------------------------------------------
+
+# Verify that no ordering is provided once ON CONFLICT clause is added.
+opt
+SELECT *
+FROM
+[
+	INSERT INTO abc
+	SELECT * FROM xyz ORDER BY y, z LIMIT 2
+	ON CONFLICT (a, b, c)
+	DO UPDATE SET a=10
+	RETURNING *
+]
+ORDER BY b
+----
+sort
+ ├── columns: a:17!null b:18!null c:19!null
+ ├── cardinality: [0 - 2]
+ ├── volatile, mutations
+ ├── ordering: +18
+ └── with &1
+      ├── columns: a:17!null b:18!null c:19!null
+      ├── cardinality: [0 - 2]
+      ├── volatile, mutations
+      ├── upsert abc
+      │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
+      │    ├── arbiter indexes: primary
+      │    ├── canary column: abc.a:9
+      │    ├── fetch columns: abc.a:9 abc.b:10 abc.c:11
+      │    ├── insert-mapping:
+      │    │    ├── x:5 => abc.a:1
+      │    │    ├── y:6 => abc.b:2
+      │    │    └── z:7 => abc.c:3
+      │    ├── update-mapping:
+      │    │    └── upsert_a:14 => abc.a:1
+      │    ├── return-mapping:
+      │    │    ├── upsert_a:14 => abc.a:1
+      │    │    ├── upsert_b:15 => abc.b:2
+      │    │    └── upsert_c:16 => abc.c:3
+      │    ├── cardinality: [0 - 2]
+      │    ├── volatile, mutations
+      │    └── project
+      │         ├── columns: upsert_a:14!null upsert_b:15 upsert_c:16 x:5!null y:6!null z:7!null abc.a:9 abc.b:10 abc.c:11
+      │         ├── cardinality: [0 - 2]
+      │         ├── key: (5-7)
+      │         ├── fd: (5-7)-->(9-11), (5,9)-->(14), (6,9,10)-->(15), (7,9,11)-->(16)
+      │         ├── left-join (lookup abc)
+      │         │    ├── columns: x:5!null y:6!null z:7!null abc.a:9 abc.b:10 abc.c:11
+      │         │    ├── key columns: [5 6 7] = [9 10 11]
+      │         │    ├── lookup columns are key
+      │         │    ├── cardinality: [0 - 2]
+      │         │    ├── key: (5-7)
+      │         │    ├── fd: (5-7)-->(9-11)
+      │         │    ├── ensure-upsert-distinct-on
+      │         │    │    ├── columns: x:5!null y:6!null z:7!null
+      │         │    │    ├── grouping columns: x:5!null y:6!null z:7!null
+      │         │    │    ├── internal-ordering: +6,+7
+      │         │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │         │    │    ├── cardinality: [0 - 2]
+      │         │    │    ├── key: (5-7)
+      │         │    │    └── limit
+      │         │    │         ├── columns: x:5!null y:6!null z:7!null
+      │         │    │         ├── internal-ordering: +6,+7
+      │         │    │         ├── cardinality: [0 - 2]
+      │         │    │         ├── key: (5-7)
+      │         │    │         ├── ordering: +6,+7
+      │         │    │         ├── sort
+      │         │    │         │    ├── columns: x:5!null y:6!null z:7!null
+      │         │    │         │    ├── key: (5-7)
+      │         │    │         │    ├── ordering: +6,+7
+      │         │    │         │    ├── limit hint: 2.00
+      │         │    │         │    └── scan xyz
+      │         │    │         │         ├── columns: x:5!null y:6!null z:7!null
+      │         │    │         │         └── key: (5-7)
+      │         │    │         └── 2
+      │         │    └── filters (true)
+      │         └── projections
+      │              ├── CASE WHEN abc.a:9 IS NULL THEN x:5 ELSE 10 END [as=upsert_a:14, outer=(5,9)]
+      │              ├── CASE WHEN abc.a:9 IS NULL THEN y:6 ELSE abc.b:10 END [as=upsert_b:15, outer=(6,9,10)]
+      │              └── CASE WHEN abc.a:9 IS NULL THEN z:7 ELSE abc.c:11 END [as=upsert_c:16, outer=(7,9,11)]
+      └── with-scan &1
+           ├── columns: a:17!null b:18!null c:19!null
+           ├── mapping:
+           │    ├──  abc.a:1 => a:17
+           │    ├──  abc.b:2 => b:18
+           │    └──  abc.c:3 => c:19
+           └── cardinality: [0 - 2]
+
+# --------------------------------------------------
+# Delete operator.
+# --------------------------------------------------
+
+# Verify that the external ordering is passed through to input.
+opt
+SELECT * FROM [DELETE FROM abcd RETURNING *] ORDER BY c
+----
+sort
+ ├── columns: a:13 b:14 c:15 d:16
+ ├── volatile, mutations
+ ├── ordering: +15
+ └── with &1
+      ├── columns: a:13 b:14 c:15 d:16
+      ├── volatile, mutations
+      ├── project
+      │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
+      │    ├── volatile, mutations
+      │    └── delete abcd
+      │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
+      │         ├── fetch columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11
+      │         ├── volatile, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── scan abcd
+      │              ├── columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              ├── key: (11)
+      │              └── fd: (11)-->(7-10)
+      └── with-scan &1
+           ├── columns: a:13 b:14 c:15 d:16
+           └── mapping:
+                ├──  abcd.a:1 => a:13
+                ├──  abcd.b:2 => b:14
+                ├──  abcd.c:3 => c:15
+                └──  abcd.d:4 => d:16
+
+# Verify that provided orderings are derived correctly.
+opt
+SELECT *
+FROM [DELETE FROM abcd ORDER BY c LIMIT 10 RETURNING *]
+ORDER BY c, d
+----
+sort
+ ├── columns: a:13 b:14 c:15 d:16
+ ├── cardinality: [0 - 10]
+ ├── volatile, mutations
+ ├── ordering: +15,+16
+ └── with &1
+      ├── columns: a:13 b:14 c:15 d:16
+      ├── cardinality: [0 - 10]
+      ├── volatile, mutations
+      ├── project
+      │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
+      │    ├── cardinality: [0 - 10]
+      │    ├── volatile, mutations
+      │    └── delete abcd
+      │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
+      │         ├── fetch columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11
+      │         ├── cardinality: [0 - 10]
+      │         ├── volatile, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── scan abcd@cd
+      │              ├── columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              ├── limit: 10
+      │              ├── key: (11)
+      │              └── fd: (11)-->(7-10)
+      └── with-scan &1
+           ├── columns: a:13 b:14 c:15 d:16
+           ├── mapping:
+           │    ├──  abcd.a:1 => a:13
+           │    ├──  abcd.b:2 => b:14
+           │    ├──  abcd.c:3 => c:15
+           │    └──  abcd.d:4 => d:16
+           └── cardinality: [0 - 10]
+
+# Verify that provided orderings are derived correctly with equivalence FD.
+# TODO(radu): Use interesting orderings to get rid of top-level sort.
+opt
+SELECT *
+FROM [DELETE FROM abcd ORDER BY c, d LIMIT 10 RETURNING *]
+WHERE b=c
+ORDER BY b, d
+----
+sort
+ ├── columns: a:13 b:14!null c:15!null d:16
+ ├── cardinality: [0 - 10]
+ ├── volatile, mutations
+ ├── fd: (14)==(15), (15)==(14)
+ ├── ordering: +(14|15),+16 [actual: +14,+16]
+ └── with &1
+      ├── columns: a:13 b:14!null c:15!null d:16
+      ├── cardinality: [0 - 10]
+      ├── volatile, mutations
+      ├── fd: (14)==(15), (15)==(14)
+      ├── project
+      │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
+      │    ├── cardinality: [0 - 10]
+      │    ├── volatile, mutations
+      │    └── delete abcd
+      │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
+      │         ├── fetch columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11
+      │         ├── cardinality: [0 - 10]
+      │         ├── volatile, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── scan abcd@cd
+      │              ├── columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10 rowid:11!null
+      │              ├── limit: 10
+      │              ├── key: (11)
+      │              └── fd: (11)-->(7-10)
+      └── select
+           ├── columns: a:13 b:14!null c:15!null d:16
+           ├── cardinality: [0 - 10]
+           ├── fd: (14)==(15), (15)==(14)
+           ├── with-scan &1
+           │    ├── columns: a:13 b:14 c:15 d:16
+           │    ├── mapping:
+           │    │    ├──  abcd.a:1 => a:13
+           │    │    ├──  abcd.b:2 => b:14
+           │    │    ├──  abcd.c:3 => c:15
+           │    │    └──  abcd.d:4 => d:16
+           │    └── cardinality: [0 - 10]
+           └── filters
+                └── b:14 = c:15 [outer=(14,15), fd=(14)==(15), (15)==(14)]
+
+
+# Regression test for #36219: lookup join with ON condition that imposes an
+# equality on two input columns (which isn't pushed down).
+opt disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
+SELECT * FROM abc JOIN xyz ON a=x AND x=z ORDER BY z
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2!null c:3!null x:5!null y:6!null z:7!null
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── key: (2,3,6,7)
+ ├── fd: (1)==(5,7), (5)==(1,7), (7)==(1,5)
+ ├── ordering: +(1|5|7) [actual: +1]
+ ├── scan abc
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:5!null y:6!null z:7!null
+ │    ├── key: (5-7)
+ │    └── ordering: +5
+ └── filters
+      └── x:5 = z:7 [outer=(5,7), fd=(5)==(7), (7)==(5)]
+
+# TODO(justin): figure out when it is that window functions can preserve their
+# input ordering.
+opt
+SELECT *, row_number() OVER() FROM abc ORDER BY a
+----
+sort
+ ├── columns: a:1!null b:2!null c:3!null row_number:5
+ ├── key: (1-3)
+ ├── ordering: +1
+ └── window partition=()
+      ├── columns: a:1!null b:2!null c:3!null row_number:5
+      ├── key: (1-3)
+      ├── scan abc
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    └── key: (1-3)
+      └── windows
+           └── row-number [as=row_number:5]
+
+# Regression test for #44469 (DistinctOn needs to remap the provided ordering).
+exec-ddl
+CREATE TABLE t44469_a (a INT, INDEX (a))
+----
+
+exec-ddl
+CREATE TABLE t44469_b (b INT, INDEX (b))
+----
+
+exec-ddl
+CREATE TABLE t44469_cd (c INT, d INT, INDEX (c, d));
+----
+
+opt
+SELECT DISTINCT ON (b) b
+FROM t44469_a INNER LOOKUP JOIN t44469_b ON a = b INNER LOOKUP JOIN t44469_cd ON c = 1 AND d = a
+ORDER BY b
+----
+distinct-on
+ ├── columns: b:4!null
+ ├── grouping columns: b:4!null
+ ├── key: (4)
+ ├── ordering: +4
+ └── inner-join (lookup t44469_cd@secondary)
+      ├── columns: a:1!null b:4!null c:7!null d:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [11 1] = [7 8]
+      ├── fd: ()-->(7), (1)==(4,8), (4)==(1,8), (8)==(1,4)
+      ├── ordering: +(1|4|8) opt(7) [actual: +1]
+      ├── project
+      │    ├── columns: "project_const_col_@7":11!null a:1!null b:4!null
+      │    ├── fd: ()-->(11), (1)==(4), (4)==(1)
+      │    ├── ordering: +(1|4) [actual: +1]
+      │    ├── inner-join (lookup t44469_b@secondary)
+      │    │    ├── columns: a:1!null b:4!null
+      │    │    ├── flags: force lookup join (into right side)
+      │    │    ├── key columns: [1] = [4]
+      │    │    ├── fd: (1)==(4), (4)==(1)
+      │    │    ├── ordering: +(1|4) [actual: +1]
+      │    │    ├── scan t44469_a@secondary
+      │    │    │    ├── columns: a:1
+      │    │    │    └── ordering: +1
+      │    │    └── filters (true)
+      │    └── projections
+      │         └── 1 [as="project_const_col_@7":11]
+      └── filters (true)
+
+# Regression test for #47041: factor check constraints into the (canonical)
+# scan FDs; otherwise operators above won't always be able to remap a provided
+# ordering.
+exec-ddl
+CREATE TABLE t47041 (
+  k INT8 PRIMARY KEY,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL CHECK (b = 0),
+  INDEX ba (b, a)
+)
+----
+
+opt
+SELECT 1 FROM t47041 WHERE a > 1 AND k > 0 GROUP BY b, a ORDER BY b
+----
+project
+ ├── columns: "?column?":5!null
+ ├── fd: ()-->(5)
+ ├── distinct-on
+ │    ├── columns: a:2!null
+ │    ├── grouping columns: a:2!null
+ │    ├── key: (2)
+ │    └── select
+ │         ├── columns: k:1!null a:2!null
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2)
+ │         ├── scan t47041@ba
+ │         │    ├── columns: k:1!null a:2!null
+ │         │    ├── constraint: /3/2/1: [/0/2/1 - /0]
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         └── filters
+ │              └── k:1 > 0 [outer=(1)]
+ └── projections
+      └── 1 [as="?column?":5]

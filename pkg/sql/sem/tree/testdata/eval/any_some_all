@@ -1,0 +1,305 @@
+# ANY, SOME, and ALL expressions.
+
+eval
+1   = ANY ARRAY[]
+----
+false
+
+eval
+1   = ANY (ARRAY[2, 3, 4])
+----
+false
+
+eval
+1   = ANY (ARRAY[1, 3, 4])
+----
+true
+
+eval
+1+1 = ANY (ARRAY[2, 3, 4])
+----
+true
+
+eval
+1+1 = ANY  (ARRAY[1, 3, 4])
+----
+false
+
+eval
+'foo' LIKE ANY ARRAY[]
+----
+false
+
+eval
+'foo' LIKE ANY (ARRAY['bar', 'baz'])
+----
+false
+
+eval
+'foo' LIKE ANY (ARRAY['foo', 'bar', 'baz'])
+----
+true
+
+eval
+1+1 = SOME (ARRAY[1, 3, 4])
+----
+false
+
+eval
+1   = ALL (ARRAY[])
+----
+true
+
+eval
+1   = ALL (ARRAY[1, 1, 1])
+----
+true
+
+eval
+1+1 = ALL (ARRAY[2, 3, 4])
+----
+false
+
+eval
+1+1 = ALL (ARRAY[2, 2, 2])
+----
+true
+
+eval
+'foo' LIKE ALL ARRAY[]
+----
+true
+
+eval
+'foo' LIKE ALL (ARRAY['foo', 'bar', 'baz'])
+----
+false
+
+eval
+'foo' LIKE ALL (ARRAY['foo', 'foo'])
+----
+true
+
+eval
+1 = ANY (ARRAY[1, 2, NULL])
+----
+true
+
+eval
+1 = ANY (ARRAY[2, 3, NULL])
+----
+NULL
+
+eval
+1 = ANY (ARRAY[NULL])
+----
+NULL
+
+eval
+1 = ALL (ARRAY[1, 1, NULL])
+----
+NULL
+
+# Regression test for #37547 - ensure that null RHS of comparisons with
+# suboperators are correctly handled. A null RHS always results in null.
+eval
+1 = ANY(NULL::int[])
+----
+NULL
+
+eval
+1 = SOME(NULL::int[])
+----
+NULL
+
+eval
+1 = ALL(NULL::int[])
+----
+NULL
+
+eval
+'foo' LIKE ANY(NULL::string[])
+----
+NULL
+
+eval
+NULL::int = ANY(NULL::int[])
+----
+NULL
+
+eval
+NULL::int = SOME(NULL::int[])
+----
+NULL
+
+eval
+NULL::int = ALL(NULL::int[])
+----
+NULL
+
+eval
+NULL::string LIKE ANY(NULL::string[])
+----
+NULL
+
+# A null LHS has different behavior if the array is empty or not
+eval
+NULL::int = ANY(ARRAY[1,2])
+----
+NULL
+
+eval
+NULL::int = SOME(ARRAY[1,2])
+----
+NULL
+
+eval
+NULL::int = ALL(ARRAY[1,2])
+----
+NULL
+
+eval
+NULL::int = ANY(ARRAY[]::int[])
+----
+false
+
+eval
+NULL::int = SOME(ARRAY[]::int[])
+----
+false
+
+eval
+NULL::int = ALL(ARRAY[]::int[])
+----
+true
+
+eval
+NULL::string LIKE ANY(ARRAY[]::string[])
+----
+false
+
+eval
+NULL::string LIKE SOME(ARRAY[]::string[])
+----
+false
+
+eval
+NULL::string LIKE ALL(ARRAY[]::string[])
+----
+true
+
+eval
+1 = ALL (ARRAY[1, 2, NULL])
+----
+false
+
+eval
+1 = ALL (ARRAY[NULL])
+----
+NULL
+
+eval
+1 =  ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+1 <  ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+1 >  ANY (ARRAY[1, 3, 5])
+----
+false
+
+eval
+1 <= ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+1 >= ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+5 =  ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+5 <  ANY (ARRAY[1, 3, 5])
+----
+false
+
+eval
+5 >  ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+5 <= ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+5 >= ANY (ARRAY[1, 3, 5])
+----
+true
+
+eval
+'AAA' LIKE ANY (ARRAY['%A%', '%B%'])
+----
+true
+
+eval
+'CCC' LIKE ANY (ARRAY['%A%', '%B%'])
+----
+false
+
+eval
+'AAA' NOT LIKE ANY (ARRAY['%A%', '%B%'])
+----
+true
+
+eval
+'AAA' NOT LIKE ANY (ARRAY['%A%', '%A%'])
+----
+false
+
+eval
+'aaa' ILIKE ANY (ARRAY['%A%', '%B%'])
+----
+true
+
+eval
+'ccc' ILIKE ANY (ARRAY['%A%', '%B%'])
+----
+false
+
+eval
+'aaa' NOT ILIKE ANY (ARRAY['%A%', '%B%'])
+----
+true
+
+eval
+'aaa' NOT ILIKE ANY (ARRAY['%A%', '%A%'])
+----
+false
+
+# Regression test for #40841 -- make sure LIKE can handle nulls.
+eval
+NULL::string LIKE ANY(ARRAY['bar', 'baz'])
+----
+NULL
+
+eval
+NULL::string ILIKE ANY(ARRAY['bar%', 'baz'])
+----
+NULL
+
+eval
+NULL::string LIKE ANY(ARRAY['bar', NULL])
+----
+NULL

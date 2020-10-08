@@ -12,12 +12,19 @@
 artifacts
 /bin
 /bin.*
+/lib
+/lib.*
 .buildinfo
 # cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
 /cockroach*
 /certs
 # make stress, acceptance produce stress.test, acceptance.test
 *.test*
+# fuzz tests
+work-Fuzz*
+*-fuzz.zip
+# vendoring by `go mod vendor` may produce this file temporarily
+/.vendor.tmp.*
 
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk

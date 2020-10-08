@@ -1,14 +1,31 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import Analytics from "analytics-node";
 import { Location } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
 import * as protos from "src/js/protos";
-import { versionsSelector } from "src/redux/alerts";
+import { versionsSelector } from "src/redux/nodes";
 import { store, history, AdminUIState } from "src/redux/state";
+import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
 type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;
 
+interface TrackMessage {
+    event: string;
+    properties?: Object;
+    timestamp?: Date;
+    context?: Object;
+}
 /**
  * List of current redactions needed for pages tracked by the Admin UI.
  * TODO(mrtracy): It this list becomes more extensive, it might benefit from a
@@ -38,6 +55,11 @@ export const defaultRedactions = [
             }
             return original.replace(localities, redactedLocalities);
         },
+    },
+    // The statement details page, with a full SQL statement in the URL.
+    {
+        match: new RegExp("/statement/.*"),
+        replace: "/statement/[statement]",
     },
 ];
 
@@ -164,6 +186,33 @@ export class AnalyticsSync {
         this.identifyEventSent = true;
     }
 
+    /** Analytics Track for Segment: https://segment.com/docs/connections/spec/track/ */
+    track(msg: TrackMessage) {
+      const cluster = this.getCluster();
+      if (cluster === null) {
+        return;
+      }
+
+      // get cluster_id to id the event
+      const { cluster_id } = cluster;
+      const pagePath = this.redact(history.location.pathname);
+
+      // break down properties from message
+      const { properties, ...rest } = msg;
+      const props = {
+        pagePath,
+        ...properties,
+      };
+
+      const message = {
+        userId: cluster_id,
+        properties: { ...props },
+        ...rest,
+      };
+
+      this.analyticsService.track(message);
+    }
+
     /**
      * Return the ClusterID from the store, returning null if the clusterID
      * has not yet been fetched. We can depend on the alertdatasync component
@@ -192,14 +241,13 @@ export class AnalyticsSync {
         let search = "";
 
         if (location.search && location.search.length > 1) {
-            const query = location.search.slice(1);
-            const params = new URLSearchParams(query);
+          const query = location.search.slice(1);
+          const params = new URLSearchParams(query);
 
-            for (const param of params) {
-                params.set(param[0], this.redact(param[1]));
-            }
-
-            search = "?" + params.toString();
+          params.forEach((value, key) => {
+            params.set(key, this.redact(value));
+          });
+          search = "?" + params.toString();
         }
 
         this.analyticsService.page({
@@ -238,13 +286,16 @@ export class AnalyticsSync {
 // Create a global instance of AnalyticsSync which can be used from various
 // packages. If enabled, this instance will push to segment using the following
 // analytics key.
-const analyticsInstance = new Analytics("5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb");
+const analyticsOpts = {
+  host: COCKROACHLABS_ADDR + "/api/segment",
+};
+const analyticsInstance = new Analytics("5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb", analyticsOpts);
 export const analytics = new AnalyticsSync(analyticsInstance, store, defaultRedactions);
 
 // Attach a listener to the history object which will track a 'page' event
 // whenever the user navigates to a new path.
 let lastPageLocation: Location;
-history.listen((location) => {
+history.listen((location: Location) => {
   // Do not log if the pathname is the same as the previous.
   // Needed because history.listen() fires twice when using hash history, this
   // bug is "won't fix" in the version of history we are using, and upgrading
@@ -261,6 +312,6 @@ history.listen((location) => {
 
 // Record the initial page that was accessed; listen won't fire for the first
 // page loaded.
-analytics.page(history.getCurrentLocation());
+analytics.page(history.location);
 // Identify the cluster.
 analytics.identify();

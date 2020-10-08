@@ -1,0 +1,77 @@
+# LogicTest: local
+
+# This file contains test cases that cannot be run with the vectorized
+# execution engine.
+
+statement ok
+SET vectorize=off
+
+# Check that no extraneous rows are fetched due to excessive batching (#15910)
+# The test is composed of three parts: populate a table, check
+# that the problematic plan is properly derived from the test query,
+# then test the results.
+
+statement ok
+CREATE TABLE test2 (
+  id BIGSERIAL PRIMARY KEY, k TEXT UNIQUE, v INT DEFAULT 42,
+  FAMILY "primary" (id, k, v)
+);
+INSERT INTO test2(k)
+     VALUES ('001'),('002'),('003'),('004'),('005'),('006'),('007'),('008'),('009'),('010'),
+            ('011'),('012'),('013'),('014'),('015'),('016'),('017'),('018'),('019'),('020'),
+            ('021'),('022'),('023'),('024'),('025'),('026'),('027'),('028'),('029'),('030')
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20; SET tracing = off
+
+# Result check: The following query must not issue more than the
+# requested LIMIT K/V reads, even though an index join batches 100
+# rows at a time -- the limit should be enforced by the scan.  We are
+# reading from the end (ORDER BY k DESC) so we should see 20 values
+# from 030 to 011 (thus not 001-010).
+
+query T
+SELECT regexp_replace(message, '\d\d\d\d\d+', '...PK...')
+  FROM [SHOW KV TRACE FOR SESSION]
+ WHERE message LIKE 'fetched:%'
+----
+fetched: /test2/test2_k_key/'030' -> /...PK...
+fetched: /test2/test2_k_key/'029' -> /...PK...
+fetched: /test2/test2_k_key/'028' -> /...PK...
+fetched: /test2/test2_k_key/'027' -> /...PK...
+fetched: /test2/test2_k_key/'026' -> /...PK...
+fetched: /test2/test2_k_key/'025' -> /...PK...
+fetched: /test2/test2_k_key/'024' -> /...PK...
+fetched: /test2/test2_k_key/'023' -> /...PK...
+fetched: /test2/test2_k_key/'022' -> /...PK...
+fetched: /test2/test2_k_key/'021' -> /...PK...
+fetched: /test2/test2_k_key/'020' -> /...PK...
+fetched: /test2/test2_k_key/'019' -> /...PK...
+fetched: /test2/test2_k_key/'018' -> /...PK...
+fetched: /test2/test2_k_key/'017' -> /...PK...
+fetched: /test2/test2_k_key/'016' -> /...PK...
+fetched: /test2/test2_k_key/'015' -> /...PK...
+fetched: /test2/test2_k_key/'014' -> /...PK...
+fetched: /test2/test2_k_key/'013' -> /...PK...
+fetched: /test2/test2_k_key/'012' -> /...PK...
+fetched: /test2/test2_k_key/'011' -> /...PK...
+fetched: /test2/primary/...PK.../k/v -> /'030'/42
+fetched: /test2/primary/...PK.../k/v -> /'029'/42
+fetched: /test2/primary/...PK.../k/v -> /'028'/42
+fetched: /test2/primary/...PK.../k/v -> /'027'/42
+fetched: /test2/primary/...PK.../k/v -> /'026'/42
+fetched: /test2/primary/...PK.../k/v -> /'025'/42
+fetched: /test2/primary/...PK.../k/v -> /'024'/42
+fetched: /test2/primary/...PK.../k/v -> /'023'/42
+fetched: /test2/primary/...PK.../k/v -> /'022'/42
+fetched: /test2/primary/...PK.../k/v -> /'021'/42
+fetched: /test2/primary/...PK.../k/v -> /'020'/42
+fetched: /test2/primary/...PK.../k/v -> /'019'/42
+fetched: /test2/primary/...PK.../k/v -> /'018'/42
+fetched: /test2/primary/...PK.../k/v -> /'017'/42
+fetched: /test2/primary/...PK.../k/v -> /'016'/42
+fetched: /test2/primary/...PK.../k/v -> /'015'/42
+fetched: /test2/primary/...PK.../k/v -> /'014'/42
+fetched: /test2/primary/...PK.../k/v -> /'013'/42
+fetched: /test2/primary/...PK.../k/v -> /'012'/42
+fetched: /test2/primary/...PK.../k/v -> /'011'/42

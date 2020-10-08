@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tests_test
 
@@ -27,8 +23,10 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -79,8 +77,6 @@ type mtClient struct {
 //   https://github.com/jepsen-io/jepsen/blob/master/cockroachdb/src/jepsen/cockroach/monotonic.clj
 func TestMonotonicInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := log.Scope(t)
-	defer s.Close(t)
 
 	for _, distSQLMode := range []sessiondata.DistSQLExecMode{
 		sessiondata.DistSQLOff, sessiondata.DistSQLOn,
@@ -93,10 +89,9 @@ func TestMonotonicInserts(t *testing.T) {
 
 func testMonotonicInserts(t *testing.T, distSQLMode sessiondata.DistSQLExecMode) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
+	skip.UnderShort(t)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(
 		t, 3,
@@ -111,6 +106,10 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondata.DistSQLExecMode)
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
 		sql.DistSQLClusterExecMode.Override(&st.SV, int64(distSQLMode))
+		// Let transactions push immediately to detect deadlocks. The test creates a
+		// large amount of contention and dependency cycles, and could take a long
+		// time to complete without this.
+		concurrency.LockTableDeadlockDetectionPushDelay.Override(&st.SV, 0)
 	}
 
 	var clients []mtClient
@@ -132,7 +131,7 @@ INSERT INTO mono.mono VALUES(-1, '0', -1, -1)`); err != nil {
 	invoke := func(client mtClient) {
 		logPrefix := fmt.Sprintf("%03d.%03d: ", atomic.AddUint64(&idGen, 1), client.ID)
 		l := func(msg string, args ...interface{}) {
-			log.Infof(ctx, logPrefix+msg, args...)
+			log.Infof(ctx, logPrefix+msg /* nolint:fmtsafe */, args...)
 		}
 		l("begin")
 		defer l("done")

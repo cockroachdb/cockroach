@@ -1,7 +1,9 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # Test that pg_catalog tables are accessible without qualifying table/view
 # names.
+
+query TTTTI
+SHOW TABLES
+----
 
 # There's no table with default values in the default test database.
 query I
@@ -60,7 +62,7 @@ SELECT count(*) FROM words
 query I
 SELECT count(DISTINCT(1)) FROM pg_attrdef
 ----
-0
+1
 
 query I
 SELECT count(DISTINCT(1)) FROM pg_attribute
@@ -100,7 +102,7 @@ SELECT count(*) FROM words
 query I
 SELECT count(DISTINCT(1)) FROM pg_attrdef
 ----
-0
+1
 
 query I
 SELECT count(DISTINCT(1)) FROM pg_attribute
@@ -150,7 +152,7 @@ SET search_path = nonexistent, public
 query T
 SELECT current_schemas(false)
 ----
-{"public"}
+{public}
 
 # Test that object creation targets the first valid entry in
 # search_path, not just the first entry.

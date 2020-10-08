@@ -55,7 +55,7 @@
 					<key>begin</key>
 					<string>(?x) # Enable free spacing mode
 							^(define)
-							\s*([[:alpha:]][[:alnum:]]*)
+							\s*((?:_|[[:alpha:]])(?:_|[[:alnum:]])*)
 							\s*\{</string>
 					<key>captures</key>
 					<dict>
@@ -77,6 +77,10 @@
 					<key>patterns</key>
 					<array>
 						<dict>
+							<key>include</key>
+							<string>#comment</string>
+						</dict>
+						<dict>
 							<key>captures</key>
 							<dict>
 								<key>2</key>
@@ -87,8 +91,8 @@
 							</dict>
 							<key>match</key>
 							<string>(?x) # Enable free spacing mode
-									\s*([[:alpha:]][[:alnum:]]*)
-									\s*([[:alpha:]][[:alnum:]]*)</string>
+									\s*((?:_|[[:alpha:]])(?:_|[[:alnum:]])*)
+									\s*((?:_|[[:alpha:]])(?:_|[[:alnum:]])*)</string>
 							<key>name</key>
 							<string>meta.define.field.optgen</string>
 						</dict>
@@ -103,85 +107,159 @@
 				<dict>
 					<key>match</key>
 					<string>(?x)\b( # Enable free spacing mode
-						Subquery | 
-						Variable | 
-						Const | 
-						Placeholder | 
-						List | 
-						OrderedList | 
-						Filters | 
-						Projections | 
-						Exists | 
-						And | 
-						Or | 
-						Not | 
-						Eq | 
-						Lt | 
-						Gt | 
-						Le | 
-						Ge | 
-						Ne | 
-						In | 
-						NotIn | 
-						Like | 
-						NotLike | 
-						ILike | 
-						NotILike | 
-						SimilarTo | 
-						NotSimilarTo | 
-						RegMatch | 
-						NotRegMatch | 
-						RegIMatch | 
-						NotRegIMatch | 
-						IsDistinctFrom | 
-						IsNotDistinctFrom | 
-						Is | 
-						IsNot | 
-						Any | 
-						Some | 
-						All | 
-						Bitand | 
-						Bitor | 
-						Bitxor | 
-						Plus | 
-						Minus | 
-						Mult | 
-						Div | 
-						FloorDiv | 
-						Mod | 
-						Pow | 
-						Concat | 
-						LShift | 
-						RShift | 
-						UnaryPlus | 
-						UnaryMinus | 
-						UnaryComplement | 
-						Function | 
-						True | 
-						False | 
-						Scan | 
-						Values | 
-						Select | 
-						Project | 
-						InnerJoin | 
-						LeftJoin | 
-						RightJoin | 
-						FullJoin | 
-						SemiJoin | 
-						AntiJoin | 
-						InnerJoinApply | 
-						LeftJoinApply | 
-						RightJoinApply | 
-						FullJoinApply | 
-						SemiJoinApply | 
-						AntiJoinApply | 
-						GroupBy | 
-						Union | 
-						Intersect | 
-						Except | 
-						Sort | 
-						Arrange |
-						OpName)\b</string>
+                        Subquery |
+                        SubqueryPrivate |
+                        Any |
+                        Exists |
+                        Variable |
+                        Const |
+                        Null |
+                        True |
+                        False |
+                        Placeholder |
+                        Tuple |
+                        Projections |
+                        ColPrivate |
+                        Aggregations |
+                        AggregationsItem |
+                        Filters |
+                        FiltersItem |
+                        Zip |
+                        ZipItem |
+                        ZipItemPrivate |
+                        And |
+                        Or |
+                        Not |
+                        Eq |
+                        Lt |
+                        Gt |
+                        Le |
+                        Ge |
+                        Ne |
+                        In |
+                        NotIn |
+                        Like |
+                        NotLike |
+                        ILike |
+                        NotILike |
+                        SimilarTo |
+                        NotSimilarTo |
+                        RegMatch |
+                        NotRegMatch |
+                        RegIMatch |
+                        NotRegIMatch |
+                        Is |
+                        IsNot |
+                        Contains |
+                        JsonExists |
+                        JsonAllExists |
+                        JsonSomeExists |
+                        AnyScalar |
+                        Bitand |
+                        Bitor |
+                        Bitxor |
+                        Plus |
+                        Minus |
+                        Mult |
+                        Div |
+                        FloorDiv |
+                        Mod |
+                        Pow |
+                        Concat |
+                        LShift |
+                        RShift |
+                        FetchVal |
+                        FetchText |
+                        FetchValPath |
+                        FetchTextPath |
+                        UnaryMinus |
+                        UnaryComplement |
+                        Cast |
+                        Case |
+                        When |
+                        Array |
+                        Indirection |
+                        Function |
+                        FunctionPrivate |
+                        Coalesce |
+                        ColumnAccess |
+                        UnsupportedExpr |
+                        Avg |
+                        BoolAnd |
+                        BoolOr |
+                        ConcatAgg |
+                        Count |
+                        CountRows |
+                        Max |
+                        Min |
+                        SumInt |
+                        Sum |
+                        SqrDiff |
+                        Variance |
+                        StdDev |
+                        XorAgg |
+                        JsonAgg |
+                        JsonbAgg |
+                        ConstAgg |
+                        ConstNotNullAgg |
+                        AnyNotNullAgg |
+                        FirstAgg |
+                        AggDistinct |
+                        ScalarList |
+                        Scan |
+                        ScanPrivate |
+                        VirtualScan |
+                        VirtualScanPrivate |
+                        Values |
+                        Select |
+                        Project |
+                        InnerJoin |
+                        LeftJoin |
+                        RightJoin |
+                        FullJoin |
+                        SemiJoin |
+                        AntiJoin |
+                        IndexJoin |
+                        IndexJoinPrivate |
+                        LookupJoin |
+                        LookupJoinPrivate |
+                        MergeJoin |
+                        MergeJoinPrivate |
+                        InnerJoinApply |
+                        LeftJoinApply |
+                        SemiJoinApply |
+                        AntiJoinApply |
+                        GroupBy |
+                        GroupingPrivate |
+                        ScalarGroupBy |
+                        DistinctOn |
+                        EnsureDistinctOn |
+                        UpsertDistinctOn |
+                        EnsureUpsertDistinctOn |
+                        Union |
+                        SetPrivate |
+                        Intersect |
+                        Except |
+                        UnionAll |
+                        IntersectAll |
+                        ExceptAll |
+                        Limit |
+                        Offset |
+                        Max1Row |
+                        Explain |
+                        ExplainPrivate |
+                        ShowTraceForSession |
+                        ShowTracePrivate |
+                        RowNumber |
+                        RowNumberPrivate |
+                        ProjectSet |
+                        Sort |
+                        Insert |
+                        Update |
+                        Upsert |
+                        Delete |
+                        CreateTable |
+                        OpName)\b</string>
 					<key>name</key>
 					<string>keyword.other.optgen</string>
 				</dict>
@@ -237,7 +315,7 @@
 							<array>
 								<dict>
 									<key>match</key>
-									<string>[[:alpha:]][[:alnum:]]*</string>
+									<string>(?:_|[[:alpha:]])(?:_|[[:alnum:]])*</string>
 									<key>name</key>
 									<string>entity.name.tag</string>
 								</dict>
@@ -257,7 +335,7 @@
 			<array>
 				<dict>
 					<key>match</key>
-					<string>[[:alpha:]][[:alnum:]]*</string>
+					<string>(?:_|[[:alpha:]])(?:_|[[:alnum:]])*</string>
 					<key>name</key>
 					<string>entity.name.function.optgen</string>
 				</dict>
@@ -269,7 +347,7 @@
 			<array>
 				<dict>
 					<key>match</key>
-					<string>\$[[:alpha:]][[:alnum:]]*</string>
+					<string>\$(?:_|[[:alpha:]])(?:_|[[:alnum:]])*</string>
 					<key>name</key>
 					<string>variable.other.optgen</string>
 				</dict>

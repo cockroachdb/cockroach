@@ -1,0 +1,16 @@
+{
+  "name": "@cockroachlabs/crdb-protobuf-client",
+  "version": "0.0.0",
+  "description": "Javascript client for use by CockroachDB UI",
+  "main": "./protos.js",
+  "types": "./protos.d.ts",
+  "license": "SEE LICENSE IN github.com/cockroachdb/cockroach/LICENSE",
+  "files": [
+    "protos.d.ts",
+    "protos.js"
+  ],
+  "peerDependencies": {
+    "protobufjs": "^6.8.8",
+    "typescript": "^3.7.5"
+  }
+}

@@ -1,0 +1,246 @@
+eval
+power(0::decimal, -1)
+----
+Infinity
+
+# Infinities
+
+eval
+'Infinity'::float
+----
++Inf
+
+eval
+'+Infinity'::float
+----
++Inf
+
+eval
+'-Infinity'::float
+----
+-Inf
+
+eval
+'Inf'::float
+----
++Inf
+
+eval
+'+Inf'::float
+----
++Inf
+
+eval
+'-Inf'::float
+----
+-Inf
+
+eval
+'Inf'::float(4)
+----
++Inf
+
+eval
+'-Inf'::real
+----
+-Inf
+
+eval
+'+Infinity'::double precision
+----
++Inf
+
+eval
+'+Inf'::float < 1.0
+----
+false
+
+eval
+'+Inf'::float <= 1.0
+----
+false
+
+eval
+'+Inf'::float = 1.0
+----
+false
+
+eval
+'+Inf'::float > 1.0
+----
+true
+
+eval
+'+Inf'::float >= 1.0
+----
+true
+
+eval
+'-Inf'::float < 1.0
+----
+true
+
+eval
+'-Inf'::float <= 1.0
+----
+true
+
+eval
+'-Inf'::float = 1.0
+----
+false
+
+eval
+'-Inf'::float > 1.0
+----
+false
+
+eval
+'-Inf'::float >= 1.0
+----
+false
+
+eval
+'-Inf'::float < '+Inf'::float
+----
+true
+
+eval
+'-Inf'::float <= '+Inf'::float
+----
+true
+
+eval
+'-Inf'::float = '+Inf'::float
+----
+false
+
+eval
+'-Inf'::float > '+Inf'::float
+----
+false
+
+eval
+'-Inf'::float >= '+Inf'::float
+----
+false
+
+eval
+'Infinity'::decimal
+----
+Infinity
+
+eval
+'+Infinity'::decimal
+----
+Infinity
+
+eval
+'-Infinity'::decimal
+----
+-Infinity
+
+eval
+'Inf'::decimal
+----
+Infinity
+
+eval
+'+Inf'::decimal
+----
+Infinity
+
+eval
+'-Inf'::decimal
+----
+-Infinity
+
+eval
+'Inf'::decimal(4)
+----
+Infinity
+
+eval
+'+Inf'::decimal < 1.0
+----
+false
+
+eval
+'+Inf'::decimal <= 1.0
+----
+false
+
+eval
+'+Inf'::decimal = 1.0
+----
+false
+
+eval
+'+Inf'::decimal > 1.0
+----
+true
+
+eval
+'+Inf'::decimal >= 1.0
+----
+true
+
+eval
+'-Inf'::decimal < 1.0
+----
+true
+
+eval
+'-Inf'::decimal <= 1.0
+----
+true
+
+eval
+'-Inf'::decimal = 1.0
+----
+false
+
+eval
+'-Inf'::decimal > 1.0
+----
+false
+
+eval
+'-Inf'::decimal >= 1.0
+----
+false
+
+eval
+'-Inf'::decimal < '+Inf'::decimal
+----
+true
+
+eval
+'-Inf'::decimal <= '+Inf'::decimal
+----
+true
+
+eval
+'-Inf'::decimal = '+Inf'::decimal
+----
+false
+
+eval
+'-Inf'::decimal > '+Inf'::decimal
+----
+false
+
+eval
+'-Inf'::decimal >= '+Inf'::decimal
+----
+false
+
+eval
+'Inf'::decimal::float
+----
++Inf
+
+eval
+'Inf'::float::decimal
+----
+Infinity

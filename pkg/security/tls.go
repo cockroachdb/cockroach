@@ -1,27 +1,20 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package security
-
-// TODO(jqmp): The use of TLS here is just a proof of concept; its security
-// properties haven't been analyzed or audited.
 
 import (
 	"crypto/tls"
 	"crypto/x509"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // EmbeddedCertsDir is the certs directory inside embedded assets.
@@ -30,6 +23,10 @@ const (
 	EmbeddedCertsDir     = "test_certs"
 	EmbeddedCACert       = "ca.crt"
 	EmbeddedCAKey        = "ca.key"
+	EmbeddedClientCACert = "ca-client.crt"
+	EmbeddedClientCAKey  = "ca-client.key"
+	EmbeddedUICACert     = "ca-ui.crt"
+	EmbeddedUICAKey      = "ca-ui.key"
 	EmbeddedNodeCert     = "node.crt"
 	EmbeddedNodeKey      = "node.key"
 	EmbeddedRootCert     = "client.root.crt"
@@ -38,39 +35,43 @@ const (
 	EmbeddedTestUserKey  = "client.testuser.key"
 )
 
-// LoadServerTLSConfig creates a server TLSConfig by loading the CA and server certs.
-// The following paths must be passed:
-// - sslCA: path to the CA certificate
-// - sslCert: path to the server certificate
-// - sslCertKey: path to the server key
-// If the path is prefixed with "embedded=", load the embedded certs.
-func LoadServerTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
-	certPEM, err := assetLoaderImpl.ReadFile(sslCert)
-	if err != nil {
-		return nil, err
-	}
-	keyPEM, err := assetLoaderImpl.ReadFile(sslCertKey)
-	if err != nil {
-		return nil, err
-	}
-	caPEM, err := assetLoaderImpl.ReadFile(sslCA)
-	if err != nil {
-		return nil, err
-	}
-	return newServerTLSConfig(certPEM, keyPEM, caPEM)
-}
+// EmbeddedTenantIDs lists the tenants we embed certs for.
+// See 'securitytest/test_certs/regenerate.sh'.
+var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
+
+// Embedded certificates specific to multi-tenancy testing.
+const (
+	EmbeddedTenantClientCACert = "ca-client-tenant.crt" // CA for client connections
+	EmbeddedTenantClientCAKey  = "ca-client-tenant.key" // CA for client connections
+)
 
 // newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
 // - the certificate of this node (should be signed by the CA),
 // - the private key of this node.
-// - the certificate of the cluster CA,
-func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
-	cfg, err := newBaseTLSConfig(certPEM, keyPEM, caPEM)
+// - the certificate of the cluster CA, used to verify other server certificates
+// - the certificate of the client CA, used to verify client certificates
+//
+// caPEM and caClientPEMs can be equal to caPEM (shared CA) or nil (use system CA
+// pool).
+func newServerTLSConfig(
+	settings TLSSettings, certPEM, keyPEM, caPEM []byte, caClientPEMs ...[]byte,
+) (*tls.Config, error) {
+	cfg, err := newBaseTLSConfigWithCertificate(settings, certPEM, keyPEM, caPEM)
 	if err != nil {
 		return nil, err
 	}
 	cfg.ClientAuth = tls.VerifyClientCertIfGiven
-	cfg.ClientCAs = cfg.RootCAs
+
+	if len(caClientPEMs) != 0 {
+		certPool := x509.NewCertPool()
+		for _, pem := range caClientPEMs {
+			if !certPool.AppendCertsFromPEM(pem) {
+				return nil, errors.Errorf("failed to parse client CA PEM data to pool")
+			}
+		}
+		cfg.ClientCAs = certPool
+	}
+
 	// Use the default cipher suite from golang (RC4 is going away in 1.5).
 	// Prefer the server-specified suite.
 	cfg.PreferServerCipherSuites = true
@@ -79,54 +80,73 @@ func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs.
-// The following paths must be passed:
-// - sslCA: path to the CA certificate
-// - sslCert: path to the client certificate
-// - sslCertKey: path to the client key
-// If the path is prefixed with "embedded=", load the embedded certs.
-func LoadClientTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
-	certPEM, err := assetLoaderImpl.ReadFile(sslCert)
-	if err != nil {
-		return nil, err
-	}
-	keyPEM, err := assetLoaderImpl.ReadFile(sslCertKey)
-	if err != nil {
-		return nil, err
-	}
-	caPEM, err := assetLoaderImpl.ReadFile(sslCA)
+// newUIServerTLSConfig creates a server TLSConfig for the Admin UI. It does not
+// use client authentication or a CA.
+// It needs:
+// - the server certificate (should be signed by the CA used by HTTP clients to the admin UI)
+// - the private key for the certificate
+func newUIServerTLSConfig(settings TLSSettings, certPEM, keyPEM []byte) (*tls.Config, error) {
+	cfg, err := newBaseTLSConfigWithCertificate(settings, certPEM, keyPEM, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return newClientTLSConfig(certPEM, keyPEM, caPEM)
+	// Use the default cipher suite from golang (RC4 is going away in 1.5).
+	// Prefer the server-specified suite.
+	cfg.PreferServerCipherSuites = true
+	// Should we disable session resumption? This may break forward secrecy.
+	// cfg.SessionTicketsDisabled = true
+	return cfg, nil
 }
 
 // newClientTLSConfig creates a client TLSConfig from the supplied byte strings containing:
 // - the certificate of this client (should be signed by the CA),
 // - the private key of this client.
-// - the certificate of the cluster CA,
-func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
-	return newBaseTLSConfig(certPEM, keyPEM, caPEM)
+// - the certificate of the cluster CA (use system cert pool if nil)
+func newClientTLSConfig(settings TLSSettings, certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+	return newBaseTLSConfigWithCertificate(settings, certPEM, keyPEM, caPEM)
 }
 
-// newBaseTLSConfig returns a tls.Config initialized with the
-// parameters that are common to clients and servers.
-func newBaseTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+// newUIClientTLSConfig creates a client TLSConfig to talk to the Admin UI.
+// It does not include client certificates and takes an optional CA certificate.
+func newUIClientTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
+	return newBaseTLSConfig(settings, caPEM)
+}
+
+// newBaseTLSConfigWithCertificate returns a tls.Config initialized with the
+// passed-in certificate and optional CA certificate.
+func newBaseTLSConfigWithCertificate(
+	settings TLSSettings, certPEM, keyPEM, caPEM []byte,
+) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
 	}
 
-	certPool := x509.NewCertPool()
+	cfg, err := newBaseTLSConfig(settings, caPEM)
+	if err != nil {
+		return nil, err
+	}
 
-	if !certPool.AppendCertsFromPEM(caPEM) {
-		return nil, errors.Errorf("failed to parse PEM data to pool")
+	cfg.Certificates = []tls.Certificate{cert}
+	return cfg, nil
+}
+
+// newBaseTLSConfig returns a tls.Config. If caPEM != nil, it is set in RootCAs.
+func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
+	var certPool *x509.CertPool
+	if caPEM != nil {
+		certPool = x509.NewCertPool()
+
+		if !certPool.AppendCertsFromPEM(caPEM) {
+			return nil, errors.Errorf("failed to parse PEM data to pool")
+		}
 	}
 
 	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      certPool,
+		RootCAs: certPool,
+
+		VerifyPeerCertificate: makeOCSPVerifier(settings),
 
 		// This is Go's default list of cipher suites (as of go 1.8.3),
 		// with the following differences:

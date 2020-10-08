@@ -1,13 +1,43 @@
-/* Copyright 2017 The Cockroach Authors.
- *
- * Licensed under the Cockroach Community Licence (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
- */
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+@require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
+
+$node-switcher-height = 48px
 
 .geopath
-  fill #fff
-  stroke #ededed
+  fill white
+  stroke $table-border-color
   stroke-width .5px
+
+.cluster-visualization-layout
+  width 100%
+  height 100%
+  display flex
+  flex-direction column
+  overflow hidden
+  background-color white
+  &--show-license
+    height unset
+  &__content
+    display flex
+    flex-direction row
+    justify-content space-between
+    background-color $colors--white
+    height $node-switcher-height
+    z-index 5
+    padding $spacing-xx-small $spacing-smaller $spacing-xx-small $spacing-small
+    border 1px solid rgb(237, 237, 237)
+    border-bottom none
+    box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
+    border-radius 3px
+  &__content-item
+    align-self center
+  &__content-item--show-license
+    display none

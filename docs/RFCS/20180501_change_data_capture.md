@@ -116,12 +116,11 @@ CREATE CHANGEFEED <name> FOR DATABASE db INTO <...>
     specified as the host and port.
     - `?kafka_topic_prefix=<...>` A string to prepend to the topic names used by
       this changefeed.
-    - `?kafka_schema_topic=<...>` A Kafka topic to emit all schema changes to.
+    - `?schema_topic=<...>` A Kafka topic to emit all schema changes to.
     - `?confluent_schema_registry=<address>` The address of a schema registry
       instance. Only allowed with the avro format. When unspecified, no schema
       registry is used.
-  - `experimental_table:///` A [SQL table sink] in the same CockroachDB cluster.
-    - TODO options
+  - `experimental-sql:///` A [SQL table sink] in the same CockroachDB cluster.
 - `WITH <...>`
   - `WITH envelope=<...>` Records have a key and a value. The key is always set
     to the primary key of the changed row and the value’s contents are
@@ -142,7 +141,7 @@ CREATE CHANGEFEED <name> FOR DATABASE db INTO <...>
     - `format='avro'` The record key is an [Avro] array, serialized in the
       binary format. The record value is an Avro record, mapping column names to
       column values, serialized in the binary format.
-  - `WITH cursor=<timestamp>` can be used to set the initial highwater mark. If
+  - `WITH cursor=<timestamp>` can be used to set the initial high-water mark. If
     this option is used, the changefeed will emit any changes after the given
     timestamp and no initial scan.
 
@@ -169,7 +168,7 @@ to `PAUSE CHANGEFEED` and `RESUME CHANGEFEED` as necessary.
 options.
 
 `ALTER CHANGEFEED <name> SET cursor=<timestamp>` can be used to manually adjust
-the highwater mark forward or back. When resumed, the changefeed will emit any
+the high-water mark forward or back. When resumed, the changefeed will emit any
 changes after the given timestamp, but will not emit the initial catch-up. To do
 this, the changefeed must be cancelled and replaced with a new one.
 

@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import _ from "lodash";
 import React from "react";
 
@@ -19,6 +29,10 @@ export default class LeaseTable extends React.Component<LeaseTableProps, {}> {
   }
 
   renderLeaseTimestampCell(timestamp: protos.cockroach.util.hlc.ITimestamp) {
+    if (_.isNil(timestamp)) {
+      return this.renderLeaseCell("<no value>");
+    }
+
     const value = Print.Timestamp(timestamp);
     return this.renderLeaseCell(value, `${value}\n${timestamp.wall_time.toString()}`);
   }
@@ -29,7 +43,7 @@ export default class LeaseTable extends React.Component<LeaseTableProps, {}> {
     // leader?
     const rangeID = info.state.state.desc.range_id;
     const header = (
-      <h2>
+      <h2 className="base-heading">
         Lease History (from {Print.ReplicaID(rangeID, RangeInfo.GetLocalReplica(info))})
       </h2>
     );

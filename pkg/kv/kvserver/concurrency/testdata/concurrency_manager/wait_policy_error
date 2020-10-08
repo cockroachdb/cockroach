@@ -1,0 +1,269 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=11,1 epoch=0
+----
+
+new-txn name=txn3 ts=11,1 epoch=0
+----
+
+new-txn name=txnNoWait ts=12,1 epoch=0
+----
+
+# -------------------------------------------------------------
+# Prep: Txn 1 acquire locks at key k and key k2
+#       Txn 2 acquire locks at key k3
+#       Txn 3 begins waiting in k2's wait-queue
+# -------------------------------------------------------------
+
+new-request name=req1 txn=txn1 ts=10,0
+  put key=k  value=v
+  put key=k2 value=v2
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 @ k
+
+on-lock-acquired req=req1 key=k2
+----
+[-] acquire lock: txn 00000001 @ k2
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn2 ts=11,0
+  put key=k3 value=v
+----
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired req=req2 key=k3
+----
+[-] acquire lock: txn 00000002 @ k3
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+new-request name=req3 txn=txn3 ts=11,0
+  put key=k2 value=v
+  put key=k3 value=v
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: waiting in lock wait-queues
+[3] sequence req3: pushing txn 00000001 to abort
+[3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=3
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k2"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+   distinguished req: 3
+ lock: "k3"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Read-only request with WaitPolicy_Error hits lock. The request
+# raises an error.
+# -------------------------------------------------------------
+
+new-request name=reqNoWait1 txn=txnNoWait ts=12,0 wait-policy=error
+  get key=k
+----
+
+sequence req=reqNoWait1
+----
+[4] sequence reqNoWait1: sequencing request
+[4] sequence reqNoWait1: acquiring latches
+[4] sequence reqNoWait1: scanning lock table for conflicting locks
+[4] sequence reqNoWait1: waiting in lock wait-queues
+[4] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
+[4] sequence reqNoWait1: pushee not abandoned
+[4] sequence reqNoWait1: sequencing complete, returned error: conflicting intents on "k"
+
+# -------------------------------------------------------------
+# Read-only request with WaitPolicy_Error hits abandoned lock.
+# The request resolves the abandoned lock and proceeds.
+# -------------------------------------------------------------
+
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[3] sequence req3: resolving intent "k2" for txn 00000001 with COMMITTED status
+[3] sequence req3: pushing txn 00000002 to abort
+[3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=reqNoWait1
+----
+[5] sequence reqNoWait1: sequencing request
+[5] sequence reqNoWait1: acquiring latches
+[5] sequence reqNoWait1: scanning lock table for conflicting locks
+[5] sequence reqNoWait1: waiting in lock wait-queues
+[5] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
+[5] sequence reqNoWait1: resolving intent "k" for txn 00000001 with COMMITTED status
+[5] sequence reqNoWait1: acquiring latches
+[5] sequence reqNoWait1: scanning lock table for conflicting locks
+[5] sequence reqNoWait1: sequencing complete, returned guard
+
+finish req=reqNoWait1
+----
+[-] finish reqNoWait1: finishing request
+
+debug-lock-table
+----
+global: num=2
+ lock: "k2"
+  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000011,0, seq: 0
+ lock: "k3"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+   distinguished req: 3
+local: num=0
+
+# -------------------------------------------------------------
+# Read-write request with WaitPolicy_Error hits reservation
+# holder. The request immediately raises an error instead of
+# waiting for the reservation holder.
+# -------------------------------------------------------------
+
+new-request name=reqNoWait2 txn=txnNoWait ts=12,0 wait-policy=error
+  put key=k2 value=v4
+----
+
+sequence req=reqNoWait2
+----
+[6] sequence reqNoWait2: sequencing request
+[6] sequence reqNoWait2: acquiring latches
+[6] sequence reqNoWait2: scanning lock table for conflicting locks
+[6] sequence reqNoWait2: waiting in lock wait-queues
+[6] sequence reqNoWait2: sequencing complete, returned error: conflicting intents on "k2"
+
+# -------------------------------------------------------------
+# Read-only request with WaitPolicy_Error discovers lock. The
+# request raises an error.
+# -------------------------------------------------------------
+
+new-request name=reqNoWait3 txn=txnNoWait ts=12,0 wait-policy=error
+  get key=k4
+----
+
+sequence req=reqNoWait3
+----
+[7] sequence reqNoWait3: sequencing request
+[7] sequence reqNoWait3: acquiring latches
+[7] sequence reqNoWait3: scanning lock table for conflicting locks
+[7] sequence reqNoWait3: sequencing complete, returned guard
+
+handle-write-intent-error req=reqNoWait3 lease-seq=1
+  intent txn=txn2 key=k4
+----
+[8] handle write intent error reqNoWait3: handled conflicting intents on "k4", released latches
+
+sequence req=reqNoWait3
+----
+[9] sequence reqNoWait3: re-sequencing request
+[9] sequence reqNoWait3: acquiring latches
+[9] sequence reqNoWait3: scanning lock table for conflicting locks
+[9] sequence reqNoWait3: waiting in lock wait-queues
+[9] sequence reqNoWait3: pushing txn 00000002 to check if abandoned
+[9] sequence reqNoWait3: pushee not abandoned
+[9] sequence reqNoWait3: sequencing complete, returned error: conflicting intents on "k4"
+
+debug-lock-table
+----
+global: num=3
+ lock: "k2"
+  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000011,0, seq: 0
+ lock: "k3"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+   distinguished req: 3
+ lock: "k4"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Read-only request with WaitPolicy_Error discovers abandoned
+# lock. The request resolves the abandoned lock and proceeds.
+# -------------------------------------------------------------
+
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+[3] sequence req3: resolving intent "k3" for txn 00000002 with ABORTED status
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+new-request name=reqNoWait4 txn=txnNoWait ts=12,0 wait-policy=error
+  get key=k5
+----
+
+sequence req=reqNoWait4
+----
+[10] sequence reqNoWait4: sequencing request
+[10] sequence reqNoWait4: acquiring latches
+[10] sequence reqNoWait4: scanning lock table for conflicting locks
+[10] sequence reqNoWait4: sequencing complete, returned guard
+
+handle-write-intent-error req=reqNoWait4 lease-seq=1
+  intent txn=txn2 key=k5
+----
+[11] handle write intent error reqNoWait4: handled conflicting intents on "k5", released latches
+
+sequence req=reqNoWait4
+----
+[12] sequence reqNoWait4: re-sequencing request
+[12] sequence reqNoWait4: acquiring latches
+[12] sequence reqNoWait4: scanning lock table for conflicting locks
+[12] sequence reqNoWait4: waiting in lock wait-queues
+[12] sequence reqNoWait4: pushing txn 00000002 to check if abandoned
+[12] sequence reqNoWait4: resolving intent "k5" for txn 00000002 with ABORTED status
+[12] sequence reqNoWait4: acquiring latches
+[12] sequence reqNoWait4: scanning lock table for conflicting locks
+[12] sequence reqNoWait4: sequencing complete, returned guard
+
+finish req=reqNoWait4
+----
+[-] finish reqNoWait4: finishing request
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k4"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+reset
+----

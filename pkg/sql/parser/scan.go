@@ -1,30 +1,25 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package parser
 
 import (
-	"bytes"
 	"fmt"
 	"go/constant"
 	"go/token"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -35,198 +30,68 @@ const errInvalidHexNumeric = "invalid hexadecimal numeric literal"
 const singleQuote = '\''
 const identQuote = '"'
 
-// Scanner lexes SQL statements.
-type Scanner struct {
-	in        string
-	pos       int
-	tokBuf    sqlSymType
-	lastTok   sqlSymType
-	nextTok   *sqlSymType
-	lastError *scanErr
-
-	// stmts contains the list of statements at the end of parsing.
-	stmts []tree.Statement
-
-	initialized bool
+// scanner lexes SQL statements.
+type scanner struct {
+	in            string
+	pos           int
+	bytesPrealloc []byte
 }
 
-// scanErr holds error state for a Scanner.
-type scanErr struct {
-	msg                  string
-	hint                 string
-	detail               string
-	unimplementedFeature string
-}
-
-// MakeScanner makes a Scanner from str.
-func MakeScanner(str string) Scanner {
-	var s Scanner
+func makeScanner(str string) scanner {
+	var s scanner
 	s.init(str)
 	return s
 }
 
-func (s *Scanner) init(str string) {
-	if s.initialized {
-		panic("scanner already initialized; a scanner cannot be reused.")
-	}
-	s.initialized = true
+func (s *scanner) init(str string) {
 	s.in = str
+	s.pos = 0
+	// Preallocate some buffer space for identifiers etc.
+	s.bytesPrealloc = make([]byte, len(str))
 }
 
-// Tokens calls f on all tokens of the input until an EOF is encountered.
-func (s *Scanner) Tokens(f func(token int)) {
-	for {
-		t := s.Lex(&s.tokBuf)
-		if t == 0 {
-			return
-		}
-		f(t)
+// cleanup is used to avoid holding on to memory unnecessarily (for the cases
+// where we reuse a scanner).
+func (s *scanner) cleanup() {
+	s.bytesPrealloc = nil
+}
+
+func (s *scanner) allocBytes(length int) []byte {
+	if len(s.bytesPrealloc) >= length {
+		res := s.bytesPrealloc[:length:length]
+		s.bytesPrealloc = s.bytesPrealloc[length:]
+		return res
+	}
+	return make([]byte, length)
+}
+
+// buffer returns an empty []byte buffer that can be appended to. Any unused
+// portion can be returned later using returnBuffer.
+func (s *scanner) buffer() []byte {
+	buf := s.bytesPrealloc[:0]
+	s.bytesPrealloc = nil
+	return buf
+}
+
+// returnBuffer returns the unused portion of buf to the scanner, to be used for
+// future allocBytes() or buffer() calls. The caller must not use buf again.
+func (s *scanner) returnBuffer(buf []byte) {
+	if len(buf) < cap(buf) {
+		s.bytesPrealloc = buf[len(buf):]
 	}
 }
 
-// Until returns the position of token or 0 if it is not found.
-func (s *Scanner) Until(token int) int {
-	var t int
-	for {
-		t = s.Lex(&s.tokBuf)
-		switch t {
-		case 0:
-			return 0
-		case token:
-			return s.pos
-		}
-	}
+// finishString casts the given buffer to a string and returns the unused
+// portion of the buffer. The caller must not use buf again.
+func (s *scanner) finishString(buf []byte) string {
+	str := *(*string)(unsafe.Pointer(&buf))
+	s.returnBuffer(buf)
+	return str
 }
 
-// Lex lexes a token from input.
-func (s *Scanner) Lex(lval *sqlSymType) int {
-	// The core lexing takes place in scan(). Here we do a small bit of post
-	// processing of the lexical tokens so that the grammar only requires
-	// one-token lookahead despite SQL requiring multi-token lookahead in some
-	// cases. These special cases are handled below and the returned tokens are
-	// adjusted to reflect the lookahead (LA) that occurred.
-
-	if s.nextTok != nil {
-		*lval = *s.nextTok
-		s.nextTok = nil
-	} else {
-		s.scan(lval)
-	}
-
-	switch lval.id {
-	case NOT, NULLS, WITH, AS:
-	default:
-		s.lastTok = *lval
-		return lval.id
-	}
-
-	s.nextTok = &s.tokBuf
-	s.scan(s.nextTok)
-
-	// If you update these cases, update lookaheadKeywords below.
-	switch lval.id {
-	case AS:
-		switch s.nextTok.id {
-		case OF:
-			lval.id = AS_LA
-		}
-	case NOT:
-		switch s.nextTok.id {
-		case BETWEEN, IN, LIKE, ILIKE, SIMILAR:
-			lval.id = NOT_LA
-		}
-
-	case WITH:
-		switch s.nextTok.id {
-		case TIME, ORDINALITY:
-			lval.id = WITH_LA
-		}
-	}
-
-	s.lastTok = *lval
-	return lval.id
-}
-
-func (s *Scanner) initLastErr() {
-	if s.lastError == nil {
-		s.lastError = new(scanErr)
-	}
-}
-
-// Unimplemented wraps Error, setting lastUnimplementedError.
-func (s *Scanner) Unimplemented(feature string) {
-	s.Error("unimplemented")
-	s.lastError.unimplementedFeature = feature
-}
-
-// UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
-func (s *Scanner) UnimplementedWithIssue(issue int) {
-	s.Error("unimplemented")
-	s.lastError.unimplementedFeature = fmt.Sprintf("#%d", issue)
-	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
-}
-
-func (s *Scanner) Error(e string) {
-	s.initLastErr()
-	if s.lastTok.id == ERROR {
-		// This is a tokenizer (lexical) error: just emit the invalid
-		// input as error.
-		s.lastError.msg = s.lastTok.str
-	} else {
-		// This is a contextual error. Print the provided error message
-		// and the error context.
-		s.lastError.msg = fmt.Sprintf("%s at or near \"%s\"", e, s.lastTok.str)
-	}
-
-	// Find the end of the line containing the last token.
-	i := strings.IndexByte(s.in[s.lastTok.pos:], '\n')
-	if i == -1 {
-		i = len(s.in)
-	} else {
-		i += s.lastTok.pos
-	}
-	// Find the beginning of the line containing the last token. Note that
-	// LastIndexByte returns -1 if '\n' could not be found.
-	j := strings.LastIndexByte(s.in[:s.lastTok.pos], '\n') + 1
-	// Output everything up to and including the line containing the last token.
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "source SQL:\n%s\n", s.in[:i])
-	// Output a caret indicating where the last token starts.
-	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", s.lastTok.pos-j))
-	s.lastError.detail = buf.String()
-	s.lastError.unimplementedFeature = ""
-}
-
-// SetHelp marks the "last error" field in the Scanner to become a
-// help text. This method is invoked in the error action of the
-// parser, so the help text is only produced if the last token
-// encountered was HELPTOKEN -- other cases are just syntax errors,
-// and in that case we do not want the help text to overwrite the
-// lastError field, which was set earlier to contain details about the
-// syntax error.
-func (s *Scanner) SetHelp(msg HelpMessage) {
-	if s.lastTok.id == HELPTOKEN {
-		s.populateHelpMsg(msg.String())
-	} else {
-		s.initLastErr()
-		if msg.Command != "" {
-			s.lastError.hint = `try \h ` + msg.Command
-		} else {
-			s.lastError.hint = `try \hf ` + msg.Function
-		}
-	}
-}
-
-func (s *Scanner) populateHelpMsg(msg string) {
-	s.initLastErr()
-	s.lastError.unimplementedFeature = ""
-	s.lastError.msg = "help token in input"
-	s.lastError.hint = msg
-}
-
-func (s *Scanner) scan(lval *sqlSymType) {
+func (s *scanner) scan(lval *sqlSymType) {
 	lval.id = 0
-	lval.pos = s.pos
+	lval.pos = int32(s.pos)
 	lval.str = "EOF"
 
 	if _, ok := s.skipWhitespace(lval, true); !ok {
@@ -235,12 +100,12 @@ func (s *Scanner) scan(lval *sqlSymType) {
 
 	ch := s.next()
 	if ch == eof {
-		lval.pos = s.pos
+		lval.pos = int32(s.pos)
 		return
 	}
 
-	lval.id = ch
-	lval.pos = s.pos - 1
+	lval.id = int32(ch)
+	lval.pos = int32(s.pos - 1)
 	lval.str = s.in[lval.pos:s.pos]
 
 	switch ch {
@@ -248,6 +113,9 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		// placeholder? $[0-9]+
 		if lex.IsDigit(s.peek()) {
 			s.scanPlaceholder(lval)
+			return
+		} else if s.scanDollarQuotedString(lval) {
+			lval.id = SCONST
 			return
 		}
 		return
@@ -266,10 +134,10 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		}
 		return
 
-	case 'b', 'B':
+	case 'b':
 		// Bytes?
 		if s.peek() == singleQuote {
-			// [bB]'[^']'
+			// b'[^']'
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, false /* requireUTF8 */) {
 				lval.id = BCONST
@@ -291,6 +159,17 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, true /* requireUTF8 */) {
 				lval.id = SCONST
 			}
+			return
+		}
+		s.scanIdent(lval)
+		return
+
+	case 'B':
+		// Bit array literal?
+		if s.peek() == singleQuote {
+			// B'[01]*'
+			s.pos++
+			s.scanBitString(lval, singleQuote)
 			return
 		}
 		s.scanIdent(lval)
@@ -420,7 +299,17 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '|': // ||
 			s.pos++
+			switch s.peek() {
+			case '/': // ||/
+				s.pos++
+				lval.id = CBRT
+				return
+			}
 			lval.id = CONCAT
+			return
+		case '/': // |/
+			s.pos++
+			lval.id = SQRT
 			return
 		}
 		return
@@ -456,7 +345,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '&': // &&
 			s.pos++
-			lval.id = INET_CONTAINS_OR_CONTAINED_BY
+			lval.id = AND_AND
 			return
 		}
 		return
@@ -510,14 +399,14 @@ func (s *Scanner) scan(lval *sqlSymType) {
 	// lval for above.
 }
 
-func (s *Scanner) peek() int {
+func (s *scanner) peek() int {
 	if s.pos >= len(s.in) {
 		return eof
 	}
 	return int(s.in[s.pos])
 }
 
-func (s *Scanner) peekN(n int) int {
+func (s *scanner) peekN(n int) int {
 	pos := s.pos + n
 	if pos >= len(s.in) {
 		return eof
@@ -525,7 +414,7 @@ func (s *Scanner) peekN(n int) int {
 	return int(s.in[pos])
 }
 
-func (s *Scanner) next() int {
+func (s *scanner) next() int {
 	ch := s.peek()
 	if ch != eof {
 		s.pos++
@@ -533,7 +422,7 @@ func (s *Scanner) next() int {
 	return ch
 }
 
-func (s *Scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline, ok bool) {
+func (s *scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline, ok bool) {
 	newline = false
 	for {
 		ch := s.peek()
@@ -558,7 +447,7 @@ func (s *Scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline,
 	return newline, true
 }
 
-func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
+func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 	start := s.pos
 	ch := s.peek()
 
@@ -591,7 +480,7 @@ func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 
 			case eof:
 				lval.id = ERROR
-				lval.pos = start
+				lval.pos = int32(start)
 				lval.str = "unterminated comment"
 				return false, false
 			}
@@ -615,7 +504,7 @@ func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *Scanner) scanIdent(lval *sqlSymType) {
+func (s *scanner) scanIdent(lval *sqlSymType) {
 	s.pos--
 	start := s.pos
 	isASCII := true
@@ -651,26 +540,53 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 	} else if isASCII {
 		// We know that the identifier we've seen so far is ASCII, so we don't need
 		// to unicode normalize. Instead, just lowercase as normal.
-		b := make([]byte, s.pos-start)
+		b := s.allocBytes(s.pos - start)
+		_ = b[s.pos-start-1] // For bounds check elimination.
 		for i, c := range s.in[start:s.pos] {
 			if c >= 'A' && c <= 'Z' {
 				c += 'a' - 'A'
 			}
 			b[i] = byte(c)
 		}
-		lval.str = string(b)
+		lval.str = *(*string)(unsafe.Pointer(&b))
 	} else {
 		// The string has unicode in it. No choice but to run Normalize.
 		lval.str = lex.NormalizeName(s.in[start:s.pos])
 	}
-	if id, ok := lex.Keywords[lval.str]; ok {
-		lval.id = id.Tok
+
+	isExperimental := false
+	kw := lval.str
+	switch {
+	case strings.HasPrefix(lval.str, "experimental_"):
+		kw = lval.str[13:]
+		isExperimental = true
+	case strings.HasPrefix(lval.str, "testing_"):
+		kw = lval.str[8:]
+		isExperimental = true
+	}
+	lval.id = lex.GetKeywordID(kw)
+	if lval.id != lex.IDENT {
+		if isExperimental {
+			if _, ok := lex.AllowedExperimental[kw]; !ok {
+				// If the parsed token is not on the allowlisted set of keywords,
+				// then it might have been intended to be parsed as something else.
+				// In that case, re-tokenize the original string.
+				lval.id = lex.GetKeywordID(lval.str)
+			} else {
+				// It is a allowlisted keyword, so remember the shortened
+				// keyword for further processing.
+				lval.str = kw
+			}
+		}
 	} else {
-		lval.id = IDENT
+		// If the word after experimental_ or testing_ is an identifier,
+		// then we might have classified it incorrectly after removing the
+		// experimental_/testing_ prefix.
+		lval.id = lex.GetKeywordID(lval.str)
 	}
 }
 
-func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
+func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	start := s.pos - 1
 	isHex := false
 	hasDecimal := ch == '.'
@@ -678,7 +594,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 
 	for {
 		ch := s.peek()
-		if isHex && lex.IsHexDigit(ch) || lex.IsDigit(ch) {
+		if (isHex && lex.IsHexDigit(ch)) || lex.IsDigit(ch) {
 			s.pos++
 			continue
 		}
@@ -739,7 +655,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant float from literal %q", lval.str)
 			return
 		}
-		lval.union.val = &tree.NumVal{Value: floatConst, OrigString: lval.str}
+		lval.union.val = tree.NewNumVal(floatConst, lval.str, false /* negative */)
 	} else {
 		if isHex && s.pos == start+2 {
 			lval.id = ERROR
@@ -764,36 +680,31 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant int from literal %q", lval.str)
 			return
 		}
-		lval.union.val = &tree.NumVal{Value: intConst, OrigString: lval.str}
+		lval.union.val = tree.NewNumVal(intConst, lval.str, false /* negative */)
 	}
 }
 
-func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
+func (s *scanner) scanPlaceholder(lval *sqlSymType) {
 	start := s.pos
 	for lex.IsDigit(s.peek()) {
 		s.pos++
 	}
 	lval.str = s.in[start:s.pos]
 
-	uval, err := strconv.ParseUint(lval.str, 10, 64)
-	if err == nil && uval > 1<<63 {
-		err = pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "integer value out of range: %d", uval)
-	}
+	placeholder, err := tree.NewPlaceholder(lval.str)
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()
 		return
 	}
-
-	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
-	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.union.val = &tree.NumVal{Value: constant.MakeUint64(uval)}
 	lval.id = PLACEHOLDER
+	lval.union.val = placeholder
 }
 
 // scanHexString scans the content inside x'....'.
-func (s *Scanner) scanHexString(lval *sqlSymType, ch int) bool {
-	var buf []byte
+func (s *scanner) scanHexString(lval *sqlSymType, ch int) bool {
+	buf := s.buffer()
+
 	var curbyte byte
 	bytep := 0
 	const errInvalidBytesLiteral = "invalid hexadecimal bytes literal"
@@ -843,15 +754,51 @@ outer:
 	}
 
 	lval.id = BCONST
-	lval.str = string(buf)
+	lval.str = s.finishString(buf)
+	return true
+}
+
+// scanBitString scans the content inside B'....'.
+func (s *scanner) scanBitString(lval *sqlSymType, ch int) bool {
+	buf := s.buffer()
+outer:
+	for {
+		b := s.next()
+		switch b {
+		case ch:
+			newline, ok := s.skipWhitespace(lval, false)
+			if !ok {
+				return false
+			}
+			// SQL allows joining adjacent strings separated by whitespace
+			// as long as that whitespace contains at least one
+			// newline. Kind of strange to require the newline, but that
+			// is the standard.
+			if s.peek() == ch && newline {
+				s.pos++
+				continue
+			}
+			break outer
+
+		case '0', '1':
+			buf = append(buf, byte(b))
+		default:
+			lval.id = ERROR
+			lval.str = fmt.Sprintf(`"%c" is not a valid binary digit`, rune(b))
+			return false
+		}
+	}
+
+	lval.id = BITCONST
+	lval.str = s.finishString(buf)
 	return true
 }
 
 // scanString scans the content inside '...'. This is used for simple
 // string literals '...' but also e'....' and b'...'. For x'...', see
 // scanHexString().
-func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
-	var buf []byte
+func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
+	buf := s.buffer()
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
 
@@ -942,6 +889,137 @@ outer:
 		return false
 	}
 
-	lval.str = string(buf)
+	lval.str = s.finishString(buf)
 	return true
+}
+
+// scanDollarQuotedString scans for so called dollar-quoted strings, which start/end with either $$ or $tag$, where
+// tag is some arbitrary string.  e.g. $$a string$$ or $escaped$a string$escaped$.
+func (s *scanner) scanDollarQuotedString(lval *sqlSymType) bool {
+	buf := s.buffer()
+	start := s.pos
+
+	foundStartTag := false
+	possibleEndTag := false
+	startTagIndex := -1
+	var startTag string
+
+outer:
+	for {
+		ch := s.peek()
+		switch ch {
+		case '$':
+			s.pos++
+			if foundStartTag {
+				if possibleEndTag {
+					if len(startTag) == startTagIndex {
+						// Found end tag.
+						buf = append(buf, s.in[start+len(startTag)+1:s.pos-len(startTag)-2]...)
+						break outer
+					} else {
+						// Was not the end tag but the current $ might be the start of the end tag we are looking for, so
+						// just reset the startTagIndex.
+						startTagIndex = 0
+					}
+				} else {
+					possibleEndTag = true
+					startTagIndex = 0
+				}
+			} else {
+				startTag = s.in[start : s.pos-1]
+				foundStartTag = true
+			}
+
+		case eof:
+			if foundStartTag {
+				// A start tag was found, therefore we expect an end tag before the eof, otherwise it is an error.
+				lval.id = ERROR
+				lval.str = errUnterminated
+			} else {
+				// This is not a dollar-quoted string, reset the pos back to the start.
+				s.pos = start
+			}
+			return false
+
+		default:
+			// If we haven't found a start tag yet, check whether the current characters is a valid for a tag.
+			if !foundStartTag && !lex.IsIdentStart(ch) {
+				return false
+			}
+			s.pos++
+			if possibleEndTag {
+				// Check whether this could be the end tag.
+				if startTagIndex >= len(startTag) || ch != int(startTag[startTagIndex]) {
+					// This is not the end tag we are looking for.
+					possibleEndTag = false
+					startTagIndex = -1
+				} else {
+					startTagIndex++
+				}
+			}
+		}
+	}
+
+	if !utf8.Valid(buf) {
+		lval.id = ERROR
+		lval.str = errInvalidUTF8
+		return false
+	}
+
+	lval.str = s.finishString(buf)
+	return true
+}
+
+// SplitFirstStatement returns the length of the prefix of the string up to and
+// including the first semicolon that separates statements. If there is no
+// semicolon, returns ok=false.
+func SplitFirstStatement(sql string) (pos int, ok bool) {
+	s := makeScanner(sql)
+	var lval sqlSymType
+	for {
+		s.scan(&lval)
+		switch lval.id {
+		case 0, ERROR:
+			return 0, false
+		case ';':
+			return s.pos, true
+		}
+	}
+}
+
+// Tokens decomposes the input into lexical tokens.
+func Tokens(sql string) (tokens []TokenString, ok bool) {
+	s := makeScanner(sql)
+	for {
+		var lval sqlSymType
+		s.scan(&lval)
+		if lval.id == ERROR {
+			return nil, false
+		}
+		if lval.id == 0 {
+			break
+		}
+		tokens = append(tokens, TokenString{TokenID: lval.id, Str: lval.str})
+	}
+	return tokens, true
+}
+
+// TokenString is the unit value returned by Tokens.
+type TokenString struct {
+	TokenID int32
+	Str     string
+}
+
+// LastLexicalToken returns the last lexical token. If the string has no lexical
+// tokens, returns 0 and ok=false.
+func LastLexicalToken(sql string) (lastTok int, ok bool) {
+	s := makeScanner(sql)
+	var lval sqlSymType
+	for {
+		last := lval.id
+		s.scan(&lval)
+		if lval.id == 0 {
+			return int(last), last != 0
+		}
+	}
 }

@@ -1,0 +1,223 @@
+statement ok
+CREATE TABLE x (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
+
+statement ok
+INSERT INTO x VALUES (1), (2), (3)
+
+statement ok
+CREATE VIEW view_ref AS SELECT a, 1 FROM x
+
+let $v_id
+SELECT id FROM system.namespace WHERE name='view_ref'
+
+statement error cannot specify an explicit column list when accessing a view by reference
+SELECT * FROM [$v_id(1) AS _]
+
+query II rowsort
+SELECT * FROM [$v_id AS _]
+----
+1  1
+2  1
+3  1
+
+query I rowsort
+SELECT foo.a FROM [$v_id AS foo]
+----
+1
+2
+3
+
+statement ok
+CREATE SEQUENCE seq
+
+let $seq_id
+SELECT id FROM system.namespace WHERE name='seq'
+
+query IIB
+SELECT * FROM [$seq_id AS _]
+----
+0 0 true
+
+# Col refs in sequences are ignored.
+query IIB
+SELECT * FROM [$seq_id(1) AS _]
+----
+0 0 true
+
+query IIB
+SELECT * FROM [$seq_id(1, 2) AS _]
+----
+0 0 true
+
+statement ok
+CREATE TABLE num_ref (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
+
+statement ok
+CREATE TABLE num_ref_hidden (a INT, b INT)
+
+statement ok
+ALTER TABLE num_ref RENAME COLUMN b TO d
+
+statement ok
+ALTER TABLE num_ref RENAME COLUMN a TO p
+
+statement ok
+ALTER TABLE num_ref DROP COLUMN xx
+
+statement ok
+INSERT INTO num_ref VALUES (1, 10, 101), (2, 20, 200), (3, 30, 300)
+
+statement ok
+INSERT INTO num_ref_hidden VALUES (1, 10), (2, 20), (3, 30)
+
+query III rowsort
+SELECT * FROM num_ref
+----
+1  10  101
+2  20  200
+3  30  300
+
+let $num_ref_id
+SELECT id FROM system.namespace WHERE name='num_ref'
+
+query III rowsort
+SELECT * FROM [$num_ref_id as num_ref_alias]
+----
+1  10  101
+2  20  200
+3  30  300
+
+query III rowsort
+SELECT * FROM [$num_ref_id(4,3,1) AS num_ref_alias]
+----
+101  10  1
+200  20  2
+300  30  3
+
+query I rowsort
+SELECT * FROM [$num_ref_id(4) AS num_ref_alias]@[2]
+----
+101
+200
+300
+
+query I rowsort
+SELECT * FROM [$num_ref_id(1) AS num_ref_alias]@[1]
+----
+1
+2
+3
+
+query III colnames,rowsort
+SELECT * FROM [$num_ref_id(1,3,4) AS num_ref_alias(col1,col2,col3)]
+----
+col1  col2  col3
+1     10    101
+2     20    200
+3     30    300
+
+statement OK
+UPSERT INTO [$num_ref_id AS num_ref_alias] VALUES (4, 40, 400)
+
+statement OK
+INSERT INTO [$num_ref_id(1) AS num_ref_alias] VALUES (5)
+
+query III rowsort
+SELECT * FROM [$num_ref_id as num_ref_alias]
+----
+1     10    101
+2     20    200
+3     30    300
+4     40    400
+5     NULL  NULL
+
+statement OK
+DELETE FROM [$num_ref_id AS num_ref_alias]@bc WHERE @1=5
+
+query I
+DELETE FROM [$num_ref_id AS num_ref_alias] WHERE d=40 RETURNING num_ref_alias.c
+----
+400
+
+query III rowsort
+SELECT * FROM [$num_ref_id AS num_ref_alias]
+----
+1     10    101
+2     20    200
+3     30    300
+
+statement OK
+INSERT INTO [$num_ref_id AS num_ref_alias] (p, c) VALUES (4, 400)
+
+query I
+INSERT INTO [$num_ref_id(1,4) AS num_ref_alias] VALUES (5, 500) RETURNING num_ref_alias.d
+----
+NULL
+
+query III rowsort
+SELECT * FROM [$num_ref_id AS num_ref_alias]
+----
+1     10    101
+2     20    200
+3     30    300
+4     NULL  400
+5     NULL  500
+
+query I
+UPDATE [$num_ref_id AS num_ref_alias] SET d=40 WHERE p=4 RETURNING num_ref_alias.c
+----
+400
+
+query III rowsort
+SELECT * FROM [$num_ref_id AS num_ref_alias]
+----
+1     10    101
+2     20    200
+3     30    300
+4     40    400
+5     NULL  500
+
+statement error pq: cannot specify both a list of column IDs and a list of column names
+INSERT INTO [$num_ref_id(1,4) AS num_ref_alias] (p,c) VALUES (6, 600)
+
+statement error pq: cannot specify a list of column IDs with DELETE
+DELETE FROM [$num_ref_id(1) AS num_ref_alias]
+
+statement error pq: cannot specify a list of column IDs with UPDATE
+UPDATE [$num_ref_id(1) AS num_ref_alias] SET d=10
+
+let $num_ref_hidden_id
+SELECT id FROM system.namespace WHERE name='num_ref_hidden'
+
+query I rowsort
+SELECT * FROM [$num_ref_hidden_id(1,3) AS num_ref_hidden]
+----
+1
+2
+3
+
+query I
+SELECT count(rowid) FROM [$num_ref_hidden_id(3) AS num_ref_hidden]
+----
+3
+
+# Ensure that privileges are checked when using numeric references.
+user testuser
+
+statement error pq: user testuser does not have SELECT privilege on relation num_ref
+SELECT * FROM [$num_ref_id AS t]
+
+statement error pq: user testuser does not have INSERT privilege on relation num_ref
+INSERT INTO [$num_ref_id AS t] VALUES (1)
+
+statement error pq: user testuser does not have DELETE privilege on relation num_ref
+DELETE FROM [$num_ref_id AS t]
+
+statement error pq: user testuser does not have UPDATE privilege on relation num_ref
+UPDATE [$num_ref_id AS t] SET d=1
+
+# The @<num> reference is by type OID, which is
+# type desc ID + oid.CockroachPredefinedOIDMax. This error reports that the
+# type desc with ID 15210 is not found, hence the slightly different error message.
+statement error pq: type with ID 15210 does not exist
+SELECT 1::@115210

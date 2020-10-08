@@ -1,0 +1,61 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.ctupdate;
+option go_package = "ctpb";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+import "util/hlc/timestamp.proto";
+
+// An Entry is a closed timestamp update. It consists of a closed timestamp
+// (i.e. a timestamp at or below which the origin node guarantees no more new
+// writes are going to be permitted), an associated epoch in which the origin
+// node promises it was live (for the closed timestamp), a map of minimum lease
+// applied indexes (which have to be caught up to before being allowed to use
+// the closed timestamp) as well as an indicator of whether this update supplies
+// a full initial state or an increment to be merged into a previous state. In
+// practice, the first Entry received for each epoch is full, while the remainder
+// are incremental. An incremental update represents the implicit promise that
+// the state accumulated since the last full Entry is the true full state.
+message Entry {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 epoch = 1 [(gogoproto.casttype) = "Epoch"];
+  util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
+  map<int32, int64> mlai = 3 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+    (gogoproto.castvalue) = "LAI",
+    (gogoproto.customname) = "MLAI"];
+  // Full is true if the emitter promises that any future write to any range
+  // mentioned in this Entry will be reflected in a subsequent Entry before any
+  // stale follower reads are possible. For example, if range 1 is assigned an
+  // MLAI of 12 in this Entry and isn't mentioned in the five subsequent
+  // entries, the recipient may behave as if the MLAI of 12 were repeated across
+  // all of these entries.
+  //
+  // In practice, a Full message is received when a stream of Entries is first
+  // established (or the Epoch changes), and all other updates are incremental
+  // (i.e. not Full).
+  bool full = 4;
+}
+
+// Reactions flow in the direction opposite to Entries and request for ranges to
+// be included in the next Entry. Under rare circumstances, ranges may be omitted
+// from closed timestamp updates, and so serving follower reads from them would
+// fail. The Reaction mechanism serves to explicitly request the missing information
+// when that happens.
+message Reaction {
+  option (gogoproto.goproto_stringer) = false;
+
+  repeated int32 Requested = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+}
+

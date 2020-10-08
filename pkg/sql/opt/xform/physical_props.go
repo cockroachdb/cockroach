@@ -1,245 +1,235 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package xform
 
 import (
-	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
-// canProvidePhysicalProps returns true if the given expression can provide the
-// required physical properties. The optimizer calls the canProvide methods to
-// determine whether an expression provides a required physical property. If it
-// does not, then the optimizer inserts an enforcer operator that is able to
-// provide it.
+// CanProvidePhysicalProps returns true if the given expression can provide the
+// required physical properties. The optimizer uses this to determine whether an
+// expression provides a required physical property. If it does not, then the
+// optimizer inserts an enforcer operator that is able to provide it.
 //
 // Some operators, like Select and Project, may not directly provide a required
 // physical property, but do "pass through" the requirement to their input.
 // Operators that do this should return true from the appropriate canProvide
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
-func (o *Optimizer) canProvidePhysicalProps(eid memo.ExprID, required memo.PhysicalPropsID) bool {
-	requiredProps := o.mem.LookupPhysicalProps(required)
-
-	if !requiredProps.Presentation.Any() {
-		if !o.canProvidePresentation(eid, requiredProps.Presentation) {
-			return false
-		}
-	}
-
-	if !requiredProps.Ordering.Any() {
-		if !o.canProvideOrdering(eid, &requiredProps.Ordering) {
-			return false
-		}
-	}
-
-	return true
+func CanProvidePhysicalProps(e memo.RelExpr, required *physical.Required) bool {
+	// All operators can provide the Presentation and LimitHint properties, so no
+	// need to check for that.
+	return e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
 }
 
-// canProvidePresentation returns true if the given expression can provide the
-// required presentation property. Currently, all relational operators are
-// capable of doing this.
-func (o *Optimizer) canProvidePresentation(eid memo.ExprID, required props.Presentation) bool {
-	mexpr := o.mem.Expr(eid)
-	if !mexpr.IsRelational() {
-		panic("presentation property doesn't apply to non-relational operators")
-	}
-
-	// All operators can provide the Presentation property.
-	return true
-}
-
-// canProvideOrdering returns true if the given expression can provide the
-// required ordering property. The required ordering is assumed to have already
-// been reduced using functional dependency analysis.
-func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.OrderingChoice) bool {
-	mexpr := o.mem.Expr(eid)
-	if !mexpr.IsRelational() {
-		panic("ordering property doesn't apply to non-relational operators")
-	}
-
-	switch mexpr.Operator() {
-	case opt.SelectOp:
-		// Select operator can always pass through ordering to its input.
-		return true
-
-	case opt.ProjectOp:
-		// Project operators can pass through their ordering if the ordering
-		// depends only on columns present in the input.
-		return o.isOrderingBoundBy(required, mexpr.AsProject().Input())
-
-	case opt.IndexJoinOp, opt.LookupJoinOp:
-		// Index and Lookup Join operators can pass through their ordering if the
-		// ordering depends only on columns present in the input.
-		return o.isOrderingBoundBy(required, mexpr.ChildGroup(o.mem, 0))
-
-	case opt.ScanOp:
-		// Scan naturally orders according to the order of the scanned index.
-		def := mexpr.Private(o.mem).(*memo.ScanOpDef)
-		return def.CanProvideOrdering(o.mem.Metadata(), required)
-
-	case opt.RowNumberOp:
-		def := o.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
-		return def.CanProvideOrdering(required)
-
-	case opt.LimitOp:
-		// Limit can provide the same ordering it requires of its input.
-		provided := o.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(*props.OrderingChoice)
-		return provided.SubsetOf(required)
-
-	case opt.OffsetOp:
-		// Offset can provide the same ordering it requires of its input.
-		provided := o.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(*props.OrderingChoice)
-		return provided.SubsetOf(required)
-	}
-
-	return false
-}
-
-// buildChildPhysicalProps returns the set of physical properties required of
+// BuildChildPhysicalProps returns the set of physical properties required of
 // the nth child, based upon the properties required of the parent. For example,
 // the Project operator passes through any ordering requirement to its child,
 // but provides any presentation requirement.
-func (o *Optimizer) buildChildPhysicalProps(
-	parent memo.ExprID, required memo.PhysicalPropsID, nth int,
-) memo.PhysicalPropsID {
-	mexpr := o.mem.Expr(parent)
+//
+// The childProps argument is allocated once by the caller and can be reused
+// repeatedly as physical properties are derived for each child. On each call,
+// buildChildPhysicalProps updates the childProps argument.
+func BuildChildPhysicalProps(
+	mem *memo.Memo, parent memo.RelExpr, nth int, parentProps *physical.Required,
+) *physical.Required {
+	var childProps physical.Required
 
-	// Fast path taken in common case when no properties are required of
-	// parent and the operator itself does not require any properties.
-	if required == memo.MinPhysPropsID {
-		switch mexpr.Operator() {
-		case opt.LimitOp, opt.OffsetOp,
-			opt.ExplainOp,
-			opt.RowNumberOp, opt.GroupByOp,
-			opt.MergeJoinOp:
-			// These operations can require an ordering of some child even if there is
-			// no ordering requirement on themselves.
-		default:
-			return memo.MinPhysPropsID
-		}
+	// ScalarExprs don't support required physical properties; don't build
+	// physical properties for them.
+	if _, ok := parent.Child(nth).(opt.ScalarExpr); ok {
+		return mem.InternPhysicalProps(&childProps)
 	}
 
-	parentProps := o.mem.LookupPhysicalProps(required)
-
-	var childProps props.Physical
-
-	// Presentation property is provided by all the relational operators, so
-	// don't add it to childProps.
-
-	// Ordering property.
-	switch mexpr.Operator() {
-	case opt.SelectOp:
-		if nth == 0 {
-			childProps.Ordering = parentProps.Ordering
-		}
-	case opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp:
-		if nth == 0 {
-			childProps.Ordering = parentProps.Ordering
-			if mexpr.Operator() == opt.ProjectOp {
-				o.optimizeProjectOrdering(mexpr.AsProject(), &childProps)
-			}
-			childLogicalProps := o.mem.GroupProperties(mexpr.ChildGroup(o.mem, nth))
-			childOutCols := childLogicalProps.Relational.OutputCols
-			if !childProps.Ordering.SubsetOfCols(childOutCols) {
-				childProps.Ordering = childProps.Ordering.Copy()
-				childProps.Ordering.ProjectCols(childOutCols)
-			}
-		}
-
-	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp, opt.GroupByOp:
-		// These ops require the ordering in their private.
-		if nth == 0 {
-			var ordering *props.OrderingChoice
-			switch mexpr.Operator() {
-			case opt.LimitOp:
-				ordering = o.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(*props.OrderingChoice)
-			case opt.OffsetOp:
-				ordering = o.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(*props.OrderingChoice)
-			case opt.RowNumberOp:
-				def := o.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
-				ordering = &def.Ordering
-			case opt.GroupByOp:
-				def := mexpr.Private(o.mem).(*memo.GroupByDef)
-				ordering = &def.Ordering
-			}
-			childProps.Ordering = *ordering
-		}
-
+	// Most operations don't require a presentation of their input; these are the
+	// exceptions.
+	switch parent.Op() {
 	case opt.ExplainOp:
-		if nth == 0 {
-			childProps = o.mem.LookupPrivate(mexpr.AsExplain().Def()).(*memo.ExplainOpDef).Props
-		}
-
-	case opt.MergeJoinOp:
-		if nth == 0 || nth == 1 {
-			mergeOn := o.mem.NormExpr(mexpr.AsMergeJoin().MergeOn())
-			def := o.mem.LookupPrivate(mergeOn.AsMergeOn().Def()).(*memo.MergeOnDef)
-			if nth == 0 {
-				childProps.Ordering = def.LeftOrdering
-			} else {
-				childProps.Ordering = def.RightOrdering
-			}
-		}
-		// ************************* WARNING *************************
-		//  If you add a new case here, check if it needs to be added
-		//     to the exception list in the fast path above.
-		// ************************* WARNING *************************
+		childProps.Presentation = parent.(*memo.ExplainExpr).Props.Presentation
+	case opt.AlterTableSplitOp:
+		childProps.Presentation = parent.(*memo.AlterTableSplitExpr).Props.Presentation
+	case opt.AlterTableUnsplitOp:
+		childProps.Presentation = parent.(*memo.AlterTableUnsplitExpr).Props.Presentation
+	case opt.AlterTableRelocateOp:
+		childProps.Presentation = parent.(*memo.AlterTableRelocateExpr).Props.Presentation
+	case opt.ControlJobsOp:
+		childProps.Presentation = parent.(*memo.ControlJobsExpr).Props.Presentation
+	case opt.CancelQueriesOp:
+		childProps.Presentation = parent.(*memo.CancelQueriesExpr).Props.Presentation
+	case opt.CancelSessionsOp:
+		childProps.Presentation = parent.(*memo.CancelSessionsExpr).Props.Presentation
+	case opt.ExportOp:
+		childProps.Presentation = parent.(*memo.ExportExpr).Props.Presentation
 	}
 
-	// RaceEnabled ensures that checks are run on every change (as part of make
-	// testrace) while keeping the check code out of non-test builds.
-	if util.RaceEnabled && !childProps.Ordering.Any() {
-		props := o.mem.GroupProperties(mexpr.ChildGroup(o.mem, nth))
-		if !childProps.Ordering.SubsetOfCols(props.Relational.OutputCols) {
-			panic(fmt.Sprintf("OrderingChoice refers to non-output columns (op: %s)", mexpr.Operator()))
+	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
+
+	switch parent.Op() {
+	case opt.LimitOp:
+		if constLimit, ok := parent.(*memo.LimitExpr).Limit.(*memo.ConstExpr); ok {
+			childProps.LimitHint = float64(*constLimit.Value.(*tree.DInt))
+			if childProps.LimitHint <= 0 {
+				childProps.LimitHint = 1
+			}
 		}
+	case opt.OffsetOp:
+		if parentProps.LimitHint == 0 {
+			break
+		}
+		if constOffset, ok := parent.(*memo.OffsetExpr).Offset.(*memo.ConstExpr); ok {
+			childProps.LimitHint = parentProps.LimitHint + float64(*constOffset.Value.(*tree.DInt))
+			if childProps.LimitHint <= 0 {
+				childProps.LimitHint = 1
+			}
+		}
+
+	case opt.IndexJoinOp:
+		// For an index join, every input row results in exactly one output row.
+		childProps.LimitHint = parentProps.LimitHint
+
+	case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp,
+		opt.UnionOp, opt.UnionAllOp:
+		// TODO(celine): Set operation limits need further thought; for example,
+		// the right child of an ExceptOp should not be limited.
+		childProps.LimitHint = parentProps.LimitHint
+
+	case opt.DistinctOnOp:
+		distinctCount := parent.(memo.RelExpr).Relational().Stats.RowCount
+		if parentProps.LimitHint > 0 {
+			childProps.LimitHint = distinctOnLimitHint(distinctCount, parentProps.LimitHint)
+		}
+
+	case opt.SelectOp, opt.LookupJoinOp:
+		// These operations are assumed to produce a constant number of output rows
+		// for each input row, independent of already-processed rows.
+		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
+		if outputRows == 0 || outputRows < parentProps.LimitHint {
+			break
+		}
+		if input, ok := parent.Child(nth).(memo.RelExpr); ok {
+			inputRows := input.Relational().Stats.RowCount
+			switch parent.Op() {
+			case opt.SelectOp:
+				// outputRows / inputRows is roughly the number of output rows produced
+				// for each input row. Reduce the number of required input rows so that
+				// the expected number of output rows is equal to the parent limit hint.
+				childProps.LimitHint = parentProps.LimitHint * inputRows / outputRows
+			case opt.LookupJoinOp:
+				childProps.LimitHint = lookupJoinInputLimitHint(inputRows, outputRows, parentProps.LimitHint)
+			}
+		}
+
+	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
+		childProps.LimitHint = parentProps.LimitHint
+	}
+
+	if childProps.LimitHint < 0 {
+		panic(errors.AssertionFailedf("negative limit hint"))
 	}
 
 	// If properties haven't changed, no need to re-intern them.
 	if childProps.Equals(parentProps) {
-		return required
+		return parentProps
 	}
 
-	return o.mem.InternPhysicalProps(&childProps)
+	return mem.InternPhysicalProps(&childProps)
 }
 
-// isOrderingBoundBy returns whether or not input provides all columns present
-// in ordering.
-func (o *Optimizer) isOrderingBoundBy(ordering *props.OrderingChoice, input memo.GroupID) bool {
-	inputCols := o.mem.GroupProperties(input).Relational.OutputCols
-	return ordering.CanProjectCols(inputCols)
+// distinctOnLimitHint returns a limit hint for the distinct operation. Given a
+// table with distinctCount distinct rows, distinctOnLimitHint will return an
+// estimated number of rows to scan that in most cases will yield at least
+// neededRows distinct rows while still substantially reducing the number of
+// unnecessarily scanned rows.
+//
+// Assume that when examining a row, each of the distinctCount possible values
+// has an equal probability of appearing. The expected number of rows that must
+// be examined to collect neededRows distinct rows is
+//
+// E[examined rows] = distinctCount * (H_{distinctCount} - H_{distinctCount-neededRows})
+//
+// where distinctCount > neededRows and H_{i} is the ith harmonic number. This
+// is a variation on the coupon collector's problem:
+// https://en.wikipedia.org/wiki/Coupon_collector%27s_problem
+//
+// Since values are not uniformly distributed in practice, the limit hint is
+// calculated by multiplying E[examined rows] by an experimentally-chosen factor
+// to provide a small overestimate of the actual number of rows needed in most
+// cases.
+//
+// This method is least accurate when attempting to return all or nearly all the
+// distinct values in the table, since the actual distribution of values becomes
+// the primary factor in how long it takes to "collect" the least-likely values.
+// As a result, cases where this limit hint may be poor (too low or more than
+// twice as high as needed) tend to occur when distinctCount is very close to
+// neededRows.
+func distinctOnLimitHint(distinctCount, neededRows float64) float64 {
+	// The harmonic function below is not intended for values under 1 (for one,
+	// it's not monotonic until 0.5); make sure we never return negative results.
+	if neededRows >= distinctCount-1.0 {
+		return 0
+	}
+
+	// Return an approximation of the nth harmonic number.
+	H := func(n float64) float64 {
+		// Euler–Mascheroni constant; this is included for clarity but is canceled
+		// out in our formula below.
+		const gamma = 0.5772156649
+		return math.Log(n) + gamma + 1/(2*n)
+	}
+
+	// Coupon collector's estimate, for a uniformly-distributed table.
+	uniformPrediction := distinctCount * (H(distinctCount) - H(distinctCount-neededRows))
+
+	// This multiplier was chosen based on simulating the distinct operation on
+	// hundreds of thousands of nonuniformly distributed tables with values of
+	// neededRows and distinctCount ranging between 1 and 1000.
+	multiplier := 0.15*neededRows/(distinctCount-neededRows) + 1.2
+
+	// In 91.6% of trials, this scaled estimate was between a 0% and 30%
+	// overestimate, and in 97.5% it was between a 0% and 100% overestimate.
+	//
+	// In 1.8% of tests, the prediction was for an insufficient number of rows, and
+	// in 0.7% of tests, the predicted number of rows was more than twice the actual
+	// number required.
+	return uniformPrediction * multiplier
 }
 
-func (o *Optimizer) optimizeProjectOrdering(project *memo.ProjectExpr, physical *props.Physical) {
-	// [SimplifyProjectOrdering]
-	// SimplifyProjectOrdering tries to update the ordering required of a Project
-	// operator's input expression, to make it less restrictive.
-	relational := o.mem.GroupProperties(project.Input()).Relational
-	if physical.Ordering.CanSimplify(&relational.FuncDeps) {
-		if o.matchedRule == nil || o.matchedRule(opt.SimplifyProjectOrdering) {
-			physical.Ordering = physical.Ordering.Copy()
-			physical.Ordering.Simplify(&relational.FuncDeps)
-
-			if o.appliedRule != nil {
-				o.appliedRule(opt.SimplifyProjectOrdering, project.Input(), 0, 0)
+// BuildChildPhysicalPropsScalar is like BuildChildPhysicalProps, but for
+// when the parent is a scalar expression.
+func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *physical.Required {
+	var childProps physical.Required
+	switch parent.Op() {
+	case opt.ArrayFlattenOp:
+		if nth == 0 {
+			af := parent.(*memo.ArrayFlattenExpr)
+			childProps.Ordering.FromOrdering(af.Ordering)
+			// ArrayFlatten might have extra ordering columns. Use the Presentation property
+			// to get rid of them.
+			childProps.Presentation = physical.Presentation{
+				opt.AliasedColumn{
+					// Keep the existing label for the column.
+					Alias: mem.Metadata().ColumnMeta(af.RequestedCol).Alias,
+					ID:    af.RequestedCol,
+				},
 			}
 		}
+	default:
+		return physical.MinRequired
 	}
+	return mem.InternPhysicalProps(&childProps)
 }

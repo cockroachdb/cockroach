@@ -1,0 +1,34 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t ()
+
+user testuser
+
+statement error permission denied to create changefeed
+CREATE CHANGEFEED FOR t
+
+user root
+
+# Test granting CONTROLCHANGEFEED.
+statement ok
+ALTER USER testuser CONTROLCHANGEFEED;
+GRANT SELECT ON DATABASE test TO testuser
+
+user testuser
+
+# Now we should pass the CONTROLCHANGEFEED permission check but error on missing
+# SELECT privileges.
+statement error user testuser does not have SELECT privilege on relation t
+CREATE CHANGEFEED FOR t
+
+# Test revoking CONTROLCHANGEFEED.
+user root
+
+statement ok
+ALTER USER testuser NOCONTROLCHANGEFEED
+
+user testuser
+
+statement error permission denied to create changefeed
+CREATE CHANGEFEED FOR t

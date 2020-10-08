@@ -1,35 +1,53 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 @require nib
 @require '~styl/base/palette.styl'
+@require '~src/components/core/index.styl'
 
 .summary-section
   width 100%
   float left
-  background-color white
+  background-color $colors--neutral-0
   margin-bottom 10px
   padding 15px 24px 12px
   border-radius 5px
   border 1px solid rgba(0, 0, 0, .1)
-  font-family Lato-Regular
+  font-family $font-family--base
 
 .summary-headline
   margin-bottom 12px
 
+  &__title, &__value
+    font-size 14px
+    font-weight 600
+    line-height 24px
+    letter-spacing 0.1px
+    white-space nowrap
+
   &__title
+    font-family $font-family--bold
     padding 6px 0
-    font-size 12px
-    font-weight 500
     text-transform uppercase
-    letter-spacing 2px
-    color $tooltip-color
+    color $colors--neutral-8
 
   &__value
     font-weight 200
     font-size 30px
-    color $body-color
 
 .summary-label
-  font-family Lato-Bold
-  color $body-color
+  font-family $font-family--bold
+  color $colors--neutral-8
+  font-size 14px
+  line-height 24px
+  letter-spacing 0.1px
   padding-bottom 12px
   text-align center
 
@@ -41,32 +59,46 @@
   &__body
     clearfix()
 
+  &__title, &__value
+    font-size 14px
+    font-weight 600
+    line-height 24px
+    letter-spacing 0.1px
+    white-space nowrap
+
   &__title
+    font-family $font-family--bold
+    font-size 14px
+    line-height 24px
+    letter-spacing 0.1px
     color $body-color
     float left
 
     // A link is present on at least one summary stat.
     a
+      font-family $font-family--base
       text-decoration none
-      color $link-color
+      color $colors--primary-blue-3
+      line-height 22px
       padding-left 6px
 
   &__value
     float right
-    color $body-color
-    font-family Lato-Bold
 
   &__tooltip
     display block
     clear both
     font-size 12px
-    color $tooltip-color
+    line-height 18px
+    letter-spacing 0.1px
+    font-family $font-family--base
+    color $colors--neutral-6
 
   & + &
     border-top 1px solid rgb(242, 242, 242)
 
   &--number &__value
-    color $healthy-color
+    color $colors--primary-green-3
 
   &--dead &__value
     color $alert-color
@@ -87,7 +119,7 @@
   &--link &__value
     a
       text-decoration none
-      font-family Lato-Regular
+      font-family $font-family--base
       color $link-color
 
 .summary-stat-breakdown
@@ -114,3 +146,17 @@
 
   &__value
     float right
+
+.summary-headline-stat
+  color $colors--neutral-6
+  font-family: $font-family--base
+  &__value
+    font-family $font-family--bold
+    font-size $font-size--x-large
+    line-height $line-height--x-large
+    color $colors--neutral-7
+    margin-bottom: 0px
+  &__label
+    font-size 14px
+    line-height 22px
+    letter-spacing 0.1px

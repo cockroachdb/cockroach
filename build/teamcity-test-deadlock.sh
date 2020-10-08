@@ -15,7 +15,7 @@ run build/builder.sh make -Otarget c-deps
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests with deadlock detection enabled"
-run build/builder.sh env TZ=America/New_York make test TAGS=deadlock TESTFLAGS='-v' 2>&1 \
-	| tee artifacts/test.log \
-	| go-test-teamcity
+run_json_test build/builder.sh \
+  stdbuf -oL -eL \
+  make test GOTESTFLAGS=-json TAGS=deadlock TESTFLAGS='-v'
 tc_end_block "Run Go tests with deadlock detection enabled"

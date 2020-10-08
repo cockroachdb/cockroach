@@ -1,44 +1,46 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tpch
 
-var queriesByName = map[string]string{
-	`1`:  query1,
-	`2`:  query2,
-	`3`:  query3,
-	`4`:  query4,
-	`5`:  query5,
-	`6`:  query6,
-	`7`:  query7,
-	`8`:  query8,
-	`9`:  query9,
-	`10`: query10,
-	`11`: query11,
-	`12`: query12,
-	`13`: query13,
-	`14`: query14,
-	`15`: query15,
-	`16`: query16,
-	`17`: query17,
-	`18`: query18,
-	`19`: query19,
-	`20`: query20,
-	`21`: query21,
-	`22`: query22,
-}
+var (
+	// QueriesByNumber is a mapping from the number of a TPC-H query to the actual
+	// query.
+	QueriesByNumber = map[int]string{
+		1:  query1,
+		2:  query2,
+		3:  query3,
+		4:  query4,
+		5:  query5,
+		6:  query6,
+		7:  query7,
+		8:  query8,
+		9:  query9,
+		10: query10,
+		11: query11,
+		12: query12,
+		13: query13,
+		14: query14,
+		15: query15,
+		16: query16,
+		17: query17,
+		18: query18,
+		19: query19,
+		20: query20,
+		21: query21,
+		22: query22,
+	}
+
+	// NumQueries specifies the number of queries in TPC-H benchmark.
+	NumQueries = len(QueriesByNumber)
+)
 
 const (
 	query1 = `
@@ -56,7 +58,7 @@ SELECT
 FROM
 	lineitem
 WHERE
-	l_shipdate <= DATE '1998-12-01' - INTERVAL '95' DAY
+	l_shipdate <= DATE '1998-12-01' - INTERVAL '90' DAY
 GROUP BY
 	l_returnflag,
 	l_linestatus
@@ -84,11 +86,11 @@ FROM
 WHERE
 	p_partkey = ps_partkey
 	AND s_suppkey = ps_suppkey
-	AND p_size = 42
-	AND p_type LIKE '%STEEL'
+	AND p_size = 15
+	AND p_type LIKE '%BRASS'
 	AND s_nationkey = n_nationkey
 	AND n_regionkey = r_regionkey
-	AND r_name = 'AMERICA'
+	AND r_name = 'EUROPE'
 	AND ps_supplycost = (
 		SELECT
 			min(ps_supplycost)
@@ -102,13 +104,14 @@ WHERE
 			AND s_suppkey = ps_suppkey
 			AND s_nationkey = n_nationkey
 			AND n_regionkey = r_regionkey
-			AND r_name = 'AMERICA'
+			AND r_name = 'EUROPE'
 	)
 ORDER BY
 	s_acctbal DESC,
 	n_name,
 	s_name,
-	p_partkey;
+	p_partkey
+LIMIT 100;
 `
 
 	query3 = `
@@ -122,18 +125,19 @@ FROM
 	orders,
 	lineitem
 WHERE
-	c_mktsegment = 'MACHINERY'
+	c_mktsegment = 'BUILDING'
 	AND c_custkey = o_custkey
 	AND l_orderkey = o_orderkey
-	AND o_orderDATE < DATE '1995-03-10'
-	AND l_shipdate > DATE '1995-03-10'
+	AND o_orderDATE < DATE '1995-03-15'
+	AND l_shipdate > DATE '1995-03-15'
 GROUP BY
 	l_orderkey,
 	o_orderdate,
 	o_shippriority
 ORDER BY
 	revenue DESC,
-	o_orderdate;
+	o_orderdate
+LIMIT 10;
 `
 
 	query4 = `
@@ -143,8 +147,8 @@ SELECT
 FROM
 	orders
 WHERE
-	o_orderdate >= DATE '1994-08-01'
-	AND o_orderdate < DATE '1994-08-01' + INTERVAL '3' MONTH
+	o_orderdate >= DATE '1993-07-01'
+	AND o_orderdate < DATE '1993-07-01' + INTERVAL '3' MONTH
 	AND EXISTS (
 		SELECT
 			*
@@ -178,9 +182,9 @@ WHERE
 	AND c_nationkey = s_nationkey
 	AND s_nationkey = n_nationkey
 	AND n_regionkey = r_regionkey
-	AND r_name = 'AFRICA'
-	AND o_orderDATE >= DATE '1997-01-01'
-	AND o_orderDATE < DATE '1997-01-01' + INTERVAL '1' YEAR
+	AND r_name = 'ASIA'
+	AND o_orderDATE >= DATE '1994-01-01'
+	AND o_orderDATE < DATE '1994-01-01' + INTERVAL '1' YEAR
 GROUP BY
 	n_name
 ORDER BY
@@ -193,9 +197,9 @@ SELECT
 FROM
 	lineitem
 WHERE
-	l_shipdate >= DATE '1997-01-01'
-	AND l_shipdate < DATE '1997-01-01' + INTERVAL '1' YEAR
-	AND l_discount BETWEEN 0.07 - 0.01 AND 0.07 + 0.01
+	l_shipdate >= DATE '1994-01-01'
+	AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR
+	AND l_discount BETWEEN 0.06 - 0.01 AND 0.06 + 0.01
 	AND l_quantity < 24;
 `
 
@@ -226,8 +230,8 @@ FROM
 			AND s_nationkey = n1.n_nationkey
 			AND c_nationkey = n2.n_nationkey
 			AND (
-				(n1.n_name = 'MOZAMBIQUE' AND n2.n_name = 'CANADA')
-				or (n1.n_name = 'CANADA' AND n2.n_name = 'MOZAMBIQUE')
+				(n1.n_name = 'FRANCE' AND n2.n_name = 'GERMANY')
+				or (n1.n_name = 'GERMANY' AND n2.n_name = 'FRANCE')
 			)
 			AND l_shipdate BETWEEN DATE '1995-01-01' AND DATE '1996-12-31'
 	) AS shipping
@@ -245,7 +249,7 @@ ORDER BY
 SELECT
 	o_year,
 	sum(CASE
-		WHEN nation = 'CANADA' THEN volume
+		WHEN nation = 'BRAZIL' THEN volume
 		ELSE 0
 	END) / sum(volume) AS mkt_share
 FROM
@@ -273,7 +277,7 @@ FROM
 			AND r_name = 'AMERICA'
 			AND s_nationkey = n2.n_nationkey
 			AND o_orderdate BETWEEN DATE '1995-01-01' AND DATE '1996-12-31'
-			AND p_type = 'ECONOMY POLISHED STEEL'
+			AND p_type = 'ECONOMY ANODIZED STEEL'
 	) AS all_nations
 GROUP BY
 	o_year
@@ -306,7 +310,7 @@ FROM
 			AND p_partkey = l_partkey
 			AND o_orderkey = l_orderkey
 			AND s_nationkey = n_nationkey
-			AND p_name LIKE '%royal%'
+			AND p_name LIKE '%green%'
 	) AS profit
 GROUP BY
 	nation,
@@ -334,8 +338,8 @@ FROM
 WHERE
 	c_custkey = o_custkey
 	AND l_orderkey = o_orderkey
-	AND o_orderDATE >= DATE '1994-12-01'
-	AND o_orderDATE < DATE '1994-12-01' + INTERVAL '3' MONTH
+	AND o_orderDATE >= DATE '1993-10-01'
+	AND o_orderDATE < DATE '1993-10-01' + INTERVAL '3' MONTH
 	AND l_returnflag = 'R'
 	AND c_nationkey = n_nationkey
 GROUP BY
@@ -347,13 +351,14 @@ GROUP BY
 	c_address,
 	c_comment
 ORDER BY
-	revenue DESC;
+	revenue DESC
+LIMIT 20;
 `
 
 	query11 = `
 SELECT
 	ps_partkey,
-	sum(ps_supplycost * ps_availqty) AS value
+	sum(ps_supplycost * ps_availqty::float) AS value
 FROM
 	partsupp,
 	supplier,
@@ -361,12 +366,12 @@ FROM
 WHERE
 	ps_suppkey = s_suppkey
 	AND s_nationkey = n_nationkey
-	AND n_name = 'ETHIOPIA'
+	AND n_name = 'GERMANY'
 GROUP BY
 	ps_partkey HAVING
-		sum(ps_supplycost * ps_availqty) > (
+		sum(ps_supplycost * ps_availqty::float) > (
 			SELECT
-				sum(ps_supplycost * ps_availqty) * 0.0000003333
+				sum(ps_supplycost * ps_availqty::float) * 0.0001
 			FROM
 				partsupp,
 				supplier,
@@ -374,7 +379,7 @@ GROUP BY
 			WHERE
 				ps_suppkey = s_suppkey
 				AND s_nationkey = n_nationkey
-				AND n_name = 'ETHIOPIA'
+				AND n_name = 'GERMANY'
 		)
 ORDER BY
 	value DESC;
@@ -400,11 +405,11 @@ FROM
 	lineitem
 WHERE
 	o_orderkey = l_orderkey
-	AND l_shipmode IN ('AIR', 'REG AIR')
+	AND l_shipmode IN ('MAIL', 'SHIP')
 	AND l_commitdate < l_receiptdate
 	AND l_shipdate < l_commitdate
-	AND l_receiptdate >= DATE '1997-01-01'
-	AND l_receiptdate < DATE '1997-01-01' + INTERVAL '1' YEAR
+	AND l_receiptdate >= DATE '1994-01-01'
+	AND l_receiptdate < DATE '1994-01-01' + INTERVAL '1' YEAR
 GROUP BY
 	l_shipmode
 ORDER BY
@@ -423,7 +428,7 @@ FROM
 		FROM
 			customer LEFT OUTER JOIN orders ON
 				c_custkey = o_custkey
-				AND o_comment NOT LIKE '%special%deposits%'
+				AND o_comment NOT LIKE '%special%requests%'
 		GROUP BY
 			c_custkey
 	) AS c_orders
@@ -446,10 +451,13 @@ FROM
 	part
 WHERE
 	l_partkey = p_partkey
-	AND l_shipdate >= DATE '1997-04-01'
-	AND l_shipdate < DATE '1997-04-01' + INTERVAL '1' MONTH;
+	AND l_shipdate >= DATE '1995-09-01'
+	AND l_shipdate < DATE '1995-09-01' + INTERVAL '1' MONTH;
 `
 
+	// Note that the main query has been adjusted to go around issues with
+	// floating point computations when the order of summation is different
+	// (see #53946 for more details).
 	query15 = `
 CREATE VIEW revenue0 (supplier_no, total_revenue) AS
 	SELECT
@@ -458,8 +466,8 @@ CREATE VIEW revenue0 (supplier_no, total_revenue) AS
 	FROM
 		lineitem
 	WHERE
-		l_shipdate >= DATE '1997-03-01'
-		AND l_shipdate < DATE '1997-03-01' + INTERVAL '3' MONTH
+		l_shipdate >= DATE '1996-01-01'
+		AND l_shipdate < DATE '1996-01-01' + INTERVAL '3' MONTH
 	GROUP BY
 		l_suppkey;
 
@@ -474,12 +482,12 @@ FROM
 	revenue0
 WHERE
 	s_suppkey = supplier_no
-	AND total_revenue = (
+	AND abs(total_revenue - (
 		SELECT
 			max(total_revenue)
 		FROM
 			revenue0
-	)
+	)) < 0.001
 ORDER BY
 	s_suppkey;
 
@@ -497,9 +505,9 @@ FROM
 	part
 WHERE
 	p_partkey = ps_partkey
-	AND p_brand <> 'Brand#41'
-	AND p_type NOT LIKE 'ECONOMY BURNISHED%'
-	AND p_size IN (22, 33, 42, 5, 27, 49, 4, 18)
+	AND p_brand <> 'Brand#45'
+	AND p_type NOT LIKE 'MEDIUM POLISHED%'
+	AND p_size IN (49, 14, 23, 45, 19, 3, 36, 9)
 	AND ps_suppkey NOT IN (
 		SELECT
 			s_suppkey
@@ -527,7 +535,7 @@ FROM
 	part
 WHERE
 	p_partkey = l_partkey
-	AND p_brand = 'Brand#14'
+	AND p_brand = 'Brand#23'
 	AND p_container = 'MED BOX'
 	AND l_quantity < (
 		SELECT
@@ -559,7 +567,7 @@ WHERE
 			lineitem
 		GROUP BY
 			l_orderkey HAVING
-				sum(l_quantity) > 314
+				sum(l_quantity) > 300
 	)
 	AND c_custkey = o_custkey
 	AND o_orderkey = l_orderkey
@@ -571,7 +579,8 @@ GROUP BY
 	o_totalprice
 ORDER BY
 	o_totalprice DESC,
-	o_orderdate;
+	o_orderdate
+LIMIT 100;
 `
 
 	query19 = `
@@ -583,9 +592,9 @@ FROM
 WHERE
 	(
 		p_partkey = l_partkey
-		AND p_brand = 'Brand#34'
+		AND p_brand = 'Brand#12'
 		AND p_container IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG')
-		AND l_quantity >= 5 AND l_quantity <= 5 + 10
+		AND l_quantity >= 1 AND l_quantity <= 1 + 10
 		AND p_size BETWEEN 1 AND 5
 		AND l_shipmode IN ('AIR', 'AIR REG')
 		AND l_shipinstruct = 'DELIVER IN PERSON'
@@ -593,9 +602,9 @@ WHERE
 	OR
 	(
 		p_partkey = l_partkey
-		AND p_brand = 'Brand#51'
+		AND p_brand = 'Brand#23'
 		AND p_container IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK')
-		AND l_quantity >= 12 AND l_quantity <= 12 + 10
+		AND l_quantity >= 10 AND l_quantity <= 10 + 10
 		AND p_size BETWEEN 1 AND 10
 		AND l_shipmode IN ('AIR', 'AIR REG')
 		AND l_shipinstruct = 'DELIVER IN PERSON'
@@ -603,9 +612,9 @@ WHERE
 	OR
 	(
 		p_partkey = l_partkey
-		AND p_brand = 'Brand#35'
+		AND p_brand = 'Brand#34'
 		AND p_container IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG')
-		AND l_quantity >= 30 AND l_quantity <= 30 + 10
+		AND l_quantity >= 20 AND l_quantity <= 20 + 10
 		AND p_size BETWEEN 1 AND 15
 		AND l_shipmode IN ('AIR', 'AIR REG')
 		AND l_shipinstruct = 'DELIVER IN PERSON'
@@ -632,7 +641,7 @@ WHERE
 				FROM
 					part
 				WHERE
-					p_name LIKE 'orange%'
+					p_name LIKE 'forest%'
 			)
 			AND ps_availqty > (
 				SELECT
@@ -642,12 +651,12 @@ WHERE
 				WHERE
 					l_partkey = ps_partkey
 					AND l_suppkey = ps_suppkey
-					AND l_shipdate >= DATE '1997-01-01'
-					AND l_shipdate < DATE '1997-01-01' + INTERVAL '1' YEAR
+					AND l_shipdate >= DATE '1994-01-01'
+					AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR
 			)
 	)
 	AND s_nationkey = n_nationkey
-	AND n_name = 'ALGERIA'
+	AND n_name = 'CANADA'
 ORDER BY
 	s_name;
 `
@@ -691,7 +700,8 @@ GROUP BY
 	s_name
 ORDER BY
 	numwait DESC,
-	s_name;
+	s_name
+LIMIT 100;
 `
 
 	query22 = `
@@ -708,7 +718,7 @@ FROM
 			customer
 		WHERE
 			substring(c_phone FROM 1 FOR 2) in
-				('20', '32', '44', '33', '29', '22', '31')
+        ('13', '31', '23', '29', '30', '18', '17')
 			AND c_acctbal > (
 				SELECT
 					avg(c_acctbal)
@@ -717,7 +727,7 @@ FROM
 				WHERE
 					c_acctbal > 0.00
 					AND substring(c_phone FROM 1 FOR 2) in
-						('20', '32', '44', '33', '29', '22', '31')
+            ('13', '31', '23', '29', '30', '18', '17')
 			)
 			AND NOT EXISTS (
 				SELECT

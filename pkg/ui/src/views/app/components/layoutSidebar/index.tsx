@@ -1,135 +1,98 @@
-import classNames from "classnames";
-import _ from "lodash";
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import React from "react";
 import { connect } from "react-redux";
-import PropTypes from "prop-types";
-import { Link } from "react-router";
+import { Link, withRouter, RouteComponentProps } from "react-router-dom";
 
-import { AdminUIState } from "src/redux/state";
-import { selectLoginState, LoginState, doLogout } from "src/redux/login";
-import { LOGOUT_PAGE } from "src/routes/login";
-import { cockroachIcon } from "src/views/shared/components/icons";
-import { trustIcon } from "src/util/trust";
+import { SideNavigation } from "src/components";
+import "./navigation-bar.styl";
+import {AdminUIState} from "src/redux/state";
+import {isSingleNodeCluster} from "src/redux/nodes";
 
-import homeIcon from "!!raw-loader!assets/home.svg";
-import metricsIcon from "!!raw-loader!assets/metrics.svg";
-import databasesIcon from "!!raw-loader!assets/databases.svg";
-import jobsIcon from "!!raw-loader!assets/jobs.svg";
-import unlockedIcon from "!!raw-loader!assets/unlocked.svg";
-
-interface IconLinkProps {
-  icon: string;
-  title?: string;
-  to: string;
-  activeFor?: string | string[];
-  className?: string;
+interface RouteParam {
+  path: string;
+  text: string;
+  activeFor: string[];
+  // ignoreFor allows exclude specific paths from been recognized as active
+  // even if path is matched with activeFor paths.
+  ignoreFor?: string[];
+  isHidden?: () => boolean;
 }
 
-/**
- * IconLink creats a react router Link which contains both a graphical icon and
- * a string title.
- */
-class IconLink extends React.Component<IconLinkProps, {}> {
-  static defaultProps: Partial<IconLinkProps> = {
-    className: "normal",
-    activeFor: [],
-  };
-
-  static contextTypes = {
-    router: PropTypes.object,
-  };
-
-  render() {
-    const { icon, title, to, activeFor, className } = this.props;
-
-    const router = this.context.router;
-    const linkRoutes = [to].concat(activeFor);
-    const isActive = _.some(linkRoutes, (route) => router.isActive(route, false));
-    return (
-      <li className={className} >
-        <Link
-          to={to}
-          className={classNames({ active: isActive })}
-        >
-          <div className="image-container"
-               dangerouslySetInnerHTML={trustIcon(icon)}/>
-          <div>{title}</div>
-        </Link>
-      </li>
-    );
-  }
-}
-
-interface LoginIndicatorProps {
-  loginState: LoginState;
-  handleLogout: () => null;
-}
-
-function LoginIndicator({ loginState, handleLogout }: LoginIndicatorProps) {
-  if (!loginState.useLogin()) {
-    return null;
-  }
-
-  if (!loginState.loginEnabled()) {
-    return (
-      <li className="login-indicator login-indicator--insecure">
-        <div className="image-container"
-             dangerouslySetInnerHTML={trustIcon(unlockedIcon)}/>
-        <div>Insecure mode</div>
-      </li>
-    );
-  }
-
-  const user = loginState.loggedInUser();
-  if (user == null) {
-    return null;
-  }
-
-  return (
-    <li className="login-indicator">
-        <div
-          className="login-indicator__initial"
-          title={`Signed in as ${user}`}
-        >
-          { user[0] }
-        </div>
-        <Link to={LOGOUT_PAGE} onClick={handleLogout}>Sign Out</Link>
-    </li>
-  );
-}
-
-// tslint:disable-next-line:variable-name
-const LoginIndicatorConnected = connect(
-  (state: AdminUIState) => ({
-    loginState: selectLoginState(state),
-  }),
-  (dispatch) => ({
-    handleLogout: () => {
-      dispatch(doLogout());
-    },
-  }),
-)(LoginIndicator);
+type SidebarProps = RouteComponentProps & MapToStateProps;
 
 /**
  * Sidebar represents the static navigation sidebar available on all pages. It
  * displays a number of graphic icons representing available pages; the icon of
  * the page which is currently active will be highlighted.
  */
-export default class Sidebar extends React.Component {
+export class Sidebar extends React.Component<SidebarProps> {
+  readonly routes: RouteParam[] = [
+    { path: "/overview", text: "Overview", activeFor: ["/node"] },
+    { path: "/metrics", text: "Metrics", activeFor: [] },
+    { path: "/databases", text: "Databases", activeFor: ["/database"] },
+    { path: "/sessions", text: "Active Sessions", activeFor: ["/session"] },
+    { path: "/statements", text: "Statements", activeFor: ["/statement"] },
+    { path: "/transactions", text: "Transactions", activeFor: ["/transactions"] },
+    {
+      path: "/reports/network",
+      text: "Network Latency",
+      activeFor: ["/reports/network"],
+      // Do not show Network Latency for single node cluster.
+      isHidden: () => this.props.isSingleNodeCluster,
+    },
+    { path: "/jobs", text: "Jobs", activeFor: [] },
+    {
+      path: "/debug",
+      text: "Advanced Debug",
+      activeFor: ["/reports", "/data-distribution", "/raft"],
+      ignoreFor: ["/reports/network"],
+    },
+  ];
+
+  isActiveNavigationItem = (path: string): boolean => {
+    const { pathname } = this.props.location;
+    const { activeFor, ignoreFor = []} = this.routes.find(route => route.path === path);
+    return [...activeFor, path].some(p => {
+      const isMatchedToIgnoredPaths = ignoreFor.some(ignorePath => pathname.startsWith(ignorePath));
+      const isMatchedToActiveFor = pathname.startsWith(p);
+      return isMatchedToActiveFor && !isMatchedToIgnoredPaths;
+    });
+  }
+
   render() {
+    const navigationItems = this.routes
+      .filter(route => !route.isHidden || !route.isHidden())
+      .map(({ path, text }, idx) => (
+        <SideNavigation.Item
+          isActive={this.isActiveNavigationItem(path)}
+          key={idx}
+        >
+          <Link to={path}>{text}</Link>
+        </SideNavigation.Item>
+      ));
     return (
-      <nav className="navigation-bar">
-        <ul className="navigation-bar__list">
-          <IconLink to="/overview" icon={homeIcon} title="Overview" activeFor="/node" />
-          <IconLink to="/metrics" icon={metricsIcon} title="Metrics" />
-          <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
-          <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
-        </ul>
-        <ul className="navigation-bar__list navigation-bar__list--bottom">
-          <LoginIndicatorConnected />
-          <IconLink to="/debug" icon={cockroachIcon} className="cockroach" />
-        </ul>
-      </nav>
+      <SideNavigation>
+        {navigationItems}
+      </SideNavigation>
     );
   }
 }
+
+interface MapToStateProps {
+  isSingleNodeCluster: boolean;
+}
+
+const mapStateToProps = (state: AdminUIState) => ({
+  isSingleNodeCluster: isSingleNodeCluster(state),
+});
+
+export default withRouter(connect(mapStateToProps, null)(Sidebar));

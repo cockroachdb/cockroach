@@ -1,0 +1,9 @@
+import_stmt ::=
+	'IMPORT' import_format file_location 'WITH' kv_option_list
+	| 'IMPORT' import_format file_location 
+	| 'IMPORT' 'TABLE' table_name 'FROM' import_format file_location 'WITH' kv_option_list
+	| 'IMPORT' 'TABLE' table_name 'FROM' import_format file_location 
+	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' import_format 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 'WITH' kv_option_list
+	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' import_format 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 
+	| 'IMPORT' 'INTO' table_name import_format 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 'WITH' kv_option_list
+	| 'IMPORT' 'INTO' table_name import_format 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 

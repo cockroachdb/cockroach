@@ -1,0 +1,67 @@
+# LogicTest: 5node 3node-tenant
+
+# Tests that verify we retrieve the stats correctly. Note that we can't create
+# statistics if distsql mode is OFF.
+
+# Disable automatic stats to prevent flakes if auto stats run.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+statement ok
+CREATE TABLE t (j JSON, g GEOMETRY);
+CREATE INVERTED INDEX ON t (j);
+CREATE INVERTED INDEX ON t (g);
+INSERT
+INTO
+  t
+VALUES
+  (
+    '{"test": "some", "other": {"nested": true, "foo": 3}}',
+    '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000'
+  );
+
+statement ok
+CREATE STATISTICS s FROM t
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE t]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+s                {g}           1          1               0           true
+s                {j}           1          1               0           true
+s                {rowid}       1          1               0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t] WHERE statistics_name = 's' AND column_names = '{j}'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound                             range_rows  distinct_range_rows  equal_rows
+'\x376f746865720002666f6f00012a0600'    0           0                    1
+'\x376f7468657200026e657374656400010a'  0           0                    1
+'\x3774657374000112736f6d650001'        0           0                    1
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t] WHERE statistics_name = 's' AND column_names = '{g}'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
+'\x42fd100000000000000100000000000000000000000000000000003ff00000000000003ff0000000000000'  0           0                    1
+
+# Regression for #50596.
+statement ok
+CREATE TABLE t50596 (_jsonb JSONB, INVERTED INDEX (_jsonb));
+INSERT INTO t50596 VALUES ('{}');
+CREATE STATISTICS foo FROM t50596;
+SELECT NULL FROM t50596 WHERE '1' != _jsonb;

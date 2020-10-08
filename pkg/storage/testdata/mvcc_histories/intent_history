@@ -1,0 +1,53 @@
+## Write the base (default) value.
+
+run ok
+with t=A
+  txn_begin  ts=1
+  put   k=a v=default resolve
+  txn_remove
+----
+>> at end:
+data: "a"/0.000000001,0 -> /BYTES/default
+
+## See how the intent history evolves throughout the test.
+
+run trace ok
+with t=A
+  txn_begin  ts=2
+  with       k=a
+  put        v=first
+  txn_step
+  put        v=second
+  txn_step   n=2
+  del
+  txn_step   n=6
+  put        v=first
+  resolve_intent
+----
+>> txn_begin ts=2 t=A
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+>> put v=first k=a t=A
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=0} ts=0.000000002,0 del=false klen=12 vlen=10
+data: "a"/0.000000002,0 -> /BYTES/first
+data: "a"/0.000000001,0 -> /BYTES/default
+>> txn_step k=a t=A
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+>> put v=second k=a t=A
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=1} ts=0.000000002,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+data: "a"/0.000000002,0 -> /BYTES/second
+data: "a"/0.000000001,0 -> /BYTES/default
+>> txn_step n=2 k=a t=A
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=3} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+>> del k=a t=A
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=3} ts=0.000000002,0 del=true klen=12 vlen=0 ih={{0 /BYTES/first}{1 /BYTES/second}}
+data: "a"/0.000000002,0 -> /<empty>
+data: "a"/0.000000001,0 -> /BYTES/default
+>> txn_step n=6 k=a t=A
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=9} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+>> put v=first k=a t=A
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=9} ts=0.000000002,0 del=false klen=12 vlen=10 ih={{0 /BYTES/first}{1 /BYTES/second}{3 /<empty>}}
+data: "a"/0.000000002,0 -> /BYTES/first
+data: "a"/0.000000001,0 -> /BYTES/default
+>> resolve_intent k=a t=A
+data: "a"/0.000000002,0 -> /BYTES/first
+data: "a"/0.000000001,0 -> /BYTES/default

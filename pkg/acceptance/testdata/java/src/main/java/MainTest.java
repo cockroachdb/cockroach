@@ -1,5 +1,8 @@
 import org.junit.*;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
+import static junit.framework.TestCase.fail;
+import org.postgresql.util.PSQLException;
 
 import java.math.BigDecimal;
 import java.sql.Array;
@@ -12,6 +15,9 @@ import java.util.List;
 import java.util.UUID;
 
 public class MainTest extends CockroachDBTest {
+    @Rule
+    public ExpectedException exception = ExpectedException.none();
+
     @Test
     public void testNoOp() throws Exception {
       // This is a test we can target when building the Docker image to ensure
@@ -129,6 +135,40 @@ public class MainTest extends CockroachDBTest {
     }
 
     @Test
+    public void testIntTypes() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a SMALLINT, b INT4, c INT, d BIGINT)");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (1, 1, 1, 1)");
+        stmt.execute();
+        stmt = conn.prepareStatement("SELECT a, b, c, d FROM x");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Short s = rs.getShort(1);
+        Assert.assertEquals(1, (short)s);
+        Integer i = rs.getInt(2);
+        Assert.assertEquals(1, (int)i);
+        Long l = rs.getLong(3);
+        Assert.assertEquals(1L, (long)l);
+        l = rs.getLong(4);
+        Assert.assertEquals(1L, (long)l);
+    }
+
+    @Test
+    public void testFloatTypes() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a FLOAT4, b FLOAT8)");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (1.2, 1.2)");
+        stmt.execute();
+        stmt = conn.prepareStatement("SELECT a, b FROM x");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Float f = rs.getFloat(1);
+        Assert.assertEquals((float)1.2, (float)f, 0.0001);
+        Double d = rs.getDouble(2);
+        Assert.assertEquals(1.2, (double)d, 0.0001);
+    }
+
+    @Test
     public void testTime() throws Exception {
         PreparedStatement stmt = conn.prepareStatement("SELECT '01:02:03.456'::TIME");
         ResultSet rs = stmt.executeQuery();
@@ -170,17 +210,23 @@ public class MainTest extends CockroachDBTest {
 
     @Test
     public void testArrayWithProps() throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a SMALLINT[])");
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a SMALLINT[], b INT4[], c BIGINT[])");
         stmt.execute();
-        stmt = conn.prepareStatement("INSERT INTO x VALUES (ARRAY[123])");
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (ARRAY[123], ARRAY[123], ARRAY[123])");
         stmt.execute();
-        stmt = conn.prepareStatement("SELECT a FROM x");
+        stmt = conn.prepareStatement("SELECT a, b, c FROM x");
         ResultSet rs = stmt.executeQuery();
         rs.next();
 
         Array ar = rs.getArray(1);
-        Long[] fs = (Long[]) ar.getArray();
-        Assert.assertArrayEquals(new Long[]{123L}, fs);
+        Integer[] fs = (Integer[]) ar.getArray();
+        Assert.assertArrayEquals(new Integer[]{123}, fs);
+        ar = rs.getArray(2);
+        fs = (Integer[]) ar.getArray();
+        Assert.assertArrayEquals(new Integer[]{123}, fs);
+        ar = rs.getArray(3);
+        Long[] longs = (Long[]) ar.getArray();
+        Assert.assertArrayEquals(new Long[]{123L}, longs);
     }
 
     @Test
@@ -207,5 +253,72 @@ public class MainTest extends CockroachDBTest {
         rs = getNextVal.executeQuery();
         rs.next();
         Assert.assertEquals(rs.getInt(1), 2);
+    }
+
+    @Test
+    public void selectLimitExplicitTxn() throws Exception {
+        conn.setAutoCommit(false);
+        PreparedStatement stmt = conn.prepareStatement("SELECT * from generate_series(1, 10)");
+        stmt.setFetchSize(1);
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Assert.assertEquals(1, rs.getInt(1));
+        rs.next();
+        Assert.assertEquals(2, rs.getInt(1));
+        rs.setFetchSize(0);
+        rs.next();
+        Assert.assertEquals(3, rs.getInt(1));
+        conn.setAutoCommit(true);
+    }
+
+    // Regression for 30538: SQL query with wrong parameter value crashes
+    // database. Unlike the Go client, the JDBC client sets placeholder type
+    // hints. When these do not match the types inferred during type checking,
+    // placeholder eval will try to convert to the needed type. If the conversion
+    // fails, AssignPlaceholders needs to gracefully report that error rather than
+    // panicking.
+    @Test
+    public void testPlaceholderTypeError() throws Exception {
+        PreparedStatement stmt1 = conn.prepareStatement("CREATE TABLE x (a INT PRIMARY KEY, b UUID)");
+        stmt1.execute();
+
+        // Send a UUID that's malformed (not long enough) and expect error.
+        PreparedStatement stmt = conn.prepareStatement("SELECT * FROM x WHERE b = ?");
+        stmt.setObject(1, "e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
+        exception.expectMessage("ERROR: could not parse \"e81bb788-2291-4b6e-9cf3-b237fe6c2f3\" as " +
+            "type uuid: uuid: incorrect UUID length: e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
+        stmt.executeQuery();
+    }
+
+    // Regression for 33340: temporary columns used by window functions should
+    // be projected out after they are no longer necessary. This problem
+    // presented itself only when invoked via an external driver by crashing
+    // the server.
+    @Test
+    public void testWindowFunctions() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE t (a INT, b INT)");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO t VALUES (0, 10), (1, 11)");
+        stmt.execute();
+        stmt = conn.prepareStatement("SELECT sum(b) OVER (ORDER BY a) FROM t");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Assert.assertEquals(rs.getInt(1), 10);
+        rs.next();
+        Assert.assertEquals(rs.getInt(1), 21);
+    }
+
+    // Regression for 34429: empty string decimals shouldn't crash the server.
+    @Test
+    public void testEmptyStringDec() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("create table product_temp_tb (product_master_id int primary key,  weight DECIMAL(10,2) NOT NULL DEFAULT 0)");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO product_temp_tb values(0,0)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPDATE product_temp_tb SET weight = ? WHERE product_master_id = ?");
+        stmt.setObject(1, "");
+        stmt.setInt(2, 1);
+        exception.expectMessage("ERROR: could not parse \"\" as type decimal");
+        stmt.execute();
     }
 }

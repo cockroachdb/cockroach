@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata 5node-dist-disk
+# LogicTest: 5node-default-configs
 
 statement ok
 CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
@@ -21,8 +21,8 @@ INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
    generate_series(1, 10) AS d(d)
 
 # Verify data placement.
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -312,16 +312,16 @@ ALTER TABLE two EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 0)
 statement ok
 INSERT INTO two VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE one]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE one]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /0       {5}       5
 /0         /99      {1}       1
 /99        NULL     {5}       5
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE two]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE two]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /0       {5}       5
@@ -564,3 +564,31 @@ query R
 SELECT sum(a) FROM data WHERE FALSE
 ----
 NULL
+
+# Test that statistics aggregate functions.
+statement ok
+CREATE TABLE statistics_agg_test (y INT, x INT)
+
+statement ok
+INSERT INTO statistics_agg_test SELECT y, y%10 FROM generate_series(1, 100) AS y
+
+query R
+SELECT corr(y, x)::decimal FROM statistics_agg_test
+----
+0.045228963191363145
+
+# Regression test for #37211 (incorrect ordering between aggregator stages).
+statement ok
+CREATE TABLE uv (u INT PRIMARY KEY, v INT);
+INSERT INTO uv SELECT x, x*10 FROM generate_series(2, 8) AS g(x);
+
+query R
+SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
+----
+20000
+30000
+40000
+50000
+60000
+70000
+80000

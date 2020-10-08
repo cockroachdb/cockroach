@@ -1,26 +1,29 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package base
+package base_test
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewStoreSpec verifies that the --store arguments are correctly parsed
@@ -28,10 +31,35 @@ import (
 func TestNewStoreSpec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	const examplePebbleOptions = `[Version]
+pebble_version=0.1
+[Options]
+bytes_per_sync=524288
+cleaner=delete
+disable_wal=true
+l0_compaction_threshold=4
+l0_stop_writes_threshold=12
+lbase_max_bytes=67108864
+max_concurrent_compactions=1
+max_manifest_file_size=134217728
+max_open_files=1000
+mem_table_size=4194304
+mem_table_stop_writes_threshold=2
+min_compaction_rate=4194304
+min_flush_rate=1048576
+table_property_collectors=[]
+wal_dir=
+[Level "0"]
+block_restart_interval=16
+block_size=4096
+compression=Snappy
+index_block_size=4096
+target_file_size=2097152`
+
 	testCases := []struct {
 		value       string
 		expectedErr string
-		expected    StoreSpec
+		expected    base.StoreSpec
 	}{
 		// path
 		{"path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1"}},
@@ -119,6 +147,12 @@ func TestNewStoreSpec(t *testing.T) {
 		// RocksDB
 		{"path=/,rocksdb=key1=val1;key2=val2", "", StoreSpec{Path: "/", RocksDBOptions: "key1=val1;key2=val2"}},
 
+		// Pebble
+		{"path=/,pebble=[Options] l0_compaction_threshold=2 l0_stop_writes_threshold=10", "", StoreSpec{Path: "/",
+			PebbleOptions: "[Options]\nl0_compaction_threshold=2\nl0_stop_writes_threshold=10"}},
+		{fmt.Sprintf("path=/,pebble=%s", examplePebbleOptions), "", StoreSpec{Path: "/", PebbleOptions: examplePebbleOptions}},
+		{"path=/mnt/hda1,pebble=[Options] not_a_real_option=10", "pebble: unknown option: Options.not_a_real_option", StoreSpec{}},
+
 		// all together
 		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
 			Path:       "/mnt/hda1",
@@ -141,7 +175,7 @@ func TestNewStoreSpec(t *testing.T) {
 	}
 
 	for i, testCase := range testCases {
-		storeSpec, err := NewStoreSpec(testCase.value)
+		storeSpec, err := base.NewStoreSpec(testCase.value)
 		if err != nil {
 			if len(testCase.expectedErr) == 0 {
 				t.Errorf("%d(%s): no expected error, got %s", i, testCase.value, err)
@@ -163,7 +197,7 @@ func TestNewStoreSpec(t *testing.T) {
 
 		// Now test String() to make sure the result can be parsed.
 		storeSpecString := storeSpec.String()
-		storeSpec2, err := NewStoreSpec(storeSpecString)
+		storeSpec2, err := base.NewStoreSpec(storeSpecString)
 		if err != nil {
 			t.Errorf("%d(%s): error parsing String() result: %s", i, testCase.value, err)
 			continue
@@ -174,4 +208,82 @@ func TestNewStoreSpec(t *testing.T) {
 				storeSpec, storeSpec2)
 		}
 	}
+}
+
+// StoreSpec aliases base.StoreSpec for convenience.
+type StoreSpec = base.StoreSpec
+
+// SizeSpec aliases base.SizeSpec for convenience.
+type SizeSpec = base.SizeSpec
+
+func TestJoinListType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		join string
+		exp  string
+		err  string
+	}{
+		{"", "", "no address specified in --join"},
+		{":", "--join=:", ""},
+		{"a", "--join=a:", ""},
+		{"a,b", "--join=a: --join=b:", ""},
+		{"a,,b", "--join=a: --join=b:", ""},
+		{",a", "--join=a:", ""},
+		{"a,", "--join=a:", ""},
+		{"a:123,b", "--join=a:123 --join=b:", ""},
+		{"[::1]:123,b", "--join=[::1]:123 --join=b:", ""},
+		{"[::1,b", "", `address \[::1: missing ']' in address`},
+	}
+
+	for _, test := range testData {
+		t.Run(test.join, func(t *testing.T) {
+			var jls base.JoinListType
+			err := jls.Set(test.join)
+			if !testutils.IsError(err, test.err) {
+				t.Fatalf("error: expected %q, got: %+v", test.err, err)
+			}
+			if test.err != "" {
+				return
+			}
+			actual := jls.String()
+			if actual != test.exp {
+				t.Errorf("expected: %q, got: %q", test.exp, actual)
+			}
+		})
+	}
+}
+
+func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	boomStoreDir := filepath.Join(dir, "boom")
+	boomAuxDir := filepath.Join(boomStoreDir, base.AuxiliaryDir)
+	okStoreDir := filepath.Join(dir, "ok")
+	okAuxDir := filepath.Join(okStoreDir, base.AuxiliaryDir)
+
+	for _, sd := range []string{boomAuxDir, okAuxDir} {
+		require.NoError(t, os.MkdirAll(sd, 0755))
+	}
+
+	ssl := base.StoreSpecList{
+		Specs: []base.StoreSpec{
+			{Path: "foo", InMemory: true},
+			{Path: okStoreDir},
+			{Path: boomStoreDir},
+		},
+	}
+
+	err := ssl.PriorCriticalAlertError()
+	require.NoError(t, err)
+
+	require.NoError(t, ioutil.WriteFile(ssl.Specs[2].PreventedStartupFile(), []byte("boom"), 0644))
+
+	err = ssl.PriorCriticalAlertError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "startup forbidden by prior critical alert")
+	require.Contains(t, errors.FlattenDetails(err), "boom")
 }

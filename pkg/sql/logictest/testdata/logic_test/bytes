@@ -1,5 +1,3 @@
-# LogicTest: local local-opt
-
 query T
 SHOW bytea_output
 ----
@@ -51,6 +49,9 @@ SELECT '日本語':::STRING::BYTES::STRING
 ----
 \xe697a5e69cace8aa9e
 
+query error invalid bytea escape sequence
+SELECT '\400'::bytea
+
 statement ok
 SET bytea_output = escape
 
@@ -99,10 +100,11 @@ SELECT '日本語':::STRING::BYTES::STRING
 ----
 \346\227\245\346\234\254\350\252\236
 
+subtest Regression_25841
+
 statement ok
 set bytea_output = hex
 
-# Regression test for #25841.
 query T
 SELECT e'a\\\\b'::STRING::BYTEA
 ----
@@ -118,3 +120,37 @@ SELECT e'a\\bcde'::STRING::BYTEA
 
 query error bytea encoded value ends with incomplete escape sequence
 SELECT e'a\\01'::STRING::BYTEA
+
+subtest Regression_27950
+
+statement ok
+set bytea_output = hex
+
+statement ok
+CREATE TABLE t(b BYTES); INSERT INTO t(b) VALUES ('\xe697a5e69cace8aa9e'::BYTES)
+
+query TT
+SELECT b, b::STRING FROM t
+----
+日本語  \xe697a5e69cace8aa9e
+
+statement ok
+set bytea_output = escape
+
+query TT
+SELECT b, b::STRING FROM t
+----
+日本語  \346\227\245\346\234\254\350\252\236
+
+statement ok
+DROP TABLE t
+
+subtest Regression_4312
+
+statement ok
+PREPARE r1(bytes) AS SELECT descriptor::STRING FROM system.descriptor WHERE descriptor != $1 ORDER BY descriptor DESC LIMIT 1
+
+query T
+EXECUTE r1('abc')
+----
+\0224\012\011defaultdb\0202\032\035\012\011\012\005admin\020\002\012\010\012\004root\020\002\022\004root\030\001"\000(\001@\000J\000

@@ -1,14 +1,28 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM system.information_schema.schemata
 ----
-values  ·     ·                  (catalog_name, schema_name, default_character_set_name, sql_path)  ·
-·       size  4 columns, 4 rows  ·                                                                  ·
+·              distribution         local                 ·                                                                                        ·
+·              vectorized           false                 ·                                                                                        ·
+virtual table  ·                    ·                     (catalog_name, schema_name, default_character_set_name, sql_path, crdb_is_user_defined)  ·
+·              estimated row count  1000 (missing stats)  ·                                                                                        ·
+·              table                schemata@primary      ·                                                                                        ·
 
 query TTT
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ----
-filter       ·     ·
- └── values  ·     ·
-·            size  6 columns, 102 rows
+·              distribution  local
+·              vectorized    false
+virtual table  ·             ·
+·              table         tables@tables_table_name_idx
+·              spans         [/'foo' - /'foo']
+
+statement error use of crdb_internal_vtable_pk column not allowed
+SELECT crdb_internal_vtable_pk FROM system.information_schema.schemata
+
+statement error use of crdb_internal_vtable_pk column not allowed
+SELECT schema_name FROM system.information_schema.schemata ORDER BY crdb_internal_vtable_pk
+
+statement error use of crdb_internal_vtable_pk column not allowed
+SELECT schema_name FROM system.information_schema.schemata WHERE crdb_internal_vtable_pk = 1

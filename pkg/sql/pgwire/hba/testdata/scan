@@ -1,0 +1,356 @@
+subtest token
+
+token
+----
+hba.String{} false ""
+
+
+token
+  # Just a comment.
+----
+hba.String{} false ""
+
+token
+a b
+----
+hba.String{Value:"a", Quoted:false} false " b"
+
+token
+a,b
+----
+hba.String{Value:"a", Quoted:false} true "b"
+
+token
+a, b
+----
+hba.String{Value:"a", Quoted:false} true " b"
+
+
+token
+a  ,b
+----
+hba.String{Value:"a", Quoted:false} false "  ,b"
+
+token
+abc,def
+----
+hba.String{Value:"abc", Quoted:false} true "def"
+
+token
+"abc",def
+----
+hba.String{Value:"abc", Quoted:true} true "def"
+
+token
+"abc"def
+----
+hba.String{Value:"abc", Quoted:true} false "def"
+
+token
+# abc,def
+----
+hba.String{} false ""
+
+token
+# "abc
+----
+hba.String{} false ""
+
+
+token
+"abc
+----
+error: unterminated quoted string
+
+subtest end
+
+subtest field
+
+field
+----
+[]
+""
+
+field
+  # Just a comment.
+----
+[]
+""
+
+field
+a b c
+----
+[a]
+" b c"
+
+field
+  a  b # c d e
+----
+[a]
+"  b # c d e"
+
+field
+   a,b    
+----
+[a b]
+""
+
+field
+   a,b    c
+----
+[a b]
+"    c"
+
+field
+   a,b,    c
+----
+[a b c]
+""
+
+field
+   a,b    ,c
+----
+[a b]
+"    ,c"
+
+field
+a,"b",c  d
+----
+[a "b" c]
+"  d"
+
+field
+"a",b,c   d
+----
+["a" b c]
+"   d"
+
+field
+"a","b","c"   d
+----
+["a" "b" "c"]
+"   d"
+
+field
+"a, b ,c"   d
+----
+["a, b ,c"]
+"   d"
+
+field
+all,abc
+----
+[all abc]
+""
+
+field
+# all,abc
+----
+[]
+""
+
+field
+all,"abc
+----
+error: unterminated quoted string
+
+subtest end
+
+subtest whitespace
+
+file
+----
+hba.scannedInput{}
+
+file
+# Just a comment.
+----
+hba.scannedInput{}
+
+file
+#
+
+    # comment and empty lines
+
+#
+----
+hba.scannedInput{}
+
+subtest end
+
+subtest whitespace_around_lines
+
+file
+#
+
+a     
+
+#
+----
+hba.scannedInput{
+    lines: {
+        {
+            input:  "a",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+            },
+        },
+    },
+    linenos: {3},
+}
+
+file
+#
+
+      a
+
+#
+----
+hba.scannedInput{
+    lines: {
+        {
+            input:  "a",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+            },
+        },
+    },
+    linenos: {3},
+}
+
+file
+#
+
+      a      
+
+b # tailing comment + whitespace   
+
+#
+----
+hba.scannedInput{
+    lines: {
+        {
+            input:  "a",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+            },
+        },
+        {
+            input:  "b # tailing comment + whitespace",
+            tokens: {
+                {
+                    {Value:"b", Quoted:false},
+                },
+            },
+        },
+    },
+    linenos: {3, 5},
+}
+
+subtest end
+
+subtest fields
+
+file
+a b c
+----
+hba.scannedInput{
+    lines: {
+        {
+            input:  "a b c",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+                {
+                    {Value:"b", Quoted:false},
+                },
+                {
+                    {Value:"c", Quoted:false},
+                },
+            },
+        },
+    },
+    linenos: {1},
+}
+
+file
+a b c
+d e
+----
+hba.scannedInput{
+    lines: {
+        {
+            input:  "a b c",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+                {
+                    {Value:"b", Quoted:false},
+                },
+                {
+                    {Value:"c", Quoted:false},
+                },
+            },
+        },
+        {
+            input:  "d e",
+            tokens: {
+                {
+                    {Value:"d", Quoted:false},
+                },
+                {
+                    {Value:"e", Quoted:false},
+                },
+            },
+        },
+    },
+    linenos: {1, 2},
+}
+
+file
+#
+
+  a  b # c d e
+
+ d  e # b c
+
+#
+----
+hba.scannedInput{
+    lines: {
+        {
+            input:  "a  b # c d e",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+                {
+                    {Value:"b", Quoted:false},
+                },
+            },
+        },
+        {
+            input:  "d  e # b c",
+            tokens: {
+                {
+                    {Value:"d", Quoted:false},
+                },
+                {
+                    {Value:"e", Quoted:false},
+                },
+            },
+        },
+    },
+    linenos: {3, 5},
+}
+
+
+subtest end

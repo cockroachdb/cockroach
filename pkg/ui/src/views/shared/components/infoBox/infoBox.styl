@@ -1,0 +1,31 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+
+.info-box
+  margin-top 20px
+  padding 10px
+  padding-left 26px
+  background-color $info-box-fill-color
+  border-left 5px solid $info-box-border-color
+  max-width 560px
+
+  h1, h2, h3, h4, h5
+    font-weight bold
+    color $info-box-heading-color
+
+  p
+    margin-top 10px
+    color $body-color
+
+  a
+    text-decoration none
+    color $link-color

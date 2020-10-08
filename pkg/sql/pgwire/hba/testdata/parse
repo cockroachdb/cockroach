@@ -1,0 +1,632 @@
+subtest line_too_short
+
+line
+local
+----
+error: end-of-line before database specification
+
+line
+local a
+----
+error: end-of-line before role specification
+
+line
+local a b
+----
+error: end-of-line before authentication method
+
+line
+host a b c
+----
+error: end-of-line before authentication method
+
+line
+host a b
+----
+error: end-of-line before IP address specification
+
+line
+host a b 1.1.1.1
+----
+error: end-of-line before netmask specification
+
+subtest end
+
+subtest unknown_formats
+
+line
+unknown a b c
+----
+error: unknown connection type: "unknown"
+
+line
+local a b c d
+----
+error: authentication option not in name=value format: d
+
+subtest end
+
+subtest quoted_columns
+
+line
+"local" a b c
+----
+# Original configuration:
+# "local" a b c
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+local  a        b            c
+
+line
+local a b "method"
+----
+# Original configuration:
+# local a b "method"
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD   OPTIONS
+local  a        b            "method"
+
+line
+host all all all gss k=v " someopt = withspaces "
+----
+# Original configuration:
+# host all all all gss k=v " someopt = withspaces "
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   all      all  all     gss    k=v " someopt = withspaces "
+
+subtest end
+
+subtest keyword_all
+
+line
+host all b c d
+----
+# Original configuration:
+# host all b c d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   all      b    c       d
+
+line
+host "all" b c d
+----
+# Original configuration:
+# host "all" b c d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   "all"    b    c       d
+
+line
+host a all c d
+----
+# Original configuration:
+# host a all c d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   a        all  c       d
+
+line
+host a "all" c d
+----
+# Original configuration:
+# host a "all" c d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER  ADDRESS METHOD OPTIONS
+host   a        "all" c       d
+
+line
+host a b all d
+----
+# Original configuration:
+# host a b all d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   a        b    all     d
+
+subtest end
+
+subtest samehost_samenet
+
+line
+host a b samehost d
+----
+error: unimplemented: address specification samehost is not yet supported
+
+line
+host a b samenet d
+----
+error: unimplemented: address specification samenet is not yet supported
+
+subtest end
+
+subtest addr
+
+
+line
+host a b 1.1.1.1,2.2.2.2
+----
+error: multiple values specified for host address
+
+line
+local a b 1.1.1.1
+----
+# Original configuration:
+# local a b 1.1.1.1
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD  OPTIONS
+local  a        b            1.1.1.1
+
+
+line
+host a b 0.0.0.0/0 d
+----
+# Original configuration:
+# host a b 0.0.0.0/0 d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS   METHOD OPTIONS
+host   a        b    0.0.0.0/0 d
+
+parse
+host all all 0.0/0 trust
+----
+unknown directive: parse
+
+line
+host a b ::1/0 d
+----
+# Original configuration:
+# host a b ::1/0 d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   a        b    ::/0    d
+
+line
+host a b 2.3.4.5/8 d
+----
+# Original configuration:
+# host a b 2.3.4.5/8 d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS   METHOD OPTIONS
+host   a        b    2.0.0.0/8 d
+
+line
+host all all fe80::7a31:c1ff:0000:0000/96 cert
+----
+# Original configuration:
+# host all all fe80::7a31:c1ff:0000:0000/96 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS                METHOD OPTIONS
+host   all      all  fe80::7a31:c1ff:0:0/96 cert
+
+line
+host a b 1.1.1.1 255.0.0.0,255.255.0.0 d
+----
+error: multiple values specified for netmask
+
+
+line
+host a b 2.3.4.5 255.255.0.0 d
+----
+# Original configuration:
+# host a b 2.3.4.5 255.255.0.0 d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS    METHOD OPTIONS
+host   a        b    2.3.0.0/16 d
+
+line
+host a b fe80:7a31:c1ff:: ffff:fff0:: d
+----
+# Original configuration:
+# host a b fe80:7a31:c1ff:: ffff:fff0:: d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS        METHOD OPTIONS
+host   a        b    fe80:7a30::/28 d
+
+line
+host a b 1.1.1.1 abc d
+----
+error: invalid IP mask "abc": netmask not in IP numeric format
+
+line
+host a b 1.1.1.1 8.0.0.8 d
+----
+error: invalid IP mask "8.0.0.8": address is not a mask
+
+line
+host a b myhost d
+----
+# Original configuration:
+# host a b myhost d
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   a        b    myhost  d
+
+subtest end
+
+subtest multiline_entries
+
+multiline
+host all all 0.0.0.0/0 trust
+# comment
+
+local all all here trust
+host all all ::1 0 reject # ip and cidr with space
+host all all fe80::7a31:c1ff:0000:0000/96 cert
+host all all all trust
+host all all hostname trust
+host all all 1.1.1.1 1 trust
+----
+error: line 4: authentication option not in name=value format: trust
+
+subtest end
+
+subtest comma_separated_lists
+
+multiline
+host a,b,c all all trust
+host all a,b,c all trust
+host a,b,c d,e,f all trust
+host all testuser,"all" 0.0.0.0/0 cert
+----
+# String render check:
+# Original configuration:
+# host a,b,c all all trust
+# host all a,b,c all trust
+# host a,b,c d,e,f all trust
+# host all testuser,"all" 0.0.0.0/0 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER           ADDRESS   METHOD OPTIONS
+host   a,b,c    all            all       trust
+host   all      a,b,c          all       trust
+host   a,b,c    d,e,f          all       trust
+host   all      testuser,"all" 0.0.0.0/0 cert
+# Detail:
+&hba.Conf{
+    Entries: {
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
+                {Value:"c", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address:      hba.String{Value:"all", Quoted:false},
+            Method:       hba.String{Value:"trust", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
+            Input:        "host a,b,c all all trust",
+            Generated:    false,
+        },
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
+                {Value:"c", Quoted:false},
+            },
+            Address:      hba.String{Value:"all", Quoted:false},
+            Method:       hba.String{Value:"trust", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
+            Input:        "host all a,b,c all trust",
+            Generated:    false,
+        },
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
+                {Value:"c", Quoted:false},
+            },
+            User: {
+                {Value:"d", Quoted:false},
+                {Value:"e", Quoted:false},
+                {Value:"f", Quoted:false},
+            },
+            Address:      hba.String{Value:"all", Quoted:false},
+            Method:       hba.String{Value:"trust", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
+            Input:        "host a,b,c d,e,f all trust",
+            Generated:    false,
+        },
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"testuser", Quoted:false},
+                {Value:"all", Quoted:true},
+            },
+            Address: &net.IPNet{
+                IP:   {0x0, 0x0, 0x0, 0x0},
+                Mask: {0x0, 0x0, 0x0, 0x0},
+            },
+            Method:       hba.String{Value:"cert", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
+            Input:        "host all testuser,\"all\" 0.0.0.0/0 cert",
+            Generated:    false,
+        },
+    },
+}
+
+
+multiline
+host "all","test space",something some,"us ers" all cert
+----
+# String render check:
+# Original configuration:
+# host "all","test space",something some,"us ers" all cert
+#
+# Interpreted configuration:
+# TYPE DATABASE                     USER          ADDRESS METHOD OPTIONS
+host   "all","test space",something some,"us ers" all     cert
+# Detail:
+&hba.Conf{
+    Entries: {
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"all", Quoted:true},
+                {Value:"test space", Quoted:true},
+                {Value:"something", Quoted:false},
+            },
+            User: {
+                {Value:"some", Quoted:false},
+                {Value:"us ers", Quoted:true},
+            },
+            Address:      hba.String{Value:"all", Quoted:false},
+            Method:       hba.String{Value:"cert", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
+            Input:        "host \"all\",\"test space\",something some,\"us ers\" all cert",
+            Generated:    false,
+        },
+    },
+}
+
+subtest end
+
+subtest empty_strings
+
+multiline
+"" all all all trust
+----
+error: line 1: unknown connection type: ""
+
+multiline
+host all all all ""
+----
+error: line 1: cannot use empty string as authentication method
+
+multiline
+host all all "" cert
+----
+error: line 1: cannot use empty string as address
+
+subtest end
+
+subtest quoted_options
+
+multiline
+host all all all gss k=v " someopt = withspaces "
+----
+# String render check:
+# Original configuration:
+# host all all all gss k=v " someopt = withspaces "
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   all      all  all     gss    k=v " someopt = withspaces "
+# Detail:
+&hba.Conf{
+    Entries: {
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address:  hba.String{Value:"all", Quoted:false},
+            Method:   hba.String{Value:"gss", Quoted:false},
+            MethodFn: nil,
+            Options:  {
+                {"k", "v"},
+                {" someopt ", " withspaces "},
+            },
+            OptionQuotes: {false, true},
+            Input:        "host all all all gss k=v \" someopt = withspaces \"",
+            Generated:    false,
+        },
+    },
+}
+
+subtest end
+
+subtest invalid_string
+
+multiline
+host "all all 0.0.0.0/0 trust
+----
+error: line 1: unterminated quoted string
+
+subtest end
+
+subtest empty_conf
+
+multiline
+# no line
+
+# to be found here
+----
+# String render check:
+# (empty configuration)
+# Detail:
+&hba.Conf{}
+
+subtest end
+
+subtest error_lineno
+
+multiline
+local all all cert
+host invalid
+----
+error: line 2: end-of-line before role specification
+
+subtest end
+
+subtest options
+
+multiline
+host all all root cert-password ignored=value
+host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
+----
+# String render check:
+# Original configuration:
+# host all all root cert-password ignored=value
+# host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      all  root    cert-password ignored=value
+host   all      all  all     gss           krb_realm=other include_realm=0 krb_realm=te-st12.COM
+# Detail:
+&hba.Conf{
+    Entries: {
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address:  hba.String{Value:"root", Quoted:false},
+            Method:   hba.String{Value:"cert-password", Quoted:false},
+            MethodFn: nil,
+            Options:  {
+                {"ignored", "value"},
+            },
+            OptionQuotes: {false},
+            Input:        "host all all root cert-password ignored=value",
+            Generated:    false,
+        },
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address:  hba.String{Value:"all", Quoted:false},
+            Method:   hba.String{Value:"gss", Quoted:false},
+            MethodFn: nil,
+            Options:  {
+                {"krb_realm", "other"},
+                {"include_realm", "0"},
+                {"krb_realm", "te-st12.COM"},
+            },
+            OptionQuotes: {false, false, false},
+            Input:        "host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM",
+            Generated:    false,
+        },
+    },
+}
+
+subtest end
+
+subtest more_all_tests
+
+multiline
+host db all 0.0.0.0/0 cert
+host "all" "all" 0.0.0.0/0 cert
+----
+# String render check:
+# Original configuration:
+# host db all 0.0.0.0/0 cert
+# host "all" "all" 0.0.0.0/0 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER  ADDRESS   METHOD OPTIONS
+host   db       all   0.0.0.0/0 cert
+host   "all"    "all" 0.0.0.0/0 cert
+# Detail:
+&hba.Conf{
+    Entries: {
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"db", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: &net.IPNet{
+                IP:   {0x0, 0x0, 0x0, 0x0},
+                Mask: {0x0, 0x0, 0x0, 0x0},
+            },
+            Method:       hba.String{Value:"cert", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
+            Input:        "host db all 0.0.0.0/0 cert",
+            Generated:    false,
+        },
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"all", Quoted:true},
+            },
+            User: {
+                {Value:"all", Quoted:true},
+            },
+            Address: &net.IPNet{
+                IP:   {0x0, 0x0, 0x0, 0x0},
+                Mask: {0x0, 0x0, 0x0, 0x0},
+            },
+            Method:       hba.String{Value:"cert", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
+            Input:        "host \"all\" \"all\" 0.0.0.0/0 cert",
+            Generated:    false,
+        },
+    },
+}
+
+subtest end

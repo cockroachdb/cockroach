@@ -1,0 +1,126 @@
+# We're going to have a "passworduser" with a password set, but no client cert.
+
+config secure
+----
+
+sql
+CREATE USER passworduser WITH PASSWORD 'pass'
+----
+ok
+
+subtest root_user_cannot_use_password
+
+# This test exercises that root cannot log in with
+# a password even if the HBA rules say so (i.e. root is
+# always forced to auth with cert).
+
+set_hba
+host all root 0.0.0.0/0 password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all root 0.0.0.0/0 password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
+host   all      root all       cert-password
+host   all      root 0.0.0.0/0 password
+
+connect user=root password=abc sslmode=verify-ca sslcert=
+----
+ERROR: password authentication failed for user root
+
+subtest end root_user_cannot_use_password
+
+
+subtest user_has_both_cert_and_passwd
+
+sql
+ALTER USER testuser WITH PASSWORD 'pass'
+----
+ok
+
+subtest user_has_both_cert_and_passwd/only_cert_implies_reject_password
+
+# If the rule says "I want a cert" (and the user has a cert),
+# then don't accept a password even if the user has one.
+
+set_hba
+host all testuser 0.0.0.0/0 cert
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testuser 0.0.0.0/0 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
+host   all      root     all       cert-password
+host   all      testuser 0.0.0.0/0 cert
+
+connect user=testuser password=pass sslmode=verify-ca sslcert=
+----
+ERROR: no TLS peer certificates, but required for auth
+
+subtest end user_has_both_cert_and_passwd/only_cert_implies_reject_password
+
+subtest user_has_both_cert_and_passwd/only_password_implies_reject_cert
+
+set_hba
+host all testuser 0.0.0.0/0 password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testuser 0.0.0.0/0 password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
+host   all      root     all       cert-password
+host   all      testuser 0.0.0.0/0 password
+
+connect user=testuser
+----
+ERROR: password authentication failed for user testuser
+
+subtest end user_has_both_cert_and_passwd/only_password_implies_reject_cert
+
+
+sql
+DROP USER testuser; CREATE USER testuser
+----
+ok
+
+subtest end user_has_both_cert_and_passwd
+
+subtest user_has_null_hashed_password_column
+
+# This test manually adds a user to the system.users table with a NULL (not
+# empty) hashedPassword and attempts to log in as that user. This used to crash
+# the server (and this test) because the authentication routine only properly
+# handled empty hashedPassword values. See #48769.
+
+sql
+INSERT INTO system.users (username, "hashedPassword") VALUES ('nopassword', NULL)
+----
+ok
+
+set_hba
+host all nopassword 0.0.0.0/0 password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all nopassword 0.0.0.0/0 password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER       ADDRESS   METHOD        OPTIONS
+host   all      root       all       cert-password
+host   all      nopassword 0.0.0.0/0 password
+
+connect user=nopassword
+----
+ERROR: password authentication failed for user nopassword
+
+subtest end user_has_null_hashed_password_column

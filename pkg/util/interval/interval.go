@@ -7,17 +7,13 @@
 //
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This code originated in the github.com/biogo/store/interval package.
 
@@ -28,25 +24,32 @@ package interval
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/errors"
 )
 
 // ErrInvertedRange is returned if an interval is used where the start value is greater
 // than the end value.
-var ErrInvertedRange = errors.New("interval: inverted range")
+var ErrInvertedRange = errors.Newf("interval: inverted range")
 
 // ErrEmptyRange is returned if an interval is used where the start value is equal
 // to the end value.
-var ErrEmptyRange = errors.New("interval: empty range")
+var ErrEmptyRange = errors.Newf("interval: empty range")
+
+// ErrNilRange is returned if an interval is used where both the start value and
+// the end value are nil. This is a specialization of ErrEmptyRange.
+var ErrNilRange = errors.Newf("interval: nil range")
 
 func rangeError(r Range) error {
 	switch r.Start.Compare(r.End) {
 	case 1:
 		return ErrInvertedRange
 	case 0:
+		if len(r.Start) == 0 && len(r.End) == 0 {
+			return ErrNilRange
+		}
 		return ErrEmptyRange
 	default:
 		return nil
@@ -146,7 +149,7 @@ func Compare(a, b Interface) int {
 // former has measurably better performance than the latter. So Equal should be used when only
 // equality state is needed.
 func Equal(a, b Interface) bool {
-	return a.Range().Start.Equal(b.Range().Start) && a.ID() == b.ID()
+	return a.ID() == b.ID() && a.Range().Start.Equal(b.Range().Start)
 }
 
 // A Comparable is a type that describes the ends of a Range.
@@ -176,7 +179,7 @@ func (c Comparable) Equal(o Comparable) bool {
 // should traverse no further.
 type Operation func(Interface) (done bool)
 
-// Tree is an interval tree. For all the functions which have a fast argment,
+// Tree is an interval tree. For all the functions which have a fast argument,
 // fast being true means a fast operation which does not adjust node ranges. If
 // fast is false, node ranges are adjusted.
 type Tree interface {
@@ -216,6 +219,8 @@ type Tree interface {
 	Iterator() TreeIterator
 	// Clear this tree.
 	Clear()
+	// Clone clones the tree, returning a copy.
+	Clone() Tree
 }
 
 // TreeIterator iterates over all intervals stored in the interval tree, in-order.

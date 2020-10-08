@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package workload
 
@@ -28,6 +24,8 @@ type ConnFlags struct {
 	*pflag.FlagSet
 	DBOverride  string
 	Concurrency int
+	// Method for issuing queries; see SQLRunner.
+	Method string
 }
 
 // NewConnFlags returns an initialized ConnFlags.
@@ -38,12 +36,14 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 		`Override for the SQL database to use. If empty, defaults to the generator name`)
 	c.IntVar(&c.Concurrency, `concurrency`, 2*runtime.NumCPU(),
 		`Number of concurrent workers`)
+	c.StringVar(&c.Method, `method`, `prepare`, `SQL issue method (prepare, noprepare, simple)`)
 	genFlags.AddFlagSet(c.FlagSet)
 	if genFlags.Meta == nil {
 		genFlags.Meta = make(map[string]FlagMeta)
 	}
 	genFlags.Meta[`db`] = FlagMeta{RuntimeOnly: true}
 	genFlags.Meta[`concurrency`] = FlagMeta{RuntimeOnly: true}
+	genFlags.Meta[`method`] = FlagMeta{RuntimeOnly: true}
 	return c
 }
 
@@ -65,6 +65,10 @@ func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, erro
 				urls[i], d, dbName)
 		}
 		parsed.Path = dbName
+
+		q := parsed.Query()
+		q.Set("application_name", gen.Meta().Name)
+		parsed.RawQuery = q.Encode()
 
 		switch parsed.Scheme {
 		case "postgres", "postgresql":

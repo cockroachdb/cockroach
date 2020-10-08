@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #include <cinttypes>
 #include <cstdint>
@@ -78,5 +74,37 @@ TEST(Libroach, Encoding) {
     rocksdb::Slice slice(buf);
     DecodeUvarint64(&slice, &out);
     EXPECT_EQ(*it, out);
+  }
+}
+
+TEST(Libroach, DecodeTenantAndTablePrefix) {
+  // clang-format off
+  std::vector<std::pair<std::string, uint64_t>> cases{
+    {{'\x89'}, 1LLU},
+    {{'\xf6', '\xff'}, 255LLU},
+    {{'\xf7', '\xff', '\xff'}, 65535LLU},
+    {{'\xf8', '\xff', '\xff', '\xff'}, 16777215LLU},
+    {{'\xf9', '\xff', '\xff', '\xff', '\xff'}, 4294967295LLU},
+    {{'\xfa', '\xff', '\xff', '\xff', '\xff', '\xff'}, 1099511627775LLU},
+    {{'\xfb', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 281474976710655LLU},
+    {{'\xfc', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 72057594037927935LLU},
+    {{'\xfd', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 18446744073709551615LLU},
+    {{'\xfe', '\x8d', '\x89'}, 1LLU},
+    {{'\xfe', '\x8d', '\xf6', '\xff'}, 255LLU},
+    {{'\xfe', '\x8d', '\xf7', '\xff', '\xff'}, 65535LLU},
+    {{'\xfe', '\x8d', '\xf8', '\xff', '\xff', '\xff'}, 16777215LLU},
+    {{'\xfe', '\x8d', '\xf9', '\xff', '\xff', '\xff', '\xff'}, 4294967295LLU},
+    {{'\xfe', '\x8d', '\xfa', '\xff', '\xff', '\xff', '\xff', '\xff'}, 1099511627775LLU},
+    {{'\xfe', '\x8d', '\xfb', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 281474976710655LLU},
+    {{'\xfe', '\x8d', '\xfc', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 72057594037927935LLU},
+    {{'\xfe', '\x8d', '\xfd', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 18446744073709551615LLU},
+  };
+  // clang-format on
+
+  for (auto it = cases.begin(); it != cases.end(); it++) {
+    rocksdb::Slice slice(it->first);
+    uint64_t tbl = 0;
+    EXPECT_TRUE(DecodeTenantAndTablePrefix(&slice, &tbl));
+    EXPECT_EQ(it->second, tbl);
   }
 }

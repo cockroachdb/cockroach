@@ -1,0 +1,119 @@
+# Ensure updates that remove a k/v pair succeed.
+statement ok
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  INDEX i (y) STORING (z, w),
+  FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (w)
+);
+INSERT INTO t VALUES (1, 2, 3, 4);
+UPDATE t SET z = NULL, w = NULL WHERE y = 2
+
+query III
+SELECT y, z, w FROM t@i WHERE y = 2
+----
+2 NULL NULL
+
+# Test some cases around insert on conflict.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y INT,
+  z STRING,
+  v INT,
+  UNIQUE INDEX i (y) STORING (z, v)
+);
+INSERT INTO t VALUES (1, 2, '3', 4), (5, 6, '7', 8);
+INSERT INTO t VALUES (10, 2, '10', 10) ON CONFLICT (y) DO NOTHING
+
+query ITI rowsort
+SELECT y, z, v FROM t@i
+----
+2 3 4
+6 7 8
+
+statement ok
+INSERT INTO t VALUES (10, 2, '10', 10) ON CONFLICT (y) DO UPDATE set x = 20, z = '20', v = 20 WHERE t.y = 2
+
+query ITI rowsort
+SELECT y, z, v FROM t@i
+----
+2 20 20
+6 7 8
+
+# Test some cases around upsert.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y STRING,
+  z DECIMAL,
+  w INT,
+  FAMILY (y), FAMILY (z), FAMILY (x, w),
+  INDEX i (y) STORING (z, w)
+);
+INSERT INTO t VALUES (1, '2', 3.0, 4), (5, '6', 7.00, 8);
+UPSERT INTO t VALUES (9, '10', 11.000, 12), (1, '3', 5.0, 16)
+
+query TTI rowsort
+SELECT y, z, w FROM t@i
+----
+3 5.0 16
+6 7.00 8
+10 11.000 12
+
+# Test some cases around schema changes.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y DECIMAL,
+  z INT,
+  w INT,
+  v INT
+);
+INSERT INTO t VALUES (1, 2, 3, 4, 5), (6, 7, 8, 9, 10), (11, 12, 13, 14, 15);
+CREATE INDEX i ON t (y) STORING (z, w, v)
+
+query TIII rowsort
+SELECT y, z, w, v FROM t@i
+----
+2 3 4 5
+7 8 9 10
+12 13 14 15
+
+statement ok
+DROP INDEX t@i
+
+query ITIII rowsort
+SELECT * FROM t
+----
+1 2 3 4 5
+6 7 8 9 10
+11 12 13 14 15
+
+statement ok
+ALTER TABLE t ADD COLUMN u INT DEFAULT (20) CREATE FAMILY new_fam;
+CREATE INDEX i ON t (y) STORING (z, w, v, u)
+
+query TIIII rowsort
+SELECT y, z, w, v, u FROM t@i
+----
+2 3 4 5 20
+7 8 9 10 20
+12 13 14 15 20
+
+# Regression for #42992.
+statement ok
+CREATE TABLE t42992 (x TIMESTAMP PRIMARY KEY, y INT, z INT, UNIQUE INDEX i (y) STORING (z), FAMILY (x), FAMILY (y), FAMILY (z))
+
+statement ok
+INSERT INTO t42992 VALUES (now(), NULL, 2)
+
+query II
+SELECT y, z FROM t42992@i
+----
+NULL 2

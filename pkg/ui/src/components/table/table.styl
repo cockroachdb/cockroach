@@ -1,0 +1,93 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-table-wrapper
+  .ant-table
+    color $colors--primary-text
+
+  // Table header
+  .ant-table-thead
+    background-color $colors--neutral-1
+    @extend $text--heading-6
+
+  .ant-table-thead > tr > th
+    padding $spacing-base $spacing-base
+    color $colors--neutral-6
+    font-family $font-family--semi-bold
+    font-weight $font-weight--bold
+    letter-spacing 1.5px
+    .ant-table-column-sorter
+      vertical-align baseline
+  // END: Table header
+
+  // Table Column
+  .column--align-right
+    text-align end
+  // END: Table Column
+
+  // Expand/Collapse icon
+  .ant-table-row-expand-icon
+    border none
+    background-color transparent
+
+  .ant-table-row-collapsed::after
+    content '▶'
+    font-size 8px
+
+  .ant-table-row-expanded::after
+    content '▼'
+    font-size 8px
+  // END: Expand/Collapse icon
+
+  // Table row
+  .ant-table-row
+    @extend $text--body
+
+  .ant-table-row .cell--show-on-hover
+    visibility hidden
+
+  .ant-table-row:hover .cell--show-on-hover
+    visibility visible
+  // END: Table row
+
+  // Table cell
+  .ant-table-tbody > tr > td
+    padding $spacing-smaller $spacing-smaller
+    border-bottom-color $colors--neutral-3
+
+  // Increase right padding for columns aligned by right
+  .ant-table-tbody > tr > td.column--align-right
+    padding-right $spacing-mid-large
+
+  // show column with right border
+  .ant-table-tbody > tr > td.column--border-right
+    border-right $colors--neutral-3 solid 1px
+  // END: Table cell
+
+  // Table cell on hover
+  .ant-table-thead > tr.ant-table-row-hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
+  .ant-table-tbody > tr.ant-table-row-hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
+  .ant-table-thead > tr:hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
+  .ant-table-tbody > tr:hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td
+    background $colors--neutral-1
+  // END: Table cell on hover
+
+  .ant-table-placeholder
+    border $colors--neutral-1 solid 1px
+
+  .empty-table__message
+    @extend $text--body
+    text-align center
+
+  .ant-pagination.ant-table-pagination
+    text-align center
+    float unset

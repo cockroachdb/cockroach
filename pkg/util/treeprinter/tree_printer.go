@@ -1,28 +1,25 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package treeprinter
 
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 var (
-	edgeLink = []rune(" │")
-	edgeMid  = []rune(" ├── ")
-	edgeLast = []rune(" └── ")
+	edgeLinkChr = rune('│')
+	edgeMidChr  = rune('├')
+	edgeLastChr = rune('└')
 )
 
 // Node is a handle associated with a specific depth in a tree. See below for
@@ -38,7 +35,7 @@ type Node struct {
 //   tp := New()
 //   root := n.Child("root")
 //   root.Child("child-1")
-//   root.Child("child-2").Child("grandchild").AddLine("grandchild-more-info")
+//   root.Child("child-2").Child("grandchild\ngrandchild-more-info")
 //   root.Child("child-3")
 //
 //   fmt.Print(tp.String())
@@ -55,8 +52,37 @@ type Node struct {
 // Note that the Child calls can't be rearranged arbitrarily; they have
 // to be in the order they need to be displayed (depth-first pre-order).
 func New() Node {
+	return NewWithIndent(true, true, 2)
+}
+
+// NewWithIndent creates a tree printer like New, permitting customization of
+// the width of the outputted tree.
+// leftPad controls whether the tree lines are padded from the first character
+// of their parent.
+// rightPad controls whether children are separated from their edges by a space.
+// edgeLength controls how many characters wide each edge is.
+func NewWithIndent(leftPad, rightPad bool, edgeLength int) Node {
+	var leftPadStr, rightPadStr string
+	var edgeBuilder strings.Builder
+	for i := 0; i < edgeLength; i++ {
+		edgeBuilder.WriteRune('─')
+	}
+	edgeStr := edgeBuilder.String()
+	if leftPad {
+		leftPadStr = " "
+	}
+	if rightPad {
+		rightPadStr = " "
+	}
+	edgeLink := fmt.Sprintf("%s%c", leftPadStr, edgeLinkChr)
+	edgeMid := fmt.Sprintf("%s%c%s%s", leftPadStr, edgeMidChr, edgeStr, rightPadStr)
+	edgeLast := fmt.Sprintf("%s%c%s%s", leftPadStr, edgeLastChr, edgeStr, rightPadStr)
 	return Node{
-		tree:  &tree{},
+		tree: &tree{
+			edgeLink: []rune(edgeLink),
+			edgeMid:  []rune(edgeMid),
+			edgeLast: []rune(edgeLast),
+		},
 		level: 0,
 	}
 }
@@ -70,6 +96,10 @@ type tree struct {
 
 	// row index of the last row for a given level. Grows as needed.
 	lastNode []int
+
+	edgeLink []rune
+	edgeMid  []rune
+	edgeLast []rune
 }
 
 // Childf adds a node as a child of the given node.
@@ -77,12 +107,42 @@ func (n Node) Childf(format string, args ...interface{}) Node {
 	return n.Child(fmt.Sprintf(format, args...))
 }
 
-// Child adds a node as a child of the given node.
+// Child adds a node as a child of the given node. Multi-line strings are
+// supported with appropriate indentation.
 func (n Node) Child(text string) Node {
+	if strings.ContainsRune(text, '\n') {
+		splitLines := strings.Split(text, "\n")
+		node := n.childLine(splitLines[0])
+		for _, l := range splitLines[1:] {
+			n.AddLine(l)
+		}
+		return node
+	}
+	return n.childLine(text)
+}
+
+// AddLine adds a new line to a child node without an edge.
+func (n Node) AddLine(text string) {
+	runes := []rune(text)
+	// Each level indents by this much.
+	k := len(n.tree.edgeLast)
+	indent := n.level * k
+	row := make([]rune, indent+len(runes))
+	for i := 0; i < indent; i++ {
+		row[i] = ' '
+	}
+	for i, r := range runes {
+		row[indent+i] = r
+	}
+	n.tree.rows = append(n.tree.rows, row)
+}
+
+// childLine adds a node as a child of the given node.
+func (n Node) childLine(text string) Node {
 	runes := []rune(text)
 
 	// Each level indents by this much.
-	k := len(edgeLast)
+	k := len(n.tree.edgeLast)
 	indent := n.level * k
 	row := make([]rune, indent+len(runes))
 	for i := 0; i < indent-k; i++ {
@@ -91,13 +151,13 @@ func (n Node) Child(text string) Node {
 	if indent >= k {
 		// Connect through any empty lines.
 		for i := len(n.tree.rows) - 1; i >= 0 && len(n.tree.rows[i]) == 0; i-- {
-			n.tree.rows[i] = make([]rune, indent-k+len(edgeLink))
-			for j := 0; j < indent-k+len(edgeLink); j++ {
+			n.tree.rows[i] = make([]rune, indent-k+len(n.tree.edgeLink))
+			for j := 0; j < indent-k+len(n.tree.edgeLink); j++ {
 				n.tree.rows[i][j] = ' '
 			}
-			copy(n.tree.rows[i][indent-k:], edgeLink)
+			copy(n.tree.rows[i][indent-k:], n.tree.edgeLink)
 		}
-		copy(row[indent-k:], edgeLast)
+		copy(row[indent-k:], n.tree.edgeLast)
 	}
 	copy(row[indent:], runes)
 
@@ -111,13 +171,13 @@ func (n Node) Child(text string) Node {
 			panic("multiple root nodes")
 		}
 		// Connect to the previous sibling.
-		copy(n.tree.rows[last][indent-k:], edgeMid)
+		copy(n.tree.rows[last][indent-k:], n.tree.edgeMid)
 		for i := last + 1; i < len(n.tree.rows); i++ {
 			// Add spaces if necessary.
-			for len(n.tree.rows[i]) < indent-k+len(edgeLink) {
+			for len(n.tree.rows[i]) < indent-k+len(n.tree.edgeLink) {
 				n.tree.rows[i] = append(n.tree.rows[i], ' ')
 			}
-			copy(n.tree.rows[i][indent-k:], edgeLink)
+			copy(n.tree.rows[i][indent-k:], n.tree.edgeLink)
 		}
 	}
 

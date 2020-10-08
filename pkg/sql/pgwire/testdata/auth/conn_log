@@ -1,0 +1,269 @@
+config secure
+----
+
+sql
+CREATE USER userpw WITH PASSWORD 'pass';
+CREATE USER usernopw;
+ALTER USER root WITH PASSWORD 'secureabc';
+CREATE USER trusted;
+CREATE USER usernologin WITH NOLOGIN PASSWORD '123';
+CREATE USER userexpired WITH PASSWORD '123' VALID UNTIL '2000-01-01'
+
+----
+ok
+
+set_hba
+host  all trusted all trust         # custom
+host  all all     all cert-password # built-in CockroachDB default
+local all trusted     reject        # custom
+local all all         password      # built-in CockroachDB default
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all trusted all trust         # custom
+# host  all all     all cert-password # built-in CockroachDB default
+# local all trusted     reject        # custom
+# local all all         password      # built-in CockroachDB default
+#
+# Interpreted configuration:
+# TYPE DATABASE USER    ADDRESS METHOD        OPTIONS
+host   all      root    all     cert-password
+host   all      trusted all     trust
+host   all      all     all     cert-password
+local  all      trusted         reject
+local  all      all             password
+
+subtest conn_tls
+
+subtest conn_tls/root_user
+
+connect user=root
+----
+ok defaultdb
+
+
+authlog 6
+.*disconnected
+----
+I: [n1,client=XXX] 5 received connection
+I: [n1,client=XXX,hostssl,user=root] 6 connection matches HBA rule: host  all root all cert-password # CockroachDB mandatory rule
+I: [n1,client=XXX,hostssl,user=root] 7 client presented certificate, proceeding with certificate validation
+I: [n1,client=XXX,hostssl,user=root] 8 authentication succeeded
+I: [n1,client=XXX,hostssl,user=root] 9 session terminated; duration: XXX
+I: [n1,client=XXX,hostssl] 10 disconnected; duration: XXX
+
+connect user=root password=secureabc sslmode=require sslcert= sslkey=
+----
+ok defaultdb
+
+authlog 6
+.*disconnected
+----
+I: [n1,client=XXX] 11 received connection
+I: [n1,client=XXX,hostssl,user=root] 12 connection matches HBA rule: host  all root all cert-password # CockroachDB mandatory rule
+I: [n1,client=XXX,hostssl,user=root] 13 no client certificate, proceeding with password authentication
+I: [n1,client=XXX,hostssl,user=root] 14 authentication succeeded
+I: [n1,client=XXX,hostssl,user=root] 15 session terminated; duration: XXX
+I: [n1,client=XXX,hostssl] 16 disconnected; duration: XXX
+
+connect user=root password=badpass sslmode=require sslcert= sslkey=
+----
+ERROR: password authentication failed for user root
+
+authlog 6
+.*disconnected
+----
+I: [n1,client=XXX] 17 received connection
+I: [n1,client=XXX,hostssl,user=root] 18 connection matches HBA rule: host  all root all cert-password # CockroachDB mandatory rule
+I: [n1,client=XXX,hostssl,user=root] 19 no client certificate, proceeding with password authentication
+I: [n1,client=XXX,hostssl,user=root] 20 authentication failed: password authentication failed for user root
+I: [n1,client=XXX,hostssl,user=root] 21 session terminated; duration: XXX
+I: [n1,client=XXX,hostssl] 22 disconnected; duration: XXX
+
+
+subtest end
+
+subtest conn_tls/trusted_user
+
+connect user=trusted
+----
+ok defaultdb
+
+authlog 5
+.*disconnected
+----
+I: [n1,client=XXX] 23 received connection
+I: [n1,client=XXX,hostssl,user=trusted] 24 connection matches HBA rule: host  all trusted all trust         # custom
+I: [n1,client=XXX,hostssl,user=trusted] 25 authentication succeeded
+I: [n1,client=XXX,hostssl,user=trusted] 26 session terminated; duration: XXX
+I: [n1,client=XXX,hostssl] 27 disconnected; duration: XXX
+
+subtest end
+
+subtest conn_tls/regular_user
+
+connect user=userpw password=pass
+----
+ok defaultdb
+
+authlog 6
+.*disconnected
+----
+I: [n1,client=XXX] 28 received connection
+I: [n1,client=XXX,hostssl,user=userpw] 29 connection matches HBA rule: host  all all     all cert-password # built-in CockroachDB default
+I: [n1,client=XXX,hostssl,user=userpw] 30 no client certificate, proceeding with password authentication
+I: [n1,client=XXX,hostssl,user=userpw] 31 authentication succeeded
+I: [n1,client=XXX,hostssl,user=userpw] 32 session terminated; duration: XXX
+I: [n1,client=XXX,hostssl] 33 disconnected; duration: XXX
+
+connect user=userpw password=badpass
+----
+ERROR: password authentication failed for user userpw
+
+authlog 6
+.*disconnected
+----
+I: [n1,client=XXX] 34 received connection
+I: [n1,client=XXX,hostssl,user=userpw] 35 connection matches HBA rule: host  all all     all cert-password # built-in CockroachDB default
+I: [n1,client=XXX,hostssl,user=userpw] 36 no client certificate, proceeding with password authentication
+I: [n1,client=XXX,hostssl,user=userpw] 37 authentication failed: password authentication failed for user userpw
+I: [n1,client=XXX,hostssl,user=userpw] 38 session terminated; duration: XXX
+I: [n1,client=XXX,hostssl] 39 disconnected; duration: XXX
+
+subtest end
+
+subtest conn_tls/no_password
+
+connect user=usernopw
+----
+ERROR: password authentication failed for user usernopw
+
+authlog 7
+.*disconnected
+----
+I: [n1,client=XXX] 40 received connection
+I: [n1,client=XXX,hostssl,user=usernopw] 41 connection matches HBA rule: host  all all     all cert-password # built-in CockroachDB default
+I: [n1,client=XXX,hostssl,user=usernopw] 42 no client certificate, proceeding with password authentication
+I: [n1,client=XXX,hostssl,user=usernopw] 43 user has no password defined
+I: [n1,client=XXX,hostssl,user=usernopw] 44 authentication failed: password authentication failed for user usernopw
+I: [n1,client=XXX,hostssl,user=usernopw] 45 session terminated; duration: XXX
+I: [n1,client=XXX,hostssl] 46 disconnected; duration: XXX
+
+
+subtest end
+
+
+subtest end
+
+subtest conn_unix
+
+subtest conn_unix/root_user
+
+connect_unix user=root password=secureabc
+----
+ok defaultdb
+
+authlog 5
+.*disconnected
+----
+I: [n1,client=XXX] 47 received connection
+I: [n1,client=XXX,local,user=root] 48 connection matches HBA rule: local all all         password      # built-in CockroachDB default
+I: [n1,client=XXX,local,user=root] 49 authentication succeeded
+I: [n1,client=XXX,local,user=root] 50 session terminated; duration: XXX
+I: [n1,client=XXX,local] 51 disconnected; duration: XXX
+
+connect_unix user=root password=badpass
+----
+ERROR: password authentication failed for user root
+
+authlog 5
+.*disconnected
+----
+I: [n1,client=XXX] 52 received connection
+I: [n1,client=XXX,local,user=root] 53 connection matches HBA rule: local all all         password      # built-in CockroachDB default
+I: [n1,client=XXX,local,user=root] 54 authentication failed: password authentication failed for user root
+I: [n1,client=XXX,local,user=root] 55 session terminated; duration: XXX
+I: [n1,client=XXX,local] 56 disconnected; duration: XXX
+
+
+subtest end
+
+subtest conn_unix/trusted_user
+
+connect_unix user=trusted
+----
+ERROR: authentication rejected by configuration
+
+authlog 5
+.*disconnected
+----
+I: [n1,client=XXX] 57 received connection
+I: [n1,client=XXX,local,user=trusted] 58 connection matches HBA rule: local all trusted     reject        # custom
+I: [n1,client=XXX,local,user=trusted] 59 authentication failed: authentication rejected by configuration
+I: [n1,client=XXX,local,user=trusted] 60 session terminated; duration: XXX
+I: [n1,client=XXX,local] 61 disconnected; duration: XXX
+
+subtest end
+
+subtest conn_unix/regular_user
+
+connect_unix user=userpw password=pass
+----
+ok defaultdb
+
+authlog 5
+.*disconnected
+----
+I: [n1,client=XXX] 62 received connection
+I: [n1,client=XXX,local,user=userpw] 63 connection matches HBA rule: local all all         password      # built-in CockroachDB default
+I: [n1,client=XXX,local,user=userpw] 64 authentication succeeded
+I: [n1,client=XXX,local,user=userpw] 65 session terminated; duration: XXX
+I: [n1,client=XXX,local] 66 disconnected; duration: XXX
+
+connect_unix user=userpw password=badpass
+----
+ERROR: password authentication failed for user userpw
+
+authlog 5
+.*disconnected
+----
+I: [n1,client=XXX] 67 received connection
+I: [n1,client=XXX,local,user=userpw] 68 connection matches HBA rule: local all all         password      # built-in CockroachDB default
+I: [n1,client=XXX,local,user=userpw] 69 authentication failed: password authentication failed for user userpw
+I: [n1,client=XXX,local,user=userpw] 70 session terminated; duration: XXX
+I: [n1,client=XXX,local] 71 disconnected; duration: XXX
+
+subtest end
+
+subtest conn_unix/nologin_expired_password
+
+connect_unix user=usernologin password=123
+----
+ERROR: usernologin does not have login privilege
+
+authlog 4
+.*disconnected
+----
+I: [n1,client=XXX] 72 received connection
+I: [n1,client=XXX,local,user=usernologin] 73 "usernologin" does not have login privilege
+I: [n1,client=XXX,local,user=usernologin] 74 session terminated; duration: XXX
+I: [n1,client=XXX,local] 75 disconnected; duration: XXX
+
+connect_unix user=userexpired password=123
+----
+ERROR: password is expired
+
+authlog 6
+.*disconnected
+----
+I: [n1,client=XXX] 76 received connection
+I: [n1,client=XXX,local,user=userexpired] 77 connection matches HBA rule: local all all         password      # built-in CockroachDB default
+I: [n1,client=XXX,local,user=userexpired] 78 password is expired
+I: [n1,client=XXX,local,user=userexpired] 79 authentication pre-hook failed: password is expired
+I: [n1,client=XXX,local,user=userexpired] 80 session terminated; duration: XXX
+I: [n1,client=XXX,local] 81 disconnected; duration: XXX
+
+subtest end
+
+subtest end

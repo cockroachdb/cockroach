@@ -1,4 +1,6 @@
-# LogicTest: local local-opt
+# 3node-tenant is blocked from running this file because the config runs with
+# a CCL binary, so the expected failures from using follower reads don't occur.
+# LogicTest: !3node-tenant
 
 statement ok
 CREATE TABLE t (i INT)
@@ -8,28 +10,23 @@ INSERT INTO t VALUES (2)
 
 # Verify strings can be parsed as intervals.
 query I
-SELECT * FROM t AS OF SYSTEM TIME '-0ns'
-----
-2
-
-query I
-SELECT * FROM t AS OF SYSTEM TIME '-1ns'
+SELECT * FROM t AS OF SYSTEM TIME '-1us'
 ----
 2
 
 # Verify a forced interval type works.
 query I
-SELECT * FROM t AS OF SYSTEM TIME INTERVAL '-1ns'
+SELECT * FROM t AS OF SYSTEM TIME INTERVAL '-1us'
 ----
 2
 
 # Verify that we can use computed expressions.
 query I
-SELECT * FROM t AS OF SYSTEM TIME -( ('1' || 'ns')::INTERVAL )
+SELECT * FROM t AS OF SYSTEM TIME -( ('1000' || 'us')::INTERVAL )
 ----
 2
 
-statement error pq: AS OF SYSTEM TIME: only constant expressions are allowed
+statement error pq: AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME cluster_logical_timestamp()
 
 statement error pq: subqueries are not allowed in AS OF SYSTEM TIME
@@ -38,5 +35,55 @@ SELECT * FROM t AS OF SYSTEM TIME (SELECT '-1h'::INTERVAL)
 statement error pq: relation "t" does not exist
 SELECT * FROM t AS OF SYSTEM TIME '-1h'
 
+query T noticetrace
+SELECT pg_sleep(5) -- we need to sleep so that the 4.8s elapses and the SELECT * FROM t returns something.
+----
+
+# Notices print twice -- once during planning and once during execution.
+# There's no nice way of reducing this to once without some hacks -- so left as is.
+query T noticetrace
+SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
+----
+NOTICE: follower_read_timestamp does not returns a value that is less likely to read from the closest replica in a non-CCL distribution, using -4.8s from statement time instead
+NOTICE: follower_read_timestamp does not returns a value that is less likely to read from the closest replica in a non-CCL distribution, using -4.8s from statement time instead
+
+query T noticetrace
+SELECT * FROM t AS OF SYSTEM TIME experimental_follower_read_timestamp()
+----
+NOTICE: follower_read_timestamp does not returns a value that is less likely to read from the closest replica in a non-CCL distribution, using -4.8s from statement time instead
+NOTICE: follower_read_timestamp does not returns a value that is less likely to read from the closest replica in a non-CCL distribution, using -4.8s from statement time instead
+
+statement error pq: unknown signature: follower_read_timestamp\(string\) \(desired <timestamptz>\)
+SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp('boom')
+
+statement error pq: AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
+SELECT * FROM t AS OF SYSTEM TIME now()
+
 statement error cannot specify timestamp in the future
 SELECT * FROM t AS OF SYSTEM TIME '10s'
+
+# Verify that the TxnTimestamp used to generate now() and current_timestamp() is
+# set to the historical timestamp.
+
+query T
+SELECT * FROM (SELECT now()) AS OF SYSTEM TIME '2018-01-01'
+----
+2018-01-01 00:00:00 +0000 UTC
+
+# Verify that zero intervals indistinguishable from zero cause an error.
+
+statement error pq: AS OF SYSTEM TIME: interval value '0.1us' too small, absolute value must be >= 1µs
+SELECT * FROM t AS OF SYSTEM TIME '0.1us'
+
+statement error pq: AS OF SYSTEM TIME: interval value '0-0' too small, absolute value must be >= 1µs
+SELECT * FROM t AS OF SYSTEM TIME '0-0'
+
+statement error pq: AS OF SYSTEM TIME: interval value '-0.1us' too small, absolute value must be >= 1µs
+SELECT * FROM t AS OF SYSTEM TIME '-0.1us'
+
+statement error pq: AS OF SYSTEM TIME: zero timestamp is invalid
+SELECT * FROM t AS OF SYSTEM TIME '0'
+
+# Verify we can explain a statement that has AS OF.
+statement ok
+EXPLAIN SELECT * FROM t AS OF SYSTEM TIME '-1us'

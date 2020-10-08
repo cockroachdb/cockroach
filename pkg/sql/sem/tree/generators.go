@@ -1,21 +1,20 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Table generators, also called "set-generating functions", are
@@ -41,18 +40,21 @@ import (
 // iterators or generators in Python).
 type ValueGenerator interface {
 	// ResolvedType returns the type signature of this value generator.
-	ResolvedType() types.TTuple
+	ResolvedType() *types.T
 
 	// Start initializes the generator. Must be called once before
 	// Next() and Values(). It can be called again to restart
 	// the generator after Next() has returned false.
-	Start() error
+	//
+	// txn represents the txn that the generator will run inside of. The generator
+	// is expected to hold on to this txn and use it in Next() calls.
+	Start(ctx context.Context, txn *kv.Txn) error
 
 	// Next determines whether there is a row of data available.
-	Next() (bool, error)
+	Next(context.Context) (bool, error)
 
 	// Values retrieves the current row of data.
-	Values() Datums
+	Values() (Datums, error)
 
 	// Close must be called after Start() before disposing of the
 	// ValueGenerator. It does not need to be called if Start() has not

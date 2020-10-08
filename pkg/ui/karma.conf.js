@@ -1,9 +1,19 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 // Karma configuration
 // Generated on Wed Mar 22 2017 16:39:26 GMT-0400 (EDT)
 
 "use strict";
 
-const webpackConfig = require("./webpack.app")({dist: "ccl"});
+const webpackConfig = require("./webpack.app")({dist: "ccl"}, {mode: "development"});
 
 module.exports = function(config) {
   config.set({
@@ -34,11 +44,8 @@ module.exports = function(config) {
 
     // list of files / patterns to load in the browser
     files: [
-      "dist/protos.ccl.dll.js",
-      "dist/vendor.oss.dll.js",
       "src/polyfills.ts",
-      "src/**/*.spec.*",
-      "ccl/src/**/*.spec.*",
+      "tests-loader.js",
     ],
 
     // frameworks to use
@@ -60,28 +67,26 @@ module.exports = function(config) {
     // preprocess matching files before serving them to the browser
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
     preprocessors: {
-      "ccl/src/**": ["webpack", "sourcemap"],
-      "src/**": ["webpack", "sourcemap"],
+      "src/polyfills.ts": ["webpack"],
+      "tests-loader.js": ["webpack", "sourcemap"],
     },
 
     // test results reporter to use
     // possible values: "dots", "progress"
     // available reporters: https://npmjs.org/browse/keyword/karma-reporter
-    reporters: ["progress"],
+    reporters: ["mocha"],
 
     // Continuous Integration mode
     // if true, Karma captures browsers, runs the tests and exits
     singleRun: true,
 
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
-    webpack: Object.assign(webpackConfig, {
-      devtool: "source-map",
-      externals: {
-        "react/addons": true,
-        "react/lib/ExecutionEnvironment": true,
-        "react/lib/ReactContext": true,
-      },
-    }),
+    webpack: {
+      devtool: "eval-cheap-source-map",
+      mode: "development",
+      module: webpackConfig.module,
+      resolve: webpackConfig.resolve,
+    },
 
     // "stats" needs to be copied to webpackMiddleware configuration in order
     // to correctly configure console output

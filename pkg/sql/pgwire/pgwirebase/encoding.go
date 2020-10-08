@@ -1,46 +1,68 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pgwirebase
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/lib/pq"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
+	"github.com/jackc/pgx/pgtype"
+	"github.com/lib/pq/oid"
 )
 
-const secondsInDay = 24 * 60 * 60
-const maxMessageSize = 1 << 24
+const (
+	defaultMaxReadBufferMessageSize = 1 << 24
+	minReadBufferMessageSize        = 1 << 14
+)
+
+const readBufferMaxMessageSizeClusterSettingName = "sql.conn.max_read_buffer_message_size"
+
+// ReadBufferMaxMessageSizeClusterSetting is the cluster setting for configuring
+// ReadBuffer default message sizes.
+var ReadBufferMaxMessageSizeClusterSetting = settings.RegisterValidatedByteSizeSetting(
+	readBufferMaxMessageSizeClusterSettingName,
+	"maximum buffer size to allow for ingesting sql statements. Connections must be restarted for this to take effect.",
+	defaultMaxReadBufferMessageSize,
+	func(val int64) error {
+		if val < minReadBufferMessageSize {
+			return errors.Newf("buffer message size must be at least %s", humanize.Bytes(minReadBufferMessageSize))
+		}
+		return nil
+	},
+)
 
 // FormatCode represents a pgwire data format.
 //
@@ -66,8 +88,33 @@ type BufferedReader interface {
 
 // ReadBuffer provides a convenient way to read pgwire protocol messages.
 type ReadBuffer struct {
-	Msg []byte
-	tmp [4]byte
+	Msg            []byte
+	tmp            [4]byte
+	maxMessageSize int
+}
+
+// ReadBufferOption is an optional argument to use with ReadBuffer.
+type ReadBufferOption func(*ReadBuffer)
+
+// ReadBufferOptionWithClusterSettings utilizes the cluster settings for setting
+// various defaults in the ReadBuffer.
+func ReadBufferOptionWithClusterSettings(sv *settings.Values) ReadBufferOption {
+	return func(b *ReadBuffer) {
+		if sv != nil {
+			b.maxMessageSize = int(ReadBufferMaxMessageSizeClusterSetting.Get(sv))
+		}
+	}
+}
+
+// MakeReadBuffer returns a new ReaderBuffer with the given size.
+func MakeReadBuffer(opts ...ReadBufferOption) ReadBuffer {
+	buf := ReadBuffer{
+		maxMessageSize: defaultMaxReadBufferMessageSize,
+	}
+	for _, opt := range opts {
+		opt(&buf)
+	}
+	return buf
 }
 
 // reset sets b.Msg to exactly size, attempting to use spare capacity
@@ -96,6 +143,9 @@ func (b *ReadBuffer) reset(size int) {
 // was one. The number of bytes returned can be non-zero even with an error
 // (e.g. if data was read but didn't validate) so that we can more accurately
 // measure network traffic.
+//
+// If the error is related to consuming a buffer that is larger than the
+// maxMessageSize, the remaining bytes will be read but discarded.
 func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 	nread, err := io.ReadFull(rd, b.tmp[:])
 	if err != nil {
@@ -104,14 +154,48 @@ func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 	size := int(binary.BigEndian.Uint32(b.tmp[:]))
 	// size includes itself.
 	size -= 4
-	if size > maxMessageSize || size < 0 {
-		return nread, NewProtocolViolationErrorf("message size %d out of bounds (0..%d)",
-			size, maxMessageSize)
+	if size > b.maxMessageSize || size < 0 {
+		err := errors.WithHintf(
+			NewProtocolViolationErrorf(
+				"message size %s bigger than maximum allowed message size %s",
+				humanize.IBytes(uint64(size)),
+				humanize.IBytes(uint64(b.maxMessageSize)),
+			),
+			"the maximum message size can be configured using the %s cluster setting",
+			readBufferMaxMessageSizeClusterSettingName,
+		)
+		if size > 0 {
+			err = withMessageTooBigError(err, size)
+		}
+		return nread, err
 	}
 
 	b.reset(size)
 	n, err := io.ReadFull(rd, b.Msg)
 	return nread + n, err
+}
+
+// SlurpBytes will consume n bytes from the read buffer, using the existing
+// buffer to ingest the message.
+func (b *ReadBuffer) SlurpBytes(rd io.Reader, n int) (int, error) {
+	var nRead int
+	if b.maxMessageSize > 0 {
+		sizeRemaining := n
+		for sizeRemaining > 0 {
+			toRead := sizeRemaining
+			if b.maxMessageSize < sizeRemaining {
+				toRead = b.maxMessageSize
+			}
+			b.reset(toRead)
+			readBatch, err := io.ReadFull(rd, b.Msg)
+			nRead += readBatch
+			sizeRemaining -= readBatch
+			if err != nil {
+				return nRead, err
+			}
+		}
+	}
+	return nRead, nil
 }
 
 // ReadTypedMsg reads a message from the provided reader, returning its type code and body.
@@ -186,12 +270,45 @@ func NewUnrecognizedMsgTypeErr(typ ClientMessageType) error {
 
 // NewProtocolViolationErrorf creates a pgwire ProtocolViolationError.
 func NewProtocolViolationErrorf(format string, args ...interface{}) error {
-	return pgerror.NewErrorf(pgerror.CodeProtocolViolationError, format, args...)
+	return pgerror.Newf(pgcode.ProtocolViolation, format, args...)
+}
+
+// NewInvalidBinaryRepresentationErrorf creates a pgwire InvalidBinaryRepresentation.
+func NewInvalidBinaryRepresentationErrorf(format string, args ...interface{}) error {
+	return pgerror.Newf(pgcode.InvalidBinaryRepresentation, format, args...)
+}
+
+// validateArrayDimensions takes the number of dimensions and elements and
+// returns an error if we don't support that combination.
+func validateArrayDimensions(nDimensions int, nElements int) error {
+	switch nDimensions {
+	case 1:
+		break
+	case 0:
+		// 0-dimensional array means 0-length array: validate that.
+		if nElements == 0 {
+			break
+		}
+		fallthrough
+	default:
+		return unimplemented.NewWithIssuef(32552,
+			"%d-dimension arrays not supported; only 1-dimension", nDimensions)
+	}
+	return nil
 }
 
 // DecodeOidDatum decodes bytes with specified Oid and format code into
-// a datum.
-func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
+// a datum. If the ParseTimeContext is nil, reasonable defaults
+// will be applied. If res is nil, then user defined types are not attempted
+// to be resolved.
+func DecodeOidDatum(
+	ctx context.Context,
+	pCtx tree.ParseTimeContext,
+	id oid.Oid,
+	code FormatCode,
+	b []byte,
+	res tree.TypeReferenceResolver,
+) (tree.Datum, error) {
 	switch code {
 	case FormatText:
 		switch id {
@@ -201,6 +318,12 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				return nil, err
 			}
 			return tree.MakeDBool(tree.DBool(t)), nil
+		case oid.T_bit, oid.T_varbit:
+			t, err := tree.ParseDBitArray(string(b))
+			if err != nil {
+				return nil, err
+			}
+			return t, nil
 		case oid.T_int2, oid.T_int4, oid.T_int8:
 			i, err := strconv.ParseInt(string(b), 10, 64)
 			if err != nil {
@@ -219,10 +342,28 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				return nil, err
 			}
 			return tree.NewDFloat(tree.DFloat(f)), nil
+		case oidext.T_box2d:
+			d, err := tree.ParseDBox2D(string(b))
+			if err != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as box2d", b)
+			}
+			return d, nil
+		case oidext.T_geography:
+			d, err := tree.ParseDGeography(string(b))
+			if err != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as geography", b)
+			}
+			return d, nil
+		case oidext.T_geometry:
+			d, err := tree.ParseDGeometry(string(b))
+			if err != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as geometry", b)
+			}
+			return d, nil
 		case oid.T_numeric:
 			d, err := tree.ParseDDecimal(string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as decimal", b)
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as decimal", b)
 			}
 			return d, nil
 		case oid.T_bytea:
@@ -232,85 +373,106 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
-			d, err := tree.ParseDTimestamp(string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestamp(pCtx, string(b), time.Microsecond)
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as timestamp", b)
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamp", b)
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, err := tree.ParseDTimestampTZ(string(b), time.UTC, time.Microsecond)
+			d, _, err := tree.ParseDTimestampTZ(pCtx, string(b), time.Microsecond)
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as timestamptz", b)
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamptz", b)
 			}
 			return d, nil
 		case oid.T_date:
-			ts, err := tree.ParseDTimestamp(string(b), time.Microsecond)
+			d, _, err := tree.ParseDDate(pCtx, string(b))
 			if err != nil {
-				res, err := tree.ParseDDate(string(b), time.UTC)
-				if err != nil {
-					return nil, errors.Errorf("could not parse string %q as date", b)
-				}
-				return res, nil
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as date", b)
 			}
-			daysSinceEpoch := ts.Unix() / secondsInDay
-			return tree.NewDDate(tree.DDate(daysSinceEpoch)), nil
+			return d, nil
 		case oid.T_time:
-			d, err := tree.ParseDTime(string(b))
+			d, _, err := tree.ParseDTime(nil, string(b), time.Microsecond)
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as time", b)
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as time", b)
 			}
 			return d, nil
 		case oid.T_timetz:
-			d, err := tree.ParseDTimeTZ(string(b), time.UTC)
+			d, _, err := tree.ParseDTimeTZ(pCtx, string(b), time.Microsecond)
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as timetz", b)
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timetz", b)
 			}
 			return d, nil
 		case oid.T_interval:
 			d, err := tree.ParseDInterval(string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as interval", b)
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as interval", b)
 			}
 			return d, nil
 		case oid.T_uuid:
 			d, err := tree.ParseDUuidFromString(string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as uuid", b)
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as uuid", b)
 			}
 			return d, nil
 		case oid.T_inet:
 			d, err := tree.ParseDIPAddrFromINetString(string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as inet", b)
+				return nil, pgerror.Newf(pgcode.Syntax,
+					"could not parse string %q as inet", b)
 			}
 			return d, nil
 		case oid.T__int2, oid.T__int4, oid.T__int8:
-			var arr pq.Int64Array
-			if err := (&arr).Scan(b); err != nil {
+			var arr pgtype.Int8Array
+			if err := arr.DecodeText(nil, b); err != nil {
+				return nil, pgerror.Wrapf(err, pgcode.Syntax,
+					"could not parse string %q as int array", b)
+			}
+			if arr.Status != pgtype.Present {
+				return tree.DNull, nil
+			}
+			if err := validateArrayDimensions(len(arr.Dimensions), len(arr.Elements)); err != nil {
 				return nil, err
 			}
 			out := tree.NewDArray(types.Int)
-			for _, v := range arr {
-				if err := out.Append(tree.NewDInt(tree.DInt(v))); err != nil {
+			var d tree.Datum
+			for _, v := range arr.Elements {
+				if v.Status != pgtype.Present {
+					d = tree.DNull
+				} else {
+					d = tree.NewDInt(tree.DInt(v.Int))
+				}
+				if err := out.Append(d); err != nil {
 					return nil, err
 				}
 			}
 			return out, nil
 		case oid.T__text, oid.T__name:
-			var arr pq.StringArray
-			if err := (&arr).Scan(b); err != nil {
+			var arr pgtype.TextArray
+			if err := arr.DecodeText(nil, b); err != nil {
+				return nil, pgerror.Wrapf(err, pgcode.Syntax,
+					"could not parse string %q as text array", b)
+			}
+			if arr.Status != pgtype.Present {
+				return tree.DNull, nil
+			}
+			if err := validateArrayDimensions(len(arr.Dimensions), len(arr.Elements)); err != nil {
 				return nil, err
 			}
 			out := tree.NewDArray(types.String)
 			if id == oid.T__name {
 				out.ParamTyp = types.Name
 			}
-			for _, v := range arr {
-				var s tree.Datum = tree.NewDString(v)
-				if id == oid.T__name {
-					s = tree.NewDNameFromDString(s.(*tree.DString))
+			var d tree.Datum
+			for _, v := range arr.Elements {
+				if v.Status != pgtype.Present {
+					d = tree.DNull
+				} else {
+					d = tree.NewDString(v.String)
+					if id == oid.T__name {
+						d = tree.NewDNameFromDString(d.(*tree.DString))
+					}
 				}
-				if err := out.Append(s); err != nil {
+				if err := out.Append(d); err != nil {
 					return nil, err
 				}
 			}
@@ -340,40 +502,40 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 					return tree.MakeDBool(true), nil
 				}
 			}
-			return nil, errors.Errorf("unsupported binary bool: %x", b)
+			return nil, pgerror.Newf(pgcode.Syntax, "unsupported binary bool: %x", b)
 		case oid.T_int2:
 			if len(b) < 2 {
-				return nil, errors.Errorf("int2 requires 2 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "int2 requires 2 bytes for binary format")
 			}
 			i := int16(binary.BigEndian.Uint16(b))
 			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_int4:
 			if len(b) < 4 {
-				return nil, errors.Errorf("int4 requires 4 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "int4 requires 4 bytes for binary format")
 			}
 			i := int32(binary.BigEndian.Uint32(b))
 			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_int8:
 			if len(b) < 8 {
-				return nil, errors.Errorf("int8 requires 8 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "int8 requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_oid:
 			if len(b) < 4 {
-				return nil, errors.Errorf("oid requires 4 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "oid requires 4 bytes for binary format")
 			}
 			u := binary.BigEndian.Uint32(b)
 			return tree.NewDOid(tree.DInt(u)), nil
 		case oid.T_float4:
 			if len(b) < 4 {
-				return nil, errors.Errorf("float4 requires 4 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "float4 requires 4 bytes for binary format")
 			}
 			f := math.Float32frombits(binary.BigEndian.Uint32(b))
 			return tree.NewDFloat(tree.DFloat(f)), nil
 		case oid.T_float8:
 			if len(b) < 8 {
-				return nil, errors.Errorf("float8 requires 8 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "float8 requires 8 bytes for binary format")
 			}
 			f := math.Float64frombits(binary.BigEndian.Uint64(b))
 			return tree.NewDFloat(tree.DFloat(f)), nil
@@ -399,11 +561,22 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 
 			if alloc.pgNum.Ndigits > 0 {
-				decDigits := make([]byte, 0, alloc.pgNum.Ndigits*PGDecDigits)
-				nextDigit := func() error {
+				decDigits := make([]byte, 0, int(alloc.pgNum.Ndigits)*PGDecDigits)
+				for i := int16(0); i < alloc.pgNum.Ndigits; i++ {
 					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
-						return err
+						return nil, err
 					}
+					// Each 16-bit "digit" can represent a 4 digit number.
+					// In the case where each digit is not 4 digits, we must append
+					// padding to the beginning, i.e.
+					// * "1234" stays "1234"
+					// * "123" becomes "0123"
+					// * "12" becomes "0012"
+					// * "1" becomes "0001"
+					// * "0" becomes "0000"
+					// * "123456" becomes ["0012", "3456"]
+					// * "123456.789" becomes ["0012", "3456", "7890"]
+					// * "120123.45678" becomes ["0012", "0123", "4567", "8000"]
 					numZeroes := PGDecDigits
 					for i16 := alloc.i16; i16 > 0; i16 /= 10 {
 						numZeroes--
@@ -411,43 +584,71 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 					for ; numZeroes > 0; numZeroes-- {
 						decDigits = append(decDigits, '0')
 					}
-					return nil
-				}
-
-				for i := int16(0); i < alloc.pgNum.Ndigits-1; i++ {
-					if err := nextDigit(); err != nil {
-						return nil, err
-					}
 					if alloc.i16 > 0 {
 						decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
 					}
 				}
 
-				// The last digit may contain padding, which we need to deal with.
-				if err := nextDigit(); err != nil {
-					return nil, err
+				// In the case of padding zeros at the end, we may have padded too many
+				// digits in the loop. This can be determined if the weight (defined as
+				// number of 4 digit groups left of the decimal point - 1) + the scale
+				// (total number of digits on the RHS of the decimal point) is less
+				// than the number of digits given.
+				//
+				// In Postgres, this is handled by the "remove trailing zeros" in
+				// `make_result_opt_error`, as well as `trunc_var`.
+				// Any zeroes are implicitly added back in when operating on the decimal
+				// value.
+				//
+				// Examples (with "," in the digit string for clarity):
+				// * for "1234", we have digits ["1234", "0"] for scale 0, which would
+				// make the digit string "1234,0000". For scale 0, we need to cut it back
+				// to "1234".
+				// * for "1234.0", we have digits ["1234", "0"] for scale 1, which would
+				// make the digit string "1234,0000". For scale 1, we need to cut it back
+				// to "1234.0".
+				// * for "1234.000000" we have digits ["1234", "0", "0"] with scale 6,
+				// which would make the digit string "1234,0000,0000". We need to cut it
+				// back to "1234,0000,00" for this to be correct.
+				// * for "123456.00000", we have digits ["12", "3456", "0", "0"] with
+				// scale 5, which would make digit string "0012,3456,0000,0000". We need
+				// to cut it back to "0012,3456,0000,0" for this to be correct.
+				// * for "123456.000000000", we may have digits ["12", "3456", "0", "0", "0"]
+				// with scale 5, which would make digit string "0012,3456,0000,0000".
+				// We need to cut it back to "0012,3456,0000,0" for this to be correct.
+				//
+				// This is handled by the below code, which truncates the decDigits
+				// such that it fits into the desired dscale. To do this:
+				// * ndigits [number of digits provided] - (weight+1) gives the number
+				// of digits on the RHS of the decimal place value as determined by
+				// the given input. Note dscale can be negative, meaning we truncated
+				// the leading zeroes at the front, giving a higher exponent (e.g. 0042,0000
+				// can omit the trailing 0000, giving dscale of -4, which makes the exponent 4).
+				// * if the digits we have in the buffer on the RHS, as calculated above,
+				// is larger than our calculated dscale, truncate our buffer to match the
+				// desired dscale.
+				dscale := (alloc.pgNum.Ndigits - (alloc.pgNum.Weight + 1)) * PGDecDigits
+				if overScale := dscale - alloc.pgNum.Dscale; overScale > 0 {
+					dscale -= overScale
+					decDigits = decDigits[:len(decDigits)-int(overScale)]
 				}
-				Dscale := (alloc.pgNum.Ndigits - (alloc.pgNum.Weight + 1)) * PGDecDigits
-				if overScale := Dscale - alloc.pgNum.Dscale; overScale > 0 {
-					Dscale -= overScale
-					for i := int16(0); i < overScale; i++ {
-						alloc.i16 /= 10
-					}
-				}
-				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+
 				decString := string(decDigits)
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
-					return nil, errors.Errorf("could not parse string %q as decimal", decString)
+					return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as decimal", decString)
 				}
-				alloc.dd.SetExponent(-int32(Dscale))
+				alloc.dd.Exponent = -int32(dscale)
 			}
 
 			switch alloc.pgNum.Sign {
 			case PGNumericPos:
 			case PGNumericNeg:
 				alloc.dd.Neg(&alloc.dd.Decimal)
+			case 0xc000:
+				// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
+				return tree.ParseDDecimal("NaN")
 			default:
-				return nil, errors.Errorf("unsupported numeric sign: %d", alloc.pgNum.Sign)
+				return nil, pgerror.Newf(pgcode.Syntax, "unsupported numeric sign: %d", alloc.pgNum.Sign)
 			}
 
 			return &alloc.dd, nil
@@ -455,47 +656,44 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			return tree.NewDBytes(tree.DBytes(b)), nil
 		case oid.T_timestamp:
 			if len(b) < 8 {
-				return nil, errors.Errorf("timestamp requires 8 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "timestamp requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			return tree.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond), nil
+			return tree.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond)
 		case oid.T_timestamptz:
 			if len(b) < 8 {
-				return nil, errors.Errorf("timestamptz requires 8 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "timestamptz requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			return tree.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond), nil
+			return tree.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond)
 		case oid.T_date:
 			if len(b) < 4 {
-				return nil, errors.Errorf("date requires 4 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "date requires 4 bytes for binary format")
 			}
 			i := int32(binary.BigEndian.Uint32(b))
-			return pgBinaryToDate(i), nil
+			return pgBinaryToDate(i)
 		case oid.T_time:
 			if len(b) < 8 {
-				return nil, errors.Errorf("time requires 8 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "time requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.MakeDTime(timeofday.TimeOfDay(i)), nil
 		case oid.T_timetz:
-			if len(b) < 8 {
-				return nil, errors.Errorf("timetz requires 8 bytes for binary format")
+			if len(b) < 12 {
+				return nil, pgerror.Newf(pgcode.Syntax, "timetz requires 12 bytes for binary format")
 			}
-			i := int64(binary.BigEndian.Uint64(b))
-			return tree.MakeDTimeTZ(timeofday.TimeOfDay(i), time.UTC), nil
+			timeOfDayMicros := int64(binary.BigEndian.Uint64(b))
+			offsetSecs := int32(binary.BigEndian.Uint32(b))
+			return tree.NewDTimeTZFromOffset(timeofday.TimeOfDay(timeOfDayMicros), offsetSecs), nil
 		case oid.T_interval:
 			if len(b) < 16 {
-				return nil, errors.Errorf("interval requires 16 bytes for binary format")
+				return nil, pgerror.Newf(pgcode.Syntax, "interval requires 16 bytes for binary format")
 			}
 			nanos := (int64(binary.BigEndian.Uint64(b)) / int64(time.Nanosecond)) * int64(time.Microsecond)
 			days := int32(binary.BigEndian.Uint32(b[8:]))
 			months := int32(binary.BigEndian.Uint32(b[12:]))
 
-			duration := duration.Duration{
-				Nanos:  nanos,
-				Days:   int64(days),
-				Months: int64(months),
-			}
+			duration := duration.MakeDuration(nanos, int64(days), int64(months))
 			return &tree.DInterval{Duration: duration}, nil
 		case oid.T_uuid:
 			u, err := tree.ParseDUuidFromBytes(b)
@@ -510,19 +708,62 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
 		case oid.T_jsonb:
-			// Skip over the version number `1`.
+			if len(b) < 1 {
+				return nil, NewProtocolViolationErrorf("no data to decode")
+			}
+			if b[0] != 1 {
+				return nil, NewProtocolViolationErrorf("expected JSONB version 1")
+			}
+			// Skip over the version number.
 			b = b[1:]
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
 			return tree.ParseDJSON(string(b))
+		case oid.T_varbit, oid.T_bit:
+			if len(b) < 4 {
+				return nil, NewProtocolViolationErrorf("insufficient data: %d", len(b))
+			}
+			bitlen := binary.BigEndian.Uint32(b)
+			b = b[4:]
+			lastBitsUsed := uint64(bitlen % 64)
+			if bitlen != 0 && lastBitsUsed == 0 {
+				lastBitsUsed = 64
+			}
+			if len(b)*8 < int(bitlen) {
+				return nil, pgerror.Newf(pgcode.Syntax, "unexpected varbit bitlen %d (b: %d)", bitlen, len(b))
+			}
+			words := make([]uint64, (len(b)+7)/8)
+			// We need two loops here. The first loop does full 8-byte decoding. The
+			// last word is not guaranteed to be a full 8 bytes, and so the second loop
+			// does manual per-byte decoding.
+			for i := 0; i < len(words)-1; i++ {
+				words[i] = binary.BigEndian.Uint64(b)
+				b = b[8:]
+			}
+			if len(words) > 0 {
+				var w uint64
+				i := uint(0)
+				for ; i < uint(lastBitsUsed); i += 8 {
+					if len(b) == 0 {
+						return nil, NewInvalidBinaryRepresentationErrorf("incorrect binary data")
+					}
+					w = (w << 8) | uint64(b[0])
+					b = b[1:]
+				}
+				words[len(words)-1] = w << (64 - i)
+			}
+			ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
+			return &tree.DBitArray{BitArray: ba}, err
 		default:
 			if _, ok := types.ArrayOids[id]; ok {
-				return decodeBinaryArray(b, code)
+				innerOid := types.OidToType[id].ArrayContents().Oid()
+				return decodeBinaryArray(ctx, pCtx, innerOid, b, code, res)
 			}
 		}
 	default:
-		return nil, errors.Errorf("unsupported format code: %s", code)
+		return nil, errors.AssertionFailedf(
+			"unexpected format code: %d", errors.Safe(code))
 	}
 
 	// Types with identical text/binary handling.
@@ -532,14 +773,44 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			return nil, err
 		}
 		return tree.NewDString(string(b)), nil
+	case oid.T_bpchar:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		// Trim the trailing spaces
+		sv := strings.TrimRight(string(b), " ")
+		return tree.NewDString(sv), nil
 	case oid.T_name:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
 		return tree.NewDName(string(b)), nil
-	default:
-		return nil, errors.Errorf("unsupported OID %v with format code %s", id, code)
 	}
+
+	// Finally, try to resolve the type's oid as a user defined type if a resolver
+	// was provided.
+	if res != nil {
+		typ, err := res.ResolveTypeByOID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		switch typ.Family() {
+		case types.EnumFamily:
+			if code != FormatText {
+				return nil, pgerror.Newf(pgcode.Syntax, "expected FormatText for ENUM value encoding")
+			}
+			if err := validateStringBytes(b); err != nil {
+				return nil, err
+			}
+			return tree.MakeDEnumFromLogicalRepresentation(typ, string(b))
+		default:
+			return nil, errors.AssertionFailedf("unsupported user defined type family %s", typ.Family().String())
+		}
+	}
+
+	// Fallthrough case.
+	return nil, errors.AssertionFailedf(
+		"unsupported OID %v with format code %s", errors.Safe(id), errors.Safe(code))
 }
 
 // Values which are going to be converted to strings (STRING and NAME) need to
@@ -582,38 +853,52 @@ func pgBinaryToTime(i int64) time.Time {
 // pgBinaryToDate takes an int32 and interprets it as the Postgres binary format
 // for a date. To create a date from this value, it takes the day delta and adds
 // it to PGEpochJDate.
-func pgBinaryToDate(i int32) *tree.DDate {
-	daysSinceEpoch := PGEpochJDateFromUnix + i
-	return tree.NewDDate(tree.DDate(daysSinceEpoch))
+func pgBinaryToDate(i int32) (*tree.DDate, error) {
+	d, err := pgdate.MakeDateFromPGEpoch(i)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDDate(d), nil
 }
 
 // pgBinaryToIPAddr takes an IPAddr and interprets it as the Postgres binary
 // format. See https://github.com/postgres/postgres/blob/81c5e46c490e2426db243eada186995da5bb0ba7/src/backend/utils/adt/network.c#L144
 // for the binary spec.
 func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
+	if len(b) < 4 {
+		return ipaddr.IPAddr{}, NewProtocolViolationErrorf("insufficient data: %d", len(b))
+	}
+
 	mask := b[1]
 	familyByte := b[0]
 	var addr ipaddr.Addr
 	var family ipaddr.IPFamily
+	b = b[4:]
 
 	if familyByte == PGBinaryIPv4family {
 		family = ipaddr.IPv4family
 	} else if familyByte == PGBinaryIPv6family {
 		family = ipaddr.IPv6family
 	} else {
-		return ipaddr.IPAddr{}, errors.Errorf("unknown family received: %d", familyByte)
+		return ipaddr.IPAddr{}, NewInvalidBinaryRepresentationErrorf("unknown family received: %d", familyByte)
 	}
 
 	// Get the IP address bytes. The IP address length is byte 3 but is ignored.
 	if family == ipaddr.IPv4family {
+		if len(b) != 4 {
+			return ipaddr.IPAddr{}, NewInvalidBinaryRepresentationErrorf("unexpected data: %d", len(b))
+		}
 		// Add the IPv4-mapped IPv6 prefix of 0xFF.
 		var tmp [16]byte
 		tmp[10] = 0xff
 		tmp[11] = 0xff
-		copy(tmp[12:], b[4:])
+		copy(tmp[12:], b)
 		addr = ipaddr.Addr(uint128.FromBytes(tmp[:]))
 	} else {
-		addr = ipaddr.Addr(uint128.FromBytes(b[4:]))
+		if len(b) != 16 {
+			return ipaddr.IPAddr{}, NewInvalidBinaryRepresentationErrorf("unexpected data: %d", len(b))
+		}
+		addr = ipaddr.Addr(uint128.FromBytes(b))
 	}
 
 	return ipaddr.IPAddr{
@@ -623,37 +908,58 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 	}, nil
 }
 
-func decodeBinaryArray(b []byte, code FormatCode) (tree.Datum, error) {
-	hdr := struct {
+func decodeBinaryArray(
+	ctx context.Context,
+	pCtx tree.ParseTimeContext,
+	elemOid oid.Oid,
+	b []byte,
+	code FormatCode,
+	res tree.TypeReferenceResolver,
+) (tree.Datum, error) {
+	var hdr struct {
 		Ndims int32
 		// Nullflag
 		_       int32
 		ElemOid int32
+	}
+	var dim struct {
 		// The next two fields should be arrays of size Ndims. However, since
 		// we only support 1-dimensional arrays for now, for convenience we can
 		// leave them in this struct as such for `binary.Read` to parse for us.
 		DimSize int32
 		// Dim lower bound
 		_ int32
-	}{}
+	}
 	r := bytes.NewBuffer(b)
 	if err := binary.Read(r, binary.BigEndian, &hdr); err != nil {
 		return nil, err
 	}
-	// Only 1-dimensional arrays are supported for now.
-	if hdr.Ndims != 1 {
-		return nil, errors.Errorf("unsupported number of array dimensions: %d", hdr.Ndims)
+	if elemOid != oid.Oid(hdr.ElemOid) {
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "wrong element type")
 	}
-
-	elemOid := oid.Oid(hdr.ElemOid)
 	arr := tree.NewDArray(types.OidToType[elemOid])
+	if hdr.Ndims == 0 {
+		return arr, nil
+	}
+	if err := binary.Read(r, binary.BigEndian, &dim); err != nil {
+		return nil, err
+	}
+	if err := validateArrayDimensions(int(hdr.Ndims), int(dim.DimSize)); err != nil {
+		return nil, err
+	}
 	var vlen int32
-	for i := int32(0); i < hdr.DimSize; i++ {
+	for i := int32(0); i < dim.DimSize; i++ {
 		if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {
 			return nil, err
 		}
+		if vlen < 0 {
+			if err := arr.Append(tree.DNull); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		buf := r.Next(int(vlen))
-		elem, err := DecodeOidDatum(elemOid, code, buf)
+		elem, err := DecodeOidDatum(ctx, pCtx, elemOid, code, buf, res)
 		if err != nil {
 			return nil, err
 		}
@@ -664,13 +970,11 @@ func decodeBinaryArray(b []byte, code FormatCode) (tree.Datum, error) {
 	return arr, nil
 }
 
-var invalidUTF8Error = pgerror.NewErrorf(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
+var invalidUTF8Error = pgerror.Newf(pgcode.CharacterNotInRepertoire, "invalid UTF-8 sequence")
 
 var (
 	// PGEpochJDate represents the pg epoch.
 	PGEpochJDate = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	// PGEpochJDateFromUnix represents the pg epoch relative to the Unix epoch.
-	PGEpochJDateFromUnix = int32(PGEpochJDate.Unix() / secondsInDay)
 )
 
 const (

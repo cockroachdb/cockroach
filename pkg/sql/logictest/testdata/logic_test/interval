@@ -1,0 +1,363 @@
+# test we store various types with precision correctly.
+subtest interval_type_storage
+
+statement ok
+CREATE TABLE interval_duration_type (
+  id INTEGER PRIMARY KEY,
+  regular INTERVAL,
+  regular_precision INTERVAL(3),
+  second INTERVAL SECOND,
+  second_precision INTERVAL SECOND(3),
+  minute INTERVAL MINUTE,
+  minute_to_second_precision INTERVAL MINUTE TO SECOND(3)
+)
+
+statement ok
+INSERT INTO interval_duration_type (id, regular, regular_precision, second, second_precision, minute, minute_to_second_precision) VALUES
+  (1, '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456'),
+  (2, '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456'),
+  (3, '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456'),
+  (4, '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1')
+
+query ITTTTTT
+select * from interval_duration_type order by id asc
+----
+1  12:34:56.123456           12:34:56.123              12:34:56.123456           12:34:56.123              12:34:00                12:34:56.123
+2  00:12:56.123456           00:12:56.123              00:12:56.123456           00:12:56.123              00:12:00                00:12:56.123
+3  366 days 12:34:56.123456  366 days 12:34:56.123     366 days 12:34:56.123456  366 days 12:34:56.123     366 days 12:34:00       366 days 12:34:56.123
+4  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:03:00  1 year 2 mons 00:00:03.1
+
+subtest interval_extract_tests
+
+query R
+SELECT extract('second', interval '10:55:01.456')
+----
+1.456
+
+query R
+SELECT extract(minute from interval '10:55:01.456')
+----
+55
+
+# tests various typmods of intervals
+# matches subset of tests in src/test/regress/expected/interval.out
+subtest interval_postgres_duration_type_tests
+
+# oversize leading field is ok
+query T
+SELECT interval '999' second
+----
+00:16:39
+
+query T
+SELECT interval '999' minute
+----
+16:39:00
+
+query T
+SELECT interval '999' hour
+----
+999:00:00
+
+query T
+SELECT interval '999' day
+----
+999 days
+
+query T
+SELECT interval '999' month
+----
+83 years 3 mons
+
+# test SQL-spec syntaxes for restricted field sets
+
+query T
+SELECT interval '1' year
+----
+1 year
+
+query T
+SELECT interval '2' month
+----
+2 mons
+
+query T
+SELECT interval '3' day
+----
+3 days
+
+query T
+SELECT interval '4' hour
+----
+04:00:00
+
+query T
+SELECT interval '5' minute
+----
+00:05:00
+
+query T
+SELECT interval '6' second
+----
+00:00:06
+
+query T
+SELECT interval '1' year to month
+----
+1 mon
+
+query T
+SELECT interval '1-2' year to month
+----
+1 year 2 mons
+
+query T
+SELECT interval '1 2' day to hour
+----
+1 day 02:00:00
+
+query T
+SELECT interval '1 2:03' day to hour
+----
+1 day 02:00:00
+
+query T
+SELECT interval '1 2:03:04' day to hour
+----
+1 day 02:00:00
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' day to minute
+
+query T
+SELECT interval '1 2:03' day to minute
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03:04' day to minute
+----
+1 day 02:03:00
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' day to second
+
+query T
+SELECT interval '1 2:03' day to second
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03:04' day to second
+----
+1 day 02:03:04
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' hour to minute
+
+query T
+SELECT interval '1 2:03' hour to minute
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03:04' hour to minute
+----
+1 day 02:03:00
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' hour to second
+
+query T
+SELECT interval '1 2:03' hour to second
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03:04' hour to second
+----
+1 day 02:03:04
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' minute to second
+
+query T
+SELECT interval '1 2:03' minute to second
+----
+1 day 00:02:03
+
+query T
+SELECT interval '1 2:03:04' minute to second
+----
+1 day 02:03:04
+
+query T
+SELECT interval '1 +2:03' minute to second
+----
+1 day 00:02:03
+
+query T
+SELECT interval '1 +2:03:04' minute to second
+----
+1 day 02:03:04
+
+query T
+SELECT interval '1 -2:03' minute to second
+----
+1 day -00:02:03
+
+query T
+SELECT interval '1 -2:03:04' minute to second
+----
+1 day -02:03:04
+
+query T
+SELECT interval '123 11' day to hour
+----
+123 days 11:00:00
+
+query error could not parse "123 11" as type interval
+SELECT interval '123 11' day
+
+query error could not parse "123 11" as type interval
+SELECT interval '123 11'
+
+# not ok, redundant hh:mm fields
+query error could not parse "123 2:03 -2:04" as type interval
+SELECT interval '123 2:03 -2:04'
+
+# test syntaxes for restricted precision
+query T
+SELECT interval(0) '1 day 01:23:45.6789'
+----
+1 day 01:23:46
+
+query T
+SELECT interval(2) '1 day 01:23:45.6789'
+----
+1 day 01:23:45.68
+
+query T
+SELECT interval '12:34.5678' minute to second(2)
+----
+00:12:34.57
+
+query T
+SELECT interval '1.234' second
+----
+00:00:01.234
+
+query T
+SELECT interval '1.234' second(2)
+----
+00:00:01.23
+
+query error could not parse "1 2.345" as type interval
+SELECT interval '1 2.345' day to second(2)
+
+query T
+SELECT interval '1 2:03' day to second(2)
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03.4567' day to second(2)
+----
+1 day 00:02:03.46
+
+query T
+SELECT interval '1 2:03:04.5678' day to second(2)
+----
+1 day 02:03:04.57
+
+query error could not parse "1 2.345" as type interval
+SELECT interval '1 2.345' hour to second(2)
+
+query T
+SELECT interval '1 2:03.45678' hour to second(2)
+----
+1 day 00:02:03.46
+
+query T
+SELECT interval '1 2:03:04.5678' hour to second(2)
+----
+1 day 02:03:04.57
+
+query error could not parse "1 2.3456" as type interval
+SELECT interval '1 2.3456' minute to second(2)
+
+query T
+SELECT interval '1 2:03.5678' minute to second(2)
+----
+1 day 00:02:03.57
+
+query T
+SELECT interval '1 2:03:04.5678' minute to second(2)
+----
+1 day 02:03:04.57
+
+# Extra regression tests found when fixing this bug.
+subtest regression_43074
+
+query T
+SELECT interval '1:02.123456'
+----
+00:01:02.123456
+
+query T
+SELECT interval '-1:02.123456'
+----
+-00:01:02.123456
+
+subtest regression_43079
+
+query T
+SELECT interval '1-2 3' year
+----
+4 years
+
+query T
+SELECT interval '1-2 3' day
+----
+1 year 2 mons 3 days
+
+query T
+SELECT interval '2.1 00:'
+----
+2 days 02:24:00
+
+query T
+SELECT interval ' 5  ' year
+----
+5 years
+
+# Check default types and expressions get truncated on insert / update.
+subtest regression_44774
+
+statement ok
+CREATE TABLE regression_44774 (
+  a interval(3) DEFAULT '1:2:3.123456'
+)
+
+statement ok
+INSERT INTO regression_44774 VALUES (default), ('4:5:6.123456')
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+01:02:03.123
+04:05:06.123
+
+statement ok
+UPDATE regression_44774
+SET a = '13:14:15.123456'::interval + '1 sec'::interval
+WHERE 1 = 1
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+13:14:16.123
+13:14:16.123
+
+statement ok
+DROP TABLE regression_44774

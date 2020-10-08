@@ -1,0 +1,317 @@
+# Extract from dates.
+
+eval
+extract(year from '2010-09-28'::date)
+----
+2010.0
+
+eval
+extract('year' from '2010-09-28'::date)
+----
+2010.0
+
+eval
+extract('YEAR' from '2010-09-28'::date)
+----
+2010.0
+
+eval
+extract(month from '2010-09-28'::date)
+----
+9.0
+
+eval
+extract(day from '2010-09-28'::date)
+----
+28.0
+
+eval
+extract(dayofyear from '2010-09-28'::date)
+----
+271.0
+
+eval
+extract(week from '2010-01-14'::date)
+----
+2.0
+
+eval
+extract(dayofweek from '2010-09-28'::date)
+----
+2.0
+
+eval
+extract(isodow from '2010-09-28'::date)
+----
+2.0
+
+eval
+extract(isodow from '2010-09-26'::date)
+----
+7.0
+
+eval
+extract(quarter from '2010-09-28'::date)
+----
+3.0
+
+eval
+extract(century from '2010-09-28'::date)
+----
+21.0
+
+eval
+extract(century from '2010-09-28 BC'::date)
+----
+-21.0
+
+eval
+extract(decade from '2010-09-28'::date)
+----
+201.0
+
+eval
+extract(decade from '2010-09-28 BC'::date)
+----
+-201.0
+
+eval
+extract(isoyear from '2006-01-01'::date)
+----
+2005.0
+
+eval
+extract(isoyear from '2006-01-02'::date)
+----
+2006.0
+
+eval
+extract(millennium from '2010-09-28'::date)
+----
+3.0
+
+eval
+extract(millennium from '2010-09-28 BC'::date)
+----
+-3.0
+
+eval
+extract(julian from '2010-09-28'::date)
+----
+2.455468e+06
+
+eval
+extract(julian from '4714-11-24 BC'::date)
+----
+0.0
+
+# Extract from times.
+
+eval
+extract(hour from '12:00:00'::time)
+----
+12.0
+
+eval
+extract(minute from '12:30:00'::time)
+----
+30.0
+
+eval
+extract(second from '12:00:30'::time)
+----
+30.0
+
+eval
+extract(millisecond from '12:00:00.123456'::time)
+----
+123.456
+
+eval
+extract(microsecond from '12:00:00.123456'::time)
+----
+123456.0
+
+# Extract from timestamps.
+
+eval
+extract(year from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+2010.0
+
+eval
+extract(year from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+2010.0
+
+eval
+extract(month from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+9.0
+
+eval
+extract(day from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+28.0
+
+eval
+extract(dayofyear from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+271.0
+
+eval
+extract(week from '2010-01-14 12:13:14.1+00:00'::timestamp)
+----
+2.0
+
+eval
+extract(dayofweek from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+2.0
+
+eval
+extract(quarter from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+3.0
+
+eval
+extract(hour from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+12.0
+
+eval
+extract(minute from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+13.0
+
+eval
+extract(second from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+14.1
+
+eval
+extract(millisecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)
+----
+14123.456
+
+eval
+extract(microsecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)
+----
+1.4123456e+07
+
+eval
+extract(epoch from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+1.2631255941e+09
+
+eval
+extract(century from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+21.0
+
+eval
+extract(century from '0001-01-10 12:13:14.1+00:00 BC'::timestamp)
+----
+-1.0
+
+eval
+extract(decade from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+201.0
+
+eval
+extract(decade from '2010-01-10 12:13:14.1+00:00 BC'::timestamp)
+----
+-201.0
+
+eval
+extract(isoyear from '2006-01-01 12:13:14.1+00:00'::timestamp)
+----
+2005.0
+
+eval
+extract(isoyear from '2006-01-02 12:13:14.1+00:00'::timestamp)
+----
+2006.0
+
+eval
+extract(millennium from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+3.0
+
+eval
+extract(millennium from '0010-01-10 12:13:14.1+00:00 BC'::timestamp)
+----
+-1.0
+
+eval
+extract(julian from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+2.4552075091909724e+06
+
+eval
+extract(julian from '4714-11-24 12:13:14.1+00:00 BC'::timestamp)
+----
+0.5091909722222222
+
+# Extract from intervals.
+
+eval
+extract_duration(hour from '123m')
+----
+2
+
+eval
+extract_duration('hour' from '123m')
+----
+2
+
+eval
+extract_duration('HOUR' from '123m')
+----
+2
+
+eval
+extract_duration(hour from '123m'::interval)
+----
+2
+
+eval
+extract_duration(minute from '123m10s'::interval)
+----
+123
+
+eval
+extract_duration(second from '10m20s30ms'::interval)
+----
+620
+
+eval
+extract_duration(millisecond from '20s30ms40µs'::interval)
+----
+20030
+
+eval
+extract(hour from '12:00:00+01'::timetz)
+----
+12.0
+
+eval
+extract(minute from '12:30:00+01'::timetz)
+----
+30.0
+
+eval
+extract(second from '12:00:30+01'::timetz)
+----
+30.0
+
+eval
+extract(millisecond from '12:00:00.123456+01'::timetz)
+----
+123.456
+
+eval
+extract(microsecond from '12:00:00.123456+01'::timetz)
+----
+123456.0

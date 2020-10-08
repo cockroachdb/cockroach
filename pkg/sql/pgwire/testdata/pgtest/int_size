@@ -1,0 +1,117 @@
+# This test verifies that we're sending the right OIDs for different integer sizes.
+# The output can be a little hard to read but the important part is the DataTypeOIDs.
+# OID 20 is INT8, OID 23 is INT4.
+
+# Clean up the environment.
+send
+Query {"String": "DROP TABLE IF EXISTS t1; DROP TABLE IF EXISTS t2"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Start of test.
+
+
+# By default, int == int8.
+send crdb_only
+Query {"String": "SELECT 1::int, 2::int4, 3::int8"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"int8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"int4","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"int8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"2"},{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Same results when selecting from a table.
+send crdb_only
+Query {"String": "CREATE TABLE t1 (a int, b int4, c int8)"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SELECT * FROM t1"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":52,"TableAttributeNumber":2,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":52,"TableAttributeNumber":3,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Now change the default_int_size setting.
+send crdb_only
+Query {"String": "SET default_int_size=4"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The setting doesn't affect explicit casts, only table definitions.
+# (So in CockroachdB ::int is still ::int8, whereas it's ::int4 in postgres.)
+send crdb_only
+Query {"String": "SELECT 1::int, 2::int4, 3::int8"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"int8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"int4","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"int8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"2"},{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+## Everything after this point should be the same between CockroachDB
+## and PostgreSQL.
+
+
+# Create a new table with the new setting.
+send
+Query {"String": "CREATE TABLE t2 (a integer, b int4, c int8)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The int column is now an int4.
+send
+Query {"String": "SELECT * FROM t2"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":0,"TableAttributeNumber":3,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# t1 is unchanged. It was created under the old configuration so its int column is int8.
+send crdb_only
+Query {"String": "SELECT * FROM t1"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":52,"TableAttributeNumber":2,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":52,"TableAttributeNumber":3,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

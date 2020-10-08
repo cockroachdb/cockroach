@@ -1,0 +1,83 @@
+# TestMVCCIncrement verifies increment behavior. In particular,
+# incrementing a non-existent key by 0 will create the value.
+
+# Non-transactional increments.
+
+run ok
+with k=k
+  increment ts=0,1 inc=0
+  get       ts=0,1
+  increment ts=0,2 inc=2
+----
+inc: current value = 0
+get: "k" -> /INT/0 @0,1
+inc: current value = 2
+>> at end:
+data: "k"/0,2 -> /INT/2
+data: "k"/0,1 -> /INT/0
+
+run ok
+clear_range k=k end=-k
+----
+>> at end:
+<no data>
+
+# Transactional increments.
+run ok
+with k=k t=a ts=0,1
+  txn_begin
+  txn_step
+  increment
+  txn_step
+  increment
+----
+inc: current value = 1
+inc: current value = 2
+>> at end:
+txn: "a" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} lock=true stat=PENDING rts=0,1 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}}
+data: "k"/0,1 -> /INT/2
+
+
+# Increments at older timestamp generate WriteTooOld.
+
+run ok
+with k=r
+  increment ts=1
+  increment ts=3
+----
+inc: current value = 1
+inc: current value = 2
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}}
+data: "k"/0,1 -> /INT/2
+data: "r"/0.000000003,0 -> /INT/2
+data: "r"/0.000000001,0 -> /INT/1
+
+run error
+increment k=r ts=2
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}}
+data: "k"/0,1 -> /INT/2
+data: "r"/0.000000003,1 -> /INT/3
+data: "r"/0.000000003,0 -> /INT/2
+data: "r"/0.000000001,0 -> /INT/1
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000002,0 too old; wrote at 0.000000003,1
+
+# Ditto with transactional.
+run error
+with t=r
+  txn_begin ts=2
+  increment k=r
+----
+>> at end:
+txn: "r" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}}
+data: "k"/0,1 -> /INT/2
+meta: "r"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,2 min=0,0 seq=0} ts=0.000000003,2 del=false klen=12 vlen=6
+data: "r"/0.000000003,2 -> /INT/2
+data: "r"/0.000000003,1 -> /INT/3
+data: "r"/0.000000003,0 -> /INT/2
+data: "r"/0.000000001,0 -> /INT/1
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000002,0 too old; wrote at 0.000000003,2

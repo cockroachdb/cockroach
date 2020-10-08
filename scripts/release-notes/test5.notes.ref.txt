@@ -1,4 +1,4 @@
-### Bug Fixes
+### Bug fixes
 
 - Feature A [#1][#1] [076393957][076393957]
 
@@ -6,15 +6,16 @@
 
 #### Changes without release note annotation
 
-- [#2][#2] [8156afc96][8156afc96] PR title in need of release note (test5)
+- [#2][#2] [8156afc96][8156afc96] PR title in need of release note (test5 <test5@example.com>)
 
-### Doc Updates
+### Doc updates
 
 Docs team: Please add these manually.
 
 ### Contributors
 
-This release includes 4 merged PRs by 1 author. We would like to thank the following contributors from the CockroachDB community:
+This release includes 4 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
 
 - test5
 

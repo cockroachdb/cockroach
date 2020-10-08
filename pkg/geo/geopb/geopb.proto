@@ -1,0 +1,68 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.geopb;
+option go_package = "geopb";
+
+import "gogoproto/gogo.proto";
+
+// ShapeType is the type of a spatial shape. Each of these corresponds to a
+// different representation and serialization format. For example, a Point is a
+// pair of doubles (or more than that for geometries with Z or N), a LineString
+// is an ordered series of Points, etc.
+enum ShapeType {
+  Unset = 0;
+
+  Point = 1;
+  LineString = 2;
+  Polygon = 3;
+  MultiPoint = 4;
+  MultiLineString = 5;
+  MultiPolygon = 6;
+  // Geometry can contain any type.
+  Geometry = 7;
+  // GeometryCollection can contain a list of any above type except for Geometry.
+  GeometryCollection = 8;
+}
+
+// SpatialObjectType represents the type of the SpatialObject.
+enum SpatialObjectType {
+  Unknown = 0;
+
+  GeographyType = 1;
+  GeometryType = 2;
+}
+
+// SpatialObject represents a serialization of a Geospatial type.
+message SpatialObject {
+  // Type is the type of the SpatialObject.
+  SpatialObjectType type = 1;
+  // EWKB is the EWKB representation of the spatial object.
+  bytes ewkb = 2 [(gogoproto.customname)="EWKB",(gogoproto.casttype)="EWKB"];
+  // SRID is the denormalized SRID derived from the EWKB.
+  int32 srid = 3 [(gogoproto.customname)="SRID",(gogoproto.casttype)="SRID"];
+  // ShapeType is denormalized ShapeType derived from the EWKB.
+  ShapeType shape_type = 4;
+  // BoundingBox is the bounding box of the SpatialObject.
+  BoundingBox bounding_box = 5;
+}
+
+// BoundingBox represents the bounding box of a Geospatial type.
+// Note the lo coordinates can be higher in value than the hi coordinates
+// for spherical geometries.
+// NOTE: Do not use these to compare bounding boxes. Use the library functions
+// provided in the geo package to perform these calculations.
+message BoundingBox {
+  double lo_x = 1;
+  double hi_x = 2;
+  double lo_y = 3;
+  double hi_y = 4;
+}

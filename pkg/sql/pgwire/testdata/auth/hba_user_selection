@@ -1,0 +1,240 @@
+# The following tests exercise how the HBA rules match on the
+# username.
+
+config secure
+----
+
+# First define some users.
+
+# We're going to have a "passworduser" with a password set, but no client cert.
+sql
+CREATE USER passworduser WITH PASSWORD 'pass'
+----
+ok
+
+
+
+subtest root
+
+# This configuration says "only root can log in".
+
+set_hba
+host all root 0.0.0.0/0 cert
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all root 0.0.0.0/0 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
+host   all      root all       cert-password
+host   all      root 0.0.0.0/0 cert
+
+connect user=root
+----
+ok defaultdb
+
+connect user=testuser
+----
+ERROR: no server.host_based_authentication.configuration entry for host "127.0.0.1", user "testuser"
+
+connect user=passworduser password=pass
+----
+ERROR: no server.host_based_authentication.configuration entry for host "127.0.0.1", user "passworduser"
+
+subtest end root
+
+
+
+
+subtest testuser
+
+# This configuration says "only testuser can log in".
+
+set_hba
+host all testuser 0.0.0.0/0 cert
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testuser 0.0.0.0/0 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
+host   all      root     all       cert-password
+host   all      testuser 0.0.0.0/0 cert
+
+connect user=testuser
+----
+ok defaultdb
+
+connect user=passworduser password=pass
+----
+ERROR: no server.host_based_authentication.configuration entry for host "127.0.0.1", user "passworduser"
+
+# Although this is not completely true. "root" can always log in nonetheless.
+
+connect user=root
+----
+ok defaultdb
+
+subtest end testuser
+
+
+subtest quoted_users
+
+set_hba
+host all "a","b","testuser" 0.0.0.0/0 cert
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all "a","b","testuser" 0.0.0.0/0 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER       ADDRESS   METHOD        OPTIONS
+host   all      root       all       cert-password
+host   all      "a"        0.0.0.0/0 cert
+host   all      "b"        0.0.0.0/0 cert
+host   all      "testuser" 0.0.0.0/0 cert
+
+connect user=testuser
+----
+ok defaultdb
+
+subtest end
+
+subtest side_by_side
+
+set_hba
+host all testuser 0.0.0.0/0 cert
+host all passworduser 0.0.0.0/0 cert-password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testuser 0.0.0.0/0 cert
+# host all passworduser 0.0.0.0/0 cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
+host   all      root         all       cert-password
+host   all      testuser     0.0.0.0/0 cert
+host   all      passworduser 0.0.0.0/0 cert-password
+
+connect user=testuser
+----
+ok defaultdb
+
+connect user=passworduser password=pass
+----
+ok defaultdb
+
+# "root" can still log in regardless.
+connect user=root
+----
+ok defaultdb
+
+subtest end side_by_side
+
+
+
+subtest multiple
+
+set_hba
+host all testuser,passworduser 0.0.0.0/0 cert-password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testuser,passworduser 0.0.0.0/0 cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
+host   all      root         all       cert-password
+host   all      testuser     0.0.0.0/0 cert-password
+host   all      passworduser 0.0.0.0/0 cert-password
+
+connect user=testuser
+----
+ok defaultdb
+
+connect user=passworduser password=pass
+----
+ok defaultdb
+
+# "root" can still log in regardless.
+connect user=root
+----
+ok defaultdb
+
+
+subtest end multiple
+
+
+
+subtest priority
+
+# This test shows that the first rule that matches
+# gets priority: in this example, the first rule
+# contains "all" and thus matches everything,
+# so the second rule is not matched. So a certificate
+# is required for everyone.
+
+set_hba
+host all testuser,all 0.0.0.0/0 cert
+host all passworduser 0.0.0.0/0 password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testuser,all 0.0.0.0/0 cert
+# host all passworduser 0.0.0.0/0 password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
+host   all      root         all       cert-password
+host   all      all          0.0.0.0/0 cert
+host   all      passworduser 0.0.0.0/0 password
+
+connect user=testuser
+----
+ok defaultdb
+
+connect user=passworduser password=pass
+----
+ERROR: no TLS peer certificates, but required for auth
+
+# The special keyword "all" only matches when it is unquoted.
+
+subtest priority/unquoted_all
+
+set_hba
+host all testuser,"all" 0.0.0.0/0 cert
+host all passworduser 0.0.0.0/0 password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testuser,"all" 0.0.0.0/0 cert
+# host all passworduser 0.0.0.0/0 password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
+host   all      root         all       cert-password
+host   all      testuser     0.0.0.0/0 cert
+host   all      "all"        0.0.0.0/0 cert
+host   all      passworduser 0.0.0.0/0 password
+
+connect user=testuser
+----
+ok defaultdb
+
+connect user=passworduser password=pass
+----
+ok defaultdb
+
+subtest end priority/unquoted_all
+
+subtest end priority

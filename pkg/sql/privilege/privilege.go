@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package privilege
 
@@ -19,7 +15,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 //go:generate stringer -type=Kind
@@ -40,12 +38,34 @@ const (
 	INSERT
 	DELETE
 	UPDATE
+	USAGE
+	ZONECONFIG
+)
+
+// ObjectType represents objects that can have privileges.
+type ObjectType string
+
+const (
+	// Any represents any object type.
+	Any ObjectType = "any"
+	// Database represents a database object.
+	Database ObjectType = "database"
+	// Schema represents a schema object.
+	Schema ObjectType = "schema"
+	// Table represents a table object.
+	Table ObjectType = "table"
+	// Type represents a type object.
+	Type ObjectType = "type"
 )
 
 // Predefined sets of privileges.
 var (
-	ReadData      = List{GRANT, SELECT}
-	ReadWriteData = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	AllPrivileges     = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	ReadData          = List{GRANT, SELECT}
+	ReadWriteData     = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	DBTablePrivileges = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	SchemaPrivileges  = List{ALL, GRANT, CREATE, USAGE}
+	TypePrivileges    = List{ALL, GRANT, USAGE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -55,19 +75,21 @@ func (k Kind) Mask() uint32 {
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE,
+	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG,
 }
 
 // ByName is a map of string -> kind value.
 var ByName = map[string]Kind{
-	"ALL":    ALL,
-	"CREATE": CREATE,
-	"DROP":   DROP,
-	"GRANT":  GRANT,
-	"SELECT": SELECT,
-	"INSERT": INSERT,
-	"DELETE": DELETE,
-	"UPDATE": UPDATE,
+	"ALL":        ALL,
+	"CREATE":     CREATE,
+	"DROP":       DROP,
+	"GRANT":      GRANT,
+	"SELECT":     SELECT,
+	"INSERT":     INSERT,
+	"DELETE":     DELETE,
+	"UPDATE":     UPDATE,
+	"ZONECONFIG": ZONECONFIG,
+	"USAGE":      USAGE,
 }
 
 // List is a list of privileges.
@@ -138,12 +160,14 @@ func (pl List) ToBitField() uint32 {
 	return ret
 }
 
-// ListFromBitField takes a bitfield of privileges and
-// returns a list. It is ordered in increasing
-// value of privilege.Kind.
-func ListFromBitField(m uint32) List {
+// ListFromBitField takes a bitfield of privileges and a ObjectType
+// returns a List. It is ordered in increasing value of privilege.Kind.
+func ListFromBitField(m uint32, objectType ObjectType) List {
 	ret := List{}
-	for _, p := range ByValue {
+
+	privileges := GetValidPrivilegesForObject(objectType)
+
+	for _, p := range privileges {
 		if m&p.Mask() != 0 {
 			ret = append(ret, p)
 		}
@@ -164,4 +188,37 @@ func ListFromStrings(strs []string) (List, error) {
 		ret[i] = k
 	}
 	return ret, nil
+}
+
+// ValidatePrivileges returns an error if any privilege in
+// privileges cannot be granted on the given objectType.
+// Currently db/schema/table can all be granted the same privileges.
+func ValidatePrivileges(privileges List, objectType ObjectType) error {
+	validPrivs := GetValidPrivilegesForObject(objectType)
+	for _, priv := range privileges {
+		// Check if priv is in DBTablePrivileges.
+		if validPrivs.ToBitField()&priv.Mask() == 0 {
+			return pgerror.Newf(pgcode.InvalidGrantOperation,
+				"invalid privilege type %s for %s", priv.String(), objectType)
+		}
+	}
+
+	return nil
+}
+
+// GetValidPrivilegesForObject returns the list of valid privileges for the
+// specified object type.
+func GetValidPrivilegesForObject(objectType ObjectType) List {
+	switch objectType {
+	case Table, Database:
+		return DBTablePrivileges
+	case Schema:
+		return SchemaPrivileges
+	case Type:
+		return TypePrivileges
+	case Any:
+		return AllPrivileges
+	default:
+		panic(errors.AssertionFailedf("unknown object type %s", objectType))
+	}
 }

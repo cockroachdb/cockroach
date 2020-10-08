@@ -1,26 +1,57 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { RouterState, Link } from "react-router";
-import _ from "lodash";
-
-import "./nodeOverview.styl";
-
-import {
-  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid,
-} from "src/redux/nodes";
-import { nodeIDAttr } from "src/util/constants";
-import { AdminUIState } from "src/redux/state";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { INodeStatus, MetricConstants, StatusMetrics } from  "src/util/proto";
-import { Bytes, Percentage } from "src/util/format";
+import { livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
+import { nodeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
-import {
-  SummaryBar, SummaryLabel, SummaryValue,
-} from "src/views/shared/components/summaryBar";
+import { Bytes, DATE_FORMAT, Percentage } from "src/util/format";
+import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
+import { getMatchParamByName } from "src/util/query";
+import { SummaryBar, SummaryLabel, SummaryValue } from "src/views/shared/components/summaryBar";
+import { Button } from "src/components/button";
+import { BackIcon } from "src/components/icon";
+import "./nodeOverview.styl";
+import { LiveBytesTooltip, KeyBytesTooltip, ValueBytesTooltip, IntentBytesTooltip, SystemBytesTooltip, NodeUsedCapacityTooltip, NodeAvailableCapacityTooltip, NodeMaximumCapacityTooltip } from "./tooltips";
+import { TooltipProps } from "src/components/tooltip/tooltip";
 
-interface NodeOverviewProps extends RouterState {
+/**
+ * TableRow is a small stateless component that renders a single row in the node
+ * overview table. Each row renders a store metrics value, comparing the value
+ * across the different stores on the node (along with a total value for the
+ * node itself).
+ */
+function TableRow( props: { data: INodeStatus, title: string, valueFn: (s: StatusMetrics) => React.ReactNode, CellTooltip?: React.FC<TooltipProps>, nodeName?: string }) {
+  const { data, title, valueFn, CellTooltip } = props;
+  return (<tr className="table__row table__row--body">
+    <td className="table__cell">
+      {CellTooltip !== undefined ? <CellTooltip {...props}>{title}</CellTooltip> : title}
+    </td>
+    <td className="table__cell">{ valueFn(data.metrics) }</td>
+    {
+      _.map(data.store_statuses, (ss) => {
+        return <td key={ss.desc.store_id} className="table__cell">{ valueFn(ss.metrics) }</td>;
+      })
+    }
+    <td className="table__cell table__cell--filler" />
+  </tr>);
+}
+
+interface NodeOverviewProps extends RouteComponentProps {
   node: INodeStatus;
   nodesSummary: NodesSummary;
   refreshNodes: typeof refreshNodes;
@@ -33,40 +64,49 @@ interface NodeOverviewProps extends RouterState {
 /**
  * Renders the Node Overview page.
  */
-class NodeOverview extends React.Component<NodeOverviewProps, {}> {
-  componentWillMount() {
+export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshNodes();
     this.props.refreshLiveness();
   }
 
-  componentWillReceiveProps(props: NodeOverviewProps) {
+  componentDidUpdate() {
     // Refresh nodes status query when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    props.refreshNodes();
-    props.refreshLiveness();
+    this.props.refreshNodes();
+    this.props.refreshLiveness();
   }
+
+  prevPage = () => this.props.history.goBack();
 
   render() {
     const { node, nodesSummary } = this.props;
     if (!node) {
       return (
         <div className="section">
-          <h1>Loading cluster status...</h1>
+          <h1 className="base-heading">Loading cluster status...</h1>
         </div>
       );
     }
 
-    const liveness = nodesSummary.livenessStatusByNodeID[node.desc.node_id] || LivenessStatus.LIVE;
+    const liveness = nodesSummary.livenessStatusByNodeID[node.desc.node_id] || LivenessStatus.NODE_STATUS_LIVE;
     const livenessString = livenessNomenclature(liveness);
 
     return (
       <div>
-        <Helmet>
-          <title>{`${nodesSummary.nodeDisplayNameByID[node.desc.node_id]} | Nodes`}</title>
-        </Helmet>
+        <Helmet title={`${nodesSummary.nodeDisplayNameByID[node.desc.node_id]} | Nodes`} />
         <div className="section section--heading">
-          <h2>{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
+          <Button
+            onClick={this.prevPage}
+            type="unstyled-link"
+            size="small"
+            icon={BackIcon}
+            iconPosition="left"
+          >
+            Overview
+          </Button>
+          <h2 className="base-heading">{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
         </div>
         <section className="section l-columns">
           <div className="l-columns__left">
@@ -87,19 +127,28 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
               <tbody>
                 <TableRow data={node}
                           title="Live Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.liveBytes])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.liveBytes])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={LiveBytesTooltip} />
                 <TableRow data={node}
                           title="Key Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.keyBytes])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.keyBytes])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={KeyBytesTooltip} />
                 <TableRow data={node}
                           title="Value Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.valBytes])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.valBytes])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={ValueBytesTooltip} />
                 <TableRow data={node}
                           title="Intent Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.intentBytes])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.intentBytes])}
+                          CellTooltip={IntentBytesTooltip} />
                 <TableRow data={node}
-                          title="Sys Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.sysBytes])} />
+                          title="System Bytes"
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.sysBytes])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={SystemBytesTooltip} />
                 <TableRow data={node}
                           title="GC Bytes Age"
                           valueFn={(metrics) => metrics[MetricConstants.gcBytesAge].toString()} />
@@ -120,13 +169,19 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                           valueFn={(metrics) => Percentage(metrics[MetricConstants.underReplicatedRanges], metrics[MetricConstants.ranges])} />
                 <TableRow data={node}
                           title="Used Capacity"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.usedCapacity])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.usedCapacity])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={NodeUsedCapacityTooltip} />
                 <TableRow data={node}
                           title="Available Capacity"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.availableCapacity])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.availableCapacity])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={NodeAvailableCapacityTooltip} />
                 <TableRow data={node}
-                          title="Total Capacity"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.capacity])} />
+                          title="Maximum Capacity"
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.capacity])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={NodeMaximumCapacityTooltip} />
               </tbody>
             </table>
           </div>
@@ -138,7 +193,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 value={livenessString}
                 classModifier={livenessString}
               />
-              <SummaryValue title="Last Update" value={LongToMoment(node.updated_at).fromNow()} />
+              <SummaryValue title="Last Update" value={LongToMoment(node.updated_at).format(DATE_FORMAT)} />
               <SummaryValue title="Build" value={node.build_info.tag} />
               <SummaryValue
                 title="Logs"
@@ -153,28 +208,9 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
   }
 }
 
-/**
- * TableRow is a small stateless component that renders a single row in the node
- * overview table. Each row renders a store metrics value, comparing the value
- * across the different stores on the node (along with a total value for the
- * node itself).
- */
-function TableRow(props: { data: INodeStatus, title: string, valueFn: (s: StatusMetrics) => React.ReactNode }) {
-  return <tr className="table__row table__row--body">
-    <td className="table__cell">{ props.title }</td>
-    <td className="table__cell">{ props.valueFn(props.data.metrics) }</td>
-    {
-      _.map(props.data.store_statuses, (ss) => {
-        return <td key={ss.desc.store_id} className="table__cell">{ props.valueFn(ss.metrics) }</td>;
-      })
-    }
-    <td className="table__cell table__cell--filler" />
-  </tr>;
-}
-
 export const currentNode = createSelector(
-  (state: AdminUIState, _props: RouterState): INodeStatus[] => state.cachedData.nodes.data,
-  (_state: AdminUIState, props: RouterState): number => parseInt(props.params[nodeIDAttr], 10),
+  (state: AdminUIState, _props: RouteComponentProps): INodeStatus[] => state.cachedData.nodes.data,
+  (_state: AdminUIState, props: RouteComponentProps): number => parseInt(getMatchParamByName(props.match, nodeIDAttr), 10),
   (nodes, id) => {
     if (!nodes || !id) {
       return undefined;
@@ -182,8 +218,8 @@ export const currentNode = createSelector(
     return _.find(nodes, (ns) => ns.desc.node_id === id);
   });
 
-export default connect(
-  (state: AdminUIState, ownProps: RouterState) => {
+export default withRouter(connect(
+  (state: AdminUIState, ownProps: RouteComponentProps) => {
     return {
       node: currentNode(state, ownProps),
       nodesSummary: nodesSummarySelector(state),
@@ -194,4 +230,4 @@ export default connect(
     refreshNodes,
     refreshLiveness,
   },
-)(NodeOverview);
+)(NodeOverview));

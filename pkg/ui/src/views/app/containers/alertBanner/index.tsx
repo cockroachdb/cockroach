@@ -1,5 +1,15 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import React from "react";
-import { Dispatch, bindActionCreators } from "redux";
+import { Action, Dispatch, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
 import "./alertbanner.styl";
@@ -7,6 +17,7 @@ import "./alertbanner.styl";
 import { AlertBox } from "src/views/shared/components/alertBox";
 import { Alert, bannerAlertsSelector } from "src/redux/alerts";
 import { AdminUIState } from "src/redux/state";
+import { AlertMessage } from "src/views/shared/components/alertMessage";
 
 interface AlertBannerProps {
   /**
@@ -17,7 +28,7 @@ interface AlertBannerProps {
    * Raw dispatch method for the current store, will be used to dispatch
    * alert dismissal callbacks.
    */
-  dispatch: Dispatch<AdminUIState>;
+  dispatch: Dispatch<Action, AdminUIState>;
 }
 
 /**
@@ -35,9 +46,14 @@ class AlertBanner extends React.Component<AlertBannerProps, {}> {
     // Display only the first visible component.
     const { dismiss, ...alertProps } = alerts[0];
     const boundDismiss = bindActionCreators(() => dismiss, dispatch);
-    return  <div className="alert-banner">
-      <AlertBox dismiss={boundDismiss} {...alertProps} />
-    </div>;
+    // tslint:disable-next-line:variable-name
+    const AlertComponent = alertProps.showAsAlert ? AlertMessage : AlertBox;
+
+    return (
+      <div className="alert-banner">
+        <AlertComponent dismiss={boundDismiss} {...alertProps} />
+      </div>
+    );
   }
 }
 

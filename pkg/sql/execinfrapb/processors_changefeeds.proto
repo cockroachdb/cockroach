@@ -1,0 +1,65 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "execinfrapb";
+
+import "jobs/jobspb/jobs.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// ChangeAggregatorSpec is the specification for a processor that watches for
+// changes in a set of spans. Each span may cross multiple ranges.
+message ChangeAggregatorSpec {
+  message Watch {
+    optional util.hlc.Timestamp initial_resolved = 1 [(gogoproto.nullable) = false];
+    optional roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  }
+  repeated Watch watches = 1 [(gogoproto.nullable) = false];
+
+  // Feed is the specification for this changefeed.
+  optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
+
+  // User who initiated the changefeed. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 3 [(gogoproto.nullable) = false];
+}
+
+// ChangeFrontierSpec is the specification for a processor that receives
+// span-level resolved timestamps, track them, and emits the changefeed-level
+// resolved timestamp whenever it changes.
+message ChangeFrontierSpec {
+  // TrackedSpans is the entire span set being watched. Once all these spans
+  // have been resolved at a certain timestamp, then it's safe to resolve the
+  // changefeed at that timestamp.
+  repeated roachpb.Span tracked_spans = 1 [(gogoproto.nullable) = false];
+
+  // Feed is the specification for this changefeed.
+  optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
+
+  // JobID is the id of this changefeed in the system jobs.
+  optional int64 job_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID"
+  ];
+
+  // User who initiated the changefeed. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 4 [(gogoproto.nullable) = false];
+}

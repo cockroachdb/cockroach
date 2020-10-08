@@ -1,17 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package jsonload
 
@@ -28,12 +23,12 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/errors"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -131,7 +126,9 @@ func (w *jsonLoad) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *jsonLoad) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+func (w *jsonLoad) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -204,7 +201,7 @@ func (w *jsonLoad) Ops(urls []string, reg *workload.HistogramRegistry) (workload
 
 type jsonOp struct {
 	config    *jsonLoad
-	hists     *workload.Histograms
+	hists     *histogram.Histograms
 	db        *gosql.DB
 	readStmt  *gosql.Stmt
 	writeStmt *gosql.Stmt
@@ -224,7 +221,8 @@ func (o *jsonOp) run(ctx context.Context) error {
 		}
 		for rows.Next() {
 		}
-		o.hists.Get(`read`).Record(timeutil.Since(start))
+		elapsed := timeutil.Since(start)
+		o.hists.Get(`read`).Record(elapsed)
 		return rows.Err()
 	}
 	argCount := 2
@@ -252,7 +250,8 @@ func (o *jsonOp) run(ctx context.Context) error {
 	}
 	start := timeutil.Now()
 	_, err := o.writeStmt.Exec(args...)
-	o.hists.Get(`write`).Record(timeutil.Since(start))
+	elapsed := timeutil.Since(start)
+	o.hists.Get(`write`).Record(elapsed)
 	return err
 }
 

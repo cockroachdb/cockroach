@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement error pq: invalid locale bad_locale: language: subtag "locale" is well-formed but unknown
 SELECT 'a' COLLATE bad_locale
 
@@ -18,6 +16,21 @@ SELECT ('a' COLLATE en_u_ks_level1, 'a' COLLATE en) < ('A' COLLATE en, 'B' COLLA
 
 query T
 SELECT 'A' COLLATE en
+----
+A
+
+query T
+SELECT ('A' COLLATE de) COLLATE en
+----
+A
+
+query T
+SELECT NAME 'A' COLLATE en
+----
+A
+
+query T
+SELECT (NAME 'A' COLLATE de) COLLATE en
 ----
 A
 
@@ -179,17 +192,17 @@ SELECT 'ü' COLLATE de < 'x' COLLATE de
 true
 
 
-statement error invalid locale e: language: tag is not well-formed at or near "\)"
+statement error syntax error: invalid locale e: language: tag is not well-formed
 CREATE TABLE e1 (
   a STRING COLLATE e
 )
 
-statement error multiple COLLATE declarations for column "a" at or near "\)"
+statement error multiple COLLATE declarations for column "a"
 CREATE TABLE e2 (
   a STRING COLLATE en COLLATE de
 )
 
-statement error COLLATE declaration for non-string-typed column "a" at or near "\)"
+statement error COLLATE declaration for non-string-typed column "a"
 CREATE TABLE e3 (
   a INT COLLATE en
 )
@@ -202,10 +215,10 @@ CREATE TABLE t (
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE t (
-     a STRING COLLATE en NULL,
-     FAMILY "primary" (a, rowid)
-   )
+t  CREATE TABLE public.t (
+   a STRING COLLATE en NULL,
+   FAMILY "primary" (a, rowid)
+)
 
 statement ok
 INSERT INTO t VALUES
@@ -216,7 +229,7 @@ INSERT INTO t VALUES
   ('x' COLLATE en),
   ('ü' COLLATE en)
 
-statement error locale "de" doesn't match locale "en" of column "a"
+statement error value type collatedstring{de} doesn't match type collatedstring{en} of column "a"
 INSERT INTO t VALUES ('X' COLLATE de)
 
 query T
@@ -249,6 +262,11 @@ SELECT 'a' COLLATE en::STRING || 'b'
 ----
 ab
 
+query T
+SELECT 'a🐛b🏠c' COLLATE en::VARCHAR(3)
+----
+a🐛b
+
 query B
 SELECT 't' COLLATE en::BOOLEAN
 ----
@@ -280,14 +298,14 @@ SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMP
 2017-01-10 16:05:50.734049 +0000 +0000
 
 query T
-SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMP WITH TIME ZONE
+SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMPTZ
 ----
-2017-01-10 16:05:50.734049 +0000 +0000
+2017-01-10 16:05:50.734049 +0000 UTC
 
 query T
 SELECT '40 days' COLLATE en::INTERVAL
 ----
-40d
+40 days
 
 statement ok
 CREATE TABLE foo(a STRING COLLATE en_u_ks_level2)
@@ -319,3 +337,68 @@ query T
 SELECT * FROM foo WHERE a = 'abcd' COLLATE en_u_ks_level2
 ----
 aBcD
+
+# Test quoted collations.
+
+statement ok
+CREATE TABLE quoted_coll (
+  a STRING COLLATE "en",
+  b STRING COLLATE "en_US",
+  c STRING COLLATE "en-Us" DEFAULT ('c' COLLATE "en-Us"),
+  d STRING COLLATE "en-u-ks-level1" DEFAULT ('d'::STRING COLLATE "en-u-ks-level1"),
+  e STRING COLLATE "en-us" AS (a COLLATE "en-us") STORED,
+  FAMILY "primary" (a, b, c, d, e, rowid)
+)
+
+query TT
+SHOW CREATE TABLE quoted_coll
+----
+quoted_coll  CREATE TABLE public.quoted_coll (
+             a STRING COLLATE en NULL,
+             b STRING COLLATE en_US NULL,
+             c STRING COLLATE en_Us NULL DEFAULT 'c':::STRING COLLATE en_us,
+             d STRING COLLATE en_u_ks_level1 NULL DEFAULT 'd':::STRING COLLATE en_u_ks_level1,
+             e STRING COLLATE en_us NULL AS (a COLLATE en_us) STORED,
+             FAMILY "primary" (a, b, c, d, e, rowid)
+)
+
+# Regression for #46570.
+statement ok
+CREATE TABLE t46570(c0 BOOL, c1 STRING COLLATE en);
+CREATE INDEX ON t46570(rowid, c1 DESC);
+INSERT INTO t46570(c1, rowid) VALUES('' COLLATE en, 0);
+UPSERT INTO t46570(rowid) VALUES (0), (1)
+
+# Test trailing spaces are truncated for char types.
+subtest regression_50015
+
+query T
+SELECT
+	t
+FROM
+	(
+		VALUES
+			('hello '::CHAR(100) COLLATE en_US),
+			('hello t'::CHAR(100) COLLATE en_US),
+			('hello '::STRING::CHAR(100) COLLATE en_US),
+			('hello t'::STRING::CHAR(100) COLLATE en_US)
+	) g(t)
+----
+hello
+hello t
+hello
+hello t
+
+statement ok
+CREATE TABLE t50015(id int PRIMARY KEY, a char(100), b char(100) COLLATE en);
+INSERT INTO t50015 VALUES
+  (1, 'hello', 'hello' COLLATE en),
+  (2, 'hello ', 'hello ' COLLATE en),
+  (3, repeat('hello ', 2), repeat('hello ', 2) COLLATE en)
+
+query ITITI
+SELECT id, a, length(a), b, length(b::string) FROM t50015 ORDER BY id ASC
+----
+1  hello                                                                                                 5   hello        5
+2  hello                                                                                                 5   hello        5
+3  hello hello                                                                                           11  hello hello  11

@@ -1,25 +1,24 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package bench
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"os/exec"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 const schema = `
@@ -109,18 +108,19 @@ func SetupExec(pgURL url.URL, name string, accounts, transactions int) (*exec.Cm
 // not support. The queries this script runs are based on a dump of a db created
 // by `pgbench -i`, but sticking to the compatible subset that both cockroach and
 // postgres support.
-func SetupBenchDB(db *gosql.DB, accounts int, quiet bool) error {
-	if _, err := db.Exec(schema); err != nil {
+func SetupBenchDB(db sqlutils.DBHandle, accounts int, quiet bool) error {
+	ctx := context.TODO()
+	if _, err := db.ExecContext(ctx, schema); err != nil {
 		return err
 	}
-	return populateDB(db, accounts, quiet)
+	return populateDB(ctx, db, accounts, quiet)
 }
 
 const tellers = 10
 
-func populateDB(db *gosql.DB, accounts int, quiet bool) error {
+func populateDB(ctx context.Context, db sqlutils.DBHandle, accounts int, quiet bool) error {
 	branches := `INSERT INTO pgbench_branches (bid, bbalance, filler) VALUES (1, 7354, NULL)`
-	if r, err := db.Exec(branches); err != nil {
+	if r, err := db.ExecContext(ctx, branches); err != nil {
 		return err
 	} else if x, err := r.RowsAffected(); err != nil {
 		return err
@@ -140,7 +140,7 @@ func populateDB(db *gosql.DB, accounts int, quiet bool) error {
 	(9, 1, 0, NULL),
 	(10, 1, 3345, NULL)
 	`
-	if r, err := db.Exec(tellers); err != nil {
+	if r, err := db.ExecContext(ctx, tellers); err != nil {
 		return err
 	} else if x, err := r.RowsAffected(); err != nil {
 		return err
@@ -167,7 +167,7 @@ func populateDB(db *gosql.DB, accounts int, quiet bool) error {
 			fmt.Fprintf(&placeholders, "(%d, 1, 0, '                                                                                    ')", done+i)
 		}
 		stmt := fmt.Sprintf(`INSERT INTO pgbench_accounts VALUES %s`, placeholders.String())
-		if r, err := db.Exec(stmt); err != nil {
+		if r, err := db.ExecContext(ctx, stmt); err != nil {
 			return err
 		} else if x, err := r.RowsAffected(); err != nil {
 			return err
@@ -190,7 +190,7 @@ INSERT INTO pgbench_history VALUES
 (5, 1, 68648, 1880, CURRENT_TIMESTAMP, NULL),
 (10, 1, 46989, 1080, CURRENT_TIMESTAMP, NULL);`
 
-	if r, err := db.Exec(history); err != nil {
+	if r, err := db.ExecContext(ctx, history); err != nil {
 		return err
 	} else if x, err := r.RowsAffected(); err != nil {
 		return err

@@ -1,13 +1,14 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Cockroach Community Licence (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-import { withRouter, WithRouterProps } from "react-router";
+import { RouteComponentProps } from "react-router";
+import { withRouter } from "react-router-dom";
 
 import { LocalityTree } from "src/redux/localities";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
@@ -39,11 +40,11 @@ const LIVENESS_ICON_SPACING = 3;
 const LIVENESS_ICON_RADIUS = 8;
 const LIVENESS_TOTAL_WIDTH = LIVENESS_ICON_RADIUS * 2 + LIVENESS_ICON_SPACING;
 
-class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> {
+class LocalityView extends React.Component<LocalityViewProps & RouteComponentProps> {
   onClick = () => {
     const localityTree = this.props.localityTree;
     const destination = CLUSTERVIZ_ROOT + generateLocalityRoute(localityTree.tiers);
-    this.props.router.push(destination);
+    this.props.history.push(destination);
   }
 
   renderLivenessIcons(nodeCounts: { healthy: number, suspect: number, dead: number }) {
@@ -115,6 +116,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
         <CapacityArc
           usableCapacity={capacityUsable}
           usedCapacity={capacityUsed}
+          localityLabel={getLocalityLabel(tiers)}
         />
         <Sparklines nodes={nodeIds} />
       </g>

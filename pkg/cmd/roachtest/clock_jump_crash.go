@@ -1,17 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -26,21 +21,23 @@ import (
 func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when injecting offset
-	if c.nodes != 1 {
-		t.Fatalf("Expected num nodes to be 1, got: %d", c.nodes)
+	if c.spec.NodeCount != 1 {
+		t.Fatalf("Expected num nodes to be 1, got: %d", c.spec.NodeCount)
 	}
 
 	t.Status("deploying offset injector")
 	offsetInjector := newOffsetInjector(c)
-	offsetInjector.deploy(ctx)
+	if err := offsetInjector.deploy(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx)
+	c.Start(ctx, t)
 
-	db := c.Conn(ctx, c.nodes)
+	db := c.Conn(ctx, c.spec.NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(
@@ -52,16 +49,34 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	// Wait for Cockroach to process the above cluster setting
 	time.Sleep(10 * time.Second)
 
-	if !isAlive(db) {
+	if !isAlive(db, c.l) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
 	t.Status("injecting offset")
-	defer offsetInjector.recover(ctx, c.nodes)
-	offsetInjector.offset(ctx, c.nodes, tc.offset)
+	// If we expect the node to crash, make sure it's restarted after the
+	// test is done to pacify the dead node detector. Do this after the
+	// clock offset is reset or the node will crash again.
+	var aliveAfterOffset bool
+	defer func() {
+		offsetInjector.recover(ctx, c.spec.NodeCount)
+		// Resetting the clock is a jump in the opposite direction which
+		// can cause a crash even if the original jump didn't. Wait a few
+		// seconds before checking whether the node is alive and
+		// restarting it if not.
+		time.Sleep(3 * time.Second)
+		if !isAlive(db, c.l) {
+			c.Start(ctx, t, c.Node(1))
+		}
+	}()
+	defer offsetInjector.recover(ctx, c.spec.NodeCount)
+	offsetInjector.offset(ctx, c.spec.NodeCount, tc.offset)
+
+	// Wait a few seconds to let it crash if it's going to crash.
+	time.Sleep(3 * time.Second)
 
 	t.Status("validating health")
-	aliveAfterOffset := isAlive(db)
+	aliveAfterOffset = isAlive(db, c.l)
 	if aliveAfterOffset != tc.aliveAfterOffset {
 		t.Fatalf("Expected node health %v, got %v", tc.aliveAfterOffset, aliveAfterOffset)
 	}
@@ -74,7 +89,7 @@ type clockJumpTestCase struct {
 	aliveAfterOffset bool
 }
 
-func makeClockJumpTests() testSpec {
+func registerClockJumpTests(r *testRegistry) {
 	testCases := []clockJumpTestCase{
 		{
 			name:             "large_forward_enabled",
@@ -111,33 +126,18 @@ func makeClockJumpTests() testSpec {
 		},
 	}
 
-	spec := testSpec{
-		Name:   "jump",
-		Stable: true, // DO NOT COPY to new tests
-	}
-
 	for i := range testCases {
 		tc := testCases[i]
-		spec.SubTests = append(spec.SubTests, testSpec{
-			Name:   tc.name,
-			Stable: true, // DO NOT COPY to new tests
+		spec := testSpec{
+			Name:  "clock/jump/" + tc.name,
+			Owner: OwnerKV,
+			// These tests muck with NTP, therefore we don't want the cluster reused
+			// by others.
+			Cluster: makeClusterSpec(1, reuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockJump(ctx, t, c, tc)
 			},
-		})
+		}
+		r.Add(spec)
 	}
-
-	return spec
-}
-
-func registerClock(r *registry) {
-	r.Add(testSpec{
-		Name:   "clock",
-		Nodes:  nodes(1),
-		Stable: true, // DO NOT COPY to new tests
-		SubTests: []testSpec{
-			makeClockJumpTests(),
-			makeClockMonotonicTests(),
-		},
-	})
 }

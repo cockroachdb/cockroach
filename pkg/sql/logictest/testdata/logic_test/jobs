@@ -1,0 +1,132 @@
+# 3node-tenant fails due to AUTO STATS being returned in SHOW JOBS. Changing
+# the cluster setting to disable auto stats doesn't work:
+# https://github.com/cockroachdb/cockroach/issues/47918
+
+# These test verify that a user's job are visible via
+# crdb_internal.jobs and SHOW JOBS.
+
+user root
+
+statement ok
+GRANT ALL ON DATABASE test TO testuser
+
+statement ok
+CREATE TABLE t(x INT); INSERT INTO t(x) VALUES (1); CREATE INDEX ON t(x)
+
+query TTT
+SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name = 'root'
+----
+SCHEMA CHANGE  updating privileges for database 52  root
+SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)    root
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'root'
+----
+SCHEMA CHANGE  updating privileges for database 52  root
+SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)    root
+
+user testuser
+
+# a non-admin user cannot see the admin jobs
+
+query TTT
+SELECT job_type, description, user_name FROM [SHOW JOBS]
+----
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs
+----
+
+# However they can see their own jobs.
+
+statement ok
+CREATE TABLE u(x INT); INSERT INTO u(x) VALUES (1); CREATE INDEX ON u(x);
+
+
+query TTT
+SELECT job_type, description, user_name FROM [SHOW JOBS]
+----
+SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs
+----
+SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
+
+# And root can see both.
+
+user root
+
+query TTT
+SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name IN ('root', 'testuser')
+----
+SCHEMA CHANGE  updating privileges for database 52  root
+SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)    root
+SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)    testuser
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser')
+----
+SCHEMA CHANGE  updating privileges for database 52  root
+SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)    root
+SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)    testuser
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser2
+
+statement ok
+ALTER ROLE testuser CONTROLJOB
+
+user testuser2
+
+statement ok
+CREATE TABLE t1(x INT);
+INSERT INTO t1(x) VALUES (1);
+CREATE INDEX ON t1(x);
+DROP TABLE t1
+
+user testuser
+
+# testuser should be able to see jobs created by non-admin users.
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs
+----
+SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)   testuser
+SCHEMA CHANGE     CREATE INDEX ON test.public.t1 (x)  testuser2
+SCHEMA CHANGE     DROP TABLE test.public.t1           testuser2
+SCHEMA CHANGE GC  GC for DROP TABLE test.public.t1    testuser2
+
+statement ok
+PAUSE JOB (SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC')
+
+user root
+
+statement ok
+CREATE TABLE t2(x INT);
+DROP TABLE t2
+
+let $job_id
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'root' AND job_type = 'SCHEMA CHANGE GC'
+
+user testuser
+
+statement error pq: only admins can control jobs owned by other admins
+PAUSE JOB (SELECT $job_id)
+
+user root
+
+# Remove CONTROLJOB from testuser
+statement ok
+ALTER ROLE testuser NOCONTROLJOB
+
+let $job_id
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC'
+
+user testuser
+
+# testuser should no longer have the ability to control jobs.
+statement error pq: user testuser does not have CONTROLJOB privilege
+PAUSE JOB (SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC')

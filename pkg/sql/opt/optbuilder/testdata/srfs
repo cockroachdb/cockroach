@@ -5,168 +5,262 @@
 build
 SELECT * FROM generate_series(1, 3)
 ----
-zip
- ├── columns: generate_series:1(int)
- └── function: generate_series [type=tuple{int AS generate_series}]
-      ├── const: 1 [type=int]
-      └── const: 3 [type=int]
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 3)
 
 build
 SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
-inner-join
- ├── columns: generate_series:1(int) generate_series:2(int)
- ├── zip
- │    ├── columns: generate_series:1(int)
- │    └── function: generate_series [type=tuple{int AS generate_series}]
- │         ├── const: 1 [type=int]
- │         └── const: 2 [type=int]
- ├── zip
- │    ├── columns: generate_series:2(int)
- │    └── function: generate_series [type=tuple{int AS generate_series}]
- │         ├── const: 1 [type=int]
- │         └── const: 2 [type=int]
- └── true [type=bool]
+inner-join-apply
+ ├── columns: generate_series:1 generate_series:2
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ ├── project-set
+ │    ├── columns: generate_series:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ └── filters (true)
 
 build
 SELECT * FROM pg_catalog.generate_series(1, 3)
 ----
-zip
- ├── columns: generate_series:1(int)
- └── function: generate_series [type=tuple{int AS generate_series}]
-      ├── const: 1 [type=int]
-      └── const: 3 [type=int]
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 3)
 
 build
 SELECT * FROM generate_series(1, 1) AS c(x)
 ----
-zip
- ├── columns: x:1(int)
- └── function: generate_series [type=tuple{int AS generate_series}]
-      ├── const: 1 [type=int]
-      └── const: 1 [type=int]
+project-set
+ ├── columns: x:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 1)
 
 build
 SELECT * FROM generate_series(1, 1) WITH ORDINALITY AS c(x, y)
 ----
-row-number
- ├── columns: x:1(int) y:2(int!null)
- └── zip
-      ├── columns: generate_series:1(int)
-      └── function: generate_series [type=tuple{int AS generate_series}]
-           ├── const: 1 [type=int]
-           └── const: 1 [type=int]
+ordinality
+ ├── columns: x:1 y:2!null
+ └── project-set
+      ├── columns: generate_series:1
+      ├── values
+      │    └── ()
+      └── zip
+           └── generate_series(1, 1)
 
 build
 SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
 ----
-error (0A000): generator functions are not supported
+error (0A000): generate_series(): generator functions are not allowed in LIMIT
 
 # multiple_SRFs
 
 build
 SELECT generate_series(1, 2), generate_series(3, 4)
 ----
-error (0A000): generator functions are not supported
+project-set
+ ├── columns: generate_series:1 generate_series:2
+ ├── values
+ │    └── ()
+ └── zip
+      ├── generate_series(1, 2)
+      └── generate_series(3, 4)
 
 exec-ddl
 CREATE TABLE t (a string)
 ----
-TABLE t
- ├── a string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE u (b string)
 ----
-TABLE u
- ├── b string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
 ----
 project
- ├── columns: a:1(string) b:3(string) a:5(int) b:6(int)
- └── inner-join
-      ├── columns: a:1(string) t.rowid:2(int!null) b:3(string) u.rowid:4(int!null) generate_series:5(int) generate_series:6(int)
-      ├── inner-join
-      │    ├── columns: a:1(string) t.rowid:2(int!null) b:3(string) u.rowid:4(int!null) generate_series:5(int)
-      │    ├── inner-join
-      │    │    ├── columns: a:1(string) t.rowid:2(int!null) b:3(string) u.rowid:4(int!null)
+ ├── columns: a:1 b:4 a:7 b:8
+ └── inner-join-apply
+      ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 b:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6 generate_series:7 generate_series:8
+      ├── inner-join-apply
+      │    ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 b:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6 generate_series:7
+      │    ├── inner-join-apply
+      │    │    ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 b:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6
       │    │    ├── scan t
-      │    │    │    └── columns: a:1(string) t.rowid:2(int!null)
+      │    │    │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3
       │    │    ├── scan u
-      │    │    │    └── columns: b:3(string) u.rowid:4(int!null)
-      │    │    └── true [type=bool]
-      │    ├── zip
-      │    │    ├── columns: generate_series:5(int)
-      │    │    └── function: generate_series [type=tuple{int AS generate_series}]
-      │    │         ├── const: 1 [type=int]
-      │    │         └── const: 2 [type=int]
-      │    └── true [type=bool]
-      ├── zip
-      │    ├── columns: generate_series:6(int)
-      │    └── function: generate_series [type=tuple{int AS generate_series}]
-      │         ├── const: 3 [type=int]
-      │         └── const: 4 [type=int]
-      └── true [type=bool]
+      │    │    │    └── columns: b:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6
+      │    │    └── filters (true)
+      │    ├── project-set
+      │    │    ├── columns: generate_series:7
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(1, 2)
+      │    └── filters (true)
+      ├── project-set
+      │    ├── columns: generate_series:8
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(3, 4)
+      └── filters (true)
 
 build
 SELECT 3 + x FROM generate_series(1,2) AS a(x)
 ----
 project
- ├── columns: "?column?":2(int)
- ├── zip
- │    ├── columns: generate_series:1(int)
- │    └── function: generate_series [type=tuple{int AS generate_series}]
- │         ├── const: 1 [type=int]
- │         └── const: 2 [type=int]
+ ├── columns: "?column?":2
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
  └── projections
-      └── plus [type=int]
-           ├── const: 3 [type=int]
-           └── variable: generate_series [type=int]
+      └── 3 + generate_series:1 [as="?column?":2]
 
 build
 SELECT 3 + (3 * generate_series(1,3))
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: "?column?":2
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 3)
+ └── projections
+      └── 3 + (3 * generate_series:1) [as="?column?":2]
 
 # unnest
 
 build
 SELECT * from unnest(ARRAY[1,2])
 ----
-zip
- ├── columns: unnest:1(int)
- └── function: unnest [type=tuple{int AS unnest}]
-      └── array: [type=int[]]
-           ├── const: 1 [type=int]
-           └── const: 2 [type=int]
+project-set
+ ├── columns: unnest:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── unnest(ARRAY[1,2])
 
 build
 SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
 ----
-error (0A000): generator functions are not supported
+project-set
+ ├── columns: unnest:1 unnest:2
+ ├── values
+ │    └── ()
+ └── zip
+      ├── unnest(ARRAY[1,2])
+      └── unnest(ARRAY['a','b'])
 
 build
 SELECT unnest(ARRAY[3,4]) - 2
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: "?column?":2
+ ├── project-set
+ │    ├── columns: unnest:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[3,4])
+ └── projections
+      └── unnest:1 - 2 [as="?column?":2]
 
 build
 SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: "?column?":3 "?column?":4
+ ├── project-set
+ │    ├── columns: generate_series:1 unnest:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         ├── generate_series(0, 1)
+ │         └── unnest(ARRAY[2,4])
+ └── projections
+      ├── 1 + generate_series:1 [as="?column?":3]
+      └── unnest:2 - 1 [as="?column?":4]
 
 build
 SELECT ascii(unnest(ARRAY['a', 'b', 'c']));
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: ascii:2
+ ├── project-set
+ │    ├── columns: unnest:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY['a','b','c'])
+ └── projections
+      └── ascii(unnest:1) [as=ascii:2]
+
+# Regression test for #36501: don't rename the SRF column because of a
+# higher-level table alias.
+build
+SELECT * FROM (SELECT unnest(ARRAY[1])) AS tablealias
+----
+project-set
+ ├── columns: unnest:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── unnest(ARRAY[1])
+
+build
+SELECT * FROM (SELECT unnest(ARRAY[1]) AS colalias) AS tablealias
+----
+project-set
+ ├── columns: colalias:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── unnest(ARRAY[1])
+
+build
+SELECT * FROM
+  (SELECT unnest(ARRAY[1]) AS filter_id2) AS uq
+JOIN
+  (SELECT unnest(ARRAY[1]) AS filter_id) AS ab
+ON uq.filter_id2 = ab.filter_id
+----
+inner-join (hash)
+ ├── columns: filter_id2:1!null filter_id:2!null
+ ├── project-set
+ │    ├── columns: unnest:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[1])
+ ├── project-set
+ │    ├── columns: unnest:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[1])
+ └── filters
+      └── unnest:1 = unnest:2
+
 
 # nested_SRF
 # See #20511
@@ -174,12 +268,22 @@ error (0A000): generator functions are not supported
 build
 SELECT generate_series(generate_series(1, 3), 3)
 ----
-error (0A000): generator functions are not supported
+error (0A000): generate_series(): unimplemented: nested set-returning functions
 
 build
 SELECT generate_series(1, 3) + generate_series(1, 3)
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: "?column?":3
+ ├── project-set
+ │    ├── columns: generate_series:1 generate_series:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         ├── generate_series(1, 3)
+ │         └── generate_series(1, 3)
+ └── projections
+      └── generate_series:1 + generate_series:2 [as="?column?":3]
 
 build
 SELECT generate_series(1, 3) FROM t WHERE generate_series > 3
@@ -192,25 +296,71 @@ error (42703): column "generate_series" does not exist
 build
 SELECT * from generate_series(1, (select * from generate_series(1, 0)))
 ----
-zip
- ├── columns: generate_series:2(int)
- └── function: generate_series [type=tuple{int AS generate_series}]
-      ├── const: 1 [type=int]
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: generate_series:1(int)
-                └── zip
-                     ├── columns: generate_series:1(int)
-                     └── function: generate_series [type=tuple{int AS generate_series}]
-                          ├── const: 1 [type=int]
-                          └── const: 0 [type=int]
+project-set
+ ├── columns: generate_series:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── function: generate_series
+           ├── 1
+           └── subquery
+                └── max1-row
+                     ├── columns: generate_series:1
+                     └── project-set
+                          ├── columns: generate_series:1
+                          ├── values
+                          │    └── ()
+                          └── zip
+                               └── generate_series(1, 0)
 
 # The following query is designed to produce a null array argument to unnest
 # in a way that the type system can't detect before evaluation.
 build
 SELECT unnest((SELECT current_schemas((SELECT isnan((SELECT round(3.4, (SELECT generate_series(1, 0)))))))));
 ----
-error (0A000): generator functions are not supported
+project-set
+ ├── columns: unnest:5
+ ├── values
+ │    └── ()
+ └── zip
+      └── function: unnest
+           └── subquery
+                └── max1-row
+                     ├── columns: current_schemas:4
+                     └── project
+                          ├── columns: current_schemas:4
+                          ├── values
+                          │    └── ()
+                          └── projections
+                               └── function: current_schemas [as=current_schemas:4]
+                                    └── subquery
+                                         └── max1-row
+                                              ├── columns: isnan:3
+                                              └── project
+                                                   ├── columns: isnan:3
+                                                   ├── values
+                                                   │    └── ()
+                                                   └── projections
+                                                        └── function: isnan [as=isnan:3]
+                                                             └── subquery
+                                                                  └── max1-row
+                                                                       ├── columns: round:2
+                                                                       └── project
+                                                                            ├── columns: round:2
+                                                                            ├── values
+                                                                            │    └── ()
+                                                                            └── projections
+                                                                                 └── function: round [as=round:2]
+                                                                                      ├── 3.4
+                                                                                      └── subquery
+                                                                                           └── max1-row
+                                                                                                ├── columns: generate_series:1
+                                                                                                └── project-set
+                                                                                                     ├── columns: generate_series:1
+                                                                                                     ├── values
+                                                                                                     │    └── ()
+                                                                                                     └── zip
+                                                                                                          └── generate_series(1, 0)
 
 # pg_get_keywords
 
@@ -219,21 +369,18 @@ build
 SELECT * FROM pg_get_keywords() WHERE word IN ('alter', 'and', 'between', 'cross') ORDER BY word
 ----
 sort
- ├── columns: word:1(string!null) catcode:2(string) catdesc:3(string)
+ ├── columns: word:1!null catcode:2 catdesc:3
  ├── ordering: +1
  └── select
-      ├── columns: word:1(string!null) catcode:2(string) catdesc:3(string)
-      ├── zip
-      │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
-      │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
-      └── filters [type=bool]
-           └── in [type=bool]
-                ├── variable: word [type=string]
-                └── tuple [type=tuple{string, string, string, string}]
-                     ├── const: 'alter' [type=string]
-                     ├── const: 'and' [type=string]
-                     ├── const: 'between' [type=string]
-                     └── const: 'cross' [type=string]
+      ├── columns: word:1!null catcode:2 catdesc:3
+      ├── project-set
+      │    ├── columns: word:1 catcode:2 catdesc:3
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── pg_get_keywords()
+      └── filters
+           └── word:1 IN ('alter', 'and', 'between', 'cross')
 
 # Postgres enables renaming both the source and the column name for
 # single-column generators, but not for multi-column generators.
@@ -241,45 +388,101 @@ build
 SELECT a.*, b.*, c.* FROM generate_series(1,1) a, unnest(ARRAY[1]) b, pg_get_keywords() c LIMIT 0
 ----
 limit
- ├── columns: a:1(int) b:2(int) word:3(string) catcode:4(string) catdesc:5(string)
- ├── inner-join
- │    ├── columns: generate_series:1(int) unnest:2(int) word:3(string) catcode:4(string) catdesc:5(string)
- │    ├── inner-join
- │    │    ├── columns: generate_series:1(int) unnest:2(int)
- │    │    ├── zip
- │    │    │    ├── columns: generate_series:1(int)
- │    │    │    └── function: generate_series [type=tuple{int AS generate_series}]
- │    │    │         ├── const: 1 [type=int]
- │    │    │         └── const: 1 [type=int]
- │    │    ├── zip
- │    │    │    ├── columns: unnest:2(int)
- │    │    │    └── function: unnest [type=tuple{int AS unnest}]
- │    │    │         └── array: [type=int[]]
- │    │    │              └── const: 1 [type=int]
- │    │    └── true [type=bool]
- │    ├── zip
- │    │    ├── columns: word:3(string) catcode:4(string) catdesc:5(string)
- │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
- │    └── true [type=bool]
- └── const: 0 [type=int]
+ ├── columns: a:1 b:2 word:3 catcode:4 catdesc:5
+ ├── inner-join-apply
+ │    ├── columns: generate_series:1 unnest:2 word:3 catcode:4 catdesc:5
+ │    ├── limit hint: 1.00
+ │    ├── inner-join-apply
+ │    │    ├── columns: generate_series:1 unnest:2
+ │    │    ├── project-set
+ │    │    │    ├── columns: generate_series:1
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── zip
+ │    │    │         └── generate_series(1, 1)
+ │    │    ├── project-set
+ │    │    │    ├── columns: unnest:2
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── zip
+ │    │    │         └── unnest(ARRAY[1])
+ │    │    └── filters (true)
+ │    ├── project-set
+ │    │    ├── columns: word:3 catcode:4 catdesc:5
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── pg_get_keywords()
+ │    └── filters (true)
+ └── 0
 
 # Beware of multi-valued SRFs in render position (#19149)
 build
 SELECT 'a', pg_get_keywords(), 'c' LIMIT 1
 ----
-error (0A000): generator functions are not supported
+limit
+ ├── columns: "?column?":4!null pg_get_keywords:5 "?column?":6!null
+ ├── project
+ │    ├── columns: "?column?":4!null pg_get_keywords:5 "?column?":6!null
+ │    ├── limit hint: 1.00
+ │    ├── project-set
+ │    │    ├── columns: word:1 catcode:2 catdesc:3
+ │    │    ├── limit hint: 1.00
+ │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── pg_get_keywords()
+ │    └── projections
+ │         ├── 'a' [as="?column?":4]
+ │         ├── ((word:1, catcode:2, catdesc:3) AS word, catcode, catdesc) [as=pg_get_keywords:5]
+ │         └── 'c' [as="?column?":6]
+ └── 1
 
 build
 SELECT 'a', pg_get_keywords() b, 'c' LIMIT 1
 ----
-error (0A000): generator functions are not supported
+limit
+ ├── columns: "?column?":4!null b:5 "?column?":6!null
+ ├── project
+ │    ├── columns: "?column?":4!null b:5 "?column?":6!null
+ │    ├── limit hint: 1.00
+ │    ├── project-set
+ │    │    ├── columns: word:1 catcode:2 catdesc:3
+ │    │    ├── limit hint: 1.00
+ │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── pg_get_keywords()
+ │    └── projections
+ │         ├── 'a' [as="?column?":4]
+ │         ├── ((word:1, catcode:2, catdesc:3) AS word, catcode, catdesc) [as=b:5]
+ │         └── 'c' [as="?column?":6]
+ └── 1
 
 # unary_table
 
 build
 SELECT 'a', crdb_internal.unary_table() b, 'c' LIMIT 1
 ----
-error (0A000): generator functions are not supported
+limit
+ ├── columns: "?column?":1!null b:2!null "?column?":3!null
+ ├── project
+ │    ├── columns: "?column?":1!null b:2!null "?column?":3!null
+ │    ├── limit hint: 1.00
+ │    ├── project-set
+ │    │    ├── limit hint: 1.00
+ │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── crdb_internal.unary_table()
+ │    └── projections
+ │         ├── 'a' [as="?column?":1]
+ │         ├── () [as=b:2]
+ │         └── 'c' [as="?column?":3]
+ └── 1
 
 # upper
 
@@ -287,38 +490,52 @@ error (0A000): generator functions are not supported
 build
 SELECT * FROM upper('abc')
 ----
-zip
- ├── columns: upper:1(string)
- └── function: upper [type=string]
-      └── const: 'abc' [type=string]
+project-set
+ ├── columns: upper:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── upper('abc')
 
 # current_schema
 
 build
 SELECT * FROM current_schema() WITH ORDINALITY AS a(b)
 ----
-row-number
- ├── columns: b:1(string) ordinality:2(int!null)
- └── zip
-      ├── columns: current_schema:1(string)
-      └── function: current_schema [type=string]
+ordinality
+ ├── columns: b:1 ordinality:2!null
+ └── project-set
+      ├── columns: current_schema:1
+      ├── values
+      │    └── ()
+      └── zip
+           └── current_schema()
 
 # expandArray
 
 build
 SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: information_schema._pg_expandarray:3
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['b','a'])
+ └── projections
+      └── ((x:1, n:2) AS x, n) [as=information_schema._pg_expandarray:3]
 
 build
 SELECT * FROM information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
-zip
- ├── columns: x:1(string) n:2(int)
- └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
+project-set
+ ├── columns: x:1 n:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── information_schema._pg_expandarray(ARRAY['b','a'])
 
 # srf_accessor
 
@@ -335,90 +552,119 @@ error (42809): type string is not composite
 build
 SELECT (unnest(ARRAY[]:::INT[])).*
 ----
-error (0A000): generator functions are not supported
+error (42809): type int is not composite
 
 build
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).*
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: x:3 n:4
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+ └── projections
+      ├── (((x:1, n:2) AS x, n)).x [as=x:3]
+      └── (((x:1, n:2) AS x, n)).n [as=n:4]
 
 build
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).x
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: x:3
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+ └── projections
+      └── (((x:1, n:2) AS x, n)).x [as=x:3]
+
+build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).@2
+----
+project
+ ├── columns: "?column?":3
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+ └── projections
+      └── (((x:1, n:2) AS x, n)).n [as="?column?":3]
 
 build
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
 ----
-error (0A000): generator functions are not supported
+error (42804): could not identify column "other" in tuple{string AS x, int AS n}
+
+build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).@4
+----
+error (42601): tuple column 4 does not exist
 
 build
 SELECT temp.n from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
 ----
 project
- ├── columns: n:2(int)
- └── zip
-      ├── columns: x:1(string) n:2(int)
-      └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-           └── array: [type=string[]]
-                ├── const: 'c' [type=string]
-                ├── const: 'b' [type=string]
-                └── const: 'a' [type=string]
+ ├── columns: n:2
+ └── project-set
+      ├── columns: x:1 n:2
+      ├── values
+      │    └── ()
+      └── zip
+           └── information_schema._pg_expandarray(ARRAY['c','b','a'])
 
 build
 SELECT temp.* from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
 ----
-zip
- ├── columns: x:1(string) n:2(int)
- └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'c' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
+project-set
+ ├── columns: x:1 n:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── information_schema._pg_expandarray(ARRAY['c','b','a'])
 
 build
 SELECT * from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
 ----
-zip
- ├── columns: x:1(string) n:2(int)
- └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'c' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
+project-set
+ ├── columns: x:1 n:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── information_schema._pg_expandarray(ARRAY['c','b','a'])
 
 # generate_subscripts
 
 build
 SELECT * FROM generate_subscripts(ARRAY[3,2,1])
 ----
-zip
- ├── columns: generate_subscripts:1(int)
- └── function: generate_subscripts [type=tuple{int AS generate_subscripts}]
-      └── array: [type=int[]]
-           ├── const: 3 [type=int]
-           ├── const: 2 [type=int]
-           └── const: 1 [type=int]
+project-set
+ ├── columns: generate_subscripts:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_subscripts(ARRAY[3,2,1])
 
 # Zip with multiple SRFs.
 build
 SELECT * FROM
 ROWS FROM (generate_series(0, 1), generate_series(1, 3), pg_get_keywords(), unnest(ARRAY['a', 'b', 'c']))
 ----
-zip
- ├── columns: generate_series:1(int) generate_series:2(int) word:3(string) catcode:4(string) catdesc:5(string) unnest:6(string)
- ├── function: generate_series [type=tuple{int AS generate_series}]
- │    ├── const: 0 [type=int]
- │    └── const: 1 [type=int]
- ├── function: generate_series [type=tuple{int AS generate_series}]
- │    ├── const: 1 [type=int]
- │    └── const: 3 [type=int]
- ├── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
- └── function: unnest [type=tuple{string AS unnest}]
-      └── array: [type=string[]]
-           ├── const: 'a' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'c' [type=string]
+project-set
+ ├── columns: generate_series:1 generate_series:2 word:3 catcode:4 catdesc:5 unnest:6
+ ├── values
+ │    └── ()
+ └── zip
+      ├── generate_series(0, 1)
+      ├── generate_series(1, 3)
+      ├── pg_get_keywords()
+      └── unnest(ARRAY['a','b','c'])
 
 # Don't rename columns if the zip contains two functions.
 build
@@ -426,37 +672,225 @@ SELECT a.*, b.*, c.* FROM upper('abc') a
 JOIN ROWS FROM (upper('def'), generate_series(1, 3)) b ON true
 JOIN generate_series(1, 4) c ON true
 ----
-inner-join
- ├── columns: a:1(string) upper:2(string) generate_series:3(int) c:4(int)
- ├── inner-join
- │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int)
- │    ├── zip
- │    │    ├── columns: upper:1(string)
- │    │    └── function: upper [type=string]
- │    │         └── const: 'abc' [type=string]
- │    ├── zip
- │    │    ├── columns: upper:2(string) generate_series:3(int)
- │    │    ├── function: upper [type=string]
- │    │    │    └── const: 'def' [type=string]
- │    │    └── function: generate_series [type=tuple{int AS generate_series}]
- │    │         ├── const: 1 [type=int]
- │    │         └── const: 3 [type=int]
- │    └── filters [type=bool]
- │         └── true [type=bool]
- ├── zip
- │    ├── columns: generate_series:4(int)
- │    └── function: generate_series [type=tuple{int AS generate_series}]
- │         ├── const: 1 [type=int]
- │         └── const: 4 [type=int]
- └── filters [type=bool]
-      └── true [type=bool]
+inner-join (cross)
+ ├── columns: a:1 upper:2 generate_series:3 c:4
+ ├── inner-join (cross)
+ │    ├── columns: upper:1 upper:2 generate_series:3
+ │    ├── project-set
+ │    │    ├── columns: upper:1
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── upper('abc')
+ │    ├── project-set
+ │    │    ├── columns: upper:2 generate_series:3
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         ├── upper('def')
+ │    │         └── generate_series(1, 3)
+ │    └── filters
+ │         └── true
+ ├── project-set
+ │    ├── columns: generate_series:4
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 4)
+ └── filters
+      └── true
 
 build
 SELECT * FROM ROWS FROM (generate_series(generate_series(1,2),3))
 ----
-error (0A000): generator functions are not supported
+error (0A000): generate_series(): generate_series(): set-returning functions must appear at the top level of FROM
+
+# SRFs not allowed in HAVING, unless they are part of a subquery.
+build
+SELECT max(a) FROM t HAVING max(a::int) > generate_series(0, a::int)
+----
+error (0A000): generate_series(): generator functions are not allowed in HAVING
 
 build
-SELECT * FROM ROWS FROM (generate_series((generate_series(1,2)).generate_series,3))
+SELECT max(a) FROM t HAVING max(a::int) > (SELECT generate_series(0, b::int) FROM u limit 1)
 ----
-error (0A000): generator functions are not supported
+project
+ ├── columns: max:4
+ └── select
+      ├── columns: max:4 max:6!null
+      ├── scalar-group-by
+      │    ├── columns: max:4 max:6
+      │    ├── project
+      │    │    ├── columns: column5:5 a:1
+      │    │    ├── scan t
+      │    │    │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3
+      │    │    └── projections
+      │    │         └── a:1::INT8 [as=column5:5]
+      │    └── aggregations
+      │         ├── max [as=max:4]
+      │         │    └── a:1
+      │         └── max [as=max:6]
+      │              └── column5:5
+      └── filters
+           └── gt
+                ├── max:6
+                └── subquery
+                     └── max1-row
+                          ├── columns: generate_series:10
+                          └── limit
+                               ├── columns: generate_series:10
+                               ├── project
+                               │    ├── columns: generate_series:10
+                               │    ├── limit hint: 1.00
+                               │    └── project-set
+                               │         ├── columns: b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9 generate_series:10
+                               │         ├── limit hint: 1.00
+                               │         ├── scan u
+                               │         │    ├── columns: b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9
+                               │         │    └── limit hint: 1.00
+                               │         └── zip
+                               │              └── generate_series(0, b:7::INT8)
+                               └── 1
+
+build
+SELECT generate_series((SELECT generate_subscripts(ARRAY[a, a||b]) FROM t, u), 100) FROM t
+----
+project
+ ├── columns: generate_series:11
+ └── project-set
+      ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 generate_series:11
+      ├── scan t
+      │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3
+      └── zip
+           └── function: generate_series
+                ├── subquery
+                │    └── max1-row
+                │         ├── columns: generate_subscripts:10
+                │         └── project
+                │              ├── columns: generate_subscripts:10
+                │              └── project-set
+                │                   ├── columns: a:4 t.rowid:5!null t.crdb_internal_mvcc_timestamp:6 b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9 generate_subscripts:10
+                │                   ├── inner-join (cross)
+                │                   │    ├── columns: a:4 t.rowid:5!null t.crdb_internal_mvcc_timestamp:6 b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9
+                │                   │    ├── scan t
+                │                   │    │    └── columns: a:4 t.rowid:5!null t.crdb_internal_mvcc_timestamp:6
+                │                   │    ├── scan u
+                │                   │    │    └── columns: b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9
+                │                   │    └── filters (true)
+                │                   └── zip
+                │                        └── generate_subscripts(ARRAY[a:4, a:4 || b:7])
+                └── 100
+
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, j JSON, k JSON, m JSON, n JSON)
+----
+
+build
+SELECT
+  json_array_elements(j),
+  (SELECT jsonb_each(k)),
+  (SELECT jsonb_object_keys(m) FROM a),
+  (SELECT generate_series((SELECT generate_series(x, 100) FROM jsonb_array_elements_text(n)), 1000))
+FROM a
+----
+project
+ ├── columns: json_array_elements:7 jsonb_each:21 jsonb_object_keys:22 generate_series:23
+ ├── project-set
+ │    ├── columns: x:1!null j:2 k:3 m:4 n:5 crdb_internal_mvcc_timestamp:6 json_array_elements:7
+ │    ├── scan a
+ │    │    └── columns: x:1!null j:2 k:3 m:4 n:5 crdb_internal_mvcc_timestamp:6
+ │    └── zip
+ │         └── json_array_elements(j:2)
+ └── projections
+      ├── subquery [as=jsonb_each:21]
+      │    └── max1-row
+      │         ├── columns: jsonb_each:10
+      │         └── project
+      │              ├── columns: jsonb_each:10
+      │              ├── project-set
+      │              │    ├── columns: key:8 value:9
+      │              │    ├── values
+      │              │    │    └── ()
+      │              │    └── zip
+      │              │         └── jsonb_each(k:3)
+      │              └── projections
+      │                   └── ((key:8, value:9) AS key, value) [as=jsonb_each:10]
+      ├── subquery [as=jsonb_object_keys:22]
+      │    └── max1-row
+      │         ├── columns: jsonb_object_keys:17
+      │         └── project
+      │              ├── columns: jsonb_object_keys:17
+      │              └── project-set
+      │                   ├── columns: x:11!null j:12 k:13 m:14 n:15 crdb_internal_mvcc_timestamp:16 jsonb_object_keys:17
+      │                   ├── scan a
+      │                   │    └── columns: x:11!null j:12 k:13 m:14 n:15 crdb_internal_mvcc_timestamp:16
+      │                   └── zip
+      │                        └── jsonb_object_keys(m:14)
+      └── subquery [as=generate_series:23]
+           └── max1-row
+                ├── columns: generate_series:20
+                └── project-set
+                     ├── columns: generate_series:20
+                     ├── values
+                     │    └── ()
+                     └── zip
+                          └── function: generate_series
+                               ├── subquery
+                               │    └── max1-row
+                               │         ├── columns: generate_series:19
+                               │         └── project
+                               │              ├── columns: generate_series:19
+                               │              └── project-set
+                               │                   ├── columns: value:18 generate_series:19
+                               │                   ├── project-set
+                               │                   │    ├── columns: value:18
+                               │                   │    ├── values
+                               │                   │    │    └── ()
+                               │                   │    └── zip
+                               │                   │         └── jsonb_array_elements_text(n:5)
+                               │                   └── zip
+                               │                        └── generate_series(x:1, 100)
+                               └── 1000
+
+# Regression test for #30412.
+build
+SELECT 0, unnest(ARRAY[0]) GROUP BY 1
+----
+error (42803): column "unnest" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT 0, unnest(ARRAY[0]) GROUP BY 1, 2
+----
+error (0A000): unnest(): generator functions are not allowed in GROUP BY
+
+build
+SELECT 0, information_schema._pg_expandarray(ARRAY[0]) GROUP BY 1
+----
+error (42803): column "x" must appear in the GROUP BY clause or be used in an aggregate function
+
+# Regression test for #31755.
+exec-ddl
+CREATE TABLE tab31755 (a STRING)
+----
+
+build
+SELECT * FROM ROWS FROM (CAST((SELECT a FROM tab31755 LIMIT 1) AS SERIAL2[])) AS ident
+----
+project-set
+ ├── columns: ident:4
+ ├── values
+ │    └── ()
+ └── zip
+      └── cast: INT2[]
+           └── subquery
+                └── max1-row
+                     ├── columns: tab31755.a:1
+                     └── limit
+                          ├── columns: tab31755.a:1
+                          ├── project
+                          │    ├── columns: tab31755.a:1
+                          │    ├── limit hint: 1.00
+                          │    └── scan tab31755
+                          │         ├── columns: tab31755.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3
+                          │         └── limit hint: 1.00
+                          └── 1

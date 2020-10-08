@@ -1,0 +1,118 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
+@require '~src/components/core/index'
+
+.app-name
+  white-space nowrap
+
+  &__unset
+    color $tooltip-color
+    font-style italic
+
+.section
+  flex 0 0 auto
+  padding 12px 24px
+  max-width $max-window-width
+  clearfix()
+
+  &--heading
+    padding-top 0
+    padding-bottom 0
+
+  &--container
+    padding 0 24px 0 0
+
+.page--header
+  padding 0
+  &__title
+    font-family $font-family--base
+    font-size 20px
+    line-height 1.6
+    letter-spacing -0.2px
+    color $colors--neutral-8
+    margin-bottom 25px
+
+.base-heading
+  composes base-heading from '~styl/base/typography.styl'
+
+.back-link
+  text-decoration none
+  color $link-color
+
+.cockroach--tabs
+  :global(.ant-tabs-bar)
+    border-bottom 1px solid $grey2
+  :global(.ant-tabs-tab)
+    font-family SourceSansPro-Regular
+    font-size 16px
+    line-height 1.5
+    letter-spacing normal
+    color $placeholder
+    &:hover
+      color $adminui-grey-1
+  :global(.ant-tabs-tab-active)
+    color $adminui-grey-1
+  :global(.ant-tabs-ink-bar)
+    height 3px
+    border-radius 40px
+    background-color $blue
+
+@require "~src/components/core/index.styl"
+
+.table-details
+  .summary--card__counting
+    margin-bottom 15px
+    &--value
+      margin 0
+      color $colors--neutral-8
+      line-height 32px
+    &--label
+      font-size 14px
+      line-height 22px
+      letter-spacing 0.1px
+
+.last-cleared-tooltip, .numeric-stats-table, .plan-view-table
+  &__tooltip
+    width 36px  // Reserve space for 10px padding around centered 16px icon
+    height 16px
+    display inline-block
+
+    // Overrides to let the tooltip sit inside a table header.
+    text-transform none
+    font-weight normal
+    white-space normal
+    letter-spacing normal
+    font-size 14px
+
+  &__tooltip-hover-area
+    width 100%
+    padding 0px 10px
+
+  &__info-icon
+    width 16px
+    height 16px
+    border-radius 50%
+    border 1px solid $tooltip-color
+    font-size 12px
+    line-height 14px  // Visual tweak to vertically center the "i"
+    text-align center
+    color $tooltip-color
+
+  .hover-tooltip--hovered &__info-icon
+    border-color $body-color
+    color $body-color
+
+.statements-table
+  &__col-query-text
+    font-family $font-family--monospace
+    white-space pre-wrap

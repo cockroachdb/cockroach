@@ -5,6 +5,7 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "jsx": "preserve",
+    "lib": ["esnext", "dom"],
     "moduleResolution": "node",
     "noFallthroughCasesInSwitch": true,
     "noImplicitAny": true,
@@ -13,6 +14,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "outDir": "./dist/",
+    "skipLibCheck": true,
     "sourceMap": true,
     "strictNullChecks": false,
     "target": "es6",
@@ -25,5 +27,8 @@
         "node_modules/*"
       ]
     }
-  }
+  },
+  "exclude": [
+    "cypress"
+  ]
 }

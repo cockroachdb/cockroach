@@ -1,9 +1,12 @@
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: example-secure
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: loadgen
   template:
     metadata:
       labels:
@@ -22,7 +25,7 @@ spec:
       # In addition to the client certificate and key, the init-certs entrypoint will symlink
       # the cluster CA to the certs directory.
       - name: init-certs
-        image: cockroachdb/cockroach-k8s-request-cert:0.3
+        image: cockroachdb/cockroach-k8s-request-cert:0.4
         imagePullPolicy: IfNotPresent
         command:
         - "/bin/ash"

@@ -1,0 +1,9 @@
+alter_role_stmt ::=
+	'ALTER' 'ROLE' name opt_with role_options
+	| 'ALTER' 'ROLE' name 
+	| 'ALTER' 'USER' name opt_with role_options
+	| 'ALTER' 'USER' name 
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' name opt_with role_options
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' name 
+	| 'ALTER' 'USER' 'IF' 'EXISTS' name opt_with role_options
+	| 'ALTER' 'USER' 'IF' 'EXISTS' name 

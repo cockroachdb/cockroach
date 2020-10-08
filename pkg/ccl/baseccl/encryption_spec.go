@@ -15,12 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
+	"github.com/spf13/pflag"
 )
 
 // DefaultRotationPeriod is the rotation period used if not specified.

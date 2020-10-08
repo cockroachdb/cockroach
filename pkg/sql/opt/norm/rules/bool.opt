@@ -1,97 +1,110 @@
 # =============================================================================
 # bool.opt contains normalization rules for boolean And, Or, Not, and Filters
 # operators.
-#
-# In order to make filter matching easier, the Filters rules create a Filters
-# operator to wrap the boolean conditions in Select and Join operators as a
-# list of AND'd expressions. For example:
-#   (InnerJoin
-#     (Scan a)
-#     (Scan b)
-#     (Filters
-#       (Eq (Variable a) (Variable b))
-#       (Gt (Variable b) (Const 5))
-#     )
-#   )
-#
-# Now other rules can rely upon the presence of the Filters when matching:
-#   (Select
-#     $input:*
-#     (Filters [ ... $conjunct:* ... ])
-#   )
 # =============================================================================
 
-
-# EliminateEmptyAnd maps an empty And or Filters list to True.
-[EliminateEmptyAnd, Normalize]
-(And | Filters
-    $conditions:[]
-)
+# NormalizeNestedAnds ensures that And expressions are normalized into a left-
+# deep tree. For example, the expression:
+#
+#   A AND (B AND (C AND D))
+#
+# would be normalized to:
+#
+#         And
+#        /   \
+#       And   D
+#      /   \
+#     And   C
+#    /   \
+#   A     B
+#
+# This normalization makes conjuncts easier to traverse for other rules, such as
+# the ExtractRedundantConjunct rule.
+[NormalizeNestedAnds, Normalize]
+(And $left:* (And $innerLeft:* $innerRight:*))
 =>
-(True)
+(And (ConcatLeftDeepAnds $left $innerLeft) $innerRight)
 
-# EliminateEmptyOr maps an empty Or list to False.
-[EliminateEmptyOr, Normalize]
-(Or
-    $conditions:[]
-)
+# SimplifyTrueAnd simplifies the And operator by discarding a True condition on
+# the left side.
+[SimplifyTrueAnd, Normalize]
+(And (True) $right:*)
+=>
+$right
+
+# SimplifyAndTrue simplifies the And operator by discarding a True condition on
+# the right side.
+[SimplifyAndTrue, Normalize]
+(And $left:* (True))
+=>
+$left
+
+# SimplifyFalseAnd maps the And operator to False if its left input is False.
+[SimplifyFalseAnd, Normalize]
+(And $left:(False) *)
+=>
+$left
+
+# SimplifyAndFalse maps the And operator to False if its right input is False.
+[SimplifyAndFalse, Normalize]
+(And * $right:(False))
+=>
+$right
+
+# SimplifyTrueOr maps the Or operator to True if its left input is True.
+[SimplifyTrueOr, Normalize]
+(Or $left:(True) *)
+=>
+$left
+
+# SimplifyOrTrue maps the Or operator to True if its righht input is True.
+[SimplifyOrTrue, Normalize]
+(Or * $right:(True))
+=>
+$right
+
+# SimplifyFalseOr simplifies the Or operator by discarding a False condition on
+# the left side.
+[SimplifyFalseOr, Normalize]
+(Or (False) $right:*)
+=>
+$right
+
+# SimplifyOrFalse simplifies the Or operator by discarding a False condition on
+# the right side.
+[SimplifyOrFalse, Normalize]
+(Or $left:* (False))
+=>
+$left
+
+# SimplifyRange simplifies a Range operator for which the input is no longer an
+# And expression, likely due to simplification of the And operator itself.
+[SimplifyRange, Normalize]
+(Range $input:^(And))
+=>
+$input
+
+# FoldNullAndOr replaces the operator with null if both operands are null.
+[FoldNullAndOr, Normalize]
+(And | Or (Null) (Null))
+=>
+(Null (BoolType))
+
+# FoldNotTrue replaces NOT(True) with False.
+[FoldNotTrue, Normalize]
+(Not (True))
 =>
 (False)
 
-# EliminateSingletonAndOr discards an And or Or operator that has only one
-# condition.
-[EliminateSingletonAndOr, Normalize]
-(And | Or
-    $conditions:[ $item:* ]
-)
+# FoldNotFalse replaces NOT(False) with True.
+[FoldNotFalse, Normalize]
+(Not (False))
 =>
-$item
+(True)
 
-# SimplifyAnd simplifies the And operator in several possible ways:
-#   - Removes True operands
-#   - Replaces the And operator with False if any operand is False
-#   - Flattens nested And operands by merging their conditions into parent And
-# This rule is especially important when we build a simplified filter.
-[SimplifyAnd, Normalize]
-(And
-    $conditions:[ ... (And | True | False) ... ]
-)
-=>
-(SimplifyAnd $conditions)
-
-# SimplifyOr simplifies the Or operator in several possible ways:
-#   - Removes False operands
-#   - Replaces the Or operator with True if any operand is True
-#   - Flattens nested Or operands by merging their conditions into parent Or
-# This rule is especially important when we build a simplified filter.
-[SimplifyOr, Normalize]
-(Or
-    $conditions:[ ... (Or | True | False) ... ]
-)
-=>
-(SimplifyOr $conditions)
-
-# SimplifyFilters simplifies the Filters operator in several possible ways:
-#   - Removes True operands
-#   - Replaces the Filters operator with False if any operand is False or Null
-#   - Flattens nested And operands by merging their conditions into parent
-#
-# Note that the Null handling behavior is different than the SimplifyAnd rule,
-# because Filters only appears as a Select or Join filter condition, both of
-# which treat a Null filter conjunct exactly as if it were False.
-[SimplifyFilters, Normalize]
-(Filters
-    $conditions:[ ... (And | True | False | Null) ... ]
-)
-=>
-(SimplifyFilters $conditions)
-
-# FoldNullAndOr replaces the operator with Null if all of its operands are
-# Null.
-[FoldNullAndOr, Normalize]
-(And | Or
-    $conditions:[ (Null) ... ] & (ListOnlyHasNulls $conditions)
-)
+# FoldNotNull replaces NOT(Null) with Null.
+[FoldNotNull, Normalize]
+(Not (Null))
 =>
 (Null (BoolType))
 
@@ -99,53 +112,53 @@ $item
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All
 # comparisons can be negated except for the JSON comparisons.
 [NegateComparison, Normalize]
-(Not $input:(Comparison $left:* $right:*) & ^(Contains|JsonExists|JsonSomeExists|JsonAllExists))
+(Not
+    $input:(Comparison $left:* $right:*) &
+        ^(Contains | JsonExists | JsonSomeExists | JsonAllExists
+                | Overlaps
+        )
+)
 =>
 (NegateComparison (OpName $input) $left $right)
 
 # EliminateNot discards a doubled Not operator.
 [EliminateNot, Normalize]
-(Not (Not $input:*)) => $input
+(Not (Not $input:*))
+=>
+$input
 
 # NegateAnd converts the negation of a conjunction into a disjunction of
 # negations.
 [NegateAnd, Normalize]
-(Not (And $conditions:*))
+(Not (And $left:* $right:*))
 =>
-(Or (NegateConditions $conditions))
+(Or (Not $left) (Not $right))
 
 # NegateOr converts the negation of a disjunction into a conjunction of
 # negations.
 [NegateOr, Normalize]
-(Not (Or $conditions:*))
+(Not (Or $left:* $right:*))
 =>
-(And (NegateConditions $conditions))
+(And (Not $left) (Not $right))
 
-# ExtractRedundantClause matches an OR expression in which one of the OR
-# conditions appears as a conjunct in all of the other OR conditions. For
-# example, it matches expressions such as: A OR (A AND B)
+# ExtractRedundantConjunct matches an OR expression in which the same conjunct
+# appears in both the left and right OR conditions:
 #
-# In this case, A is the redundant clause, so the boolean expression can be
-# simplified to:
-#   A OR (A AND B)  =>  A
-[ExtractRedundantClause, Normalize]
-(Or $conditions:[ $item:* ... ] & (IsRedundantSubclause $conditions $item))
-=>
-$item
-
-# ExtractRedundantSubclause matches an OR expression in which a subclause
-# appears as a conjunct in all of the OR conditions. For example, it matches
-# expressions such as: (A AND B) OR (A AND C)
-#
-# In this case, A is the redundant subclause, so the boolean expression can be
-# rewritten as:
+#   A OR (A AND B)          =>  A
 #   (A AND B) OR (A AND C)  =>  A AND (B OR C)
 #
-# This transformation is useful for finding a conjunct that can be pushed
-# down in the query tree. For example, if the redundant subclause A is
-# fully bound by one side of a join, it can be pushed through the join, even
-# if B AND C cannot.
-[ExtractRedundantSubclause, Normalize]
-(Or $conditions:[ (And [ ... $item:* ... ]) ... ] & (IsRedundantSubclause $conditions $item))
+# In both these cases, the redundant conjunct is A.
+#
+# This transformation is useful for finding a conjunct that can be pushed down
+# in the query tree. For example, if the redundant conjunct A is fully bound by
+# one side of a join, it can be pushed through the join, even if B AND C cannot.
+[ExtractRedundantConjunct, Normalize]
+(Or
+    $left:^(Or)
+    $right:^(Or) &
+        (Succeeded
+            $conjunct:(FindRedundantConjunct $left $right)
+        )
+)
 =>
-(ExtractRedundantSubclause $conditions $item)
+(ExtractRedundantConjunct $conjunct $left $right)

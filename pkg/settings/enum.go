@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package settings
 
@@ -21,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // EnumSetting is a StringSetting that restricts the values to be one of the `enumValues`
@@ -30,11 +26,20 @@ type EnumSetting struct {
 	enumValues map[int64]string
 }
 
-var _ Setting = &EnumSetting{}
+var _ extendedSetting = &EnumSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (e *EnumSetting) Typ() string {
 	return "e"
+}
+
+// String returns the enum's string value.
+func (e *EnumSetting) String(sv *Values) string {
+	enumID := e.Get(sv)
+	if str, ok := e.enumValues[enumID]; ok {
+		return str
+	}
+	return fmt.Sprintf("unknown(%d)", enumID)
 }
 
 // ParseEnum returns the enum value, and a boolean that indicates if it was parseable.
@@ -52,6 +57,24 @@ func (e *EnumSetting) ParseEnum(raw string) (int64, bool) {
 	}
 	_, ok := e.enumValues[v]
 	return v, ok
+}
+
+// GetAvailableValuesAsHint returns the possible enum settings as a string that
+// can be provided as an error hint to a user.
+func (e *EnumSetting) GetAvailableValuesAsHint() string {
+	// First stabilize output by sorting by key.
+	valIdxs := make([]int, 0, len(e.enumValues))
+	for i := range e.enumValues {
+		valIdxs = append(valIdxs, int(i))
+	}
+	sort.Ints(valIdxs)
+
+	// Now use those indices
+	vals := make([]string, 0, len(e.enumValues))
+	for _, enumIdx := range valIdxs {
+		vals = append(vals, fmt.Sprintf("%d: %s", enumIdx, e.enumValues[int64(enumIdx)]))
+	}
+	return "Available values: " + strings.Join(vals, ", ")
 }
 
 func (e *EnumSetting) set(sv *Values, k int64) error {
@@ -78,6 +101,15 @@ func enumValuesToDesc(enumValues map[int64]string) string {
 	}
 	buffer.WriteString("]")
 	return buffer.String()
+}
+
+// RegisterPublicEnumSetting defines a new setting with type int and makes it public.
+func RegisterPublicEnumSetting(
+	key, desc string, defaultValue string, enumValues map[int64]string,
+) *EnumSetting {
+	s := RegisterEnumSetting(key, desc, defaultValue, enumValues)
+	s.SetVisibility(Public)
+	return s
 }
 
 // RegisterEnumSetting defines a new setting with type int.

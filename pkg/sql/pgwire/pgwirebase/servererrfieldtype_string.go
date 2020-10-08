@@ -4,16 +4,32 @@ package pgwirebase
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[ServerErrFieldSeverity-83]
+	_ = x[ServerErrFieldSQLState-67]
+	_ = x[ServerErrFieldMsgPrimary-77]
+	_ = x[ServerErrFieldDetail-68]
+	_ = x[ServerErrFieldHint-72]
+	_ = x[ServerErrFieldSrcFile-70]
+	_ = x[ServerErrFieldSrcLine-76]
+	_ = x[ServerErrFieldSrcFunction-82]
+	_ = x[ServerErrFieldConstraintName-110]
+}
+
 const (
-	_ServerErrFieldType_name_0 = "ServerErrFieldSQLStateServerErrFileldDetail"
+	_ServerErrFieldType_name_0 = "ServerErrFieldSQLStateServerErrFieldDetail"
 	_ServerErrFieldType_name_1 = "ServerErrFieldSrcFile"
-	_ServerErrFieldType_name_2 = "ServerErrFileldHint"
+	_ServerErrFieldType_name_2 = "ServerErrFieldHint"
 	_ServerErrFieldType_name_3 = "ServerErrFieldSrcLineServerErrFieldMsgPrimary"
 	_ServerErrFieldType_name_4 = "ServerErrFieldSrcFunctionServerErrFieldSeverity"
+	_ServerErrFieldType_name_5 = "ServerErrFieldConstraintName"
 )
 
 var (
-	_ServerErrFieldType_index_0 = [...]uint8{0, 22, 43}
+	_ServerErrFieldType_index_0 = [...]uint8{0, 22, 42}
 	_ServerErrFieldType_index_3 = [...]uint8{0, 21, 45}
 	_ServerErrFieldType_index_4 = [...]uint8{0, 25, 47}
 )
@@ -33,6 +49,8 @@ func (i ServerErrFieldType) String() string {
 	case 82 <= i && i <= 83:
 		i -= 82
 		return _ServerErrFieldType_name_4[_ServerErrFieldType_index_4[i]:_ServerErrFieldType_index_4[i+1]]
+	case i == 110:
+		return _ServerErrFieldType_name_5
 	default:
 		return "ServerErrFieldType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

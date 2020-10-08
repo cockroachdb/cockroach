@@ -1,8 +1,8 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Cockroach Community Licence (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
@@ -16,7 +16,7 @@ import { NodeView } from "./nodeView";
 import { LivenessStatus } from "src/redux/nodes";
 import { cockroach } from "src/js/protos";
 
-type Liveness = cockroach.storage.Liveness;
+type Liveness = cockroach.kv.kvserver.storagepb.ILiveness;
 
 const MIN_RADIUS = 150;
 const PADDING = 150;

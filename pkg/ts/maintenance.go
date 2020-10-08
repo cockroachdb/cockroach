@@ -1,26 +1,22 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package ts
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -51,9 +47,9 @@ func (tsdb *DB) ContainsTimeSeries(start, end roachpb.RKey) bool {
 // snapshot to quickly obtain a set of keys to be pruned with no network calls.
 func (tsdb *DB) MaintainTimeSeries(
 	ctx context.Context,
-	snapshot engine.Reader,
+	snapshot storage.Reader,
 	start, end roachpb.RKey,
-	db *client.DB,
+	db *kv.DB,
 	mem *mon.BytesMonitor,
 	budgetBytes int64,
 	now hlc.Timestamp,
@@ -74,4 +70,4 @@ func (tsdb *DB) MaintainTimeSeries(
 }
 
 // Assert that DB implements the necessary interface from the storage package.
-var _ storage.TimeSeriesDataStore = (*DB)(nil)
+var _ kvserver.TimeSeriesDataStore = (*DB)(nil)

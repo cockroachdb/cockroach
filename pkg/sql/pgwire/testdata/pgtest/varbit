@@ -1,0 +1,27 @@
+# Empty VARBIT param.
+send
+Parse {"Query": "SELECT $1::VARBIT"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [[]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# bitlen = 82 (4 bytes), with 17 0-bytes following.
+send
+Bind {"ParameterFormatCodes": [1], "Parameters": [[0, 0, 0, 82, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

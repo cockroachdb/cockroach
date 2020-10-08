@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import { assert } from "chai";
 import * as timewindow from "./timewindow";
 import moment from "moment";
@@ -40,7 +50,7 @@ describe("time window reducer", function() {
       );
       assert.deepEqual(
         (new timewindow.TimeWindowState()).scale,
-        timewindow.availableTimeScales["10 min"],
+        timewindow.availableTimeScales["Past 10 Minutes"],
       );
     });
 
@@ -81,6 +91,14 @@ describe("time window reducer", function() {
           })),
           expected,
         );
+      });
+    });
+    describe("findClosestTimeScale", () => {
+      it("should found correctly time scale", () => {
+        assert.deepEqual(timewindow.findClosestTimeScale(15), { ...timewindow.availableTimeScales["Past 10 Minutes"], key: "Custom" });
+        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(10, "minutes").asSeconds()), { ...timewindow.availableTimeScales["Past 10 Minutes"], key: "Past 10 Minutes"});
+        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(14, "days").asSeconds()), { ...timewindow.availableTimeScales["Past 2 Weeks"], key: "Past 2 Weeks" });
+        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(moment().daysInMonth() * 5, "days").asSeconds()), { ...timewindow.availableTimeScales["Past 2 Months"], key: "Custom" });
       });
     });
   });

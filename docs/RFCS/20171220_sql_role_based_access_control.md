@@ -439,8 +439,10 @@ Role membership expansion can be pre-computed (see [Internal representation of m
 Permission checks currently consist of calls to one of:
 ```
 func (p *planner) CheckPrivilege(descriptor sqlbase.DescriptorProto, privilege privilege.Kind) error
-func (p *planner) RequireSuperUser(action string) error
-func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error
+func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error
+func (p *planner) RequireAdminRole(action string) error
+func (p *planner) HasAdminRole() (bool, error)
+func (p *planner) MemberOfWithAdminOption(member string) (map[string]bool, error)
 ```
 
 All methods operate on `p.session.User`.

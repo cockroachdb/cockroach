@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto3";
 package cockroach.util.tracing;
@@ -21,9 +17,24 @@ import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
+// LogRecord is a log message recorded in a traced span.
+message LogRecord {
+  // Time of the log record.
+  google.protobuf.Timestamp time = 1 [(gogoproto.nullable) = false,
+                                     (gogoproto.stdtime) = true];
+  message Field {
+    string key = 1;
+    string value = 2;
+  }
+  // Fields with values converted to strings.
+  repeated Field fields = 2 [(gogoproto.nullable) = false];
+}
+
 // RecordedSpan is a span that is part of a recording. It can be transferred
 // over the wire for snowball tracing.
 message RecordedSpan {
+  option (gogoproto.goproto_stringer) = false;
+
   // ID of the trace; spans that are part of the same hierarchy share
   // the same trace ID.
   uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
@@ -41,24 +52,33 @@ message RecordedSpan {
   // Time when the span was started.
   google.protobuf.Timestamp start_time = 7 [(gogoproto.nullable) = false,
                                             (gogoproto.stdtime) = true];
-  // Duration in nanoseconds; 0 if the span is not finished.
+  // Duration is the span's duration, measured from start to Finish().
+  //
+  // A spans whose recording is collected before it's finished will have the
+  // duration set as the time of collection - start_time. Such a span will have
+  // an "unfinished" tag.
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
-  message LogRecord {
-    // Time of the log record.
-    google.protobuf.Timestamp time = 1 [(gogoproto.nullable) = false,
-                                        (gogoproto.stdtime) = true];
-    message Field {
-      string key = 1;
-      string value = 2;
-    }
-    // Fields with values converted to strings.
-    repeated Field fields = 2 [(gogoproto.nullable) = false];
-  }
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
 
   // Stats collected in this span.
   google.protobuf.Any stats = 10;
+}
+
+// NormalizedSpan is a representation of a RecordedSpan from a trace with all
+// its children embedded, recursively. This JSON serialization of this proto is
+// used in the system.statement_diagnostics.trace column.
+//
+// See RecordedSpan for the description of the fields.
+message NormalizedSpan {
+  string operation = 1;
+  map<string, string> tags = 2;
+  google.protobuf.Timestamp start_time = 3 [(gogoproto.nullable) = false,
+                                           (gogoproto.stdtime) = true];
+  google.protobuf.Duration duration = 4 [(gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+  repeated LogRecord logs = 5 [(gogoproto.nullable) = false];
+  repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
 }

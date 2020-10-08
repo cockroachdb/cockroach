@@ -1,0 +1,101 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.distsqlrun;
+option go_package = "rowexec";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+// InputStats represents the stats collected from an input.
+message InputStats {
+  // num_rows is the number of rows received from the input.
+  int64 num_rows = 1;
+  // Duration in nanoseconds of the cumulative time spent stalled.
+  google.protobuf.Duration stall_time = 8 [(gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+}
+
+// TableReaderStats are the stats collected during a tableReader run.
+message TableReaderStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 bytes_read = 2;
+}
+
+// JoinReaderStats are the stats collected during a JoinReader run.
+message JoinReaderStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats index_lookup_stats = 2 [(gogoproto.nullable) = false];
+  reserved 3;
+}
+
+// HashJoinerStats are the stats collected during a hashJoiner run.
+message HashJoinerStats {
+  InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
+  string stored_side = 3;
+  int64 max_allocated_mem = 4;
+  int64 max_allocated_disk = 5;
+}
+
+// AggregatorStats are the stats collected during an aggregator run.
+message AggregatorStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 2;
+}
+
+// DistinctStats are the stats collected during a distinct run.
+message DistinctStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 2;
+}
+
+// OrdinalityStats are the stats collected during a WITH ORDINALITY run.
+message OrdinalityStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+}
+
+// MergeJoinerStats are the stats collected during a mergeJoiner run.
+message MergeJoinerStats {
+  InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 3;
+}
+
+// SorterStats are the stats collected during a sorter run.
+message SorterStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 2;
+  int64 max_allocated_disk = 3;
+}
+
+// WindowerStats are the stats collected during a windower run.
+message WindowerStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 2;
+  int64 max_allocated_disk = 3;
+}
+
+// InvertedFiltererStats are the stats collected during an inverted
+// filterer run.
+message InvertedFiltererStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 2;
+  int64 max_allocated_disk = 3;
+}
+
+// InvertedJoinerStats are the stats collected during an invertedJoiner run.
+message InvertedJoinerStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats index_scan_stats = 2 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 3;
+  int64 max_allocated_disk = 4;
+}

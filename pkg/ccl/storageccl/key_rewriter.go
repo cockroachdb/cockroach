@@ -13,10 +13,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // prefixRewrite holds information for a single []byte replacement of a prefix.
@@ -53,28 +55,28 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 // and splits.
 type KeyRewriter struct {
 	prefixes prefixRewriter
-	descs    map[sqlbase.ID]*sqlbase.TableDescriptor
+	descs    map[descpb.ID]*tabledesc.Immutable
 }
 
 // MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
 func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
-	descs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	descs := make(map[descpb.ID]*tabledesc.Immutable)
 	for _, rekey := range rekeys {
-		var desc sqlbase.Descriptor
+		var desc descpb.Descriptor
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
 			return nil, errors.Wrapf(err, "unmarshalling rekey descriptor for old table id %d", rekey.OldID)
 		}
-		table := desc.GetTable()
+		table := descpb.TableFromDescriptor(&desc, hlc.Timestamp{})
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}
-		descs[sqlbase.ID(rekey.OldID)] = table
+		descs[descpb.ID(rekey.OldID)] = tabledesc.NewImmutable(*table)
 	}
 	return MakeKeyRewriter(descs)
 }
 
 // MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
-func MakeKeyRewriter(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (*KeyRewriter, error) {
+func MakeKeyRewriter(descs map[descpb.ID]*tabledesc.Immutable) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
@@ -115,36 +117,45 @@ func MakeKeyRewriter(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (*KeyRewrite
 // the given table and index IDs. sqlbase.MakeIndexKeyPrefix is a similar
 // function, but it takes into account interleaved ancestors, which we don't
 // want here.
-func makeKeyRewriterPrefixIgnoringInterleaved(tableID sqlbase.ID, indexID sqlbase.IndexID) []byte {
-	var key []byte
-	key = encoding.EncodeUvarintAscending(key, uint64(tableID))
-	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
-	return key
+func makeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.IndexID) []byte {
+	return keys.TODOSQLCodec.IndexPrefix(uint32(tableID), uint32(indexID))
 }
 
-// RewriteKey modifies key (possibly in place), changing all table IDs to
-// their new value, including any interleaved table children and prefix
-// ends. This function works by inspecting the key for table and index IDs,
-// then uses the corresponding table and index descriptors to determine if
-// interleaved data is present and if it is, to find the next prefix of an
-// interleaved child, then calls itself recursively until all interleaved
-// children have been rekeyed.
-func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
+// RewriteKey modifies key (possibly in place), changing all table IDs to their
+// new value, including any interleaved table children and prefix ends. This
+// function works by inspecting the key for table and index IDs, then uses the
+// corresponding table and index descriptors to determine if interleaved data is
+// present and if it is, to find the next prefix of an interleaved child, then
+// calls itself recursively until all interleaved children have been rekeyed. If
+// it encounters a table ID for which it does not have a configured rewrite, it
+// returns the prefix of the key that was rewritten key. The returned boolean
+// is true if and only if all of the table IDs found in the key were rewritten.
+// If isFromSpan is true, failures in value decoding are assumed to be due to
+// valid span manipulations, like PrefixEnd or Next having altered the trailing
+// byte(s) to corrupt the value encoding -- in such a case we will not be able
+// to decode the value (to determine how much further to scan for table IDs) but
+// we can assume that since these manipulations are only done to the trailing
+// byte that we're likely at the end anyway and do not need to search for any
+// further table IDs to replace.
+func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, error) {
+	if bytes.HasPrefix(key, keys.TenantPrefix) {
+		return key, true, nil
+	}
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
-	_, tableID, _ := encoding.DecodeUvarintAscending(key)
+	_, tableID, _ := keys.TODOSQLCodec.DecodeTablePrefix(key)
 	// Rewrite the first table ID.
 	key, ok := kr.prefixes.rewriteKey(key)
 	if !ok {
-		return key, false, nil
+		return nil, false, nil
 	}
-	desc := kr.descs[sqlbase.ID(tableID)]
+	desc := kr.descs[descpb.ID(tableID)]
 	if desc == nil {
 		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
 	}
 	// Check if this key may have interleaved children.
-	k, _, indexID, err := sqlbase.DecodeTableIDIndexID(key)
+	k, _, indexID, err := keys.TODOSQLCodec.DecodeIndexPrefix(key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -152,7 +163,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 		// If there isn't any more data, we are at some split boundary.
 		return key, true, nil
 	}
-	idx, err := desc.FindIndexByID(indexID)
+	idx, err := desc.FindIndexByID(descpb.IndexID(indexID))
 	if err != nil {
 		return nil, false, err
 	}
@@ -172,9 +183,40 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	for i := 0; i < len(colIDs)-skipCols; i++ {
 		n, err := encoding.PeekLength(k)
 		if err != nil {
+			// PeekLength, and key decoding in general, can fail when reading the last
+			// value from a key that is coming from a span. Keys in spans are often
+			// altered e.g. by calling Next() or PrefixEnd() to ensure a given span is
+			// inclusive or for other reasons, but the manipulations sometimes change
+			// the encoded bytes, meaning they can no longer successfully decode as
+			// back to the original values. This is OK when span boundaries mostly are
+			// only required to be even divisions of keyspace, but when we try to go
+			// back to interpreting them as keys, it can fall apart. Partitioning a
+			// table (and applying zone configs) eagerly creates splits at the defined
+			// partition boundaries, using PrefixEnd for their ends, resulting in such
+			// spans.
+			//
+			// Fortunately, the only common span manipulations are to the trailing
+			// byte of a key (e.g. incrementing or appending a null) so for our needs
+			// here, if we fail to decode because of one of those manipulations, we
+			// can assume that we are at the end of the key as far as fields where a
+			// table ID which needs to be replaced can appear and consider the rewrite
+			// of this key as being compelted successfully.
+			//
+			// Finally unlike key rewrites of actual row-data, span rewrites do not
+			// need to be perfect: spans are only rewritten for use in pre-splitting
+			// and work distribution, so even if it turned out that this assumption
+			// was incorrect, it could cause a performance degradation but does not
+			// pose a correctness risk.
+			if isFromSpan {
+				return key, true, nil
+			}
 			return nil, false, err
 		}
 		k = k[n:]
+		// Check if we ran out of key before getting to an interleave child?
+		if len(k) == 0 {
+			return key, true, nil
+		}
 	}
 	// We might have an interleaved key.
 	k, ok = encoding.DecodeIfInterleavedSentinel(k)
@@ -182,45 +224,14 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 		return key, true, nil
 	}
 	prefix := key[:len(key)-len(k)]
-	k, ok, err = kr.RewriteKey(k)
+	k, ok, err = kr.RewriteKey(k, isFromSpan)
 	if err != nil {
 		return nil, false, err
 	}
 	if !ok {
 		// The interleaved child was not rewritten, skip this row.
-		return key, false, nil
+		return prefix, false, nil
 	}
 	key = append(prefix, k...)
 	return key, true, nil
-}
-
-// RewriteSpan returns a new span with both Key and EndKey rewritten using
-// RewriteKey. Span start keys for the primary index will be rewritten to
-// contain just the table ID. That is, /Table/51/1 -> /Table/51. An error
-// is returned if either was not matched for rewrite.
-func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
-	newKey, ok, err := kr.RewriteKey(append([]byte(nil), span.Key...))
-	if err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
-	}
-	if !ok {
-		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.Key)
-	}
-	// Modify all spans that begin at the primary index to instead begin at the
-	// start of the table. That is, change a span start key from /Table/51/1 to
-	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
-	// will be created.
-	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
-	} else if idx == 1 && len(b) == 0 {
-		newKey = keys.MakeTablePrefix(uint32(id))
-	}
-	newEndKey, ok, err := kr.RewriteKey(append([]byte(nil), span.EndKey...))
-	if err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.EndKey)
-	}
-	if !ok {
-		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.EndKey)
-	}
-	return roachpb.Span{Key: newKey, EndKey: newEndKey}, nil
 }

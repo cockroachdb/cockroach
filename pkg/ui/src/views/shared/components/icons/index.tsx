@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 // Exports icons as SVG strings.
 
 export const cockroachIcon: string = `<svg width="38px" height="38px" viewBox="0 0 38 38" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
@@ -58,7 +68,7 @@ export let criticalIcon: string = `<svg width="20px" height="20px" viewBox="0 0 
             <g id="Group-3">
                 <g transform="translate(25.000000, 19.000000)">
                     <path d="M8.75139389,1.26729609 C9.24631171,0.277343549 10.0519669,0.283622947 10.5438615,1.26729609 L19.1995435,18.5766161 C19.4476073,19.0726851 19.1933971,19.4748284 18.6568996,19.4748284 L0.640505826,19.4748284 C0.092748094,19.4748284 -0.15156708,19.0753209 0.0977558747,18.5766161 L8.75139389,1.26729609 Z" id="Rectangle-4" fill="#F26969"></path>
-                    <g id="Group-2" transform="translate(8.000000, 3.000000)" font-size="14" font-family="Lato-Bold, Lato" fill="#FFFFFF" font-weight="bold">
+                    <g id="Group-2" transform="translate(8.000000, 3.000000)" font-size="14" font-family="SourceSansPro-Bold, SourceSansPro-Regular" fill="#FFFFFF" font-weight="bold">
                         <text id="!">
                             <tspan x="0" y="14">!</tspan>
                         </text>
@@ -78,8 +88,8 @@ export let warningIcon: string = `<svg width="21px" height="21px" viewBox="0 0 2
         <g id="Alert" transform="translate(-18.000000, -20.000000)">
             <g id="Group-4">
                 <g id="Group-2" transform="translate(18.000000, 20.000000)">
-                    <circle id="Oval-5" fill="#F2BE2C" cx="10.5" cy="10.5" r="10.5"></circle>
-                    <text id="!" font-family="Lato-Bold, Lato" font-size="14" font-weight="bold" fill="#FFFFFF">
+                    <circle id="Oval-5" fill="#FFCD02" cx="10.5" cy="10.5" r="10.5"></circle>
+                    <text id="!" font-family="SourceSansPro-Bold, SourceSansPro-Regular" font-size="14" font-weight="bold" fill="#FFFFFF">
                         <tspan x="8" y="16">!</tspan>
                     </text>
                 </g>

@@ -1,0 +1,93 @@
+# OK with empty input
+omit
+----
+
+# Does not like input without JSON but with plain text output (avoids misconfiguration)
+omit
+PASS
+----
+not a single test was parsed, but detected test output: PASS
+
+# Skips non-test lines. The test line is required to avoid a sanity
+# check in the tool.
+omit
+{"Time":"2019-11-29T14:20:13.25826+01:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker"}
+foobar
+----
+
+# Skips passing tests.
+omit
+{"Time":"2019-11-29T14:20:13.25826+01:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker"}
+{"Time":"2019-11-29T14:20:13.258474+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"=== RUN   TestFaker\n"}
+{"Time":"2019-11-29T14:20:13.258488+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"foo\n"}
+{"Time":"2019-11-29T14:20:13.258495+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"bar\n"}
+{"Time":"2019-11-29T14:20:13.258502+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"--- PASS: TestFaker (0.00s)\n"}
+{"Time":"2019-11-29T14:20:13.258508+01:00","Action":"pass","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Elapsed":0}
+{"Time":"2019-11-29T14:20:13.258518+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Output":"PASS\n"}
+{"Time":"2019-11-29T14:20:13.258522+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Output":"ok  \tgithub.com/cockroachdb/cockroach/pkg/util/stop\t(cached)\n"}
+{"Time":"2019-11-29T14:20:13.258539+01:00","Action":"pass","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Elapsed":0}
+----
+
+# Skips unterminated tests.
+omit
+{"Time":"2019-11-29T14:20:13.25826+01:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker"}
+{"Time":"2019-11-29T14:20:13.258474+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"=== RUN   TestFaker\n"}
+{"Time":"2019-11-29T14:20:13.258488+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"foo\n"}
+{"Time":"2019-11-29T14:20:13.258495+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"bar\n"}
+{"Time":"2019-11-29T14:20:13.258502+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"--- PASS: TestFaker (0.00s)\n"}
+----
+
+# Keeps failing test (strips some package-level chatter, though).
+omit
+{"Time":"2019-11-29T14:21:47.595635+01:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker"}
+{"Time":"2019-11-29T14:21:47.595941+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"=== RUN   TestFaker\n"}
+{"Time":"2019-11-29T14:21:47.595957+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"foo\n"}
+{"Time":"2019-11-29T14:21:47.595964+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"bar\n"}
+{"Time":"2019-11-29T14:21:47.595977+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"--- FAIL: TestFaker (0.00s)\n"}
+{"Time":"2019-11-29T14:21:47.595982+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"    stopper_test.go:379: failed\n"}
+{"Time":"2019-11-29T14:21:47.595991+01:00","Action":"fail","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Elapsed":0}
+{"Time":"2019-11-29T14:21:47.596002+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Output":"FAIL\n"}
+{"Time":"2019-11-29T14:21:47.59685+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Output":"FAIL\tgithub.com/cockroachdb/cockroach/pkg/util/stop\t1.593s\n"}
+{"Time":"2019-11-29T14:21:47.596863+01:00","Action":"fail","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Elapsed":1.593}
+----
+{"Time":"2019-11-29T14:21:47.595635+01:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker"}
+{"Time":"2019-11-29T14:21:47.595941+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"=== RUN   TestFaker\n"}
+{"Time":"2019-11-29T14:21:47.595957+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"foo\n"}
+{"Time":"2019-11-29T14:21:47.595964+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"bar\n"}
+{"Time":"2019-11-29T14:21:47.595977+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"--- FAIL: TestFaker (0.00s)\n"}
+{"Time":"2019-11-29T14:21:47.595982+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"    stopper_test.go:379: failed\n"}
+{"Time":"2019-11-29T14:21:47.595991+01:00","Action":"fail","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Elapsed":0}
+
+# Keeps panicking test.
+omit
+{"Time":"2019-11-29T14:16:10.376429+01:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker"}
+{"Time":"2019-11-29T14:16:10.37671+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"=== RUN   TestFaker\n"}
+{"Time":"2019-11-29T14:16:10.376722+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"foo\n"}
+{"Time":"2019-11-29T14:16:10.376729+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"bar\n"}
+{"Time":"2019-11-29T14:16:10.376749+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"--- FAIL: TestFaker (0.00s)\n"}
+{"Time":"2019-11-29T14:16:10.379069+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"panic: boom [recovered]\n"}
+{"Time":"2019-11-29T14:16:10.379101+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"\tpanic: boom\n"}
+{"Time":"2019-11-29T14:16:10.379106+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"\n"}
+{"Time":"2019-11-29T14:16:10.37911+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"goroutine 70 [running]:\n"}
+{"Time":"2019-11-29T14:16:10.379116+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"testing.tRunner.func1(0xc0001e6400)\n"}
+{"Time":"2019-11-29T14:16:10.37912+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"\t/usr/local/Cellar/go/1.13.4/libexec/src/testing/testing.go:874 +0x3a3\n"}
+{"Time":"2019-11-29T14:16:10.379146+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"panic(0x4a7c3e0, 0x4daf450)\n"}
+{"Time":"2019-11-29T14:16:10.379153+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"\t/usr/local/Cellar/go/1.13.4/libexec/src/runtime/panic.go:679 +0x1b2\n"}
+{"Time":"2019-11-29T14:16:10.38139+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"FAIL\tgithub.com/cockroachdb/cockroach/pkg/util/stop\t1.421s\n"}
+{"Time":"2019-11-29T14:16:10.381438+01:00","Action":"fail","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Elapsed":1.421}
+----
+{"Time":"2019-11-29T14:16:10.376429+01:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker"}
+{"Time":"2019-11-29T14:16:10.37671+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"=== RUN   TestFaker\n"}
+{"Time":"2019-11-29T14:16:10.376722+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"foo\n"}
+{"Time":"2019-11-29T14:16:10.376729+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"bar\n"}
+{"Time":"2019-11-29T14:16:10.376749+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"--- FAIL: TestFaker (0.00s)\n"}
+{"Time":"2019-11-29T14:16:10.379069+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"panic: boom [recovered]\n"}
+{"Time":"2019-11-29T14:16:10.379101+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"\tpanic: boom\n"}
+{"Time":"2019-11-29T14:16:10.379106+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"\n"}
+{"Time":"2019-11-29T14:16:10.37911+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"goroutine 70 [running]:\n"}
+{"Time":"2019-11-29T14:16:10.379116+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"testing.tRunner.func1(0xc0001e6400)\n"}
+{"Time":"2019-11-29T14:16:10.37912+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"\t/usr/local/Cellar/go/1.13.4/libexec/src/testing/testing.go:874 +0x3a3\n"}
+{"Time":"2019-11-29T14:16:10.379146+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"panic(0x4a7c3e0, 0x4daf450)\n"}
+{"Time":"2019-11-29T14:16:10.379153+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"\t/usr/local/Cellar/go/1.13.4/libexec/src/runtime/panic.go:679 +0x1b2\n"}
+{"Time":"2019-11-29T14:16:10.38139+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"FAIL\tgithub.com/cockroachdb/cockroach/pkg/util/stop\t1.421s\n"}
+{"Time":"2019-11-29T14:16:10.381438+01:00","Action":"fail","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Elapsed":1.421}

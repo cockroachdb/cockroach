@@ -1,71 +1,44 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
 import (
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/assert"
 )
 
-// TestSQLLex tests the usage of the lexer in the sql subcommand.
-func TestSQLLex(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
+// Example_sql_lex tests the usage of the lexer in the sql subcommand.
+func Example_sql_lex() {
+	c := newCLITest(cliTestParams{insecure: true})
 	defer c.cleanup()
 
-	pgurl, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
-	defer cleanup()
-
-	conn := makeSQLConn(pgurl.String())
+	conn := makeSQLConn(fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
+		security.RootUser, c.ServingSQLAddr()))
 	defer conn.Close()
 
-	tests := []struct {
-		in     string
-		expect string
-	}{
-		{
-			in: `
+	tests := []string{`
 select '
 \?
 ;
 ';
 `,
-			expect: `+----------+
-| ?column? |
-+----------+
-|          |
-|          |
-| \?       |
-|          |
-| ;        |
-|          |
-|          |
-+----------+
-(1 row)
-`,
-		},
-		{
-			in: `
+		`
 select ''''
 ;
 
@@ -73,35 +46,8 @@ select '''
 ;
 ''';
 `,
-			expect: `+----------+
-| ?column? |
-+----------+
-| '        |
-+----------+
-(1 row)
-+----------+
-| ?column? |
-+----------+
-| '        |
-|          |
-| ;        |
-|          |
-| '        |
-+----------+
-(1 row)
-`,
-		},
-		{
-			in: `select 1 as "1";
+		`select 1 as "1";
 -- just a comment without final semicolon`,
-			expect: `+---+
-| 1 |
-+---+
-| 1 |
-+---+
-(1 row)
-`,
-		},
 	}
 
 	setCLIDefaultsForTests()
@@ -110,7 +56,8 @@ select '''
 	// So open a dummy file.
 	f, err := ioutil.TempFile("", "input")
 	if err != nil {
-		t.Fatal(err)
+		fmt.Fprintln(stderr, err)
+		return
 	}
 	// Get the name and close it.
 	fname := f.Name()
@@ -124,86 +71,171 @@ select '''
 			f.Close()
 		}
 		_ = os.Remove(fname)
-		stdin = os.Stdin
 	}()
 
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			// Populate the test input.
-			if f, err = os.OpenFile(fname, os.O_WRONLY, 0666); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := f.WriteString(test.in); err != nil {
-				t.Fatal(err)
-			}
-			f.Close()
-			// Make it available for reading.
-			if f, err = os.Open(fname); err != nil {
-				t.Fatal(err)
-			}
-			// Override the standard input for runInteractive().
-			stdin = f
-
-			out, err := captureOutput(func() {
-				err := runInteractive(conn)
-				if err != nil {
-					t.Fatal(err)
-				}
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if out != test.expect {
-				t.Fatalf("%s:\nexpected: %s\ngot: %s", test.in, test.expect, out)
-			}
-		})
+	for _, test := range tests {
+		// Populate the test input.
+		if f, err = os.OpenFile(fname, os.O_WRONLY, 0644); err != nil {
+			fmt.Fprintln(stderr, err)
+			return
+		}
+		if _, err := f.WriteString(test); err != nil {
+			fmt.Fprintln(stderr, err)
+			return
+		}
+		f.Close()
+		// Make it available for reading.
+		if f, err = os.Open(fname); err != nil {
+			fmt.Fprintln(stderr, err)
+			return
+		}
+		err := runInteractive(conn, f)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+		}
 	}
+
+	// Output:
+	// ?column?
+	// ------------
+	//
+	//   \?
+	//   ;
+	//
+	// (1 row)
+	//   ?column?
+	// ------------
+	//   '
+	// (1 row)
+	//   ?column?
+	// ------------
+	//   '
+	//   ;
+	//   '
+	// (1 row)
+	//   1
+	// -----
+	//   1
+	// (1 row)
 }
 
 func TestIsEndOfStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
-		in      string
-		isEnd   bool
-		isEmpty bool
+		in         string
+		isEnd      bool
+		isNotEmpty bool
 	}{
 		{
-			in:    ";",
-			isEnd: true,
+			in:         ";",
+			isEnd:      true,
+			isNotEmpty: true,
 		},
 		{
-			in:    "; /* comment */",
-			isEnd: true,
+			in:         "; /* comment */",
+			isEnd:      true,
+			isNotEmpty: true,
 		},
 		{
-			in: "; SELECT",
+			in:         "; SELECT",
+			isNotEmpty: true,
 		},
 		{
-			in: "SELECT",
+			in:         "SELECT",
+			isNotEmpty: true,
 		},
 		{
-			in:    "SET; SELECT 1;",
-			isEnd: true,
+			in:         "SET; SELECT 1;",
+			isEnd:      true,
+			isNotEmpty: true,
 		},
 		{
-			in:    "SELECT ''''; SET;",
-			isEnd: true,
+			in:         "SELECT ''''; SET;",
+			isEnd:      true,
+			isNotEmpty: true,
 		},
 		{
-			in:      "  -- hello",
-			isEmpty: true,
+			in: "  -- hello",
+		},
+		{
+			in:         "select 'abc", // invalid token
+			isNotEmpty: true,
+		},
+		{
+			in:         "'abc", // invalid token
+			isNotEmpty: true,
+		},
+		{
+			in:         `SELECT e'\xaa';`, // invalid token but last token is semicolon
+			isEnd:      true,
+			isNotEmpty: true,
 		},
 	}
 
 	for _, test := range tests {
-		isEmpty, lastTok := checkTokens(test.in)
-		if isEmpty != test.isEmpty {
-			t.Errorf("%q: isEmpty expected %v, got %v", test.in, test.isEmpty, isEmpty)
+		lastTok, isNotEmpty := parser.LastLexicalToken(test.in)
+		if isNotEmpty != test.isNotEmpty {
+			t.Errorf("%q: isNotEmpty expected %v, got %v", test.in, test.isNotEmpty, isNotEmpty)
 		}
 		isEnd := isEndOfStatement(lastTok)
 		if isEnd != test.isEnd {
 			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
 		}
 	}
+}
+
+// Test handleCliCmd cases for client-side commands that are aliases for sql
+// statements.
+func TestHandleCliCmdSqlAlias(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	initCLIDefaults()
+
+	clientSideCommandTestsTable := []struct {
+		commandString string
+		wantSQLStmt   string
+	}{
+		{`\l`, `SHOW DATABASES`},
+		{`\dt`, `SHOW TABLES`},
+		{`\dT`, `SHOW TYPES`},
+		{`\du`, `SHOW USERS`},
+		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
+		{`\d`, `SHOW TABLES`},
+	}
+
+	var c cliState
+	for _, tt := range clientSideCommandTestsTable {
+		c = setupTestCliState()
+		c.lastInputLine = tt.commandString
+		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
+
+		assert.Equal(t, cliRunStatement, gotState)
+		assert.Equal(t, tt.wantSQLStmt, c.concatLines)
+	}
+}
+
+func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	initCLIDefaults()
+
+	clientSideCommandTests := []string{`\d goodarg badarg`, `\dz`}
+
+	var c cliState
+	for _, tt := range clientSideCommandTests {
+		c = setupTestCliState()
+		c.lastInputLine = tt
+		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
+
+		assert.Equal(t, cliStateEnum(0), gotState)
+		assert.Equal(t, errInvalidSyntax, c.exitErr)
+	}
+}
+
+func setupTestCliState() cliState {
+	c := cliState{}
+	c.ins = noLineEditor
+	return c
 }

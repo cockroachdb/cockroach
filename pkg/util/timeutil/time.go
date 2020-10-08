@@ -1,33 +1,33 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package timeutil
 
 import (
-	"math"
+	"strings"
 	"time"
 )
 
-// ClocklessMaxOffset is a special-cased value that is used when the cluster
-// runs in "clockless" mode. In that (experimental) mode, we operate without
-// assuming any bound on the clock drift.
-const ClocklessMaxOffset = math.MaxInt64
+// LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
+const LibPQTimePrefix = "0000-01-01"
 
 // Since returns the time elapsed since t.
 // It is shorthand for Now().Sub(t).
 func Since(t time.Time) time.Duration {
 	return Now().Sub(t)
+}
+
+// Until returns the duration until t.
+// It is shorthand for t.Sub(Now()).
+func Until(t time.Time) time.Duration {
+	return t.Sub(Now())
 }
 
 // UnixEpoch represents the Unix epoch, January 1, 1970 UTC.
@@ -69,4 +69,13 @@ func SleepUntil(untilNanos int64, currentTimeNanos func() int64) {
 		}
 		time.Sleep(d)
 	}
+}
+
+// ReplaceLibPQTimePrefix replaces unparsable lib/pq dates used for timestamps
+// (0000-01-01) with timestamps that can be parsed by date libraries.
+func ReplaceLibPQTimePrefix(s string) string {
+	if strings.HasPrefix(s, LibPQTimePrefix) {
+		return "1970-01-01" + s[len(LibPQTimePrefix):]
+	}
+	return s
 }

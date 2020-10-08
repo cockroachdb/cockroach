@@ -1,7 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import _ from "lodash";
 import classNames from "classnames";
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -39,8 +49,16 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: (problem) => problem.underreplicated_range_ids.length,
   },
   {
+    title: "Overreplicated",
+    extract: (problem) => problem.overreplicated_range_ids.length,
+  },
+  {
     title: "Quiescent equals ticking",
     extract: (problem) => problem.quiescent_equals_ticking_range_ids.length,
+  },
+  {
+    title: "Raft log too large",
+    extract: (problem) => problem.raft_log_too_large_range_ids.length,
   },
   {
     title: "Total",
@@ -50,7 +68,9 @@ const connectionTableColumns: ConnectionTableColumn[] = [
         problem.no_lease_range_ids.length +
         problem.raft_leader_not_lease_holder_range_ids.length +
         problem.underreplicated_range_ids.length +
-        problem.quiescent_equals_ticking_range_ids.length;
+        problem.overreplicated_range_ids.length +
+        problem.quiescent_equals_ticking_range_ids.length +
+        problem.raft_log_too_large_range_ids.length;
     },
   },
   { title: "Error", extract: (problem) => problem.error_message },
@@ -71,7 +91,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
     .value();
   return (
     <div>
-      <h2>Connections (via Node {data.node_id})</h2>
+      <h2 className="base-heading">Connections (via Node {data.node_id})</h2>
       <table className="connections-table">
         <tbody>
           <tr className="connections-table__row connections-table__row--header">

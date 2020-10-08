@@ -1,18 +1,14 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package norm
+package norm_test
 
 import (
 	"testing"
@@ -20,153 +16,145 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// TestFactoryProjectColsFromBoth unit tests the Factory.projectColsFromBoth
-// method. This method is used in several decorrelation rules, and is difficult
-// to fully test with data-driven rules tests.
-func TestFactoryProjectColsFromBoth(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := NewFactory(&evalCtx)
-	pb := projectionsBuilder{f: f}
-
-	cat := createFiltersCatalog(t)
-	a := f.Metadata().AddTable(cat.Table("a"))
-	ax := f.Metadata().TableColumn(a, 0)
-	ay := f.Metadata().TableColumn(a, 1)
-	aCols := util.MakeFastIntSet(int(ax), int(ay))
-
-	a2 := f.Metadata().AddTable(cat.Table("a"))
-	a2x := f.Metadata().TableColumn(a2, 0)
-	a2y := f.Metadata().TableColumn(a2, 1)
-	a2Cols := util.MakeFastIntSet(int(a2x), int(a2y))
-
-	scan := f.ConstructScan(f.InternScanOpDef(&memo.ScanOpDef{Table: a, Cols: aCols}))
-	scan2 := f.ConstructScan(f.InternScanOpDef(&memo.ScanOpDef{Table: a2, Cols: a2Cols}))
-
-	// Construct Projections with two passthrough columns.
-	pb.addPassthroughCols(f.funcs.OutputCols(scan))
-	passthroughProj := pb.buildProjections()
-
-	// Construct Projections with one passthrough and two synthesized columns.
-	plus := f.ConstructPlus(
-		f.ConstructVariable(f.InternColumnID(ay)),
-		f.ConstructConst(f.InternDatum(tree.NewDInt(1))),
-	)
-	plusACol := f.Metadata().AddColumn("plusA", types.Int)
-	plusBCol := f.Metadata().AddColumn("plusB", types.Int)
-	pb.addPassthroughCol(ax)
-	pb.addSynthesized(plus, plusACol)
-	pb.addSynthesized(plus, plusBCol)
-	synthProj := pb.buildProjections()
-
-	// Construct Projections with two partially overlapping synthesized columns.
-	plusCCol := f.Metadata().AddColumn("plusC", types.Int)
-	pb.addSynthesized(plus, plusBCol)
-	pb.addSynthesized(plus, plusCCol)
-	synth2Proj := pb.buildProjections()
-
-	testCases := []struct {
-		left     memo.GroupID
-		right    memo.GroupID
-		expected string
-	}{
-		{left: scan, right: scan, expected: "(1,2)"},
-		{left: scan, right: scan2, expected: "(1-4)"},
-		{left: scan2, right: scan, expected: "(1-4)"},
-
-		{left: passthroughProj, right: passthroughProj, expected: "(1,2)"},
-		{left: passthroughProj, right: scan, expected: "(1,2)"},
-		{left: scan, right: passthroughProj, expected: "(1,2)"},
-		{left: passthroughProj, right: scan2, expected: "(1-4)"},
-		{left: scan2, right: passthroughProj, expected: "(1-4)"},
-
-		{left: synthProj, right: synthProj, expected: "(1,5,6)"},
-		{left: synthProj, right: passthroughProj, expected: "(1,2,5,6)"},
-		{left: passthroughProj, right: synthProj, expected: "(1,2,5,6)"},
-		{left: synthProj, right: scan, expected: "(1,2,5,6)"},
-		{left: scan, right: synthProj, expected: "(1,2,5,6)"},
-		{left: synthProj, right: scan2, expected: "(1,3-6)"},
-		{left: scan2, right: synthProj, expected: "(1,3-6)"},
-
-		{left: synthProj, right: synth2Proj, expected: "(1,5-7)"},
-	}
-
-	for _, tc := range testCases {
-		combined := f.funcs.ProjectColsFromBoth(tc.left, tc.right)
-		f.checkExpr(memo.MakeNormExprView(f.mem, combined))
-		actual := f.funcs.OutputCols(combined).String()
-		if actual != tc.expected {
-			t.Errorf("expected: %s, actual: %s", tc.expected, actual)
-		}
-
-		def := f.funcs.ExtractProjectionsOpDef(f.mem.NormExpr(combined).AsProjections().Def())
-		expectedCount := def.PassthroughCols.Len() + len(def.SynthesizedCols)
-		actualCount := f.funcs.OutputCols(combined).Len()
-		if actualCount != expectedCount {
-			t.Errorf("expected column count: %d, actual column count: %d", expectedCount, actualCount)
-		}
-	}
-}
-
-// TestSimplifyFilters tests factory.simplifyFilters. It's hard to fully test
+// TestSimplifyFilters tests factory.SimplifyFilters. It's hard to fully test
 // using SQL, as And operator rules simplify the expression before the Filters
 // operator is created.
 func TestSimplifyFilters(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := NewFactory(&evalCtx)
 
-	cat := createFiltersCatalog(t)
-	a := f.Metadata().AddTable(cat.Table("a"))
-	ax := f.Metadata().TableColumn(a, 0)
-
-	variable := f.ConstructVariable(f.InternColumnID(ax))
-	constant := f.ConstructConst(f.InternDatum(tree.NewDInt(1)))
-	eq := f.ConstructEq(variable, constant)
-
-	// Filters expression evaluates to False if any operand is False.
-	conditions := []memo.GroupID{eq, f.ConstructFalse(), eq}
-	result := f.ConstructFilters(f.InternList(conditions))
-	ev := memo.MakeNormExprView(f.Memo(), result)
-	if ev.Operator() != opt.FalseOp {
-		t.Fatalf("result should have been False")
-	}
-
-	// Filters expression evaluates to False if any operand is Null.
-	conditions = []memo.GroupID{f.ConstructNull(f.InternType(types.Unknown)), eq, eq}
-	result = f.ConstructFilters(f.InternList(conditions))
-	ev = memo.MakeNormExprView(f.Memo(), result)
-	if ev.Operator() != opt.FalseOp {
-		t.Fatalf("result should have been False")
-	}
-
-	// Filters operator skips True operands.
-	conditions = []memo.GroupID{eq, f.ConstructTrue(), eq, f.ConstructTrue()}
-	result = f.ConstructFilters(f.InternList(conditions))
-	ev = memo.MakeNormExprView(f.Memo(), result)
-	if ev.Operator() != opt.FiltersOp || ev.ChildCount() != 2 {
-		t.Fatalf("filters result should have filtered True operators")
-	}
-
-	// Filters operator flattens nested And operands.
-	conditions = []memo.GroupID{eq, eq}
-	and := f.ConstructAnd(f.InternList(conditions))
-	conditions = []memo.GroupID{and, eq, and}
-	result = f.ConstructFilters(f.InternList(conditions))
-	ev = memo.MakeNormExprView(f.Memo(), result)
-	if ev.Operator() != opt.FiltersOp || ev.ChildCount() != 5 {
-		t.Fatalf("result should have flattened And operators")
-	}
-}
-
-func createFiltersCatalog(t *testing.T) *testcat.Catalog {
 	cat := testcat.New()
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (x INT PRIMARY KEY, y INT)"); err != nil {
 		t.Fatal(err)
 	}
-	return cat
+
+	var f norm.Factory
+	f.Init(&evalCtx, cat)
+
+	tn := tree.NewTableName("t", "a")
+	a := f.Metadata().AddTable(cat.Table(tn), tn)
+	ax := a.ColumnID(0)
+
+	variable := f.ConstructVariable(ax)
+	constant := f.ConstructConst(tree.NewDInt(1), types.Int)
+	eq := f.ConstructEq(variable, constant)
+
+	// Filters expression evaluates to False if any operand is False.
+	vals := f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
+		Cols: opt.ColList{},
+		ID:   f.Metadata().NextUniqueID(),
+	})
+	filters := memo.FiltersExpr{
+		f.ConstructFiltersItem(eq),
+		f.ConstructFiltersItem(memo.FalseSingleton),
+		f.ConstructFiltersItem(eq),
+	}
+	sel := f.ConstructSelect(vals, filters)
+	if sel.Relational().Cardinality.Max != 0 {
+		t.Fatalf("result should have been collapsed to zero cardinality rowset")
+	}
+
+	// Filters operator skips True operands.
+	filters = memo.FiltersExpr{f.ConstructFiltersItem(eq), f.ConstructFiltersItem(memo.TrueSingleton)}
+	sel = f.ConstructSelect(vals, filters)
+	if len(sel.(*memo.SelectExpr).Filters) != 1 {
+		t.Fatalf("filters result should have filtered True operator")
+	}
+}
+
+// Test CopyAndReplace on an already optimized join. Before CopyAndReplace is
+// called, the join has a placeholder that causes the optimizer to use a merge
+// join. After CopyAndReplace substitutes a constant for the placeholder, the
+// optimizer switches to a lookup join. A similar pattern is used by the
+// ApplyJoin execution operator which replaces variables with constants in an
+// already optimized tree. The CopyAndReplace code must take care to copy over
+// the normalized tree rather than the optimized tree by using the FirstExpr
+// method.
+func TestCopyAndReplace(t *testing.T) {
+	cat := testcat.New()
+	if _, err := cat.ExecuteDDL("CREATE TABLE ab (a INT PRIMARY KEY, b INT)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cat.ExecuteDDL("CREATE TABLE cde (c INT PRIMARY KEY, d INT, e INT, INDEX(d))"); err != nil {
+		t.Fatal(err)
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	var o xform.Optimizer
+	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM cde INNER JOIN ab ON a=c AND d=$1")
+
+	if e, err := o.Optimize(); err != nil {
+		t.Fatal(err)
+	} else if e.Op() != opt.MergeJoinOp {
+		t.Errorf("expected optimizer to choose merge-join, not %v", e.Op())
+	}
+
+	m := o.Factory().DetachMemo()
+
+	o.Init(&evalCtx, cat)
+	var replaceFn norm.ReplaceFunc
+	replaceFn = func(e opt.Expr) opt.Expr {
+		if e.Op() == opt.PlaceholderOp {
+			return o.Factory().ConstructConstVal(tree.NewDInt(1), types.Int)
+		}
+		return o.Factory().CopyAndReplaceDefault(e, replaceFn)
+	}
+	o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
+
+	if e, err := o.Optimize(); err != nil {
+		t.Fatal(err)
+	} else if e.Op() != opt.LookupJoinOp {
+		t.Errorf("expected optimizer to choose lookup-join, not %v", e.Op())
+	}
+}
+
+// Test that CopyAndReplace works on expressions using WithScan.
+func TestCopyAndReplaceWithScan(t *testing.T) {
+	cat := testcat.New()
+	for _, ddl := range []string{
+		"CREATE TABLE ab (a INT PRIMARY KEY, b INT)",
+		"CREATE TABLE parent (p INT PRIMARY KEY)",
+		"CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p))",
+	} {
+		if _, err := cat.ExecuteDDL(ddl); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	for _, query := range []string{
+		"WITH cte AS (SELECT * FROM ab) SELECT * FROM cte, cte AS cte2 WHERE cte.a = cte2.b",
+		"INSERT INTO child VALUES (1,1), (2,2)",
+		"UPSERT INTO child SELECT a, b FROM ab",
+		"UPDATE child SET p=p+1 WHERE c > 1",
+		"UPDATE parent SET p=p+1 WHERE p > 1",
+		"DELETE FROM parent WHERE p < 10",
+		"WITH RECURSIVE cte(x) AS (VALUES (1) UNION ALL SELECT x+1 FROM cte WHERE x < 10) SELECT * FROM cte",
+	} {
+		t.Run(query, func(t *testing.T) {
+			var o xform.Optimizer
+			testutils.BuildQuery(t, &o, cat, &evalCtx, query)
+
+			m := o.Factory().DetachMemo()
+
+			o.Init(&evalCtx, cat)
+			var replaceFn norm.ReplaceFunc
+			replaceFn = func(e opt.Expr) opt.Expr {
+				return o.Factory().CopyAndReplaceDefault(e, replaceFn)
+			}
+			o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
+
+			if _, err := o.Optimize(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }

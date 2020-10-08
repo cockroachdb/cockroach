@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 # SELECT with no table.
 
 query I
@@ -23,7 +21,7 @@ two four
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 
-query error syntax error at or near "from"
+query error at or near "from": syntax error
 SELECT FROM abc
 
 query error could not parse "hello" as type bool
@@ -50,7 +48,7 @@ TABLE abc
 ----
 1 2 3
 
-query error syntax error at or near "*"
+query error at or near "\*": syntax error
 TABLE abc.*
 
 query III colnames
@@ -182,7 +180,7 @@ query error no data source matches pattern: bar.kv.\*
 SELECT bar.kv.* FROM kv
 
 # Don't panic with invalid names (#8024)
-query error cannot subscript type tuple\{string AS k, string AS v\} because it is not an array
+query error cannot subscript type tuple\{char AS k, char AS v\} because it is not an array
 SELECT kv.*[1] FROM kv
 
 query T colnames
@@ -244,6 +242,12 @@ SELECT * FROM xyzw LIMIT -100
 
 query error negative value for OFFSET
 SELECT * FROM xyzw OFFSET -100
+
+query error numeric constant out of int64 range
+SELECT * FROM xyzw LIMIT 9223372036854775808
+
+query error numeric constant out of int64 range
+SELECT * FROM xyzw OFFSET 9223372036854775808
 
 query IIII
 SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
@@ -385,6 +389,13 @@ SELECT 1 IN (NULL, 2)
 ----
 NULL
 
+# Note: The desired behavior here differs from the desired behavior of
+# NULL IN <subquery> as tested below.
+query B
+SELECT NULL IN ((1, 1))
+----
+NULL
+
 query B
 SELECT (1, NULL) IN ((1, 1))
 ----
@@ -394,6 +405,23 @@ query B
 SELECT (2, NULL) IN ((1, 1))
 ----
 false
+
+query error unsupported comparison operator: .* expected 1 to be of type tuple, found type int
+SELECT () IN (1,2)
+
+query error unsupported comparison operator: .* expected tuple \(1, 2\) to have a length of 0
+SELECT () IN ((1,2))
+
+query B
+SELECT () IN (());
+----
+true
+
+query error unsupported comparison operator: .* could not parse "string" as type int
+SELECT ('string', NULL) IN ((1, 1))
+
+query error unsupported comparison operator: .* expected tuple \(1, 1\) to have a length of 3
+SELECT (2, 'string', NULL) IN ((1, 1))
 
 query B
 SELECT (1, 1) IN ((1, NULL))
@@ -407,103 +435,133 @@ false
 
 # Tests with a tuple coming from a subquery.
 query B
-SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a))
+SELECT NULL IN (SELECT * FROM (VALUES (1)) AS t(a))
 ----
 NULL
 
 query B
-SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (1, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
+query error unsupported comparison operator: <unknown> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT NULL IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b));
+
+query error unsupported comparison operator: <tuple> IN <tuple{int}>
+SELECT () IN (SELECT * FROM (VALUES (1)) AS t(a))
+
+query error unsupported comparison operator: <tuple> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT () IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple{string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT ('string', NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple{int, string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT (2, 'string', NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
 query B
-SELECT (2, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (2, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 false
 
 query B
-SELECT (NULL::int, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT (NULL::int, 2) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, 2) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 false
 
 query B
-SELECT (NULL::int, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
+SELECT NULL NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
+----
+NULL
+
+query error unsupported comparison operator: <unknown> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT NULL NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple> IN <tuple{int}>
+SELECT () NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
+
+query error unsupported comparison operator: <tuple> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT () NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple{string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT ('string', NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query error unsupported comparison operator: <tuple{int, string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+SELECT (2, 'string', NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+
+query B
+SELECT (1, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
-----
-NULL
-
-query B
-SELECT (2, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (2, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 true
 
 query B
-SELECT (NULL::int, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 query B
-SELECT (NULL::int, 2) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, 2) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 true
 
 query B
-SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+SELECT (NULL, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
 # Tests with an empty IN tuple.
 query B
-SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+SELECT NULL IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
 ----
 false
 
 query B
-SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (1, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 false
 
 query B
-SELECT (NULL::int, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (NULL, 1) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 false
 
 query B
-SELECT (NULL::int, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (NULL, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 false
 
 query B
-SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+SELECT NULL NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
 ----
 true
 
 query B
-SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (1, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
 
 query B
-SELECT (NULL::int, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (NULL, 1) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
 
 query B
-SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+SELECT (NULL, NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
 
@@ -618,3 +676,73 @@ CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
 query I
 SELECT 1, * FROM nocols
 ----
+
+# ------------------------------------------------------------------------------
+# Wide tables can tickle edge cases.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE wide (id INT4 NOT NULL, a INT4, b VARCHAR(255), c INT4, d VARCHAR(255), e VARCHAR(255), f INT4, g VARCHAR(255), h VARCHAR(255), i VARCHAR(255), j VARCHAR(255), k INT4,
+                   l FLOAT4, m FLOAT8, n INT2, PRIMARY KEY (id))
+
+statement ok
+INSERT INTO wide(id, n) VALUES(0, 10)
+
+query IITITTITTTTIFFI
+SELECT * FROM wide
+----
+0  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  10
+
+# Regression test for #44203 (filter that is not folded inside the optimizer,
+# but is statically evaluated to true when building the filterNode).
+statement ok
+CREATE TABLE t44203(c0 BOOL)
+
+statement ok
+INSERT INTO t44203(c0) VALUES (false)
+
+statement ok
+CREATE VIEW v44203(c0) AS SELECT c0 FROM t44203 WHERE t44203.c0 OFFSET NULL
+
+query B
+SELECT * FROM v44203 WHERE current_user() != ''
+----
+
+# Regression test for #44132 - generated column causes incorrect scan.
+statement ok
+CREATE TABLE t44132(c0 BOOL UNIQUE, c1 INT AS (NULL) STORED)
+
+statement ok
+INSERT INTO t44132 (c0) VALUES (true)
+
+query BI
+SELECT * FROM t44132 WHERE c0
+----
+true NULL
+
+# Tests for `disallow_full_table_scans`
+statement ok
+CREATE TABLE t_disallow_scans(a INT);
+
+statement ok
+INSERT INTO t_disallow_scans VALUES (1), (2), (3)
+
+statement ok
+SELECT * FROM t_disallow_scans
+
+statement ok
+SET disallow_full_table_scans = true
+
+statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans
+
+# Internal statements should still be allowed with this setting.
+statement ok
+SELECT * FROM pg_class
+
+statement ok
+SELECT * FROM crdb_internal.jobs
+
+# Cleanup
+statement ok
+SET disallow_full_table_scans = false

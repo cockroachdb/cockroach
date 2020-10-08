@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 # Demonstrates late restarting of a serializable transaction when its
 # commit timestamp has moved forward.
 # TODO(tschottdorf): implement eager restart for CLI.
@@ -41,11 +39,11 @@ SELECT * FROM t
 user root
 
 # The insert increases the candidate timestamp, but a restart won't occur
-# until an EndTransaction.
+# until an EndTxn.
 statement ok
 INSERT INTO t(a) VALUES (1)
 
-# RELEASE will send an EndTransaction which will result in a retriable error.
+# RELEASE will send an EndTxn which will result in a retriable error.
 statement error pgcode 40001 retry txn.*
 RELEASE SAVEPOINT cockroach_restart
 

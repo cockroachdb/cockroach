@@ -1,21 +1,20 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package constraint
 
 import (
 	"bytes"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // SpanBoundary specifies whether a span endpoint is inclusive or exclusive of
@@ -65,7 +64,28 @@ var UnconstrainedSpan = Span{}
 // before Set is called. Unconstrained spans cannot be used in constraints,
 // since the absence of a constraint is equivalent to an unconstrained span.
 func (sp *Span) IsUnconstrained() bool {
-	return sp.start.IsEmpty() && sp.end.IsEmpty()
+	startUnconstrained := sp.start.IsEmpty() || (sp.start.IsNull() && sp.startBoundary == IncludeBoundary)
+	endUnconstrained := sp.end.IsEmpty()
+
+	return startUnconstrained && endUnconstrained
+}
+
+// HasSingleKey is true if the span contains exactly one key. This is true when
+// the start key is the same as the end key, and both boundaries are inclusive.
+func (sp *Span) HasSingleKey(evalCtx *tree.EvalContext) bool {
+	l := sp.start.Length()
+	if l == 0 || l != sp.end.Length() {
+		return false
+	}
+	if sp.startBoundary != IncludeBoundary || sp.endBoundary != IncludeBoundary {
+		return false
+	}
+	for i, n := 0, l; i < n; i++ {
+		if sp.start.Value(i).Compare(evalCtx, sp.end.Value(i)) != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // StartKey returns the start key.
@@ -95,11 +115,11 @@ func (sp *Span) EndBoundary() SpanBoundary {
 func (sp *Span) Init(start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary) {
 	if start.IsEmpty() && startBoundary == ExcludeBoundary {
 		// Enforce one representation for empty boundary.
-		panic("an empty start boundary must be inclusive")
+		panic(errors.AssertionFailedf("an empty start boundary must be inclusive"))
 	}
 	if end.IsEmpty() && endBoundary == ExcludeBoundary {
 		// Enforce one representation for empty boundary.
-		panic("an empty end boundary must be inclusive")
+		panic(errors.AssertionFailedf("an empty end boundary must be inclusive"))
 	}
 
 	sp.start = start
@@ -291,6 +311,152 @@ func (sp *Span) PreferInclusive(keyCtx *KeyContext) {
 func (sp *Span) CutFront(numCols int) {
 	sp.start = sp.start.CutFront(numCols)
 	sp.end = sp.end.CutFront(numCols)
+}
+
+// KeyCount returns the number of distinct keys contained in this span. Returns
+// zero and false if the operation is not possible. Requirements:
+//   1. The boundaries must be inclusive.
+//   2. The span must have a start and end key.
+//   3. Keys must be of the same length.
+//   4. Keys must have equivalent datums for all but the last column.
+//   5. The last columns are of the same type and either:
+//      a. are countable, or
+//      b. have the same value (in which case the distinct count is 1).
+//
+// Example:
+//
+//    [/'ASIA'/1 - /'ASIA'/2].KeyCount(keyCtx) => 2, true
+//
+func (sp *Span) KeyCount(keyCtx *KeyContext) (int64, bool) {
+	if sp.startBoundary == ExcludeBoundary || sp.endBoundary == ExcludeBoundary {
+		// Bounds must be inclusive.
+		return 0, false
+	}
+
+	startKey := sp.start
+	endKey := sp.end
+	if startKey.IsEmpty() || endKey.IsEmpty() {
+		// The span must have both start and end keys.
+		return 0, false
+	}
+
+	// Keys must be same length.
+	n := startKey.Length()
+	if n != endKey.Length() {
+		return 0, false
+	}
+
+	// All the datums up to the last one must be equal.
+	for i := 0; i < n-1; i++ {
+		if startKey.Value(i).ResolvedType() != endKey.Value(i).ResolvedType() {
+			// The datums must be of the same type.
+			return 0, false
+		}
+		if keyCtx.Compare(i, startKey.Value(i), endKey.Value(i)) != 0 {
+			// The datums must be equal.
+			return 0, false
+		}
+	}
+
+	thisVal := startKey.Value(startKey.Length() - 1)
+	otherVal := endKey.Value(endKey.Length() - 1)
+
+	if thisVal.ResolvedType() != otherVal.ResolvedType() {
+		// The last datums must be of the same type.
+		return 0, false
+	}
+	if keyCtx.Compare(n-1, thisVal, otherVal) == 0 {
+		// If the last datums are equal, the distinct count is 1.
+		return 1, true
+	}
+
+	// If the last columns are countable, return the distinct count between them.
+	var start, end int64
+
+	switch t := thisVal.(type) {
+	case *tree.DInt:
+		otherDInt, otherOk := tree.AsDInt(otherVal)
+		if otherOk {
+			start = int64(*t)
+			end = int64(otherDInt)
+		}
+
+	case *tree.DOid:
+		otherDOid, otherOk := tree.AsDOid(otherVal)
+		if otherOk {
+			start = int64((*t).DInt)
+			end = int64(otherDOid.DInt)
+		}
+
+	case *tree.DDate:
+		otherDDate, otherOk := otherVal.(*tree.DDate)
+		if otherOk {
+			if !t.IsFinite() || !otherDDate.IsFinite() {
+				// One of the DDates isn't finite, so we can't extract a distinct count.
+				return 0, false
+			}
+			start = int64((*t).PGEpochDays())
+			end = int64(otherDDate.PGEpochDays())
+		}
+
+	default:
+		// Uncountable type.
+		return 0, false
+	}
+
+	if keyCtx.Columns.Get(startKey.Length() - 1).Descending() {
+		// Normalize delta according to the key ordering.
+		start, end = end, start
+	}
+
+	if start > end {
+		// Incorrect ordering.
+		return 0, false
+	}
+
+	delta := end - start
+	if delta < 0 {
+		// Overflow or underflow.
+		return 0, false
+	}
+	return delta + 1, true
+}
+
+// Split returns a Spans object, with each span containing one key from the
+// original span. Returns nil and false if unsuccessful. The operation is
+// unsuccessful if the number of distinct keys in the span cannot be obtained or
+// the number of keys exceeds the limit. The boundaries are assumed to be
+// inclusive.
+//
+// Example:
+//
+//    [/'ASIA'/1 - /'ASIA'/2].Split(keyCtx, 10)
+//    =>
+//    ([/'ASIA'/1 - /'ASIA'/1], [/'ASIA'/2 - /'ASIA'/2]), true
+//
+func (sp *Span) Split(keyCtx *KeyContext, limit int64) (spans *Spans, ok bool) {
+	keyCount, ok := sp.KeyCount(keyCtx)
+	if !ok || keyCount > limit {
+		// The key count could not be determined, or the key count exceeds the
+		// limit.
+		return nil, false
+	}
+	spans = &Spans{}
+	spans.Alloc(int(keyCount))
+	currKey := sp.StartKey()
+	for i, ok := 0, true; i < int(keyCount); i++ {
+		if !ok {
+			return nil, false
+		}
+		spans.Append(&Span{
+			start:         currKey,
+			end:           currKey,
+			startBoundary: IncludeBoundary,
+			endBoundary:   IncludeBoundary,
+		})
+		currKey, ok = currKey.Next(keyCtx)
+	}
+	return spans, true
 }
 
 func (sp *Span) startExt() KeyExtension {

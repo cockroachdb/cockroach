@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package metric
 
@@ -31,7 +27,6 @@ func (r *Registry) findMetricByName(name string) Iterable {
 // getCounter returns the Counter in this registry with the given name. If a
 // Counter with this name is not present (including if a non-Counter Iterable is
 // registered with the name), nil is returned.
-// For the purpose of this method, a CounterWithRate is a Counter.
 func (r *Registry) getCounter(name string) *Counter {
 	r.Lock()
 	defer r.Unlock()
@@ -43,8 +38,6 @@ func (r *Registry) getCounter(name string) *Counter {
 	switch t := iterable.(type) {
 	case *Counter:
 		return t
-	case *CounterWithRates:
-		return t.Counter
 	default:
 	}
 	return nil
@@ -67,6 +60,13 @@ func (r *Registry) getGauge(name string) *Gauge {
 	return gauge
 }
 
+type NestedStruct struct {
+	NestedStructGauge *Gauge
+}
+
+// MetricStruct implements the metrics.Struct interface.
+func (NestedStruct) MetricStruct() {}
+
 func TestRegistry(t *testing.T) {
 	r := NewRegistry()
 
@@ -78,50 +78,73 @@ func TestRegistry(t *testing.T) {
 	topCounter := NewCounter(Metadata{Name: "top.counter"})
 	r.AddMetric(topCounter)
 
-	topCounterWithRates := NewCounterWithRates(Metadata{Name: "top.counterwithrates"})
-	r.AddMetric(topCounterWithRates)
-
 	r.AddMetric(NewHistogram(Metadata{Name: "top.histogram"}, time.Minute, 1000, 3))
 
 	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
 	ms := &struct {
-		StructGauge            *Gauge
-		StructGauge64          *GaugeFloat64
-		StructCounter          *Counter
-		StructHistogram        *Histogram
-		StructCounterWithRates *CounterWithRates
+		StructGauge         *Gauge
+		StructGauge64       *GaugeFloat64
+		StructCounter       *Counter
+		StructHistogram     *Histogram
+		NestedStructGauge   NestedStruct
+		ArrayStructCounters [4]*Counter
 		// A few extra ones: either not exported, or not metric objects.
-		privateStructGauge   *Gauge
-		privateStructGauge64 *GaugeFloat64
-		NotAMetric           int
-		AlsoNotAMetric       string
-		ReallyNotAMetric     *Registry
+		privateStructGauge            *Gauge
+		privateStructGauge64          *GaugeFloat64
+		privateStructCounter          *Counter
+		privateStructHistogram        *Histogram
+		privateNestedStructGauge      NestedStruct
+		privateArrayStructCounters    [2]*Counter
+		NotAMetric                    int
+		AlsoNotAMetric                string
+		ReallyNotAMetric              *Registry
+		DefinitelyNotAnArrayOfMetrics [2]int
 	}{
-		StructGauge:            NewGauge(Metadata{Name: "struct.gauge"}),
-		StructGauge64:          NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
-		StructCounter:          NewCounter(Metadata{Name: "struct.counter"}),
-		StructHistogram:        NewHistogram(Metadata{Name: "struct.histogram"}, time.Minute, 1000, 3),
-		StructCounterWithRates: NewCounterWithRates(Metadata{Name: "struct.counterwithrates"}),
-		privateStructGauge:     NewGauge(Metadata{Name: "struct.private-gauge"}),
-		privateStructGauge64:   NewGaugeFloat64(Metadata{Name: "struct.private-gauge64"}),
-		NotAMetric:             0,
-		AlsoNotAMetric:         "foo",
-		ReallyNotAMetric:       NewRegistry(),
+		StructGauge:     NewGauge(Metadata{Name: "struct.gauge"}),
+		StructGauge64:   NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
+		StructCounter:   NewCounter(Metadata{Name: "struct.counter"}),
+		StructHistogram: NewHistogram(Metadata{Name: "struct.histogram"}, time.Minute, 1000, 3),
+		NestedStructGauge: NestedStruct{
+			NestedStructGauge: NewGauge(Metadata{Name: "nested.struct.gauge"}),
+		},
+		ArrayStructCounters: [...]*Counter{
+			NewCounter(Metadata{Name: "array.struct.counter.0"}),
+			NewCounter(Metadata{Name: "array.struct.counter.1"}),
+			nil, // skipped
+			NewCounter(Metadata{Name: "array.struct.counter.3"}),
+		},
+		privateStructGauge:     NewGauge(Metadata{Name: "private.struct.gauge"}),
+		privateStructGauge64:   NewGaugeFloat64(Metadata{Name: "private.struct.gauge64"}),
+		privateStructCounter:   NewCounter(Metadata{Name: "private.struct.counter"}),
+		privateStructHistogram: NewHistogram(Metadata{Name: "private.struct.histogram"}, time.Minute, 1000, 3),
+		privateNestedStructGauge: NestedStruct{
+			NestedStructGauge: NewGauge(Metadata{Name: "private.nested.struct.gauge"}),
+		},
+		privateArrayStructCounters: [...]*Counter{
+			NewCounter(Metadata{Name: "private.array.struct.counter.0"}),
+			NewCounter(Metadata{Name: "private.array.struct.counter.1"}),
+		},
+		NotAMetric:                    0,
+		AlsoNotAMetric:                "foo",
+		ReallyNotAMetric:              NewRegistry(),
+		DefinitelyNotAnArrayOfMetrics: [...]int{1, 2},
 	}
 	r.AddMetricStruct(ms)
 
 	expNames := map[string]struct{}{
-		"top.counterwithrates":    {},
-		"top.histogram":           {},
-		"top.gauge":               {},
-		"top.floatgauge":          {},
-		"top.counter":             {},
-		"bottom.gauge":            {},
-		"struct.gauge":            {},
-		"struct.gauge64":          {},
-		"struct.counter":          {},
-		"struct.histogram":        {},
-		"struct.counterwithrates": {},
+		"top.histogram":          {},
+		"top.gauge":              {},
+		"top.floatgauge":         {},
+		"top.counter":            {},
+		"bottom.gauge":           {},
+		"struct.gauge":           {},
+		"struct.gauge64":         {},
+		"struct.counter":         {},
+		"struct.histogram":       {},
+		"nested.struct.gauge":    {},
+		"array.struct.counter.0": {},
+		"array.struct.counter.1": {},
+		"array.struct.counter.3": {},
 	}
 
 	r.Each(func(name string, _ interface{}) {
@@ -147,9 +170,6 @@ func TestRegistry(t *testing.T) {
 
 	if c := r.getCounter("top.counter"); c != topCounter {
 		t.Errorf("getCounter returned %v, expected %v", c, topCounter)
-	}
-	if c, e := r.getCounter("top.counterwithrates"), topCounterWithRates.Counter; c != e {
-		t.Errorf("getCounter returned %v, expected %v", c, e)
 	}
 	if c := r.getCounter("bad"); c != nil {
 		t.Errorf("getCounter returned non-nil %v, expected nil", c)

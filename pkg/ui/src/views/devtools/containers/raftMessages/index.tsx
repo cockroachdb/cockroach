@@ -1,26 +1,32 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import _ from "lodash";
-import PropTypes from "prop-types";
 import React from "react";
 import { connect } from "react-redux";
-import { InjectedRouter, RouterState } from "react-router";
 import { createSelector } from "reselect";
+import {RouteComponentProps, withRouter} from "react-router-dom";
 
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
-import { hoverStateSelector, HoverState, hoverOn as hoverOnAction, hoverOff as hoverOffAction } from "src/redux/hover";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+import { hoverOff as hoverOffAction, hoverOn as hoverOnAction, hoverStateSelector, HoverState } from "src/redux/hover";
+import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
-import {
-  GraphDashboardProps, storeIDsForNode,
-} from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
+import { GraphDashboardProps, storeIDsForNode } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
-
 import messagesDashboard from "./messages";
+import { getMatchParamByName } from "src/util/query";
 
-// The properties required by a NodeGraphs component.
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
@@ -32,21 +38,9 @@ interface NodeGraphsOwnProps {
   hoverState: HoverState;
 }
 
-type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
+type RaftMessagesProps = NodeGraphsOwnProps & RouteComponentProps;
 
-/**
- * NodeGraphs renders the main content of the cluster graphs page.
- */
-class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
-  // Magic to add react router to the context.
-  // See https://github.com/ReactTraining/react-router/issues/975
-  // TODO(mrtracy): Switch this, and the other uses of contextTypes, to use the
-  // 'withRouter' HoC after upgrading to react-router 4.x.
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState; };
-
+export class RaftMessages extends React.Component<RaftMessagesProps> {
   /**
    * Selector to compute node dropdown options from the current node summary
    * collection.
@@ -75,10 +69,11 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   setClusterPath(nodeID: string) {
+    const push = this.props.history.push;
     if (!_.isString(nodeID) || nodeID === "") {
-      this.context.router.push("/raft/messages/all/");
+      push("/raft/messages/all/");
     } else {
-      this.context.router.push(`/raft/messages/node/${nodeID}`);
+      push(`/raft/messages/node/${nodeID}`);
     }
   }
 
@@ -86,18 +81,18 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     this.setClusterPath(selected.value);
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
   }
 
-  componentWillReceiveProps(props: NodeGraphsProps) {
+  componentDidUpdate(props: RaftMessagesProps) {
     this.refresh(props);
   }
 
   render() {
-    const { params, nodesSummary, hoverState, hoverOn, hoverOff } = this.props;
+    const { match, nodesSummary, hoverState, hoverOn, hoverOff } = this.props;
 
-    const selectedNode = params[nodeIDAttr] || "";
+    const selectedNode = getMatchParamByName(match, nodeIDAttr) || "";
     const nodeSources = (selectedNode !== "") ? [selectedNode] : null;
 
     // When "all" is the selected source, some graphs display a line for every
@@ -165,18 +160,18 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
-  return {
-    nodesSummary: nodesSummarySelector(state),
-    nodesQueryValid: state.cachedData.nodes.valid,
-    livenessQueryValid: state.cachedData.nodes.valid,
-    hoverState: hoverStateSelector(state),
-  };
-}
-const actions = {
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  nodesSummary: nodesSummarySelector(state),
+  nodesQueryValid: state.cachedData.nodes.valid,
+  livenessQueryValid: state.cachedData.nodes.valid,
+  hoverState: hoverStateSelector(state),
+});
+
+const mapDispatchToProps = {
   refreshNodes,
   refreshLiveness,
   hoverOn: hoverOnAction,
   hoverOff: hoverOffAction,
 };
-export default connect(mapStateToProps, actions)(NodeGraphs);
+
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(RaftMessages));

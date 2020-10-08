@@ -1,2 +1,3 @@
 range_max_bytes: 134217728
+range_min_bytes: 16777216
 num_replicas: 3

@@ -4,9 +4,20 @@ package sql
 
 import "strconv"
 
-const _txnEvent_name = "noEventtxnStarttxnCommittxnAbortedtxnRestart"
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[noEvent-0]
+	_ = x[txnStart-1]
+	_ = x[txnCommit-2]
+	_ = x[txnRollback-3]
+	_ = x[txnRestart-4]
+}
 
-var _txnEvent_index = [...]uint8{0, 7, 15, 24, 34, 44}
+const _txnEvent_name = "noEventtxnStarttxnCommittxnRollbacktxnRestart"
+
+var _txnEvent_index = [...]uint8{0, 7, 15, 24, 35, 45}
 
 func (i txnEvent) String() string {
 	if i < 0 || i >= txnEvent(len(_txnEvent_index)-1) {

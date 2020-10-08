@@ -46,64 +46,70 @@ A SQL query arrives at the server through the Postgres wire protocol
 existing client drivers and applications). The `pgwire` package
 implements protocol-related functionality; once a client connection is
 authenticated, it is represented by a
-[`pgwire.v3Conn`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/pgwire/v3.go#L164)
+[`pgwire.conn`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L54)
 struct (it wraps a [`net.Conn`](https://golang.org/pkg/net/#Conn)
 interface - Go's
-sockets). [`v3Conn.serve()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/pgwire/v3.go#L313)
-implements the "read query - execute it - return result" loop. The
-protocol is message-oriented: for the lifetime of the connection, we
-[read a
-message](https://github.com/cockroachdb/cockroach/blob/677f6f18b/pkg/sql/pgwire/v3.go#L324)
-usually representing one or more SQL statements, pass it to the
-`sql.Executor` for executing all the statements in the batch and, once
-that's done and the results have been produced, [serialize them and
-send them to the
-client](https://github.com/cockroachdb/cockroach/blob/677f6f18b/pkg/sql/pgwire/v3.go#L755).
+sockets).
+[`conn.serveImpl`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L207)
+implements the "read query - parse it - push it to `connExecutor` for
+execution" loop. The protocol is message-oriented: for the lifetime of the
+connection, we
+[read a message](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L323)
+usually representing one or more SQL statements, parse the queries, pass them
+to the `connExecutor` for executing all the statements in the batch and, once
+that's done and the results have been produced,
+[serialize and buffer them](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L1109)
+and then possibly
+[send the buffered results to the client](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L1333).
 
-Notice that the results are not streamed to the client and, moreover, a whole batch of statements might be executed before any results are sent back.
+Notice that the results are not streamed to the client and, moreover, a whole
+batch of statements might be executed before any results are sent back.
 
-## SQL Executor
+## connExecutor
 
 The
-[`sql.Executor`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L194)
-is responsible for parsing statements, executing them and returning
-results back to the `pgwire.v3Conn`. The main entry point is
-[`Executor.execRequest()`](https://github.com/cockroachdb/cockroach/blob/677f6f18b63355cb2d040b251af202fe6505128f/pkg/sql/executor.go#L481),
-which receives a batch of statements as a raw `string`. The execution
-of the batch is done in the context of a
-[`sql.Session`](https://github.com/cockroachdb/cockroach/blob/677f6f18b63355cb2d040b251af202fe6505128f/pkg/sql/session.go#L61)
+[`connExecutor`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_executor.go#L62)
+is responsible for parsing and executing statements pushed into its
+[statement buffer](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_executor.go#L910)
+by a given client connection as well as pushing the results back to the
+`pgwire.conn`. The main entry point is
+[`connExecutor.execCmd`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_executor.go#L1320),
+which reads the current
+[command](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_io.go#L115)
+from the statement buffer and executes a query if necessary (not all commands
+require query execution). The execution of the queries is done in the context
+of a
+[`sessiondata.SessionData`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/sessiondata/session_data.go#L25)
 object which accumulates information about the state of the connection
 (e.g. the database that has been selected, the various variables that
-can be set, the transaction status), as well as accounting the memory
-in use at any given time by this connection. The `Executor` also
-manipulates a
-[`planner`](https://github.com/cockroachdb/cockroach/blob/677f6f18b63355cb2d040b251af202fe6505128f/pkg/sql/planner.go#L39)
+can be set) as well as of
+[transaction state](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_executor.go#L918).
+The `connExecutor` also manipulates a
+[`planner`](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/planner.go#L123)
 struct which provides the functionality around actually planning and
 executing a query.
 
-`Executor.execRequest()` implements a state-machine of sorts by
-receiving batches of statements from `pgwire`, executing them one by
-one, updating the `Session`'s transaction state (did a new transaction
-just begin or an old transaction just end? did we encounter an error
-which forces us to abort the current transaction?) and returning
-results and control back to pgwire. The next batch of statements
-received from the client will continue from the transaction state left
-by the previous batch.
+`connExecutor` implements a state-machine by receiving batches of statements
+from `pgwire`, executing them one by one, updating its transaction state (did a
+new transaction just begin or an old transaction just end? did we encounter an
+error which forces us to abort the current transaction?) and notifying
+[ClientComm](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/conn_io.go#L574)
+about any results or errors.
 
 ### Parsing
 
-The first thing the `Executor` does is [parse the
-statements](https://github.com/cockroachdb/cockroach/blob/677f6f18b63355cb2d040b251af202fe6505128f/pkg/sql/executor.go#L495);
-parsing uses a LALR parser generated by `go-yacc` from a [Yacc-like grammar
-file](https://github.com/cockroachdb/cockroach/blob/677f6f18b63355cb2d040b251af202fe6505128f/pkg/sql/parser/sql.y),
+Parsing is
+[performed](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/pgwire/conn.go#L685),
+by `pgwire.conn` and uses a LALR parser generated by `go-yacc` from a
+[Yacc-like grammar file](https://github.com/cockroachdb/cockroach/blob/708df8bca077276b9161d68486beae26e77e4377/pkg/sql/parser/sql.y),
 originally copied from Postgres and stripped down, and then gradually
 grown organically with ever-more SQL support. The process of parsing
 transforms a `string` into an array of ASTs (Abstract Syntax Trees),
 one for each statement. The AST nodes are structs defined in the
-`sql/parser` package, generally of two types - statements and
+`sql/sem/tree` package, generally of two types - statements and
 expressions. Expressions implement a common interface useful for
 applying tree transformations. These ASTs will later be transformed by
-the `planner` into an execution plan.
+the cost-based optimizer into an execution plan.
 
 ### Statement Execution
 
@@ -269,7 +275,7 @@ root@:26257> EXPLAIN(EXPRS,NOEXPAND,NOOPTIMIZE,METADATA) SELECT * FROM customers
 ```
 
 You can see data being produced by a `scanNode`, being filtered by a
-`renderNode` (presented as "render"), and then sorted by a `sortNode`
+`filterNode` (presented as "filter"), and then sorted by a `sortNode`
 (presented as "nosort", because we have turned off order analysis with
 NOEXPAND and the sort node doesn't know yet whether sorting is
 needed), wrapped in a `selectTopNode` (presented as "select").
@@ -559,21 +565,21 @@ SELECT * FROM Orders o inner join Customers c ON o.CustomerID = c.ID WHERE Order
       data types, browse around the [`util/encoding
       directory`](https://github.com/cockroachdb/cockroach/tree/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/util/encoding).
 
-      For actually reading a KV pair from the database, the `rowFetcher` delegates to the `kvFetcher`.
+      For actually reading a KV pair from the database, the `rowFetcher` delegates to the `kvBatchFetcher`.
 
-   2. [`kvFetcher`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L84):
-      The `kvFetcher` finally reads data from the KV database. It
+   2. [`kvBatchFetcher`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L84):
+      The `kvBatchFetcher` finally reads data from the KV database. It
       understands nothing of SQL concepts, such as tables, rows or
       columns. When it is created, it is configured with a number of "key
       spans" that it needs to read (these might be, for example, a single
       span for reading a whole table, or a couple of spans for reading
       parts of the PK or of an index).
 
-      To actually read data from the KV database, the `kvFetcher` uses the
+      To actually read data from the KV database, the `kvBatchFetcher` uses the
       KV layer's "client" interface, namely
       [`client.Batch`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/batch.go#L30). This
       is where the "SQL layer" interfaces with the "KV layer" - the
-      `kvFetcher` will
+      `kvBatchFetcher` will
       [build](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L197)
       such `Batch`es of requests, [send them for
       execution](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/kvfetcher.go#L203)
@@ -586,7 +592,7 @@ SELECT * FROM Orders o inner join Customers c ON o.CustomerID = c.ID WHERE Order
       [`ScanRequest`s](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/roachpb/api.proto#L204).
 
 The rest of this document will walk through the "execution" of KV
-requests, such as the ones sent by the `kvFetcher`.
+requests, such as the ones sent by the `kvBatchFetcher`.
 
 ## KV
 
@@ -616,7 +622,7 @@ context of a transaction). Afterwards, a
 [`Txn`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L36)
 object is available for [executing requests in the context of that
 transaction](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L295)
-- this is what, for example, the `kvFetcher` uses. If you trace what
+- this is what, for example, the `kvBatchFetcher` uses. If you trace what
 happens inside that `Txn.Run()` method you eventually get to
 [`txn.db.sender.Send(...,
 batch)`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/internal/client/txn.go#L587):

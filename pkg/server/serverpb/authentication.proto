@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto3";
 package cockroach.server.serverpb;
@@ -54,6 +50,34 @@ message SessionCookie {
 	bytes secret = 2;
 }
 
+// OIDCState is a message that is serialized and sent over with an OIDC authentication request
+// when the identity provider triggers our callback, it returns the same state message back to
+// us so that we can ensure that we're only processing responses that we originated.
+message OIDCState {
+	// ID of node that originated the OIDC session.
+	int32 node_id = 1 [
+		(gogoproto.customname) = "NodeID",
+		(gogoproto.casttype) =
+			"github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+	];
+	// Random bytes that the originating node stores to validate the callback response.
+	bytes secret = 2;
+}
+
+// ValidateOIDCStateRequest is a message that one node sends to another to request
+// a state validation. When an OIDC identity provider triggers our callback URL it
+// sends back a serialized OIDCState (defined above). If the NodeID in that state
+// does not match the node we're processing the callback with, we will request a
+// validation from the appropriate node using this message.
+message ValidateOIDCStateRequest {
+	OIDCState state = 1;
+}
+
+// ValidateOIDCStateResponse simply tells us if a given state was considered valid
+// by the node. It will usually result in that state being cleared from the node's
+// cache and discarded to prevent reuse.
+message ValidateOIDCStateResponse {}
+
 // LogIn and LogOut are the GRPC APIs used to create web authentication sessions.
 // Intended for use over GRPC-Gateway, which identifies sessions using HTTP
 // cookies.
@@ -69,13 +93,21 @@ service LogIn {
 			body: "*"
 		};
 	}
+
+	// ValidateOIDCState is used for nodes to validate OIDC state that another node
+	// may have cached since auth requests can originate and be completed at any
+	// node in the cluster.
+	//
+	// This endpoint does not have an HTTP API since we only intend to use it for
+	// inter-node communication.
+	rpc ValidateOIDCState(ValidateOIDCStateRequest) returns (ValidateOIDCStateResponse) {}
 }
 
 service LogOut {
-  // UserLogout terminates an active authentication session.
-  rpc UserLogout(UserLogoutRequest) returns (UserLogoutResponse) {
-    option (google.api.http) = {
+	// UserLogout terminates an active authentication session.
+	rpc UserLogout(UserLogoutRequest) returns (UserLogoutResponse) {
+		option (google.api.http) = {
 			get: "/logout"
 		};
-  }
+	}
 }

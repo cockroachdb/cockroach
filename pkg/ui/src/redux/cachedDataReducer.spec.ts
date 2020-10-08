@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import { assert } from "chai";
 import _ from "lodash";
 import { Action } from "redux";
@@ -110,7 +120,7 @@ describe("basic cachedDataReducer", function () {
 
         const testString = "refresh test string";
 
-        return testReducerObj.refresh(new Request(testString))(mockDispatch, () => state).then(() => {
+        return testReducerObj.refresh(new Request(testString))(mockDispatch, () => state, undefined).then(() => {
           expected = new CachedDataReducerState<Response>();
           expected.valid = true;
           expected.data = new Response(testString);

@@ -1,11 +1,21 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import React from "react";
 import _ from "lodash";
 
-import * as docsURL from "src/util/docs";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+import { CapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;
@@ -15,13 +25,12 @@ export default function (props: GraphDashboardProps) {
       title="SQL Queries"
       sources={nodeSources}
       tooltip={
-        `A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE operations
-        started per second ${tooltipSelection}.`
+        `A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
+        successfully executed per second ${tooltipSelection}.`
       }
     >
       <Axis label="queries">
-        <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
-        <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
+        <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
         <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
         <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
         <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
@@ -33,7 +42,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={(
         <div>
           Over the last minute, this node executed 99% of queries within this time.&nbsp;
-            <em>This time does not include network latency between the node and client.</em>
+          <em>This time does not include network latency between the node and client.</em>
         </div>
       )}
     >
@@ -79,39 +88,13 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Capacity"
       sources={storeSources}
-      tooltip={(
-        <div>
-          <dl>
-            <dt>Capacity</dt>
-            <dd>
-              Total disk space available {tooltipSelection} to CockroachDB.
-              {" "}
-              <em>
-                Control this value per node with the
-                {" "}
-                <code>
-                  <a href={docsURL.startFlags} target="_blank">
-                    --store
-                  </a>
-                </code>
-                {" "}
-                flag.
-              </em>
-            </dd>
-            <dt>Available</dt>
-            <dd>Free disk space available {tooltipSelection} to CockroachDB.</dd>
-            <dt>Used</dt>
-            <dd>Disk space used {tooltipSelection} by CockroachDB.</dd>
-          </dl>
-        </div>
-      )}
+      tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
-        <Metric name="cr.store.capacity" title="Capacity" />
+        <Metric name="cr.store.capacity" title="Max" />
         <Metric name="cr.store.capacity.available" title="Available" />
         <Metric name="cr.store.capacity.used" title="Used" />
       </Axis>
     </LineGraph>,
-
   ];
 }

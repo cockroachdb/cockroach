@@ -1,9 +1,18 @@
-import { Location } from "history";
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import { Location, createPath } from "history";
 import { Action } from "redux";
 import { ThunkAction } from "redux-thunk";
 import { createSelector } from "reselect";
 
-import { createPath } from "src/hacks/createPath";
 import { userLogin, userLogout } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
 import { LOGIN_PAGE, LOGOUT_PAGE } from "src/routes/login";
@@ -17,87 +26,95 @@ const dataFromServer = getDataFromServer();
 // State for application use.
 
 export interface LoginState {
-    useLogin(): boolean;
-    loginEnabled(): boolean;
-    hasAccess(): boolean;
-    loggedInUser(): string;
+  // displayUserMenu() indicates whether the login drop-down menu should be
+  // displayed at the top right.
+  displayUserMenu(): boolean;
+  // secureCluster() indicates whether the connection is secure. If
+  // false, an "insecure" indicator is displayed at the top right.
+  secureCluster(): boolean;
+  // hideLoginPage() indicates whether the login page can be
+  // displayed at all. The login page is hidden e.g.
+  // after a user has logged in.
+  hideLoginPage(): boolean;
+  // loggedInUser() returns the name of the user logged in.
+  loggedInUser(): string;
 }
 
 class LoginEnabledState {
-    apiState: LoginAPIState;
+  apiState: LoginAPIState;
 
-    constructor(state: LoginAPIState) {
-        this.apiState = state;
-    }
+  constructor(state: LoginAPIState) {
+    this.apiState = state;
+  }
 
-    useLogin(): boolean {
-        return true;
-    }
+  displayUserMenu(): boolean {
+    return true;
+  }
 
-    loginEnabled(): boolean {
-        return true;
-    }
+  secureCluster(): boolean {
+    return true;
+  }
 
-    hasAccess(): boolean {
-        return this.apiState.loggedInUser != null;
-    }
+  hideLoginPage(): boolean {
+    return this.apiState.loggedInUser != null;
+  }
 
-    loggedInUser(): string {
-        return this.apiState.loggedInUser;
-    }
+  loggedInUser(): string {
+    return this.apiState.loggedInUser;
+  }
 }
 
 class LoginDisabledState {
-    useLogin(): boolean {
-        return true;
-    }
+  displayUserMenu(): boolean {
+    return true;
+  }
 
-    loginEnabled(): boolean {
-        return false;
-    }
+  secureCluster(): boolean {
+    return false;
+  }
 
-    hasAccess(): boolean {
-        return true;
-    }
+  hideLoginPage(): boolean {
+    return true;
+  }
 
-    loggedInUser(): string {
-        return null;
-    }
+  loggedInUser(): string {
+    return null;
+  }
 }
 
 class NoLoginState {
-    useLogin(): boolean {
-        return false;
-    }
+  displayUserMenu(): boolean {
+    return false;
+  }
 
-    loginEnabled(): boolean {
-        return false;
-    }
+  secureCluster(): boolean {
+    return false;
+  }
 
-    hasAccess(): boolean {
-        return true;
-    }
+  hideLoginPage(): boolean {
+    return true;
+  }
 
-    loggedInUser(): string {
-        return null;
-    }
+  loggedInUser(): string {
+    return null;
+  }
 }
 
 // Selector
 
 export const selectLoginState = createSelector(
-    (state: AdminUIState) => state.login,
-    (login: LoginAPIState) => {
-        if (!dataFromServer.ExperimentalUseLogin) {
-            return new NoLoginState();
-        }
+  (state: AdminUIState) => state.login,
+  (login: LoginAPIState) => {
+    if (!dataFromServer.ExperimentalUseLogin) {
+      return new NoLoginState();
+    }
 
-        if (!dataFromServer.LoginEnabled) {
-            return new LoginDisabledState();
-        }
+    if (!dataFromServer.LoginEnabled) {
+      return new LoginDisabledState();
+    }
 
-        return new LoginEnabledState(login);
-    },
+    return new LoginEnabledState(login);
+  },
 );
 
 function shouldRedirect(location: Location) {
@@ -133,12 +150,18 @@ export interface LoginAPIState {
   loggedInUser: string;
   error: Error;
   inProgress: boolean;
+  displayPasswordLogin: boolean;
+  displayOIDCButton: boolean;
+  oidcButtonText: string;
 }
 
-const emptyLoginState: LoginAPIState = {
+export const emptyLoginState: LoginAPIState = {
   loggedInUser: dataFromServer.LoggedInUser,
   error: null,
   inProgress: false,
+  displayPasswordLogin: dataFromServer.PasswordLoginEnabled,
+  displayOIDCButton: dataFromServer.OIDCLoginEnabled,
+  oidcButtonText: dataFromServer.OIDCButtonText,
 };
 
 // Actions
@@ -191,8 +214,12 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
     });
     return userLogin(loginReq)
       .then(
-        () => { dispatch(loginSuccess(username)); },
-        (err) => { dispatch(loginFailure(err)); },
+        () => {
+          dispatch(loginSuccess(username));
+        },
+        (err) => {
+          dispatch(loginFailure(err));
+        },
       );
   };
 }
@@ -223,24 +250,28 @@ export function loginReducer(state = emptyLoginState, action: Action): LoginAPIS
   switch (action.type) {
     case LOGIN_BEGIN:
       return {
+        ...state,
         loggedInUser: null,
         error: null,
         inProgress: true,
       };
     case LOGIN_SUCCESS:
       return {
+        ...state,
         loggedInUser: (action as LoginSuccessAction).loggedInUser,
         inProgress: false,
         error: null,
       };
     case LOGIN_FAILURE:
       return {
+        ...state,
         loggedInUser: null,
         inProgress: false,
         error: (action as LoginFailureAction).error,
       };
     case LOGOUT_BEGIN:
       return {
+        ...state,
         loggedInUser: state.loggedInUser,
         inProgress: true,
         error: null,

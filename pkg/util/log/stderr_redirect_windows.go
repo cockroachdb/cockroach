@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package log
 
@@ -20,6 +16,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// dupFD is used to initialize OrigStderr (see stderr_redirect.go).
 func dupFD(fd uintptr) (uintptr, error) {
 	// Adapted from https://github.com/golang/go/blob/go1.8/src/syscall/exec_windows.go#L303.
 	p, err := windows.GetCurrentProcess()
@@ -30,7 +27,19 @@ func dupFD(fd uintptr) (uintptr, error) {
 	return uintptr(h), windows.DuplicateHandle(p, windows.Handle(fd), p, &h, 0, true, windows.DUPLICATE_SAME_ACCESS)
 }
 
+// redirectStderr is used to redirect internal writes to the error
+// handle to the specified file. This is needed to ensure that
+// harcoded writes to the error handle by e.g. the Go runtime are
+// redirected to a log file of our choosing.
+//
+// We also override os.Stderr for those other parts of Go which use
+// that and not fd 2 directly.
 func redirectStderr(f *os.File) error {
+	osStderrMu.Lock()
+	defer osStderrMu.Unlock()
+	if err := windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(f.Fd())); err != nil {
+		return err
+	}
 	os.Stderr = f
-	return windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(f.Fd()))
+	return nil
 }

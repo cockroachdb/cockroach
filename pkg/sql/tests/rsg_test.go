@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tests_test
 
@@ -22,24 +18,33 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
+	// Enable CCL statements.
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 )
 
 var (
@@ -48,23 +53,18 @@ var (
 	flagRSGExecTimeout = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
 )
 
-func parseStatementList(sql string) (tree.StatementList, error) {
-	var p parser.Parser
-	return p.Parse(sql)
-}
-
 func verifyFormat(sql string) error {
-	stmts, err := parseStatementList(sql)
+	stmts, err := parser.Parse(sql)
 	if err != nil {
 		// Cannot serialize a statement list without parsing it.
-		return nil
+		return nil //nolint:returnerrcheck
 	}
-	formattedSQL := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
-	formattedStmts, err := parseStatementList(formattedSQL)
+	formattedSQL := stmts.StringWithFlags(tree.FmtShowPasswords)
+	formattedStmts, err := parser.Parse(formattedSQL)
 	if err != nil {
 		return errors.Wrapf(err, "cannot parse output of Format: sql=%q, formattedSQL=%q", sql, formattedSQL)
 	}
-	formattedFormattedSQL := tree.AsStringWithFlags(&formattedStmts, tree.FmtShowPasswords)
+	formattedFormattedSQL := formattedStmts.StringWithFlags(tree.FmtShowPasswords)
 	if formattedSQL != formattedFormattedSQL {
 		return errors.Errorf("Parse followed by Format is not idempotent: %q -> %q != %q", sql, formattedSQL, formattedFormattedSQL)
 	}
@@ -102,6 +102,25 @@ func (db *verifyFormatDB) Incr(sql string) func() {
 	}
 }
 
+type crasher struct {
+	sql    string
+	err    error
+	detail string
+}
+
+func (c *crasher) Error() string {
+	return fmt.Sprintf("server panic: %s", c.err)
+}
+
+type nonCrasher struct {
+	sql string
+	err error
+}
+
+func (c *nonCrasher) Error() string {
+	return c.err.Error()
+}
+
 func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 	if err := verifyFormat(sql); err != nil {
 		db.verifyFormatErr = err
@@ -117,23 +136,68 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 	}()
 	select {
 	case err := <-funcdone:
-		return errors.Wrap(err, sql)
+		if err != nil {
+			if pqerr := (*pq.Error)(nil); errors.As(err, &pqerr) {
+				// Output Postgres error code if it's available.
+				if pgcode.MakeCode(string(pqerr.Code)) == pgcode.CrashShutdown {
+					return &crasher{
+						sql:    sql,
+						err:    err,
+						detail: pqerr.Detail,
+					}
+				}
+			}
+			if es := err.Error(); strings.Contains(es, "internal error") ||
+				strings.Contains(es, "driver: bad connection") ||
+				strings.Contains(es, "unexpected error inside CockroachDB") {
+				return &crasher{
+					sql: sql,
+					err: err,
+				}
+			}
+			return &nonCrasher{sql: sql, err: err}
+		}
+		return nil
 	case <-time.After(*flagRSGExecTimeout):
 		db.mu.Lock()
 		defer db.mu.Unlock()
 		b := make([]byte, 1024*1024)
 		n := runtime.Stack(b, true)
 		fmt.Printf("%s\n", b[:n])
-		panic(errors.Errorf("timeout: %q. currently executing: %v", sql, db.mu.active))
+		// Now see if we can execute a SELECT 1. This is useful because sometimes an
+		// exec timeout is because of a slow-executing statement, and other times
+		// it's because the server is completely wedged. This is an automated way
+		// to find out.
+		errch := make(chan error, 1)
+		go func() {
+			rows, err := db.db.Query(`SELECT 1`)
+			if err == nil {
+				rows.Close()
+			}
+			errch <- err
+		}()
+		select {
+		case <-time.After(5 * time.Second):
+			fmt.Println("SELECT 1 timeout: probably a wedged server")
+		case err := <-errch:
+			if err != nil {
+				fmt.Println("SELECT 1 execute error:", err)
+			} else {
+				fmt.Println("SELECT 1 executed successfully: probably a slow statement")
+			}
+		}
+		fmt.Printf("timeout: %q. currently executing: %v\n", sql, db.mu.active)
+		panic("statement exec timeout")
 	}
 }
 
 func TestRandomSyntaxGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "stmt"
 
-	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, "ident", nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := r.Generate(rootStmt, 20)
 		// Don't start transactions since closing them is tricky. Just issuing a
 		// ROLLBACK after all queries doesn't work due to the parellel uses of db,
@@ -149,6 +213,12 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
 			return errors.New("READ ONLY settings are unsupported")
 		}
+		if strings.Contains(s, "REVOKE") || strings.Contains(s, "GRANT") {
+			return errors.New("REVOKE and GRANT are unsupported")
+		}
+		if strings.Contains(s, "EXPERIMENTAL SCRUB DATABASE SYSTEM") {
+			return errors.New("See #43693")
+		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
@@ -160,10 +230,11 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 func TestRandomSyntaxSelect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "target_list"
 
-	testRandomSyntax(t, false, func(ctx context.Context, db *verifyFormatDB) error {
+	testRandomSyntax(t, false, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		targets := r.Generate(rootStmt, 300)
@@ -187,6 +258,7 @@ type namedBuiltin struct {
 
 func TestRandomSyntaxFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	done := make(chan struct{})
 	defer close(done)
@@ -194,8 +266,13 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 	go func() {
 		for {
 			for _, name := range builtins.AllBuiltinNames {
-				switch strings.ToLower(name) {
-				case "crdb_internal.force_panic", "crdb_internal.force_log_fatal", "pg_sleep":
+				lower := strings.ToLower(name)
+				if strings.HasPrefix(lower, "crdb_internal.force_") {
+					continue
+				}
+				switch lower {
+				case
+					"pg_sleep":
 					continue
 				}
 				_, variations := builtins.GetBuiltinProperties(name)
@@ -210,17 +287,24 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		}
 	}()
 
-	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, "defaultdb", nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		nb := <-namedBuiltinChan
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
 		case tree.ArgTypes:
 			for _, arg := range ft {
-				args = append(args, r.GenerateRandomArg(arg.Typ))
+				// CollatedString's default has no Locale, and so GenerateRandomArg will panic
+				// on RandDatumWithNilChance. Copy the typ and fake a locale.
+				typ := *arg.Typ
+				if typ.Locale() == "" && typ.Family() == types.CollatedStringFamily {
+					locale := "en_US"
+					typ.InternalType.Locale = &locale
+				}
+				args = append(args, r.GenerateRandomArg(&typ))
 			}
 		case tree.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
-				var typ types.T
+				var typ *types.T
 				switch r.Intn(4) {
 				case 0:
 					typ = types.String
@@ -241,7 +325,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				args = append(args, r.GenerateRandomArg(ft.VarType))
 			}
 		default:
-			panic(fmt.Sprintf("unknown fn.Types: %T", ft))
+			panic(errors.AssertionFailedf("unknown fn.Types: %T", ft))
 		}
 		var limit string
 		switch strings.ToLower(nb.name) {
@@ -255,10 +339,11 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 
 func TestRandomSyntaxFuncCommon(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "func_expr_common_subexpr"
 
-	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, "defaultdb", nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		expr := r.Generate(rootStmt, 30)
 		s := fmt.Sprintf("SELECT %s", expr)
 		return db.exec(ctx, s)
@@ -267,14 +352,18 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	roots := []string{
 		"create_database_stmt",
 		"drop_database_stmt",
 		"alter_rename_database_stmt",
+		"create_user_stmt",
+		"drop_user_stmt",
+		"alter_user_stmt",
 	}
 
-	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB) error {
+	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `
 			CREATE DATABASE ident;
 		`)
@@ -287,12 +376,13 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 
 func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	roots := []string{
 		"alter_table_cmd",
 	}
 
-	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB) error {
+	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `
 			CREATE DATABASE ident;
 			CREATE TABLE ident.ident (ident decimal);
@@ -304,6 +394,268 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	})
 }
 
+var ignoredErrorPatterns = []string{
+	"unimplemented",
+	"unsupported binary operator",
+	"unsupported comparison operator",
+	"memory budget exceeded",
+	"generator functions are not allowed in",
+	"txn already encountered an error; cannot be used anymore",
+	"no data source matches prefix",
+	"index .* already contains column",
+	"cannot convert .* to .*",
+	"index .* is in used as unique constraint",
+	"could not decorrelate subquery",
+	"column reference .* is ambiguous",
+	"INSERT has more expressions than target columns",
+	"index .* is in use as unique constraint",
+	"frame .* offset must not be .*",
+	"bit string length .* does not match type",
+	"column reference .* not allowed in this context",
+	"cannot write directly to computed column",
+	"index .* in the middle of being added",
+	"could not mark job .* as succeeded",
+	"failed to read backup descriptor",
+	"AS OF SYSTEM TIME: cannot specify timestamp in the future",
+	"AS OF SYSTEM TIME: timestamp before 1970-01-01T00:00:00Z is invalid",
+	"BACKUP for requested time  needs option 'revision_history'",
+	"RESTORE timestamp: supplied backups do not cover requested time",
+
+	// Numeric conditions
+	"exponent out of range",
+	"result out of range",
+	"argument out of range",
+	"integer out of range",
+	"invalid operation",
+	"invalid mask",
+	"cannot take square root of a negative number",
+	"out of int64 range",
+	"underflow, subnormal",
+	"overflow",
+	"requested length too large",
+	"division by zero",
+	"is out of range",
+
+	// Type checking
+	"value type .* doesn't match type .* of column",
+	"incompatible value type",
+	"incompatible COALESCE expressions",
+	"error type checking constant value",
+	"ambiguous binary operator",
+	"ambiguous call",
+	"cannot be matched",
+	"unknown signature",
+	"cannot determine type of empty array",
+	"conflicting ColumnTypes",
+
+	// Data dependencies
+	"violates not-null constraint",
+	"violates unique constraint",
+	"column .* is referenced by the primary key",
+	"column .* is referenced by existing index",
+
+	// Context-specific string formats
+	"invalid regexp flag",
+	"unrecognized privilege",
+	"invalid escape string",
+	"error parsing regexp",
+	"could not parse .* as type bytes",
+	"UUID must be exactly 16 bytes long",
+	"unsupported timespan",
+	"does not exist",
+	"unterminated string",
+	"incorrect UUID length",
+	"the input string must not be empty",
+
+	// JSON builtins
+	"mismatched array dimensions",
+	"cannot get array length of a non-array",
+	"cannot get array length of a scalar",
+	"cannot be called on a non-array",
+	"cannot call json_object_keys on an array",
+	"cannot set path in scalar",
+	"cannot delete path in scalar",
+	"unable to encode table key: \\*tree\\.DJSON",
+	"path element at position .* is null",
+	"path element is not an integer",
+	"cannot delete from object using integer index",
+	"invalid concatenation of jsonb objects",
+	"null value not allowed for object key",
+
+	// Builtins that have funky preconditions
+	"cannot delete from scalar",
+	"lastval is not yet defined",
+	"negative substring length",
+	"non-positive substring length",
+	"bit strings of different sizes",
+	"inet addresses with different sizes",
+	"zero length IP",
+	"values of different sizes",
+	"must have even number of elements",
+	"cannot take logarithm of a negative number",
+	"input value must be",
+	"formats are supported for decode",
+	"only available in ccl",
+	"expect comma-separated list of filename",
+	"unknown constraint",
+	"invalid destination encoding name",
+	"invalid IP format",
+	"invalid format code",
+	`.*val\(\): syntax error`,
+	`.*val\(\): syntax error at or near`,
+	`.*val\(\): help token in input`,
+	"invalid source encoding name",
+	"strconv.Atoi: parsing .*: invalid syntax",
+	"field position .* must be greater than zero",
+	"cannot take logarithm of zero",
+	"only 'hex', 'escape', and 'base64' formats are supported for encode",
+	"LIKE pattern must not end with escape character",
+
+	// TODO(mjibson): fix these
+	"column .* must appear in the GROUP BY clause or be used in an aggregate function",
+	"aggregate functions are not allowed in ON",
+}
+
+var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
+
+func TestRandomSyntaxSQLSmith(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	var smither *sqlsmith.Smither
+
+	tableStmts := make([]string, 0)
+	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		setups := []string{"rand-tables", "seed"}
+		for _, s := range setups {
+			randTables := sqlsmith.Setups[s](r.Rnd)
+			if err := db.exec(ctx, randTables); err != nil {
+				return err
+			}
+			tableStmts = append(tableStmts, randTables)
+			fmt.Printf("%s;\n", randTables)
+		}
+		var err error
+		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
+		return err
+	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		s := smither.Generate()
+		err := db.exec(ctx, s)
+		if c := (*crasher)(nil); errors.As(err, &c) {
+			if err := db.exec(ctx, "USE defaultdb"); err != nil {
+				t.Fatalf("couldn't reconnect to db after crasher: %v", c)
+			}
+			fmt.Printf("CRASHER:\ncaused by: %s\n\nSTATEMENT:\n%s;\n\nserver stacktrace:\n%s\n\n", c.Error(), s, c.detail)
+			return c
+		}
+		if err == nil {
+			return nil
+		}
+		msg := err.Error()
+		shouldLogErr := true
+		if ignoredRegex.MatchString(msg) {
+			shouldLogErr = false
+		}
+		if testing.Verbose() && shouldLogErr {
+			fmt.Printf("ERROR: %s\ncaused by:\n%s;\n\n", err, s)
+		}
+		return err
+	})
+	if smither != nil {
+		smither.Close()
+	}
+
+	fmt.Printf("To reproduce, use schema:\n\n")
+	for _, stmt := range tableStmts {
+		fmt.Printf("%s;", stmt)
+	}
+	fmt.Printf("\n")
+}
+
+func TestRandomDatumRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eval := tree.MakeTestingEvalContext(nil)
+
+	var smither *sqlsmith.Smither
+	testRandomSyntax(t, true, "", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		var err error
+		smither, err = sqlsmith.NewSmither(nil, r.Rnd)
+		return err
+	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		defer func() {
+			if err := recover(); err != nil {
+				s := fmt.Sprint(err)
+				// JSONB NaN and Infinity can't round
+				// trip because JSON doesn't support
+				// those as Numbers, only strings. (Try
+				// `JSON.stringify(Infinity)` in a JS console.)
+				if strings.Contains(s, "JSONB") && (strings.Contains(s, "Infinity") || strings.Contains(s, "NaN")) {
+					return
+				}
+				for _, cmp := range []string{
+					"ReturnType called on TypedExpr with empty typeAnnotation",
+					"runtime error: invalid memory address or nil pointer dereference",
+				} {
+					if strings.Contains(s, cmp) {
+						return
+					}
+				}
+				panic(err)
+			}
+		}()
+		generated := smither.GenerateExpr()
+		typ := generated.ResolvedType()
+		switch typ {
+		case types.Date, types.Decimal:
+			return nil
+		}
+		serializedGen := tree.Serialize(generated)
+
+		sema := tree.MakeSemaContext()
+		// We don't care about errors below because they are often
+		// caused by sqlsmith generating bogus queries. We're just
+		// looking for datums that don't match.
+		parsed1, err := parser.ParseExpr(serializedGen)
+		if err != nil {
+			return nil //nolint:returnerrcheck
+		}
+		typed1, err := parsed1.TypeCheck(ctx, &sema, typ)
+		if err != nil {
+			return nil //nolint:returnerrcheck
+		}
+		datum1, err := typed1.Eval(&eval)
+		if err != nil {
+			return nil //nolint:returnerrcheck
+		}
+		serialized1 := tree.Serialize(datum1)
+
+		parsed2, err := parser.ParseExpr(serialized1)
+		if err != nil {
+			return nil //nolint:returnerrcheck
+		}
+		typed2, err := parsed2.TypeCheck(ctx, &sema, typ)
+		if err != nil {
+			return nil //nolint:returnerrcheck
+		}
+		datum2, err := typed2.Eval(&eval)
+		if err != nil {
+			return nil //nolint:returnerrcheck
+		}
+		serialized2 := tree.Serialize(datum2)
+
+		if serialized1 != serialized2 {
+			panic(errors.Errorf("serialized didn't match:\nexpr: %s\nfirst: %s\nsecond: %s", generated, serialized1, serialized2))
+		}
+		if datum1.Compare(&eval, datum2) != 0 {
+			panic(errors.Errorf("%s [%[1]T] != %s [%[2]T] (original expr: %s)", serialized1, serialized2, serializedGen))
+		}
+		return nil
+	})
+}
+
 // testRandomSyntax performs all of the RSG setup and teardown for common
 // random syntax testing operations. It takes a closure where the random
 // expression should be generated and executed. It returns an error indicating
@@ -312,28 +664,25 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 func testRandomSyntax(
 	t *testing.T,
 	allowDuplicates bool,
-	setup func(context.Context, *verifyFormatDB) error,
+	databaseName string,
+	setup func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 	fn func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 ) {
 	if *flagRSGTime == 0 {
-		t.Skip("enable with '-rsg <duration>'")
+		skip.IgnoreLint(t, "enable with '-rsg <duration>'")
 	}
 	ctx := context.Background()
+	defer utilccl.TestingEnableEnterprise()()
 
 	params, _ := tests.CreateTestServerParams()
-	params.UseDatabase = "ident"
-	// Use a low memory limit to quickly halt runaway functions.
-	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
+	params.UseDatabase = databaseName
+	// Catch panics and return them as errors.
+	params.Knobs.PGWireTestingKnobs = &sql.PGWireTestingKnobs{
+		CatchPanics: true,
+	}
 	s, rawDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
-
-	if setup != nil {
-		err := setup(ctx, db)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	yBytes, err := ioutil.ReadFile(filepath.Join("..", "parser", "sql.y"))
 	if err != nil {
@@ -343,6 +692,14 @@ func testRandomSyntax(
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if setup != nil {
+		err := setup(ctx, db, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Broadcast channel for all workers.
 	done := make(chan struct{})
 	time.AfterFunc(*flagRSGTime, func() {
@@ -375,7 +732,7 @@ func testRandomSyntax(
 		}
 	}(ctx)
 	ctx, timeoutCancel := context.WithTimeout(ctx, *flagRSGTime)
-	err = ctxgroup.GroupWorkers(ctx, *flagRSGGoRoutines, func(ctx context.Context) error {
+	err = ctxgroup.GroupWorkers(ctx, *flagRSGGoRoutines, func(ctx context.Context, _ int) error {
 		for {
 			select {
 			case <-ctx.Done():
@@ -387,6 +744,10 @@ func testRandomSyntax(
 			countsMu.total++
 			if err == nil {
 				countsMu.success++
+			} else {
+				if c := (*crasher)(nil); errors.As(err, &c) {
+					t.Errorf("Crash detected: \n%s\n\nStack trace:\n%s", c.sql, c.detail)
+				}
 			}
 			countsMu.Unlock()
 		}
@@ -402,6 +763,6 @@ func testRandomSyntax(
 		t.Fatal("0 successful executions")
 	}
 	if db.verifyFormatErr != nil {
-		t.Fatal(db.verifyFormatErr)
+		t.Error(db.verifyFormatErr)
 	}
 }

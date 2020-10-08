@@ -1,5 +1,5 @@
 rollback_stmt ::=
 	'ROLLBACK' 
-	| 'ROLLBACK'  'TO' 'SAVEPOINT' cockroach_restart
-	| 'ROLLBACK' 'TO' 'SAVEPOINT' cockroach_restart
 	| 'ROLLBACK' 
+	| 'ROLLBACK'  'TO' 'SAVEPOINT' savepoint_name
+	| 'ROLLBACK'  'TO' 'SAVEPOINT' savepoint_name

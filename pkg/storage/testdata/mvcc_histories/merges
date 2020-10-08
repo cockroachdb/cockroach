@@ -1,0 +1,39 @@
+# The MVCC merge operator is non-transactional and stores data in the
+# intent, so that subsequent reads diregard the MVCC values stored on
+# the same key.
+#
+# This is a very unique feature and is currently only used in CockroachDB's
+# built-in timeseries database.
+
+run ok
+with t=A
+  txn_begin  ts=11
+  put        k=a v=abc resolve
+  txn_remove
+----
+>> at end:
+data: "a"/0.000000011,0 -> /BYTES/abc
+
+# Merge appends data in the intent and ignores the regular k/v pairs.
+
+run trace ok
+merge k=a v=def ts=22
+merge k=a v=ghi ts=22
+----
+>> merge k=a v=def ts=22
+meta: "a"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/def
+data: "a"/0.000000011,0 -> /BYTES/abc
+>> merge k=a v=ghi ts=22
+meta: "a"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/defghi
+data: "a"/0.000000011,0 -> /BYTES/abc
+
+# After a merge, only the data in the intent is every used.
+
+run ok
+with t=A
+  txn_begin ts=33
+  get k=a
+----
+get: "a" -> /BYTES/defghi @0,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000033,0 wto=false max=0,0

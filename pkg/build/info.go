@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package build
 
@@ -20,19 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	version "github.com/hashicorp/go-version"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
-
-// const char* compilerVersion() {
-// #if defined(__clang__)
-// 	return __VERSION__;
-// #elif defined(__GNUC__) || defined(__GNUG__)
-// 	return "gcc " __VERSION__;
-// #else
-// 	return "non-gcc, non-clang (or an unrecognized version)";
-// #endif
-// }
-import "C"
 
 // TimeFormat is the reference format for build.Time. Make sure it stays in sync
 // with the string passed to the linker in the root Makefile.
@@ -44,13 +29,14 @@ var (
 	tag             = "unknown" // Tag of this build (git describe --tags w/ optional '-dirty' suffix)
 	utcTime         string      // Build time in UTC (year/month/day hour:min:sec)
 	rev             string      // SHA-1 of this build (git rev-parse)
-	cgoCompiler     = C.GoString(C.compilerVersion())
+	cgoCompiler     = cgoVersion()
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
 	Distribution = "OSS"
-	typ          string // Type of this build: <empty>, "development", or "release[-gnu|-musl]"
+	typ          string // Type of this build: <empty>, "development", or "release"
 	channel      = "unknown"
+	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
 )
 
 // IsRelease returns true if the binary was produced by a "release" build.
@@ -66,12 +52,11 @@ func SeemsOfficial() bool {
 
 // VersionPrefix returns the version prefix of the current build.
 func VersionPrefix() string {
-	v, err := version.NewVersion(tag)
+	v, err := version.Parse(tag)
 	if err != nil {
 		return "dev"
 	}
-	semVer := v.Segments()[:2]
-	return fmt.Sprintf("v%d.%d", semVer[0], semVer[1])
+	return fmt.Sprintf("v%d.%d", v.Major(), v.Minor())
 }
 
 func init() {
@@ -90,6 +75,15 @@ func (b Info) Short() string {
 	}
 	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
 		b.Distribution, b.Tag, plat, b.Time, b.GoVersion)
+}
+
+// GoTime parses the utcTime string and returns a time.Time.
+func (b Info) GoTime() time.Time {
+	val, err := time.Parse(TimeFormat, b.Time)
+	if err != nil {
+		return time.Time{}
+	}
+	return val
 }
 
 // Timestamp parses the utcTime string and returns the number of seconds since epoch.
@@ -114,6 +108,7 @@ func GetInfo() Info {
 		Distribution:    Distribution,
 		Type:            typ,
 		Channel:         channel,
+		EnvChannel:      envChannel,
 	}
 }
 

@@ -1,0 +1,23 @@
+run ok
+with t=A
+  txn_begin ts=0,1
+  put k=k v=v
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=6
+data: "k"/0,1 -> /BYTES/v
+
+# Write at newer timestamp.
+# Verify that the original write has been repositioned at the new timestamp.
+
+run ok
+with t=A
+  txn_advance ts=1
+  txn_step
+  put k=k v=v
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=1} lock=true stat=PENDING rts=0,1 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=1} ts=0.000000001,0 del=false klen=12 vlen=6 ih={{0 /BYTES/v}}
+data: "k"/0.000000001,0 -> /BYTES/v

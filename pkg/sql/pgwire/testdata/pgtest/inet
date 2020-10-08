@@ -1,0 +1,53 @@
+# Empty INET param.
+send
+Parse {"Query": "SELECT $1::INET"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [[]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# IPv4family
+send
+Bind {"ParameterFormatCodes": [1], "Parameters": [[2, 0, 0, 0, 0, 0]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# IPv6family
+send
+Bind {"ParameterFormatCodes": [1], "Parameters": [[3, 0, 0, 0, 0, 0]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Unknown family
+send
+Bind {"ParameterFormatCodes": [1], "Parameters": [[6, 0, 0, 0, 0, 0]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

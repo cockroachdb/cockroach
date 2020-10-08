@@ -1,24 +1,18 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tests_test
 
 import (
 	"context"
 	"testing"
-
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,16 +21,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func TestSplitAtTableBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testClusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,
 	}
 	tc := testcluster.StartTestCluster(t, 3, testClusterArgs)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	runner := sqlutils.MakeSQLRunner(tc.Conns[0])
 	runner.Exec(t, `CREATE DATABASE test`)
@@ -49,7 +45,7 @@ SELECT tables.id FROM system.namespace tables
 `
 	var tableID uint32
 	runner.QueryRow(t, tableIDQuery, "test", "t").Scan(&tableID)
-	tableStartKey := keys.MakeTablePrefix(tableID)
+	tableStartKey := keys.SystemSQLCodec.TablePrefix(tableID)
 
 	// Wait for new table to split.
 	testutils.SucceedsSoon(t, func() error {
@@ -58,7 +54,7 @@ SELECT tables.id FROM system.namespace tables
 			t.Fatal(err)
 		}
 		if !desc.StartKey.Equal(tableStartKey) {
-			log.Infof(context.TODO(), "waiting on split results")
+			log.Infof(context.Background(), "waiting on split results")
 			return errors.Errorf("expected range start key %s; got %s", tableStartKey, desc.StartKey)
 		}
 		return nil

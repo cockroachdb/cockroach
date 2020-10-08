@@ -1,0 +1,106 @@
+# Conditional expressions.
+
+eval
+IF(true, 1, 2/0)
+----
+1
+
+eval
+IF(false, 1/0, 2)
+----
+2
+
+eval
+IF(NULL, 1/0, 2)
+----
+2
+
+eval
+IFERROR(2, 123)
+----
+2
+
+eval
+IFERROR(1/0, 123)
+----
+123
+
+eval
+IFERROR(1/0, 123, '22012')
+----
+123
+
+eval
+ISERROR(2)
+----
+false
+
+eval
+(ISERROR((1/0)::STRING, '22012'), IFERROR((1/0)::STRING, '22012'))
+----
+(true, '22012')
+
+eval
+ISERROR(1/0)
+----
+true
+
+eval
+ISERROR(1/0, '22012')
+----
+true
+
+eval
+NULLIF(1, 1)
+----
+NULL
+
+eval
+NULLIF(1, 2)
+----
+1
+
+eval
+NULLIF(2, 1)
+----
+2
+
+eval
+IFNULL(1, 2/0)
+----
+1
+
+eval
+IFNULL(NULL, 2)
+----
+2
+
+eval
+IFNULL(1, NULL)
+----
+1
+
+eval
+IFNULL(NULL, NULL)
+----
+NULL
+
+eval
+COALESCE(1, 2, 3, 4/0)
+----
+1
+
+eval
+COALESCE(NULL, 2, 3, 4/0)
+----
+2
+
+eval
+COALESCE(NULL, NULL, NULL, 4)
+----
+4
+
+eval
+COALESCE(NULL, NULL, NULL, NULL)
+----
+NULL

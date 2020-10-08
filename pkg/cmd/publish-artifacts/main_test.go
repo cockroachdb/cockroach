@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -20,7 +16,8 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/kr/pretty"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/stretchr/testify/require"
 )
 
 // Whether to run slow tests.
@@ -57,7 +54,7 @@ func mockPutter(p s3putter) func() {
 
 func TestMain(t *testing.T) {
 	if !slow {
-		t.Skip("only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
+		skip.IgnoreLint(t, "only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
 	}
 	r := &recorder{}
 	undo := mockPutter(r)
@@ -76,64 +73,145 @@ func TestMain(t *testing.T) {
 			Key:                "/cockroach/cockroach.darwin-amd64." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.darwin-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.darwin-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.darwin-amd64." + shaStub,
 		},
+		{
+			Bucket:             "cockroach",
+			ContentDisposition: "attachment; filename=libgeos.darwin-amd64." + shaStub + ".dylib",
+			Key:                "/cockroach/lib/libgeos.darwin-amd64." + shaStub + ".dylib",
+		},
+		{
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/lib/libgeos.darwin-amd64.dylib.LATEST",
+			WebsiteRedirectLocation: "/cockroach/lib/libgeos.darwin-amd64." + shaStub + ".dylib",
+		},
+		{
+			Bucket:             "cockroach",
+			ContentDisposition: "attachment; filename=libgeos_c.darwin-amd64." + shaStub + ".dylib",
+			Key:                "/cockroach/lib/libgeos_c.darwin-amd64." + shaStub + ".dylib",
+		},
+		{
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST",
+			WebsiteRedirectLocation: "/cockroach/lib/libgeos_c.darwin-amd64." + shaStub + ".dylib",
+		},
+
 		{
 			Bucket:             "cockroach",
 			ContentDisposition: "attachment; filename=cockroach.linux-gnu-amd64." + shaStub,
 			Key:                "/cockroach/cockroach.linux-gnu-amd64." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.linux-gnu-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.linux-gnu-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.linux-gnu-amd64." + shaStub,
 		},
+		{
+			Bucket:             "cockroach",
+			ContentDisposition: "attachment; filename=libgeos.linux-gnu-amd64." + shaStub + ".so",
+			Key:                "/cockroach/lib/libgeos.linux-gnu-amd64." + shaStub + ".so",
+		},
+		{
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST",
+			WebsiteRedirectLocation: "/cockroach/lib/libgeos.linux-gnu-amd64." + shaStub + ".so",
+		},
+		{
+			Bucket:             "cockroach",
+			ContentDisposition: "attachment; filename=libgeos_c.linux-gnu-amd64." + shaStub + ".so",
+			Key:                "/cockroach/lib/libgeos_c.linux-gnu-amd64." + shaStub + ".so",
+		},
+		{
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST",
+			WebsiteRedirectLocation: "/cockroach/lib/libgeos_c.linux-gnu-amd64." + shaStub + ".so",
+		},
+
 		{
 			Bucket:             "cockroach",
 			ContentDisposition: "attachment; filename=cockroach.race.linux-gnu-amd64." + shaStub,
 			Key:                "/cockroach/cockroach.race.linux-gnu-amd64." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.race.linux-gnu-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.race.linux-gnu-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.race.linux-gnu-amd64." + shaStub,
 		},
 		{
 			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=cockroach.linux-musl-amd64." + shaStub,
-			Key:                "/cockroach/cockroach.linux-musl-amd64." + shaStub,
+			ContentDisposition: "attachment; filename=libgeos.race.linux-gnu-amd64." + shaStub + ".so",
+			Key:                "/cockroach/lib/libgeos.race.linux-gnu-amd64." + shaStub + ".so",
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.linux-musl-amd64.LATEST",
-			WebsiteRedirectLocation: "/cockroach/cockroach.linux-musl-amd64." + shaStub,
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/lib/libgeos.race.linux-gnu-amd64.so.LATEST",
+			WebsiteRedirectLocation: "/cockroach/lib/libgeos.race.linux-gnu-amd64." + shaStub + ".so",
 		},
+		{
+			Bucket:             "cockroach",
+			ContentDisposition: "attachment; filename=libgeos_c.race.linux-gnu-amd64." + shaStub + ".so",
+			Key:                "/cockroach/lib/libgeos_c.race.linux-gnu-amd64." + shaStub + ".so",
+		},
+		{
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/lib/libgeos_c.race.linux-gnu-amd64.so.LATEST",
+			WebsiteRedirectLocation: "/cockroach/lib/libgeos_c.race.linux-gnu-amd64." + shaStub + ".so",
+		},
+
 		{
 			Bucket:             "cockroach",
 			ContentDisposition: "attachment; filename=cockroach.windows-amd64." + shaStub + ".exe",
 			Key:                "/cockroach/cockroach.windows-amd64." + shaStub + ".exe",
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.windows-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.windows-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.windows-amd64." + shaStub + ".exe",
 		},
+		{
+			Bucket:             "cockroach",
+			ContentDisposition: "attachment; filename=libgeos.windows-amd64." + shaStub + ".dll",
+			Key:                "/cockroach/lib/libgeos.windows-amd64." + shaStub + ".dll",
+		},
+		{
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/lib/libgeos.windows-amd64.dll.LATEST",
+			WebsiteRedirectLocation: "/cockroach/lib/libgeos.windows-amd64." + shaStub + ".dll",
+		},
+		{
+			Bucket:             "cockroach",
+			ContentDisposition: "attachment; filename=libgeos_c.windows-amd64." + shaStub + ".dll",
+			Key:                "/cockroach/lib/libgeos_c.windows-amd64." + shaStub + ".dll",
+		},
+		{
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/lib/libgeos_c.windows-amd64.dll.LATEST",
+			WebsiteRedirectLocation: "/cockroach/lib/libgeos_c.windows-amd64." + shaStub + ".dll",
+		},
+
 		{
 			Bucket:             "cockroach",
 			ContentDisposition: "attachment; filename=workload." + shaStub,
 			Key:                "/cockroach/workload." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/workload.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/workload.LATEST",
 			WebsiteRedirectLocation: "/cockroach/workload." + shaStub,
 		},
 		{
@@ -162,15 +240,6 @@ func TestMain(t *testing.T) {
 			Bucket:       "binaries.cockroachdb.com",
 			CacheControl: "no-cache",
 			Key:          "cockroach-latest.linux-amd64.tgz",
-		},
-		{
-			Bucket: "binaries.cockroachdb.com",
-			Key:    "cockroach-v42.42.42.linux-musl-amd64.tgz",
-		},
-		{
-			Bucket:       "binaries.cockroachdb.com",
-			CacheControl: "no-cache",
-			Key:          "cockroach-latest.linux-musl-amd64.tgz",
 		},
 		{
 			Bucket: "binaries.cockroachdb.com",
@@ -215,15 +284,5 @@ func TestMain(t *testing.T) {
 		acts = append(acts, act)
 	}
 
-	for i := len(exp); i < len(acts); i++ {
-		exp = append(exp, testCase{})
-	}
-	for i := len(acts); i < len(exp); i++ {
-		acts = append(acts, testCase{})
-	}
-
-	if len(pretty.Diff(acts, exp)) > 0 {
-		t.Error("diff(act, exp) is nontrivial")
-		pretty.Ldiff(t, acts, exp)
-	}
+	require.Equal(t, exp, acts)
 }

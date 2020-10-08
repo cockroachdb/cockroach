@@ -1,20 +1,19 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pprofui
 
-import "github.com/spf13/pflag"
+import (
+	"github.com/google/pprof/driver"
+	"github.com/spf13/pflag"
+)
 
 // pprofFlags is a wrapper to satisfy pprof's client flag interface.
 // That interface is satisfied by what the standard flag package
@@ -28,8 +27,15 @@ type pprofFlags struct {
 	*pflag.FlagSet
 }
 
+var _ driver.FlagSet = &pprofFlags{}
+
+// ExtraUsage is part of the driver.FlagSet interface.
 func (pprofFlags) ExtraUsage() string {
 	return ""
+}
+
+// AddExtraUsage is part of the driver.FlagSet interface.
+func (pprofFlags) AddExtraUsage(eu string) {
 }
 
 func (f pprofFlags) StringList(o, d, c string) *[]*string {

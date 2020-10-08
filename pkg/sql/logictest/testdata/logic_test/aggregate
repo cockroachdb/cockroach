@@ -1,18 +1,25 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+subtest other
 
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT,
   w INT,
-  s STRING
+  s STRING,
+  i INTERVAL
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRBBT
-SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01') FROM kv
+query IIIIRRRRRRRRBBTII
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1), var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+
+# Regression test for #29695
+query T
+SELECT min(NULL)
+----
+NULL
 
 # Aggregate functions return NULL if there are no rows.
 query T
@@ -30,10 +37,15 @@ SELECT jsonb_agg(1) FROM kv
 ----
 NULL
 
-query IIIIRRRRBBT
-SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
+query TTTT
+SELECT min(i), avg(i), max(i), sum(i) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL NULL NULL
+
+query IIIIRRRRRRBBT
+SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
+----
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT array_agg(v) FROM kv
@@ -51,10 +63,10 @@ SELECT jsonb_agg(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRBBT
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
+query IIIIRRRRRRBBT
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1), var_pop(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
-1 1 1 1 1 1 NULL NULL true true 01
+1  1  1  1  1  1  NULL  0  NULL  0  true  true  01
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -141,19 +153,19 @@ SELECT (SELECT COALESCE(max(1), 0) FROM generate_series(1,0))
 
 statement OK
 INSERT INTO kv VALUES
-(1, 2, 3, 'a'),
-(3, 4, 5, 'a'),
-(5, NULL, 5, NULL),
-(6, 2, 3, 'b'),
-(7, 2, 2, 'b'),
-(8, 4, 2, 'A')
+(1, 2, 3, 'a', '1min'),
+(3, 4, 5, 'a', '2sec'),
+(5, NULL, 5, NULL, NULL),
+(6, 2, 3, 'b', '1ms'),
+(7, 2, 2, 'b', '4 days'),
+(8, 4, 2, 'A', '3 years')
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
-query IIIIRRRRBBT
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')) FROM kv
+query IIIIRRRRRRBBT
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), stddev_pop(1), variance(1)::float, var_pop(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')) FROM kv
 ----
-1 6 1 6 1 6 0 0 true true 00
+1 6 1 6 1 6 0 0 0 0 true true 00
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 query T
@@ -221,10 +233,10 @@ SELECT count(DISTINCT w) FROM kv GROUP BY 1
 query error aggregate functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v)
 
-query error aggregate functions are not allowed in LIMIT
+query error column "v" does not exist
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v)
 
-query error aggregate functions are not allowed in OFFSET
+query error column "v" does not exist
 SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v)
 
 query error aggregate functions are not allowed in VALUES
@@ -347,8 +359,15 @@ SELECT count(*), k+v FROM kv GROUP BY k, v
 1 9
 1 NULL
 
-query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+query II rowsort
 SELECT count(*), k+v FROM kv GROUP BY k
+----
+1  3
+1  7
+1  NULL
+1  8
+1  9
+1  12
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT count(*), k+v FROM kv GROUP BY v
@@ -402,15 +421,17 @@ SELECT max(k), min(v) FROM kv HAVING k
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT 3 FROM kv GROUP BY v HAVING k > 5
 
-# pg has a special case for grouping on primary key, which would allow this, but we do not.
-# See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
-query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+# Special case for grouping on primary key.
+query I
 SELECT 3 FROM kv GROUP BY k HAVING v > 2
+----
+3
+3
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT k FROM kv HAVING k > 7
 
-query error syntax error at or near ","
+query error at or near ",": syntax error
 SELECT count(*, 1) FROM kv
 
 query I
@@ -553,7 +574,7 @@ NULL NULL NULL NULL
 query TT
 SELECT array_agg(k), array_agg(s) FROM (SELECT k, s FROM kv ORDER BY k)
 ----
-{1,3,5,6,7,8} {"a","a",NULL,"b","b","A"}
+{1,3,5,6,7,8}  {a,a,NULL,b,b,A}
 
 query T
 SELECT array_agg(k) || 1 FROM (SELECT k FROM kv ORDER BY k)
@@ -580,6 +601,11 @@ SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
 5 2.8 30 14
 
+query TTTT
+SELECT min(i), avg(i), max(i), sum(i) FROM kv
+----
+00:00:00.001  7 mons 6 days 19:12:12.4002  3 years  3 years 4 days 00:01:02.001
+
 query RRRR
 SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
 ----
@@ -602,9 +628,21 @@ SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
 14.0
 
+# Grouping columns can be eliminated, but should still return zero rows (i.e.
+# shouldn't use scalar GroupBy).
+query I
+SELECT max(v) FROM kv GROUP BY k HAVING k=100
+----
+
+# Same query as above, but using scalar GroupBy (should return default row).
+query I
+SELECT max(v) FROM kv WHERE k=100
+----
+NULL
+
 statement ok
 CREATE TABLE abc (
-  a CHAR PRIMARY KEY,
+  a VARCHAR PRIMARY KEY,
   b FLOAT,
   c BOOLEAN,
   d DECIMAL
@@ -640,25 +678,25 @@ INSERT INTO intervals VALUES (INTERVAL '1 year 2 months 3 days 4 seconds'), (INT
 query T
 SELECT sum(a) FROM intervals
 ----
-3y5mon7d19s
+3 years 5 mons 7 days 00:00:19
 
 
-query error unknown signature: avg\(string\)
+query error unknown signature: avg\(varchar\)
 SELECT avg(a) FROM abc
 
 query error unknown signature: avg\(bool\)
 SELECT avg(c) FROM abc
 
-query error unknown signature: avg\(tuple{string, bool}\)
+query error unknown signature: avg\(tuple{varchar, bool}\)
 SELECT avg((a,c)) FROM abc
 
-query error unknown signature: sum\(string\)
+query error unknown signature: sum\(varchar\)
 SELECT sum(a) FROM abc
 
 query error unknown signature: sum\(bool\)
 SELECT sum(c) FROM abc
 
-query error unknown signature: sum\(tuple{string, bool}\)
+query error unknown signature: sum\(tuple{varchar, bool}\)
 SELECT sum((a,c)) FROM abc
 
 statement ok
@@ -736,7 +774,7 @@ SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 # VARIANCE/STDDEV
 
 query RRR
-SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz
+SELECT var_samp(x), variance(y::decimal), round(var_samp(z), 14) FROM xyz
 ----
 9 4.5 6.33333333333333
 
@@ -751,7 +789,22 @@ SELECT variance(x) FROM xyz WHERE x = 1
 NULL
 
 query RRR
-SELECT stddev(x), stddev(y::decimal), round(stddev(z), 14) FROM xyz
+SELECT var_pop(x), var_pop(y::decimal), round(var_pop(z), 14) FROM xyz
+----
+6 2.25 4.22222222222222
+
+query R
+SELECT var_pop(x) FROM xyz WHERE x = 10
+----
+NULL
+
+query R
+SELECT var_pop(x) FROM xyz WHERE x = 1
+----
+0
+
+query RRR
+SELECT stddev_samp(x), stddev(y::decimal), round(stddev_samp(z), 14) FROM xyz
 ----
 3  2.1213203435596425732  2.51661147842358
 
@@ -759,6 +812,25 @@ query R
 SELECT stddev(x) FROM xyz WHERE x = 1
 ----
 NULL
+
+query RRR
+SELECT stddev_pop(x), stddev_pop(y::decimal), round(stddev_pop(z), 14) FROM xyz
+----
+2.4494897427831780982  1.5  2.05480466765633
+
+query R
+SELECT stddev_pop(x) FROM xyz WHERE x = 1
+----
+0
+
+# Ensure subqueries don't trigger aggregation.
+query B
+SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
+----
+true
+
+statement ok
+DROP TABLE xyz
 
 # Numerical stability test for VARIANCE/STDDEV.
 # See https://www.johndcook.com/blog/2008/09/28/theoretical-explanation-for-numerical-results.
@@ -785,9 +857,18 @@ SELECT round(variance(n), 2), round(variance(n), 2), round(variance(p)) FROM mno
 ----
 0.08 0.08 8
 
+query RRR
+SELECT round(var_pop(n), 2), round(var_pop(n), 2), round(var_pop(p)) FROM mnop
+----
+0.08 0.08 8
 
 query RRR
-SELECT round(stddev(n), 2), round(stddev(n), 2), round(stddev(p)) FROM mnop
+SELECT round(stddev_samp(n), 2), round(stddev(n), 2), round(stddev_samp(p)) FROM mnop
+----
+0.29 0.29 3
+
+query RRR
+SELECT round(stddev_pop(n), 2), round(stddev_pop(n), 2), round(stddev_pop(p)) FROM mnop
 ----
 0.29 0.29 3
 
@@ -812,15 +893,51 @@ SELECT variance(1::int), variance(1::float), variance(1::decimal)
 NULL NULL NULL
 
 query RRR
-SELECT stddev(1::int), stddev(1::float), stddev(1::decimal)
+SELECT var_pop(1::int), var_pop(1::float), var_pop(1::decimal)
+----
+0  0  0
+
+query RRR
+SELECT stddev(1::int), stddev_samp(1::float), stddev(1::decimal)
 ----
 NULL NULL NULL
 
-# Ensure subqueries don't trigger aggregation.
-query B
-SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
+query RRR
+SELECT stddev_pop(1::int), stddev_pop(1::float), stddev_pop(1::decimal)
 ----
-true
+0  0  0
+
+statement ok
+CREATE TABLE bits (b INT)
+
+query II
+SELECT bit_and(b), bit_or(b) FROM bits
+----
+NULL NULL
+
+statement ok
+INSERT INTO bits VALUES (12), (25)
+
+query II
+SELECT bit_and(b), bit_or(b) FROM bits
+----
+8 29
+
+statement ok
+INSERT INTO bits VALUES(105)
+
+query II
+SELECT bit_and(b), bit_or(b) FROM bits
+----
+8 125
+
+statement ok
+INSERT INTO bits VALUES(NULL)
+
+query II
+SELECT bit_and(b), bit_or(b) FROM bits
+----
+8 125
 
 statement ok
 CREATE TABLE bools (b BOOL)
@@ -908,7 +1025,7 @@ NULL true 0 1 5
 query error FILTER specified but abs\(\) is not an aggregate function
 SELECT k, abs(k) FILTER (WHERE k=1) FROM kv
 
-query error syntax error at or near "filter"
+query error at or near "filter": syntax error
 SELECT k FILTER (WHERE k=1) FROM kv GROUP BY k
 
 query error aggregate functions are not allowed in FILTER
@@ -1122,6 +1239,40 @@ SELECT * FROM (SELECT x, max(y) FROM group_ord GROUP BY x) JOIN (SELECT z, min(y
 5  NULL  5  4
 3  4     3  2
 
+# Test max and min when agg column is the second column in an index.
+statement ok
+CREATE TABLE index_tab (
+  region STRING,
+  data INT NOT NULL,
+  INDEX (region, data)
+)
+
+statement ok
+INSERT INTO index_tab
+(VALUES
+  ('US_WEST', 3),
+  ('US_EAST', 23),
+  ('US_EAST', -14),
+  ('ASIA', 3294),
+  ('ASIA', -3),
+  ('US_WEST', 31),
+  ('EUROPE', 123),
+  ('US_EAST', -3000)
+)
+
+query I
+SELECT max(data) FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
+----
+31
+
+query I
+SELECT min(data) FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
+----
+-3000
+
+statement ok
+DROP TABLE index_tab
+
 # Regression test for #23798 until #10495 is fixed.
 statement error function reserved for internal use
 SELECT final_variance(1.2, 1.2, 123) FROM kv
@@ -1140,12 +1291,1513 @@ SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1
 query IT rowsort
 SELECT v, array_agg('a') FROM kv GROUP BY v
 ----
-2     {"a","a","a"}
-4     {"a","a"}
-NULL  {"a"}
+2     {a,a,a}
+4     {a,a}
+NULL  {a}
 
 # Regression test for #26419
 query I
 SELECT 123 FROM kv ORDER BY max(v)
 ----
 123
+
+subtest statistics
+
+statement OK
+CREATE TABLE statistics_agg_test (
+  y float,
+  x float,
+  int_y int,
+  int_x int
+)
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0,   10.0,    1,   10),
+  (2.0,   25.0,    2,   25),
+  (2.0,   25.0,    2,   25),
+  (3.0,   40.0,    3,   40),
+  (3.0,   40.0,    3,   40),
+  (3.0,   40.0,    3,   40),
+  (4.0,  100.0,    4,  100),
+  (4.0,  100.0,    4,  100),
+  (4.0,  100.0,    4,  100),
+  (4.0,  100.0,    4,  100),
+  (NULL,  NULL, NULL, NULL)
+
+query RRRR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(y, int_x)::decimal, corr(int_y, x)::decimal FROM statistics_agg_test
+----
+0.933007822647968 0.933007822647968 0.933007822647968 0.933007822647968
+
+query R
+SELECT corr(DISTINCT y, x)::decimal FROM statistics_agg_test
+----
+0.9326733179802503
+
+query R
+SELECT CAST(corr(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 30) AS decimal) FROM statistics_agg_test
+----
+0.9326733179802503
+
+query error pq: unknown signature: corr\(string, string\)
+SELECT corr(y::string, x::string) FROM statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+
+query error float out of range
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0,  10.0, 1, 10),
+  (2.0,  20.0, 2, 20)
+
+query RR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+----
+1 1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0,  10.0, 1,  10),
+  (2.0, -20.0, 2, -20)
+
+query RR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+----
+-1 -1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0, -1.0, 1, -1),
+  (1.0,  1.0, 1,  1)
+
+query RR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+----
+NULL NULL
+
+subtest string_agg
+
+statement OK
+CREATE TABLE string_agg_test (
+  id INT PRIMARY KEY,
+  company_id INT,
+  employee STRING
+)
+
+query IT colnames
+SELECT company_id, string_agg(employee, ',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, b',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+
+query IT colnames
+SELECT company_id, string_agg(employee, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+
+statement OK
+INSERT INTO string_agg_test VALUES
+  (1, 1, 'A'),
+  (2, 2, 'B'),
+  (3, 3, 'C'),
+  (4, 4, 'D'),
+  (5, 3, 'C'),
+  (6, 4, 'D'),
+  (7, 4, 'D'),
+  (8, 4, 'D'),
+  (9, 3, 'C'),
+  (10, 2, 'B')
+
+# This is a bit strange but the same behavior as PostgreSQL.
+query IT rowsort
+SELECT company_id, string_agg(employee, employee)
+FROM string_agg_test
+GROUP BY company_id;
+----
+1           A
+2           BBB
+3           CCCCC
+4           DDDDDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee, ',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           B,B
+3           C,C,C
+4           D,D,D,D
+
+query IT colnames
+SELECT company_id, string_agg(DISTINCT employee, ',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           B
+3           C
+4           D
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, b',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           B,B
+3           C,C,C
+4           D,D,D,D
+
+query IT colnames
+SELECT company_id, string_agg(employee, '')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           BB
+3           CCC
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, b'')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           BB
+3           CCC
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           BB
+3           CCC
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           BB
+3           CCC
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, ',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+3           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, b',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+3           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+3           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+3           NULL
+4           NULL
+
+query error pq: ambiguous call: string_agg\(unknown, unknown\)
+SELECT company_id, string_agg(NULL, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+
+# Now test the window function version of string_agg.
+
+query IT colnames
+SELECT company_id, string_agg(employee, ',')
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           B,B
+3           C
+3           C,C
+3           C,C,C
+4           D
+4           D,D
+4           D,D,D
+4           D,D,D,D
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, b',')
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           B,B
+3           C
+3           C,C
+3           C,C,C
+4           D
+4           D,D
+4           D,D,D
+4           D,D,D,D
+
+query IT colnames
+SELECT company_id, string_agg(employee, '')
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, b'')
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, employee)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, employee::BYTES)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL, NULL::STRING)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL, NULL::BYTES)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query error pq: ambiguous call: string_agg\(unknown, unknown\)
+SELECT company_id, string_agg(NULL, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+query IT colnames
+SELECT company_id, string_agg(employee, lower(employee))
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           BbB
+2           BbB
+3           CcCcC
+3           CcCcC
+3           CcCcC
+4           DdDdDdD
+4           DdDdDdD
+4           DdDdDdD
+4           DdDdDdD
+
+query IT colnames
+SELECT company_id, string_agg(lower(employee), employee)
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           a
+2           bBb
+2           bBb
+3           cCcCc
+3           cCcCc
+3           cCcCc
+4           dDdDdDd
+4           dDdDdDd
+4           dDdDdDd
+4           dDdDdDd
+
+statement error pq: unknown signature: string_agg\(string, string, string\)
+SELECT company_id, string_agg(employee, employee, employee)
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+query error pq: unknown signature: string_agg\(string\)
+SELECT company_id, string_agg(employee)
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+query error pq: unknown signature: string_agg\(string, string, string, string\)
+SELECT company_id, string_agg(employee, 'foo', employee, 'bar')
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+statement OK
+TRUNCATE string_agg_test
+
+statement OK
+INSERT INTO string_agg_test VALUES
+  (1, 1, 'A'),
+  (2, 1, 'B'),
+  (3, 1, 'C'),
+  (4, 1, 'D')
+
+query IT colnames
+SELECT e.company_id, string_agg(e.employee, ', ')
+FROM (
+  SELECT employee, company_id
+  FROM string_agg_test
+  ORDER BY employee
+  ) AS e
+GROUP BY e.company_id
+ORDER BY e.company_id;
+----
+company_id  string_agg
+1           A, B, C, D
+
+query IT colnames
+SELECT e.company_id, string_agg(e.employee, b', ')
+FROM (
+  SELECT employee::BYTES, company_id
+  FROM string_agg_test
+  ORDER BY employee
+  ) AS e
+GROUP BY e.company_id
+ORDER BY e.company_id;
+----
+company_id  string_agg
+1           A, B, C, D
+
+query IT colnames
+SELECT e.company_id, string_agg(e.employee, ', ')
+FROM (
+  SELECT employee, company_id
+  FROM string_agg_test
+  ORDER BY employee DESC
+  ) AS e
+GROUP BY e.company_id
+ORDER BY e.company_id;
+----
+company_id  string_agg
+1           D, C, B, A
+
+query IT colnames
+SELECT e.company_id, string_agg(e.employee, b', ')
+FROM (
+  SELECT employee::BYTES, company_id
+  FROM string_agg_test
+  ORDER BY employee DESC
+  ) AS e
+GROUP BY e.company_id
+ORDER BY e.company_id;
+----
+company_id  string_agg
+1           D, C, B, A
+
+query IT colnames
+SELECT e.company_id, string_agg(e.employee, NULL)
+FROM (
+  SELECT employee, company_id
+  FROM string_agg_test
+  ORDER BY employee DESC
+  ) AS e
+GROUP BY e.company_id
+ORDER BY e.company_id;
+----
+company_id  string_agg
+1           DCBA
+
+query IT colnames
+SELECT e.company_id, string_agg(e.employee, NULL)
+FROM (
+  SELECT employee::BYTES, company_id
+  FROM string_agg_test
+  ORDER BY employee DESC
+  ) AS e
+GROUP BY e.company_id
+ORDER BY e.company_id;
+----
+company_id  string_agg
+1           DCBA
+
+statement OK
+DROP TABLE string_agg_test
+
+# Regression test for #28836.
+
+query T
+SELECT string_agg('foo', CAST ((SELECT NULL) AS BYTES)) OVER ();
+----
+foo
+
+# Regression test for #30166.
+query T
+SELECT array_agg(generate_series(1, 2))
+----
+{1,2}
+
+# Regression test for #31882.
+
+statement ok
+CREATE TABLE uvw (u INT, v INT, w INT, INDEX uvw(u, v, w))
+
+statement ok
+INSERT INTO uvw VALUES (1, 2, 3), (1, 2, 3), (3, 2, 1), (3, 2, 3)
+
+query IIT rowsort
+SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
+----
+3  2  {1,3}
+1  2  {3,3}
+
+# Regression test for #36433: don't panic with count_agg if a post-render produces an error.
+
+query error lpad
+SELECT count(*)::TEXT||lpad('foo', 23984729388383834723984) FROM (VALUES(1));
+
+statement ok
+CREATE TABLE tab (
+  col1 INT PRIMARY KEY,
+  col2 INT,
+  col3 STRING
+)
+
+# Ordered aggregations when there are no rows.
+query I
+SELECT array_agg(col1 ORDER BY col2) FROM TAB
+----
+NULL
+
+statement ok
+INSERT INTO tab VALUES (-3, 7, 'a'), (-2, 6, 'a'), (-1, 5, 'a'), (0, 7, 'b'), (1, 5, 'b'), (2, 6, 'b')
+
+query T colnames
+SELECT array_agg(col1 ORDER BY col1) FROM tab
+----
+array_agg
+{-3,-2,-1,0,1,2}
+
+query T colnames
+SELECT array_agg(col1 ORDER BY col2*100+col1) FROM tab
+----
+array_agg
+{-1,1,-2,2,-3,0}
+
+query T colnames
+SELECT json_agg(col1 ORDER BY col1) FROM tab
+----
+json_agg
+[-3, -2, -1, 0, 1, 2]
+
+query T colnames
+SELECT jsonb_agg(col1 ORDER BY col1) FROM tab
+----
+jsonb_agg
+[-3, -2, -1, 0, 1, 2]
+
+query T colnames
+SELECT jsonb_agg(col1 ORDER BY col2, col1) FROM tab
+----
+jsonb_agg
+[-1, 1, -2, 2, -3, 0]
+
+query T colnames
+SELECT concat_agg(col3 ORDER BY col1) FROM tab
+----
+concat_agg
+aaabbb
+
+query T colnames
+SELECT concat_agg(col3 ORDER BY col1 DESC) FROM tab
+----
+concat_agg
+bbbaaa
+
+query T colnames
+SELECT string_agg(col3, ', ' ORDER BY col3) FROM tab
+----
+string_agg
+a, a, a, b, b, b
+
+query T colnames
+SELECT string_agg(col3, ', ' ORDER BY col3 DESC) FROM tab
+----
+string_agg
+b, b, b, a, a, a
+
+query TTT colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), array_agg(col1 ORDER BY col3, col1) FROM tab
+----
+array_agg         array_agg         array_agg
+{-3,-2,-1,0,1,2}  {-1,1,-2,2,-3,0}  {-3,-2,-1,0,1,2}
+
+query TTT colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), col3 FROM tab GROUP BY col3 ORDER BY col3
+----
+array_agg   array_agg   col3
+{-3,-2,-1}  {-1,-2,-3}  a
+{0,1,2}     {1,2,0}     b
+
+query TTII colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), count(col3), count(*) FROM tab
+----
+array_agg         array_agg         count  count
+{-3,-2,-1,0,1,2}  {-1,1,-2,2,-3,0}  6      6
+
+query TT colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col1) FILTER (WHERE col1 < 0) FROM tab
+----
+array_agg         array_agg
+{-3,-2,-1,0,1,2}  {-3,-2,-1}
+
+query TT colnames
+SELECT array_agg(col1 ORDER BY col3, col1) FILTER (WHERE col1 < 0), array_agg(col1 ORDER BY col3, col1) FROM tab
+----
+array_agg   array_agg
+{-3,-2,-1}  {-3,-2,-1,0,1,2}
+
+query IT
+SELECT count(1), concat_agg(col3 ORDER BY col1) from tab
+----
+6  aaabbb
+
+# Testing pre-projections. Tests when the GroupBy clause has a projection.
+query IIIT colnames
+SELECT
+    *
+FROM
+    (
+        SELECT
+            count(1) AS count_1,
+            count(lower(col3)) AS count_lower,
+            count(upper(col3)) AS count_upper,
+            concat_agg(col3 ORDER BY col1) AS concat
+        FROM
+            tab
+        GROUP BY
+            upper(col3)
+    )
+ORDER BY
+    concat
+----
+count_1  count_lower  count_upper  concat
+3        3            3            aaa
+3        3            3            bbb
+
+# Tests for selecting any columns when grouping by the PK.
+statement ok
+DELETE FROM ab WHERE true;
+INSERT INTO ab VALUES (1,1), (2,1), (3,3), (4, 7)
+
+query I rowsort
+SELECT b FROM ab GROUP BY a
+----
+1
+1
+3
+7
+
+query II rowsort
+SELECT a+b, count(*) FROM ab JOIN tab ON b=col2 GROUP BY a
+----
+11 2
+
+query IIII rowsort
+SELECT a, col1, b+col2, count(*) FROM ab JOIN tab ON b=col2 GROUP BY a, col1
+----
+4  -3  14  1
+4  0   14  1
+
+query IIII rowsort
+SELECT a, b, count(*), count(col2) FROM ab LEFT JOIN tab ON b=col2 GROUP BY a
+----
+1  1  1  0
+2  1  1  0
+3  3  1  0
+4  7  2  2
+
+query III rowsort
+SELECT a, b, count(*) FROM ab RIGHT JOIN tab ON b=col2 GROUP BY a
+----
+NULL  NULL  4
+4     7     2
+
+# Additional tests for MIN/MAX aggregates with indexes.
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX yz (y, z)
+)
+
+statement ok
+INSERT INTO xyz VALUES (1, 2, 3), (2, 2, 7), (3, 2, 1), (4, 2, NULL), (5, 3, -1)
+
+query I
+SELECT min(z) FROM xyz WHERE y = 2 GROUP BY y
+----
+1
+
+query I
+SELECT min(z) FROM xyz WHERE y = 2 AND z IS NOT NULL GROUP BY y
+----
+1
+
+query I
+SELECT min(z) FROM xyz WHERE y = 2 AND z IS NULL GROUP BY y
+----
+NULL
+
+query I
+SELECT min(z) FROM xyz WHERE y = 100 AND z IS NULL GROUP BY y
+----
+
+query I
+SELECT max(z) FROM xyz WHERE y = 2 GROUP BY y
+----
+7
+
+query I
+SELECT max(z) FROM xyz WHERE y = 2 AND z IS NOT NULL GROUP BY y
+----
+7
+
+query I
+SELECT max(z) FROM xyz WHERE y = 2 AND z IS NULL GROUP BY y
+----
+NULL
+
+query I
+SELECT max(z) FROM xyz WHERE y = 100 GROUP BY y
+----
+
+statement ok
+DROP TABLE xyz
+
+# Regression test for #44469 (DistinctOn needs to remap the provided ordering).
+statement ok
+CREATE TABLE t44469_a (a INT, INDEX (a))
+
+statement ok
+CREATE TABLE t44469_b (b INT, INDEX (b))
+
+statement ok
+CREATE TABLE t44469_cd (c INT, d INT, INDEX (c, d));
+
+statement ok
+SELECT DISTINCT ON (b) b
+FROM t44469_a INNER LOOKUP JOIN t44469_b ON a = b INNER LOOKUP JOIN t44469_cd ON c = 1 AND d = a
+ORDER BY b
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x JSONB, y INT);
+INSERT INTO t VALUES
+  ('{"foo": "bar"}', 5),
+  ('{"foo": "bar"}', 10),
+  ('[1, 2]', 5),
+  ('[1, 2]', 20),
+  ('{"foo": "bar", "bar": "baz"}', 5),
+  ('{"foo": "bar", "bar": "baz"}', 30),
+  ('{"foo": {"bar" : "baz"}}', 5),
+  ('{"foo": {"bar" : "baz"}}', 40)
+
+query TT
+SELECT x, SUM (y) FROM t GROUP BY (x) ORDER BY SUM (y)
+----
+{"foo": "bar"}                15
+[1, 2]                        25
+{"bar": "baz", "foo": "bar"}  35
+{"foo": {"bar": "baz"}}       45
+
+# Tests for the 'every' aggregate function.
+subtest every
+
+statement ok
+CREATE TABLE t_every (x BOOL)
+
+query B
+SELECT every (x) FROM t_every
+----
+NULL
+
+statement ok
+INSERT INTO t_every VALUES (true), (true)
+
+query B
+SELECT every (x) FROM t_every
+----
+true
+
+statement ok
+INSERT INTO t_every VALUES (NULL), (true)
+
+query B
+SELECT every (x) FROM t_every
+----
+true
+
+statement ok
+INSERT INTO t_every VALUES (false), (NULL)
+
+query B
+SELECT every (x) FROM t_every
+----
+false
+
+statement ok
+TRUNCATE t_every;
+INSERT INTO t_every VALUES (false)
+
+query B
+SELECT every (x) FROM t_every
+----
+false
+
+statement ok
+TRUNCATE t_every;
+INSERT INTO t_every VALUES (NULL), (NULL), (NULL)
+
+query B
+SELECT every (x) FROM t_every
+----
+NULL
+
+# Regression test for #46423: this query should return no rows.
+statement ok
+CREATE TABLE t46423(c0 INT);
+INSERT INTO t46423(c0) VALUES(0)
+
+query T
+SELECT c0 FROM t46423 GROUP BY c0 HAVING NOT (variance(0) IS NULL);
+----
+
+# Regression test for #45453 - make sure that we don't incorrectly treat the
+# aggregation as scalar.
+statement ok
+CREATE TABLE t45453(c INT)
+
+query I
+SELECT count(*) FROM t45453 GROUP BY 0 + 0
+----
+
+# Tests for the bit_and and bit_or aggregate functions.
+
+subtest bit_aggregates
+
+statement ok
+DROP TABLE IF EXISTS vals
+
+statement ok
+CREATE TABLE vals (
+  v VARBIT,
+  b BIT(8)
+)
+
+# Testing that bit aggregate functions return NULL if there are no rows.
+
+query T
+SELECT bit_and(v) FROM vals
+----
+NULL
+
+query T
+SELECT bit_or(v) FROM vals
+----
+NULL
+
+# Testing that bit aggregate functions do not trigger aggregation on a constant
+# with a source that has no rows.
+
+query T
+SELECT bit_and('1000'::varbit) FROM vals
+----
+NULL
+
+query T
+SELECT bit_or('1000'::varbit) FROM vals
+----
+NULL
+
+# Testing that bit aggregate functions trigger aggregation and computation on a
+# constant with no source.
+
+query TTT
+SELECT bit_and('1'::varbit), bit_and('1000'::bit(4)), bit_and('1010'::varbit)
+----
+1 1000 1010
+
+query TTT
+SELECT bit_or('1'::varbit), bit_or('1000'::bit(4)), bit_or('1010'::varbit)
+----
+1 1000 1010
+
+# Testing that bit aggregate functions return null given a null.
+
+query T
+SELECT bit_and(NULL::varbit)
+----
+NULL
+
+query T
+SELECT bit_or(NULL::varbit)
+----
+NULL
+
+# Testing successful bitwise aggregation over a sequence of non-nulls.
+
+statement ok
+INSERT INTO vals VALUES
+('11111110'::varbit, '11111110'::bit(8)),
+('01111111'::varbit, '01111110'::bit(8)),
+('10111111'::varbit, '10111110'::bit(8)),
+('11011111'::varbit, '11011110'::bit(8)),
+('11101111'::varbit, '11101110'::bit(8))
+
+query TT
+SELECT bit_and(v), bit_and(b) FROM vals
+----
+00001110 00001110
+
+query TT
+SELECT bit_or(v), bit_or(b) FROM vals
+----
+11111111 11111110
+
+# Testing bit aggregate functions over a sequence with nulls and non-nulls.
+
+statement ok
+INSERT INTO vals VALUES
+(NULL::varbit, NULL::bit),
+(NULL::varbit, NULL::bit)
+
+query TT
+SELECT bit_and(v), bit_and(b) FROM vals
+----
+00001110 00001110
+
+query TT
+SELECT bit_or(v), bit_or(b) FROM vals
+----
+11111111 11111110
+
+# Testing bit aggregate functions over a sequence with all nulls.
+
+statement ok
+DELETE FROM vals
+
+statement ok
+INSERT INTO vals VALUES
+(NULL::varbit),
+(NULL::varbit),
+(NULL::varbit),
+(NULL::varbit)
+
+query T
+SELECT bit_and(v) FROM vals
+----
+NULL
+
+query T
+SELECT bit_or(v) FROM vals
+----
+NULL
+
+# Testing that bit aggregate functions return an error when given an uncasted null.
+
+statement error ambiguous call: bit_and\(unknown\), candidates are
+SELECT bit_and(NULL)
+
+statement error ambiguous call: bit_or\(unknown\), candidates are
+SELECT bit_or(NULL)
+
+# Testing that an error is returned when bit aggregate functions are called on bit
+# arrays of different sizes.
+
+statement error cannot AND bit strings of different sizes
+SELECT bit_and(x::varbit) FROM (VALUES ('1'), ('11')) t(x)
+
+statement error cannot AND bit strings of different sizes
+SELECT bit_and(x) FROM (VALUES ('100'::bit(3)), ('101010111'::varbit)) t(x)
+
+statement error cannot AND bit strings of different sizes
+SELECT bit_and(x) FROM (VALUES (''::varbit), ('1'::varbit)) t(x)
+
+statement error cannot OR bit strings of different sizes
+SELECT bit_or(x::varbit) FROM (VALUES ('1'), ('11')) t(x)
+
+statement error cannot OR bit strings of different sizes
+SELECT bit_or(x) FROM (VALUES ('100'::bit(3)), ('101010111'::varbit)) t(x)
+
+statement error cannot OR bit strings of different sizes
+SELECT bit_or(x) FROM (VALUES (''::varbit), ('1'::varbit)) t(x)
+
+# Regression test for #46981 (not propagating an error which occurs when
+# rendering the single output row of countRows aggregate).
+statement ok
+CREATE TABLE t46981_0(c0 INT);
+CREATE VIEW v46981_0(c0) AS SELECT count_rows() FROM t46981_0
+
+statement error parsing regexp: missing argument to repetition operator: `\+`
+SELECT * FROM v46981_0 WHERE '' !~ '+'
+
+# Testing ordered-set aggregations.
+subtest ordered_set_aggregates
+
+statement ok
+DROP TABLE IF EXISTS osagg
+
+statement ok
+CREATE TABLE osagg (
+  f FLOAT,
+  s STRING,
+  i INTERVAL
+)
+
+statement ok
+INSERT INTO osagg VALUES
+(NULL, NULL, NULL),
+(0.00, NULL, '1 months'),
+(0.05, NULL, '1 months'),
+(1.0, 'v1', '1 year 1 months'),
+(3.0, 'v3', '1 year 3 months'),
+(5.0, 'v5', '1 year 5 months'),
+(2.0, 'v2', '1 year 2 months'),
+(4.0, 'v4', '1 year 4 months'),
+(6.0, 'v6', '1 year 6 months')
+
+# Test basic functionality.
+query R
+SELECT
+  percentile_disc(0.95) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+6
+
+query RT
+SELECT
+  percentile_disc(0.95) WITHIN GROUP (ORDER BY f),
+  percentile_disc(0.95) WITHIN GROUP (ORDER BY s)
+FROM osagg
+----
+6  v6
+
+query RRT
+SELECT
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY f),
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY f DESC),
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY i)
+FROM osagg
+----
+5.65  0.0175  1 year 5 mons 24 days 18:00:00
+
+# Test with null values.
+query TRR
+SELECT
+  percentile_disc(0.00) WITHIN GROUP (ORDER BY s),
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY f),
+  percentile_disc(0.15) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+v1  0  0.05
+
+query RRTT
+SELECT
+  percentile_cont(0.05) WITHIN GROUP (ORDER BY f),
+  percentile_cont(0.05) WITHIN GROUP (ORDER BY f DESC),
+  percentile_cont(0.05) WITHIN GROUP (ORDER BY i),
+  percentile_cont(0.05) WITHIN GROUP (ORDER BY i DESC)
+FROM osagg
+----
+0.0175  5.65  1 mon  1 year 5 mons 24 days 18:00:00
+
+# Test with different percent values.
+query RRR
+SELECT
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY f),
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY f),
+  percentile_disc(0.75) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+0.05  2  4
+
+query RRR
+SELECT
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY f),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY f),
+  percentile_cont(0.75) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+0.7625  2.5  4.25
+
+# Test with arrays.
+query T
+SELECT
+  percentile_disc(ARRAY[0.25]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.05}
+
+query T
+SELECT
+  percentile_disc(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.05,2.0,4.0}
+
+query T
+SELECT
+  percentile_cont(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.7625,2.5,4.25}
+
+query T
+SELECT
+  percentile_disc(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY i)
+FROM osagg
+----
+{"1 mon","1 year 2 mons","1 year 4 mons"}
+
+statement error percentile value 1.250000 is not between 0 and 1
+SELECT
+  percentile_disc(ARRAY[1.25]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+
+statement error percentile value 1.250000 is not between 0 and 1
+SELECT
+  percentile_disc(ARRAY[0.25, 0.50, 1.25]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+
+query T
+SELECT
+  percentile_cont(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY i)
+FROM osagg
+----
+{"10 mons 3 days 22:30:00","1 year 2 mons 20 days 06:00:00","1 year 4 mons 12 days 18:00:00"}
+
+# Test that the view query is not broken by the overriding logic in the optbuilder.
+statement ok
+CREATE VIEW osagg_view (disc, cont) AS
+  SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f),
+         percentile_cont(0.50) WITHIN GROUP (ORDER BY f DESC) FROM osagg
+
+query TT
+SHOW CREATE osagg_view
+----
+osagg_view  CREATE VIEW public.osagg_view (disc, cont) AS SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f), percentile_cont(0.50) WITHIN GROUP (ORDER BY f DESC) FROM test.public.osagg
+
+# Test malformed ordered-set aggregation.
+statement error ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column
+SELECT percentile_disc(0.50) FROM osagg
+
+statement error ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column
+SELECT percentile_cont(0.50) FROM osagg
+
+# Tests for min/max on collated strings.
+statement ok
+CREATE TABLE t_collate (x STRING COLLATE en_us);
+INSERT INTO t_collate VALUES ('hi' COLLATE en_us), ('hello' COLLATE en_us), ('howdy' COLLATE en_us)
+
+query TT
+SELECT min(x), max(x) FROM t_collate
+----
+hello howdy
+
+query TT
+SELECT min(NULL::STRING COLLATE en_us), max(NULL::STRING COLLATE en_us)
+----
+NULL NULL
+
+subtest json_object_agg
+
+statement ok
+CREATE TABLE profiles (
+  userid int not null,
+  property string not null,
+  value string not null
+)
+
+statement ok
+INSERT INTO profiles VALUES
+(1, 'email', 'user1@gmail.com'),
+(1, 'phone', '111111111111111'),
+(1, 'home_page', 'user1.org1.com'),
+(2, 'email', 'user2@gmail.com'),
+(2, 'phone', '222222222222222'),
+(2, 'home_page', 'user2.org1.com')
+
+query T
+SELECT json_object_agg(property, value) FROM profiles GROUP BY userid ORDER BY userid
+----
+{"email": "user1@gmail.com", "home_page": "user1.org1.com", "phone": "111111111111111"}
+{"email": "user2@gmail.com", "home_page": "user2.org1.com", "phone": "222222222222222"}
+
+statement ok
+CREATE TABLE users (
+  userid int primary key,
+  user_name string not null
+)
+
+statement ok
+CREATE TABLE user_networks(
+  userid int not null references users(userid),
+  network_name string not null,
+  user_account_id string not null
+)
+
+statement ok
+INSERT INTO users VALUES
+(1, 'Alice'),
+(2, 'Bob')
+
+statement ok
+INSERT INTO user_networks VALUES
+('1', 'Facebook', 'Alice_fb'),
+('1', 'Twitter', '@Alice'),
+('1', 'Instagram', 'AliceInst'),
+('2', 'Facebook', 'Bob_fb'),
+('2', 'LinkedIn', 'Bob The Builder')
+
+query T
+SELECT json_object_agg(user_name, networks) FROM
+  (SELECT u.userid as userid, u.user_name, json_object_agg(un.network_name, un.user_account_id) as networks FROM
+    users u, user_networks un
+      WHERE u.userid = un.userid
+      GROUP BY u.userid
+      ORDER BY u.userid)
+  GROUP BY userid
+  ORDER BY userid
+----
+{"Alice": {"Facebook": "Alice_fb", "Instagram": "AliceInst", "Twitter": "@Alice"}}
+{"Bob": {"Facebook": "Bob_fb", "LinkedIn": "Bob The Builder"}}
+
+statement error pq: field name must not be null
+select json_object_agg(null, null)
+
+statement error pq: field name must not be null
+select json_object_agg(null, 1)
+
+statement ok
+CREATE TABLE persons(
+  id string PRIMARY KEY,
+  name string NOT NULL
+)
+
+statement ok
+CREATE TABLE companies(
+  id string PRIMARY KEY,
+  company_name string NOT NULL
+)
+
+statement ok
+CREATE TABLE jobs(
+  id string PRIMARY KEY,
+  person_id string NOT NULL REFERENCES persons(id),
+  company_id string NOT NULL REFERENCES companies(id),
+  job_title string NOT NULL
+)
+
+statement ok
+INSERT INTO persons VALUES
+('1', 'Alice'),
+('2', 'Bob')
+
+statement ok
+INSERT INTO companies VALUES
+('1', 'Facebook'),
+('2', 'Google'),
+('3', 'Twitter'),
+('4', 'IBM'),
+('5', 'Cockroach Labs')
+
+statement ok
+INSERT INTO jobs VALUES
+('1', '1', '1', 'Developer'),
+('2', '1', '2', 'Full Stack'),
+('3', '1', '4', 'Research'),
+('4', '2', '3', 'Frontend'),
+('5', '2', '5', 'DB Developer'),
+('6', '2', '2', 'DevOps')
+
+query T
+SELECT json_build_object(p.name, json_object_agg(c.company_name, j.job_title))
+FROM persons p
+  LEFT OUTER JOIN jobs j ON p.id = j.person_id
+    LEFT OUTER JOIN companies c ON c.id = j.company_id
+GROUP BY p.name
+ORDER BY p.name
+----
+{"Alice": {"Facebook": "Developer", "Google": "Full Stack", "IBM": "Research"}}
+{"Bob": {"Cockroach Labs": "DB Developer", "Google": "DevOps", "Twitter": "Frontend"}}
+
+statement ok
+CREATE TABLE blog(
+  id string NOT NULL,
+  name string NOT NULL
+)
+
+statement ok
+INSERT INTO blog VALUES ('1', 'Test Blog')
+
+statement ok
+CREATE TABLE blog_properties(
+  blog_id string NOT NULL,
+  property_name string NOT NULL,
+  property_value string NOT NULL
+)
+
+statement ok
+INSERT INTO blog_properties VALUES
+('1', 'Application Name', 'Instagram'),
+('1', 'Admin Email', 'admin@email.com'),
+('1', 'Blog Name', 'Wordpress Blog'),
+('1', 'Application Name', 'Twitter'),
+('1', 'KeepAlive', 'true'),
+('1', 'Session Timeout', '1000ms')
+
+query T
+SELECT json_build_object(b.name, json_object_agg(p.property_name, p.property_value ORDER BY p.property_value))
+FROM blog b, blog_properties p WHERE b.id = p.blog_id
+GROUP BY b.name
+----
+{"Test Blog": {"Admin Email": "admin@email.com", "Application Name": "Twitter", "Blog Name": "Wordpress Blog", "KeepAlive": "true", "Session Timeout": "1000ms"}}

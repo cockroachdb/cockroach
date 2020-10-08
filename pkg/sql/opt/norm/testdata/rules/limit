@@ -1,379 +1,1535 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
-CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
+CREATE TABLE b (x INT PRIMARY KEY, y INT)
 ----
-TABLE b
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
+
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+----
+
+exec-ddl
+CREATE TABLE uv (u INT PRIMARY KEY, v INT)
+----
+
+exec-ddl
+CREATE TABLE kvr_fk(k INT PRIMARY KEY, v INT, r INT NOT NULL REFERENCES uv(u))
+----
 
 # --------------------------------------------------
 # EliminateLimit
 # --------------------------------------------------
-opt
+norm expect=EliminateLimit
 SELECT * FROM (SELECT * FROM a LIMIT 99) LIMIT 100
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── limit: 99
- ├── key: (1)
- └── fd: (1)-->(2-5)
-
-opt
-SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 100
-----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── limit: 100
- ├── key: (1)
- └── fd: (1)-->(2-5)
-
-# Don't eliminate the outer limit if it's less than the inner.
-opt
-SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 99
-----
 limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── cardinality: [0 - 99]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── limit: 100
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── const: 99 [type=int]
+ │    ├── fd: (1)-->(2-5)
+ │    └── limit hint: 99.00
+ └── 99
+
+norm expect=EliminateLimit
+SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 100
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 100]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── limit hint: 100.00
+ └── 100
+
+# Don't eliminate the outer limit if it's less than the inner (the limit is
+# instead removed by FoldLimits).
+norm expect-not=EliminateLimit
+SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 99
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 99]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── limit hint: 99.00
+ └── 99
 
 # High limits (> max uint32), can't eliminate in this case.
-opt
+norm expect-not=EliminateLimit
 SELECT * FROM (SELECT * FROM a LIMIT 5000000000) LIMIT 5100000000
 ----
 limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── limit
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
+ │    ├── limit hint: 5100000000.00
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── const: 5000000000 [type=int]
- └── const: 5100000000 [type=int]
+ │    │    ├── fd: (1)-->(2-5)
+ │    │    └── limit hint: 5000000000.00
+ │    └── 5000000000
+ └── 5100000000
 
-# Don't eliminate in case of zero or negative limit.
-opt
+# Don't eliminate in case of negative limit (the limit is instead removed by
+# FoldLimits).
+norm expect-not=EliminateLimit
 SELECT * FROM (SELECT * FROM a LIMIT 0) LIMIT -1
 ----
 limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
  ├── cardinality: [0 - 0]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1-5)
- ├── limit
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── values
+ │    ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
+ │    └── limit hint: 1.00
+ └── -1
+
+# --------------------------------------------------
+# EliminateOffset
+# --------------------------------------------------
+norm expect=EliminateOffset
+SELECT * FROM a OFFSET 0
+----
+scan a
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+norm expect=EliminateOffset
+SELECT * FROM a LIMIT 5 OFFSET 0
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── limit hint: 5.00
+ └── 5
+
+norm expect-not=EliminateOffset
+SELECT * FROM a LIMIT 5 OFFSET 1
+----
+offset
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── limit
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── cardinality: [0 - 6]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── const: 0 [type=int]
- └── const: -1 [type=int]
+ │    │    ├── fd: (1)-->(2-5)
+ │    │    └── limit hint: 6.00
+ │    └── 6
+ └── 1
 
 # --------------------------------------------------
 # PushLimitIntoProject
 # --------------------------------------------------
-opt
+norm expect=PushLimitIntoProject
 SELECT k, f*2.0 AS r FROM a LIMIT 5
 ----
 project
- ├── columns: k:1(int!null) r:6(float)
+ ├── columns: k:1!null r:7
  ├── cardinality: [0 - 5]
+ ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(6)
- ├── scan a
- │    ├── columns: k:1(int!null) f:3(float)
- │    ├── limit: 5
- │    ├── key: (1)
- │    └── fd: (1)-->(3)
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
-
-opt
-SELECT k, f*2.0 AS r FROM a ORDER BY k LIMIT 5
-----
-project
- ├── columns: k:1(int!null) r:6(float)
- ├── cardinality: [0 - 5]
- ├── key: (1)
- ├── fd: (1)-->(6)
- ├── ordering: +1
- ├── scan a
- │    ├── columns: k:1(int!null) f:3(float)
- │    ├── limit: 5
- │    ├── key: (1)
- │    ├── fd: (1)-->(3)
- │    └── ordering: +1
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
-
-# Don't push the limit through project when the ordering is on a
-# synthesized column.
-opt
-SELECT k, f*2.0 AS r FROM a ORDER BY r LIMIT 5 
-----
-limit
- ├── columns: k:1(int!null) r:6(float)
- ├── cardinality: [0 - 5]
- ├── key: (1)
- ├── fd: (1)-->(6)
- ├── ordering: +6
- ├── sort
- │    ├── columns: k:1(int!null) r:6(float)
- │    ├── key: (1)
- │    ├── fd: (1)-->(6)
- │    ├── ordering: +6
- │    └── project
- │         ├── columns: r:6(float) k:1(int!null)
- │         ├── key: (1)
- │         ├── fd: (1)-->(6)
- │         ├── scan a
- │         │    ├── columns: k:1(int!null) f:3(float)
- │         │    ├── key: (1)
- │         │    └── fd: (1)-->(3)
- │         └── projections [outer=(1,3)]
- │              └── a.f * 2.0 [type=float, outer=(3)]
- └── const: 5 [type=int]
-
-
-# Detect PushLimitIntoProject and FilterUnusedLimitCols dependency cycle.
-opt
-SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 5
-----
-project
- ├── columns: f:3(float) r:6(float)
- ├── cardinality: [0 - 5]
- ├── fd: (3)-->(6)
- ├── ordering: +3
+ ├── fd: (1)-->(7)
  ├── limit
- │    ├── columns: i:2(int) f:3(float)
+ │    ├── columns: k:1!null f:3
  │    ├── cardinality: [0 - 5]
- │    ├── key: (2,3)
- │    ├── ordering: +3
- │    ├── sort
- │    │    ├── columns: i:2(int) f:3(float)
- │    │    ├── key: (2,3)
- │    │    ├── ordering: +3
- │    │    └── group-by
- │    │         ├── columns: i:2(int) f:3(float)
- │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │         ├── key: (2,3)
- │    │         └── scan a
- │    │              └── columns: i:2(int) f:3(float)
- │    └── const: 5 [type=int]
- └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
-
-# Don't push zero limit into Scan.
-opt
-SELECT * FROM a LIMIT 0
-----
-limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── cardinality: [0 - 0]
- ├── key: ()
- ├── fd: ()-->(1-5)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── const: 0 [type=int]
-
-# Don't push negative limit into Scan.
-opt
-SELECT * FROM a LIMIT -1
-----
-limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── cardinality: [0 - 0]
- ├── key: ()
- ├── fd: ()-->(1-5)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── const: -1 [type=int]
-
-# --------------------------------------------------
-# PushOffsetIntoProject
-# --------------------------------------------------
-opt
-SELECT k, f*2.0 AS r FROM a OFFSET 5
-----
-project
- ├── columns: k:1(int!null) r:6(float)
- ├── key: (1)
- ├── fd: (1)-->(6)
- ├── offset
- │    ├── columns: k:1(int!null) f:3(float)
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) f:3(float)
+ │    │    ├── columns: k:1!null f:3
  │    │    ├── key: (1)
- │    │    └── fd: (1)-->(3)
- │    └── const: 5 [type=int]
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+ │    │    ├── fd: (1)-->(3)
+ │    │    └── limit hint: 5.00
+ │    └── 5
+ └── projections
+      └── f:3 * 2.0 [as=r:7, outer=(3), immutable]
 
-opt
-SELECT k, f*2.0 AS r FROM a ORDER BY k OFFSET 5
+norm expect=PushLimitIntoProject
+SELECT k, f*2.0 AS r FROM a ORDER BY k LIMIT 5
 ----
 project
- ├── columns: k:1(int!null) r:6(float)
+ ├── columns: k:1!null r:7
+ ├── cardinality: [0 - 5]
+ ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(6)
+ ├── fd: (1)-->(7)
  ├── ordering: +1
- ├── offset
- │    ├── columns: k:1(int!null) f:3(float)
+ ├── limit
+ │    ├── columns: k:1!null f:3
+ │    ├── internal-ordering: +1
+ │    ├── cardinality: [0 - 5]
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
  │    ├── ordering: +1
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) f:3(float)
+ │    │    ├── columns: k:1!null f:3
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(3)
+ │    │    ├── ordering: +1
+ │    │    └── limit hint: 5.00
+ │    └── 5
+ └── projections
+      └── f:3 * 2.0 [as=r:7, outer=(3), immutable]
+
+# Don't push the limit through project when the ordering is on a
+# synthesized column.
+norm expect-not=PushLimitIntoProject
+SELECT k, f*2.0 AS r FROM a ORDER BY r LIMIT 5
+----
+limit
+ ├── columns: k:1!null r:7
+ ├── internal-ordering: +7
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── ordering: +7
+ ├── sort
+ │    ├── columns: k:1!null r:7
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(7)
+ │    ├── ordering: +7
+ │    ├── limit hint: 5.00
+ │    └── project
+ │         ├── columns: r:7 k:1!null
+ │         ├── immutable
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(7)
+ │         ├── scan a
+ │         │    ├── columns: k:1!null f:3
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(3)
+ │         └── projections
+ │              └── f:3 * 2.0 [as=r:7, outer=(3), immutable]
+ └── 5
+
+
+# Detect PushLimitIntoProject and FilterUnusedLimitCols dependency cycle.
+norm
+SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 5
+----
+project
+ ├── columns: f:3 r:7
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── fd: (3)-->(7)
+ ├── ordering: +3
+ ├── limit
+ │    ├── columns: i:2 f:3
+ │    ├── internal-ordering: +3
+ │    ├── cardinality: [0 - 5]
+ │    ├── key: (2,3)
+ │    ├── ordering: +3
+ │    ├── distinct-on
+ │    │    ├── columns: i:2 f:3
+ │    │    ├── grouping columns: i:2 f:3
+ │    │    ├── key: (2,3)
+ │    │    ├── ordering: +3
+ │    │    ├── limit hint: 5.00
+ │    │    └── sort
+ │    │         ├── columns: i:2 f:3
+ │    │         ├── ordering: +3
+ │    │         ├── limit hint: 6.02
+ │    │         └── scan a
+ │    │              └── columns: i:2 f:3
+ │    └── 5
+ └── projections
+      └── f:3 + 1.1 [as=r:7, outer=(3), immutable]
+
+# Don't push negative limit into Scan.
+norm
+SELECT * FROM a LIMIT -1
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── limit hint: 1.00
+ └── -1
+
+# --------------------------------------------------
+# PushOffsetIntoProject
+# --------------------------------------------------
+norm expect=PushOffsetIntoProject
+SELECT k, f*2.0 AS r FROM a OFFSET 5
+----
+project
+ ├── columns: k:1!null r:7
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── offset
+ │    ├── columns: k:1!null f:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null f:3
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
+ │    └── 5
+ └── projections
+      └── f:3 * 2.0 [as=r:7, outer=(3), immutable]
+
+norm expect=PushOffsetIntoProject
+SELECT k, f*2.0 AS r FROM a ORDER BY k OFFSET 5
+----
+project
+ ├── columns: k:1!null r:7
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ ├── ordering: +1
+ ├── offset
+ │    ├── columns: k:1!null f:3
+ │    ├── internal-ordering: +1
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
+ │    ├── ordering: +1
+ │    ├── scan a
+ │    │    ├── columns: k:1!null f:3
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(3)
  │    │    └── ordering: +1
- │    └── const: 5 [type=int]
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+ │    └── 5
+ └── projections
+      └── f:3 * 2.0 [as=r:7, outer=(3), immutable]
 
 # Don't push the offset through project when the ordering is on a
 # synthesized column.
-opt
+norm expect-not=PushOffsetIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY r OFFSET 5
 ----
 offset
- ├── columns: k:1(int!null) r:6(float)
+ ├── columns: k:1!null r:7
+ ├── internal-ordering: +7
+ ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(6)
- ├── ordering: +6
+ ├── fd: (1)-->(7)
+ ├── ordering: +7
  ├── sort
- │    ├── columns: k:1(int!null) r:6(float)
+ │    ├── columns: k:1!null r:7
+ │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(6)
- │    ├── ordering: +6
+ │    ├── fd: (1)-->(7)
+ │    ├── ordering: +7
  │    └── project
- │         ├── columns: r:6(float) k:1(int!null)
+ │         ├── columns: r:7 k:1!null
+ │         ├── immutable
  │         ├── key: (1)
- │         ├── fd: (1)-->(6)
+ │         ├── fd: (1)-->(7)
  │         ├── scan a
- │         │    ├── columns: k:1(int!null) f:3(float)
+ │         │    ├── columns: k:1!null f:3
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3)
- │         └── projections [outer=(1,3)]
- │              └── a.f * 2.0 [type=float, outer=(3)]
- └── const: 5 [type=int]
+ │         └── projections
+ │              └── f:3 * 2.0 [as=r:7, outer=(3), immutable]
+ └── 5
 
 # Detect PushOffsetIntoProject and FilterUnusedOffsetCols dependency cycle.
-opt
+norm
 SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5
 ----
 project
- ├── columns: f:3(float) r:6(float)
- ├── fd: (3)-->(6)
+ ├── columns: f:3 r:7
+ ├── immutable
+ ├── fd: (3)-->(7)
  ├── ordering: +3
  ├── offset
- │    ├── columns: i:2(int) f:3(float)
+ │    ├── columns: i:2 f:3
+ │    ├── internal-ordering: +3
  │    ├── key: (2,3)
  │    ├── ordering: +3
- │    ├── sort
- │    │    ├── columns: i:2(int) f:3(float)
+ │    ├── distinct-on
+ │    │    ├── columns: i:2 f:3
+ │    │    ├── grouping columns: i:2 f:3
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    └── group-by
- │    │         ├── columns: i:2(int) f:3(float)
- │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │         ├── key: (2,3)
+ │    │    └── sort
+ │    │         ├── columns: i:2 f:3
+ │    │         ├── ordering: +3
  │    │         └── scan a
- │    │              └── columns: i:2(int) f:3(float)
- │    └── const: 5 [type=int]
- └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
+ │    │              └── columns: i:2 f:3
+ │    └── 5
+ └── projections
+      └── f:3 + 1.1 [as=r:7, outer=(3), immutable]
 
 # --------------------------------------------------
 # PushLimitIntoProject + PushOffsetIntoProject
 # --------------------------------------------------
-opt
+norm expect=(PushLimitIntoProject,PushOffsetIntoProject)
 SELECT k, f*2.0 AS r FROM a OFFSET 5 LIMIT 10
 ----
 project
- ├── columns: k:1(int!null) r:6(float)
+ ├── columns: k:1!null r:7
  ├── cardinality: [0 - 10]
+ ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(6)
- ├── limit
- │    ├── columns: k:1(int!null) f:3(float)
+ ├── fd: (1)-->(7)
+ ├── offset
+ │    ├── columns: k:1!null f:3
  │    ├── cardinality: [0 - 10]
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
- │    ├── offset
- │    │    ├── columns: k:1(int!null) f:3(float)
+ │    ├── limit
+ │    │    ├── columns: k:1!null f:3
+ │    │    ├── cardinality: [0 - 15]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(3)
  │    │    ├── scan a
- │    │    │    ├── columns: k:1(int!null) f:3(float)
+ │    │    │    ├── columns: k:1!null f:3
  │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(3)
- │    │    └── const: 5 [type=int]
- │    └── const: 10 [type=int]
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+ │    │    │    ├── fd: (1)-->(3)
+ │    │    │    └── limit hint: 15.00
+ │    │    └── 15
+ │    └── 5
+ └── projections
+      └── f:3 * 2.0 [as=r:7, outer=(3), immutable]
 
-opt
+norm expect=(PushLimitIntoProject,PushOffsetIntoProject)
 SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LIMIT 10
 ----
 project
- ├── columns: f:3(float) r:6(float)
+ ├── columns: f:3 r:7
  ├── cardinality: [0 - 10]
- ├── fd: (3)-->(6)
+ ├── immutable
+ ├── fd: (3)-->(7)
  ├── ordering: +3
- ├── limit
- │    ├── columns: i:2(int) f:3(float)
+ ├── offset
+ │    ├── columns: i:2 f:3
+ │    ├── internal-ordering: +3
  │    ├── cardinality: [0 - 10]
  │    ├── key: (2,3)
  │    ├── ordering: +3
- │    ├── offset
- │    │    ├── columns: i:2(int) f:3(float)
+ │    ├── limit
+ │    │    ├── columns: i:2 f:3
+ │    │    ├── internal-ordering: +3
+ │    │    ├── cardinality: [0 - 15]
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    ├── sort
- │    │    │    ├── columns: i:2(int) f:3(float)
+ │    │    ├── distinct-on
+ │    │    │    ├── columns: i:2 f:3
+ │    │    │    ├── grouping columns: i:2 f:3
  │    │    │    ├── key: (2,3)
  │    │    │    ├── ordering: +3
- │    │    │    └── group-by
- │    │    │         ├── columns: i:2(int) f:3(float)
- │    │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │    │         ├── key: (2,3)
+ │    │    │    ├── limit hint: 15.00
+ │    │    │    └── sort
+ │    │    │         ├── columns: i:2 f:3
+ │    │    │         ├── ordering: +3
+ │    │    │         ├── limit hint: 18.16
  │    │    │         └── scan a
- │    │    │              └── columns: i:2(int) f:3(float)
- │    │    └── const: 5 [type=int]
- │    └── const: 10 [type=int]
- └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
+ │    │    │              └── columns: i:2 f:3
+ │    │    └── 15
+ │    └── 5
+ └── projections
+      └── f:3 + 1.1 [as=r:7, outer=(3), immutable]
+
+# --------------------------------------------------
+# PushLimitIntoOffset
+# --------------------------------------------------
+
+norm expect=PushLimitIntoOffset
+SELECT k, i FROM a LIMIT 10 OFFSET 10
+----
+offset
+ ├── columns: k:1!null i:2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── limit
+ │    ├── columns: k:1!null i:2
+ │    ├── cardinality: [0 - 20]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── limit hint: 20.00
+ │    └── 20
+ └── 10
+
+norm expect=(PushLimitIntoOffset)
+SELECT k, i FROM a OFFSET 10 LIMIT 10
+----
+offset
+ ├── columns: k:1!null i:2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── limit
+ │    ├── columns: k:1!null i:2
+ │    ├── cardinality: [0 - 20]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── limit hint: 20.00
+ │    └── 20
+ └── 10
+
+# Limit can be pushed into the ordering if they have the same ordering.
+norm expect=PushLimitIntoOffset
+SELECT k, i FROM (SELECT k, i FROM a ORDER BY i OFFSET 20) ORDER BY i LIMIT 10
+----
+offset
+ ├── columns: k:1!null i:2
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: +2
+ ├── limit
+ │    ├── columns: k:1!null i:2
+ │    ├── internal-ordering: +2
+ │    ├── cardinality: [0 - 30]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +2
+ │    ├── sort
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── ordering: +2
+ │    │    ├── limit hint: 30.00
+ │    │    └── scan a
+ │    │         ├── columns: k:1!null i:2
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2)
+ │    └── 30
+ └── 20
+
+norm expect-not=PushLimitIntoOffset
+SELECT k, i FROM (SELECT k, i FROM a ORDER BY i OFFSET 20) ORDER BY i DESC LIMIT 10
+----
+limit
+ ├── columns: k:1!null i:2
+ ├── internal-ordering: -2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: -2
+ ├── sort
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: -2
+ │    ├── limit hint: 10.00
+ │    └── offset
+ │         ├── columns: k:1!null i:2
+ │         ├── internal-ordering: +2
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2)
+ │         ├── sort
+ │         │    ├── columns: k:1!null i:2
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2)
+ │         │    ├── ordering: +2
+ │         │    └── scan a
+ │         │         ├── columns: k:1!null i:2
+ │         │         ├── key: (1)
+ │         │         └── fd: (1)-->(2)
+ │         └── 20
+ └── 10
+
+# Using MaxInt64. Do not apply rule when sum overflows.
+norm expect-not=PushLimitIntoOffset
+SELECT k, i FROM a LIMIT 9223372036854775807 OFFSET 9223372036854775807
+----
+limit
+ ├── columns: k:1!null i:2
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── offset
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── limit hint: 9223372036854775808.00
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── limit hint: 18446744073709551616.00
+ │    └── 9223372036854775807
+ └── 9223372036854775807
+
+norm expect=PushLimitIntoOrdinality
+SELECT * FROM (SELECT * FROM a ORDER BY k) WITH ORDINALITY LIMIT 10
+----
+ordinality
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 ordinality:7!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,7), (7)-->(1-5)
+ └── limit
+      ├── columns: k:1!null i:2 f:3 s:4 j:5
+      ├── internal-ordering: +1
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2-5)
+      ├── ordering: +1
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5)
+      │    ├── ordering: +1
+      │    └── limit hint: 10.00
+      └── 10
+
+norm expect=PushLimitIntoOrdinality
+SELECT * FROM a WITH ORDINALITY ORDER BY k LIMIT 10
+----
+sort
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 ordinality:7!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,7), (7)-->(1-5)
+ ├── ordering: +1
+ └── ordinality
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 ordinality:7!null
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2-5,7), (7)-->(1-5)
+      └── limit
+           ├── columns: k:1!null i:2 f:3 s:4 j:5
+           ├── internal-ordering: +1
+           ├── cardinality: [0 - 10]
+           ├── key: (1)
+           ├── fd: (1)-->(2-5)
+           ├── scan a
+           │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+           │    ├── key: (1)
+           │    ├── fd: (1)-->(2-5)
+           │    ├── ordering: +1
+           │    └── limit hint: 10.00
+           └── 10
+
+
+# More complex example of an intersection:
+# +(i|f) +s and +f have the intersection +(i|f) +s
+norm expect=PushLimitIntoOrdinality
+SELECT * FROM (SELECT * FROM a WHERE i=f ORDER BY i, s) WITH ORDINALITY ORDER BY f LIMIT 10
+----
+ordinality
+ ├── columns: k:1!null i:2!null f:3!null s:4 j:5 ordinality:7!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,7), (2)==(3), (3)==(2), (7)-->(1-5)
+ ├── ordering: +(2|3) [actual: +2]
+ └── limit
+      ├── columns: k:1!null i:2!null f:3!null s:4 j:5
+      ├── internal-ordering: +(2|3),+4
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
+      ├── ordering: +(2|3),+4 [actual: +2,+4]
+      ├── sort
+      │    ├── columns: k:1!null i:2!null f:3!null s:4 j:5
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
+      │    ├── ordering: +(2|3),+4 [actual: +2,+4]
+      │    ├── limit hint: 10.00
+      │    └── select
+      │         ├── columns: k:1!null i:2!null f:3!null s:4 j:5
+      │         ├── key: (1)
+      │         ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
+      │         ├── scan a
+      │         │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │         │    ├── key: (1)
+      │         │    └── fd: (1)-->(2-5)
+      │         └── filters
+      │              └── i:2 = f:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+      └── 10
+
+norm expect-not=PushLimitIntoOrdinality
+SELECT * FROM (SELECT * FROM a ORDER BY k) WITH ORDINALITY ORDER BY i LIMIT 10
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 ordinality:7!null
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,7), (7)-->(1-5)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 ordinality:7!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5,7), (7)-->(1-5)
+ │    ├── ordering: +2
+ │    ├── limit hint: 10.00
+ │    └── ordinality
+ │         ├── columns: k:1!null i:2 f:3 s:4 j:5 ordinality:7!null
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-5,7), (7)-->(1-5)
+ │         └── scan a
+ │              ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │              ├── key: (1)
+ │              ├── fd: (1)-->(2-5)
+ │              └── ordering: +1
+ └── 10
+
+norm expect-not=PushLimitIntoOrdinality
+SELECT * FROM (SELECT * FROM a WITH ORDINALITY) ORDER BY ordinality LIMIT 10
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 ordinality:7!null
+ ├── internal-ordering: +7
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,7), (7)-->(1-5)
+ ├── ordering: +7
+ ├── ordinality
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 ordinality:7!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5,7), (7)-->(1-5)
+ │    ├── ordering: +7
+ │    ├── limit hint: 10.00
+ │    └── scan a
+ │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-5)
+ │         └── limit hint: 10.00
+ └── 10
+
+# ------------------------------------------------
+# PushLimitIntoJoinLeft and PushLimitIntoJoinRight
+# ------------------------------------------------
+
+# InnerJoin case.
+norm expect=PushLimitIntoJoinLeft
+SELECT * FROM kvr_fk INNER JOIN uv ON r = u LIMIT 10
+----
+inner-join (hash)
+ ├── columns: k:1!null v:2 r:3!null u:5!null v:6
+ ├── cardinality: [0 - 10]
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (5)-->(6), (3)==(5), (5)==(3)
+ ├── limit
+ │    ├── columns: k:1!null kvr_fk.v:2 r:3!null
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── scan kvr_fk
+ │    │    ├── columns: k:1!null kvr_fk.v:2 r:3!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    └── limit hint: 10.00
+ │    └── 10
+ ├── scan uv
+ │    ├── columns: u:5!null uv.v:6
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters
+      └── r:3 = u:5 [outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+
+# LeftJoin case.
+norm expect=PushLimitIntoJoinLeft
+SELECT * FROM ab LEFT JOIN uv ON a = u LIMIT 10
+----
+left-join (hash)
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── cardinality: [0 - 10]
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5), (4)-->(5)
+ ├── limit
+ │    ├── columns: a:1!null b:2
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan ab
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── limit hint: 10.00
+ │    └── 10
+ ├── scan uv
+ │    ├── columns: u:4!null v:5
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5)
+ └── filters
+      └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+
+# InnerJoin case for PushLimitIntoJoinRight.
+norm expect=PushLimitIntoJoinRight
+SELECT * FROM uv INNER JOIN kvr_fk ON u = r LIMIT 10
+----
+inner-join (hash)
+ ├── columns: u:1!null v:2 k:4!null v:5 r:6!null
+ ├── cardinality: [0 - 10]
+ ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
+ ├── key: (4)
+ ├── fd: (1)-->(2), (4)-->(5,6), (1)==(6), (6)==(1)
+ ├── scan uv
+ │    ├── columns: u:1!null uv.v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── limit
+ │    ├── columns: k:4!null kvr_fk.v:5 r:6!null
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(5,6)
+ │    ├── scan kvr_fk
+ │    │    ├── columns: k:4!null kvr_fk.v:5 r:6!null
+ │    │    ├── key: (4)
+ │    │    ├── fd: (4)-->(5,6)
+ │    │    └── limit hint: 10.00
+ │    └── 10
+ └── filters
+      └── u:1 = r:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Ordering can be pushed down.
+norm expect=PushLimitIntoJoinLeft
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY a LIMIT 10
+----
+sort
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5), (4)-->(5)
+ ├── ordering: +1
+ └── left-join (hash)
+      ├── columns: a:1!null b:2 u:4 v:5
+      ├── cardinality: [0 - 10]
+      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      ├── key: (1)
+      ├── fd: (1)-->(2,4,5), (4)-->(5)
+      ├── limit
+      │    ├── columns: a:1!null b:2
+      │    ├── internal-ordering: +1
+      │    ├── cardinality: [0 - 10]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── scan ab
+      │    │    ├── columns: a:1!null b:2
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    ├── ordering: +1
+      │    │    └── limit hint: 10.00
+      │    └── 10
+      ├── scan uv
+      │    ├── columns: u:4!null v:5
+      │    ├── key: (4)
+      │    └── fd: (4)-->(5)
+      └── filters
+           └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+
+norm expect=PushLimitIntoJoinLeft
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY b LIMIT 10
+----
+sort
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5), (4)-->(5)
+ ├── ordering: +2
+ └── left-join (hash)
+      ├── columns: a:1!null b:2 u:4 v:5
+      ├── cardinality: [0 - 10]
+      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      ├── key: (1)
+      ├── fd: (1)-->(2,4,5), (4)-->(5)
+      ├── limit
+      │    ├── columns: a:1!null b:2
+      │    ├── internal-ordering: +2
+      │    ├── cardinality: [0 - 10]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── sort
+      │    │    ├── columns: a:1!null b:2
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    ├── ordering: +2
+      │    │    ├── limit hint: 10.00
+      │    │    └── scan ab
+      │    │         ├── columns: a:1!null b:2
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2)
+      │    └── 10
+      ├── scan uv
+      │    ├── columns: u:4!null v:5
+      │    ├── key: (4)
+      │    └── fd: (4)-->(5)
+      └── filters
+           └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+
+# Ordering on u is not equivalent to ordering on a because of NULLs; it cannot
+# be pushed down.
+norm expect-not=PushLimitIntoJoinLeft
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY u LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── internal-ordering: +4
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5), (4)-->(5)
+ ├── ordering: +4
+ ├── sort
+ │    ├── columns: a:1!null b:2 u:4 v:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,4,5), (4)-->(5)
+ │    ├── ordering: +4
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1!null b:2 u:4 v:5
+ │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2,4,5), (4)-->(5)
+ │         ├── scan ab
+ │         │    ├── columns: a:1!null b:2
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:4!null v:5
+ │         │    ├── key: (4)
+ │         │    └── fd: (4)-->(5)
+ │         └── filters
+ │              └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── 10
+
+# Ordering cannot be pushed down.
+norm expect-not=PushLimitIntoJoinLeft
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY v LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── internal-ordering: +5
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5), (4)-->(5)
+ ├── ordering: +5
+ ├── sort
+ │    ├── columns: a:1!null b:2 u:4 v:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,4,5), (4)-->(5)
+ │    ├── ordering: +5
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1!null b:2 u:4 v:5
+ │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2,4,5), (4)-->(5)
+ │         ├── scan ab
+ │         │    ├── columns: a:1!null b:2
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:4!null v:5
+ │         │    ├── key: (4)
+ │         │    └── fd: (4)-->(5)
+ │         └── filters
+ │              └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── 10
+
+norm expect-not=PushLimitIntoJoinLeft
+SELECT * FROM ab LEFT JOIN uv ON b = v ORDER BY a, v LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── internal-ordering: +1,+5
+ ├── cardinality: [0 - 10]
+ ├── key: (1,4)
+ ├── fd: (1)-->(2), (4)-->(5)
+ ├── ordering: +1,+5
+ ├── sort
+ │    ├── columns: a:1!null b:2 u:4 v:5
+ │    ├── key: (1,4)
+ │    ├── fd: (1)-->(2), (4)-->(5)
+ │    ├── ordering: +1,+5
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1!null b:2 u:4 v:5
+ │         ├── key: (1,4)
+ │         ├── fd: (1)-->(2), (4)-->(5)
+ │         ├── scan ab
+ │         │    ├── columns: a:1!null b:2
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:4!null v:5
+ │         │    ├── key: (4)
+ │         │    └── fd: (4)-->(5)
+ │         └── filters
+ │              └── b:2 = v:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+ └── 10
+
+norm expect-not=PushLimitIntoJoinLeft
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY u, b LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── internal-ordering: +4,+2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5), (4)-->(5)
+ ├── ordering: +4,+2
+ ├── sort
+ │    ├── columns: a:1!null b:2 u:4 v:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,4,5), (4)-->(5)
+ │    ├── ordering: +4,+2
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1!null b:2 u:4 v:5
+ │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2,4,5), (4)-->(5)
+ │         ├── scan ab
+ │         │    ├── columns: a:1!null b:2
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:4!null v:5
+ │         │    ├── key: (4)
+ │         │    └── fd: (4)-->(5)
+ │         └── filters
+ │              └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── 10
+
+# Rule should not fire if the input's cardinality is already less than the
+# limit.
+norm expect-not=PushLimitIntoJoinLeft
+SELECT * FROM (SELECT * FROM ab LIMIT 5) LEFT JOIN uv ON a = u LIMIT 10
+----
+left-join (hash)
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── cardinality: [0 - 5]
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5), (4)-->(5)
+ ├── limit
+ │    ├── columns: a:1!null b:2
+ │    ├── cardinality: [0 - 5]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan ab
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── limit hint: 5.00
+ │    └── 5
+ ├── scan uv
+ │    ├── columns: u:4!null v:5
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5)
+ └── filters
+      └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+
+# Push the limit even if the input is already limited (but with a higher limit).
+norm expect=PushLimitIntoJoinLeft
+SELECT * FROM (SELECT * FROM ab LIMIT 20) LEFT JOIN uv ON a = u LIMIT 10
+----
+left-join (hash)
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── cardinality: [0 - 10]
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5), (4)-->(5)
+ ├── limit
+ │    ├── columns: a:1!null b:2
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan ab
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── limit hint: 10.00
+ │    └── 10
+ ├── scan uv
+ │    ├── columns: u:4!null v:5
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5)
+ └── filters
+      └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+
+# Don't push negative limits (or we would enter an infinite loop).
+norm expect-not=PushLimitIntoJoinLeft
+SELECT * FROM ab LEFT JOIN uv ON a = u LIMIT -1
+----
+limit
+ ├── columns: a:1!null b:2 u:4 v:5
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1,2,4,5)
+ ├── left-join (hash)
+ │    ├── columns: a:1!null b:2 u:4 v:5
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,4,5), (4)-->(5)
+ │    ├── limit hint: 1.00
+ │    ├── scan ab
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan uv
+ │    │    ├── columns: u:4!null v:5
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5)
+ │    └── filters
+ │         └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── -1
+
+# Don't push limits into an inner join that may not preserve rows.
+norm expect-not=(PushLimitIntoJoinLeft,PushLimitIntoJoinRight)
+SELECT * FROM ab INNER JOIN uv ON a = u LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2 u:4!null v:5
+ ├── cardinality: [0 - 10]
+ ├── key: (4)
+ ├── fd: (1)-->(2), (4)-->(5), (1)==(4), (4)==(1)
+ ├── inner-join (hash)
+ │    ├── columns: a:1!null b:2 u:4!null v:5
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (4)
+ │    ├── fd: (1)-->(2), (4)-->(5), (1)==(4), (4)==(1)
+ │    ├── limit hint: 10.00
+ │    ├── scan ab
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan uv
+ │    │    ├── columns: u:4!null v:5
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5)
+ │    └── filters
+ │         └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── 10
+
+# Don't push a limit into the right side of a LeftJoin.
+norm expect-not=PushLimitIntoJoinRight
+SELECT * FROM uv LEFT JOIN kvr_fk ON u = r LIMIT 10
+----
+limit
+ ├── columns: u:1!null v:2 k:4 v:5 r:6
+ ├── cardinality: [0 - 10]
+ ├── key: (1,4)
+ ├── fd: (1)-->(2), (4)-->(5,6)
+ ├── left-join (hash)
+ │    ├── columns: u:1!null uv.v:2 k:4 kvr_fk.v:5 r:6
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ │    ├── key: (1,4)
+ │    ├── fd: (1)-->(2), (4)-->(5,6)
+ │    ├── limit hint: 10.00
+ │    ├── limit
+ │    │    ├── columns: u:1!null uv.v:2
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:1!null uv.v:2
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    └── limit hint: 10.00
+ │    │    └── 10
+ │    ├── scan kvr_fk
+ │    │    ├── columns: k:4!null kvr_fk.v:5 r:6!null
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5,6)
+ │    └── filters
+ │         └── u:1 = r:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── 10
+
+# Don't push a limit into either side of a FullJoin.
+norm expect-not=(PushLimitIntoJoinLeft,PushLimitIntoJoinRight)
+SELECT * FROM ab FULL JOIN uv ON a = u LIMIT 10
+----
+limit
+ ├── columns: a:1 b:2 u:4 v:5
+ ├── cardinality: [0 - 10]
+ ├── key: (1,4)
+ ├── fd: (1)-->(2), (4)-->(5)
+ ├── full-join (hash)
+ │    ├── columns: a:1 b:2 u:4 v:5
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    ├── key: (1,4)
+ │    ├── fd: (1)-->(2), (4)-->(5)
+ │    ├── limit hint: 10.00
+ │    ├── scan ab
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan uv
+ │    │    ├── columns: u:4!null v:5
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5)
+ │    └── filters
+ │         └── a:1 = u:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── 10
+
+# ----------
+# FoldLimits
+# ----------
+
+# Basic case with no orderings.
+norm expect=FoldLimits
+SELECT * FROM (SELECT * FROM ab LIMIT 10) LIMIT 5
+----
+limit
+ ├── columns: a:1!null b:2
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan ab
+ │    ├── columns: a:1!null b:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── limit hint: 5.00
+ └── 5
+
+# Case where the inner limit has an ordering and the outer limit is unordered.
+norm expect=FoldLimits
+SELECT * FROM (SELECT * FROM ab ORDER BY a LIMIT 10) LIMIT 5
+----
+limit
+ ├── columns: a:1!null b:2
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan ab
+ │    ├── columns: a:1!null b:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +1
+ │    └── limit hint: 5.00
+ └── 5
+
+# Case where the inner limit ordering implies the outer ordering.
+norm expect=FoldLimits
+SELECT * FROM (SELECT * FROM a ORDER BY i, f LIMIT 10) ORDER BY i LIMIT 5
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── internal-ordering: +2,+3
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── ordering: +2,+3
+ │    ├── limit hint: 5.00
+ │    └── scan a
+ │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-5)
+ └── 5
+
+# No-op case where the outer limit is larger than the inner limit. (The limit is
+# instead removed by EliminateLimit).
+norm expect-not=FoldLimits
+SELECT * FROM (SELECT * FROM ab LIMIT 5) LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan ab
+ │    ├── columns: a:1!null b:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── limit hint: 5.00
+ └── 5
+
+# No-op case where the inner limit ordering does not imply the outer limit
+# ordering.
+norm expect-not=FoldLimits
+SELECT * FROM (SELECT * FROM ab ORDER BY b LIMIT 10) ORDER BY a LIMIT 5
+----
+limit
+ ├── columns: a:1!null b:2
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: a:1!null b:2
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +1
+ │    ├── limit hint: 5.00
+ │    └── limit
+ │         ├── columns: a:1!null b:2
+ │         ├── internal-ordering: +2
+ │         ├── cardinality: [0 - 10]
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2)
+ │         ├── sort
+ │         │    ├── columns: a:1!null b:2
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2)
+ │         │    ├── ordering: +2
+ │         │    ├── limit hint: 10.00
+ │         │    └── scan ab
+ │         │         ├── columns: a:1!null b:2
+ │         │         ├── key: (1)
+ │         │         └── fd: (1)-->(2)
+ │         └── 10
+ └── 5
+
+# No-op case where the outer ordering implies the inner, but the inner doesn't
+# imply the outer.
+norm expect-not=FoldLimits
+SELECT * FROM (SELECT * FROM a ORDER BY i LIMIT 10) ORDER BY i, f LIMIT 5
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── internal-ordering: +2,+3
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── ordering: +2,+3
+ ├── sort (segmented)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── ordering: +2,+3
+ │    ├── limit hint: 5.00
+ │    └── limit
+ │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         ├── internal-ordering: +2
+ │         ├── cardinality: [0 - 10]
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-5)
+ │         ├── ordering: +2
+ │         ├── sort
+ │         │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2-5)
+ │         │    ├── ordering: +2
+ │         │    ├── limit hint: 10.00
+ │         │    └── scan a
+ │         │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         │         ├── key: (1)
+ │         │         └── fd: (1)-->(2-5)
+ │         └── 10
+ └── 5
+
+# ----------------------------------------------------
+# AssociateLimitJoinsLeft and AssociateLimitJoinsRight
+# ----------------------------------------------------
+
+norm expect=AssociateLimitJoinsLeft format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER JOIN ab
+ON a = y
+LIMIT 10
+----
+left-join (hash)
+ ├── limit
+ │    ├── inner-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── a = y
+ │    └── 10
+ ├── scan uv
+ └── filters
+      └── x = u
+
+norm expect=AssociateLimitJoinsRight format=hide-all
+SELECT *
+FROM ab
+INNER JOIN (SELECT * FROM b LEFT JOIN uv ON x = u)
+ON a = y
+LIMIT 10
+----
+left-join (hash)
+ ├── limit
+ │    ├── inner-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── a = y
+ │    └── 10
+ ├── scan uv
+ └── filters
+      └── x = u
+
+norm expect=AssociateLimitJoinsRight format=hide-all
+SELECT *
+FROM kvr_fk
+INNER JOIN (SELECT * FROM uv LEFT JOIN ab ON v = b)
+ON r = u
+LIMIT 10
+----
+limit
+ ├── left-join (hash)
+ │    ├── inner-join (hash)
+ │    │    ├── scan uv
+ │    │    ├── limit
+ │    │    │    ├── scan kvr_fk
+ │    │    │    └── 10
+ │    │    └── filters
+ │    │         └── r = u
+ │    ├── scan ab
+ │    └── filters
+ │         └── uv.v = b
+ └── 10
+
+# No-op case because the InnerJoin filter references columns from the right side
+# of the LeftJoin.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER JOIN ab
+ON a = y AND (b = v OR v IS NULL)
+LIMIT 10
+----
+limit
+ ├── inner-join (hash)
+ │    ├── left-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── x = u
+ │    ├── scan ab
+ │    └── filters
+ │         ├── a = y
+ │         └── (b = v) OR (v IS NULL)
+ └── 10
+
+# No-op case because one of the joins has a join hint.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER MERGE JOIN ab
+ON a = y
+LIMIT 10
+----
+limit
+ ├── inner-join (hash)
+ │    ├── flags: force merge join
+ │    ├── left-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── x = u
+ │    ├── scan ab
+ │    └── filters
+ │         └── a = y
+ └── 10
+
+# No-op case because the left input has outer columns.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) disable=(TryDecorrelateProject,PushLimitIntoProject) format=hide-all
+SELECT *
+FROM uv
+LEFT JOIN LATERAL (
+  SELECT *
+  FROM (SELECT a*u FROM ab)
+  INNER JOIN (VALUES (1))
+  ON True
+  LIMIT 1
+)
+ON True
+----
+distinct-on
+ ├── left-join-apply
+ │    ├── scan uv
+ │    ├── inner-join (cross)
+ │    │    ├── project
+ │    │    │    ├── scan ab
+ │    │    │    └── projections
+ │    │    │         └── a * u
+ │    │    ├── values
+ │    │    │    └── (1,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── aggregations
+      ├── const-agg
+      │    └── v
+      ├── first-agg
+      │    └── "?column?"
+      └── first-agg
+           └── column1
+
+# No-op case because the right input has outer columns. An infinite loop will
+# occur if the limit is pushed down. Regression test for #50355.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) disable=(TryDecorrelateProject,PushLimitIntoProject) format=hide-all
+SELECT *
+FROM uv
+LEFT JOIN LATERAL (
+  SELECT *
+  FROM (VALUES (1))
+  INNER JOIN (SELECT a*u FROM ab)
+  ON True
+  LIMIT 1
+)
+ON True
+----
+distinct-on
+ ├── left-join-apply
+ │    ├── scan uv
+ │    ├── inner-join (cross)
+ │    │    ├── values
+ │    │    │    └── (1,)
+ │    │    ├── project
+ │    │    │    ├── scan ab
+ │    │    │    └── projections
+ │    │    │         └── a * u
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── aggregations
+      ├── const-agg
+      │    └── v
+      ├── first-agg
+      │    └── column1
+      └── first-agg
+           └── "?column?"

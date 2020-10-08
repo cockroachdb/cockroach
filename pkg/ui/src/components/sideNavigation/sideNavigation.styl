@@ -1,0 +1,37 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.side-navigation--list
+  margin-bottom inherit
+
+.side-navigation__navigation-item
+  list-style-type none
+  margin-bottom $spacing-small
+  color $colors--secondary-text
+
+  & *,
+  & *:hover,
+  & *:active
+    color inherit
+    text-decoration inherit
+
+.side-navigation__navigation-item:hover,
+.side-navigation__navigation-item:active
+  color $colors--link
+
+.side-navigation__navigation-item--active
+  color $colors--link
+
+.side-navigation__navigation-item--disabled
+  color $colors--disabled
+  pointer-events none
+  cursor default

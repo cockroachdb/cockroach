@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-secure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadgen
+  template:
+    metadata:
+      labels:
+        app: loadgen
+    spec:
+      serviceAccountName: cockroachdb
+      volumes:
+      - name: client-certs
+        secret:
+          secretName: cockroachdb.client.root
+          defaultMode: 256
+      containers:
+      - name: loadgen
+        image: cockroachdb/loadgen-kv:0.1
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: client-certs
+          mountPath: /cockroach-certs
+        command:
+          - "/kv"
+          - "postgres://root@cockroachdb-public:26257/kv?sslmode=verify-full&sslcert=/cockroach-certs/client.root.crt&sslkey=/cockroach-certs/client.root.key&sslrootcert=/cockroach-certs/ca.crt"

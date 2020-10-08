@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package privilege_test
 
@@ -34,16 +30,16 @@ func TestPrivilegeDecode(t *testing.T) {
 		{2, privilege.List{privilege.ALL}, "ALL", "ALL"},
 		{10, privilege.List{privilege.ALL, privilege.DROP}, "ALL, DROP", "ALL,DROP"},
 		{144, privilege.List{privilege.GRANT, privilege.DELETE}, "GRANT, DELETE", "DELETE,GRANT"},
-		{2047,
+		{2046,
 			privilege.List{privilege.ALL, privilege.CREATE, privilege.DROP, privilege.GRANT,
-				privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE},
-			"ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE",
-			"ALL,CREATE,DELETE,DROP,GRANT,INSERT,SELECT,UPDATE",
+				privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.USAGE, privilege.ZONECONFIG},
+			"ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG",
+			"ALL,CREATE,DELETE,DROP,GRANT,INSERT,SELECT,UPDATE,USAGE,ZONECONFIG",
 		},
 	}
 
 	for _, tc := range testCases {
-		pl := privilege.ListFromBitField(tc.raw)
+		pl := privilege.ListFromBitField(tc.raw, privilege.Any)
 		if len(pl) != len(tc.privileges) {
 			t.Fatalf("%+v: wrong privilege list from raw: %+v", tc, pl)
 		}

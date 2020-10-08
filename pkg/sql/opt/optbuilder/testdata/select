@@ -1,49 +1,69 @@
 # tests adapted from logictest -- select
 
+# These statements must be first - the numeric reference tests assume that
+# these are the first tables defined. Cockroach numeric references start after
+# 53 for user tables. See opt/testutils/testcat/create_table.go:117 for more
+# info on 53 as a magic number.
+
+exec-ddl
+CREATE TABLE tab53 (a INT PRIMARY KEY, y INT, b INT, c INT, INDEX bc (b,c))
+----
+
+exec-ddl
+CREATE TABLE tab54 (x INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE tab55 (a INT PRIMARY KEY, b INT NOT NULL, CONSTRAINT foo CHECK (a+b < 10))
+----
+
+exec-ddl
+CREATE TABLE tab56 (
+  a INT PRIMARY KEY,
+  b INT,
+  "c:write-only" INT,
+  "d:delete-only" INT
+)
+----
+
 # SELECT with no table.
 
 build
 SELECT 1
 ----
 project
- ├── columns: "?column?":1(int!null)
+ ├── columns: "?column?":1!null
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── const: 1 [type=int]
+      └── 1 [as="?column?":1]
 
 build
 SELECT NULL
 ----
 project
- ├── columns: "?column?":1(unknown)
+ ├── columns: "?column?":1
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── null [type=unknown]
+      └── NULL [as="?column?":1]
 
 build
 SELECT 1+1 AS two, 2+2 AS four
 ----
 project
- ├── columns: two:1(int!null) four:2(int!null)
+ ├── columns: two:1!null four:2!null
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      ├── const: 2 [type=int]
-      └── const: 4 [type=int]
+      ├── 1 + 1 [as=two:1]
+      └── 2 + 2 [as=four:2]
 
 # SELECT expression tests.
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT * FROM abc WHERE 'hello'
@@ -53,183 +73,195 @@ error (22P02): could not parse "hello" as type bool: invalid bool value
 build
 SELECT * FROM abc
 ----
-scan abc
- └── columns: a:1(int!null) b:2(int) c:3(int)
+project
+ ├── columns: a:1!null b:2 c:3
+ └── scan abc
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT NULL AS r, * FROM abc
 ----
 project
- ├── columns: r:4(unknown) a:1(int!null) b:2(int) c:3(int)
+ ├── columns: r:5 a:1!null b:2 c:3
  ├── scan abc
- │    └── columns: a:1(int!null) b:2(int) c:3(int)
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  └── projections
-      └── null [type=unknown]
+      └── NULL [as=r:5]
 
 
 # synonym for SELECT * FROM abc
 build
 TABLE abc
 ----
-scan abc
- └── columns: a:1(int!null) b:2(int) c:3(int)
+project
+ ├── columns: a:1!null b:2 c:3
+ └── scan abc
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM abc WHERE NULL
 ----
-select
- ├── columns: a:1(int!null) b:2(int) c:3(int)
- ├── scan abc
- │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── filters [type=bool]
-      └── null [type=unknown]
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── filters
+           └── NULL::BOOL
 
 build
 SELECT * FROM abc WHERE a = NULL
 ----
-select
- ├── columns: a:1(int!null) b:2(int) c:3(int)
- ├── scan abc
- │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── filters [type=bool]
-      └── null [type=unknown]
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── filters
+           └── NULL::BOOL
 
 build
 SELECT *,* FROM abc
 ----
-scan abc
- └── columns: a:1(int!null) b:2(int) c:3(int) a:1(int!null) b:2(int) c:3(int)
+project
+ ├── columns: a:1!null b:2 c:3 a:1!null b:2 c:3
+ └── scan abc
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a,a,a,a FROM abc
 ----
 project
- ├── columns: a:1(int!null) a:1(int!null) a:1(int!null) a:1(int!null)
+ ├── columns: a:1!null a:1!null a:1!null a:1!null
  └── scan abc
-      └── columns: a:1(int!null) b:2(int) c:3(int)
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a,c FROM abc
 ----
 project
- ├── columns: a:1(int!null) c:3(int)
+ ├── columns: a:1!null c:3
  └── scan abc
-      └── columns: a:1(int!null) b:2(int) c:3(int)
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a+b+c AS foo FROM abc
 ----
 project
- ├── columns: foo:4(int)
+ ├── columns: foo:5
  ├── scan abc
- │    └── columns: a:1(int!null) b:2(int) c:3(int)
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  └── projections
-      └── plus [type=int]
-           ├── plus [type=int]
-           │    ├── variable: abc.a [type=int]
-           │    └── variable: abc.b [type=int]
-           └── variable: abc.c [type=int]
+      └── (a:1 + b:2) + c:3 [as=foo:5]
 
-build allow-unsupported
+build
 SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
 ----
 project
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── select
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       ├── scan abc
-      │    └── columns: a:1(int!null) b:2(int) c:3(int)
-      └── filters [type=bool]
-           └── case [type=bool]
-                ├── true [type=bool]
-                ├── when [type=bool]
-                │    ├── ne [type=bool]
-                │    │    ├── variable: abc.a [type=int]
-                │    │    └── const: 0 [type=int]
-                │    └── gt [type=bool]
-                │         ├── div [type=decimal]
-                │         │    ├── variable: abc.b [type=int]
-                │         │    └── variable: abc.a [type=int]
-                │         └── const: 1.5 [type=decimal]
-                └── false [type=bool]
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── filters
+           └── CASE WHEN a:1 != 0 THEN (b:2 / a:1) > 1.5 ELSE false END
 
 # SELECT of NULL value.
 
 exec-ddl
 CREATE TABLE kv (k CHAR PRIMARY KEY, v CHAR)
 ----
-TABLE kv
- ├── k string not null
- ├── v string
- └── INDEX primary
-      └── k string not null
 
 build
 SELECT * FROM kv
 ----
-scan kv
- └── columns: k:1(string!null) v:2(string)
+project
+ ├── columns: k:1!null v:2
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT k,v FROM kv
 ----
-scan kv
- └── columns: k:1(string!null) v:2(string)
+project
+ ├── columns: k:1!null v:2
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT v||'foo' AS r FROM kv
 ----
 project
- ├── columns: r:3(string)
+ ├── columns: r:4
  ├── scan kv
- │    └── columns: k:1(string!null) v:2(string)
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      └── concat [type=string]
-           ├── variable: kv.v [type=string]
-           └── const: 'foo' [type=string]
+      └── v:2::STRING || 'foo' [as=r:4]
 
 build
 SELECT lower(v) FROM kv
 ----
 project
- ├── columns: lower:3(string)
+ ├── columns: lower:4
  ├── scan kv
- │    └── columns: k:1(string!null) v:2(string)
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      └── function: lower [type=string]
-           └── variable: kv.v [type=string]
+      └── lower(v:2) [as=lower:4]
 
 build
 SELECT k FROM kv
 ----
 project
- ├── columns: k:1(string!null)
+ ├── columns: k:1!null
  └── scan kv
-      └── columns: k:1(string!null) v:2(string)
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT kv.K,KV.v FROM kv
 ----
-scan kv
- └── columns: k:1(string!null) v:2(string)
+project
+ ├── columns: k:1!null v:2
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT kv.* FROM kv
 ----
-scan kv
- └── columns: k:1(string!null) v:2(string)
+project
+ ├── columns: k:1!null v:2
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT (kv.*) AS r FROM kv
 ----
 project
- ├── columns: r:3(tuple{string AS k, string AS v})
+ ├── columns: r:4
  ├── scan kv
- │    └── columns: k:1(string!null) v:2(string)
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      └── tuple [type=tuple{string AS k, string AS v}]
-           ├── variable: kv.k [type=string]
-           └── variable: kv.v [type=string]
+      └── ((k:1, v:2) AS k, v) [as=r:4]
+
+build
+SELECT (SELECT t.*) FROM (VALUES (1)) AS t(x)
+----
+project
+ ├── columns: "?column?":3
+ ├── values
+ │    ├── columns: column1:1!null
+ │    └── (1,)
+ └── projections
+      └── subquery [as="?column?":3]
+           └── max1-row
+                ├── columns: x:2
+                └── project
+                     ├── columns: x:2
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── column1:1 [as=x:2]
 
 build
 SELECT foo.* FROM kv
@@ -255,7 +287,7 @@ error (42P01): no data source matches pattern: bar.kv.*
 build
 SELECT kv.*[1] FROM kv
 ----
-error (42804): cannot subscript type tuple{string AS k, string AS v} because it is not an array
+error (42804): cannot subscript type tuple{char AS k, char AS v} because it is not an array
 
 build
 SELECT ARRAY[]
@@ -266,43 +298,37 @@ build
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
- ├── columns: k:1(string!null)
+ ├── columns: k:1!null
  └── select
-      ├── columns: k:1(string!null) v:2(string)
-      ├── scan kv
-      │    └── columns: k:1(string!null) v:2(string)
-      └── filters [type=bool]
-           └── eq [type=bool]
-                ├── variable: kv.k [type=string]
-                └── const: 'a' [type=string]
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      ├── scan foo
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── k:1 = 'a'
 
 build
 SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
- ├── columns: v:2(string)
+ ├── columns: v:2
  └── select
-      ├── columns: k:1(string!null) v:2(string)
-      ├── scan kv
-      │    └── columns: k:1(string!null) v:2(string)
-      └── filters [type=bool]
-           └── eq [type=bool]
-                ├── variable: kv.k [type=string]
-                └── const: 'a' [type=string]
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      ├── scan foo
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── k:1 = 'a'
 
 exec-ddl
 CREATE TABLE kw ("from" INT PRIMARY KEY)
 ----
-TABLE kw
- ├── from int not null
- └── INDEX primary
-      └── from int not null
 
 build
 SELECT *, "from", kw."from" FROM kw
 ----
-scan kw
- └── columns: from:1(int!null) from:1(int!null) from:1(int!null)
+project
+ ├── columns: from:1!null from:1!null from:1!null
+ └── scan kw
+      └── columns: from:1!null crdb_internal_mvcc_timestamp:2
 
 exec-ddl
 CREATE TABLE xyzw (
@@ -313,27 +339,59 @@ CREATE TABLE xyzw (
   INDEX foo (z, y)
 )
 ----
-TABLE xyzw
- ├── x int not null
- ├── y int
- ├── z int
- ├── w int
- ├── INDEX primary
- │    └── x int not null
- └── INDEX foo
-      ├── z int
-      ├── y int
-      └── x int not null
 
-# TODO(rytaft): Fix error message:
-# error: name "x" is not defined
+# SELECT with index hints.
+
+build
+SELECT * FROM xyzw@primary
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+      └── flags: force-index=primary
+
+build
+SELECT * FROM xyzw@foo
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+      └── flags: force-index=foo
+
+build
+SELECT * FROM xyzw@{FORCE_INDEX=foo,ASC}
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+      └── flags: force-index=foo,fwd
+
+build
+SELECT * FROM xyzw@{FORCE_INDEX=foo,DESC}
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw,rev
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+      └── flags: force-index=foo,rev
+
+build
+SELECT * FROM xyzw@{NO_INDEX_JOIN}
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+      └── flags: no-index-join
+
 build
 SELECT * FROM xyzw LIMIT x
 ----
 error (42703): column "x" does not exist
 
-# TODO(rytaft): Fix error message:
-# error: name "y" is not defined
 build
 SELECT * FROM xyzw OFFSET 1 + y
 ----
@@ -348,12 +406,18 @@ build
 SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +1
  ├── ordering: +1
- ├── scan xyzw
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── ordering: +1
- └── const: 1 [type=int]
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ │         ├── ordering: +1
+ │         └── limit hint: 1.00
+ └── 1
 
 build
 SELECT * FROM xyzw OFFSET 1.5
@@ -365,142 +429,179 @@ build
 SELECT * FROM xyzw LIMIT -100
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- ├── scan xyzw
- │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- └── const: -100 [type=int]
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── limit hint: 1.00
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ │         └── limit hint: 1.00
+ └── -100
 
 # At execution time, this will cause the error: negative value for OFFSET
 build
 SELECT * FROM xyzw OFFSET -100
 ----
 offset
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- ├── scan xyzw
- │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- └── const: -100 [type=int]
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    └── scan xyzw
+ │         └── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ └── -100
 
 build
 SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
 ----
 offset
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +1
  ├── ordering: +1
- ├── scan xyzw
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── ordering: +1
- └── const: 1 [type=int]
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── ordering: +1
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ │         └── ordering: +1
+ └── 1 + 0
 
 build
 SELECT (x,y) AS r FROM xyzw
 ----
 project
- ├── columns: r:5(tuple{int, int})
+ ├── columns: r:6
  ├── scan xyzw
- │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── tuple [type=tuple{int, int}]
-           ├── variable: xyzw.x [type=int]
-           └── variable: xyzw.y [type=int]
+      └── (x:1, y:2) [as=r:6]
 
 build
 SELECT * FROM xyzw LIMIT 0
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- ├── scan xyzw
- │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- └── const: 0 [type=int]
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── limit hint: 1.00
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ │         └── limit hint: 1.00
+ └── 0
 
 build
 SELECT * FROM xyzw ORDER BY x LIMIT 1
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +1
  ├── ordering: +1
- ├── scan xyzw
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── ordering: +1
- └── const: 1 [type=int]
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ │         ├── ordering: +1
+ │         └── limit hint: 1.00
+ └── 1
 
 build
 SELECT * FROM xyzw ORDER BY x LIMIT 1 OFFSET 1
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── offset
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── internal-ordering: +1
  │    ├── ordering: +1
- │    ├── scan xyzw
- │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    │    └── ordering: +1
- │    └── const: 1 [type=int]
- └── const: 1 [type=int]
+ │    ├── limit hint: 1.00
+ │    ├── project
+ │    │    ├── columns: x:1!null y:2 z:3 w:4
+ │    │    ├── ordering: +1
+ │    │    ├── limit hint: 2.00
+ │    │    └── scan xyzw
+ │    │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ │    │         ├── ordering: +1
+ │    │         └── limit hint: 2.00
+ │    └── 1
+ └── 1
 
 build
 SELECT * FROM xyzw ORDER BY y OFFSET 1
 ----
 offset
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +2
  ├── ordering: +2
  ├── sort
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── columns: x:1!null y:2 z:3 w:4
  │    ├── ordering: +2
- │    └── scan xyzw
- │         └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- └── const: 1 [type=int]
+ │    └── project
+ │         ├── columns: x:1!null y:2 z:3 w:4
+ │         └── scan xyzw
+ │              └── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ └── 1
 
 build
 SELECT * FROM xyzw ORDER BY y OFFSET 1 LIMIT 1
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +2
  ├── ordering: +2
  ├── offset
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── internal-ordering: +2
  │    ├── ordering: +2
+ │    ├── limit hint: 1.00
  │    ├── sort
- │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    │    ├── columns: x:1!null y:2 z:3 w:4
  │    │    ├── ordering: +2
- │    │    └── scan xyzw
- │    │         └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── const: 1 [type=int]
- └── const: 1 [type=int]
+ │    │    ├── limit hint: 2.00
+ │    │    └── project
+ │    │         ├── columns: x:1!null y:2 z:3 w:4
+ │    │         └── scan xyzw
+ │    │              └── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ │    └── 1
+ └── 1
 
 build
 SELECT * FROM xyzw LIMIT (SELECT count(*) FROM abc) * 2 OFFSET (SELECT count(*) FROM abc) * 3
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── columns: x:1!null y:2 z:3 w:4
  ├── offset
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    ├── scan xyzw
- │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── mult [type=int]
- │         ├── subquery [type=int]
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── project
+ │    │    ├── columns: x:1!null y:2 z:3 w:4
+ │    │    └── scan xyzw
+ │    │         └── columns: x:1!null y:2 z:3 w:4 xyzw.crdb_internal_mvcc_timestamp:5
+ │    └── mult
+ │         ├── subquery
  │         │    └── max1-row
- │         │         ├── columns: count:8(int)
- │         │         └── group-by
- │         │              ├── columns: count:8(int)
+ │         │         ├── columns: count_rows:10!null
+ │         │         └── scalar-group-by
+ │         │              ├── columns: count_rows:10!null
  │         │              ├── project
  │         │              │    └── scan abc
- │         │              │         └── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int)
+ │         │              │         └── columns: a:6!null b:7 c:8 abc.crdb_internal_mvcc_timestamp:9
  │         │              └── aggregations
- │         │                   └── count-rows [type=int]
- │         └── const: 3 [type=int]
- └── mult [type=int]
-      ├── subquery [type=int]
+ │         │                   └── count-rows [as=count_rows:10]
+ │         └── 3
+ └── mult
+      ├── subquery
       │    └── max1-row
-      │         ├── columns: count:12(int)
-      │         └── group-by
-      │              ├── columns: count:12(int)
+      │         ├── columns: count_rows:15!null
+      │         └── scalar-group-by
+      │              ├── columns: count_rows:15!null
       │              ├── project
       │              │    └── scan abc
-      │              │         └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int)
+      │              │         └── columns: a:11!null b:12 c:13 abc.crdb_internal_mvcc_timestamp:14
       │              └── aggregations
-      │                   └── count-rows [type=int]
-      └── const: 2 [type=int]
+      │                   └── count-rows [as=count_rows:15]
+      └── 2
 
 build
 ((SELECT x FROM xyzw LIMIT 1)) LIMIT 1
@@ -511,18 +612,26 @@ build
 SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
 ----
 offset
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── columns: x:1!null y:2 z:3 w:4
  ├── limit
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    ├── scan xyzw
- │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── const: 5 [type=int]
- └── const: 5 [type=int]
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── project
+ │    │    ├── columns: x:1!null y:2 z:3 w:4
+ │    │    ├── limit hint: 5.00
+ │    │    └── scan xyzw
+ │    │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+ │    │         └── limit hint: 5.00
+ │    └── 5
+ └── 5
 
 build
 SELECT * FROM xyzw@foo
 ----
-error (0A000): index hints are not supported
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5
+      └── flags: force-index=foo
 
 exec-ddl
 CREATE TABLE boolean_table (
@@ -530,530 +639,414 @@ CREATE TABLE boolean_table (
   value BOOLEAN
 )
 ----
-TABLE boolean_table
- ├── id int not null
- ├── value bool
- └── INDEX primary
-      └── id int not null
 
 build
 SELECT value FROM boolean_table
 ----
 project
- ├── columns: value:2(bool)
+ ├── columns: value:2
  └── scan boolean_table
-      └── columns: id:1(int!null) value:2(bool)
+      └── columns: id:1!null value:2 crdb_internal_mvcc_timestamp:3
 
-build allow-unsupported
+build
 SELECT CASE WHEN NULL THEN 1 ELSE 2 END
 ----
 project
- ├── columns: case:1(int)
+ ├── columns: case:1
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── case [type=int]
-           ├── true [type=bool]
-           ├── when [type=int]
-           │    ├── null [type=unknown]
-           │    └── const: 1 [type=int]
-           └── const: 2 [type=int]
+      └── CASE WHEN NULL THEN 1 ELSE 2 END [as=case:1]
 
 build
 SELECT 0 * b AS r, b % 1 AS s, 0 % b AS t from abc
 ----
 project
- ├── columns: r:4(int) s:5(int) t:6(int)
+ ├── columns: r:5 s:6 t:7
  ├── scan abc
- │    └── columns: a:1(int!null) b:2(int) c:3(int)
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  └── projections
-      ├── mult [type=int]
-      │    ├── const: 0 [type=int]
-      │    └── variable: abc.b [type=int]
-      ├── mod [type=int]
-      │    ├── variable: abc.b [type=int]
-      │    └── const: 1 [type=int]
-      └── mod [type=int]
-           ├── const: 0 [type=int]
-           └── variable: abc.b [type=int]
+      ├── 0 * b:2 [as=r:5]
+      ├── b:2 % 1 [as=s:6]
+      └── 0 % b:2 [as=t:7]
 
 # Regression tests for #22670.
 build
 SELECT 1 IN (1, 2) AS r
 ----
 project
- ├── columns: r:1(bool)
+ ├── columns: r:1!null
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── in [type=bool]
-           ├── const: 1 [type=int]
-           └── tuple [type=tuple{int, int}]
-                ├── const: 1 [type=int]
-                └── const: 2 [type=int]
+      └── 1 IN (1, 2) [as=r:1]
 
 build
 SELECT NULL IN (1, 2) AS r
 ----
 project
- ├── columns: r:1(bool)
+ ├── columns: r:1
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── in [type=bool]
-           ├── null [type=unknown]
-           └── tuple [type=tuple{int, int}]
-                ├── const: 1 [type=int]
-                └── const: 2 [type=int]
+      └── NULL IN (1, 2) [as=r:1]
 
 build
 SELECT 1 IN (NULL, 2) AS r
 ----
 project
- ├── columns: r:1(bool)
+ ├── columns: r:1
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── in [type=bool]
-           ├── const: 1 [type=int]
-           └── tuple [type=tuple{int, int}]
-                ├── null [type=unknown]
-                └── const: 2 [type=int]
+      └── 1 IN (NULL, 2) [as=r:1]
 
 build
 SELECT (1, NULL) IN ((1, 1)) AS r
 ----
 project
- ├── columns: r:1(bool)
+ ├── columns: r:1
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── in [type=bool]
-           ├── tuple [type=tuple{int, int}]
-           │    ├── const: 1 [type=int]
-           │    └── null [type=unknown]
-           └── tuple [type=tuple{tuple{int, int}}]
-                └── tuple [type=tuple{int, int}]
-                     ├── const: 1 [type=int]
-                     └── const: 1 [type=int]
+      └── (1, NULL) IN ((1, 1),) [as=r:1]
 
 # Tests with a tuple coming from a subquery.
 build
  SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a)) AS r
 ----
 project
- ├── columns: r:2(bool)
+ ├── columns: r:2
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── any: eq [type=bool]
+      └── any: eq [as=r:2]
            ├── values
-           │    ├── columns: column1:1(int)
-           │    └── tuple [type=tuple{int}]
-           │         └── const: 1 [type=int]
-           └── cast: INT [type=int]
-                └── null [type=unknown]
+           │    ├── columns: column1:1!null
+           │    └── (1,)
+           └── NULL::INT8
 
 build
 SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b)) AS r
 ----
 project
- ├── columns: r:4(bool)
+ ├── columns: r:4
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── any: eq [type=bool]
+      └── any: eq [as=r:4]
            ├── project
-           │    ├── columns: column3:3(tuple{int AS a, int AS b})
+           │    ├── columns: column3:3!null
            │    ├── values
-           │    │    ├── columns: column1:1(int) column2:2(int)
-           │    │    └── tuple [type=tuple{int, int}]
-           │    │         ├── const: 1 [type=int]
-           │    │         └── const: 1 [type=int]
+           │    │    ├── columns: column1:1!null column2:2!null
+           │    │    └── (1, 1)
            │    └── projections
-           │         └── tuple [type=tuple{int AS a, int AS b}]
-           │              ├── variable: column1 [type=int]
-           │              └── variable: column2 [type=int]
-           └── tuple [type=tuple{int, int}]
-                ├── const: 1 [type=int]
-                └── cast: INT [type=int]
-                     └── null [type=unknown]
+           │         └── (column1:1, column2:2) [as=column3:3]
+           └── (1, NULL::INT8)
 
 build
 SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a)) AS r
 ----
 project
- ├── columns: r:2(bool)
+ ├── columns: r:2
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
+      └── not [as=r:2]
+           └── any: eq
                 ├── values
-                │    ├── columns: column1:1(int)
-                │    └── tuple [type=tuple{int}]
-                │         └── const: 1 [type=int]
-                └── cast: INT [type=int]
-                     └── null [type=unknown]
+                │    ├── columns: column1:1!null
+                │    └── (1,)
+                └── NULL::INT8
 
 build
 SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b)) AS r
 ----
 project
- ├── columns: r:4(bool)
+ ├── columns: r:4
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
+      └── not [as=r:4]
+           └── any: eq
                 ├── project
-                │    ├── columns: column3:3(tuple{int AS a, int AS b})
+                │    ├── columns: column3:3!null
                 │    ├── values
-                │    │    ├── columns: column1:1(int) column2:2(int)
-                │    │    └── tuple [type=tuple{int, int}]
-                │    │         ├── const: 1 [type=int]
-                │    │         └── const: 1 [type=int]
+                │    │    ├── columns: column1:1!null column2:2!null
+                │    │    └── (1, 1)
                 │    └── projections
-                │         └── tuple [type=tuple{int AS a, int AS b}]
-                │              ├── variable: column1 [type=int]
-                │              └── variable: column2 [type=int]
-                └── tuple [type=tuple{int, int}]
-                     ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
-                          └── null [type=unknown]
+                │         └── (column1:1, column2:2) [as=column3:3]
+                └── (1, NULL::INT8)
 
 # Tests with an empty IN tuple.
 build
 SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
 ----
 project
- ├── columns: r:2(bool)
+ ├── columns: r:2
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── any: eq [type=bool]
+      └── any: eq [as=r:2]
            ├── select
-           │    ├── columns: column1:1(int!null)
+           │    ├── columns: column1:1!null
            │    ├── values
-           │    │    ├── columns: column1:1(int)
-           │    │    └── tuple [type=tuple{int}]
-           │    │         └── const: 1 [type=int]
-           │    └── filters [type=bool]
-           │         └── gt [type=bool]
-           │              ├── variable: column1 [type=int]
-           │              └── const: 1 [type=int]
-           └── cast: INT [type=int]
-                └── null [type=unknown]
+           │    │    ├── columns: column1:1!null
+           │    │    └── (1,)
+           │    └── filters
+           │         └── column1:1 > 1
+           └── NULL::INT8
 
 build
 SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
 ----
 project
- ├── columns: r:4(bool)
+ ├── columns: r:4
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── any: eq [type=bool]
+      └── any: eq [as=r:4]
            ├── project
-           │    ├── columns: column3:3(tuple{int AS a, int AS b})
+           │    ├── columns: column3:3!null
            │    ├── select
-           │    │    ├── columns: column1:1(int!null) column2:2(int)
+           │    │    ├── columns: column1:1!null column2:2!null
            │    │    ├── values
-           │    │    │    ├── columns: column1:1(int) column2:2(int)
-           │    │    │    └── tuple [type=tuple{int, int}]
-           │    │    │         ├── const: 1 [type=int]
-           │    │    │         └── const: 1 [type=int]
-           │    │    └── filters [type=bool]
-           │    │         └── gt [type=bool]
-           │    │              ├── variable: column1 [type=int]
-           │    │              └── const: 1 [type=int]
+           │    │    │    ├── columns: column1:1!null column2:2!null
+           │    │    │    └── (1, 1)
+           │    │    └── filters
+           │    │         └── column1:1 > 1
            │    └── projections
-           │         └── tuple [type=tuple{int AS a, int AS b}]
-           │              ├── variable: column1 [type=int]
-           │              └── variable: column2 [type=int]
-           └── tuple [type=tuple{int, int}]
-                ├── const: 1 [type=int]
-                └── cast: INT [type=int]
-                     └── null [type=unknown]
+           │         └── (column1:1, column2:2) [as=column3:3]
+           └── (1, NULL::INT8)
 
 build
 SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
 ----
 project
- ├── columns: r:2(bool)
+ ├── columns: r:2
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
+      └── not [as=r:2]
+           └── any: eq
                 ├── select
-                │    ├── columns: column1:1(int!null)
+                │    ├── columns: column1:1!null
                 │    ├── values
-                │    │    ├── columns: column1:1(int)
-                │    │    └── tuple [type=tuple{int}]
-                │    │         └── const: 1 [type=int]
-                │    └── filters [type=bool]
-                │         └── gt [type=bool]
-                │              ├── variable: column1 [type=int]
-                │              └── const: 1 [type=int]
-                └── cast: INT [type=int]
-                     └── null [type=unknown]
+                │    │    ├── columns: column1:1!null
+                │    │    └── (1,)
+                │    └── filters
+                │         └── column1:1 > 1
+                └── NULL::INT8
 
 build
 SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
 ----
 project
- ├── columns: r:4(bool)
+ ├── columns: r:4
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
+      └── not [as=r:4]
+           └── any: eq
                 ├── project
-                │    ├── columns: column3:3(tuple{int AS a, int AS b})
+                │    ├── columns: column3:3!null
                 │    ├── select
-                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── columns: column1:1!null column2:2!null
                 │    │    ├── values
-                │    │    │    ├── columns: column1:1(int) column2:2(int)
-                │    │    │    └── tuple [type=tuple{int, int}]
-                │    │    │         ├── const: 1 [type=int]
-                │    │    │         └── const: 1 [type=int]
-                │    │    └── filters [type=bool]
-                │    │         └── gt [type=bool]
-                │    │              ├── variable: column1 [type=int]
-                │    │              └── const: 1 [type=int]
+                │    │    │    ├── columns: column1:1!null column2:2!null
+                │    │    │    └── (1, 1)
+                │    │    └── filters
+                │    │         └── column1:1 > 1
                 │    └── projections
-                │         └── tuple [type=tuple{int AS a, int AS b}]
-                │              ├── variable: column1 [type=int]
-                │              └── variable: column2 [type=int]
-                └── tuple [type=tuple{int, int}]
-                     ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
-                          └── null [type=unknown]
+                │         └── (column1:1, column2:2) [as=column3:3]
+                └── (1, NULL::INT8)
 
 build
 SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
 ----
 project
- ├── columns: r:2(bool)
+ ├── columns: r:2
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
+      └── not [as=r:2]
+           └── any: eq
                 ├── select
-                │    ├── columns: column1:1(int!null)
+                │    ├── columns: column1:1!null
                 │    ├── values
-                │    │    ├── columns: column1:1(int)
-                │    │    └── tuple [type=tuple{int}]
-                │    │         └── const: 1 [type=int]
-                │    └── filters [type=bool]
-                │         └── gt [type=bool]
-                │              ├── variable: column1 [type=int]
-                │              └── const: 1 [type=int]
-                └── cast: INT [type=int]
-                     └── null [type=unknown]
+                │    │    ├── columns: column1:1!null
+                │    │    └── (1,)
+                │    └── filters
+                │         └── column1:1 > 1
+                └── NULL::INT8
 
 build
 SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
 ----
 project
- ├── columns: r:4(bool)
+ ├── columns: r:4
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
+      └── not [as=r:4]
+           └── any: eq
                 ├── project
-                │    ├── columns: column3:3(tuple{int AS a, int AS b})
+                │    ├── columns: column3:3!null
                 │    ├── select
-                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── columns: column1:1!null column2:2!null
                 │    │    ├── values
-                │    │    │    ├── columns: column1:1(int) column2:2(int)
-                │    │    │    └── tuple [type=tuple{int, int}]
-                │    │    │         ├── const: 1 [type=int]
-                │    │    │         └── const: 1 [type=int]
-                │    │    └── filters [type=bool]
-                │    │         └── gt [type=bool]
-                │    │              ├── variable: column1 [type=int]
-                │    │              └── const: 1 [type=int]
+                │    │    │    ├── columns: column1:1!null column2:2!null
+                │    │    │    └── (1, 1)
+                │    │    └── filters
+                │    │         └── column1:1 > 1
                 │    └── projections
-                │         └── tuple [type=tuple{int AS a, int AS b}]
-                │              ├── variable: column1 [type=int]
-                │              └── variable: column2 [type=int]
-                └── tuple [type=tuple{int, int}]
-                     ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
-                          └── null [type=unknown]
+                │         └── (column1:1, column2:2) [as=column3:3]
+                └── (1, NULL::INT8)
 
 build
 SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
 ----
 project
- ├── columns: r:2(bool)
+ ├── columns: r:2
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
+      └── not [as=r:2]
+           └── any: eq
                 ├── select
-                │    ├── columns: column1:1(int!null)
+                │    ├── columns: column1:1!null
                 │    ├── values
-                │    │    ├── columns: column1:1(int)
-                │    │    └── tuple [type=tuple{int}]
-                │    │         └── const: 1 [type=int]
-                │    └── filters [type=bool]
-                │         └── gt [type=bool]
-                │              ├── variable: column1 [type=int]
-                │              └── const: 1 [type=int]
-                └── cast: INT [type=int]
-                     └── null [type=unknown]
+                │    │    ├── columns: column1:1!null
+                │    │    └── (1,)
+                │    └── filters
+                │         └── column1:1 > 1
+                └── NULL::INT8
 
 build
 SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
 ----
 project
- ├── columns: r:4(bool)
+ ├── columns: r:4
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
+      └── not [as=r:4]
+           └── any: eq
                 ├── project
-                │    ├── columns: column3:3(tuple{int AS a, int AS b})
+                │    ├── columns: column3:3!null
                 │    ├── select
-                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── columns: column1:1!null column2:2!null
                 │    │    ├── values
-                │    │    │    ├── columns: column1:1(int) column2:2(int)
-                │    │    │    └── tuple [type=tuple{int, int}]
-                │    │    │         ├── const: 1 [type=int]
-                │    │    │         └── const: 1 [type=int]
-                │    │    └── filters [type=bool]
-                │    │         └── gt [type=bool]
-                │    │              ├── variable: column1 [type=int]
-                │    │              └── const: 1 [type=int]
+                │    │    │    ├── columns: column1:1!null column2:2!null
+                │    │    │    └── (1, 1)
+                │    │    └── filters
+                │    │         └── column1:1 > 1
                 │    └── projections
-                │         └── tuple [type=tuple{int AS a, int AS b}]
-                │              ├── variable: column1 [type=int]
-                │              └── variable: column2 [type=int]
-                └── tuple [type=tuple{int, int}]
-                     ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
-                          └── null [type=unknown]
+                │         └── (column1:1, column2:2) [as=column3:3]
+                └── (1, NULL::INT8)
 
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
 ----
-TABLE a
- ├── x int not null
- ├── y float
- └── INDEX primary
-      └── x int not null
 
 build
 SELECT * FROM a
 ----
-scan a
- └── columns: x:1(int!null) y:2(float)
+project
+ ├── columns: x:1!null y:2
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT * FROM a WHERE x > 10
 ----
-select
- ├── columns: x:1(int!null) y:2(float)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
-      └── gt [type=bool]
-           ├── variable: a.x [type=int]
-           └── const: 10 [type=int]
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── x:1 > 10
 
 build
 SELECT * FROM a WHERE (x > 10 AND (x < 20 AND x != 13))
 ----
-select
- ├── columns: x:1(int!null) y:2(float)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
-      └── and [type=bool]
-           ├── gt [type=bool]
-           │    ├── variable: a.x [type=int]
-           │    └── const: 10 [type=int]
-           └── and [type=bool]
-                ├── lt [type=bool]
-                │    ├── variable: a.x [type=int]
-                │    └── const: 20 [type=int]
-                └── ne [type=bool]
-                     ├── variable: a.x [type=int]
-                     └── const: 13 [type=int]
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── (x:1 > 10) AND ((x:1 < 20) AND (x:1 != 13))
 
 build
 SELECT * FROM a WHERE x IN (1, 2, 3)
 ----
-select
- ├── columns: x:1(int!null) y:2(float)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
-      └── in [type=bool]
-           ├── variable: a.x [type=int]
-           └── tuple [type=tuple{int, int, int}]
-                ├── const: 1 [type=int]
-                ├── const: 2 [type=int]
-                └── const: 3 [type=int]
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── x:1 IN (1, 2, 3)
 
 build
 SELECT * FROM a AS A(X, Y)
 ----
-scan a
- └── columns: x:1(int!null) y:2(float)
+project
+ ├── columns: x:1!null y:2
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 build
 SELECT @1 AS r, @2 AS s FROM a
 ----
 project
- ├── columns: r:3(int) s:4(float)
+ ├── columns: r:4!null s:5
  ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      ├── variable: a.x [type=int]
-      └── variable: a.y [type=float]
+      ├── x:1 [as=r:4]
+      └── y:2 [as=s:5]
 
 build
 SELECT * FROM a WHERE (x > 10)::bool
 ----
-select
- ├── columns: x:1(int!null) y:2(float)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
-      └── cast: BOOL [type=bool]
-           └── gt [type=bool]
-                ├── variable: a.x [type=int]
-                └── const: 10 [type=int]
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── x:1 > 10
 
 build
 SELECT * FROM a WHERE (x > 10)::INT[]
 ----
-error (42846): invalid cast: bool -> INT[]
+error (42846): invalid cast: bool -> int[]
 
 build
 SELECT * FROM a WHERE x = $1
 ----
-select
- ├── columns: x:1(int!null) y:2(float)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
-      └── eq [type=bool]
-           ├── variable: a.x [type=int]
-           └── placeholder: $1 [type=int]
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── x:1 = $1
 
+# This is slightly funky, because the AS OF SYSTEM TIME timestamp only gets
+# interpreted by the executor, which obviously is not at play in these tests.
 build
-SELECT * FROM a AS OF SYSTEM TIME '10ns'
+SELECT * FROM a AS OF SYSTEM TIME '-1000ms'
 ----
-error (0A000): AS OF clause not supported
+error (42601): AS OF SYSTEM TIME must be provided on a top-level statement
 
 build
 SELECT * FROM a AS t(a, b, c)
@@ -1067,28 +1060,355 @@ FROM (
 )
 ----
 project
- ├── columns: e:2(int) f:3(string) g:4(bool)
+ ├── columns: e:2 f:3 g:4
  ├── project
- │    ├── columns: x:1(tuple{int AS e, string AS f, bool AS g})
+ │    ├── columns: x:1!null
  │    ├── values
- │    │    └── tuple [type=tuple]
+ │    │    └── ()
  │    └── projections
- │         └── tuple [type=tuple{int AS e, string AS f, bool AS g}]
- │              ├── const: 1 [type=int]
- │              ├── const: '2' [type=string]
- │              └── true [type=bool]
+ │         └── ((1, '2', true) AS e, f, g) [as=x:1]
  └── projections
-      ├── column-access: 0 [type=int]
-      │    └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
-      ├── column-access: 1 [type=string]
-      │    └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
-      └── column-access: 2 [type=bool]
-           └── variable: x [type=tuple{int AS e, string AS f, bool AS g}]
+      ├── (x:1).e [as=e:2]
+      ├── (x:1).f [as=f:3]
+      └── (x:1).g [as=g:4]
 
 build
 SELECT (((x, y) AS x, y)).x FROM a
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── scan a
-      └── columns: x:1(int!null) y:2(float)
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+
+
+# Numeric Reference Tests
+# Cockroach numeric references start after 53 for user tables.
+# See opt/testutils/testcat/create_table.go:117 for more info on
+# 53 as a magic number.
+
+build
+SELECT * FROM [53 AS t]
+----
+project
+ ├── columns: a:1!null y:2 b:3 c:4
+ └── scan t
+      └── columns: a:1!null y:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+
+build
+SELECT * FROM [53(1) AS t]
+----
+scan t
+ └── columns: a:1!null
+
+build
+SELECT * FROM [53(1,2) AS t]
+----
+scan t
+ └── columns: a:1!null y:2
+
+build
+SELECT * FROM [53(4) AS t]
+----
+scan t
+ └── columns: c:4
+
+build
+SELECT * FROM [53(5) AS t]
+----
+project
+ └── scan t
+      └── columns: crdb_internal_mvcc_timestamp:5
+
+build
+SELECT * FROM [53(2,4) AS t]
+----
+scan t
+ └── columns: y:2 c:4
+
+build
+SELECT * FROM [53(2,3) AS t(col1,col2)]
+----
+scan t
+ └── columns: col1:2 col2:3
+
+build
+SELECT * FROM [53() AS t]
+----
+error (42601): an explicit list of column IDs must include at least one column
+
+# Test that hidden columns are not presented
+build
+SELECT * FROM [54 AS t]
+----
+project
+ ├── columns: x:1 y:2
+ └── scan t
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+
+# Verify that we force the given index.
+build
+SELECT * FROM [53 AS t]@[1]
+----
+project
+ ├── columns: a:1!null y:2 b:3 c:4
+ └── scan t
+      ├── columns: a:1!null y:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+      └── flags: force-index=primary
+
+build
+SELECT * FROM [53 AS t]@[2]
+----
+project
+ ├── columns: a:1!null y:2 b:3 c:4
+ └── scan t
+      ├── columns: a:1!null y:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+      └── flags: force-index=bc
+
+# Test that hidden columns are not presented.
+build
+SELECT * FROM [54(1,3) AS t]
+----
+project
+ ├── columns: x:1
+ └── scan t
+      └── columns: x:1 rowid:3!null
+
+build
+SELECT rowid FROM [54(3) as t]
+----
+scan t
+ └── columns: rowid:3!null
+
+
+# Test that we don't error out due to check constraints that involve unselected
+# columns.
+build
+SELECT * FROM [55(1) as t(a)]
+----
+scan t
+ ├── columns: a:1!null
+ └── check constraint expressions
+      └── (a:1 + b:2) < 10
+
+# Test that we error out if we refer to a mutation column,
+build
+SELECT * FROM [56(1,3) AS t(a, b)]
+----
+error (42703): column [3] does not exist
+
+build
+SELECT * FROM [56(1,4) AS t(a, b)]
+----
+error (42703): column [4] does not exist
+
+build
+INSERT INTO [56(1,3) AS t(a,b)] VALUES (1,2)
+----
+error (42703): column [3] does not exist
+
+# Regression test for #28388. Ensure that selecting from a table with no
+# columns does not cause a panic.
+exec-ddl
+CREATE TABLE no_cols_table ()
+----
+
+build
+SELECT * FROM no_cols_table
+----
+project
+ └── scan no_cols_table
+      └── columns: rowid:1!null crdb_internal_mvcc_timestamp:2
+
+build
+SELECT * FROM [54(3) as t]
+----
+project
+ └── scan t
+      └── columns: rowid:3!null
+
+# Non-referenced CTE with mutation.
+build
+WITH cte AS (SELECT b FROM [INSERT INTO abc VALUES (1) RETURNING *] LIMIT 1) SELECT * FROM abc
+----
+with &1
+ ├── columns: a:10!null b:11 c:12
+ ├── insert abc
+ │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
+ │    ├── insert-mapping:
+ │    │    ├── column1:5 => abc.a:1
+ │    │    ├── column6:6 => abc.b:2
+ │    │    └── column6:6 => abc.c:3
+ │    └── project
+ │         ├── columns: column6:6 column1:5!null
+ │         ├── values
+ │         │    ├── columns: column1:5!null
+ │         │    └── (1,)
+ │         └── projections
+ │              └── NULL::INT8 [as=column6:6]
+ └── with &2 (cte)
+      ├── columns: abc.a:10!null abc.b:11 abc.c:12
+      ├── limit
+      │    ├── columns: b:8
+      │    ├── project
+      │    │    ├── columns: b:8
+      │    │    ├── limit hint: 1.00
+      │    │    └── with-scan &1
+      │    │         ├── columns: a:7!null b:8 c:9
+      │    │         ├── mapping:
+      │    │         │    ├──  abc.a:1 => a:7
+      │    │         │    ├──  abc.b:2 => b:8
+      │    │         │    └──  abc.c:3 => c:9
+      │    │         └── limit hint: 1.00
+      │    └── 1
+      └── project
+           ├── columns: abc.a:10!null abc.b:11 abc.c:12
+           └── scan abc
+                └── columns: abc.a:10!null abc.b:11 abc.c:12 crdb_internal_mvcc_timestamp:13
+
+# Tests for the square bracket syntax.
+build
+SELECT * FROM [SELECT * FROM abc]
+----
+with &1
+ ├── columns: a:5!null b:6 c:7
+ ├── project
+ │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
+ │    └── scan abc
+ │         └── columns: abc.a:1!null abc.b:2 abc.c:3 crdb_internal_mvcc_timestamp:4
+ └── with-scan &1
+      ├── columns: a:5!null b:6 c:7
+      └── mapping:
+           ├──  abc.a:1 => a:5
+           ├──  abc.b:2 => b:6
+           └──  abc.c:3 => c:7
+
+build
+SELECT * FROM [INSERT INTO abc VALUES (1, 2, 3) RETURNING a]
+----
+with &1
+ ├── columns: a:8!null
+ ├── project
+ │    ├── columns: abc.a:1!null
+ │    └── insert abc
+ │         ├── columns: abc.a:1!null b:2!null c:3!null
+ │         ├── insert-mapping:
+ │         │    ├── column1:5 => abc.a:1
+ │         │    ├── column2:6 => b:2
+ │         │    └── column3:7 => c:3
+ │         └── values
+ │              ├── columns: column1:5!null column2:6!null column3:7!null
+ │              └── (1, 2, 3)
+ └── with-scan &1
+      ├── columns: a:8!null
+      └── mapping:
+           └──  abc.a:1 => a:8
+
+# Statement inside brackets cannot refer to outer column.
+build
+SELECT a, b FROM abc WHERE b = (SELECT x FROM [SELECT * FROM xyzw WHERE x = a])
+----
+error (42703): column "a" does not exist
+
+build
+SELECT a, b FROM abc, LATERAL (SELECT * FROM [SELECT * FROM xyzw WHERE a = x])
+----
+error (42703): column "a" does not exist
+
+# Statement inside brackets cannot refer to outer CTEs.
+build
+WITH cte AS (VALUES (1), (2))
+SELECT * FROM (VALUES (3)) AS t (x), [SELECT * FROM cte]
+----
+error (42P01): no data source matches prefix: "cte"
+
+# Projection list should still be able to refer to outer columns or CTEs.
+build
+WITH cte AS (SELECT 1) SELECT 1 + (SELECT * FROM cte) FROM [SELECT * from xyzw]
+----
+with &1 (cte)
+ ├── columns: "?column?":12
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── with &2
+      ├── columns: "?column?":12
+      ├── project
+      │    ├── columns: xyzw.x:2!null xyzw.y:3 xyzw.z:4 xyzw.w:5
+      │    └── scan xyzw
+      │         └── columns: xyzw.x:2!null xyzw.y:3 xyzw.z:4 xyzw.w:5 crdb_internal_mvcc_timestamp:6
+      └── project
+           ├── columns: "?column?":12
+           ├── with-scan &2
+           │    ├── columns: x:7!null y:8 z:9 w:10
+           │    └── mapping:
+           │         ├──  xyzw.x:2 => x:7
+           │         ├──  xyzw.y:3 => y:8
+           │         ├──  xyzw.z:4 => z:9
+           │         └──  xyzw.w:5 => w:10
+           └── projections
+                └── plus [as="?column?":12]
+                     ├── 1
+                     └── subquery
+                          └── max1-row
+                               ├── columns: "?column?":11!null
+                               └── with-scan &1 (cte)
+                                    ├── columns: "?column?":11!null
+                                    └── mapping:
+                                         └──  "?column?":1 => "?column?":11
+
+build
+SELECT a, (SELECT a+x FROM [SELECT * from xyzw]) FROM abc
+----
+with &1
+ ├── columns: a:1!null "?column?":15
+ ├── project
+ │    ├── columns: xyzw.x:5!null xyzw.y:6 xyzw.z:7 xyzw.w:8
+ │    └── scan xyzw
+ │         └── columns: xyzw.x:5!null xyzw.y:6 xyzw.z:7 xyzw.w:8 xyzw.crdb_internal_mvcc_timestamp:9
+ └── project
+      ├── columns: "?column?":15 a:1!null
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 abc.crdb_internal_mvcc_timestamp:4
+      └── projections
+           └── subquery [as="?column?":15]
+                └── max1-row
+                     ├── columns: "?column?":14
+                     └── project
+                          ├── columns: "?column?":14
+                          ├── with-scan &1
+                          │    ├── columns: x:10!null y:11 z:12 w:13
+                          │    └── mapping:
+                          │         ├──  xyzw.x:5 => x:10
+                          │         ├──  xyzw.y:6 => y:11
+                          │         ├──  xyzw.z:7 => z:12
+                          │         └──  xyzw.w:8 => w:13
+                          └── projections
+                               └── a:1 + x:10 [as="?column?":14]
+
+# Populates table metadata with partial index predicates.
+exec-ddl
+CREATE TABLE partial_index (
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    INDEX u (u) WHERE u = 1,
+    INDEX uv (u, v),
+    INDEX v (v) WHERE v > 100 AND v < 200 AND u > 50
+)
+----
+
+build
+SELECT k FROM partial_index
+----
+project
+ ├── columns: k:1!null
+ └── scan partial_index
+      ├── columns: k:1!null u:2 v:3 crdb_internal_mvcc_timestamp:4
+      └── partial index predicates
+           ├── u: filters
+           │    └── u:2 = 1
+           └── v: filters
+                └── ((v:3 > 100) AND (v:3 < 200)) AND (u:2 > 50)

@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv (
@@ -6,19 +6,234 @@ CREATE TABLE kv (
   v INT
 )
 
+# Use implicit target columns (which can use blind KV Put).
 query TTT
 SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC
+EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
 ]
 ----
-count                ·      ·
- └── upsert          ·      ·
-      │              into   kv(k, v)
-      └── sort       ·      ·
-           │         order  -v
-           └── scan  ·      ·
-·                    table  kv@primary
-·                    spans  ALL
+·                         distribution         local
+·                         vectorized           false
+upsert                    ·                    ·
+ │                        estimated row count  0 (missing stats)
+ │                        into                 kv(k, v)
+ │                        auto commit          ·
+ └── project              ·                    ·
+      └── limit           ·                    ·
+           │              estimated row count  2 (missing stats)
+           │              count                2
+           └── sort       ·                    ·
+                │         estimated row count  1000 (missing stats)
+                │         order                -v
+                └── scan  ·                    ·
+·                         estimated row count  1000 (missing stats)
+·                         table                kv@primary
+·                         spans                FULL SCAN
+
+# Use explicit target columns (which can use blind KV Put).
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2
+]
+----
+·                         distribution         local
+·                         vectorized           false
+upsert                    ·                    ·
+ │                        estimated row count  0 (missing stats)
+ │                        into                 kv(k, v)
+ │                        auto commit          ·
+ └── project              ·                    ·
+      └── limit           ·                    ·
+           │              estimated row count  2 (missing stats)
+           │              count                2
+           └── sort       ·                    ·
+                │         estimated row count  1000 (missing stats)
+                │         order                -v
+                └── scan  ·                    ·
+·                         estimated row count  1000 (missing stats)
+·                         table                kv@primary
+·                         spans                FULL SCAN
+
+# Add RETURNING clause (should still use blind KV Put).
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2 RETURNING *
+]
+----
+·                         distribution         local
+·                         vectorized           false
+upsert                    ·                    ·
+ │                        estimated row count  2 (missing stats)
+ │                        into                 kv(k, v)
+ │                        auto commit          ·
+ └── project              ·                    ·
+      └── limit           ·                    ·
+           │              estimated row count  2 (missing stats)
+           │              count                2
+           └── sort       ·                    ·
+                │         estimated row count  1000 (missing stats)
+                │         order                -v
+                └── scan  ·                    ·
+·                         estimated row count  1000 (missing stats)
+·                         table                kv@primary
+·                         spans                FULL SCAN
+
+# Use subset of explicit target columns (which cannot use blind KV Put).
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
+]
+----
+·                                   distribution           local
+·                                   vectorized             false
+upsert                              ·                      ·
+ │                                  estimated row count    0 (missing stats)
+ │                                  into                   kv(k, v)
+ │                                  auto commit            ·
+ │                                  arbiter indexes        primary
+ └── lookup join (inner)            ·                      ·
+      │                             estimated row count    2 (missing stats)
+      │                             table                  kv@primary
+      │                             equality               (k) = (k)
+      │                             equality cols are key  ·
+      └── distinct                  ·                      ·
+           │                        estimated row count    2 (missing stats)
+           │                        distinct on            k
+           │                        nulls are distinct     ·
+           │                        error on duplicate     ·
+           └── render               ·                      ·
+                │                   estimated row count    2 (missing stats)
+                │                   render 0               CAST(NULL AS INT8)
+                │                   render 1               k
+                └── limit           ·                      ·
+                     │              estimated row count    2 (missing stats)
+                     │              count                  2
+                     └── sort       ·                      ·
+                          │         estimated row count    1000 (missing stats)
+                          │         order                  -v
+                          └── scan  ·                      ·
+·                                   estimated row count    1000 (missing stats)
+·                                   table                  kv@primary
+·                                   spans                  FULL SCAN
+
+# Use Upsert with indexed table, default columns, computed columns, and check
+# columns.
+statement ok
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT DEFAULT(10),
+  d INT AS (a + c) STORED,
+  FAMILY (a, b, c, d),
+  UNIQUE INDEX secondary (d, b),
+  CHECK (c > 0)
+)
+
+# Should fetch existing values since there is a secondary index.
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
+]
+----
+·                                       distribution         local
+·                                       vectorized           false
+upsert                                  ·                    ·
+ │                                      estimated row count  0 (missing stats)
+ │                                      into                 indexed(a, b, c, d)
+ │                                      auto commit          ·
+ │                                      arbiter indexes      primary
+ └── project                            ·                    ·
+      └── render                        ·                    ·
+           │                            estimated row count  1 (missing stats)
+           │                            render 0             column9 > 0
+           │                            render 1             column1
+           │                            render 2             column8
+           │                            render 3             column9
+           │                            render 4             column10
+           │                            render 5             a
+           │                            render 6             b
+           │                            render 7             c
+           │                            render 8             d
+           └── cross join (left outer)  ·                    ·
+                │                       estimated row count  1 (missing stats)
+                ├── values              ·                    ·
+                │                       size                 4 columns, 1 row
+                │                       row 0, expr 0        1
+                │                       row 0, expr 1        CAST(NULL AS INT8)
+                │                       row 0, expr 2        10
+                │                       row 0, expr 3        11
+                └── scan                ·                    ·
+·                                       estimated row count  1 (missing stats)
+·                                       table                indexed@primary
+·                                       spans                /1-/1/#
+·                                       locking strength     for update
+
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1), (2), (3), (4)
+]
+----
+·                                        distribution           local
+·                                        vectorized             false
+upsert                                   ·                      ·
+ │                                       estimated row count    0 (missing stats)
+ │                                       into                   indexed(a, b, c, d)
+ │                                       auto commit            ·
+ │                                       arbiter indexes        primary
+ └── project                             ·                      ·
+      └── render                         ·                      ·
+           │                             estimated row count    4 (missing stats)
+           │                             render 0               column9 > 0
+           │                             render 1               column1
+           │                             render 2               column8
+           │                             render 3               column9
+           │                             render 4               column10
+           │                             render 5               a
+           │                             render 6               b
+           │                             render 7               c
+           │                             render 8               d
+           └── lookup join (left outer)  ·                      ·
+                │                        estimated row count    4 (missing stats)
+                │                        table                  indexed@primary
+                │                        equality               (column1) = (a)
+                │                        equality cols are key  ·
+                │                        locking strength       for update
+                └── render               ·                      ·
+                     │                   estimated row count    4
+                     │                   render 0               column1 + 10
+                     │                   render 1               CAST(NULL AS INT8)
+                     │                   render 2               10
+                     │                   render 3               column1
+                     └── values          ·                      ·
+·                                        size                   1 column, 4 rows
+·                                        row 0, expr 0          1
+·                                        row 1, expr 0          2
+·                                        row 2, expr 0          3
+·                                        row 3, expr 0          4
+
+# Drop index and verify that existing values no longer need to be fetched.
+statement ok
+DROP INDEX indexed@secondary CASCADE
+
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1) RETURNING *
+]
+----
+·                 distribution         local
+·                 vectorized           false
+upsert            ·                    ·
+ │                estimated row count  1
+ │                into                 indexed(a, b, c, d)
+ │                auto commit          ·
+ └── project      ·                    ·
+      └── values  ·                    ·
+·                 size                 5 columns, 1 row
+·                 row 0, expr 0        1
+·                 row 0, expr 1        CAST(NULL AS INT8)
+·                 row 0, expr 2        10
+·                 row 0, expr 3        11
+·                 row 0, expr 4        true
 
 # Regression test for #25726.
 # UPSERT over tables with column families, on the fast path, use the
@@ -36,11 +251,320 @@ SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tr
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
 ----
-Put /Table/54/1/1/0 -> /TUPLE/
-Del /Table/54/1/1/1/1
-Del /Table/54/1/1/2/1
-querying next range at /Table/54/1/1/0
-r1: sending batch 1 Put, 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+Put /Table/55/1/1/0 -> /TUPLE/
+Del /Table/55/1/1/1/1
+Del /Table/55/1/1/2/1
 fast path completed
 rows affected: 1
+
+# KV operations.
+statement ok
+CREATE DATABASE t; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v))
+
+statement ok
+CREATE UNIQUE INDEX woo ON t.kv(v)
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+table reader                          Scan /Table/57/1/2{-/#}
+flow                                  CPut /Table/57/1/2/0 -> /TUPLE/2:2:Int/3
+flow                                  InitPut /Table/57/2/3/0 -> /BYTES/0x8a
+kv.DistSender: sending partial batch  r35: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+flow                                  fast path completed
+exec stmt                             rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+table reader                          Scan /Table/57/1/1{-/#}
+flow                                  CPut /Table/57/1/1/0 -> /TUPLE/2:2:Int/2
+flow                                  InitPut /Table/57/2/2/0 -> /BYTES/0x89
+kv.DistSender: sending partial batch  r35: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+flow                                  fast path completed
+exec stmt                             rows affected: 1
+
+statement error duplicate key value
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+table reader                          Scan /Table/57/1/2{-/#}
+table reader                          fetched: /kv/primary/2/v -> /3
+flow                                  Put /Table/57/1/2/0 -> /TUPLE/2:2:Int/2
+flow                                  Del /Table/57/2/3/0
+flow                                  CPut /Table/57/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+kv.DistSender: sending partial batch  r35: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+exec stmt                             execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
+
+
+subtest regression_32473
+
+statement ok
+CREATE TABLE customers (
+  customer_id serial PRIMARY KEY,
+  name VARCHAR UNIQUE,
+  email VARCHAR NOT NULL
+);
+
+statement ok
+INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT (name)
+  DO UPDATE SET (name, email) = (
+    SELECT 'bob', 'otherbob@email.com'
+  )
+
+query TT
+SELECT name, email FROM customers
+----
+bob  bob@email.com
+
+# This statement only works with the optimizer enabled.
+statement ok
+INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT (name)
+  DO UPDATE SET (name, email) = (
+    SELECT 'bob2', 'otherbob@email.com'
+  )
+
+query TT
+SELECT name, email FROM customers
+----
+bob2  otherbob@email.com
+
+statement ok
+DROP TABLE customers
+
+# The CBO behaves differently than the HP and PG in this case. It only checks
+# constraints if an insert or update actually occurs. In this case, the DO
+# NOTHING clause skips the update, so there is no need to check the constraint.
+statement ok
+CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b))
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+# Regression test for #35564: make sure we use the Upsert's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
+----
+·                                        distribution         local                                                ·                             ·
+·                                        vectorized           false                                                ·                             ·
+root                                     ·                    ·                                                    (z)                           ·
+ ├── sort                                ·                    ·                                                    (z)                           +z
+ │    │                                  estimated row count  1000 (missing stats)                                 ·                             ·
+ │    │                                  order                +z                                                   ·                             ·
+ │    └── scan buffer                    ·                    ·                                                    (z)                           ·
+ │                                       estimated row count  1000 (missing stats)                                 ·                             ·
+ │                                       label                buffer 1                                             ·                             ·
+ └── subquery                            ·                    ·                                                    ·                             ·
+      │                                  id                   @S1                                                  ·                             ·
+      │                                  original sql         UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                             ·
+      │                                  exec mode            all rows                                             ·                             ·
+      └── buffer                         ·                    ·                                                    (z)                           ·
+           │                             label                buffer 1                                             ·                             ·
+           └── project                   ·                    ·                                                    (z)                           ·
+                │                        estimated row count  1000 (missing stats)                                 ·                             ·
+                └── upsert               ·                    ·                                                    (z, rowid)                    ·
+                     │                   estimated row count  1000 (missing stats)                                 ·                             ·
+                     │                   into                 xyz(x, y, z, rowid)                                  ·                             ·
+                     └── project         ·                    ·                                                    (a, b, c, column13, a, b, c)  ·
+                          └── render     ·                    ·                                                    (column13, a, b, c)           ·
+                               │         estimated row count  1000 (missing stats)                                 ·                             ·
+                               │         render 0             unique_rowid()                                       ·                             ·
+                               │         render 1             a                                                    ·                             ·
+                               │         render 2             b                                                    ·                             ·
+                               │         render 3             c                                                    ·                             ·
+                               └── scan  ·                    ·                                                    (a, b, c)                     ·
+·                                        estimated row count  1000 (missing stats)                                 ·                             ·
+·                                        table                abc@primary                                          ·                             ·
+·                                        spans                FULL SCAN                                            ·                             ·
+
+# ------------------------------------------------------------------------------
+# Regression for #35364. This tests behavior that is different between the CBO
+# and the HP. The CBO will (deliberately) round any input columns *before*
+# evaluating any computed columns, as well as rounding the output.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t35364(
+    x DECIMAL(10,0) CHECK(round(x) = x) PRIMARY KEY,
+    y DECIMAL(10,0) DEFAULT (1.5),
+    z DECIMAL(10,0) AS (x+y+2.5) STORED CHECK(z >= 7)
+)
+
+query TTT
+UPSERT INTO t35364 (x) VALUES (1.5) RETURNING *
+----
+2  2  7
+
+query TTT
+UPSERT INTO t35364 (x, y) VALUES (1.5, 2.5) RETURNING *
+----
+2  3  8
+
+query TTT
+INSERT INTO t35364 (x) VALUES (1.5) ON CONFLICT (x) DO UPDATE SET x=2.5 RETURNING *
+----
+3  3  9
+
+statement error pq: failed to satisfy CHECK constraint \(z >= 7:::DECIMAL\)
+UPSERT INTO t35364 (x) VALUES (0)
+
+# ------------------------------------------------------------------------------
+# Regression for #38627. Combined with the equivalent logic test, make sure that
+# UPSERT in the presence of column mutations uses a lookup join without a
+# problem.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT, FAMILY (a, b)); INSERT INTO table38627 VALUES(1,1)
+
+statement ok
+BEGIN; ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
+
+query TTTTT
+EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
+----
+·                              distribution           local               ·                      ·
+·                              vectorized             false               ·                      ·
+upsert                         ·                      ·                   ()                     ·
+ │                             estimated row count    0 (missing stats)   ·                      ·
+ │                             into                   table38627(a, b)    ·                      ·
+ │                             arbiter indexes        primary             ·                      ·
+ └── project                   ·                      ·                   (a, b, a, b, c, b, a)  ·
+      └── lookup join (inner)  ·                      ·                   (a, b, a, b, c)        ·
+           │                   estimated row count    1 (missing stats)   ·                      ·
+           │                   table                  table38627@primary  ·                      ·
+           │                   equality               (a) = (a)           ·                      ·
+           │                   equality cols are key  ·                   ·                      ·
+           └── scan            ·                      ·                   (a, b)                 ·
+·                              estimated row count    1 (missing stats)   ·                      ·
+·                              table                  table38627@primary  ·                      ·
+·                              spans                  /1-/1/#             ·                      ·
+
+statement ok
+COMMIT
+
+# ------------------------------------------------------------------------------
+# Show UPSERT plans with Distinct execution operator.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE tdup (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+# Show unsorted upsert-distinct-on. Plan should not contain "order key".
+# Ensure this test stays synchronized to the test in logic_test/upsert.
+query TTTTT
+EXPLAIN (VERBOSE)
+INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
+----
+·                                        distribution           local                                        ·                                                  ·
+·                                        vectorized             false                                        ·                                                  ·
+upsert                                   ·                      ·                                            ()                                                 ·
+ │                                       estimated row count    0 (missing stats)                            ·                                                  ·
+ │                                       into                   tdup(x, y, z)                                ·                                                  ·
+ │                                       auto commit            ·                                            ·                                                  ·
+ │                                       arbiter indexes        tdup_y_z_key                                 ·                                                  ·
+ └── project                             ·                      ·                                            (column1, column2, column3, x, y, z, upsert_z, x)  ·
+      └── render                         ·                      ·                                            (upsert_z, column1, column2, column3, x, y, z)     ·
+           │                             estimated row count    2 (missing stats)                            ·                                                  ·
+           │                             render 0               CASE WHEN x IS NULL THEN column3 ELSE 1 END  ·                                                  ·
+           │                             render 1               column1                                      ·                                                  ·
+           │                             render 2               column2                                      ·                                                  ·
+           │                             render 3               column3                                      ·                                                  ·
+           │                             render 4               x                                            ·                                                  ·
+           │                             render 5               y                                            ·                                                  ·
+           │                             render 6               z                                            ·                                                  ·
+           └── lookup join (left outer)  ·                      ·                                            (column1, column2, column3, x, y, z)               ·
+                │                        estimated row count    2 (missing stats)                            ·                                                  ·
+                │                        table                  tdup@tdup_y_z_key                            ·                                                  ·
+                │                        equality               (column2, column3) = (y,z)                   ·                                                  ·
+                │                        equality cols are key  ·                                            ·                                                  ·
+                └── distinct             ·                      ·                                            (column1, column2, column3)                        ·
+                     │                   estimated row count    2                                            ·                                                  ·
+                     │                   distinct on            column2, column3                             ·                                                  ·
+                     │                   nulls are distinct     ·                                            ·                                                  ·
+                     │                   error on duplicate     ·                                            ·                                                  ·
+                     └── values          ·                      ·                                            (column1, column2, column3)                        ·
+·                                        size                   3 columns, 2 rows                            ·                                                  ·
+·                                        row 0, expr 0          2                                            ·                                                  ·
+·                                        row 0, expr 1          2                                            ·                                                  ·
+·                                        row 0, expr 2          2                                            ·                                                  ·
+·                                        row 1, expr 0          3                                            ·                                                  ·
+·                                        row 1, expr 1          2                                            ·                                                  ·
+·                                        row 1, expr 2          2                                            ·                                                  ·
+
+statement ok
+CREATE TABLE target (a INT PRIMARY KEY, b INT, c INT, UNIQUE (b, c))
+
+statement ok
+CREATE TABLE source (x INT PRIMARY KEY, y INT, z INT, INDEX (y, z))
+
+# Show sorted upsert-distinct-on. "order key = y, z" should be set below.
+# Ensure this test stays synchronized to the test in logic_test/upsert.
+query TTTTT
+EXPLAIN (VERBOSE)
+INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
+ON CONFLICT (b, c) DO UPDATE SET b=5
+----
+·                                        distribution         local                                  ·                                ·
+·                                        vectorized           false                                  ·                                ·
+upsert                                   ·                    ·                                      ()                               ·
+ │                                       estimated row count  0 (missing stats)                      ·                                ·
+ │                                       into                 target(a, b, c)                        ·                                ·
+ │                                       auto commit          ·                                      ·                                ·
+ │                                       arbiter indexes      target_b_c_key                         ·                                ·
+ └── project                             ·                    ·                                      (x, y, z, a, b, c, upsert_b, a)  ·
+      └── render                         ·                    ·                                      (upsert_b, x, y, z, a, b, c)     ·
+           │                             estimated row count  311 (missing stats)                    ·                                ·
+           │                             render 0             CASE WHEN a IS NULL THEN y ELSE 5 END  ·                                ·
+           │                             render 1             x                                      ·                                ·
+           │                             render 2             y                                      ·                                ·
+           │                             render 3             z                                      ·                                ·
+           │                             render 4             a                                      ·                                ·
+           │                             render 5             b                                      ·                                ·
+           │                             render 6             c                                      ·                                ·
+           └── merge join (right outer)  ·                    ·                                      (a, b, c, x, y, z)               ·
+                │                        estimated row count  311 (missing stats)                    ·                                ·
+                │                        equality             (b, c) = (y, z)                        ·                                ·
+                │                        merge ordering       +"(b=y)",+"(c=z)"                      ·                                ·
+                ├── scan                 ·                    ·                                      (a, b, c)                        +b,+c
+                │                        estimated row count  1000 (missing stats)                   ·                                ·
+                │                        table                target@target_b_c_key                  ·                                ·
+                │                        spans                FULL SCAN                              ·                                ·
+                └── distinct             ·                    ·                                      (x, y, z)                        +y,+z
+                     │                   estimated row count  311 (missing stats)                    ·                                ·
+                     │                   distinct on          y, z                                   ·                                ·
+                     │                   nulls are distinct   ·                                      ·                                ·
+                     │                   error on duplicate   ·                                      ·                                ·
+                     │                   order key            y, z                                   ·                                ·
+                     └── filter          ·                    ·                                      (x, y, z)                        +y,+z
+                          │              estimated row count  311 (missing stats)                    ·                                ·
+                          │              filter               x != 1                                 ·                                ·
+                          └── scan       ·                    ·                                      (x, y, z)                        +y,+z
+·                                        estimated row count  333 (missing stats)                    ·                                ·
+·                                        table                source@source_y_z_idx                  ·                                ·
+·                                        spans                /NULL-/!NULL /1-                       ·                                ·

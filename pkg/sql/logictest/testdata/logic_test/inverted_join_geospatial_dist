@@ -1,0 +1,146 @@
+# LogicTest: 5node-default-configs !5node-metadata
+
+statement ok
+CREATE TABLE ltable(
+  lk int primary key,
+  geom1 geometry,
+  geom2 geometry
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)', 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)', 'POINT(3.0 3.0)'),
+  (3, 'POINT(1.5 1.5)', 'POINT(3.0 3.0)')
+
+statement ok
+CREATE TABLE rtable(
+  rk int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 'POINT(1.0 1.0)'),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 'POINT(3.0 3.0)'),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+statement ok
+ALTER TABLE ltable SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE ltable EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE ltable] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         /3       {2}       2
+/3         NULL     {3}       3
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElF1v2jwYhs_fX2E9R0U1b3AC_chRtpVJqRjpoAebqqjKkkdd1mBntjN1qvjvUxI2CAUn7EOcYew79-VHl_wM6msGLszHk_GbW1LIjLydBe_I3fjDzeSVPyUnV_78dv5-0iOrI9kjJfKxPpXp6FOG5Drwp0RWv70HFIv7lCf4RIIpUfo-5Rqlwlirk_r4_-URRleBatUjwexqPCOvP5KT-vu9EChwkeA0WqAC9w4YULCBggMhhVyKGJUSstx6rg76yRO4Awopzwtd_h1SiIVEcJ9BpzpDcOG2bJxhlKC0BkAhQR2lWfX5ms3LZbqI5HegMM8jrlzSt8rSoNAu8Rj1bAiXFESh1yVKRw8ILlvS7iA-_4ZSY3ItUo7ScposL0YJ9Fdi_JTLrbF6NiXesNfApJ6zl9Q-hLQkXE3sbCflemITIR6LnHwRKSeCu8Qrr_VCgop21KDdj-ocgjoXUqO0LpuYHjulnn0KFBaRjj-TDLlL2N7G4d7GdZGQCUpMdveEyx1oU9EXucXsRmQfwqiBwLorzbopbdn9yriDpW5B2ZJ6eESpW0g3pD4_ttQtqCup2eAvWm13V8ruqJTT_x2hWkC2hBodUagW0g2hLo4tVAvqT6HYP3omd1TOUOWCK-z0-g3K9xOTB6zfXCUKGeONFHFVUy-DKlf9kaDS9S6rFz6vt0rAzTAzhm1z2DaGHXPYMYaHjTDbDg_Nd26pHhnTZ-bwmTF8bg6fG8MX5vDFn0zs0jyxQYsmLZK1WWbWjLV4xsyibd88XP73IwAA___909Eu
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVVFv2jwUff9-hXWfQDUFO9DSPKXfSiUqRjrgYVOFqoxcdVlTO7PN1qnqf5-coJVQsOn60r5h-x7uPcfnOA-gf-QQwnQwGnyYkaXKyfkk_kiuBp8vR6fDMWmcDaez6adRk6xK8ltK1G1VlZvka47kIh6OiSp_Rzco764zkeI9icdEm-tMGFQaF0Y3qpJDW0JX2HLBmiSe2Nr0V2a-ZaKxfkZJDcZt7dlgQv7_QhrVLM05UBAyxXFyhxrCK2BAgQOFAOYUCiUXqLVU9uihLBym9xB2KGSiWBq7PaewkAohfACTmRwhhJltOsEkRdXuAIUUTZLl5d9X40WFyu4S9RsoTItE6JC02rZpvDQhiRiNOMwfKcileWqiTXKDELJHuv8gQ_ETlcH0QmYCVTuoz_JMdqB_EYP7Qm1cQcQpibqbele7lPDDThiG56P4dNZv1qjQKNjJhr-EzVQqg6p9VGcRsQMaBQc7WwQvaWGFWl3cyVaxni5uJOXtsiDfZSaIFCGJrLrPfBv1KIn4VtF6DtF2K9bdSeeJhVQpKky36MStTlt4j2VLFm3Ga5BdI_RqI7D9s8D2y0Kbt0qrvjgNnlE20tB942nwsFml4fg1afC0WEsD67yHOPD9vcj39GLQ-hcnegbZcGLvjTvRw2blxP5rnOhpse5E9h6c6PnOTFAXUmjc673t2Bcb0xusXnktl2qBl0ouyjbVMi5x5UaK2lSnrFoMRXVkB1wHMyeYu8HcCQ7c4MAJ7tbAbBPcdXP2tO450Udu8JETfOwGHzvBfTe4_xrFTtyKdTw28ZjM5zK3zZjHZ8xttE3m88f__gQAAP__5mgOKA==
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVV1vGjsQfb-_wponUEzAXkiInzb3hkhEXDYFHlpFKNqyo2Sbxd7apk0V8d-r3aUNy4eX9ENK3rBnDuec4Yx5AvM5AQHj3qD334QsdEIuR8H_5Kb3_npw3h-S2kV_PBm_G9TJqiV5oEQ_FF2JDT8mSK6C_pDo_LN_h2p-G8sIH0kwJMbextKiNjizpla0H2ctjK4A-alOzocXWXP0Nbb3sayt1Sgpw3idBKOL3oj8-4HUCjH1KVCQKsJhOEcD4gYYUOBAwYMphVSrGRqjdFZ6yhv70SOIFoVYpgubXU8pzJRGEE9gY5sgCJhkrCMMI9TNFlCI0IZxkn99ochPdTwP9TegME5DaQRpNDPSYGEF8Rn1OUyXFNTCPpMYG94hCLakhwvpyy-oLUZXKpaom15Zy9bcgf5E9B5TvfEb-JwSv7018OKaEn7cEkJcDoLzSbde8kJ9b68d_hI7mY3VWE92Wnke60Cph0VKPqlYEiUF8TPvW7HKtXe2LXUoyUp7Le33473Ez1hpi7p5VvbisyPq8yOgMA_t7J4kKAVhexnbexmfiZSOUGO0m2e63CFtqBoqbTJeguyT0ClJYIcvBztsOZq8kWf3xetRIWVjPdqvfT0q7Kytx-mbWI8KP6v1YK0_uB_88HDyA8PpNX4lmhVCNqLZee3RrLCzFs3um4hmhZ8f0WR_6eneQTlCkypp8KAXuZW96RjdYfE_YNRCz_Baq1lOUxyDHJdfRGhsUWXFoS-LUiZwHcycYO4GcyfYc4M9J7hdArNNcNvtuYK640SfuMEnTvCpG3zqBHfd4O7vTOzMPbFWRUwqQlaVMnfMWEXOmDtom86ny3--BwAA__-jCRy4
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.geom)
+AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzsVUFv2jAYve9XWN-lIBmIE6DUp1QrTKlo0gGHTRWqMuJ1WVM7s52uVcV_n5JUKwlgUk27wQnb7_l9ed_35BdQvxKgMB9Pxx8XKJMJmsyCK3Qz_nI9Pfd81Lrw5ov552kbvUKSe4zkfYlKdPgtYegy8Hwki__uHRMPtzGP2BMKfNRS-jbmmknFVlq1Snw3xxD8yihWbXTuXyClb1fikckK0K4CS2R-b_Q9S5Ln37H-EfPWBgSjqgyxrDYKZqhaysl14PmLFulaiHSt9klNZQkYuIiYHz4wBfQGCGCwAYMDSwypFCumlJD50UsB9KInoBaGmKeZzreXGFZCMqAvoGOdMKCwyAVmLIyY7FmAIWI6jJPi-rJkN5XxQyifAcM8DbmiqNOzYbnGIDL9dq_S4R0DSta4ubbHH5nULLoUMWey51Tlt5oH-C9j_JTKeiNdGyN3UO-a6xS7e1pUcop-dC1K6WQanC9Gu1pjEYtYW7-J5Uzq6xNK6adxcDVezL6W2oAhyDRFLsGujV0Hu_29BtrvMTA37rV3w53mvfVuKsR9lqKfIuZIcIrcfl7VVhoKQ4Y7TRzuNXGIUc77jyYOqybut8_Za9-baxkXMmKSRRXLlusdBvuiI9LeWQ24W7pfkSbNY0eaxa5nd3pOw-AdUK8Fr38MXj14BwzcCN7pMXjbwbObT7_dcPqdTsPZP6Bdm_3Bcfbrs3_AwI3ZHx1n3_zo7LBvxlQquGKN3hQrf5RYdMfKF0yJTK7YtRSrQqZcBgWv2IiY0uUpKRceL4_yAjfJxEi2zWTbSHYqZFInO-ayLbN038gemMkDI3loJg__5aNPjeSRWXlkJJ-ZyWfvKnu5_vAnAAD__96MMnU=
+
+# This query performs a semi-join, which is converted to an inner join by the
+# optimizer.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElVFP2zAQx9_3Kax7opu71klaIE-ZRqZ16lrWIg0JVSg0J8gIcWY7Ewj1u09JKtKG1k4Ho49J7uf7-ey_8gjydwwuTP2h__mMZCImXybj7-TCPz8dfhqMyMHJYHo2_TFskWVJfFtWxCq4ipH8_OpPfOKf51XkYFnzviwRqyVSXUaJQiFxruRBSX-8Rn5n0WVh8dRqzYBCwkMcBXcowb0ABhQsoGDDjEIq-Byl5CL_9FgUDsJ7cLsUoiTNVP56RmHOBYL7CCpSMYILZ3mDCQYhik4XKISogiguli9VvFREd4F4AArTNEikS9qdvOk4Uy7xGPVsmC0o8ExVTaQKrhFctqDNRQbJHxQKw288SlB07HWXchBePojLKAnxHugT4d-nojZFz6LEc1qrmpbO1NrFNDdcTqy_0bKa2JDz2ywlv3iUEJ64xMu3NR5tsu2t225VtXdRPYmkipK56hyvi3r51RmLEAWGecNat2qBqwdyE8ibZ_RsURk5W42qdXjZq77Oh3KhrdrMMng_jWzrvHoN7LJkk99GtRFv87TDerXKzb37a71Z8ySyZknsWO0iKDtn0aBSy6KzxywaTFeyeLjvLBpUq0vdfbMwslcNo_3KYbSaB8JqGAi7_S9xMIjU4tDbYxwMpitxONp3HAyq1bVibxYH61Xj4PzHf9OGxhOUKU8kNvrzdHN1DK-x3KrkmZjjqeDzok35OC644kWIUpVfWfkwSMpPueAqzLSwpYctLWzrYbsOs1XYWYPZbjDrvoju6WlHu2sD3NMfVl8_s76WPtTDh1r4SA8faeFjPXz8kqPWw6ajNtCG02L6bJlofbiYIV1MHy9myBd7dsvXcceAP7vmuxyagTadmgk3DV6fsjo9W7z7GwAA__9Kzz7E
+
+# Left joins are also converted to an inner join by the optimizer.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9Fv2jAQxt_3V5zuCSRr4AAvkSZ52tI1FSMdZNKkClVpctAMY2e2M1Eh_vcpCRojLQweff4-3---S7Zof0n0cRaMg08xlEbCzTT6Cg_Bj_vxx3ACnc_hLJ59G3dhL5ErBmbVqKRLniTBOLiJ4S4KJ2CaQjQB6x5z5chYSp3tNML3S9Jrzvaq-tSdI0OlM5oka7LoPyDHOcPC6JSs1aYqbWtBmG3Q7zPMVVG6qjxnmGpD6G_R5U4S-ih1mkiwaaLgqVwsyEC_10eGGbkkl7Vpx1CX7vCEdcmS0Oc7dnmbUP0m4yi707ki0-NHHbCZTlTTPeYqow2yv45gU5hWNMJjIIZdZBiVzgcxYIIz4eEpUu8a0opwSklGpue9SVmYfJ2YF2Q41npVFvBT5wq08kFUY71apBgwEKMDbYXKKubRSeDBNcCvN8h7g4s2ODzZ5vB6qbTJyFDWfvH_kjdYbxP7vP8Ehsfhxi8F-TANv9zGEH2Pg2n9dyBDSQvXEV73g8mXz64j-CHJERP8ZIajazKcki20snRRbP1qMsqW1CRldWlSujc6rds0x6j21YWMrGtueXMIVXNVAf5r5mfN3nmzd9Y8PDLztnlwhdlrm4dnzaMW9nz37k8AAAD__-1Ht2g=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+WITH q AS (
+  SELECT * FROM ltable WHERE lk > 2
+)
+SELECT count(*), (SELECT count(*) FROM q) FROM (
+  SELECT lk, rk
+  FROM q
+  LEFT JOIN rtable ON ST_Intersects(q.geom1, rtable.geom)
+) GROUP BY lk]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlM9u2kAQxu99itGccLQq2EAOliqZpk5wRO3UGKVRipBjT4iLswu76ypRlHev_CehkEDDCe3M_Ga-nY_1E6pVjjaO3ZF7EkEhczgNg-9w7f68GA08H1rfvHE0_jEy4NKLhrCCwRhaTfVRXZvr-CYnuBy6oQv5An4VnU6XwDKgqUtEwXXryGCv5EukbrBqfl-y-YKBXDQ5GLmnEZwHng-yHhT4oPQs45qkokSr1urznMS9yZqC6mQYcBYGkwv4egX5YooMuUjJj-9JoX2NJk4ZLqVISCkhy9BTVeClD2h3GGZ8WegyPGWYCEloP6HOdE5oYy6SOAeVxBxuittbktBpd5BhSjrO8gp6ZigKvW6hdDwntM1n9vExHv9DUlN6LjJOsm1uTMD6qk551VnGU3pA9kq4D0u5tSLHYuD0DGQYFNoGp8sckzkW7lJqHaK0VBhSnJJsW--qXMrsPpaPyHAkxKJYwm-RcRDcBqe81htDnS4Dp79W22eOxZzuTrXdQ9S-tc9sdz9kX2_nmHX3gguZkqR0u-P_S97ROozVXeN_b3Oz0eOSbAi9s2EEwSRyw-qJIMOcbnXLsYwvMpvf6ZZjrtfY27nA_iELHMznkuaxFrLd3xRVuTnwr2Z-EM38yWjUjD8JJn40C4PLcas8hsRTkjaUf8rmzb98EMo3vzJ26jw-RGdIaim4og952ynXT-mcajuVKGRCF1Ik1Zj6GFRcFUhJ6Tpr1geP16lS4L-wuRe29sPWXri3AZvbcPcA2NqGe3vh_n7Z_b3w8RY8ff70NwAA__-fpxhU
+
+# Anti joins are also converted to an inner join by the optimizer.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9Fum0wQhe__pxjNFf61qg22pQqpElFKGiIKKRA1UmRFBCYODdmlu0uVKPK7VwtWHdPYtS93OWfmm7PMK6qfNbqY-qF_mkErazhL4q9w419fhidBBNbnIM3Sb-EI1pL6sVfUOr-rCb6f-4kPUZyBf22UYK11__cy-Vam9G3FNUlFhVZWX-HDksSTw9bC7jQaLZAhFyVF-RMpdG_QxgXDRoqClBLSXL12gqB8RnfCsOJNq831gmEhJKH7irrSNaGLtSjyGlSRc7hr7-9JwmQ8QYYl6byqO9OKoWj1poTS-ZLQtVfs8DYB_0VSU3khKk5ybG91wH48z4x3W_GSnpH9cfjPjRxk4zkMvNkIGcatdsGbMs9mnoO7SJ1jSA1hQnlJcuy8S9nI6imXL8gwFOKxbeCHqDgI7oJnxoqjIe2UgTff0BpUZpjnO4GnxwD__YL2eHrQC852ttlUb7mQJUkqhxX_LXmH9TxXD-tfYLYdbvbSkAtJ8OU8g_gq8xO4iIMIGdZ0ry3PGX2S1fJBW55tkjyrak3ShAlB2i2Y2cQgOs36xTo9STMrugpDOEkhiLKPm_h3pz4_JvWEVCO4ooOCnpgsqFxSn60SrSzoUoqia9Mf487XXZSkdP_V7g8B7z8ZwLdme6_Z2W929ppnW2Z7aJ4eYXaG5tle83yAvVj99zsAAP__b1jKcw==
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk FROM ltable
+WHERE NOT EXISTS (
+  SELECT * FROM rtable WHERE ST_Covers(ltable.geom1, rtable.geom) AND lk > 5 AND rk > 12
+)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk29vmzAQxt_vU5zuFUzWEiCRJqRJRC1dqTLoEqpV6qKKwjVldTGzTdWq6nefDFn-rcmalz4_z92PB98Lqt8cfZyG4_AohUZyOJkk3-AqvDwfj6IYrONomk6_j21YSPh9p-A6u-EEP07DSQhxkkJ4aZRgLXQfO5lcl1lKX-fikaSyOvunOYkHhy1U7cmGUXwMFr-Hn02_7xEM7UVJLkuOa9szZFiJguLsgRT6V-jgjGEtRU5KCWlKL60gKp7Q7zMsq7rRpjxjmAtJ6L-gLjUn9JGLPOOg8qyCm-b2liT0e31kWJDOSt62Pym5JulD4CzBfN-P4vQzzl4Zikav2iudzQl955W9HyGqHklqKs5EWZHsOZvTu4ACE9B1WRX0hGzpCJ9qCatkA5dBMLCRYRJD4K0y-4vLMGm0D4HHAocF7k589xB8gz2hrCDZc99Er2X5kMlnZDgW4r6p4ZcoKxCVSbRjXfsEj0EwtJekBpMZ3uFOWO8Q2H9_t9PzNqh3jRnsHLPq3lRCFiSp2O74f8kbrKeZulu8icFmsOlzTT5Moq-nKSQXaTiBsySKkSGnW20Frv1FlvM7bQWOSXLt_UbTdmHNZkfxUdot6tFomlrxxXgMoymYd7KKf3fqw0NSn5CqRaXoXUH3TRZUzKnLVolG5nQuRd6O6Y5J62sLBSnd3TrdIaq6KwO4bnb2mt39ZnevebBhdrbN3gFmd9s82GsebmHPXj_8CQAA___Yjtw0
+
+# Bounding box operations.
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElMGO2jwQgO__U1hz2pXMD0mAhZxStVTKiiZb4FBpFa1SPEIpwU5tZ0WF2GevkqBCKJjQSuUW2_N5Pnsm3oD6noIL09F49H5GcpmSj5PwE3kefXkav_MDcvfBn86mn8f3ZBeSLimRyyoq1fHXFMlj6AdElt_eAsXqJeEM1yQMdgH_F5MWedvFlMMIKHDBMIhXqMB9Bgso2EDBgYhCJsUclRKyWNqUgT5bg9uhkPAs18V0RGEuJIK7AZ3oFMGFWbH9BGOGst0BCgx1nKTl9pWJl8lkFcsfQGGaxVy5pNUukoa5dolnUc-GaEtB5HqfROl4geBaW9pcxOevKDWyR5FwlG2n7vLbVQH9RYzWmSRKv8zFK0p159mUeN37miL1nLOW9jWWhd3utvonDfe3NRZimWfkm0g4EdwlXnGkMCCeTd6I1zv0Oy_nnJXbO-VcSIYSWU0o2p7QD0RLZO3hUeDp1N1aaqt5G1nN2qhtt8oqX91IF1SOGql7o0a6YHnQSA__vpHs5tW0G1bTaf1JLS-IHNWyd6NaXrA8qOXgto_CCbkJqkxwhY3--U7xaCBbYPXCKJHLOT5JMS_TVMOw5MoJhkpXq1Y18Hm1VAgewpYRts2wbYSdGmwdw45Zu2NO3TXSPTPcM8J9M9z_m0M_GOGBOfPACA_N8PAq7Wj7388AAAD__5r_BqA=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElFFv2jAQx9_3Kax7aiUzSAIU8pRpY1IqRjrgYVIVVSk5oYxgZ7ZTUSH62ScnbBAGJmzSeIvP9_f_57uL1yB_pODCZDAcfJySXKTk8zj4Qh4H3x6GH_wRufnkT6aTr8Nbsk1JF5SIRZmVqug5RXIf-CMiim9vjnz5lLAYVyT4FXyvg-Rtm16srBAoMB7jKFqiBPcRLKBgAwUHQgqZ4DOUkgu9tS4S_XgFbotCwrJc6XBIYcYFgrsGlagUwYWpPn-MUYyi2QIKMaooSYvjS28vE8kyEq9AYZJFTLqk0dSmQa5c4lnUsyHcUOC52plIFc0RXGtD64P47AWFwvieJwxF06my_FEqoL8Vg1UmiFRPM_6CAuPn1xvPpsRr31YoqeecBLUvAdWA24J1j0LuCjbkfJFn5DtPGOHMJZ6-VTAiXoe8Ea9SxdNwzkm4HVPOuIj15StA4eYI_og3eNbsHyQet25XrK36k2TVm6Sm3SgaffEsnUE5mKX29WbpDOjeLN39_1my6zfUrtlQp_E37TwDctDOzvXaeQZ0r5296z4NR-DGKDPOJNb681v66cB4juU7I3kuZvgg-KywKZdBoSsCMUpV7lrlwmfllgbcF1tGsW0W20axUxFbh2LHjN0yW7eN6o5Z3DGKu2Zx918ufWcU98zOPaO4bxb3L8ION-9-BgAA__9vVwoz
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom && ltable.geom1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlM-O2jAQh-99CmtOu5Ip-QMs5JSqpVJWlGyBQ6VttErxCKUEO7Wdigrx7lUSWggFE9oDvSBi-_N89m_kDahvKXgwHY6Gb2cklyl5Pwk_kOfhp6fRm2BM7t4F09n04-ie7JakS0rkslqV6vhLiuQxDMZElv_9BYrVS8IZrkn4a_B1MUg-55bl9KrfHVlO2BFQ4ILhOF6hAu8ZbKDgAAUXIgqZFHNUSshialMuDNgaPItCwrNcF8MRhbmQCN4GdKJTBA9mxf4TjBnKtgUUGOo4Scvtq9p-JpNVLH8AhWkWc-WRVrsoGubaI75NfQeiLQWR630RpeMFgmdvaXORgH9HqZE9ioSjbLt1lz9uDehvYrjOJFH6JeEapcK5Vne-Q4nfua9pUt89a-pcY1oY7m6sd9Jyf2MjIZZ5Rr6KhBPBPeIXxwrHxO_WY_ZrN3re0z3rudfLuZAMJbKaW7Q9cZKxaImsPThaeLp0p1babt5VdrOuajutMvSr--qCylFfdW7YVxdMD_rq4aZ95TQP12kYrtv6m2gviBxF271htBdMD6Lt_zdPxgnPCapMcIWNXgSreFKQLbB6f5TI5RyfpJiXZarPsOTKAYZKV7N29RHwaqoQPIRtI-yYYccIuzXYPoZds7ZlLt0x0l0z3DXCPTPc-5dDPxjhvrly3wgPzPDgKu1o--pnAAAA___waBaG

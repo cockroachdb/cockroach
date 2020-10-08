@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package logflags
 
@@ -27,9 +23,12 @@ type atomicBool struct {
 	b *bool
 }
 
+// IsBoolFlag is recognized by pflags.
 func (ab *atomicBool) IsBoolFlag() bool {
 	return true
 }
+
+var _ = (*atomicBool).IsBoolFlag
 
 func (ab *atomicBool) String() string {
 	if ab.Locker == nil {
@@ -61,34 +60,34 @@ var _ flag.Value = &atomicBool{}
 const (
 	LogToStderrName               = "logtostderr"
 	NoColorName                   = "no-color"
-	VerbosityName                 = "verbosity"
+	RedactableLogsName            = "redactable-logs"
 	VModuleName                   = "vmodule"
-	LogBacktraceAtName            = "log-backtrace-at"
 	LogDirName                    = "log-dir"
-	NoRedirectStderrName          = "no-redirect-stderr"
 	ShowLogsName                  = "show-logs"
 	LogFileMaxSizeName            = "log-file-max-size"
-	LogFilesCombinedMaxSizeName   = "log-dir-max-size"
+	LogFilesCombinedMaxSizeName   = "log-group-max-size"
 	LogFileVerbosityThresholdName = "log-file-verbosity"
+
+	DeprecatedLogFilesCombinedMaxSizeName = "log-dir-max-size"
 )
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is
 // locked while the boolean variables are accessed during flag updates.
 func InitFlags(
-	noRedirectStderr *bool,
 	logDir flag.Value,
 	showLogs *bool,
 	nocolor *bool,
-	verbosity, vmodule, traceLocation flag.Value,
+	redactableLogs *bool,
+	vmodule flag.Value,
 	logFileMaxSize, logFilesCombinedMaxSize *int64,
 ) {
 	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
-	flag.BoolVar(noRedirectStderr, NoRedirectStderrName, *noRedirectStderr, "disable redirect of stderr to the log file")
-	flag.Var(verbosity, VerbosityName, "log level for V logs")
-	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging")
-	flag.Var(traceLocation, LogBacktraceAtName, "when logging hits line file:N, emit a stack trace")
+	flag.BoolVar(redactableLogs, RedactableLogsName, *redactableLogs, "make log outputs redactable for confidentiality")
+	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging (significantly hurts performance)")
 	flag.Var(logDir, LogDirName, "if non-empty, write log files in this directory")
 	flag.BoolVar(showLogs, ShowLogsName, *showLogs, "print logs instead of saving them in files")
 	flag.Var(humanizeutil.NewBytesValue(logFileMaxSize), LogFileMaxSizeName, "maximum size of each log file")
-	flag.Var(humanizeutil.NewBytesValue(logFilesCombinedMaxSize), LogFilesCombinedMaxSizeName, "maximum combined size of all log files")
+	flag.Var(humanizeutil.NewBytesValue(logFilesCombinedMaxSize), LogFilesCombinedMaxSizeName, "maximum combined size of all log files in a logging group")
+	// The deprecated  name for this last flag.
+	flag.Var(humanizeutil.NewBytesValue(logFilesCombinedMaxSize), "log-dir-max-size", "maximum combined size of all log files in a logging group (deprecated)")
 }

@@ -1,0 +1,34 @@
+feature-allowlist
+sql.udts.*
+sql.schema.alter_type.*
+----
+
+feature-usage
+CREATE TYPE t AS ENUM ('hello')
+----
+sql.udts.create_enum
+
+feature-usage
+ALTER TYPE t ADD VALUE 'howdy'
+----
+sql.schema.alter_type.add_value
+sql.udts.alter_enum
+
+feature-usage
+CREATE TABLE tt (x t)
+----
+sql.udts.enum_used_in_table
+
+feature-usage
+ALTER TABLE tt ADD COLUMN y t
+----
+sql.udts.enum_used_in_table
+
+exec
+DROP TABLE tt
+----
+
+feature-usage
+DROP TYPE t
+----
+sql.udts.drop_enum

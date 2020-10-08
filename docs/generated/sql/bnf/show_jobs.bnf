@@ -1,2 +1,8 @@
 show_jobs_stmt ::=
-	'SHOW' 'JOBS'
+	'SHOW' 'AUTOMATIC' 'JOBS'
+	| 'SHOW' 'JOBS'
+	| 'SHOW' 'JOBS' select_stmt
+	| 'SHOW' 'JOBS' 'WHEN' 'COMPLETE' select_stmt
+	| 'SHOW' 'JOBS' for_schedules_clause
+	| 'SHOW' 'JOB' job_id
+	| 'SHOW' 'JOB' 'WHEN' 'COMPLETE' job_id

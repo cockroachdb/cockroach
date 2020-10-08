@@ -1,1 +1,2 @@
 *.pb.* -diff
+*.eg.go -diff

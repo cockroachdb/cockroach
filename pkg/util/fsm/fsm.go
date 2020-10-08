@@ -1,24 +1,18 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // See doc.go for a description.
 
 package fsm
 
-import (
-	"context"
-)
+import "context"
 
 // State is a node in a Machine's transition graph.
 type State interface {
@@ -71,7 +65,7 @@ type TransitionNotFoundError struct {
 	Event Event
 }
 
-func (e TransitionNotFoundError) Error() string {
+func (e *TransitionNotFoundError) Error() string {
 	return "event " + eventName(e.Event) + " inappropriate in current state " + stateName(e.State)
 }
 
@@ -86,6 +80,11 @@ type Transitions struct {
 	expanded Pattern
 }
 
+// GetExpanded returns the expanded map of transitions.
+func (t Transitions) GetExpanded() Pattern {
+	return t.expanded
+}
+
 // Compile creates a set of state Transitions from a Pattern. This is relatively
 // expensive so it's expected that Compile is called once for each transition
 // graph and assigned to a static variable. This variable can then be given to
@@ -97,11 +96,11 @@ func Compile(p Pattern) Transitions {
 func (t Transitions) apply(a Args) (State, error) {
 	sm, ok := t.expanded[a.Prev]
 	if !ok {
-		return a.Prev, TransitionNotFoundError{State: a.Prev, Event: a.Event}
+		return a.Prev, &TransitionNotFoundError{State: a.Prev, Event: a.Event}
 	}
 	tr, ok := sm[a.Event]
 	if !ok {
-		return a.Prev, TransitionNotFoundError{State: a.Prev, Event: a.Event}
+		return a.Prev, &TransitionNotFoundError{State: a.Prev, Event: a.Event}
 	}
 	if tr.Action != nil {
 		if err := tr.Action(a); err != nil {

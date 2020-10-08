@@ -1,37 +1,119 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+statement ok
+CREATE TABLE t (
+  a INT REFERENCES t,
+  FAMILY "primary" (a, rowid)
+)
 
 statement ok
-CREATE TABLE t (a INT REFERENCES t)
+CREATE TABLE v (
+  "'" INT REFERENCES t, s STRING UNIQUE REFERENCES v (s),
+  FAMILY "primary" ("'", s, rowid)
+)
 
 statement ok
-CREATE TABLE v ("'" INT REFERENCES t, s STRING UNIQUE REFERENCES v (s))
+CREATE TABLE c (
+	a INT NOT NULL,
+	b INT NULL,
+	INDEX c_a_b_idx (a ASC, b ASC),
+	FAMILY fam_0_a_rowid (a, rowid),
+	FAMILY fam_1_b (b)
+)
+
+statement ok
+COMMENT ON TABLE c IS 'table'
+
+statement ok
+COMMENT ON COLUMN c.a IS 'column'
+
+statement ok
+COMMENT ON INDEX c_a_b_idx IS 'index'
 
 query TTTT colnames
 SELECT create_statement, create_nofks, alter_statements, validate_statements FROM crdb_internal.create_statements WHERE database_name = 'test'
 ----
 create_statement  create_nofks  alter_statements  validate_statements
-CREATE TABLE t (
-   a INT NULL,
-   CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES t (rowid),
-   INDEX t_auto_index_fk_a_ref_t (a ASC),
+CREATE TABLE public.t (
+   a INT8 NULL,
+   CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES public.t(rowid),
    FAMILY "primary" (a, rowid)
-)  CREATE TABLE t (
-   a INT NULL,
-   INDEX t_auto_index_fk_a_ref_t (a ASC),
+)  CREATE TABLE public.t (
+   a INT8 NULL,
    FAMILY "primary" (a, rowid)
-)  {"ALTER TABLE t ADD CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES t (rowid)"}  {"ALTER TABLE t VALIDATE CONSTRAINT fk_a_ref_t"}
-CREATE TABLE v (
-   "'" INT NULL,
+)  {"ALTER TABLE public.t ADD CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES public.t(rowid)"}  {"ALTER TABLE public.t VALIDATE CONSTRAINT fk_a_ref_t"}
+CREATE TABLE public.v (
+   "'" INT8 NULL,
    s STRING NULL,
-   CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v (s),
+   CONSTRAINT "fk_'_ref_t" FOREIGN KEY ("'") REFERENCES public.t(rowid),
+   CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s),
    UNIQUE INDEX v_s_key (s ASC),
-   CONSTRAINT "fk_'_ref_t" FOREIGN KEY ("'") REFERENCES t (rowid),
-   INDEX "v_auto_index_fk_'_ref_t" ("'" ASC),
    FAMILY "primary" ("'", s, rowid)
-)  CREATE TABLE v (
-   "'" INT NULL,
+)  CREATE TABLE public.v (
+   "'" INT8 NULL,
    s STRING NULL,
    UNIQUE INDEX v_s_key (s ASC),
-   INDEX "v_auto_index_fk_'_ref_t" ("'" ASC),
    FAMILY "primary" ("'", s, rowid)
-)  {"ALTER TABLE v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v (s)","ALTER TABLE v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES t (rowid)"}  {"ALTER TABLE v VALIDATE CONSTRAINT fk_s_ref_v","ALTER TABLE v VALIDATE CONSTRAINT \"fk_'_ref_t\""}
+)  {"ALTER TABLE public.v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"fk_'_ref_t\"","ALTER TABLE public.v VALIDATE CONSTRAINT fk_s_ref_v"}
+CREATE TABLE public.c (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  INDEX c_a_b_idx (a ASC, b ASC),
+  FAMILY fam_0_a_rowid (a, rowid),
+  FAMILY fam_1_b (b)
+);
+COMMENT ON TABLE public.c IS 'table';
+COMMENT ON COLUMN public.c.a IS 'column';
+COMMENT ON INDEX public.c@c_a_b_idx IS 'index'  CREATE TABLE public.c (
+                                                a INT8 NOT NULL,
+                                                b INT8 NULL,
+                                                INDEX c_a_b_idx (a ASC, b ASC),
+                                                FAMILY fam_0_a_rowid (a, rowid),
+                                                FAMILY fam_1_b (b)
+);
+COMMENT ON TABLE public.c IS 'table';
+COMMENT ON COLUMN public.c.a IS 'column';
+COMMENT ON INDEX public.c@c_a_b_idx IS 'index'  {}  {}
+
+query T noticetrace
+CREATE UNLOGGED TABLE unlogged_tbl (col int PRIMARY KEY)
+----
+NOTICE: UNLOGGED TABLE will behave as a regular table in CockroachDB
+
+query TT
+SHOW CREATE TABLE unlogged_tbl
+----
+unlogged_tbl  CREATE TABLE public.unlogged_tbl (
+              col INT8 NOT NULL,
+              CONSTRAINT "primary" PRIMARY KEY (col ASC),
+              FAMILY "primary" (col)
+)
+
+statement error invalid storage parameter "foo"
+CREATE TABLE a (b INT) WITH (foo=100);
+
+statement error parameter "fillfactor" requires an float value
+CREATE TABLE a (b INT) WITH (fillfactor=true);
+
+statement error unimplemented: storage parameter "toast_tuple_target"
+CREATE TABLE a (b INT) WITH (toast_tuple_target=100);
+
+query T noticetrace
+CREATE TABLE a (b INT) WITH (fillfactor=99.9)
+----
+NOTICE: storage parameter "fillfactor" is ignored
+
+query T noticetrace
+CREATE INDEX a_idx ON a(b) WITH (fillfactor=50)
+----
+NOTICE: storage parameter "fillfactor" is ignored
+
+query T noticetrace
+DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled=off)
+----
+NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
+
+query T noticetrace
+DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled=on)
+----
+
+statement error parameter "autovacuum_enabled" requires a Boolean value
+DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled='11')

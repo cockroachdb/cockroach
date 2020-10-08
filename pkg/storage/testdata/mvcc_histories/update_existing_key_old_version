@@ -1,0 +1,28 @@
+run ok
+put k=k v=v ts=1,1
+----
+>> at end:
+data: "k"/0.000000001,1 -> /BYTES/v
+
+# Earlier wall time.
+# Note: a WriteTooOld "error" is returned, but really the write completed,
+# just with a different timestamp.
+
+run error
+put k=k v=v2 ts=0,1
+----
+>> at end:
+data: "k"/0.000000001,2 -> /BYTES/v2
+data: "k"/0.000000001,1 -> /BYTES/v
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0,1 too old; wrote at 0.000000001,2
+
+# Earlier logical time.
+
+run error
+put k=k v=v2 ts=1,0
+----
+>> at end:
+data: "k"/0.000000001,3 -> /BYTES/v2
+data: "k"/0.000000001,2 -> /BYTES/v2
+data: "k"/0.000000001,1 -> /BYTES/v
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000001,0 too old; wrote at 0.000000001,3

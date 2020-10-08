@@ -1,0 +1,25 @@
+## Two overlapping txns.
+## Two writes to the same key should be rejected with "write intent error", "conflicting intents".
+
+run error
+with t=A
+  txn_begin  ts=33
+  put   k=a v=xyz
+with t=B
+  txn_begin  ts=44
+  put   k=a v=zzz
+----
+>> at end:
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000044,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000044,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} ts=0.000000033,0 del=false klen=12 vlen=8
+data: "a"/0.000000033,0 -> /BYTES/xyz
+error: (*roachpb.WriteIntentError:) conflicting intents on "a"
+
+## It's possible to observe the intent with an inconsistent read.
+
+run ok
+with t=B
+  get k=a inconsistent
+----
+get: "a" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0}
+get: "a" -> <no data>

@@ -1,0 +1,109 @@
+query II
+SELECT IF(1 = 2, NULL, 1), IF(2 = 2, NULL, 2)
+----
+1  NULL
+
+query III
+SELECT NULLIF(1, 2), NULLIF(2, 2), NULLIF(NULL, NULL)
+----
+1  NULL  NULL
+
+query IIII
+SELECT
+    IFNULL(1, 2),
+    IFNULL(NULL, 2),
+    COALESCE(1, 2),
+    COALESCE(NULL, 2)
+----
+1  2  1  2
+
+statement ok
+CREATE TABLE t (a) AS VALUES (1), (2), (3)
+
+query IT
+SELECT
+    a,
+    CASE
+    WHEN a = 1 THEN 'one'
+    WHEN a = 2 THEN 'two'
+    ELSE 'other'
+    END
+FROM
+    t
+ORDER BY
+    a
+----
+1  one
+2  two
+3  other
+
+query IT
+SELECT
+    a,
+    CASE a
+    WHEN 1 THEN 'one'
+    WHEN 2 THEN 'two'
+    ELSE 'other'
+    END
+FROM
+    t
+ORDER BY
+    a
+----
+1  one
+2  two
+3  other
+
+query III
+SELECT a, NULLIF(a, 2), IF(a = 2, NULL, a) FROM t ORDER BY a
+----
+1  1     1
+2  NULL  NULL
+3  3     3
+
+query TTTT
+SELECT
+    CASE
+    WHEN false THEN 'one'
+    WHEN true THEN 'two'
+    ELSE 'three'
+    END,
+    CASE 1
+    WHEN 2 THEN 'two'
+    WHEN 1 THEN 'one'
+    ELSE 'three'
+    END,
+    CASE
+    WHEN false THEN 'one'
+    ELSE 'three'
+    END,
+    CASE
+    WHEN false THEN 'one'
+    END
+----
+two  one  three  NULL
+
+query TTTTT
+SELECT
+    CASE
+    WHEN 1 = 1 THEN 'one'
+    END,
+    CASE false
+    WHEN 0 = 1 THEN 'one'
+    END,
+    CASE 1
+    WHEN 2 THEN 'one'
+    ELSE 'three'
+    END,
+    CASE NULL
+    WHEN true THEN 'one'
+    WHEN false THEN 'two'
+    WHEN NULL THEN 'three'
+    ELSE 'four'
+    END,
+    CASE
+    WHEN false THEN 'one'
+    WHEN true THEN 'two'
+    END
+----
+one  one  three  four  two

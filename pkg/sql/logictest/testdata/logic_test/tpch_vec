@@ -1,0 +1,1009 @@
+# LogicTest: local
+
+# Note that statistics are populated for TPCH Scale Factor 1.
+
+statement ok
+CREATE TABLE public.region
+(
+    r_regionkey int PRIMARY KEY,
+    r_name char(25) NOT NULL,
+    r_comment varchar(152)
+)
+
+statement ok
+ALTER TABLE public.region INJECT STATISTICS '[
+  {
+    "columns": ["r_regionkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["r_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["r_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  }
+]'
+
+statement ok
+CREATE TABLE public.nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25) NOT NULL,
+    n_regionkey int NOT NULL,
+    n_comment varchar(152),
+    INDEX n_rk (n_regionkey ASC),
+    CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) references public.region (r_regionkey)
+)
+
+statement ok
+ALTER TABLE public.nation INJECT STATISTICS '[
+  {
+    "columns": ["n_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["n_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["n_regionkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["n_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  }
+]'
+
+statement ok
+CREATE TABLE public.supplier
+(
+    s_suppkey int PRIMARY KEY,
+    s_name char(25) NOT NULL,
+    s_address varchar(40) NOT NULL,
+    s_nationkey int NOT NULL,
+    s_phone char(15) NOT NULL,
+    s_acctbal float NOT NULL,
+    s_comment varchar(101) NOT NULL,
+    INDEX s_nk (s_nationkey ASC),
+    CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) references public.nation (n_nationkey)
+)
+
+statement ok
+ALTER TABLE public.supplier INJECT STATISTICS '[
+  {
+    "columns": ["s_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_address"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["s_phone"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_acctbal"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+CREATE TABLE public.part
+(
+    p_partkey int PRIMARY KEY,
+    p_name varchar(55) NOT NULL,
+    p_mfgr char(25) NOT NULL,
+    p_brand char(10) NOT NULL,
+    p_type varchar(25) NOT NULL,
+    p_size int NOT NULL,
+    p_container char(10) NOT NULL,
+    p_retailprice float NOT NULL,
+    p_comment varchar(23) NOT NULL
+)
+
+statement ok
+ALTER TABLE public.part INJECT STATISTICS '[
+  {
+    "columns": ["p_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["p_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["p_mfgr"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["p_brand"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["p_type"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 150
+  },
+  {
+    "columns": ["p_size"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["p_container"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 40
+  },
+  {
+    "columns": ["p_retailprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 20000
+  },
+  {
+    "columns": ["p_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 130000
+  }
+]'
+
+statement ok
+CREATE TABLE public.partsupp
+(
+    ps_partkey int NOT NULL,
+    ps_suppkey int NOT NULL,
+    ps_availqty int NOT NULL,
+    ps_supplycost float NOT NULL,
+    ps_comment varchar(199) NOT NULL,
+    PRIMARY KEY (ps_partkey, ps_suppkey),
+    INDEX ps_sk (ps_suppkey ASC),
+    CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) references public.part (p_partkey),
+    CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) references public.supplier (s_suppkey)
+)
+
+statement ok
+ALTER TABLE public.partsupp INJECT STATISTICS '[
+  {
+    "columns": ["ps_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["ps_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["ps_availqty"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["ps_supplycost"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["ps_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 800000
+  }
+]'
+
+statement ok
+CREATE TABLE public.customer
+(
+    c_custkey int PRIMARY KEY,
+    c_name varchar(25) NOT NULL,
+    c_address varchar(40) NOT NULL,
+    c_nationkey int NOT NULL NOT NULL,
+    c_phone char(15) NOT NULL,
+    c_acctbal float NOT NULL,
+    c_mktsegment char(10) NOT NULL,
+    c_comment varchar(117) NOT NULL,
+    INDEX c_nk (c_nationkey ASC),
+    CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) references public.nation (n_nationkey)
+)
+
+statement ok
+ALTER TABLE public.customer INJECT STATISTICS '[
+  {
+    "columns": ["c_custkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_address"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["c_phone"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_acctbal"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_mktsegment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["c_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  }
+]'
+
+statement ok
+CREATE TABLE public.orders
+(
+    o_orderkey int PRIMARY KEY,
+    o_custkey int NOT NULL,
+    o_orderstatus char(1) NOT NULL,
+    o_totalprice float NOT NULL,
+    o_orderdate date NOT NULL,
+    o_orderpriority char(15) NOT NULL,
+    o_clerk char(15) NOT NULL,
+    o_shippriority int NOT NULL,
+    o_comment varchar(79) NOT NULL,
+    INDEX o_ck (o_custkey ASC),
+    INDEX o_od (o_orderdate ASC),
+    CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) references public.customer (c_custkey)
+)
+
+statement ok
+ALTER TABLE public.orders INJECT STATISTICS '[
+  {
+    "columns": ["o_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["o_custkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["o_orderstatus"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["o_totalprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["o_orderdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["o_orderpriority"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["o_clerk"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["o_shippriority"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["o_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  }
+]'
+
+statement ok
+CREATE TABLE public.lineitem
+(
+    l_orderkey int NOT NULL,
+    l_partkey int NOT NULL,
+    l_suppkey int NOT NULL,
+    l_linenumber int NOT NULL,
+    l_quantity float NOT NULL,
+    l_extendedprice float NOT NULL,
+    l_discount float NOT NULL,
+    l_tax float NOT NULL,
+    l_returnflag char(1) NOT NULL,
+    l_linestatus char(1) NOT NULL,
+    l_shipdate date NOT NULL,
+    l_commitdate date NOT NULL,
+    l_receiptdate date NOT NULL,
+    l_shipinstruct char(25) NOT NULL,
+    l_shipmode char(10) NOT NULL,
+    l_comment varchar(44) NOT NULL,
+    PRIMARY KEY (l_orderkey, l_linenumber),
+    INDEX l_ok (l_orderkey ASC),
+    INDEX l_pk (l_partkey ASC),
+    INDEX l_sk (l_suppkey ASC),
+    INDEX l_sd (l_shipdate ASC),
+    INDEX l_cd (l_commitdate ASC),
+    INDEX l_rd (l_receiptdate ASC),
+    INDEX l_pk_sk (l_partkey ASC, l_suppkey ASC),
+    INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC),
+    CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) references public.orders (o_orderkey),
+    CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) references public.part (p_partkey),
+    CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) references public.supplier (s_suppkey)
+)
+
+statement ok
+ALTER TABLE public.lineitem INJECT STATISTICS '[
+  {
+    "columns": ["l_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["l_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["l_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["l_linenumber"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 7
+  },
+  {
+    "columns": ["l_quantity"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["l_extendedprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["l_discount"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 11
+  },
+  {
+    "columns": ["l_tax"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 9
+  },
+  {
+    "columns": ["l_returnflag"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["l_linestatus"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2
+  },
+  {
+    "columns": ["l_shipdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_commitdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_receiptdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_shipinstruct"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 4
+  },
+  {
+    "columns": ["l_shipmode"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 7
+  },
+  {
+    "columns": ["l_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 4500000
+  }
+]'
+
+# Query 1
+query T
+EXPLAIN (VEC) SELECT l_returnflag, l_linestatus, sum(l_quantity) AS sum_qty, sum(l_extendedprice) AS sum_base_price, sum(l_extendedprice * (1 - l_discount)) AS sum_disc_price, sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge, avg(l_quantity) AS avg_qty, avg(l_extendedprice) AS avg_price, avg(l_discount) AS avg_disc, count(*) AS count_order FROM lineitem WHERE l_shipdate <= DATE '1998-12-01' - INTERVAL '90' DAY GROUP BY l_returnflag, l_linestatus ORDER BY l_returnflag, l_linestatus
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *colexec.projMultFloat64Float64Op
+        └ *colexec.projPlusFloat64Float64ConstOp
+          └ *colexec.projMultFloat64Float64Op
+            └ *colexec.projMinusFloat64ConstFloat64Op
+              └ *colexec.projMultFloat64Float64Op
+                └ *colexec.projMinusFloat64ConstFloat64Op
+                  └ *colexec.selLEInt64Int64ConstOp
+                    └ *colfetcher.ColBatchScan
+
+# Query 2
+query T
+EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment FROM part, supplier, partsupp, nation, region WHERE p_partkey = ps_partkey AND s_suppkey = ps_suppkey AND p_size = 15 AND p_type LIKE '%BRASS' AND s_nationkey = n_nationkey AND n_regionkey = r_regionkey AND r_name = 'EUROPE' AND ps_supplycost = ( SELECT min(ps_supplycost) FROM partsupp, supplier, nation, region WHERE p_partkey = ps_partkey AND s_suppkey = ps_suppkey AND s_nationkey = n_nationkey AND n_regionkey = r_regionkey AND r_name = 'EUROPE') ORDER BY s_acctbal DESC, n_name, s_name, p_partkey LIMIT 100
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colexec.selEQFloat64Float64Op
+        └ *colexec.hashAggregator
+          └ *colexec.hashJoiner
+            ├ *rowexec.joinReader
+            │ └ *colexec.hashJoiner
+            │   ├ *rowexec.joinReader
+            │   │ └ *colexec.selSuffixBytesBytesConstOp
+            │   │   └ *colexec.selEQInt64Int64ConstOp
+            │   │     └ *colfetcher.ColBatchScan
+            │   └ *colexec.hashJoiner
+            │     ├ *colfetcher.ColBatchScan
+            │     └ *colexec.hashJoiner
+            │       ├ *colfetcher.ColBatchScan
+            │       └ *colexec.selEQBytesBytesConstOp
+            │         └ *colfetcher.ColBatchScan
+            └ *rowexec.joinReader
+              └ *rowexec.joinReader
+                └ *colexec.selEQBytesBytesConstOp
+                  └ *colfetcher.ColBatchScan
+
+# Query 3
+query T
+EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS revenue, o_orderdate, o_shippriority FROM customer, orders, lineitem WHERE c_mktsegment = 'BUILDING' AND c_custkey = o_custkey AND l_orderkey = o_orderkey AND o_orderDATE < DATE '1995-03-15' AND l_shipdate > DATE '1995-03-15' GROUP BY l_orderkey, o_orderdate, o_shippriority ORDER BY revenue DESC, o_orderdate LIMIT 10
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colexec.hashAggregator
+        └ *rowexec.joinReader
+          └ *colexec.hashJoiner
+            ├ *colfetcher.ColBatchScan
+            └ *colexec.hashJoiner
+              ├ *colexec.selLTInt64Int64ConstOp
+              │ └ *colfetcher.ColBatchScan
+              └ *colexec.selEQBytesBytesConstOp
+                └ *colfetcher.ColBatchScan
+
+# Query 4
+query T
+EXPLAIN (VEC) SELECT o_orderpriority, count(*) AS order_count FROM orders WHERE o_orderdate >= DATE '1993-07-01' AND o_orderdate < DATE '1993-07-01' + INTERVAL '3' MONTH AND EXISTS ( SELECT * FROM lineitem WHERE l_orderkey = o_orderkey AND l_commitDATE < l_receiptdate) GROUP BY o_orderpriority ORDER BY o_orderpriority
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *rowexec.joinReader
+        └ *rowexec.joinReader
+          └ *colfetcher.ColBatchScan
+
+# Query 5
+query T
+EXPLAIN (VEC) SELECT n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue FROM customer, orders, lineitem, supplier, nation, region WHERE c_custkey = o_custkey AND l_orderkey = o_orderkey AND l_suppkey = s_suppkey AND c_nationkey = s_nationkey AND s_nationkey = n_nationkey AND n_regionkey = r_regionkey AND r_name = 'ASIA' AND o_orderDATE >= DATE '1994-01-01' AND o_orderDATE < DATE '1994-01-01' + INTERVAL '1' YEAR GROUP BY n_name ORDER BY revenue DESC
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *colexec.projMultFloat64Float64Op
+        └ *colexec.projMinusFloat64ConstFloat64Op
+          └ *colexec.hashJoiner
+            ├ *rowexec.joinReader
+            │ └ *colexec.hashJoiner
+            │   ├ *rowexec.joinReader
+            │   │ └ *colfetcher.ColBatchScan
+            │   └ *rowexec.joinReader
+            │     └ *colexec.hashJoiner
+            │       ├ *colfetcher.ColBatchScan
+            │       └ *colexec.selEQBytesBytesConstOp
+            │         └ *colfetcher.ColBatchScan
+            └ *colfetcher.ColBatchScan
+
+# Query 6
+query T
+EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR AND l_discount BETWEEN 0.06 - 0.01 AND 0.06 + 0.01 AND l_quantity < 24
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexec.distinctChainOps
+      └ *rowexec.joinReader
+        └ *colfetcher.ColBatchScan
+
+# Query 7
+query T
+EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FROM ( SELECT n1.n_name AS supp_nation, n2.n_name AS cust_nation, EXTRACT(year FROM l_shipdate) AS l_year, l_extendedprice * (1 - l_discount) AS volume FROM supplier, lineitem, orders, customer, nation n1, nation n2 WHERE s_suppkey = l_suppkey AND o_orderkey = l_orderkey AND c_custkey = o_custkey AND s_nationkey = n1.n_nationkey AND c_nationkey = n2.n_nationkey AND ( (n1.n_name = 'FRANCE' AND n2.n_name = 'GERMANY') or (n1.n_name = 'GERMANY' AND n2.n_name = 'FRANCE')) AND l_shipdate BETWEEN DATE '1995-01-01' AND DATE '1996-12-31') AS shipping GROUP BY supp_nation, cust_nation, l_year ORDER BY supp_nation, cust_nation, l_year
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *colexec.projMultFloat64Float64Op
+        └ *colexec.projMinusFloat64ConstFloat64Op
+          └ *colexec.defaultBuiltinFuncOperator
+            └ *colexec.constBytesOp
+              └ *colexec.hashJoiner
+                ├ *colfetcher.ColBatchScan
+                └ *rowexec.joinReader
+                  └ *rowexec.joinReader
+                    └ *rowexec.joinReader
+                      └ *rowexec.joinReader
+                        └ *colexec.caseOp
+                          ├ *colexec.bufferOp
+                          │ └ *colexec.hashJoiner
+                          │   ├ *colfetcher.ColBatchScan
+                          │   └ *colfetcher.ColBatchScan
+                          ├ *colexec.constBoolOp
+                          │ └ *colexec.andProjOp
+                          │   ├ *colexec.bufferOp
+                          │   ├ *colexec.projEQBytesBytesConstOp
+                          │   └ *colexec.projEQBytesBytesConstOp
+                          ├ *colexec.constBoolOp
+                          │ └ *colexec.andProjOp
+                          │   ├ *colexec.bufferOp
+                          │   ├ *colexec.projEQBytesBytesConstOp
+                          │   └ *colexec.projEQBytesBytesConstOp
+                          └ *colexec.constBoolOp
+                            └ *colexec.bufferOp
+
+# Query 8
+query T
+EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 END) / sum(volume) AS mkt_share FROM ( SELECT EXTRACT(year FROM o_orderdate) AS o_year, l_extendedprice * (1 - l_discount) AS volume, n2.n_name AS nation FROM part, supplier, lineitem, orders, customer, nation n1, nation n2, region WHERE p_partkey = l_partkey AND s_suppkey = l_suppkey AND l_orderkey = o_orderkey AND o_custkey = c_custkey AND c_nationkey = n1.n_nationkey AND n1.n_regionkey = r_regionkey AND r_name = 'AMERICA' AND s_nationkey = n2.n_nationkey AND o_orderdate BETWEEN DATE '1995-01-01' AND DATE '1996-12-31' AND p_type = 'ECONOMY ANODIZED STEEL') AS all_nations GROUP BY o_year ORDER BY o_year
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.projDivFloat64Float64Op
+      └ *colexec.hashAggregator
+        └ *colexec.caseOp
+          ├ *colexec.bufferOp
+          │ └ *colexec.projMultFloat64Float64Op
+          │   └ *colexec.projMinusFloat64ConstFloat64Op
+          │     └ *colexec.defaultBuiltinFuncOperator
+          │       └ *colexec.constBytesOp
+          │         └ *colexec.hashJoiner
+          │           ├ *colexec.hashJoiner
+          │           │ ├ *colfetcher.ColBatchScan
+          │           │ └ *colexec.hashJoiner
+          │           │   ├ *rowexec.joinReader
+          │           │   │ └ *rowexec.joinReader
+          │           │   │   └ *colexec.selEQBytesBytesConstOp
+          │           │   │     └ *colfetcher.ColBatchScan
+          │           │   └ *rowexec.joinReader
+          │           │     └ *rowexec.joinReader
+          │           │       └ *rowexec.joinReader
+          │           │         └ *colexec.selEQBytesBytesConstOp
+          │           │           └ *colfetcher.ColBatchScan
+          │           └ *colfetcher.ColBatchScan
+          ├ *colexec.projEQBytesBytesConstOp
+          │ └ *colexec.bufferOp
+          └ *colexec.constFloat64Op
+            └ *colexec.bufferOp
+
+# Query 9
+query T
+EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_name AS nation, EXTRACT(year FROM o_orderdate) AS o_year, l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity AS amount FROM part, supplier, lineitem, partsupp, orders, nation WHERE s_suppkey = l_suppkey AND ps_suppkey = l_suppkey AND ps_partkey = l_partkey AND p_partkey = l_partkey AND o_orderkey = l_orderkey AND s_nationkey = n_nationkey AND p_name LIKE '%green%') AS profit GROUP BY nation, o_year ORDER BY nation, o_year DESC
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *colexec.projMinusFloat64Float64Op
+        └ *colexec.projMultFloat64Float64Op
+          └ *colexec.projMultFloat64Float64Op
+            └ *colexec.projMinusFloat64ConstFloat64Op
+              └ *colexec.defaultBuiltinFuncOperator
+                └ *colexec.constBytesOp
+                  └ *colexec.hashJoiner
+                    ├ *colexec.hashJoiner
+                    │ ├ *colfetcher.ColBatchScan
+                    │ └ *rowexec.joinReader
+                    │   └ *rowexec.joinReader
+                    │     └ *rowexec.joinReader
+                    │       └ *colexec.mergeJoinInnerOp
+                    │         ├ *colexec.selContainsBytesBytesConstOp
+                    │         │ └ *colfetcher.ColBatchScan
+                    │         └ *colfetcher.ColBatchScan
+                    └ *colfetcher.ColBatchScan
+
+# Query 10
+query T
+EXPLAIN (VEC) SELECT c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) AS revenue, c_acctbal, n_name, c_address, c_phone, c_comment FROM customer, orders, lineitem, nation WHERE c_custkey = o_custkey AND l_orderkey = o_orderkey AND o_orderDATE >= DATE '1993-10-01' AND o_orderDATE < DATE '1993-10-01' + INTERVAL '3' MONTH AND l_returnflag = 'R' AND c_nationkey = n_nationkey GROUP BY c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, c_comment ORDER BY revenue DESC LIMIT 20
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colexec.hashAggregator
+        └ *colexec.projMultFloat64Float64Op
+          └ *colexec.projMinusFloat64ConstFloat64Op
+            └ *colexec.hashJoiner
+              ├ *rowexec.joinReader
+              │ └ *colexec.hashJoiner
+              │   ├ *colfetcher.ColBatchScan
+              │   └ *rowexec.joinReader
+              │     └ *colfetcher.ColBatchScan
+              └ *colfetcher.ColBatchScan
+
+# Query 11
+query T
+EXPLAIN (VEC) SELECT ps_partkey, sum(ps_supplycost * ps_availqty::float) AS value FROM partsupp, supplier, nation WHERE ps_suppkey = s_suppkey AND s_nationkey = n_nationkey AND n_name = 'GERMANY' GROUP BY ps_partkey HAVING sum(ps_supplycost * ps_availqty::float) > ( SELECT sum(ps_supplycost * ps_availqty::float) * 0.0001 FROM partsupp, supplier, nation WHERE ps_suppkey = s_suppkey AND s_nationkey = n_nationkey AND n_name = 'GERMANY') ORDER BY value DESC
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.selGTFloat64Float64Op
+      └ *colexec.castOpNullAny
+        └ *colexec.constNullOp
+          └ *colexec.hashAggregator
+            └ *rowexec.joinReader
+              └ *rowexec.joinReader
+                └ *rowexec.joinReader
+                  └ *colexec.selEQBytesBytesConstOp
+                    └ *colfetcher.ColBatchScan
+
+# Query 12
+query T
+EXPLAIN (VEC) SELECT l_shipmode, sum(CASE WHEN o_orderpriority = '1-URGENT' or o_orderpriority = '2-HIGH' THEN 1 ELSE 0 END) AS high_line_count, sum(CASE WHEN o_orderpriority <> '1-URGENT' AND o_orderpriority <> '2-HIGH' THEN 1 ELSE 0 END) AS low_line_count FROM orders, lineitem WHERE o_orderkey = l_orderkey AND l_shipmode IN ('MAIL', 'SHIP') AND l_commitdate < l_receiptdate AND l_shipdate < l_commitdate AND l_receiptdate >= DATE '1994-01-01' AND l_receiptdate < DATE '1994-01-01' + INTERVAL '1' YEAR GROUP BY l_shipmode ORDER BY l_shipmode
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *rowexec.joinReader
+        └ *rowexec.joinReader
+          └ *colfetcher.ColBatchScan
+
+# Query 13
+query T
+EXPLAIN (VEC) SELECT c_count, count(*) AS custdist FROM ( SELECT c_custkey, count(o_orderkey) AS c_count FROM customer LEFT OUTER JOIN orders ON c_custkey = o_custkey AND o_comment NOT LIKE '%special%requests%' GROUP BY c_custkey) AS c_orders GROUP BY c_count ORDER BY custdist DESC, c_count DESC
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *colexec.hashAggregator
+        └ *colexec.hashJoiner
+          ├ *colexec.selNotRegexpBytesBytesConstOp
+          │ └ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchScan
+
+# Query 14
+query T
+EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extendedprice * (1 - l_discount) ELSE 0 END) / sum(l_extendedprice * (1 - l_discount)) AS promo_revenue FROM lineitem, part WHERE l_partkey = p_partkey AND l_shipdate >= DATE '1995-09-01' AND l_shipdate < DATE '1995-09-01' + INTERVAL '1' MONTH
+----
+│
+└ Node 1
+  └ *colexec.projDivFloat64Float64Op
+    └ *colexec.projMultFloat64Float64ConstOp
+      └ *colexec.orderedAggregator
+        └ *colexec.distinctChainOps
+          └ *colexec.projMultFloat64Float64Op
+            └ *colexec.projMinusFloat64ConstFloat64Op
+              └ *colexec.caseOp
+                ├ *colexec.bufferOp
+                │ └ *colexec.hashJoiner
+                │   ├ *colfetcher.ColBatchScan
+                │   └ *rowexec.joinReader
+                │     └ *colfetcher.ColBatchScan
+                ├ *colexec.projMultFloat64Float64Op
+                │ └ *colexec.projMinusFloat64ConstFloat64Op
+                │   └ *colexec.projPrefixBytesBytesConstOp
+                │     └ *colexec.bufferOp
+                └ *colexec.constFloat64Op
+                  └ *colexec.bufferOp
+
+# Query 15
+statement ok
+CREATE VIEW revenue0 (supplier_no, total_revenue) AS SELECT l_suppkey, sum(l_extendedprice * (1 - l_discount)) FROM lineitem WHERE l_shipdate >= DATE '1996-01-01' AND l_shipdate < DATE '1996-01-01' + INTERVAL '3' MONTH GROUP BY l_suppkey
+
+query T
+EXPLAIN (VEC) SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM supplier, revenue0 WHERE s_suppkey = supplier_no AND total_revenue = ( SELECT max(total_revenue) FROM revenue0) ORDER BY s_suppkey
+----
+│
+└ Node 1
+  └ *colexec.mergeJoinInnerOp
+    ├ *colfetcher.ColBatchScan
+    └ *colexec.sortOp
+      └ *colexec.selEQFloat64Float64Op
+        └ *colexec.castOpNullAny
+          └ *colexec.constNullOp
+            └ *colexec.hashAggregator
+              └ *rowexec.joinReader
+                └ *colfetcher.ColBatchScan
+
+statement ok
+DROP VIEW revenue0
+
+# Query 16
+query T
+EXPLAIN (VEC) SELECT p_brand, p_type, p_size, count(distinct ps_suppkey) AS supplier_cnt FROM partsupp, part WHERE p_partkey = ps_partkey AND p_brand <> 'Brand#45' AND p_type NOT LIKE 'MEDIUM POLISHED%' AND p_size IN (49, 14, 23, 45, 19, 3, 36, 9) AND ps_suppkey NOT IN ( SELECT s_suppkey FROM supplier WHERE s_comment LIKE '%Customer%Complaints%') GROUP BY p_brand, p_type, p_size ORDER BY supplier_cnt DESC, p_brand, p_type, p_size
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *colexec.unorderedDistinct
+        └ *colexec.hashJoiner
+          ├ *rowexec.joinReader
+          │ └ *colexec.selectInOpInt64
+          │   └ *colexec.selNotPrefixBytesBytesConstOp
+          │     └ *colexec.selNEBytesBytesConstOp
+          │       └ *colfetcher.ColBatchScan
+          └ *colexec.selRegexpBytesBytesConstOp
+            └ *colfetcher.ColBatchScan
+
+# Query 17
+query T
+EXPLAIN (VEC) SELECT sum(l_extendedprice) / 7.0 AS avg_yearly FROM lineitem, part WHERE p_partkey = l_partkey AND p_brand = 'Brand#23' AND p_container = 'MED BOX' AND l_quantity < ( SELECT 0.2 * avg(l_quantity) FROM lineitem WHERE l_partkey = p_partkey)
+----
+│
+└ Node 1
+  └ *colexec.projDivFloat64Float64ConstOp
+    └ *colexec.orderedAggregator
+      └ *colexec.distinctChainOps
+        └ *rowexec.joinReader
+          └ *rowexec.joinReader
+            └ *colexec.projMultFloat64Float64ConstOp
+              └ *colexec.orderedAggregator
+                └ *colexec.distinctChainOps
+                  └ *rowexec.joinReader
+                    └ *rowexec.joinReader
+                      └ *colexec.selEQBytesBytesConstOp
+                        └ *colexec.selEQBytesBytesConstOp
+                          └ *colfetcher.ColBatchScan
+
+# Query 18
+query T
+EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, sum(l_quantity) FROM customer, orders, lineitem WHERE o_orderkey IN ( SELECT l_orderkey FROM lineitem GROUP BY l_orderkey HAVING sum(l_quantity) > 300) AND c_custkey = o_custkey AND o_orderkey = l_orderkey GROUP BY c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice ORDER BY o_totalprice DESC, o_orderdate LIMIT 100
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colexec.hashAggregator
+        └ *colexec.hashJoiner
+          ├ *colfetcher.ColBatchScan
+          └ *colexec.hashJoiner
+            ├ *colexec.mergeJoinLeftSemiOp
+            │ ├ *colfetcher.ColBatchScan
+            │ └ *colexec.selGTFloat64Float64ConstOp
+            │   └ *colexec.orderedAggregator
+            │     └ *colexec.distinctChainOps
+            │       └ *colfetcher.ColBatchScan
+            └ *colfetcher.ColBatchScan
+
+# Query 19
+query T
+EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM lineitem, part WHERE ( p_partkey = l_partkey AND p_brand = 'Brand#12' AND p_container IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG') AND l_quantity >= 1 AND l_quantity <= 1 + 10 AND p_size BETWEEN 1 AND 5 AND l_shipmode IN ('AIR', 'AIR REG') AND l_shipinstruct = 'DELIVER IN PERSON') OR ( p_partkey = l_partkey AND p_brand = 'Brand#23' AND p_container IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK') AND l_quantity >= 10 AND l_quantity <= 10 + 10 AND p_size BETWEEN 1 AND 10 AND l_shipmode IN ('AIR', 'AIR REG') AND l_shipinstruct = 'DELIVER IN PERSON') OR ( p_partkey = l_partkey AND p_brand = 'Brand#34' AND p_container IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG') AND l_quantity >= 20 AND l_quantity <= 20 + 10 AND p_size BETWEEN 1 AND 15 AND l_shipmode IN ('AIR', 'AIR REG') AND l_shipinstruct = 'DELIVER IN PERSON')
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexec.distinctChainOps
+      └ *colexec.projMultFloat64Float64Op
+        └ *colexec.projMinusFloat64ConstFloat64Op
+          └ *colexec.caseOp
+            ├ *colexec.bufferOp
+            │ └ *colexec.hashJoiner
+            │   ├ *colexec.selEQBytesBytesConstOp
+            │   │ └ *colexec.selectInOpBytes
+            │   │   └ *colfetcher.ColBatchScan
+            │   └ *colexec.selGEInt64Int64ConstOp
+            │     └ *colfetcher.ColBatchScan
+            ├ *colexec.constBoolOp
+            │ └ *colexec.orProjOp
+            │   ├ *colexec.bufferOp
+            │   ├ *colexec.andProjOp
+            │   │ ├ *colexec.andProjOp
+            │   │ │ ├ *colexec.andProjOp
+            │   │ │ │ ├ *colexec.andProjOp
+            │   │ │ │ │ ├ *colexec.projEQBytesBytesConstOp
+            │   │ │ │ │ └ *colexec.projectInOpBytes
+            │   │ │ │ └ *colexec.projGEFloat64Float64ConstOp
+            │   │ │ └ *colexec.projLEFloat64Float64ConstOp
+            │   │ └ *colexec.projLEInt64Int64ConstOp
+            │   └ *colexec.andProjOp
+            │     ├ *colexec.andProjOp
+            │     │ ├ *colexec.andProjOp
+            │     │ │ ├ *colexec.andProjOp
+            │     │ │ │ ├ *colexec.projEQBytesBytesConstOp
+            │     │ │ │ └ *colexec.projectInOpBytes
+            │     │ │ └ *colexec.projGEFloat64Float64ConstOp
+            │     │ └ *colexec.projLEFloat64Float64ConstOp
+            │     └ *colexec.projLEInt64Int64ConstOp
+            ├ *colexec.constBoolOp
+            │ └ *colexec.andProjOp
+            │   ├ *colexec.bufferOp
+            │   ├ *colexec.andProjOp
+            │   │ ├ *colexec.andProjOp
+            │   │ │ ├ *colexec.andProjOp
+            │   │ │ │ ├ *colexec.projEQBytesBytesConstOp
+            │   │ │ │ └ *colexec.projectInOpBytes
+            │   │ │ └ *colexec.projGEFloat64Float64ConstOp
+            │   │ └ *colexec.projLEFloat64Float64ConstOp
+            │   └ *colexec.projLEInt64Int64ConstOp
+            └ *colexec.constBoolOp
+              └ *colexec.bufferOp
+
+# Query 20
+query T
+EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN ( SELECT ps_suppkey FROM partsupp WHERE ps_partkey IN ( SELECT p_partkey FROM part WHERE p_name LIKE 'forest%') AND ps_availqty > ( SELECT 0.5 * sum(l_quantity) FROM lineitem WHERE l_partkey = ps_partkey AND l_suppkey = ps_suppkey AND l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR)) AND s_nationkey = n_nationkey AND n_name = 'CANADA' ORDER BY s_name
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashJoiner
+      ├ *rowexec.joinReader
+      │ └ *colexec.unorderedDistinct
+      │   └ *rowexec.joinReader
+      │     └ *colexec.selGTInt64Float64Op
+      │       └ *colexec.projMultFloat64Float64ConstOp
+      │         └ *colexec.hashAggregator
+      │           └ *colexec.hashJoiner
+      │             ├ *rowexec.joinReader
+      │             │ └ *colfetcher.ColBatchScan
+      │             └ *colfetcher.ColBatchScan
+      └ *colexec.selEQBytesBytesConstOp
+        └ *colfetcher.ColBatchScan
+
+# Query 21
+query T
+EXPLAIN (VEC) SELECT s_name, count(*) AS numwait FROM supplier, lineitem l1, orders, nation WHERE s_suppkey = l1.l_suppkey AND o_orderkey = l1.l_orderkey AND o_orderstatus = 'F' AND l1.l_receiptDATE > l1.l_commitdate AND EXISTS ( SELECT * FROM lineitem l2 WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey) AND NOT EXISTS ( SELECT * FROM lineitem l3 WHERE l3.l_orderkey = l1.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptDATE > l3.l_commitdate) AND s_nationkey = n_nationkey AND n_name = 'SAUDI ARABIA' GROUP BY s_name ORDER BY numwait DESC, s_name LIMIT 100
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colexec.hashAggregator
+        └ *rowexec.joinReader
+          └ *rowexec.joinReader
+            └ *rowexec.joinReader
+              └ *rowexec.joinReader
+                └ *rowexec.joinReader
+                  └ *rowexec.joinReader
+                    └ *rowexec.joinReader
+                      └ *colexec.selEQBytesBytesConstOp
+                        └ *colfetcher.ColBatchScan
+
+# Query 22
+query T
+EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctbal FROM ( SELECT substring(c_phone FROM 1 FOR 2) AS cntrycode, c_acctbal FROM customer WHERE substring(c_phone FROM 1 FOR 2) in ('13', '31', '23', '29', '30', '18', '17') AND c_acctbal > ( SELECT avg(c_acctbal) FROM customer WHERE c_acctbal > 0.00 AND substring(c_phone FROM 1 FOR 2) in ('13', '31', '23', '29', '30', '18', '17')) AND NOT EXISTS ( SELECT * FROM orders WHERE o_custkey = c_custkey)) AS custsale GROUP BY cntrycode ORDER BY cntrycode
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexec.hashAggregator
+      └ *rowexec.joinReader
+        └ *colexec.selGTFloat64Float64Op
+          └ *colexec.castOpNullAny
+            └ *colexec.constNullOp
+              └ *colexec.selectInOpBytes
+                └ *colexec.substringInt64Int64Operator
+                  └ *colexec.constInt64Op
+                    └ *colexec.constInt64Op
+                      └ *colfetcher.ColBatchScan

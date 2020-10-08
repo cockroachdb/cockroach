@@ -1,12 +1,15 @@
-# LogicTest: local local-opt
+# 3node-tenant is blocked from running this file because the config runs with
+# a CCL binary, so the expected failures from using follower reads don't occur
+# (we get unauthenticated errors instead).
+# LogicTest: !3node-tenant
 
-statement error creating or manipulating partitions requires a CCL binary
+statement error pgcode XXC01 creating or manipulating partitions requires a CCL binary
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (1),
     PARTITION p2 VALUES IN (2)
 )
 
-statement error creating or manipulating partitions requires a CCL binary
+statement error pgcode XXC01 creating or manipulating partitions requires a CCL binary
 CREATE TABLE t (
     a INT PRIMARY KEY, b INT,
     INDEX (b) PARTITION BY LIST (b) (

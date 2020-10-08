@@ -1,0 +1,3 @@
+resume_schedules_stmt ::=
+	'RESUME' 'SCHEDULE' schedule_id
+	| 'RESUME' 'SCHEDULES' select_stmt

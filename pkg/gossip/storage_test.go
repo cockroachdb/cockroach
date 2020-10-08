@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package gossip_test
 
@@ -22,8 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
@@ -33,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 type testStorage struct {
@@ -99,9 +95,10 @@ func (s unresolvedAddrSlice) Swap(i, j int) {
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
-	network := simulation.NewNetwork(stopper, 3, true)
+	defaultZoneConfig := zonepb.DefaultZoneConfigRef()
+	network := simulation.NewNetwork(stopper, 3, true, defaultZoneConfig)
 
 	// Set storage for each of the nodes.
 	addresses := make(unresolvedAddrSlice, len(network.Nodes))
@@ -158,7 +155,7 @@ func TestGossipStorage(t *testing.T) {
 
 	// Create an unaffiliated gossip node with only itself as a resolver,
 	// leaving it no way to reach the gossip network.
-	node, err := network.CreateNode()
+	node, err := network.CreateNode(defaultZoneConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,10 +213,10 @@ func TestGossipStorage(t *testing.T) {
 func TestGossipStorageCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	const numNodes = 3
-	network := simulation.NewNetwork(stopper, numNodes, false)
+	network := simulation.NewNetwork(stopper, numNodes, false, zonepb.DefaultZoneConfigRef())
 
 	const notReachableAddr = "localhost:0"
 	const invalidAddr = "10.0.0.1000:3333333"
@@ -264,7 +261,7 @@ func TestGossipStorageCleanup(t *testing.T) {
 			}
 			for _, addr := range p.Info().Addresses {
 				if addr.String() == invalidAddr {
-					return errors.Errorf("node %d still needs bootstrap cleanup", i)
+					return errors.Errorf("n%d still needs bootstrap cleanup", i)
 				}
 			}
 		}

@@ -1,25 +1,26 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 type createDatabaseNode struct {
@@ -27,9 +28,7 @@ type createDatabaseNode struct {
 }
 
 // CreateDatabase creates a database.
-// Privileges: superuser.
-//   Notes: postgres requires superuser or "CREATEDB".
-//          mysql uses the mysqladmin command.
+// Privileges: superuser or CREATEDB
 func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
@@ -38,7 +37,8 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	if tmpl := n.Template; tmpl != "" {
 		// See https://www.postgresql.org/docs/current/static/manage-ag-templatedbs.html
 		if !strings.EqualFold(tmpl, "template0") {
-			return nil, fmt.Errorf("unsupported template: %s", tmpl)
+			return nil, unimplemented.NewWithIssuef(10151,
+				"unsupported template: %s", tmpl)
 		}
 	}
 
@@ -47,35 +47,52 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		if !(strings.EqualFold(enc, "UTF8") ||
 			strings.EqualFold(enc, "UTF-8") ||
 			strings.EqualFold(enc, "UNICODE")) {
-			return nil, fmt.Errorf("unsupported encoding: %s", enc)
+			return nil, unimplemented.NewWithIssueDetailf(35882, "create.db.encoding",
+				"unsupported encoding: %s", enc)
 		}
 	}
 
 	if col := n.Collate; col != "" {
 		// We only support C and C.UTF-8.
 		if col != "C" && col != "C.UTF-8" {
-			return nil, fmt.Errorf("unsupported collation: %s", col)
+			return nil, unimplemented.NewWithIssueDetailf(16618, "create.db.collation",
+				"unsupported collation: %s", col)
 		}
 	}
 
 	if ctype := n.CType; ctype != "" {
 		// We only support C and C.UTF-8.
 		if ctype != "C" && ctype != "C.UTF-8" {
-			return nil, fmt.Errorf("unsupported character classification: %s", ctype)
+			return nil, unimplemented.NewWithIssueDetailf(35882, "create.db.classification",
+				"unsupported character classification: %s", ctype)
 		}
 	}
 
-	if err := p.RequireSuperUser(ctx, "CREATE DATABASE"); err != nil {
+	if n.ConnectionLimit != -1 {
+		return nil, unimplemented.NewWithIssueDetailf(
+			54241,
+			"create.db.connection_limit",
+			"only connection limit -1 is supported, got: %d",
+			n.ConnectionLimit,
+		)
+	}
+
+	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
+	if err != nil {
 		return nil, err
+	}
+	if !hasCreateDB {
+		return nil, pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create database")
 	}
 
 	return &createDatabaseNode{n: n}, nil
 }
 
 func (n *createDatabaseNode) startExec(params runParams) error {
-	desc := makeDatabaseDesc(n.n)
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("database"))
 
-	created, err := params.p.createDatabase(params.ctx, &desc, n.n.IfNotExists)
+	desc, created, err := params.p.createDatabase(
+		params.ctx, n.n, tree.AsStringWithFQNames(n.n, params.Ann()))
 	if err != nil {
 		return err
 	}
@@ -86,8 +103,8 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 			params.ctx,
 			params.p.txn,
 			EventLogCreateDatabase,
-			int32(desc.ID),
-			int32(params.extendedEvalCtx.NodeID),
+			int32(desc.GetID()),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 			struct {
 				DatabaseName string
 				Statement    string
@@ -96,8 +113,6 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
-		params.extendedEvalCtx.Tables.addUncommittedDatabase(
-			desc.Name, desc.ID, dbCreated)
 	}
 	return nil
 }

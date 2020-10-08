@@ -6,25 +6,25 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl_test
+package backupccl
 
 import (
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
-
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func initNone(_ *testcluster.TestCluster) {}
+func InitNone(_ *testcluster.TestCluster) {}
 
 // The tests in this file talk to remote APIs which require credentials.
 // To run these tests, you need to supply credentials via env vars (the tests
@@ -37,63 +37,51 @@ func initNone(_ *testcluster.TestCluster) {}
 // only run if the AWS_S3_BUCKET environment var is set.
 func TestCloudBackupRestoreS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	creds, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
-		t.Skipf("No AWS env keys (%v)", err)
+		skip.IgnoreLintf(t, "No AWS env keys (%v)", err)
 	}
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
-		t.Skip("AWS_S3_BUCKET env var must be set")
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	defer func(disableKeepAlives bool) {
-		http.DefaultTransport.(*http.Transport).DisableKeepAlives = disableKeepAlives
-	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
+	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
-	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
+	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
 	values := uri.Query()
-	values.Add(storageccl.S3AccessKeyParam, creds.AccessKeyID)
-	values.Add(storageccl.S3SecretParam, creds.SecretAccessKey)
+	values.Add(cloudimpl.AWSAccessKeyParam, creds.AccessKeyID)
+	values.Add(cloudimpl.AWSSecretParam, creds.SecretAccessKey)
 	uri.RawQuery = values.Encode()
 
-	backupAndRestore(ctx, t, tc, uri.String(), numAccounts)
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
 }
 
 // TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
 // occasionally be flaky. It's only run if the GS_BUCKET environment var is set.
 func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	bucket := os.Getenv("GS_BUCKET")
 	if bucket == "" {
-		t.Skip("GS_BUCKET env var must be set")
+		skip.IgnoreLint(t, "GS_BUCKET env var must be set")
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
+	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
-	// TODO(dt): this prevents leaking an http conn goroutine -- presumably the
-	// conn is held open for reuse until the idle timeout. Ideally we'd test with
-	// conn reuse enabled though, to match expected production behavior.
-	defer func(disableKeepAlives bool) {
-		http.DefaultTransport.(*http.Transport).DisableKeepAlives = disableKeepAlives
-	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
-	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
+	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
-	backupAndRestore(ctx, t, tc, uri.String(), numAccounts)
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
 }
 
 // TestBackupRestoreAzure hits the real Azure Blob Storage and so could
@@ -101,34 +89,29 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 // AZURE_ACCOUNT_KEY environment vars are set.
 func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
 	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
 	if accountName == "" || accountKey == "" {
-		t.Skip("AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
+		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
 	}
 	bucket := os.Getenv("AZURE_CONTAINER")
 	if bucket == "" {
-		t.Skip("AZURE_CONTAINER env var must be set")
+		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
+	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	defer func(disableKeepAlives bool) {
-		http.DefaultTransport.(*http.Transport).DisableKeepAlives = disableKeepAlives
-	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
-	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
+	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
 	values := uri.Query()
-	values.Add(storageccl.AzureAccountNameParam, accountName)
-	values.Add(storageccl.AzureAccountKeyParam, accountKey)
+	values.Add(cloudimpl.AzureAccountNameParam, accountName)
+	values.Add(cloudimpl.AzureAccountKeyParam, accountKey)
 	uri.RawQuery = values.Encode()
 
-	backupAndRestore(ctx, t, tc, uri.String(), numAccounts)
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
 }

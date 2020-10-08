@@ -1,0 +1,64 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.jobs.jobspb;
+option go_package = "jobspb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
+
+// ScheduleDetails describes how to schedule and execute the job.
+message ScheduleDetails {
+  // WaitBehavior describes how to handle previously  started
+  // jobs that have not completed yet.
+  enum WaitBehavior {
+    // Wait for the previous run to complete
+    // before starting the next one.
+    WAIT = 0;
+    // Do not wait for the previous run to complete.
+    NO_WAIT = 1;
+    // If the previous run is still running, skip this run
+    // and advance schedule to the next recurrence.
+    SKIP = 2;
+  }
+
+  // ErrorHandlingBehavior describes how to handle failed job runs.
+  enum ErrorHandlingBehavior {
+    // By default, failed jobs will run again, based on their schedule.
+    RETRY_SCHED = 0;
+    // Retry failed jobs soon.
+    RETRY_SOON = 1;
+    // Stop running this schedule
+    PAUSE_SCHED = 2;
+  }
+
+  // How to handle running jobs.
+  WaitBehavior wait = 1;
+
+  // How to handle failed jobs.
+  ErrorHandlingBehavior on_error = 2;
+}
+
+// ExecutionArguments describes data needed to execute scheduled jobs.
+message ExecutionArguments {
+  google.protobuf.Any args = 1;
+}
+
+// Message representing sql statement to execute.
+message SqlStatementExecutionArg {
+  string statement = 1;
+}
+
+// ScheduleState represents mutable schedule state.
+// The members of this proto may be mutated during each schedule execution.
+message ScheduleState {
+  string status = 1;
+}

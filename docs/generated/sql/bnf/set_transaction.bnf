@@ -1,2 +1,8 @@
-set_stmt ::=
-	'SET' 'TRANSACTION' transaction_mode ( ( opt_comma transaction_mode ) )*
+nonpreparable_set_stmt ::=
+	'SET' 'TRANSACTION' 'PRIORITY' 'LOW' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | transaction_deferrable_mode ) ) )*
+	| 'SET' 'TRANSACTION' 'PRIORITY' 'NORMAL' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | transaction_deferrable_mode ) ) )*
+	| 'SET' 'TRANSACTION' 'PRIORITY' 'HIGH' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | transaction_deferrable_mode ) ) )*
+	| 'SET' 'TRANSACTION' 'READ' 'ONLY' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | transaction_deferrable_mode ) ) )*
+	| 'SET' 'TRANSACTION' 'READ' 'WRITE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | transaction_deferrable_mode ) ) )*
+	| 'SET' 'TRANSACTION' 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | transaction_deferrable_mode ) ) )*
+	| 'SET' 'TRANSACTION' transaction_deferrable_mode ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | transaction_deferrable_mode ) ) )*

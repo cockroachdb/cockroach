@@ -1,0 +1,14 @@
+# Send a bad OID (the "1, 1, 1, 1" are the 4 OID bytes).
+send
+Parse {"Query": "SELECT $1::INTERVAL[]"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [[0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42804"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

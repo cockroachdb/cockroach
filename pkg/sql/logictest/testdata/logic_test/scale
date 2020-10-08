@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE test (
   t CHAR(4),
@@ -15,7 +13,7 @@ INSERT INTO test VALUES ('ab')
 statement ok
 INSERT INTO test VALUES ('abcd')
 
-statement error value too long for type STRING\(4\) \(column "t"\)
+statement error value too long for type CHAR\(4\) \(column "t"\)
 INSERT INTO test VALUES ('abcdef')
 
 statement ok
@@ -37,22 +35,22 @@ CREATE TABLE tb (
 )
 
 statement ok
-INSERT INTO tb VALUES (1)
+INSERT INTO tb VALUES (B'001')
 
 statement ok
-INSERT INTO tb VALUES (3)
+INSERT INTO tb VALUES (B'011')
 
 statement ok
-INSERT INTO tb VALUES (7)
+INSERT INTO tb VALUES (B'111')
 
-statement error integer out of range for type BIT \(column "b"\)
-INSERT INTO tb VALUES (15)
+statement error bit string length 4 does not match type BIT\(3\)
+INSERT INTO tb VALUES (B'1111')
 
 statement ok
-UPDATE tb SET b = 2 WHERE b = 7
+UPDATE tb SET b = B'010' WHERE b = B'111'
 
-statement error integer out of range for type BIT \(column "b"\)
-UPDATE tb SET b = 16 WHERE b = 2
+statement error bit string length 5 does not match type BIT\(3\)
+UPDATE tb SET b = B'10000' WHERE b = B'010'
 
 statement ok
 CREATE TABLE tc (
@@ -74,16 +72,16 @@ INSERT INTO tc VALUES (32767)
 statement ok
 INSERT INTO tc VALUES (60000-59999)
 
-statement error integer out of range for type SMALLINT \(column "b"\)
+statement error integer out of range for type int2 \(column "b"\)
 INSERT INTO tc VALUES (-32769)
 
-statement error integer out of range for type SMALLINT \(column "b"\)
+statement error integer out of range for type int2 \(column "b"\)
 INSERT INTO tc VALUES (32768)
 
 statement ok
 UPDATE tc SET b = 80 WHERE b = 50
 
-statement error integer out of range for type SMALLINT \(column "b"\)
+statement error integer out of range for type int2 \(column "b"\)
 UPDATE tc SET b = 32768 WHERE b = 32767
 
 statement ok
@@ -101,16 +99,16 @@ INSERT INTO tc1 VALUES (-2147483648)
 statement ok
 INSERT INTO tc1 VALUES (2147483647)
 
-statement error integer out of range for type INTEGER \(column "b"\)
+statement error integer out of range for type int4 \(column "b"\)
 INSERT INTO tc1 VALUES (-2147483649)
 
-statement error integer out of range for type INTEGER \(column "b"\)
+statement error integer out of range for type int4 \(column "b"\)
 INSERT INTO tc1 VALUES (2147483648)
 
 statement ok
 UPDATE tc1 SET b = 80 WHERE b = 50
 
-statement error integer out of range for type INTEGER \(column "b"\)
+statement error integer out of range for type int4 \(column "b"\)
 UPDATE tc1 SET b = 2147483648 WHERE b = 2147483647
 
 statement ok

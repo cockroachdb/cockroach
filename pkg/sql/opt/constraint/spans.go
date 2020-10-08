@@ -1,22 +1,20 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package constraint
 
 import (
 	"sort"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // Spans is a collection of spans. There are no general requirements on the
@@ -67,7 +65,7 @@ func (s *Spans) Get(nth int) *Span {
 // Append adds another span (at the end).
 func (s *Spans) Append(sp *Span) {
 	if s.immutable {
-		panic("mutation disallowed")
+		panic(errors.AssertionFailedf("mutation disallowed"))
 	}
 	if s.numSpans == 0 {
 		s.firstSpan = *sp
@@ -80,10 +78,10 @@ func (s *Spans) Append(sp *Span) {
 // Truncate removes all but the first newLength spans.
 func (s *Spans) Truncate(newLength int) {
 	if s.immutable {
-		panic("mutation disallowed")
+		panic(errors.AssertionFailedf("mutation disallowed"))
 	}
 	if int32(newLength) > s.numSpans {
-		panic("can't truncate to longer length")
+		panic(errors.AssertionFailedf("can't truncate to longer length"))
 	}
 	if newLength == 0 {
 		s.otherSpans = s.otherSpans[:0]
@@ -149,6 +147,78 @@ func (s *Spans) SortAndMerge(keyCtx *KeyContext) {
 	}
 	*s.Get(n) = currentSpan
 	s.Truncate(n + 1)
+}
+
+// KeyCount returns the number of distinct keys contained in the spans. See
+// span.KeyCount for conditions under which this is possible. Example:
+//
+//    KeyCount('[/'ASIA' - /'ASIA'] [/'EUROPE'/1 - /'EUROPE'/4]') == 5
+//
+func (s *Spans) KeyCount(keyCtx *KeyContext) (int64, bool) {
+	keyCount := int64(0)
+	for i, cnt := 0, s.Count(); i < cnt; i++ {
+		cnt, ok := s.Get(i).KeyCount(keyCtx)
+		if !ok {
+			return 0, false
+		}
+		keyCount += cnt
+		if keyCount < 0 {
+			// Overflow.
+			return 0, false
+		}
+	}
+	return keyCount, true
+}
+
+// ExtractSingleKeySpans returns a new Spans struct containing a span for each
+// key in the given spans. Returns nil and false if one of the following is
+// true:
+//   1. The number of new spans exceeds the given limit value.
+//   2. The spans don't all have the same key length (length as in
+//      length(/3/'two'/1) == 3).
+//   3. span.Split is unsuccessful for any of the spans.
+//
+// Example:
+//
+//    ExtractSingleKeySpans('[/'ASIA'/0 - /'ASIA'/0] [/'US'/1 - /'US'/4]')
+//    =>
+//    '[/'ASIA'/0 - /'ASIA'/0] [/'US'/1 - /'US'/1] [/'US'/2 - /'US'/2]
+//     [/'US'/3 - /'US'/3] [/'US'/4 - /'US'/4]'
+//
+func (s *Spans) ExtractSingleKeySpans(keyCtx *KeyContext, limit int64) (*Spans, bool) {
+	// Ensure that the number of keys in the spans does not exceed the limit.
+	keyCount, ok := s.KeyCount(keyCtx)
+	if !ok || keyCount > limit {
+		return nil, false
+	}
+
+	// Ensure that the key lengths are consistent between spans.
+	keyLength := -1
+	for i, spanCnt := 0, s.Count(); i < spanCnt; i++ {
+		span := s.Get(i)
+		if keyLength == -1 {
+			// Initialize keyLength.
+			keyLength = span.StartKey().Length()
+		}
+		if span.StartKey().Length() != keyLength {
+			// The spans don't all have the same key length.
+			return nil, false
+		}
+	}
+
+	// Construct the new single-key spans.
+	newSpans := Spans{}
+	for i, spanCnt := 0, s.Count(); i < spanCnt; i++ {
+		splitSpans, ok := s.Get(i).Split(keyCtx, limit-int64(newSpans.Count()))
+		if !ok {
+			// The span could not be split into single key spans.
+			return nil, false
+		}
+		for i, cnt := 0, splitSpans.Count(); i < cnt; i++ {
+			newSpans.Append(splitSpans.Get(i))
+		}
+	}
+	return &newSpans, true
 }
 
 type spanSorter struct {

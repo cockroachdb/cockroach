@@ -1,0 +1,33 @@
+## A simple txn that deletes.
+## The delete tombstone is placed alongside the previous value, at the newer timestamp.
+
+run ok
+with t=A
+  txn_begin  ts=44
+  del   k=a resolve
+  txn_remove
+----
+>> at end:
+data: "a"/0.000000044,0 -> /<empty>
+
+# Show the value disappears from gets.
+
+run ok
+with t=A
+  txn_begin ts=45
+  get k=a
+  txn_remove
+----
+get: "a" -> <no data>
+>> at end:
+
+# Show the tombstone.
+
+run ok
+with t=A
+  txn_begin ts=45
+  get k=a tombstones
+  txn_remove
+----
+get: "a" -> /<empty> @0.000000044,0
+>> at end:

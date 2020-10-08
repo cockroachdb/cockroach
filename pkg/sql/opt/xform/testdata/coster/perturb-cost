@@ -1,0 +1,72 @@
+# This file tests that the OptTester flag perturb-cost works. It's not possible
+# to include tests with the opt directive (other than for trivial scalar
+# queries), since by construction those tests will produce a random query plan
+# and we cannot predict the output in advance. For example,
+#   `SELECT * FROM a JOIN b ON a.x=b.x`
+# may produce one of at least 6 different plans.
+
+# For this reason, the perturb-cost flag is only intended for debugging at this
+# time, by using the "-rewrite=true" flag.
+
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+CREATE TABLE b (x INT PRIMARY KEY)
+----
+
+norm perturb-cost=(0.5)
+SELECT * FROM a JOIN b ON a.x=b.x ORDER BY a.y
+----
+sort
+ ├── columns: x:1!null y:2 x:4!null
+ ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=1000, null(4)=0]
+ ├── cost: 2327.38569
+ ├── key: (4)
+ ├── fd: (1)-->(2), (1)==(4), (4)==(1)
+ ├── ordering: +2
+ └── inner-join (hash)
+      ├── columns: a.x:1!null y:2 b.x:4!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=1000, null(4)=0]
+      ├── cost: 2108.06
+      ├── key: (4)
+      ├── fd: (1)-->(2), (1)==(4), (4)==(1)
+      ├── scan a
+      │    ├── columns: a.x:1!null y:2
+      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+      │    ├── cost: 1044.02
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── scan b
+      │    ├── columns: b.x:4!null
+      │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0]
+      │    ├── cost: 1024.02
+      │    └── key: (4)
+      └── filters
+           └── a.x:1 = b.x:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+
+opt perturb-cost=(0.9)
+SELECT 1
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.02
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1,)
+
+opt perturb-cost=(2.5)
+SELECT 1
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.02
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1,)

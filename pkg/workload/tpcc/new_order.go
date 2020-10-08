@@ -1,36 +1,29 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tpcc
 
 import (
-	gosql "database/sql"
+	"context"
 	"fmt"
-	"math/rand"
 	"sort"
 	"strings"
-	"time"
-
-	"context"
-
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
+	"golang.org/x/exp/rand"
 )
 
 // From the TPCC spec, section 2.4:
@@ -77,27 +70,82 @@ type newOrderData struct {
 
 var errSimulated = errors.New("simulated user error")
 
-type newOrder struct{}
+type newOrder struct {
+	config *tpcc
+	mcp    *workload.MultiConnPool
+	sr     workload.SQLRunner
 
-var _ tpccTx = newOrder{}
+	updateDistrict     workload.StmtHandle
+	selectWarehouseTax workload.StmtHandle
+	selectCustomerInfo workload.StmtHandle
+	insertOrder        workload.StmtHandle
+	insertNewOrder     workload.StmtHandle
+}
 
-func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
-	atomic.AddUint64(&config.auditor.newOrderTransactions, 1)
+var _ tpccTx = &newOrder{}
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+func createNewOrder(
+	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
+) (tpccTx, error) {
+	n := &newOrder{
+		config: config,
+		mcp:    mcp,
+	}
+
+	// Select the district tax rate and next available order number, bumping it.
+	n.updateDistrict = n.sr.Define(`
+		UPDATE district
+		SET d_next_o_id = d_next_o_id + 1
+		WHERE d_w_id = $1 AND d_id = $2
+		RETURNING d_tax, d_next_o_id`,
+	)
+
+	// Select the warehouse tax rate.
+	n.selectWarehouseTax = n.sr.Define(`
+		SELECT w_tax FROM warehouse WHERE w_id = $1`,
+	)
+
+	// Select the customer's discount, last name and credit.
+	n.selectCustomerInfo = n.sr.Define(`
+		SELECT c_discount, c_last, c_credit
+		FROM customer
+		WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`,
+	)
+
+	n.insertOrder = n.sr.Define(`
+		INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+	)
+
+	n.insertNewOrder = n.sr.Define(`
+		INSERT INTO new_order (no_o_id, no_d_id, no_w_id)
+		VALUES ($1, $2, $3)`,
+	)
+
+	if err := n.sr.Init(ctx, "new-order", mcp, config.connFlags); err != nil {
+		return nil, err
+	}
+
+	return n, nil
+}
+
+func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
+	atomic.AddUint64(&n.config.auditor.newOrderTransactions, 1)
+
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := newOrderData{
 		wID:    wID,
-		dID:    randInt(rng, 1, 10),
-		cID:    randCustomerID(rng),
-		oOlCnt: randInt(rng, 5, 15),
+		dID:    int(randInt(rng, 1, 10)),
+		cID:    n.config.randCustomerID(rng),
+		oOlCnt: int(randInt(rng, 5, 15)),
 	}
 	d.items = make([]orderItem, d.oOlCnt)
 
-	config.auditor.Lock()
-	config.auditor.orderLinesFreq[d.oOlCnt]++
-	config.auditor.Unlock()
-	atomic.AddUint64(&config.auditor.totalOrderLines, uint64(d.oOlCnt))
+	n.config.auditor.Lock()
+	n.config.auditor.orderLinesFreq[d.oOlCnt]++
+	n.config.auditor.Unlock()
+	atomic.AddUint64(&n.config.auditor.totalOrderLines, uint64(d.oOlCnt))
 
 	// itemIDs tracks the item ids in the order so that we can prevent adding
 	// multiple items with the same ID. This would not make sense because each
@@ -107,7 +155,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 	// 2.4.1.4: A fixed 1% of the New-Order transactions are chosen at random to
 	// simulate user data entry errors and exercise the performance of rolling
 	// back update transactions.
-	rollback := rand.Intn(100) == 0
+	rollback := rng.Intn(100) == 0
 
 	// allLocal tracks whether any of the items were from a remote warehouse.
 	allLocal := 1
@@ -115,7 +163,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 		item := orderItem{
 			olNumber: i + 1,
 			// 2.4.1.5.3: order has a quantity [1..10]
-			olQuantity: rand.Intn(10) + 1,
+			olQuantity: rng.Intn(10) + 1,
 		}
 		// 2.4.1.5.1 an order item has a random item number, unless rollback is true
 		// and it's the last item in the items list.
@@ -124,7 +172,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 		} else {
 			// Loop until we find a unique item ID.
 			for {
-				item.olIID = randItemID(rng)
+				item.olIID = n.config.randItemID(rng)
 				if _, ok := itemIDs[item.olIID]; !ok {
 					itemIDs[item.olIID] = struct{}{}
 					break
@@ -132,19 +180,19 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			}
 		}
 		// 2.4.1.5.2: 1% of the time, an item is supplied from a remote warehouse.
-		item.remoteWarehouse = rand.Intn(100) == 0
+		item.remoteWarehouse = rng.Intn(100) == 0
 		item.olSupplyWID = wID
-		if item.remoteWarehouse && config.warehouses > 1 {
+		if item.remoteWarehouse && n.config.activeWarehouses > 1 {
 			allLocal = 0
 			// To avoid picking the local warehouse again, randomly choose among n-1
 			// warehouses and swap in the nth if necessary.
-			item.olSupplyWID = rand.Intn(config.warehouses - 1)
-			if item.olSupplyWID == wID {
-				item.olSupplyWID = config.warehouses - 1
+			item.olSupplyWID = n.config.wPart.randActive(rng)
+			for item.olSupplyWID == wID {
+				item.olSupplyWID = n.config.wPart.randActive(rng)
 			}
-			config.auditor.Lock()
-			config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
-			config.auditor.Unlock()
+			n.config.auditor.Lock()
+			n.config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
+			n.config.auditor.Unlock()
 		} else {
 			item.olSupplyWID = wID
 		}
@@ -158,38 +206,32 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 
 	d.oEntryD = timeutil.Now()
 
-	err := crdb.ExecuteTx(
-		context.Background(),
-		db,
-		config.txOpts,
-		func(tx *gosql.Tx) error {
+	tx, err := n.mcp.Get().BeginEx(ctx, n.config.txOpts)
+	if err != nil {
+		return nil, err
+	}
+	err = crdb.ExecuteInTx(
+		ctx, (*workload.PgxTx)(tx),
+		func() error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
-			if err := tx.QueryRow(fmt.Sprintf(`
-				UPDATE district
-				SET d_next_o_id = d_next_o_id + 1
-				WHERE d_w_id = %[1]d AND d_id = %[2]d
-				RETURNING d_tax, d_next_o_id`,
-				d.wID, d.dID),
+			if err := n.updateDistrict.QueryRowTx(
+				ctx, tx, d.wID, d.dID,
 			).Scan(&d.dTax, &dNextOID); err != nil {
 				return err
 			}
 			d.oID = dNextOID - 1
 
 			// Select the warehouse tax rate.
-			if err := tx.QueryRow(fmt.Sprintf(`
-				SELECT w_tax FROM warehouse WHERE w_id = %[1]d`,
-				wID),
+			if err := n.selectWarehouseTax.QueryRowTx(
+				ctx, tx, wID,
 			).Scan(&d.wTax); err != nil {
 				return err
 			}
 
 			// Select the customer's discount, last name and credit.
-			if err := tx.QueryRow(fmt.Sprintf(`
-				SELECT c_discount, c_last, c_credit
-				FROM customer
-				WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
-				d.wID, d.dID, d.cID),
+			if err := n.selectCustomerInfo.QueryRowTx(
+				ctx, tx, d.wID, d.dID, d.cID,
 			).Scan(&d.cDiscount, &d.cLast, &d.cCredit); err != nil {
 				return err
 			}
@@ -201,12 +243,16 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			for i, item := range d.items {
 				itemIDs[i] = fmt.Sprint(item.olIID)
 			}
-			rows, err := tx.Query(fmt.Sprintf(`
-				SELECT i_price, i_name, i_data
-				FROM item
-				WHERE i_id IN (%[1]s)
-				ORDER BY i_id`,
-				strings.Join(itemIDs, ", ")),
+			rows, err := tx.QueryEx(
+				ctx,
+				fmt.Sprintf(`
+					SELECT i_price, i_name, i_data
+					FROM item
+					WHERE i_id IN (%[1]s)
+					ORDER BY i_id`,
+					strings.Join(itemIDs, ", "),
+				),
+				nil, /* options */
 			)
 			if err != nil {
 				return err
@@ -217,13 +263,16 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 				iData := &iDatas[i]
 
 				if !rows.Next() {
+					if err := rows.Err(); err != nil {
+						return err
+					}
 					if rollback {
 						// 2.4.2.3: roll back when we're expecting a rollback due to
 						// simulated user error (invalid item id) and we actually
 						// can't find the item. The spec requires us to actually go
 						// to the database for this, even though we know earlier
 						// that the item has an invalid number.
-						atomic.AddUint64(&config.auditor.newOrderRollbacks, 1)
+						atomic.AddUint64(&n.config.auditor.newOrderRollbacks, 1)
 						return errSimulated
 					}
 					return errors.New("missing item row")
@@ -247,12 +296,16 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			for i, item := range d.items {
 				stockIDs[i] = fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
 			}
-			rows, err = tx.Query(fmt.Sprintf(`
-				SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
-				FROM stock
-				WHERE (s_i_id, s_w_id) IN (%[2]s)
-				ORDER BY s_i_id`,
-				d.dID, strings.Join(stockIDs, ", ")),
+			rows, err = tx.QueryEx(
+				ctx,
+				fmt.Sprintf(`
+					SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
+					FROM stock
+					WHERE (s_i_id, s_w_id) IN (%[2]s)
+					ORDER BY s_i_id`,
+					d.dID, strings.Join(stockIDs, ", "),
+				),
+				nil, /* options */
 			)
 			if err != nil {
 				return err
@@ -266,6 +319,9 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 				item := &d.items[i]
 
 				if !rows.Next() {
+					if err := rows.Err(); err != nil {
+						return err
+					}
 					return errors.New("missing stock row")
 				}
 
@@ -307,35 +363,36 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			rows.Close()
 
 			// Insert row into the orders and new orders table.
-			if _, err := tx.Exec(fmt.Sprintf(`
-				INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
-				VALUES (%[1]d, %[2]d, %[3]d, %[4]d, '%[5]s', %[6]d, %[7]d)`,
-				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"),
-				d.oOlCnt, allLocal),
+			if _, err := n.insertOrder.ExecTx(
+				ctx, tx,
+				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
 			); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(fmt.Sprintf(`
-				INSERT INTO new_order (no_o_id, no_d_id, no_w_id) 
-				VALUES (%[1]d, %[2]d, %[3]d)`,
-				d.oID, d.dID, d.wID)); err != nil {
+			if _, err := n.insertNewOrder.ExecTx(
+				ctx, tx, d.oID, d.dID, d.wID,
+			); err != nil {
 				return err
 			}
 
 			// Update the stock table for each item.
-			if _, err := tx.Exec(fmt.Sprintf(`
-				UPDATE stock
-				SET
-					s_quantity = CASE (s_i_id, s_w_id) %[1]s ELSE crdb_internal.force_error('', 'unknown case') END,
-					s_ytd = CASE (s_i_id, s_w_id) %[2]s END,
-					s_order_cnt = CASE (s_i_id, s_w_id) %[3]s END,
-					s_remote_cnt = CASE (s_i_id, s_w_id) %[4]s END
-				WHERE (s_i_id, s_w_id) IN (%[5]s)`,
-				strings.Join(sQuantityUpdateCases, " "),
-				strings.Join(sYtdUpdateCases, " "),
-				strings.Join(sOrderCntUpdateCases, " "),
-				strings.Join(sRemoteCntUpdateCases, " "),
-				strings.Join(stockIDs, ", ")),
+			if _, err := tx.ExecEx(
+				ctx,
+				fmt.Sprintf(`
+					UPDATE stock
+					SET
+						s_quantity = CASE (s_i_id, s_w_id) %[1]s ELSE crdb_internal.force_error('', 'unknown case') END,
+						s_ytd = CASE (s_i_id, s_w_id) %[2]s END,
+						s_order_cnt = CASE (s_i_id, s_w_id) %[3]s END,
+						s_remote_cnt = CASE (s_i_id, s_w_id) %[4]s END
+					WHERE (s_i_id, s_w_id) IN (%[5]s)`,
+					strings.Join(sQuantityUpdateCases, " "),
+					strings.Join(sYtdUpdateCases, " "),
+					strings.Join(sOrderCntUpdateCases, " "),
+					strings.Join(sRemoteCntUpdateCases, " "),
+					strings.Join(stockIDs, ", "),
+				),
+				nil, /* options */
 			); err != nil {
 				return err
 			}
@@ -359,10 +416,14 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 					distInfos[i],     // ol_dist_info
 				)
 			}
-			if _, err := tx.Exec(fmt.Sprintf(`
-				INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
-				VALUES %s`,
-				strings.Join(olValsStrings, ", ")),
+			if _, err := tx.ExecEx(
+				ctx,
+				fmt.Sprintf(`
+					INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
+					VALUES %s`,
+					strings.Join(olValsStrings, ", "),
+				),
+				nil, /* options */
 			); err != nil {
 				return err
 			}
@@ -372,9 +433,8 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 
 			return nil
 		})
-	if err == errSimulated {
+	if errors.Is(err, errSimulated) {
 		return d, nil
 	}
 	return d, err
-
 }

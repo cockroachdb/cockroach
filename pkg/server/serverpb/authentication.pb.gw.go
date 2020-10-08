@@ -9,11 +9,11 @@ It translates gRPC into RESTful JSON APIs.
 package serverpb
 
 import (
+	"context"
 	"io"
 	"net/http"
 
-	"context"
-
+	"github.com/golang/protobuf/descriptor"
 	"github.com/golang/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/utilities"
@@ -23,21 +23,44 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Suppress "imported and not used" errors
 var _ codes.Code
 var _ io.Reader
 var _ status.Status
 var _ = runtime.String
 var _ = utilities.NewDoubleArray
+var _ = descriptor.ForMessage
 
 func request_LogIn_UserLogin_0(ctx context.Context, marshaler runtime.Marshaler, client LogInClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq UserLoginRequest
 	var metadata runtime.ServerMetadata
 
-	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil {
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
 	msg, err := client.UserLogin(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_LogIn_UserLogin_0(ctx context.Context, marshaler runtime.Marshaler, server LogInServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq UserLoginRequest
+	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := server.UserLogin(ctx, &protoReq)
 	return msg, metadata, err
 
 }
@@ -51,6 +74,71 @@ func request_LogOut_UserLogout_0(ctx context.Context, marshaler runtime.Marshale
 
 }
 
+func local_request_LogOut_UserLogout_0(ctx context.Context, marshaler runtime.Marshaler, server LogOutServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq UserLogoutRequest
+	var metadata runtime.ServerMetadata
+
+	msg, err := server.UserLogout(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
+// RegisterLogInHandlerServer registers the http handlers for service LogIn to "mux".
+// UnaryRPC     :call LogInServer directly.
+// StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
+func RegisterLogInHandlerServer(ctx context.Context, mux *runtime.ServeMux, server LogInServer) error {
+
+	mux.Handle("POST", pattern_LogIn_UserLogin_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_LogIn_UserLogin_0(rctx, inboundMarshaler, server, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_LogIn_UserLogin_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	return nil
+}
+
+// RegisterLogOutHandlerServer registers the http handlers for service LogOut to "mux".
+// UnaryRPC     :call LogOutServer directly.
+// StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
+func RegisterLogOutHandlerServer(ctx context.Context, mux *runtime.ServeMux, server LogOutServer) error {
+
+	mux.Handle("GET", pattern_LogOut_UserLogout_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_LogOut_UserLogout_0(rctx, inboundMarshaler, server, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_LogOut_UserLogout_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	return nil
+}
+
 // RegisterLogInHandlerFromEndpoint is same as RegisterLogInHandler but
 // automatically dials to "endpoint" and closes the connection when "ctx" gets done.
 func RegisterLogInHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
@@ -61,14 +149,14 @@ func RegisterLogInHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux
 	defer func() {
 		if err != nil {
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Printf("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 			return
 		}
 		go func() {
 			<-ctx.Done()
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Printf("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 		}()
 	}()
@@ -82,8 +170,8 @@ func RegisterLogInHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	return RegisterLogInHandlerClient(ctx, mux, NewLogInClient(conn))
 }
 
-// RegisterLogInHandler registers the http handlers for service LogIn to "mux".
-// The handlers forward requests to the grpc endpoint over the given implementation of "LogInClient".
+// RegisterLogInHandlerClient registers the http handlers for service LogIn
+// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "LogInClient".
 // Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "LogInClient"
 // doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
 // "LogInClient" to call the correct interceptors.
@@ -92,15 +180,6 @@ func RegisterLogInHandlerClient(ctx context.Context, mux *runtime.ServeMux, clie
 	mux.Handle("POST", pattern_LogIn_UserLogin_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
-		if cn, ok := w.(http.CloseNotifier); ok {
-			go func(done <-chan struct{}, closed <-chan bool) {
-				select {
-				case <-done:
-				case <-closed:
-					cancel()
-				}
-			}(ctx.Done(), cn.CloseNotify())
-		}
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		rctx, err := runtime.AnnotateContext(ctx, mux, req)
 		if err != nil {
@@ -122,7 +201,7 @@ func RegisterLogInHandlerClient(ctx context.Context, mux *runtime.ServeMux, clie
 }
 
 var (
-	pattern_LogIn_UserLogin_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0}, []string{"login"}, ""))
+	pattern_LogIn_UserLogin_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0}, []string{"login"}, "", runtime.AssumeColonVerbOpt(true)))
 )
 
 var (
@@ -139,14 +218,14 @@ func RegisterLogOutHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMu
 	defer func() {
 		if err != nil {
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Printf("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 			return
 		}
 		go func() {
 			<-ctx.Done()
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Printf("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 		}()
 	}()
@@ -160,8 +239,8 @@ func RegisterLogOutHandler(ctx context.Context, mux *runtime.ServeMux, conn *grp
 	return RegisterLogOutHandlerClient(ctx, mux, NewLogOutClient(conn))
 }
 
-// RegisterLogOutHandler registers the http handlers for service LogOut to "mux".
-// The handlers forward requests to the grpc endpoint over the given implementation of "LogOutClient".
+// RegisterLogOutHandlerClient registers the http handlers for service LogOut
+// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "LogOutClient".
 // Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "LogOutClient"
 // doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
 // "LogOutClient" to call the correct interceptors.
@@ -170,15 +249,6 @@ func RegisterLogOutHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 	mux.Handle("GET", pattern_LogOut_UserLogout_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
-		if cn, ok := w.(http.CloseNotifier); ok {
-			go func(done <-chan struct{}, closed <-chan bool) {
-				select {
-				case <-done:
-				case <-closed:
-					cancel()
-				}
-			}(ctx.Done(), cn.CloseNotify())
-		}
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		rctx, err := runtime.AnnotateContext(ctx, mux, req)
 		if err != nil {
@@ -200,7 +270,7 @@ func RegisterLogOutHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 }
 
 var (
-	pattern_LogOut_UserLogout_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0}, []string{"logout"}, ""))
+	pattern_LogOut_UserLogout_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0}, []string{"logout"}, "", runtime.AssumeColonVerbOpt(true)))
 )
 
 var (

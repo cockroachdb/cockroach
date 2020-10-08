@@ -1,0 +1,37 @@
+# Default behavior, where atomicity violations are allowed
+
+statement ok
+CREATE TABLE testing (k int, v string);
+  INSERT INTO testing (k,v) VALUES (1, 'a'), (2, 'b'), (3, 'a'), (4, 'b');
+  CREATE TABLE unrelated(x INT)
+
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE testing ADD CONSTRAINT "unique_values" UNIQUE(v)
+
+statement ok
+INSERT INTO testing (k,v) VALUES (5, 'c');
+INSERT INTO unrelated(x) VALUES (1);
+
+
+statement error pgcode XXA00 violates unique constraint.*\n.*\n.*\n.*\n.*issues/42061
+COMMIT
+
+# oops!
+query IT rowsort
+SELECT * FROM testing
+----
+1  a
+2  b
+3  a
+4  b
+5  c
+
+# oops again!
+query I
+SELECT * FROM unrelated
+----
+1

@@ -1,8 +1,18 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import _ from "lodash";
 
 import * as protos from "src/js/protos";
 
-export type INodeStatus = protos.cockroach.server.status.INodeStatus;
+export type INodeStatus = protos.cockroach.server.status.statuspb.INodeStatus;
 const nodeStatus: INodeStatus = null;
 export type StatusMetrics = typeof nodeStatus.metrics;
 
@@ -56,7 +66,6 @@ export namespace MetricConstants {
   export const intentCount: string = "intentcount";
   export const intentAge: string = "intentage";
   export const gcBytesAge: string = "gcbytesage";
-  export const lastUpdateNano: string = "lastupdatenanos";
   export const capacity: string = "capacity";
   export const availableCapacity: string = "capacity.available";
   export const usedCapacity: string = "capacity.used";

@@ -1,0 +1,19 @@
+# Test for overflow handling in sum aggregate.
+
+statement ok
+CREATE TABLE large_numbers (a INT8)
+
+statement ok
+INSERT INTO large_numbers VALUES (9223372036854775807),(1)
+
+statement error integer out of range
+SELECT sum_int(a) FROM large_numbers
+
+statement ok
+DELETE FROM large_numbers
+
+statement ok
+INSERT INTO large_numbers VALUES (-9223372036854775808),(-1)
+
+statement error integer out of range
+SELECT sum_int(a) FROM large_numbers

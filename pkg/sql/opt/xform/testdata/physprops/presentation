@@ -1,72 +1,86 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE t.b (x INT, y FLOAT)
 ----
-TABLE b
- ├── x int
- ├── y float
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Scan operator.
 opt
 SELECT a.y, a.x, a.y y2 FROM a
 ----
 scan a
- └── columns: y:2(int) x:1(int!null) y2:2(int)
+ ├── columns: y:2 x:1!null y2:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
 
 # Select operator.
 opt
 SELECT a.y, a.x, a.y y2 FROM a WHERE y=1
 ----
 select
- ├── columns: y:2(int!null) x:1(int!null) y2:2(int!null)
+ ├── columns: y:2!null x:1!null y2:2!null
+ ├── key: (1)
+ ├── fd: ()-->(2)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
- └── filters [type=bool]
-      └── a.y = 1 [type=bool]
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── y:2 = 1 [outer=(2), fd=()-->(2)]
 
 # Project operator.
 opt
 SELECT 1+a.y AS plus, a.x FROM a
 ----
 project
- ├── columns: plus:3(int) x:1(int!null)
+ ├── columns: plus:4 x:1!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(4)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  └── projections
-      └── a.y + 1 [type=int]
+      └── y:2 + 1 [as=plus:4, outer=(2), immutable]
 
 # Join operator.
 opt
 SELECT b.x, rowid, a.y, a.x, a.y y2, b.y FROM a, b
 ----
-inner-join
- ├── columns: x:3(int) rowid:5(int!null) y:2(int) x:1(int!null) y2:2(int) y:4(float)
+inner-join (cross)
+ ├── columns: x:4 rowid:6!null y:2 x:1!null y2:2 y:5
+ ├── key: (1,6)
+ ├── fd: (1)-->(2), (6)-->(4,5)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1!null a.y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  ├── scan b
- │    └── columns: b.x:3(int) b.y:4(float) rowid:5(int!null)
- └── true [type=bool]
+ │    ├── columns: b.x:4 b.y:5 rowid:6!null
+ │    ├── key: (6)
+ │    └── fd: (6)-->(4,5)
+ └── filters (true)
 
 # Groupby operator.
 opt
 SELECT max(y), y, y, x FROM a GROUP BY a.x, a.y
 ----
 group-by
- ├── columns: max:3(int) y:2(int) y:2(int) x:1(int!null)
- ├── grouping columns: x:1(int!null) y:2(int)
+ ├── columns: max:4 y:2 y:2 x:1!null
+ ├── grouping columns: x:1!null
+ ├── internal-ordering: +1
+ ├── key: (1)
+ ├── fd: (1)-->(2,4)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
  └── aggregations
-      └── max [type=int]
-           └── variable: a.y [type=int]
+      ├── max [as=max:4, outer=(2)]
+      │    └── y:2
+      └── const-agg [as=y:2, outer=(2)]
+           └── y:2

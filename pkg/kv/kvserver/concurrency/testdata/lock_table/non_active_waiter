@@ -1,0 +1,228 @@
+# Tests where a request is a non-active waiter.
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=0
+----
+
+new-txn txn=txn2 ts=10 epoch=0
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=w@a+r@b+w@c
+----
+
+scan r=req1
+----
+start-waiting: false
+
+add-discovered r=req1 k=a txn=txn2
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
+
+add-discovered r=req1 k=b txn=txn2
+----
+global: num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+add-discovered r=req1 k=c txn=txn2
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
+
+# req1 is not in the queue for "b" as readers are never inactive waiters.
+
+print
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
+
+new-request r=req2 txn=txn1 ts=10 spans=w@c
+----
+
+scan r=req2
+----
+start-waiting: true
+
+# req2 is the distinguished waiter at "c".
+
+print
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 2
+local: num=0
+
+scan r=req1
+----
+start-waiting: true
+
+guard-state r=req1
+----
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
+
+print
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 2
+local: num=0
+
+# req1 waits at "c" but not as distinguished waiter.
+release txn=txn2 span=a
+----
+global: num=3
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 2
+local: num=0
+
+guard-state r=req1
+----
+new: state=waitFor txn=txn2 key="c" held=true guard-access=write
+
+print
+----
+global: num=3
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 2
+local: num=0
+
+# req1 waits at "b" as reader.
+
+release txn=txn2 span=c
+----
+global: num=3
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
+
+guard-state r=req1
+----
+new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=read
+
+guard-state r=req2
+----
+new: state=waitSelf
+
+print
+----
+global: num=3
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 1, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 1
+ lock: "c"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
+
+# req1 is done waiting.
+
+release txn=txn2 span=b
+----
+global: num=2
+ lock: "a"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
+
+guard-state r=req1
+----
+new: state=doneWaiting
+
+dequeue r=req1
+----
+global: num=1
+ lock: "c"
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+local: num=0
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+dequeue r=req2
+----
+global: num=0
+local: num=0

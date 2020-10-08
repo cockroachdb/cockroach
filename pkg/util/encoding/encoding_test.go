@@ -1,35 +1,39 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package encoding
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"regexp"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testBasicEncodeDecode32(
@@ -605,6 +609,278 @@ func TestEncodeDecodeUnsafeString(t *testing.T) {
 	}
 }
 
+func encodeBitArrayWithDir(dir Direction, buf []byte, d bitarray.BitArray) []byte {
+	if dir == Ascending {
+		return EncodeBitArrayAscending(buf, d)
+	}
+	return EncodeBitArrayDescending(buf, d)
+}
+
+func decodeBitArrayWithDir(
+	t *testing.T, dir Direction, buf []byte, tmp []byte,
+) ([]byte, bitarray.BitArray) {
+	var err error
+	var resBuf []byte
+	var res bitarray.BitArray
+	if dir == Ascending {
+		resBuf, res, err = DecodeBitArrayAscending(buf)
+	} else {
+		resBuf, res, err = DecodeBitArrayDescending(buf)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resBuf, res
+}
+
+func TestEncodeBitArray(t *testing.T) {
+	ba := func(s string) bitarray.BitArray {
+		res, _ := bitarray.Parse(s)
+		return res
+	}
+
+	testCases := []struct {
+		Value    bitarray.BitArray
+		Encoding []byte
+	}{
+		{ba(""),
+			[]byte{0x3a, 0 /* no words */, 0x88}},
+		{ba("0"),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0x89}},
+		{ba("1"),
+			[]byte{0x3a,
+				0xfd, 0x80, 0, 0, 0, 0, 0, 0, 0, // word 0
+				0, 0x89}},
+		{ba("00"),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0x8a}},
+		{ba("01"),
+			[]byte{0x3a,
+				0xfd, 0x40, 0, 0, 0, 0, 0, 0, 0, // word 0
+				0, 0x8a}},
+		{ba("10"),
+			[]byte{0x3a,
+				0xfd, 0x80, 0, 0, 0, 0, 0, 0, 0, // word 0
+				0, 0x8a}},
+		{ba("11"),
+			[]byte{0x3a,
+				0xfd, 0xc0, 0, 0, 0, 0, 0, 0, 0, // word 0
+				0, 0x8a}},
+		{bitarray.MakeZeroBitArray(32),
+			[]byte{0x3a, 0x88 /* word 0*/, 0, 0xa8}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(32)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, // word 0
+				0, 0xa8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(32), ba("00")),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0xaa}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(32), ba("01")),
+			[]byte{0x3a,
+				0xf9, 0x40, 0, 0, 0, // word 0
+				0, 0xaa}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(32), ba("10")),
+			[]byte{0x3a,
+				0xf9, 0x80, 0, 0, 0, // word 0
+				0, 0xaa}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(32), ba("11")),
+			[]byte{0x3a,
+				0xf9, 0xc0, 0, 0, 0, // word 0
+				0, 0xaa}},
+		{bitarray.MakeZeroBitArray(48),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0xb8}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(48)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, // word 0
+				0, 0xb8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(48), ba("00")),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0xba}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(48), ba("01")),
+			[]byte{0x3a,
+				0xf7, 0x40, 0, // word 0
+				0, 0xba}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(48), ba("10")),
+			[]byte{0x3a,
+				0xf7, 0x80, 0, // word 0
+				0, 0xba}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(48), ba("11")),
+			[]byte{0x3a,
+				0xf7, 0xc0, 0, // word 0
+				0, 0xba}},
+		{bitarray.MakeZeroBitArray(62),
+			[]byte{0x3a,
+				0x88, //word 0
+				0, 0xc6}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(62)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfc, // word 0
+				0, 0xc6}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(62), ba("00")),
+			[]byte{0x3a, 0x88 /* word 0*/, 0, 0xc8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(62), ba("01")),
+			[]byte{0x3a, 0x89 /* word 0*/, 0, 0xc8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(62), ba("10")),
+			[]byte{0x3a, 0x8a /* word 0*/, 0, 0xc8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(62), ba("11")),
+			[]byte{0x3a, 0x8b /* word 0*/, 0, 0xc8}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(64)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // word 0
+				0, 0xc8}},
+		{bitarray.MakeZeroBitArray(65),
+			[]byte{0x3a,
+				0x88, // word 0
+				0x88, // word 1
+				0, 0x89}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(65)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // word 0
+				0xfd, 0x80, 0, 0, 0, 0, 0, 0, 0, // word 1
+				0, 0x89}},
+		{bitarray.MakeZeroBitArray(66),
+			[]byte{0x3a,
+				0x88, // word 0
+				0x88, // word 1
+				0, 0x8a}},
+		{bitarray.MakeZeroBitArray(128),
+			[]byte{0x3a,
+				0x88, // word 0
+				0x88, // word 1
+				0, 0xc8}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(128)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // word 0
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // word 1
+				0, 0xc8}},
+	}
+
+	rng, _ := randutil.NewPseudoRand()
+
+	var lastEncoded []byte
+	dirNames := []string{"", "asc", "desc"}
+	for _, dir := range []Direction{Ascending, Descending} {
+		for _, tmp := range [][]byte{nil, make([]byte, 0, 100)} {
+			for i, c := range testCases {
+				t.Run(fmt.Sprintf("%s/%d/%d/%s", dirNames[dir], cap(tmp), i, c.Value), func(t *testing.T) {
+					enc := encodeBitArrayWithDir(dir, nil, c.Value)
+					_, dec := decodeBitArrayWithDir(t, dir, enc, tmp)
+					if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
+						t.Errorf("unexpected mismatch for %s. expected [% x], got [% x]",
+							c.Value, c.Encoding, enc)
+					}
+					if i > 0 {
+						valCompare := bitarray.Compare(testCases[i-1].Value, testCases[i].Value)
+						expCompare := valCompare
+						if dir == Descending {
+							expCompare = -expCompare
+						}
+						const compareSigns = "<=>"
+						gotCompare := bytes.Compare(lastEncoded, enc)
+						if gotCompare != expCompare {
+							t.Errorf("%q %c %q, however their %s encodings are %v %c %v",
+								testCases[i-1].Value, compareSigns[valCompare+1], testCases[i].Value,
+								dirNames[dir],
+								lastEncoded, compareSigns[gotCompare+1], enc)
+						}
+					}
+					testPeekLength(t, enc)
+					if bitarray.Compare(dec, c.Value) != 0 {
+						t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
+					}
+					lastEncoded = enc
+
+					// Test that appending the bitarray to an existing buffer works. It
+					// is important to test with various values, slice lengths, and
+					// capacities because the various encoding paths try to use any
+					// spare capacity to avoid allocations.
+					for trials := 0; trials < 5; trials++ {
+						orig := randBuf(rng, 30)
+						origLen := len(orig)
+
+						bufCap := origLen + rng.Intn(30)
+						buf := make([]byte, origLen, bufCap)
+						copy(buf, orig)
+
+						enc := encodeBitArrayWithDir(dir, buf, c.Value)
+						// Append some random bytes
+						enc = append(enc, randBuf(rng, 20)...)
+						_, dec := decodeBitArrayWithDir(t, dir, enc[origLen:], tmp)
+
+						if bitarray.Compare(dec, c.Value) != 0 {
+							t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
+						}
+						// Verify the existing values weren't modified.
+						for i := range orig {
+							if enc[i] != orig[i] {
+								t.Errorf("existing byte %d changed after encoding (from %d to %d)",
+									i, orig[i], enc[i])
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestKeyEncodeDecodeBitArrayRand(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]bitarray.BitArray, 1000)
+	for i := range tests {
+		tests[i] = rd.bitArray()
+	}
+	for i, test := range tests {
+		for _, dir := range []Direction{Ascending, Descending} {
+			var remainder, buf []byte
+			var err error
+			var x bitarray.BitArray
+			if dir == Ascending {
+				buf = EncodeBitArrayAscending(nil, test)
+				remainder, x, err = DecodeBitArrayAscending(buf)
+			} else {
+				buf = EncodeBitArrayAscending(nil, test)
+				remainder, x, err = DecodeBitArrayAscending(buf)
+			}
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if bitarray.Compare(x, tests[i]) != 0 {
+				t.Errorf("seed %d: expected %v got %v (buf: %+v)", seed, &tests[i], &x, buf)
+			}
+			if len(remainder) > 0 {
+				t.Errorf("seed %d: decoding %v tailing bytes: %+v", seed, &tests[i], remainder)
+			}
+		}
+	}
+}
+
+func TestPrettyPrintValue(t *testing.T) {
+	ba := bitarray.MakeBitArrayFromInt64(8, 58, 7)
+
+	testData := []struct {
+		dir Direction
+		key []byte
+		exp string
+	}{
+		{Ascending, EncodeFloatAscending(nil, float64(233.221112)), "/233.221112"},
+		{Descending, EncodeFloatDescending(nil, float64(233.221112)), "/233.221112"},
+		{Ascending, EncodeBitArrayAscending(nil, ba), "/B00111010"},
+		{Descending, EncodeBitArrayDescending(nil, ba), "/B00111010"},
+	}
+
+	for _, test := range testData {
+		dirStr := "Asc"
+		if test.dir != Ascending {
+			dirStr = "Desc"
+		}
+		t.Run(test.exp[1:]+"/"+dirStr, func(t *testing.T) {
+			got := PrettyPrintValue([]Direction{test.dir}, test.key, "/")
+			if got != test.exp {
+				t.Errorf("expected %q, got %q", test.exp, got)
+			}
+		})
+	}
+}
+
 func TestEncodeDecodeUnsafeStringDescending(t *testing.T) {
 	testCases := []struct {
 		value   string
@@ -788,6 +1064,316 @@ func TestEncodeDecodeTime(t *testing.T) {
 	}
 }
 
+func TestEncodeDecodeTimeTZ(t *testing.T) {
+	// Test cases are in ascending order for TimeTZ, which means:
+	// * UTC timestamp first preference
+	// * Negative Zone Offset second preference
+	//
+	// Tests these UTC times:
+	//  05:06:07
+	//  10:11:12
+	//  15:16:17
+	//  20:21:22
+	// Over time zones (if not overflowing):
+	//  -12
+	//  -08
+	//  -04
+	//  0
+	//  +04
+	//  +08
+	//  +12
+	testCases := []string{
+		"00:00:00+1559", // minimum
+
+		"17:06:07+12",
+		"13:06:07+8",
+		"09:06:07+4",
+		"05:06:07+0",
+		"01:06:07-4",
+
+		"22:11:12+12",
+		"18:11:12+8",
+		"14:11:12+4",
+		"10:41:12+0030", // special check of .5 hour offsets
+		"10:11:12+0",
+		"06:11:12-4",
+		"04:11:12-8",
+
+		"23:16:17+8",
+		"19:16:17+4",
+		"15:16:17+0",
+		"11:16:17-4",
+		"09:16:17-8",
+		"05:16:17-12",
+
+		"20:21:22+0",
+		"16:21:22-4",
+		"12:21:22-8",
+		"08:21:22-12",
+
+		"24:00:00-1559", // maximum
+	}
+
+	var lastEncoded []byte
+	for _, dir := range []Direction{Ascending, Descending} {
+		t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+			for i := range testCases {
+				t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
+					current, _, err := timetz.ParseTimeTZ(timeutil.Now(), testCases[i], time.Microsecond)
+					assert.NoError(t, err)
+
+					var b []byte
+					var decodedCurrent timetz.TimeTZ
+					if dir == Ascending {
+						b = EncodeTimeTZAscending(b, current)
+						_, decodedCurrent, err = DecodeTimeTZAscending(b)
+					} else {
+						b = EncodeTimeTZDescending(b, current)
+						_, decodedCurrent, err = DecodeTimeTZDescending(b)
+					}
+					assert.NoError(t, err)
+					assert.Equal(t, current, decodedCurrent)
+					testPeekLength(t, b)
+					if i > 0 {
+						if dir == Ascending {
+							assert.True(t, bytes.Compare(lastEncoded, b) < 0, "encodings %s, %s not increasing", testCases[i-1], testCases[i])
+						} else {
+							assert.True(t, bytes.Compare(lastEncoded, b) > 0, "encodings %s, %s not decreasing", testCases[i-1], testCases[i])
+						}
+					}
+					lastEncoded = b
+				})
+			}
+		})
+	}
+}
+
+func TestEncodeDecodeBox2D(t *testing.T) {
+	testCases := []struct {
+		ordered []geo.CartesianBoundingBox
+	}{
+		{
+			ordered: []geo.CartesianBoundingBox{
+				{BoundingBox: geopb.BoundingBox{LoX: -100, HiX: 99, LoY: -100, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: -100, HiX: 100, LoY: -100, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: -50, HiX: 100, LoY: -100, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 100, LoY: 0, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 100, LoY: 50, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -100, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -10, HiY: 50}},
+				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -10, HiY: 100}},
+			},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			for _, dir := range []Direction{Ascending, Descending} {
+				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+					var lastEncoded []byte
+					for j := range tc.ordered {
+						var b []byte
+						var err error
+						var decoded geo.CartesianBoundingBox
+
+						if dir == Ascending {
+							b, err = EncodeBox2DAscending(b, tc.ordered[j])
+							require.NoError(t, err)
+							_, decoded, err = DecodeBox2DAscending(b)
+							require.NoError(t, err)
+						} else {
+							b, err = EncodeBox2DDescending(b, tc.ordered[j])
+							require.NoError(t, err)
+							_, decoded, err = DecodeBox2DDescending(b)
+							require.NoError(t, err)
+						}
+						require.Equal(t, tc.ordered[j], decoded)
+						testPeekLength(t, b)
+
+						if j > 0 {
+							if dir == Ascending {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.ordered[j], tc.ordered[j-1])
+							} else {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.ordered[j], tc.ordered[j-1])
+							}
+						}
+
+						lastEncoded = b
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestEncodeDecodeGeometry(t *testing.T) {
+	testCases := []struct {
+		orderedWKTs []string
+	}{
+		{
+			orderedWKTs: []string{
+				"SRID=4326;POLYGON EMPTY",
+				"SRID=4326;POINT EMPTY",
+				"SRID=4326;LINESTRING(0 0, -90 -80)",
+				"SRID=4326;POINT(-80 80)",
+				"SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			for _, dir := range []Direction{Ascending, Descending} {
+				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+					var lastEncoded []byte
+					for j, wkt := range tc.orderedWKTs {
+						parsed, err := geo.ParseGeometry(wkt)
+						require.NoError(t, err)
+						spatialObject := parsed.SpatialObject()
+
+						var b []byte
+						var decoded geopb.SpatialObject
+						if dir == Ascending {
+							b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							require.NoError(t, err)
+							_, err = DecodeGeoAscending(b, &decoded)
+							require.NoError(t, err)
+						} else {
+							b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							require.NoError(t, err)
+							_, err = DecodeGeoDescending(b, &decoded)
+							require.NoError(t, err)
+						}
+						require.Equal(t, spatialObject, decoded)
+						testPeekLength(t, b)
+
+						if j > 0 {
+							if dir == Ascending {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.orderedWKTs[j], tc.orderedWKTs[j-1])
+							} else {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.orderedWKTs[j], tc.orderedWKTs[j-1])
+							}
+						}
+
+						lastEncoded = b
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestEncodeDecodeGeography(t *testing.T) {
+	testCases := []struct {
+		orderedWKTs []string
+	}{
+		{
+			orderedWKTs: []string{
+				"SRID=4326;POLYGON EMPTY",
+				"SRID=4326;POINT EMPTY",
+				"SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+				"SRID=4326;POINT(-80 80)",
+				"SRID=4326;LINESTRING(0 0, -90 -80)",
+			},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			for _, dir := range []Direction{Ascending, Descending} {
+				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+					var lastEncoded []byte
+					for j, wkt := range tc.orderedWKTs {
+						parsed, err := geo.ParseGeography(wkt)
+						require.NoError(t, err)
+						spatialObject := parsed.SpatialObject()
+
+						var b []byte
+						var decoded geopb.SpatialObject
+						if dir == Ascending {
+							b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							require.NoError(t, err)
+							_, err = DecodeGeoAscending(b, &decoded)
+							require.NoError(t, err)
+						} else {
+							b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							require.NoError(t, err)
+							_, err = DecodeGeoDescending(b, &decoded)
+							require.NoError(t, err)
+						}
+						require.Equal(t, spatialObject, decoded)
+						testPeekLength(t, b)
+
+						if j > 0 {
+							if dir == Ascending {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.orderedWKTs[j], tc.orderedWKTs[j-1])
+							} else {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.orderedWKTs[j], tc.orderedWKTs[j-1])
+							}
+						}
+
+						lastEncoded = b
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestEncodeDecodeGeoInvertedIndex(t *testing.T) {
+	testCases := []struct {
+		shape          string
+		cellID         uint64
+		expectedLength int
+	}{
+		{
+			shape:          "SRID=4326;LINESTRING(0 0, -90 -80)",
+			cellID:         0,
+			expectedLength: 35,
+		},
+		{
+			shape:          "SRID=4326;LINESTRING(0 0, -90 -80)",
+			cellID:         math.MaxUint64,
+			expectedLength: 43,
+		},
+		{
+			shape:          "SRID=4326;POINT(-80 80)",
+			cellID:         0,
+			expectedLength: 19,
+		},
+		{
+			shape:          "SRID=4326;POINT(-80 80)",
+			cellID:         math.MaxUint64,
+			expectedLength: 27,
+		},
+		{
+			shape:          "SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			cellID:         10000,
+			expectedLength: 37,
+		},
+		{
+			shape:          "SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			cellID:         math.MaxUint32,
+			expectedLength: 39,
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			parsed, err := geo.ParseGeometry(tc.shape)
+			require.NoError(t, err)
+			var b []byte
+			b = EncodeGeoInvertedAscending(b)
+			b = EncodeUvarintAscending(b, tc.cellID)
+			bbox := parsed.BoundingBoxRef()
+			require.NotNil(t, bbox)
+			b = EncodeGeoInvertedBBox(b, bbox.LoX, bbox.LoY, bbox.HiX, bbox.HiY)
+			require.Equal(t, tc.expectedLength, len(b))
+			var dBBox geopb.BoundingBox
+			dBBox.LoX, dBBox.LoY, dBBox.HiX, dBBox.HiY, b, err = DecodeGeoInvertedKey(b)
+			require.NoError(t, err)
+			require.Equal(t, *bbox, dBBox)
+			require.Equal(t, 0, len(b))
+		})
+	}
+}
+
 type testCaseDuration struct {
 	value  duration.Duration
 	expEnc []byte
@@ -839,11 +1425,11 @@ func testCustomEncodeDuration(
 
 func TestEncodeDecodeDuration(t *testing.T) {
 	testCases := []testCaseDuration{
-		{duration.Duration{Months: 0, Days: 0, Nanos: 0}, []byte{0x16, 0x88, 0x88, 0x88}},
-		{duration.Duration{Months: 0, Days: 0, Nanos: 1}, []byte{0x16, 0x89, 0x88, 0x88}},
-		{duration.Duration{Months: 0, Days: 1, Nanos: 0}, []byte{0x16, 0xfb, 0x4e, 0x94, 0x91, 0x4f, 0x00, 0x00, 0x88, 0x89}},
-		{duration.Duration{Months: 1, Days: 0, Nanos: 0}, []byte{0x16, 0xfc, 0x09, 0x35, 0x69, 0x07, 0x42, 0x00, 0x00, 0x89, 0x88}},
-		{duration.Duration{Months: 0, Days: 40, Nanos: 0}, []byte{0x16, 0xfc, 0x0c, 0x47, 0x36, 0xb4, 0x58, 0x00, 0x00, 0x88, 0xb0}},
+		{duration.DecodeDuration(0, 0, 0), []byte{0x16, 0x88, 0x88, 0x88}},
+		{duration.DecodeDuration(0, 0, 1), []byte{0x16, 0x89, 0x88, 0x88}},
+		{duration.DecodeDuration(0, 1, 0), []byte{0x16, 0xfb, 0x4e, 0x94, 0x91, 0x4f, 0x00, 0x00, 0x88, 0x89}},
+		{duration.DecodeDuration(1, 0, 0), []byte{0x16, 0xfc, 0x09, 0x35, 0x69, 0x07, 0x42, 0x00, 0x00, 0x89, 0x88}},
+		{duration.DecodeDuration(0, 40, 0), []byte{0x16, 0xfc, 0x0c, 0x47, 0x36, 0xb4, 0x58, 0x00, 0x00, 0x88, 0xb0}},
 	}
 	testBasicEncodeDuration(testCases, EncodeDurationAscending, t)
 	testCustomEncodeDuration(testCases, EncodeDurationAscending, DecodeDurationAscending, t)
@@ -851,19 +1437,25 @@ func TestEncodeDecodeDuration(t *testing.T) {
 
 func TestEncodeDecodeDescending(t *testing.T) {
 	testCases := []testCaseDuration{
-		{duration.Duration{Months: 0, Days: 40, Nanos: 0}, []byte{0x16, 0x81, 0xf3, 0xb8, 0xc9, 0x4b, 0xa7, 0xff, 0xff, 0x87, 0xff, 0x87, 0xd7}},
-		{duration.Duration{Months: 1, Days: 0, Nanos: 0}, []byte{0x16, 0x81, 0xf6, 0xca, 0x96, 0xf8, 0xbd, 0xff, 0xff, 0x87, 0xfe, 0x87, 0xff}},
-		{duration.Duration{Months: 0, Days: 1, Nanos: 0}, []byte{0x16, 0x82, 0xb1, 0x6b, 0x6e, 0xb0, 0xff, 0xff, 0x87, 0xff, 0x87, 0xfe}},
-		{duration.Duration{Months: 0, Days: 0, Nanos: 1}, []byte{0x16, 0x87, 0xfe, 0x87, 0xff, 0x87, 0xff}},
-		{duration.Duration{Months: 0, Days: 0, Nanos: 0}, []byte{0x16, 0x87, 0xff, 0x87, 0xff, 0x87, 0xff}},
+		{duration.DecodeDuration(0, 40, 0), []byte{0x16, 0x81, 0xf3, 0xb8, 0xc9, 0x4b, 0xa7, 0xff, 0xff, 0x87, 0xff, 0x87, 0xd7}},
+		{duration.DecodeDuration(1, 0, 0), []byte{0x16, 0x81, 0xf6, 0xca, 0x96, 0xf8, 0xbd, 0xff, 0xff, 0x87, 0xfe, 0x87, 0xff}},
+		{duration.DecodeDuration(0, 1, 0), []byte{0x16, 0x82, 0xb1, 0x6b, 0x6e, 0xb0, 0xff, 0xff, 0x87, 0xff, 0x87, 0xfe}},
+		{duration.DecodeDuration(0, 0, 1), []byte{0x16, 0x87, 0xfe, 0x87, 0xff, 0x87, 0xff}},
+		{duration.DecodeDuration(0, 0, 0), []byte{0x16, 0x87, 0xff, 0x87, 0xff, 0x87, 0xff}},
 	}
 	testBasicEncodeDuration(testCases, EncodeDurationDescending, t)
 	testCustomEncodeDuration(testCases, EncodeDurationDescending, DecodeDurationDescending, t)
 }
 
 func TestPeekType(t *testing.T) {
-	encodedDurationAscending, _ := EncodeDurationAscending(nil, duration.Duration{})
-	encodedDurationDescending, _ := EncodeDurationDescending(nil, duration.Duration{})
+	encodedDurationAscending, err := EncodeDurationAscending(nil, duration.Duration{})
+	require.NoError(t, err)
+	encodedDurationDescending, err := EncodeDurationDescending(nil, duration.Duration{})
+	require.NoError(t, err)
+	encodedGeoAscending, err := EncodeGeoAscending(nil, 0, &geopb.SpatialObject{})
+	require.NoError(t, err)
+	encodedGeoDescending, err := EncodeGeoDescending(nil, 0, &geopb.SpatialObject{})
+	require.NoError(t, err)
 	testCases := []struct {
 		enc []byte
 		typ Type
@@ -885,8 +1477,14 @@ func TestPeekType(t *testing.T) {
 		{EncodeBytesDescending(nil, []byte("")), BytesDesc},
 		{EncodeTimeAscending(nil, timeutil.Now()), Time},
 		{EncodeTimeDescending(nil, timeutil.Now()), Time},
+		{EncodeTimeTZAscending(nil, timetz.Now()), TimeTZ},
+		{EncodeTimeTZDescending(nil, timetz.Now()), TimeTZ},
+		{encodedGeoAscending, Geo},
+		{encodedGeoDescending, GeoDesc},
 		{encodedDurationAscending, Duration},
 		{encodedDurationDescending, Duration},
+		{EncodeBitArrayAscending(nil, bitarray.BitArray{}), BitArray},
+		{EncodeBitArrayDescending(nil, bitarray.BitArray{}), BitArrayDesc},
 	}
 	for i, c := range testCases {
 		typ := PeekType(c.enc)
@@ -894,6 +1492,17 @@ func TestPeekType(t *testing.T) {
 			t.Fatalf("%d: expected %d, but found %d", i, c.typ, typ)
 		}
 	}
+}
+
+var sink string
+
+func BenchmarkPeekType(b *testing.B) {
+	buf := EncodeVarintAscending(nil, 0)
+	var typ Type
+	for i := 0; i < b.N; i++ {
+		typ = PeekType(buf)
+	}
+	sink = string(typ)
 }
 
 type randData struct {
@@ -912,12 +1521,23 @@ func (rd randData) time() time.Time {
 	return timeutil.Unix(rd.Int63n(1000000), rd.Int63n(1000000))
 }
 
+func (rd randData) timetz() timetz.TimeTZ {
+	return timetz.MakeTimeTZ(
+		timeofday.FromInt(rd.Int63n(int64(timeofday.Max))),
+		rd.Int31n(timetz.MaxTimeTZOffsetSecs*2)-timetz.MaxTimeTZOffsetSecs,
+	)
+}
+
+func (rd randData) bitArray() bitarray.BitArray {
+	return bitarray.Rand(rd.Rand, uint(rd.Int31n(140)))
+}
+
 func (rd randData) duration() duration.Duration {
-	return duration.Duration{
-		Months: rd.Int63n(1000),
-		Days:   rd.Int63n(1000),
-		Nanos:  rd.Int63n(1000000),
-	}
+	return duration.DecodeDuration(
+		rd.Int63n(1000),
+		rd.Int63n(1000),
+		rd.Int63n(1000000),
+	)
 }
 
 func (rd randData) ipAddr() ipaddr.IPAddr {
@@ -1390,6 +2010,47 @@ func TestValueEncodeDecodeTime(t *testing.T) {
 	}
 }
 
+func TestValueEncodeDecodeTimeTZ(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]timetz.TimeTZ, 1000)
+	for i := range tests {
+		tests[i] = rd.timetz()
+	}
+	for _, test := range tests {
+		buf := EncodeTimeTZValue(nil, NoColumnID, test)
+		_, x, err := DecodeTimeTZValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x != test {
+			t.Errorf("seed %d: expected %v got %v", seed, test, x)
+		}
+	}
+}
+
+func TestValueEncodeDecodeBitArray(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]bitarray.BitArray, 1000)
+	for i := range tests {
+		tests[i] = rd.bitArray()
+	}
+	for i, test := range tests {
+		buf := EncodeBitArrayValue(nil, NoColumnID, test)
+		remainder, x, err := DecodeBitArrayValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bitarray.Compare(x, tests[i]) != 0 {
+			t.Errorf("seed %d: expected %v got %v (buf: %+v)", seed, &tests[i], &x, buf)
+		}
+		if len(remainder) > 0 {
+			t.Errorf("seed %d: decoding %v tailing bytes: %+v", seed, &tests[i], remainder)
+		}
+	}
+}
+
 func TestValueEncodeDecodeDuration(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	rd := randData{rng}
@@ -1410,7 +2071,7 @@ func TestValueEncodeDecodeDuration(t *testing.T) {
 }
 
 func BenchmarkEncodeNonsortingVarint(b *testing.B) {
-	bytes := make([]byte, 0, b.N*NonsortingVarintMaxLen)
+	bytes := make([]byte, 0, b.N*MaxNonsortingVarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -1419,7 +2080,7 @@ func BenchmarkEncodeNonsortingVarint(b *testing.B) {
 }
 
 func BenchmarkDecodeNonsortingVarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingVarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingVarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingStdlibVarint(buf, rng.Int63())
@@ -1523,7 +2184,7 @@ func TestPeekLengthNonsortingUVarint(t *testing.T) {
 }
 
 func BenchmarkEncodeNonsortingUvarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -1532,7 +2193,7 @@ func BenchmarkEncodeNonsortingUvarint(b *testing.B) {
 }
 
 func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
@@ -1548,7 +2209,7 @@ func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
 }
 
 func BenchmarkDecodeOneByteNonsortingUvarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()%(1<<7)))
@@ -1564,7 +2225,7 @@ func BenchmarkDecodeOneByteNonsortingUvarint(b *testing.B) {
 }
 
 func BenchmarkPeekLengthNonsortingUvarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
@@ -1602,9 +2263,15 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 	case Time:
 		x := rd.time()
 		return EncodeTimeValue(buf, colID, x), x, true
+	case TimeTZ:
+		x := rd.timetz()
+		return EncodeTimeTZValue(buf, colID, x), x, true
 	case Duration:
 		x := rd.duration()
 		return EncodeDurationValue(buf, colID, x), x, true
+	case BitArray:
+		x := rd.bitArray()
+		return EncodeBitArrayValue(buf, colID, x), x, true
 	case IPAddr:
 		x := rd.ipAddr()
 		return EncodeIPAddrValue(buf, colID, x), x, true
@@ -1755,8 +2422,12 @@ func TestValueEncodingRand(t *testing.T) {
 			buf, decoded, err = DecodeBytesValue(buf)
 		case Time:
 			buf, decoded, err = DecodeTimeValue(buf)
+		case TimeTZ:
+			buf, decoded, err = DecodeTimeTZValue(buf)
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
+		case BitArray:
+			buf, decoded, err = DecodeBitArrayValue(buf)
 		case IPAddr:
 			buf, decoded, err = DecodeIPAddrValue(buf)
 		default:
@@ -1783,49 +2454,16 @@ func TestValueEncodingRand(t *testing.T) {
 			if !d.Equal(&val) {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
+		case BitArray:
+			d := decoded.(bitarray.BitArray)
+			val := value.(bitarray.BitArray)
+			if bitarray.Compare(d, val) != 0 {
+				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
+			}
 		default:
 			if decoded != value {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
-		}
-	}
-}
-
-func TestUpperBoundValueEncodingSize(t *testing.T) {
-	tests := []struct {
-		colID uint32
-		typ   Type
-		width int
-		size  int // -1 means unbounded
-	}{
-		{colID: 0, typ: Null, size: 1},
-		{colID: 0, typ: True, size: 1},
-		{colID: 0, typ: False, size: 1},
-		{colID: 0, typ: Int, size: 10},
-		{colID: 0, typ: Int, width: 100, size: 10},
-		{colID: 0, typ: Float, size: 9},
-		{colID: 0, typ: Decimal, size: -1},
-		{colID: 0, typ: Decimal, width: 100, size: 69},
-		{colID: 0, typ: Time, size: 19},
-		{colID: 0, typ: Duration, size: 28},
-		{colID: 0, typ: Bytes, size: -1},
-		{colID: 0, typ: Bytes, width: 100, size: 110},
-
-		{colID: 8, typ: True, size: 2},
-	}
-	for i, test := range tests {
-		testIsBounded := test.size != -1
-		size, isBounded := UpperBoundValueEncodingSize(test.colID, test.typ, test.width)
-		if isBounded != testIsBounded {
-			if isBounded {
-				t.Errorf("%d: expected unbounded but got bounded", i)
-			} else {
-				t.Errorf("%d: expected bounded but got unbounded", i)
-			}
-			continue
-		}
-		if isBounded && size != test.size {
-			t.Errorf("%d: got size %d but expected %d", i, size, test.size)
 		}
 	}
 }
@@ -1842,6 +2480,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bad test case. Attempted ipaddr.ParseINet(%q) got err: %d", ip, err)
 	}
+	ba := bitarray.MakeBitArrayFromInt64(6, 9, 5)
 	tests := []struct {
 		buf      []byte
 		expected string
@@ -1854,13 +2493,16 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeDecimalValue(nil, NoColumnID, apd.New(628, -2)), "6.28"},
 		{EncodeTimeValue(nil, NoColumnID,
 			time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC)), "2016-06-29T16:02:50.000000005Z"},
+		{EncodeTimeTZValue(nil, NoColumnID,
+			timetz.MakeTimeTZ(timeofday.New(10, 11, 12, 0), 5*60*60+24)), "10:11:12-05:00:24"},
 		{EncodeDurationValue(nil, NoColumnID,
-			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1mon2d3ns"},
+			duration.DecodeDuration(1, 2, 3)), "1 mon 2 days 00:00:00+3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "0x01020fff"},
 		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"}, // printable bytes
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x89}), "0x89"}, // non-printable bytes
 		{EncodeIPAddrValue(nil, NoColumnID, ipAddr), ip},
 		{EncodeUUIDValue(nil, NoColumnID, u), uuidStr},
+		{EncodeBitArrayValue(nil, NoColumnID, ba), "B001001"},
 	}
 	for i, test := range tests {
 		remaining, str, err := PrettyPrintValueEncoded(test.buf)
@@ -2035,6 +2677,40 @@ func BenchmarkDecodeTimeValue(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if _, _, err := DecodeTimeValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeTimeTZValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([]timetz.TimeTZ, 10000)
+	for i := range vals {
+		vals[i] = rd.timetz()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeTimeTZValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeTimeTZValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeTimeTZValue(nil, uint32(rng.Intn(100)), rd.timetz())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeTimeTZValue(vals[i%len(vals)]); err != nil {
 			b.Fatal(err)
 		}
 	}

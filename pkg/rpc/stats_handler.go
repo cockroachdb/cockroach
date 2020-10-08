@@ -1,28 +1,22 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package rpc
 
 import (
 	"context"
-	"net"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc/stats"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type remoteAddrKey struct{}
@@ -131,16 +125,17 @@ func (sh *StatsHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) conte
 // to key into our stats map in order to properly update incoming
 // and outgoing throughput for the implicated remote node.
 func (sh *StatsHandler) HandleRPC(ctx context.Context, rpcStats stats.RPCStats) {
-	remoteAddr, ok := ctx.Value(remoteAddrKey{}).(net.Addr)
+	remoteAddr, ok := ctx.Value(remoteAddrKey{}).(string)
 	if !ok {
 		log.Warningf(ctx, "unable to record stats (%+v); remote addr not found in context", rpcStats)
+		return
 	}
 	// There is a race here, but it's meaningless in practice. Worst
 	// case is we fail to record a handful of observations. We do
 	// this to avoid creating a new Stats object on every invocation.
-	value, ok := sh.stats.Load(remoteAddr.String())
+	value, ok := sh.stats.Load(remoteAddr)
 	if !ok {
-		value, _ = sh.stats.LoadOrStore(remoteAddr.String(), &Stats{})
+		value, _ = sh.stats.LoadOrStore(remoteAddr, &Stats{})
 	}
 	value.(*Stats).record(rpcStats)
 }
@@ -151,7 +146,7 @@ func (sh *StatsHandler) HandleRPC(ctx context.Context, rpcStats stats.RPCStats) 
 // ConnTagInfo, and use that to properly update the Stats object
 // belonging to that remote address.
 func (sh *StatsHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo) context.Context {
-	return context.WithValue(ctx, remoteAddrKey{}, cti.RemoteAddr)
+	return context.WithValue(ctx, remoteAddrKey{}, cti.RemoteAddr.String())
 }
 
 // HandleConn implements the grpc.stats.Handler interface. This

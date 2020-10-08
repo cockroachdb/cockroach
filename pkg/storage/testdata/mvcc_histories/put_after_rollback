@@ -1,0 +1,83 @@
+run ok
+with t=A k=k2
+  txn_begin ts=1
+  txn_step  seq=10
+  put       v=a
+  txn_ignore_seqs seqs=(5-15)
+  txn_step  seq=20
+  put       v=b
+  get
+  txn_ignore_seqs seqs=(5-25)
+  get
+----
+get: "k2" -> /BYTES/b @0.000000001,0
+get: "k2" -> <no data>
+>> at end:
+txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} ts=0.000000001,0 del=false klen=12 vlen=6
+data: "k2"/0.000000001,0 -> /BYTES/b
+
+run ok
+with t=A k=k3
+  txn_step  seq=30
+  put       v=a
+  txn_ignore_seqs seqs=(5-35)
+  txn_step  seq=40
+  del
+----
+>> at end:
+txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} ts=0.000000001,0 del=false klen=12 vlen=6
+data: "k2"/0.000000001,0 -> /BYTES/b
+meta: "k3"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} ts=0.000000001,0 del=true klen=12 vlen=0
+data: "k3"/0.000000001,0 -> /<empty>
+
+run ok
+with t=A k=k4
+  txn_step  seq=50
+  put       v=a
+  txn_step  seq=51
+  cput      v=b cond=a
+  txn_ignore_seqs seqs=(5-55)
+  txn_step  seq=60
+  cput      v=c
+----
+>> at end:
+txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=60} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} ts=0.000000001,0 del=false klen=12 vlen=6
+data: "k2"/0.000000001,0 -> /BYTES/b
+meta: "k3"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} ts=0.000000001,0 del=true klen=12 vlen=0
+data: "k3"/0.000000001,0 -> /<empty>
+meta: "k4"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=60} ts=0.000000001,0 del=false klen=12 vlen=6
+data: "k4"/0.000000001,0 -> /BYTES/c
+
+run ok
+put k=k5 v=foo ts=3
+with t=B k=k5
+  txn_begin ts=5
+  txn_step  seq=10
+  put       v=a
+  txn_step  seq=20
+  put       v=b
+  txn_step  seq=30
+  txn_ignore_seqs seqs=(15-25)
+  put       v=c
+  check_intent
+  txn_step  seq=40
+  txn_ignore_seqs seqs=(5-35)
+  put       v=d
+  check_intent
+  resolve_intent status=COMMITTED
+----
+meta: "k5" -> txn={id=00000000 key="k5" pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=30} ts=0.000000005,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+meta: "k5" -> txn={id=00000000 key="k5" pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=40} ts=0.000000005,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+>> at end:
+txn: "B" meta={id=00000000 key="k5" pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000005,0 wto=false max=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} ts=0.000000001,0 del=false klen=12 vlen=6
+data: "k2"/0.000000001,0 -> /BYTES/b
+meta: "k3"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} ts=0.000000001,0 del=true klen=12 vlen=0
+data: "k3"/0.000000001,0 -> /<empty>
+meta: "k4"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=60} ts=0.000000001,0 del=false klen=12 vlen=6
+data: "k4"/0.000000001,0 -> /BYTES/c
+data: "k5"/0.000000005,0 -> /BYTES/d
+data: "k5"/0.000000003,0 -> /BYTES/foo

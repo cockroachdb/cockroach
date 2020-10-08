@@ -1,5 +1,3 @@
-# LogicTest: local local-opt
-
 # Check that we auto-retry pushed transactions which can't be refreshed - if
 # they're pushed while we can still auto-retry them.
 subtest autoretry-on-push-first-batch

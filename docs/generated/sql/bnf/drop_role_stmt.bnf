@@ -1,3 +1,5 @@
 drop_role_stmt ::=
 	'DROP' 'ROLE' name
+	| 'DROP' 'USER' name
 	| 'DROP' 'ROLE' 'IF' 'EXISTS' name
+	| 'DROP' 'USER' 'IF' 'EXISTS' name

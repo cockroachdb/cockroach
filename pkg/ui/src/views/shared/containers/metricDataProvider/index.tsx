@@ -1,18 +1,25 @@
-import React from "react";
-import { createSelector } from "reselect";
-import { connect } from "react-redux";
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import _ from "lodash";
 import Long from "long";
 import moment from "moment";
-
-import * as protos from  "src/js/protos";
+import React from "react";
+import { connect } from "react-redux";
+import { createSelector } from "reselect";
+import * as protos from "src/js/protos";
+import { MetricsQuery, requestMetrics as requestMetricsAction } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
-import { requestMetrics as requestMetricsAction, MetricsQuery } from "src/redux/metrics";
-import {
-  Metric, MetricProps, MetricsDataComponentProps, QueryTimeInfo,
-} from "src/views/shared/components/metricQuery";
-import { findChildrenOfType } from "src/util/find";
 import { MilliToNano } from "src/util/convert";
+import { findChildrenOfType } from "src/util/find";
+import { Metric, MetricProps, MetricsDataComponentProps, QueryTimeInfo } from "src/views/shared/components/metricQuery";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -80,6 +87,7 @@ interface MetricsDataProviderExplicitProps {
   id: string;
   // If current is true, uses the current time instead of the global timewindow.
   current?: boolean;
+  children?: React.ReactElement<{}>;
 }
 
 /**
@@ -113,7 +121,7 @@ type MetricsDataProviderProps = MetricsDataProviderConnectProps & MetricsDataPro
  */
 class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> {
   private queriesSelector = createSelector(
-    (props: MetricsDataProviderProps & {children?: React.ReactNode}) => props.children,
+    ({ children }: MetricsDataProviderProps) => children,
     (children) => {
       // MetricsDataProvider should contain only one direct child.
       const child: React.ReactElement<MetricsDataComponentProps> = React.Children.only(this.props.children);
@@ -154,15 +162,15 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     }
   }
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.refreshMetricsIfStale(this.props);
   }
 
-  componentWillReceiveProps(props: MetricsDataProviderProps) {
+  componentDidUpdate() {
     // Refresh nodes status query when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    this.refreshMetricsIfStale(props);
+    this.refreshMetricsIfStale(this.props);
   }
 
   getData() {
@@ -227,9 +235,4 @@ const metricsDataProviderConnected = connect(
   },
 )(MetricsDataProvider);
 
-export {
-  // Export original, unconnected MetricsDataProvider for effective unit
-  // testing.
-  MetricsDataProvider as MetricsDataProviderUnconnected,
-  metricsDataProviderConnected as MetricsDataProvider,
-};
+export { MetricsDataProvider as MetricsDataProviderUnconnected, metricsDataProviderConnected as MetricsDataProvider };

@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package settings
 
@@ -18,7 +14,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // EncodeDuration encodes a duration in the format parseRaw expects.
@@ -69,14 +65,14 @@ func (u NoopUpdater) ResetRemaining() {}
 // NewUpdater makes an Updater.
 func NewUpdater(sv *Values) Updater {
 	return updater{
-		m:  make(map[string]struct{}, len(Registry)),
+		m:  make(map[string]struct{}, len(registry)),
 		sv: sv,
 	}
 }
 
 // Set attempts to parse and update a setting and notes that it was updated.
 func (u updater) Set(key, rawValue string, vt string) error {
-	d, ok := Registry[key]
+	d, ok := registry[key]
 	if !ok {
 		if _, ok := retiredSettings[key]; ok {
 			return nil
@@ -101,7 +97,7 @@ func (u updater) Set(key, rawValue string, vt string) error {
 		}
 		setting.set(u.sv, b)
 		return nil
-	case numericSetting:
+	case numericSetting: // includes *EnumSetting
 		i, err := strconv.Atoi(rawValue)
 		if err != nil {
 			return err
@@ -119,12 +115,12 @@ func (u updater) Set(key, rawValue string, vt string) error {
 			return err
 		}
 		return setting.set(u.sv, d)
-	case *EnumSetting:
-		i, err := strconv.Atoi(rawValue)
+	case *DurationSettingWithExplicitUnit:
+		d, err := time.ParseDuration(rawValue)
 		if err != nil {
 			return err
 		}
-		return setting.set(u.sv, int64(i))
+		return setting.set(u.sv, d)
 	case *StateMachineSetting:
 		return setting.set(u.sv, []byte(rawValue))
 	}
@@ -133,7 +129,7 @@ func (u updater) Set(key, rawValue string, vt string) error {
 
 // ResetRemaining sets all settings not updated by the updater to their default values.
 func (u updater) ResetRemaining() {
-	for k, v := range Registry {
+	for k, v := range registry {
 		if _, ok := u.m[k]; !ok {
 			v.setToDefault(u.sv)
 		}

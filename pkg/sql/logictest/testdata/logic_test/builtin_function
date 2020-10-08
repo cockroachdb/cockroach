@@ -1,4 +1,6 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-metadata fakedist-opt
+# LogicTest: !3node-tenant(49854)
+# TODO(asubiotto): Possibly split out the test that attempts to set a zone
+# config in order to run the other ones.
 
 statement ok
 CREATE TABLE foo (a int)
@@ -67,7 +69,7 @@ SELECT
  quote_literal('2018-06-11 12:13:14'::timestamp), quote_nullable('2018-06-11 12:13:14'::timestamp),
  quote_literal('2018-06-11'::date), quote_nullable('2018-06-11'::date)
 ----
-'1d'  '1d'  '2018-06-11 12:13:14+00:00'  '2018-06-11 12:13:14+00:00'  '2018-06-11'  '2018-06-11'
+'1 day'  '1 day'  '2018-06-11 12:13:14'  '2018-06-11 12:13:14'  '2018-06-11'  '2018-06-11'
 
 query TTBB
 SELECT
@@ -99,6 +101,21 @@ SELECT upper('roacH7')
 ----
 upper
 ROACH7
+
+query T
+SELECT unaccent(str) FROM ( VALUES 
+   ('no_special_CHARACTERS1!'),
+   ('Żółć'),
+   ('⃞h̀ＥＬＬＯ`̀́⃞'),
+   ('Softhyphen­separator'),
+   ('some ̂thing')
+) tbl(str)
+----
+no_special_CHARACTERS1!
+Zolc
+hELLO`
+Softhyphen-separator
+something
 
 statement error unknown signature: upper\(decimal\)
 SELECT upper(2.2)
@@ -226,6 +243,86 @@ SELECT substring('f(oabaroob' from '\(o(.)b' for '+')
 query error unknown signature: substring\(\)
 SELECT substring()
 
+# Adding testcases for substring against bit array.
+
+query TTT
+SELECT substring(B'11110000', 0), substring(B'11110000', -1), substring(B'11110000', 5)
+----
+11110000 11110000 0000
+
+query TTT
+SELECT substring(B'11110000', 8), substring(B'11110000', 10), substring(B'', 0)
+----
+0  ·  ·
+
+query TTT
+SELECT substring('11100011'::bit(8), 4), substring('11100011'::bit(6), 4), substring(B'', 0, 1)
+----
+00011 000  ·
+
+query TTT
+SELECT substring(B'11110000', 0, 4), substring(B'11110000', -1, 4), substring(B'11110000', 5, 10)
+----
+111 11 0000
+
+query TTT
+SELECT substring(B'11110000', 8, 1), substring(B'11110000', 8, 0), substring(B'11110000', 10, 5)
+----
+0  ·  ·
+
+query TT
+SELECT substring('11100011'::bit(10), 4, 10), substring('11100011'::bit(8), 1, 8)
+----
+0001100 11100011
+
+query TTT
+SELECT substring(B'10001000' FOR 4 FROM 0), substring(B'10001000' FROM 0 FOR 4), substring(B'10001000' FOR 4)
+----
+100 100 1000
+
+query error substring\(\): negative bit subarray length -1 not allowed
+SELECT substring('11100011'::bit(10), 4, -1)
+
+# Adding testcases for substring against byte array.
+
+query TT
+SELECT substring(b'abc', 0), substring(b'\x61\x62\x63', -1)
+----
+abc abc
+
+query TT
+SELECT substring(b'abc', 3), substring(b'abc', 5)
+----
+c  ·
+
+query T
+SELECT substring('abc'::bytea, 0)
+----
+abc
+
+query TT
+SELECT substring(b'\x61\x62\x63', 0, 4), substring(b'abc', -1, 4)
+----
+abc ab
+
+query TTT
+SELECT substring(b'abc', 3, 1), substring(b'abc', 3, 0), substring(b'abc', 4, 3)
+----
+c  ·  ·
+
+query T
+SELECT substring('abc'::bytea, 0, 4)
+----
+abc
+
+query TTT
+SELECT substring(b'abc' FOR 3 FROM 1), substring(b'abc' FROM 1 FOR 3), substring(b'abc' FOR 3)
+----
+abc abc abc
+
+query error substring\(\): negative byte subarray length -1 not allowed
+SELECT substring('11100011'::bytea, 4, -1)
+
 query error unknown signature: concat_ws\(\)
 SELECT concat_ws()
 
@@ -262,7 +359,7 @@ SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
 
-statement error pq: repeat\(\): .* memory budget exceeded
+statement error pq: repeat\(\): requested length too large
 SELECT repeat('s', 9223372036854775807)
 
 # Regression for #19035.
@@ -325,6 +422,42 @@ SELECT crc32ieee('abc'), crc32c('abc')
 ----
 891568578  910901175
 
+# Regression tests for #29754
+query T
+SELECT md5(NULL::STRING)
+----
+NULL
+
+query T
+SELECT md5('')
+----
+d41d8cd98f00b204e9800998ecf8427e
+
+query T
+SELECT md5(NULL::STRING, NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha1(NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha256(NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha512(NULL::STRING, NULL::STRING)
+----
+NULL
+
+query T
+SELECT fnv32(NULL::STRING)
+----
+NULL
+
 query T
 SELECT to_hex(2147483647)
 ----
@@ -344,6 +477,31 @@ query I
 SELECT strpos('💩high', 'ig')
 ----
 3
+
+query III
+SELECT strpos(B'00001111', B'1111'), strpos(B'', B''), strpos(B'0000111', B'1111')
+----
+5 1 0
+
+query I
+SELECT strpos('000001'::varbit, '1'::varbit)
+----
+6
+
+query I
+SELECT position(B'100' in B'100101')
+----
+1
+
+query III
+SELECT strpos(b'\x61\145aabc', b'abc'), strpos(b'', b''), strpos(b'ttt\x61\x61c', b'abc')
+----
+4 1 0
+
+query I
+SELECT position('\x616263'::bytea in 'abc'::bytea)
+----
+1
 
 query I
 SELECT position('ig' in 'high')
@@ -530,30 +688,88 @@ SELECT abs(sin(pi())) < 1e-12
 ----
 true
 
+subtest standard_float_digits
+
 query RR
 SELECT acos(-0.5), round(acos(0.5), 15)
 ----
-2.0943951023931957 1.047197551196598
+2.0943951023932  1.0471975511966
 
 query RR
 SELECT cot(-0.5), cot(0.5)
 ----
--1.830487721712452 1.830487721712452
+-1.83048772171245  1.83048772171245
 
 query RRR
 SELECT asin(-0.5), asin(0.5), asin(1.5)
 ----
--0.5235987755982989 0.5235987755982989 NaN
+-0.523598775598299  0.523598775598299  NaN
 
 query RR
 SELECT atan(-0.5), atan(0.5)
 ----
--0.4636476090008061 0.4636476090008061
+-0.463647609000806  0.463647609000806
 
 query RR
 SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 ----
--1.1071487177940904 1.1071487177940904
+-1.10714871779409  1.10714871779409
+
+query RRR
+SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
+----
+-1 3 2.6823725926296729544
+
+
+query RRRRR
+SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling (-0.9::decimal)
+----
+-0  1  1  1  0
+
+query RR
+SELECT cos(-0.5), cos(0.5)
+----
+0.877582561890373  0.877582561890373
+
+query RRR
+SELECT sin(-1.0), sin(0.0), sin(1.0)
+----
+-0.841470984807897  0  0.841470984807897
+
+query RR
+SELECT degrees(-0.5), degrees(0.5)
+----
+-28.6478897565412  28.6478897565412
+
+subtest extra_float_digits_3
+
+statement ok
+SET extra_float_digits = 3
+
+query RR
+SELECT acos(-0.5), round(acos(0.5), 15)
+----
+2.0943951023931957  1.047197551196598
+
+query RR
+SELECT cot(-0.5), cot(0.5)
+----
+-1.830487721712452  1.830487721712452
+
+query RRR
+SELECT asin(-0.5), asin(0.5), asin(1.5)
+----
+-0.5235987755982989  0.5235987755982989  NaN
+
+query RR
+SELECT atan(-0.5), atan(0.5)
+----
+-0.4636476090008061  0.4636476090008061
+
+query RR
+SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
+----
+-1.1071487177940904  1.1071487177940904
 
 query RRR
 SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
@@ -563,12 +779,27 @@ SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
 query RRRRR
 SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling(-0.9::decimal)
 ----
--0  1  1  1  -0
+-0  1  1  1  0
 
 query RR
 SELECT cos(-0.5), cos(0.5)
 ----
-0.8775825618903728 0.8775825618903728
+0.8775825618903728  0.8775825618903728
+
+query RRR
+SELECT sin(-1.0), sin(0.0), sin(1.0)
+----
+-0.8414709848078965  0  0.8414709848078965
+
+query RR
+SELECT degrees(-0.5), degrees(0.5)
+----
+-28.64788975654116  28.64788975654116
+
+statement ok
+SET extra_float_digits = 0
+
+subtest other_tests
 
 query IIII
 SELECT div(-1::int, 2::int), div(1::int, 2::int), div(9::int, 4::int), div(-9::int, 4::int)
@@ -579,11 +810,6 @@ query RRRRRR
 SELECT div(-1.0::float, 2.0), div(1.0::float, 2.0), div(9.0::float, 4.0), div(-9.0::float, 4.0), div(1.0::float, 0.0), div(1111.0::decimal, 9.44)
 ----
 -0 0 2 -2 +Inf 117
-
-query RR
-SELECT degrees(-0.5), degrees(0.5)
-----
--28.64788975654116 28.64788975654116
 
 query error div\(\): division by zero
 SELECT div(1.0::decimal, 0.0::decimal)
@@ -597,7 +823,7 @@ SELECT div(1::int, 0::int)
 query RRR
 SELECT exp(-1.0::float), round(exp(1.0::float), 13), exp(2.0::decimal)
 ----
-0.36787944117144233 2.718281828459 7.3890560989306502272
+0.367879441171442  2.718281828459  7.3890560989306502272
 
 query error exp\(\): overflow
 SELECT exp(1e2000::decimal)
@@ -615,7 +841,7 @@ false true false true false true
 query RRR
 SELECT ln(-2.0::float), ln(2.0::float), ln(2.5::decimal)
 ----
-NaN 0.6931471805599453 0.91629073187415506518
+NaN  0.693147180559945  0.91629073187415506518
 
 query error cannot take logarithm of a negative number
 SELECT ln(-100.000::decimal)
@@ -627,6 +853,28 @@ query RR
 SELECT log(10.0::float), log(100.000::decimal)
 ----
 1 2.0000000000000000000
+
+query R
+SELECT log(2.0::float, 4.0::float)
+----
+2
+
+query R
+SELECT log(2.0::decimal, 4.0::decimal)
+----
+2.0000000000000000000
+
+query error cannot take logarithm of a negative number
+SELECT log(2.0::float, -10.0::float)
+
+query error cannot take logarithm of zero
+SELECT log(2.0::float, 0.0::float)
+
+query error cannot take logarithm of a negative number
+SELECT log(2.0::decimal, -10.0::decimal)
+
+query error cannot take logarithm of zero
+SELECT log(2.0::decimal, 0.0::decimal)
 
 query error cannot take logarithm of a negative number
 SELECT log(-100.000::decimal)
@@ -642,10 +890,10 @@ SELECT mod(5.0::float, 2.0), mod(1.0::float, 0.0), mod(5, 2), mod(19.3::decimal,
 # mod returns the same results as PostgreSQL 9.4.4
 # in tests below (except for the error message).
 
-query error mod\(\): zero modulus
+query error mod\(\): division by zero
 SELECT mod(5, 0)
 
-query error mod\(\): zero modulus
+query error mod\(\): division by zero
 SELECT mod(5::decimal, 0::decimal)
 
 query II
@@ -713,7 +961,7 @@ SELECT div(-9.0::float, -2.0) * -2.0 + mod(-9.0::float, -2.0)
 query R
 SELECT pi()
 ----
-3.141592653589793
+3.14159265358979
 
 query II
 SELECT pow(-2::int, 3::int), pow(2::int, 3::int)
@@ -731,7 +979,10 @@ SELECT pow(0::int, 3::int), pow(3::int, 0::int), pow(-3::int, 0::int)
 statement error integer out of range
 SELECT pow(0::int, -3::int)
 
-statement error invalid operation
+# TODO(mjibson): This uses the decimal implementation internally, which
+# returns NaN, hence the below error. However postgres returns 1 for this,
+# which we should probably match.
+statement error integer out of range
 SELECT pow(0::int, 0::int)
 
 query RRR
@@ -749,16 +1000,21 @@ SELECT power(0::decimal, -1)
 ----
 Infinity
 
-statement error invalid operation
+# TODO(mjibson): Postgres returns an error for this.
+query R
 SELECT power(-1, -.1)
+----
+NaN
 
 query RR
 SELECT radians(-45.0), radians(45.0)
 ----
--0.7853981633974483 0.7853981633974483
+-0.785398163397448  0.785398163397448
 
-query error invalid operation
+query R
 SELECT round(123.456::float, -2438602134409251682)
+----
+NaN
 
 query RRR
 SELECT round(4.2::float, 0), round(4.2::float, 10), round(4.22222222::decimal, 3)
@@ -785,7 +1041,7 @@ SELECT round(-2.5::float), round(-1.5::float), round(-0.0::float), round(0.0::fl
 query RRRRRRR
 SELECT round(1.390671161567e-309::float), round(0.49999999999999994::float), round(0.5000000000000001::float), round(2251799813685249.5::float), round(2251799813685250.5::float), round(4503599627370495.5::float), round(4503599627370497::float)
 ----
-0  0  1  2.25179981368525e+15  2.25179981368525e+15  4.503599627370496e+15  4.503599627370497e+15
+0  0  1  2.25179981368525e+15  2.25179981368525e+15  4.5035996273705e+15  4.5035996273705e+15
 
 # round up for decimals
 # These results are indeed different than floats. Compare with postgres.
@@ -805,8 +1061,13 @@ SELECT round(-2.5::decimal), round(-1.5::decimal), round(0.0::decimal), round(1.
 ----
 -3 -2 0 2 3
 
+subtest round_max_prec
+
 # Test rounding to 14 digits, because the logic test itself
 # formats floats rounded to 15 digits behind the decimal point.
+
+statement ok
+SET extra_float_digits = 3
 
 query RRR
 SELECT round(-2.123456789, 5), round(2.123456789, 5), round(2.12345678901234567890, 14)
@@ -828,15 +1089,54 @@ SELECT round(-1.23456789e+308::float, -308), round(1.23456789e+308::float, -308)
 ----
 -1e+308 1e+308
 
+query RRRR
+SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), round(1.234567890123456789::float, 16), round(1.234567890123456789::float, 17)
+----
+1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
+
+statement ok
+SET extra_float_digits = 0
+
+subtest round_low_prec
+
+statement ok
+SET extra_float_digits = -6
+
+query RRR
+SELECT round(-2.123456789, 5), round(2.123456789, 5), round(2.12345678901234567890, 14)
+----
+-2.12346 2.12346 2.12345678901235
+
+query RR
+SELECT round(-1.7976931348623157e+308::float, 1), round(1.7976931348623157e+308::float, 1)
+----
+-1.79769313e+308  1.79769313e+308
+
+query RR
+SELECT round(-1.7976931348623157e+308::float, -303), round(1.7976931348623157e+308::float, -303)
+----
+-1.79769e+308 1.79769e+308
+
+query RR
+SELECT round(-1.23456789e+308::float, -308), round(1.23456789e+308::float, -308)
+----
+-1e+308 1e+308
+
+query RRRR
+SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), round(1.234567890123456789::float, 16), round(1.234567890123456789::float, 17)
+----
+1.23456789  1.23456789  1.23456789  1.23456789
+
+statement ok
+SET extra_float_digits = 0
+
+subtest more_round_tests
+
 query RR
 SELECT round(-1.7976931348623157e-308::float, 1), round(1.7976931348623157e-308::float, 1)
 ----
 -0 0
 
-query RRRR
-SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), round(1.234567890123456789::float, 16), round(1.234567890123456789::float, 17)
-----
-1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
 
 query RRR
 SELECT round(123.456::float, -1), round(123.456::float, -2), round(123.456::float, -3)
@@ -862,11 +1162,17 @@ SELECT round('inf'::float), round('inf'::float, 1), round('-inf'::float), round(
 # But decimal round (which isn't supported at all in postgres because
 # postgres doesn't support NaN or Inf for its decimals) conforms to
 # the GDA spec.
-query error invalid operation
+query R
 SELECT round('inf'::decimal)
+----
+NaN
 
-query error invalid operation
+query R
 SELECT round(1::decimal, 3000)
+----
+NaN
+
+subtest more_tests
 
 query III
 SELECT sign(-2), sign(0), sign(2)
@@ -877,11 +1183,6 @@ query RRRR
 SELECT sign(-2.0), sign(-0.0), sign(0.0), sign(2.0)
 ----
 -1 0 0 1
-
-query RRR
-SELECT sin(-1.0), sin(0.0), sin(1.0)
-----
--0.8414709848078965 0 0.8414709848078965
 
 query RR
 SELECT sqrt(4.0::float), sqrt(9.0::decimal)
@@ -1056,6 +1357,22 @@ SELECT regexp_replace('ReRe','R(e)','1\\1','g');
 ----
 1\11\1
 
+# Regression test for #51289.
+query T
+SELECT regexp_replace('TIMESTAMP(6)', '.*(\((\d+)\))?.*', '\2')
+----
+·
+
+query T
+SELECT regexp_replace('TIMESTAMP(6)', '.*(\((\d+)\)).*', '\2')
+----
+6
+
+query T
+SELECT regexp_replace('TIMESTAMP(6)', '.*(\((\d+)\)?).*', '\2')
+----
+6
+
 query B
 SELECT unique_rowid() < unique_rowid()
 ----
@@ -1066,10 +1383,10 @@ SELECT uuid_v4() != uuid_v4(), length(uuid_v4())
 ----
 true 16
 
-query error syntax error at or near.*
+query error at or near.*: syntax error
 SELECT greatest()
 
-query error syntax error at or near.*
+query error at or near.*: syntax error
 SELECT least()
 
 query I
@@ -1254,21 +1571,21 @@ query error pq: cos\(\): cannot use "\*" in this context
 SELECT cos(*) FROM system.namespace
 
 # Don't panic with invalid names (#8045)
-query error cannot use "nonexistent.\*" without a FROM clause
+query error no data source matches pattern: nonexistent.\*
 SELECT TRIM(TRAILING nonexistent.*[1])
 
 query error rtrim\(\): cannot subscript type tuple
 SELECT TRIM(TRAILING foo.*[1]) FROM (VALUES (1)) AS foo(x)
 
 # Don't panic with invalid names (#8044)
-query error cannot use "nonexistent.\*" without a FROM clause
+query error no data source matches pattern: nonexistent.\*
 SELECT OVERLAY(nonexistent.* PLACING 'string' FROM 'string')
 
 query error unknown signature
 SELECT OVERLAY(foo.* PLACING 'string' FROM 'string') FROM (VALUES (1)) AS foo(x)
 
 # Don't panic with invalid names (#8023)
-query error cannot use "nonexistent.\*" without a FROM clause
+query error no data source matches pattern: nonexistent.\*
 SELECT nonexistent.* IS NOT TRUE
 
 query error unsupported comparison operator: <tuple{int AS x}> IS DISTINCT FROM <bool>
@@ -1277,20 +1594,20 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT current_schemas(true)
 ----
-{"pg_catalog","public"}
+{pg_catalog,pg_extension,public}
 
 query T
 SELECT current_schemas(false)
 ----
-{"public"}
+{public}
 
 # Force the function to be evaluated at execution time and verify it doesn't
 # break when distsql is on.
 query T
 SELECT current_schemas(x) FROM (VALUES (true), (false)) AS t(x);
 ----
-{"pg_catalog","public"}
-{"public"}
+{pg_catalog,pg_extension,public}
+{public}
 
 statement ok
 SET search_path=test,pg_catalog
@@ -1298,12 +1615,12 @@ SET search_path=test,pg_catalog
 query T
 SELECT current_schemas(true)
 ----
-{"pg_catalog"}
+{pg_catalog}
 
 query T
 SELECT current_schemas(false)
 ----
-{"pg_catalog"}
+{pg_catalog}
 
 statement ok
 RESET search_path
@@ -1354,6 +1671,45 @@ query T
 SELECT current_schema()
 ----
 public
+
+query B
+SELECT pg_catalog.pg_function_is_visible((select 'pg_table_is_visible'::regproc))
+----
+true
+
+query B
+SELECT pg_catalog.pg_function_is_visible(0)
+----
+NULL
+
+# COLLATION FOR returns a locale name for a collated string
+# but for a not collated string 'default' locale name is a Postgres compatible behavior:
+# https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
+query T
+SELECT COLLATION FOR ('foo')
+----
+"default"
+
+query T
+SELECT COLLATION FOR ('foo' COLLATE "de_DE");
+----
+"de_DE"
+
+statement error pq: pg_collation_for\(\): collations are not supported by type: int
+SELECT COLLATION FOR (1);
+
+query T
+SELECT pg_collation_for ('foo')
+----
+"default"
+
+query T
+SELECT pg_collation_for ('foo' COLLATE "de_DE");
+----
+"de_DE"
+
+statement error pq: pg_collation_for\(\): collations are not supported by type: int
+SELECT pg_collation_for(1);
 
 query I
 SELECT array_length(ARRAY['a', 'b'], 1)
@@ -1557,7 +1913,7 @@ SELECT from_uuid(b'f00d')
 query T
 SELECT pg_catalog.pg_typeof(sign(1:::decimal))
 ----
-decimal
+numeric
 
 query T
 VALUES (pg_typeof(1:::int)),
@@ -1570,36 +1926,96 @@ VALUES (pg_typeof(1:::int)),
        (pg_typeof(b'a':::bytes)),
        (pg_typeof(array[1,2,3]))
 ----
-int
-string
-bool
+bigint
+text
+boolean
 unknown
 interval
 date
-timestamptz
-bytes
-int[]
+timestamp with time zone
+bytea
+bigint[]
 
 query T
 VALUES (format_type('anyelement'::regtype, -1)),
+       (format_type('bit'::regtype, -1)),
        (format_type('bool'::regtype, -1)),
        (format_type('bytea'::regtype, -1)),
+       (format_type('char'::regtype, -1)),
        (format_type('date'::regtype, -1)),
-       (format_type('numeric'::regtype, -1)),
+       (format_type('decimal'::regtype, -1)),
+       (format_type('float'::regtype, -1)),
+       (format_type('float4'::regtype, -1)),
        (format_type('interval'::regtype, -1)),
+       (format_type('numeric'::regtype, -1)),
+       (format_type('oid'::regtype, -1)),
+       (format_type('oidvector'::regtype, -1)),
+       (format_type('inet'::regtype, -1)),
+       (format_type('int'::regtype, -1)),
+       (format_type('int4'::regtype, -1)),
+       (format_type('int2'::regtype, -1)),
+       (format_type('int2vector'::regtype, -1)),
+       (format_type('interval'::regtype, -1)),
+       (format_type('json'::regtype, -1)),
+       (format_type('name'::regtype, -1)),
+       (format_type('regclass'::regtype, -1)),
+       (format_type('regnamespace'::regtype, -1)),
+       (format_type('regproc'::regtype, -1)),
+       (format_type('regprocedure'::regtype, -1)),
+       (format_type('regtype'::regtype, -1)),
+       (format_type('string'::regtype, -1)),
+       (format_type('time'::regtype, -1)),
        (format_type('timestamp'::regtype, -1)),
        (format_type('timestamptz'::regtype, -1)),
-       (format_type('record'::regtype, -1))
+       (format_type('record'::regtype, -1)),
+       (format_type('uuid'::regtype, -1)),
+       (format_type('unknown'::regtype, -1)),
+       (format_type('varbit'::regtype, -1)),
+       (format_type('varchar'::regtype, -1)),
+       (format_type('int[]'::regtype, -1)),
+       (format_type('int2[]'::regtype, -1)),
+       (format_type('string[]'::regtype, -1)),
+       (format_type('varchar[]'::regtype, -1))
 ----
 anyelement
+bit
 boolean
 bytea
+bpchar
 date
 numeric
+double precision
+real
 interval
+numeric
+oid
+oidvector
+inet
+bigint
+integer
+smallint
+int2vector
+interval
+jsonb
+name
+regclass
+regnamespace
+regproc
+regprocedure
+regtype
+text
+time without time zone
 timestamp without time zone
 timestamp with time zone
 record
+uuid
+unknown
+bit varying
+character varying
+bigint[]
+smallint[]
+text[]
+character varying[]
 
 query T
 VALUES (format_type('anyelement'::regtype, NULL)),
@@ -1663,12 +2079,32 @@ SELECT pg_catalog.pg_get_indexdef(0)
 NULL
 
 statement ok
-CREATE TABLE test.pg_indexdef_test (a INT, UNIQUE INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
+CREATE TYPE testenum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE test.pg_indexdef_test (
+    a INT,
+    e testenum,
+    UNIQUE INDEX pg_indexdef_idx (a ASC),
+    INDEX pg_indexdef_partial_idx (a) WHERE a > 0,
+    INDEX pg_indexdef_partial_enum_idx (a) WHERE e IN ('foo', 'bar'),
+    INDEX other (a DESC)
+)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
 ----
-CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree (a ASC)
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_idx'))
+----
+CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (a > 0)
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_enum_idx'))
+----
+CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::public.testenum, 'bar'::public.testenum))
 
 query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -1678,7 +2114,7 @@ NULL
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'), 0, true)
 ----
-CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree (a ASC)
 
 statement ok
 CREATE TABLE test.pg_indexdef_test_cols (a INT, b INT, UNIQUE INDEX pg_indexdef_cols_idx (a ASC, b DESC), INDEX other (a DESC))
@@ -1686,7 +2122,7 @@ CREATE TABLE test.pg_indexdef_test_cols (a INT, b INT, UNIQUE INDEX pg_indexdef_
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 0, true)
 ----
-CREATE UNIQUE INDEX pg_indexdef_cols_idx ON test.public.pg_indexdef_test_cols (a ASC, b DESC)
+CREATE UNIQUE INDEX pg_indexdef_cols_idx ON test.public.pg_indexdef_test_cols USING btree (a ASC, b DESC)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 1, true)
@@ -1754,6 +2190,8 @@ CREATE TABLE test.pg_constraintdef_test (
   a int,
   b int unique,
   c int check (c > a),
+  d string,
+  UNIQUE INDEX (a) WHERE d = 'foo',
   FOREIGN KEY(a) REFERENCES test.pg_indexdef_test(a) ON DELETE CASCADE
 )
 
@@ -1762,18 +2200,61 @@ SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
-FOREIGN KEY (a) REFERENCES pg_indexdef_test (a) ON DELETE CASCADE
-CHECK (c > a)
 UNIQUE (b ASC)
+UNIQUE (a ASC) WHERE (d = 'foo'::STRING)
+FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
+CHECK ((c > a))
 
-# These functions always return NULL since we don't support comments.
-query TTTT
+# These functions always return NULL since we don't support comments on vtable columns and databases.
+query TT
 SELECT col_description('pg_class'::regclass::oid, 2),
-       obj_description('pg_class'::regclass::oid, 'pg_class'),
-       obj_description('pg_class'::regclass::oid),
        shobj_description('pg_class'::regclass::oid, 'pg_class')
 ----
-NULL  NULL  NULL  NULL
+NULL  NULL
+
+# vtable comments are supported
+query TT
+SELECT regexp_replace(obj_description('pg_class'::regclass::oid), e' .*', '') AS comment1,
+       regexp_replace(obj_description('pg_class'::regclass::oid, 'pg_class'), e' .*', '') AS comment2
+----
+tables tables
+
+# Regular table column comments are supported.
+statement ok
+CREATE TABLE t(x INT);
+
+statement ok
+COMMENT ON TABLE t IS 'waa'
+
+statement ok
+COMMENT ON COLUMN t.x IS 'woo'
+
+query TTTT
+SELECT obj_description('t'::regclass::oid),
+       obj_description('t'::regclass::oid, 'pg_class'),
+       obj_description('t'::regclass::oid, 'notexist'),
+       col_description('t'::regclass, 1)
+----
+waa  waa  NULL  woo
+
+statement ok
+COMMENT ON DATABASE test is 'foo'
+
+query TTTT
+SELECT shobj_description((select oid from pg_database where datname = 'defaultdb')::oid, 'pg_database'),
+       shobj_description((select oid from pg_database where datname = 'test')::oid, 'pg_database'),
+       shobj_description((select oid from pg_database where datname = 'notexist')::oid, 'pg_database'),
+       shobj_description((select oid from pg_database where datname = 'test')::oid, 'notexist')
+----
+NULL foo NULL NULL
+
+# Ensure that shobj_ and obj_description don't return the opposite type of
+# comments.
+query TT
+SELECT shobj_description('t'::regclass::oid, 'pg_class'),
+       obj_description((select oid from pg_database where datname = 'test')::oid, 'pg_database')
+----
+NULL NULL
 
 # Check that base function names are also visible in namespace pg_catalog.
 query I
@@ -1787,12 +2268,13 @@ SELECT oid(3), oid(0), oid(12023948723)
 3  0  12023948723
 
 query T
-SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2)) AS a(i)
+SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2), (-9223372036854775808)) AS a(i)
 ----
 one
 one-three
 six-one-seven
 minus-two
+minus-nine-two-two-three-three-seven-two-zero-three-six-eight-five-four-seven-seven-five-eight-zero-eight
 
 # Do some basic sanity checking of the variadic hash functions.
 query BBBBBBBBB
@@ -1813,7 +2295,6 @@ true false true false true false true true true
 # don't change.
 query T
 SELECT i FROM (VALUES
-  (sha512(NULL::string)),
   (sha512(true::string)),
   (sha512(false::string)),
   (sha512(1::int::string)),
@@ -1825,13 +2306,12 @@ SELECT i FROM (VALUES
   (sha512(b'bar'::bytes))
 ) AS a(i)
 ----
-cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
 9120cd5faef07a08e971ff024a3fcbea1e3a6b44142a6d82ca28c6c42e4f852595bcf53d81d776f10541045abdb7c37950629415d0dc66c8d86c64a5606d32de
 719fa67eef49c4b2a2b83f0c62bddd88c106aaadb7e21ae057c8802b700e36f81fe3f144812d8b05d66dc663d908b25645e153262cf6d457aa34e684af9e328d
 4dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b37b89903a740e1ee172da793a6e79d560e5f7f9bd058a12a280433ed6fa46510a
 be09b235155bae6cb96b94ce4645260937e856ac3907d710850256e6351f50b428f948a7af33937445604f41cf3a3121b2dd069a057708ed1f047e133e09151e
 f7fbba6e0636f890e56fbbf3283e524c6fa3204ae298382d624741d0dc6638326e282c41be5e4254d8820772c5518a2c5a8c0c7f7eda19594a7eb539453e1ed7
-6ca65db2a861fa0ecd0c1e29ef9566425e952d2a205706a6e955a6b1bbd721fdc2d28efdba515f9d29f34aa84223382f6ca6d11bdef23984b8ff9339b59e80f5
+95bce0fdbcf48ba9c944dae46238d89bbd6df696a0d0b7cc8fc16eeabd30c03d6d2506cfcce81de320b37bc677df1bd045ac9231b43ae11807773db3909d1220
 b2d173023893f71caadf7cb2f9557355462570de2c9c971b9cfa5494936e28df8e13d0db4d550aab66d5e7a002f678ddb02def092c069ce473cf5fb293953986
 960b0fed9378be1e9adefd91e1be6ac9c1de7208008dfec438ff845135727bebea0f7458a5181079f61288176e0168cfea501b900c3e495b3ab9bbe4d372486d
 d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
@@ -1843,8 +2323,12 @@ SELECT pg_catalog.pg_encoding_to_char(6), pg_catalog.pg_encoding_to_char(7)
 ----
 UTF8  NULL
 
+# TODO(jordan): Restore this to original form by removing FROM
+# clause once issue 32876 is fixed.
 query TITI
 SELECT pg_catalog.inet_client_addr(), pg_catalog.inet_client_port(), pg_catalog.inet_server_addr(), pg_catalog.inet_server_port()
+FROM pg_class
+WHERE relname = 'pg_constraint'
 ----
 ::/0  0  ::/0  0
 
@@ -1864,10 +2348,10 @@ SELECT lpad('abc', 5, ''), rpad('abc', 5, '')
 ----
 abc  abc
 
-query error memory budget exceeded
+query error requested length too large
 SELECT lpad('abc', 100000000000000)
 
-query error memory budget exceeded
+query error requested length too large
 SELECT rpad('abc', 100000000000000)
 
 query TT
@@ -1905,3 +2389,472 @@ query T
 SELECT pg_catalog.pg_client_encoding()
 ----
 UTF8
+
+subtest check_consistency
+
+# Sanity-check crdb_internal.check_consistency.
+
+statement error start key must be >= "\\x02"
+SELECT crdb_internal.check_consistency(true, '\x01', '\xffff')
+
+statement error end key must be < "\\xff\\xff"
+SELECT crdb_internal.check_consistency(true, '\x02', '\xffff00')
+
+statement error start key must be less than end key
+SELECT crdb_internal.check_consistency(true, '\x02', '\x02')
+
+statement error start key must be less than end key
+SELECT crdb_internal.check_consistency(true, '\x03', '\x02')
+
+query ITT
+SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x02', '\xffff') WHERE range_id = 1
+----
+1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SysBytes: SysCount: AbortSpanBytes:}
+
+# Without explicit keys, scans all ranges (we don't test this too precisely to
+# avoid flaking the test when the range count changes, just want to know that
+# we're touching multiple ranges).
+query B
+SELECT count(*) > 5 FROM crdb_internal.check_consistency(true, '', '')
+----
+true
+
+# Query that should touch only a single range.
+query B
+SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\x03', '\x0300')
+----
+true
+
+# Ditto, but implicit start key \x02
+query B
+SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '', '\x0200')
+----
+true
+
+# Ditto, but implicit end key.
+query B
+SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\xff', '')
+----
+true
+
+# Tests for width_bucket builtin
+query I
+SELECT width_bucket(8.0, 2.0, 3.0, 5)
+----
+6
+
+query I
+SELECT width_bucket(5.35, 0.024, 10.06, 5)
+----
+3
+
+query I
+SELECT width_bucket(7, 3, 11, 5)
+----
+3
+
+query I
+SELECT width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz[])
+----
+2
+
+query error pq: width_bucket\(\): operand and thresholds must be of the same type
+SELECT width_bucket(1, array['a', 'h', 'l', 'z']);
+
+# Regression for #40623
+query I
+SELECT width_bucket(1, array[]::int[]);
+----
+0
+
+# Sanity check pg_type_is_visible.
+query BBB
+SELECT pg_type_is_visible('int'::regtype), pg_type_is_visible(NULL), pg_type_is_visible(99999)
+----
+true  NULL  NULL
+
+# Sanity check pg_get_function_identity_arguments.
+query T
+SELECT pg_get_function_identity_arguments('convert_from'::regproc::oid)
+----
+bytea, text
+
+# This produces an empty string in Postgres too.
+query T
+SELECT pg_get_function_identity_arguments('version'::regproc::oid)
+----
+·
+
+query T
+SELECT pg_get_function_identity_arguments('array_length'::regproc)
+----
+anyarray, int8
+
+query T
+SELECT pg_get_function_identity_arguments((select oid from pg_proc where proname='variance' and proargtypes[0] = 'int'::regtype))
+----
+int8
+
+# Sanity check pg_get_function_result.
+
+query T
+SELECT pg_get_function_result('array_length'::regproc)
+----
+int8
+
+query T
+SELECT pg_get_function_result((select oid from pg_proc where proname='variance' and proargtypes[0] = 'int'::regtype))
+----
+numeric
+
+query T
+SELECT pg_get_function_result('pg_sleep'::regproc)
+----
+bool
+
+# Note in Postgres <= 9.5, returns SETOF anyelement.
+query error pq: more than one function named 'unnest'
+SELECT pg_get_function_result('unnest'::regproc);
+
+# Regression test for #40297.
+statement ok
+CREATE TABLE t40297 AS SELECT g FROM generate_series(NULL, NULL) AS g
+
+query I
+SELECT COALESCE((SELECT ()), NULL) FROM t40297
+----
+
+query T
+SELECT CASE WHEN true THEN (1, 2) ELSE NULL END
+----
+(1,2)
+
+query B
+SELECT (1, 2) IN ((2, 3), NULL, (1, 2))
+----
+true
+
+query B
+SELECT (1, 2) IN ((2, 3), NULL)
+----
+NULL
+
+# Test for regression in hex functions.
+subtest regression_41707
+
+# The int8 casts make it match postgres behavior - unfortunately, we do not default to int4.
+query TTTTTTT
+select to_hex(-2147483649), to_hex(-2147483648::int8), to_hex(-1::int8), to_hex(0), to_hex(1), to_hex(2147483647), to_hex(2147483648)
+----
+ffffffff7fffffff  ffffffff80000000  ffffffffffffffff  0  1  7fffffff  80000000
+
+query T
+select to_hex(E'\\047\\134'::bytea)
+----
+275c
+
+query T
+select to_hex('abc')
+----
+616263
+
+# Test crdb_internal commands which execute as root, but
+# only checks for permissions afterwards.
+subtest crdb_internal_privileged_only
+
+user root
+
+statement ok
+CREATE DATABASE root_test
+
+statement ok
+CREATE TABLE root_test.t(a int)
+
+statement ok
+ALTER DATABASE root_test CONFIGURE ZONE USING num_replicas = 5
+
+query I
+SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
+----
+NULL
+
+query I
+SELECT crdb_internal.get_namespace_id(0, 'root_test')
+----
+63
+
+query I
+SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
+----
+64
+
+query T
+SELECT crdb_internal.get_zone_config(-1)::string
+----
+NULL
+
+query T
+SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
+----
+\x280550015801
+
+query T
+SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
+----
+NULL
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query I
+SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
+----
+NULL
+
+query error insufficient privilege
+SELECT crdb_internal.get_namespace_id(0, 'root_test')
+
+query T
+SELECT crdb_internal.get_zone_config(-1)::string
+----
+NULL
+
+query error insufficient privilege
+SELECT crdb_internal.get_zone_config(61)::string -- based on root query. having no permissions blocks us from this test rapidly changing though.
+
+# give testuser permissions on everything and retest
+user root
+
+statement ok
+GRANT ALL ON DATABASE root_test TO testuser
+
+statement ok
+GRANT ALL ON root_test.t TO testuser
+
+user testuser
+
+query I
+SELECT crdb_internal.get_namespace_id(0, 'root_test')
+----
+63
+
+query I
+SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
+----
+64
+
+query T
+SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
+----
+\x280550015801
+
+query T
+SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
+----
+NULL
+
+# reset state to default
+user root
+
+statement ok
+DROP DATABASE root_test CASCADE
+
+# Test for timezone builtin.
+subtest timezone_test
+
+statement ok
+SET TIME ZONE -3
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00')
+----
+1969-12-31 22:00:00 +0000 +0000
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00'::time)
+----
+0000-01-01 22:00:00 -0600 -0600
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00'::timetz)
+----
+0000-01-01 22:00:00 -0600 -0600
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00'::timestamp)
+----
+1970-01-01 04:00:00 -0300 -0300
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00'::timestamptz)
+----
+1969-12-31 22:00:00 +0000 +0000
+
+statement ok
+SET TIME ZONE +0
+
+subtest getdatabaseencoding
+
+query T
+SELECT getdatabaseencoding()
+----
+UTF8
+
+subtest get_bit
+
+query I rowsort
+SELECT get_bit(B'100101110101', 3) UNION SELECT get_bit(B'100101110101', 2)
+----
+1
+0
+
+query I rowsort
+SELECT get_bit('000000'::varbit, 5) UNION SELECT get_bit('1111111'::varbit, 5)
+----
+1
+0
+
+query error get_bit\(\): GetBitAtIndex: bit index 10 out of valid range \(0..4\)
+SELECT get_bit(B'10110', 10)
+
+query error get_bit\(\): GetBitAtIndex: bit index 0 out of valid range \(0..-1\)
+SELECT get_bit(B'', 0);
+
+# Binary representation of 'l' is 01101100
+# Binary representation of \o145 is 01100101
+# Binary representation of \x61\x62\x6C are 01100001 01100010 01101100
+
+query I rowsort
+SELECT get_bit(b'\145\x6C\l', 0) UNION SELECT get_bit(b'\145\x6C\l', 13)
+----
+0
+1
+
+query I rowsort
+SELECT get_bit(b'\145', 7) UNION SELECT get_bit(b'\145', 0)
+----
+1
+0
+
+query I rowsort
+SELECT get_bit('\x6162'::bytea, 7) UNION SELECT get_bit('\x6162'::bytea, 12)
+----
+1
+0
+
+query error get_bit\(\): bit index 8 out of valid range \(0..7\)
+SELECT get_bit(b'\x61', 8)
+
+query error get_bit\(\): bit index 0 out of valid range \(0..-1\)
+SELECT get_bit(b'', 0)
+
+subtest set_bit
+
+query T rowsort
+SELECT set_bit(B'1101010', 0, 0) UNION SELECT set_bit(B'1101010', 2, 1)
+----
+0101010
+1111010
+
+query T rowsort
+SELECT set_bit('000000'::varbit, 5, 1) UNION SELECT set_bit('111111'::varbit, 5, 0)
+----
+000001
+111110
+
+query error set_bit\(\): SetBitAtIndex: bit index 10 out of valid range \(0..6\)
+SELECT set_bit(B'1101010', 10, 1)
+
+query error set_bit\(\): new bit must be 0 or 1.
+SELECT set_bit(B'1001010', 0, 2)
+
+query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
+SELECT set_bit(B'', 0, 1)
+
+# Binary representation of 'a' 'b' 'c' 'f' 'l'  are 01100001 01100010 01100011 01100110 01101100
+# Binary representation of \o145 is 1100101
+# Binary representation of \x61\x62\x66\x6C are 01100001 01100010 01100110 01101100
+
+query T rowsort
+SELECT set_bit(b'ab', 6, 1) UNION SELECT set_bit(b'\x61\x66', 15, 0)
+----
+cb
+af
+
+query T rowsort
+SELECT set_bit('a'::bytea, 5, 0) UNION SELECT set_bit('\x6162'::bytea, 13, 1)
+----
+a
+af
+
+query error set_bit\(\): bit index 16 out of valid range \(0..15\)
+SELECT set_bit(b'ac', 16, 0)
+
+query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
+SELECT set_bit(b'', 0, 1)
+
+query error set_bit\(\): new bit must be 0 or 1.
+SELECT set_bit(b'\145\x6C\l', 0, 2)
+
+subtest num_nulls_test
+
+statement ok
+CREATE TABLE nulls_test(a INT, b STRING)
+
+statement ok
+INSERT INTO nulls_test VALUES(1, 'foo'), (1, NULL), (NULL, 'foo'), (NULL, NULL)
+
+query II rowsort
+SELECT num_nulls(a, b), num_nonnulls(a, b) FROM nulls_test
+----
+0  2
+1  1
+1  1
+2  0
+
+subtest pb_to_json
+
+query T
+select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
+----
+system
+
+
+query error pq: crdb_internal.pb_to_json\(\): unknown proto message type cockroach.sql.sqlbase.descriptor
+select crdb_internal.pb_to_json('cockroach.sql.sqlbase.descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
+
+query B
+SELECT (SELECT * FROM [SHOW crdb_version]) = version()
+----
+true
+
+query B
+select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)) = descriptor from system.descriptor where id = 1
+----
+true
+
+subtest regexp_split
+
+query T
+SELECT regexp_split_to_table('3aa0AAa1', 'a+')
+----
+3
+0AA
+1
+
+query T
+SELECT regexp_split_to_table('3aa0AAa1', 'a+', 'i')
+----
+3
+0
+1
+
+query T
+SELECT regexp_split_to_array('3aa0AAa1', 'a+')
+----
+{3,0AA,1}
+
+query T
+SELECT regexp_split_to_array('3aaa0AAa1', 'a+', 'i')
+----
+{3,0,1}

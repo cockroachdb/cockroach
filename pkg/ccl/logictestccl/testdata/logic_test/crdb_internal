@@ -1,9 +1,9 @@
 # LogicTest: local
 
-query IITTI colnames
+query IITTITTTII colnames
 SELECT * FROM crdb_internal.partitions
 ----
-table_id  index_id  parent_name  name  columns
+table_id  index_id  parent_name  name  columns column_names list_value range_value zone_id subzone_id
 
 statement ok
 CREATE TABLE t1 (
@@ -33,16 +33,130 @@ CREATE table t2 (a STRING PRIMARY KEY) PARTITION BY LIST (a) (
   PARTITION pfoo VALUES IN ('foo')
 )
 
-query IITTI
+# Since there are no zone configurations on any of these partitions, tables,
+# or databases, these partitions inherit directly from the default config.
+query IITTITTTII
 SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
 ----
-53  1  NULL   p12      1
-53  1  p12    p12p3    1
-53  1  p12p3  p12p3p8  1
-53  1  NULL   p6       1
-53  1  p6     p6p7     1
-53  1  p6     p6p8     1
-53  1  p6     p6px     1
-53  1  p12    pd       1
-53  2  NULL   p00      2
-54  1  NULL   pfoo     1
+53  1  NULL  p12  1  a  (1), (2)  NULL 0 0
+53  1  p12  p12p3  1  b  (3)  NULL 0 0
+53  1  p12p3  p12p3p8  1  c  (8)  NULL 0 0
+53  1  NULL  p6  1  a  (6)  NULL 0 0
+53  1  p6  p6p7  1  b  NULL  (MINVALUE) TO (7) 0 0
+53  1  p6  p6p8  1  b  NULL  (7) TO (8) 0 0
+53  1  p6  p6px  1  b  NULL  (8) TO (MAXVALUE) 0 0
+53  1  p12  pd  1  b  (DEFAULT)  NULL 0 0
+53  2  NULL  p00  2  a, b  (0, 0)  NULL 0 0
+54  1  NULL  pfoo  1  a  ('foo')  NULL 0 0
+
+# Test crdb_internal.zones functions correctly on zoned indexes.
+subtest privileged_zones_test
+
+statement ok
+CREATE DATABASE db2; ALTER DATABASE db2 CONFIGURE ZONE USING num_replicas = 3;
+
+statement ok
+CREATE TABLE t3 (a INT PRIMARY KEY, b INT); CREATE INDEX myt3index ON t3 (b); ALTER INDEX myt3index CONFIGURE ZONE USING num_replicas = 5; ALTER TABLE t3 CONFIGURE ZONE USING num_replicas = 8
+
+statement ok
+CREATE TABLE t4 (a INT PRIMARY KEY, b INT); CREATE INDEX myt4index ON t4 (b); ALTER TABLE t4 CONFIGURE ZONE USING num_replicas = 7; ALTER INDEX myt4index CONFIGURE ZONE USING num_replicas = 5; GRANT ALL ON t4 TO testuser
+
+user testuser
+
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+0   RANGE default
+16  RANGE meta
+17  RANGE system
+22  RANGE liveness
+57  TABLE test.public.t4
+57  INDEX test.public.t4@myt4index
+
+query TT
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] ORDER BY 1
+----
+INDEX test.public.t4@myt4index  ALTER INDEX test.public.t4@myt4index CONFIGURE ZONE USING
+                                num_replicas = 5
+RANGE default                   ALTER RANGE default CONFIGURE ZONE USING
+                                range_min_bytes = 134217728,
+                                range_max_bytes = 536870912,
+                                gc.ttlseconds = 90000,
+                                num_replicas = 3,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+RANGE liveness                  ALTER RANGE liveness CONFIGURE ZONE USING
+                                range_min_bytes = 134217728,
+                                range_max_bytes = 536870912,
+                                gc.ttlseconds = 600,
+                                num_replicas = 5,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+RANGE meta                      ALTER RANGE meta CONFIGURE ZONE USING
+                                range_min_bytes = 134217728,
+                                range_max_bytes = 536870912,
+                                gc.ttlseconds = 3600,
+                                num_replicas = 5,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+RANGE system                    ALTER RANGE system CONFIGURE ZONE USING
+                                range_min_bytes = 134217728,
+                                range_max_bytes = 536870912,
+                                gc.ttlseconds = 90000,
+                                num_replicas = 5,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+TABLE test.public.t4            ALTER TABLE test.public.t4 CONFIGURE ZONE USING
+                                num_replicas = 7
+
+query error pq: user testuser has no privileges on database db2
+SHOW ZONE CONFIGURATION FOR DATABASE db2
+
+query error pq: user testuser has no privileges on relation t2
+SHOW ZONE CONFIGURATION FOR TABLE t2
+
+query error pq: user testuser has no privileges on relation t3
+SHOW ZONE CONFIGURATION FOR TABLE t3
+
+query error pq: user testuser has no privileges on relation t3
+SHOW ZONE CONFIGURATION FOR INDEX myt3index
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX myt4index
+----
+INDEX test.public.t4@myt4index  ALTER INDEX test.public.t4@myt4index CONFIGURE ZONE USING
+                                range_min_bytes = 134217728,
+                                range_max_bytes = 536870912,
+                                gc.ttlseconds = 90000,
+                                num_replicas = 5,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE t4
+----
+TABLE t4  ALTER TABLE t4 CONFIGURE ZONE USING
+          range_min_bytes = 134217728,
+          range_max_bytes = 536870912,
+          gc.ttlseconds = 90000,
+          num_replicas = 7,
+          constraints = '[]',
+          lease_preferences = '[]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR RANGE default
+----
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 90000,
+               num_replicas = 3,
+               constraints = '[]',
+               lease_preferences = '[]'
+
+# This test checks that generator backed tables do not concurrently
+# access transactions. It does this by scanning two virtual tables at a time.
+# If the background generator functions were performing work when not allowed
+# to, the background generators would conflict with an error.
+statement ok
+SELECT a.* FROM crdb_internal.partitions AS a JOIN crdb_internal.partitions AS b ON a.table_id = b.table_id

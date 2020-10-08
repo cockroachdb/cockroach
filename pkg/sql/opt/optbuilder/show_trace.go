@@ -1,25 +1,20 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
 import (
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 func (b *Builder) buildShowTrace(
@@ -30,26 +25,22 @@ func (b *Builder) buildShowTrace(
 	switch showTrace.TraceType {
 	case tree.ShowTraceRaw, tree.ShowTraceKV:
 		if showTrace.Compact {
-			b.synthesizeResultColumns(outScope, sqlbase.ShowCompactTraceColumns)
+			b.synthesizeResultColumns(outScope, colinfo.ShowCompactTraceColumns)
 		} else {
-			b.synthesizeResultColumns(outScope, sqlbase.ShowTraceColumns)
+			b.synthesizeResultColumns(outScope, colinfo.ShowTraceColumns)
 		}
 
 	case tree.ShowTraceReplica:
-		b.synthesizeResultColumns(outScope, sqlbase.ShowReplicaTraceColumns)
+		b.synthesizeResultColumns(outScope, colinfo.ShowReplicaTraceColumns)
 
 	default:
-		panic(fmt.Errorf("SHOW %s not supported", showTrace.TraceType))
+		panic(errors.AssertionFailedf("SHOW %s not supported", showTrace.TraceType))
 	}
 
-	def := memo.ShowTraceOpDef{
-		Type:    showTrace.TraceType,
-		Compact: showTrace.Compact,
-		ColList: colsToColList(outScope.cols),
-	}
-	for i := range outScope.cols {
-		def.ColList[i] = outScope.cols[i].id
-	}
-	outScope.group = b.factory.ConstructShowTraceForSession(b.factory.InternShowTraceOpDef(&def))
+	outScope.expr = b.factory.ConstructShowTraceForSession(&memo.ShowTracePrivate{
+		TraceType: showTrace.TraceType,
+		Compact:   showTrace.Compact,
+		ColList:   colsToColList(outScope.cols),
+	})
 	return outScope
 }

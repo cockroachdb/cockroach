@@ -1,0 +1,29 @@
+getLatestTag: result v3.3.0
+listMilestones owner=cockroachdb repo=cockroach: result [github.Milestone{Number:2, Title:"3.3"} github.Milestone{Number:1, Title:"3.2"}]
+listCommits owner=cockroachdb repo=cockroach github.CommitsListOptions{SHA:"", Path:"", Author:"bran", Since:time.Time{wall:, ext:}, Until:time.Time{wall:, ext:}, ListOptions:github.ListOptions{Page:0, PerPage:1}}
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: kv/splits/nodes=3/quiesce=true failed" label:branch-release-0.1: []
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: kv/splits/nodes=3/quiesce=true failed" -label:branch-release-0.1: []
+createIssue owner=cockroachdb repo=cockroach:
+github.IssueRequest{Labels:["O-robot" "C-test-failure" "branch-release-0.1" "release-blocker"], Assignee:"hodor", Milestone:2}
+
+storage: kv/splits/nodes=3/quiesce=true failed
+
+[(storage).kv/splits/nodes=3/quiesce=true failed](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=buildLog) on [release-0.1@abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
+
+```
+The test failed on branch=master, cloud=gce:
+```
+
+<details><summary>More</summary><p>
+Parameters:
+
+- TAGS=deadlock
+- GOFLAGS=race
+
+Artifacts: [/kv/splits/nodes=3/quiesce=true](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=artifacts#/kv/splits/nodes=3/quiesce=true)
+
+[See this test on roachdash](https://roachdash.crdb.dev/?filter=status%3Aopen+t%3A.%2Akv%2Fsplits%2Fnodes%3D3%2Fquiesce%3Dtrue.%2A&sort=title&restgroup=false&display=lastcommented+project)
+<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
+
+
+Rendered: https://github.com/cockroachdb/cockroach/issues/new?body=%5B%28storage%29.kv%2Fsplits%2Fnodes%3D3%2Fquiesce%3Dtrue+failed%5D%28https%3A%2F%2Fteamcity.example.com%2FviewLog.html%3FbuildId%3D8008135%26tab%3DbuildLog%29+on+%5Brelease-0.1%40abcd123%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fcommits%2Fabcd123%29%3A%0A%0A%60%60%60%0AThe+test+failed+on+branch%3Dmaster%2C+cloud%3Dgce%3A%0A%60%60%60%0A%0A%3Cdetails%3E%3Csummary%3EMore%3C%2Fsummary%3E%3Cp%3E%0AParameters%3A%0A%0A-+TAGS%3Ddeadlock%0A-+GOFLAGS%3Drace%0A%0AArtifacts%3A+%5B%2Fkv%2Fsplits%2Fnodes%3D3%2Fquiesce%3Dtrue%5D%28https%3A%2F%2Fteamcity.example.com%2FviewLog.html%3FbuildId%3D8008135%26tab%3Dartifacts%23%2Fkv%2Fsplits%2Fnodes%3D3%2Fquiesce%3Dtrue%29%0A%0A%5BSee+this+test+on+roachdash%5D%28https%3A%2F%2Froachdash.crdb.dev%2F%3Ffilter%3Dstatus%253Aopen%2Bt%253A.%252Akv%252Fsplits%252Fnodes%253D3%252Fquiesce%253Dtrue.%252A%26sort%3Dtitle%26restgroup%3Dfalse%26display%3Dlastcommented%2Bproject%29%0A%3Csub%3Epowered+by+%5Bpkg%2Fcmd%2Finternal%2Fissues%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Ftree%2Fmaster%2Fpkg%2Fcmd%2Finternal%2Fissues%29%3C%2Fsub%3E%3C%2Fp%3E%3C%2Fdetails%3E%0A&title=storage%3A+kv%2Fsplits%2Fnodes%3D3%2Fquiesce%3Dtrue+failed

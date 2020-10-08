@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts
-
 statement ok
 CREATE TABLE a (a int, b int)
 

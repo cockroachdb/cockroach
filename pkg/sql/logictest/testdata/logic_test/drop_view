@@ -1,5 +1,3 @@
-# LogicTest: local local-opt
-
 statement ok
 CREATE TABLE a (k STRING PRIMARY KEY, v STRING)
 
@@ -12,12 +10,12 @@ CREATE VIEW b AS SELECT k,v from a
 statement ok
 CREATE VIEW c AS SELECT k,v from b
 
-query T
+query TTTTI
 SHOW TABLES FROM test
 ----
-a
-b
-c
+public  a  table  root  0
+public  b  view   root  0
+public  c  view   root  0
 
 statement error cannot drop relation "a" because view "b" depends on it
 DROP TABLE a
@@ -40,14 +38,14 @@ DROP VIEW d
 statement ok
 GRANT ALL ON d TO testuser
 
-query T
+query TTTTI
 SHOW TABLES FROM test
 ----
-a
-b
-c
-d
-diamond
+public  a        table  root  0
+public  b        view   root  0
+public  c        view   root  0
+public  d        view   root  0
+public  diamond  view   root  0
 
 user testuser
 
@@ -77,29 +75,26 @@ GRANT ALL ON testuser2 to testuser
 statement ok
 GRANT ALL ON testuser3 to testuser
 
-query T
+query TTTTI
 SHOW TABLES FROM test
 ----
-a
-b
-c
-d
-diamond
-testuser1
-testuser2
-testuser3
+public  a          table  root  0
+public  b          view   root  0
+public  c          view   root  0
+public  d          view   root  0
+public  diamond    view   root  0
+public  testuser1  view   root  0
+public  testuser2  view   root  0
+public  testuser3  view   root  0
 
 user testuser
 
 statement ok
 DROP VIEW testuser3
 
-query T
+query TTTTI
 SHOW TABLES FROM test
 ----
-d
-testuser1
-testuser2
 
 statement error cannot drop relation "testuser1" because view "testuser2" depends on it
 DROP VIEW testuser1
@@ -110,10 +105,9 @@ DROP VIEW testuser1 RESTRICT
 statement ok
 DROP VIEW testuser1 CASCADE
 
-query T
+query TTTTI
 SHOW TABLES FROM test
 ----
-d
 
 statement error pgcode 42P01 relation "testuser2" does not exist
 DROP VIEW testuser2
@@ -142,7 +136,7 @@ user root
 statement ok
 DROP TABLE a CASCADE
 
-query T
+query TTTTI
 SHOW TABLES FROM test
 ----
 

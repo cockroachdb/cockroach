@@ -34,6 +34,26 @@ spawn $argv sql --format=tsv
 eexpect root@
 end_test
 
+start_test "Check that quit terminates the client."
+send "quit\r"
+eexpect eof
+spawn $argv sql --format=tsv
+eexpect root@
+end_test
+
+start_test "Check that quit does not terminate the client in the middle of a statement."
+send "select\rquit\r;\r"
+eexpect "column \"quit\" does not exist"
+eexpect root@
+end_test
+
+start_test "Check that exit terminates the client."
+send "exit\r"
+eexpect eof
+spawn $argv sql --format=tsv
+eexpect root@
+end_test
+
 start_test "Check that \\| reads statements."
 send "\\| echo 'select '; echo '38 + 4;'\r"
 eexpect 42
@@ -201,6 +221,18 @@ eexpect "with no argument"
 eexpect root@
 end_test
 
+start_test "Check that \\echo behaves well."
+send "\\echo\r"
+eexpect "\r\n"
+eexpect "\r\n"
+eexpect root@
+
+send "\\echo hello  world\r"
+# echo removes double spaces within the line. That's expected.
+eexpect "hello world"
+eexpect root@
+end_test
+
 start_test "Check that commands are also recognized with a final semicolon."
 send "\\set;\r"
 eexpect "display_format"
@@ -225,9 +257,45 @@ eexpect "statement ignored"
 eexpect ":/# "
 
 send "(echo '\\unset check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\r"
-eexpect "pq: syntax error"
+eexpect "ERROR: at or near"
+eexpect "syntax error"
 eexpect ":/# "
 end_test
+
+start_test "Check that client-side options can be overridden with set"
+
+# First establish a baseline with all the defaults.
+send "$argv demo --empty\r"
+eexpect root@
+send "\\set display_format csv\r"
+send "\\set\r"
+eexpect "auto_trace,off"
+eexpect "check_syntax,true"
+eexpect "echo,false"
+eexpect "errexit,false"
+eexpect "prompt1,%n@"
+eexpect "show_times,true"
+eexpect root@
+interrupt
+eexpect ":/# "
+
+# Then verify that the defaults can be overridden.
+send "$argv demo --empty --set=auto_trace=on --set=check_syntax=false --set=echo=true --set=errexit=true --set=prompt1=%n@haa --set=show_times=false\r"
+eexpect root@
+send "\\set display_format csv\r"
+send "\\set\r"
+eexpect "auto_trace,\"on"
+eexpect "check_syntax,false"
+eexpect "echo,true"
+eexpect "errexit,true"
+eexpect "prompt1,%n@haa"
+eexpect "show_times,false"
+eexpect root@
+interrupt
+eexpect ":/# "
+
+end_test
+
 
 send "exit 0\r"
 eexpect eof

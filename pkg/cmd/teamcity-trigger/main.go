@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // teamcity-trigger launches a variety of nightly build jobs on TeamCity using
 // its REST API. It is intended to be run from a meta-build on a schedule
@@ -25,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/abourget/teamcity"
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmdutil"
@@ -32,18 +29,18 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: %s BRANCH...\n", os.Args[0])
+	if len(os.Args) != 1 {
+		fmt.Fprintf(os.Stderr, "usage: %s\n", os.Args[0])
 		os.Exit(1)
 	}
-	branches := os.Args[1:]
 
+	branch := cmdutil.RequireEnv("TC_BUILD_BRANCH")
 	serverURL := cmdutil.RequireEnv("TC_SERVER_URL")
 	username := cmdutil.RequireEnv("TC_API_USER")
 	password := cmdutil.RequireEnv("TC_API_PASSWORD")
 
 	tcClient := teamcity.New(serverURL, username, password)
-	runTC(branches, func(buildID, branch string, opts map[string]string) {
+	runTC(func(buildID string, opts map[string]string) {
 		build, err := tcClient.QueueBuild(buildID, branch, opts)
 		if err != nil {
 			log.Fatalf("failed to create teamcity build (buildID=%s, branch=%s, opts=%+v): %s",
@@ -54,19 +51,59 @@ func main() {
 	})
 }
 
-func runTC(branches []string, queueBuild func(string, string, map[string]string)) {
-	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/pkg/..."})
+const baseImportPath = "github.com/cockroachdb/cockroach/pkg/"
 
-	for _, branch := range branches {
-		// Queue stress builds. One per configuration per package.
-		for _, opts := range []map[string]string{
-			{}, // uninstrumented
-			{"env.GOFLAGS": "-race"},
-		} {
-			for _, importPath := range importPaths {
-				opts["env.PKG"] = importPath
-				queueBuild("Cockroach_Nightlies_Stress", branch, opts)
-			}
+var importPaths = gotool.ImportPaths([]string{baseImportPath + "..."})
+
+func runTC(queueBuild func(string, map[string]string)) {
+	// Queue stress builds. One per configuration per package.
+	for _, importPath := range importPaths {
+		// By default, run each package for up to 100 iterations.
+		maxRuns := 100
+
+		// By default, run each package for up to 1h.
+		maxTime := 1 * time.Hour
+
+		// By default, fail the stress run on the first test failure.
+		maxFails := 1
+
+		// The stress program by default runs as many instances in parallel as there
+		// are CPUs. Each instance itself can run tests in parallel. The amount of
+		// parallelism needs to be reduced, or we can run into OOM issues,
+		// especially for race builds and/or logic tests (see
+		// https://github.com/cockroachdb/cockroach/pull/10966).
+		//
+		// We limit both the stress program parallelism and the go test parallelism
+		// to 4 for non-race builds and 2 for race builds. For logic tests, we
+		// halve these values.
+		parallelism := 4
+
+		// Conditionally override stressflags.
+		switch importPath {
+		case baseImportPath + "kv/kvnemesis":
+			// Disable -maxruns for kvnemesis. Run for the full 1h.
+			maxRuns = 0
+		case baseImportPath + "sql/logictest":
+			// Stress logic tests with reduced parallelism (to avoid overloading the
+			// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
+			parallelism /= 2
 		}
+
+		opts := map[string]string{
+			"env.PKG": importPath,
+		}
+
+		// Run non-race build.
+		opts["env.GOFLAGS"] = fmt.Sprintf("-parallel=%d", parallelism)
+		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
+			maxRuns, maxTime, maxFails, parallelism)
+		queueBuild("Cockroach_Nightlies_Stress", opts)
+
+		// Run race build. Reduce the parallelism to avoid overloading the machine.
+		parallelism /= 2
+		opts["env.GOFLAGS"] = fmt.Sprintf("-race -parallel=%d", parallelism)
+		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
+			maxRuns, maxTime, maxFails, parallelism)
+		queueBuild("Cockroach_Nightlies_Stress", opts)
 	}
 }

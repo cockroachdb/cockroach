@@ -1,0 +1,107 @@
+exec-ddl
+CREATE TABLE abc (
+    a INT NOT NULL,
+    b TEXT DEFAULT ('foo'),
+    c FLOAT AS (a::float) STORED
+)
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+
+# Statistics should be derived from DELETE input columns and transferred to
+# RETURNING columns.
+build
+SELECT *
+FROM [DELETE FROM xyz WHERE z=5.5 RETURNING *]
+WHERE x > 'foo'
+----
+with &1
+ ├── columns: x:9(string!null) y:10(int!null) z:11(float!null)
+ ├── volatile, mutations
+ ├── stats: [rows=3.33333333, distinct(9)=3.33333333, null(9)=0]
+ ├── key: (9)
+ ├── fd: ()-->(11), (9)-->(10)
+ ├── delete xyz
+ │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
+ │    ├── fetch columns: xyz.x:5(string) xyz.y:6(int) xyz.z:7(float)
+ │    ├── volatile, mutations
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=1, null(3)=0]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2)
+ │    └── select
+ │         ├── columns: xyz.x:5(string!null) xyz.y:6(int!null) xyz.z:7(float!null) crdb_internal_mvcc_timestamp:8(decimal)
+ │         ├── stats: [rows=10, distinct(5)=10, null(5)=0, distinct(6)=9.5617925, null(6)=0, distinct(7)=1, null(7)=0]
+ │         ├── key: (5)
+ │         ├── fd: ()-->(7), (5)-->(6,8)
+ │         ├── scan xyz
+ │         │    ├── columns: xyz.x:5(string!null) xyz.y:6(int!null) xyz.z:7(float) crdb_internal_mvcc_timestamp:8(decimal)
+ │         │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=100, null(7)=10]
+ │         │    ├── key: (5)
+ │         │    └── fd: (5)-->(6-8)
+ │         └── filters
+ │              └── xyz.z:7 = 5.5 [type=bool, outer=(7), constraints=(/7: [/5.5 - /5.5]; tight), fd=()-->(7)]
+ └── select
+      ├── columns: x:9(string!null) y:10(int!null) z:11(float!null)
+      ├── stats: [rows=3.33333333, distinct(9)=3.33333333, null(9)=0]
+      ├── key: (9)
+      ├── fd: ()-->(11), (9)-->(10)
+      ├── with-scan &1
+      │    ├── columns: x:9(string!null) y:10(int!null) z:11(float!null)
+      │    ├── mapping:
+      │    │    ├──  xyz.x:1(string) => x:9(string)
+      │    │    ├──  xyz.y:2(int) => y:10(int)
+      │    │    └──  xyz.z:3(float) => z:11(float)
+      │    ├── stats: [rows=10, distinct(9)=10, null(9)=0, distinct(10)=9.5617925, null(10)=0, distinct(11)=1, null(11)=0]
+      │    ├── key: (9)
+      │    └── fd: ()-->(11), (9)-->(10)
+      └── filters
+           └── x:9 > 'foo' [type=bool, outer=(9), constraints=(/9: [/e'foo\x00' - ]; tight)]
+
+# Cardinality is zero.
+build
+DELETE FROM xyz WHERE False RETURNING *
+----
+delete xyz
+ ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+ ├── fetch columns: x:5(string) y:6(int) z:7(float)
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── select
+      ├── columns: x:5(string!null) y:6(int!null) z:7(float) crdb_internal_mvcc_timestamp:8(decimal)
+      ├── cardinality: [0 - 0]
+      ├── stats: [rows=0]
+      ├── key: (5)
+      ├── fd: (5)-->(6-8)
+      ├── scan xyz
+      │    ├── columns: x:5(string!null) y:6(int!null) z:7(float) crdb_internal_mvcc_timestamp:8(decimal)
+      │    ├── stats: [rows=1000]
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6-8)
+      └── filters
+           └── false [type=bool, constraints=(contradiction; tight)]

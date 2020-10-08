@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE kv (
   -- don't add column "a"
@@ -10,6 +8,7 @@ CREATE TABLE kv (
   d DECIMAL,
   s STRING,
   b BOOL,
+  i INTERVAL,
   FAMILY (k, v, w, f, b),
   FAMILY (d),
   FAMILY (s)
@@ -17,12 +16,12 @@ CREATE TABLE kv (
 
 statement OK
 INSERT INTO kv VALUES
-(1, 2, 3, 1.0, 1, 'a', true),
-(3, 4, 5, 2, 8, 'a', true),
-(5, NULL, 5, 9.9, -321, NULL, false),
-(6, 2, 3, 4.4, 4.4, 'b', true),
-(7, 2, 2, 6, 7.9, 'b', true),
-(8, 4, 2, 3, 3, 'A', false)
+(1, 2, 3, 1.0, 1, 'a', true, '1min'),
+(3, 4, 5, 2, 8, 'a', true, '2sec'),
+(5, NULL, 5, 9.9, -321, NULL, false, NULL),
+(6, 2, 3, 4.4, 4.4, 'b', true, '1ms'),
+(7, 2, 2, 6, 7.9, 'b', true, '4 days'),
+(8, 4, 2, 3, 3, 'A', false, '3 years')
 
 query error window functions are not allowed in GROUP BY
 SELECT * FROM kv GROUP BY v, count(w) OVER ()
@@ -33,10 +32,10 @@ SELECT count(w) OVER () FROM kv GROUP BY 1
 query error window functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v) OVER ()
 
-query error window functions are not allowed in LIMIT
+query error column "v" does not exist
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v) OVER ()
 
-query error window functions are not allowed in OFFSET
+query error column "v" does not exist
 SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v) OVER ()
 
 query error window functions are not allowed in VALUES
@@ -46,7 +45,7 @@ query error window functions are not allowed in WHERE
 SELECT k FROM kv WHERE avg(k) OVER () > 1
 
 query error window functions are not allowed in HAVING
-SELECT 1 GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
+SELECT 1 FROM kv GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
 
 query R
 SELECT avg(k) OVER () FROM kv ORDER BY 1
@@ -208,38 +207,38 @@ SELECT avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 
 7
 8
 
-query IIIRRTBR colnames
+query IIIRRTBTR colnames
 SELECT *, avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 1
 ----
-k  v     w  f    d     s     b      avg
-1  2     3  1    1     a     true   4.6666666666666666667
-3  4     5  2    8     a     true   5.5
-5  NULL  5  9.9  -321  NULL  false  5
-6  2     3  4.4  4.4   b     true   4.6666666666666666667
-7  2     2  6    7.9   b     true   7
-8  4     2  3    3     A     false  8
+k  v     w  f    d     s     b      i             avg
+1  2     3  1    1     a     true   00:01:00      4.6666666666666666667
+3  4     5  2    8     a     true   00:00:02      5.5
+5  NULL  5  9.9  -321  NULL  false  NULL          5
+6  2     3  4.4  4.4   b     true   00:00:00.001  4.6666666666666666667
+7  2     2  6    7.9   b     true   4 days        7
+8  4     2  3    3     A     false  3 years       8
 
-query IIIRRTBR colnames
+query IIIRRTBTR colnames
 SELECT *, avg(k) OVER w FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w, k
 ----
-k  v     w  f    d     s     b      avg
-1  2     3  1    1     a     true   4.6666666666666666667
-6  2     3  4.4  4.4   b     true   4.6666666666666666667
-5  NULL  5  9.9  -321  NULL  false  5
-3  4     5  2    8     a     true   5.5
-7  2     2  6    7.9   b     true   7
-8  4     2  3    3     A     false  8
+k  v     w  f    d     s     b      i             avg
+1  2     3  1    1     a     true   00:01:00      4.6666666666666666667
+6  2     3  4.4  4.4   b     true   00:00:00.001  4.6666666666666666667
+5  NULL  5  9.9  -321  NULL  false  NULL          5
+3  4     5  2    8     a     true   00:00:02      5.5
+7  2     2  6    7.9   b     true   4 days        7
+8  4     2  3    3     A     false  3 years       8
 
-query IIIRRTB colnames
+query IIIRRTBT colnames
 SELECT * FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w DESC, k
 ----
-k  v     w  f    d     s     b
-8  4     2  3    3     A     false
-7  2     2  6    7.9   b     true
-3  4     5  2    8     a     true
-5  NULL  5  9.9  -321  NULL  false
-1  2     3  1    1     a     true
-6  2     3  4.4  4.4   b     true
+k  v     w  f    d     s     b      i
+8  4     2  3    3     A     false  3 years
+7  2     2  6    7.9   b     true   4 days
+3  4     5  2    8     a     true   00:00:02
+5  NULL  5  9.9  -321  NULL  false  NULL
+1  2     3  1    1     a     true   00:01:00
+6  2     3  4.4  4.4   b     true   00:00:00.001
 
 query error window "w" is already defined
 SELECT avg(k) OVER w FROM kv WINDOW w AS (), w AS ()
@@ -265,13 +264,25 @@ SELECT avg(k) OVER (PARTITION BY a) FROM kv
 query error column "a" does not exist
 SELECT avg(k) OVER (ORDER BY a) FROM kv
 
-query error pgcode 42803 aggregate function calls cannot contain window function calls
+# TODO(justin): this should have pgcode 42803 but CBO currently doesn't get
+# it right.
+query error window functions are not allowed in aggregate
 SELECT avg(avg(k) OVER ()) FROM kv ORDER BY 1
 
 query R
 SELECT avg(avg(k)) OVER () FROM kv ORDER BY 1
 ----
 5
+
+query RR
+SELECT avg(k) OVER (), avg(v) OVER () FROM kv ORDER BY 1
+----
+5  2.8
+5  2.8
+5  2.8
+5  2.8
+5  2.8
+5  2.8
 
 query error OVER specified, but now\(\) is neither a window function nor an aggregate function
 SELECT now() OVER () FROM kv ORDER BY 1
@@ -303,8 +314,8 @@ SELECT avg(f) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
 2.5
 3
-3.8000000000000003
-3.8000000000000003
+3.8
+3.8
 6
 9.9
 
@@ -591,6 +602,53 @@ NULL  NULL
 10    NULL
 12    20
 
+query R
+SELECT f::DECIMAL + round(max(k) * w * avg(d) OVER wind) + (lead(f, 2, 17::FLOAT) OVER wind::DECIMAL / d * row_number() OVER wind) FROM kv GROUP BY k, w, f, d WINDOW wind AS (ORDER BY k) ORDER BY k
+----
+13.9
+71.10
+-2590.156074766355140186916
+-1376.87272727272727272728
+-822.2405063291139240505
+-753.9999999999999999998
+
+query R
+SELECT round(max(w) * w * avg(w) OVER wind) + (lead(w, 2, 17) OVER wind::DECIMAL / w * row_number() OVER wind) FROM kv GROUP BY w WINDOW wind AS (PARTITION BY w) ORDER BY 1
+----
+16.5
+32.6666666666666666667
+128.4
+
+query IRRIRIR
+SELECT k, avg(d) OVER w1, avg(d) OVER w2, row_number() OVER w2, sum(f) OVER w1, row_number() OVER w1, sum(f) OVER w2 FROM kv WINDOW w1 AS (ORDER BY k), w2 AS (ORDER BY w, k) ORDER BY k
+----
+1  1       3.9666666666666666667  3  1     1  10
+3  4.5     4.86                   5  3     2  16.4
+5  -104    -49.45                 6  12.9  3  26.3
+6  -76.9   4.075                  4  17.3  4  14.4
+7  -59.94  7.9                    1  23.3  5  6
+8  -49.45  5.45                   2  26.3  6  9
+
+query R
+SELECT round((avg(d) OVER wind) * max(k) + (lag(d, 1, 42.0) OVER wind) * max(d)) FROM kv GROUP BY d, k WINDOW wind AS (ORDER BY k) ORDER BY k
+----
+43
+22
+-3088
+-1874
+-385
+-372
+
+query RR
+SELECT avg(k) OVER w, avg(k) OVER w + 1 FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY k
+----
+4.6666666666666666667  5.6666666666666666667
+5.5                    6.5
+5                      6
+4.6666666666666666667  5.6666666666666666667
+7                      8
+8                      9
+
 statement OK
 INSERT INTO kv VALUES
 (9, 2, 9, .1, DEFAULT, DEFAULT, DEFAULT),
@@ -813,10 +871,10 @@ SELECT k, v, percent_rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
 query IIIR
 SELECT k, v, w, percent_rank() OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
-1   2     3  0.3333333333333333
+1   2     3  0.333333333333333
 3   4     5  0.5
 5   NULL  5  0
-6   2     3  0.3333333333333333
+6   2     3  0.333333333333333
 7   2     2  0
 8   4     2  0
 9   2     9  1
@@ -853,11 +911,11 @@ query IIIR
 SELECT k, v, w, cume_dist() OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
 1   2     3  0.75
-3   4     5  0.6666666666666666
+3   4     5  0.666666666666667
 5   NULL  5  0.5
 6   2     3  0.75
 7   2     2  0.25
-8   4     2  0.3333333333333333
+8   4     2  0.333333333333333
 9   2     9  1
 10  4     9  1
 11  NULL  9  1
@@ -1259,10 +1317,10 @@ SELECT k, lead(k, w) OVER (PARTITION BY v ORDER BY w, k) FROM kv ORDER BY 1
 10  NULL
 11  NULL
 
-query error could not parse "FOO" as type int
+query error pq: lag\(\): could not parse "FOO" as type int
 SELECT k, lag(k, 1, 'FOO') OVER () FROM kv ORDER BY 1
 
-query error could not parse "FOO" as type int
+query error pq: lead\(\): could not parse "FOO" as type int
 SELECT k, lead(k, 1, 'FOO') OVER () FROM kv ORDER BY 1
 
 query error unknown signature: lag\(int, int, string\)
@@ -1674,7 +1732,7 @@ SELECT k, last_value(v) OVER (PARTITION BY k) FROM kv ORDER BY 1
 10  4
 11  NULL
 
-query error could not parse "FOO" as type int
+query error pq: nth_value\(\): could not parse "FOO" as type int
 SELECT k, nth_value(v, 'FOO') OVER () FROM kv ORDER BY 1
 
 query error argument of nth_value\(\) must be greater than zero
@@ -1836,8 +1894,22 @@ SELECT k, nth_value(v, v) OVER () FROM kv ORDER BY 1
 statement ok
 DELETE FROM kv WHERE k = 12
 
-query error FILTER within a window function call is not yet supported
+query error FILTER specified but rank\(\) is not an aggregate function
 SELECT k, rank() FILTER (WHERE k=1) OVER () FROM kv
+
+query TT
+SELECT i, avg(i) OVER (ORDER BY i) FROM kv ORDER BY i
+----
+NULL          NULL
+NULL          NULL
+NULL          NULL
+NULL          NULL
+00:00:00.001  00:00:00.001
+00:00:02      00:00:01.0005
+00:01:00      00:00:20.667
+4 days        1 day 00:00:15.50025
+3 years       7 mons 6 days 19:12:12.4002
+
 
 # Issue #14606: correctly handle aggregation functions above the windowing level
 query I
@@ -1859,7 +1931,6 @@ SELECT max(i) * (1/j) * (row_number() OVER (ORDER BY max(i))) FROM (SELECT 1 AS 
 statement error function reserved for internal use
 SELECT final_variance(1.2, 1.2, 123) OVER (PARTITION BY k) FROM kv
 
-
 statement ok
 CREATE TABLE products (
   group_id serial PRIMARY KEY,
@@ -1867,43 +1938,75 @@ CREATE TABLE products (
   product_name VARCHAR (255) NOT NULL,
   price DECIMAL (11, 2),
   priceInt INT,
-  priceFloat FLOAT
+  priceFloat FLOAT,
+  pDate DATE,
+  pTime TIME,
+  pTimestamp TIMESTAMP,
+  pTimestampTZ TIMESTAMPTZ,
+  pInterval INTERVAL
 )
 
 statement ok
-INSERT INTO products (group_name, product_name, price, priceInt, priceFloat) VALUES
-('Smartphone', 'Microsoft Lumia', 200, 200, 200),
-('Smartphone', 'HTC One', 400, 400, 400),
-('Smartphone', 'Nexus', 500, 500, 500),
-('Smartphone', 'iPhone', 900, 900, 900),
-('Laptop', 'HP Elite', 1200, 1200, 1200),
-('Laptop', 'Lenovo Thinkpad', 700, 700, 700),
-('Laptop', 'Sony VAIO', 700, 700, 700),
-('Laptop', 'Dell', 800, 800, 800),
-('Tablet', 'iPad', 700, 700, 700),
-('Tablet', 'Kindle Fire', 150, 150, 150),
-('Tablet', 'Samsung', 200, 200, 200)
+INSERT INTO products (group_name, product_name, price, priceInt, priceFloat, pDate, pTime, pTimestamp, pTimestampTZ, pInterval) VALUES
+('Smartphone', 'Microsoft Lumia', 200, 200, 200, '2018-07-30', TIME '01:23:45', TIMESTAMP '2018-07-30 01:23:45', TIMESTAMPTZ '2018-07-30 01:23:45', INTERVAL '1 months 2 days 3 hours 4 minutes 5 seconds'),
+('Smartphone', 'HTC One', 400, 400, 400, '2018-07-31', TIME '12:34:56', TIMESTAMP '2018-07-31 12:34:56', TIMESTAMPTZ '2018-07-31 12:34:56', INTERVAL '1 days 2 hours 3 minutes 4 seconds'),
+('Smartphone', 'Nexus', 500, 500, 500, '2018-07-30', TIME '11:23:45', TIMESTAMP '2018-07-30 11:23:45', TIMESTAMPTZ '2018-07-30 11:23:45', INTERVAL '1 hours 2 minutes 3 seconds'),
+('Smartphone', 'iPhone', 900, 900, 900, '2018-07-31', TIME '07:34:56', TIMESTAMP '2018-07-31 07:34:56', TIMESTAMPTZ '2018-07-31 07:34:56', INTERVAL '1 minutes 2 seconds'),
+('Laptop', 'HP Elite', 1200, 1200, 1200, '2018-07-30', TIME '01:23:45', TIMESTAMP '2018-07-30 01:23:45', TIMESTAMPTZ '2018-07-30 01:23:45', INTERVAL '1 months 2 days 3 hours 4 minutes 5 seconds'),
+('Laptop', 'Lenovo Thinkpad', 700, 700, 700, '2018-07-31', TIME '12:34:56', TIMESTAMP '2018-07-31 12:34:56', TIMESTAMPTZ '2018-07-31 12:34:56', INTERVAL '1 days 2 hours 3 minutes 4 seconds'),
+('Laptop', 'Sony VAIO', 700, 700, 700, '2018-07-30', TIME '11:23:45', TIMESTAMP '2018-07-30 11:23:45', TIMESTAMPTZ '2018-07-30 11:23:45', INTERVAL '1 hours 2 minutes 3 seconds'),
+('Laptop', 'Dell', 800, 800, 800, '2018-07-31', TIME '07:34:56', TIMESTAMP '2018-07-31 07:34:56', TIMESTAMPTZ '2018-07-31 07:34:56', INTERVAL '1 minutes 2 seconds'),
+('Tablet', 'iPad', 700, 700, 700, '2018-07-30', TIME '01:23:45', TIMESTAMP '2018-07-30 01:23:45', TIMESTAMPTZ '2018-07-30 01:23:45', INTERVAL '1 months 2 days 3 hours 4 minutes 5 seconds'),
+('Tablet', 'Kindle Fire', 150, 150, 150, '2018-07-31', TIME '12:34:56', TIMESTAMP '2018-07-31 12:34:56', TIMESTAMPTZ '2018-07-31 12:34:56', INTERVAL '1 days 2 hours 3 minutes 4 seconds'),
+('Tablet', 'Samsung', 200, 200, 200, '2018-07-30', TIME '11:23:45', TIMESTAMP '2018-07-30 11:23:45', TIMESTAMPTZ '2018-07-30 11:23:45', INTERVAL '1 hours 2 minutes 3 seconds')
 
 statement error cannot copy window "w" because it has a frame clause
-SELECT price, max(price) OVER (w ORDER BY price) AS max_price FROM products WINDOW w AS (PARTITION BY price ROWS UNBOUNDED PRECEDING)
+SELECT avg(price) OVER (w) FROM products WINDOW w AS (ROWS 1 PRECEDING)
+
+statement error cannot copy window "w" because it has a frame clause
+SELECT avg(price) OVER (w ORDER BY price) FROM products WINDOW w AS (ROWS 1 PRECEDING)
+
+statement error frame starting offset must not be null
+SELECT avg(price) OVER (ROWS NULL PRECEDING) FROM products
+
+statement error frame starting offset must not be null
+SELECT avg(price) OVER (ROWS BETWEEN NULL PRECEDING AND 1 FOLLOWING) FROM products
 
 statement error frame starting offset must not be negative
 SELECT price, avg(price) OVER (PARTITION BY price ROWS -1 PRECEDING) AS avg_price FROM products
+
+statement error frame starting offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price ROWS -1 PRECEDING)
+
+statement error frame ending offset must not be null
+SELECT avg(price) OVER (ROWS BETWEEN 1 PRECEDING AND NULL FOLLOWING) FROM products
 
 statement error frame ending offset must not be negative
 SELECT price, avg(price) OVER (PARTITION BY price ROWS BETWEEN 1 FOLLOWING AND -1 FOLLOWING) AS avg_price FROM products
 
 statement error frame ending offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price ROWS BETWEEN 1 FOLLOWING AND -1 FOLLOWING)
+
+statement error frame ending offset must not be negative
 SELECT product_name, price, min(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS min_over_three, max(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND -1 FOLLOWING) AS max_over_partition FROM products ORDER BY group_id
 
-statement error incompatible window frame start type: decimal
+statement error argument of WINDOW FRAME START must be type int, not type decimal
 SELECT avg(price) OVER (PARTITION BY group_name ROWS 1.5 PRECEDING) AS avg_price FROM products
 
-statement error incompatible window frame start type: decimal
+statement error argument of WINDOW FRAME START must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ROWS 1.5 PRECEDING)
+
+statement error argument of WINDOW FRAME START must be type int, not type decimal
 SELECT avg(price) OVER (PARTITION BY group_name ROWS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING) AS avg_price FROM products
 
-statement error incompatible window frame end type: decimal
+statement error argument of WINDOW FRAME START must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ROWS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING)
+
+statement error argument of WINDOW FRAME END must be type int, not type decimal
 SELECT avg(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING) AS avg_price FROM products
+
+statement error argument of WINDOW FRAME END must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING)
 
 query TRT
 SELECT product_name, price, first_value(product_name) OVER w AS first FROM products WHERE price = 200 OR price = 700 WINDOW w as (PARTITION BY price ORDER BY product_name RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) ORDER BY price, product_name
@@ -1951,11 +2054,11 @@ query TTRR
 SELECT product_name, group_name, price, avg(priceFloat) OVER (PARTITION BY group_name ORDER BY price, product_name ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS avg_of_three_floats FROM products ORDER BY group_name, price, product_name
 ----
 Lenovo Thinkpad  Laptop      700.00   700
-Sony VAIO        Laptop      700.00   733.3333333333334
+Sony VAIO        Laptop      700.00   733.333333333333
 Dell             Laptop      800.00   900
 HP Elite         Laptop      1200.00  1000
 Microsoft Lumia  Smartphone  200.00   300
-HTC One          Smartphone  400.00   366.6666666666667
+HTC One          Smartphone  400.00   366.666666666667
 Nexus            Smartphone  500.00   600
 iPhone           Smartphone  900.00   700
 Kindle Fire      Tablet      150.00   175
@@ -1978,7 +2081,7 @@ Samsung          Tablet      200.00   350
 iPad             Tablet      700.00   450
 
 query TTRR
-SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ROWS (SELECT count(*) FROM PRODUCTS WHERE price = 200) PRECEDING) AS running_avg_of_three FROM products ORDER BY group_id
+SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ORDER BY group_id ROWS (SELECT count(*) FROM PRODUCTS WHERE price = 200) PRECEDING) AS running_avg_of_three FROM products ORDER BY group_id
 ----
 Smartphone  Microsoft Lumia  200.00   200.00
 Smartphone  HTC One          400.00   300.00
@@ -2021,6 +2124,21 @@ Laptop      Dell             800.00   {700.00,800.00}
 Tablet      iPad             700.00   {700.00,150.00,200.00}
 Tablet      Kindle Fire      150.00   {700.00,150.00,200.00}
 Tablet      Samsung          200.00   {150.00,200.00}
+
+query TTRTTTT
+SELECT group_name, product_name, price, array_agg(price) OVER (w ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING), array_agg(price) OVER (w ROWS BETWEEN UNBOUNDED PRECEDING AND 3 FOLLOWING), array_agg(price) OVER (w GROUPS BETWEEN 3 PRECEDING AND UNBOUNDED FOLLOWING), array_agg(price) OVER (w RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (PARTITION BY group_name ORDER BY group_id DESC) ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}
+Smartphone  HTC One          400.00   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}
+Smartphone  Nexus            500.00   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}
+Smartphone  iPhone           900.00   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}
+Laptop      HP Elite         1200.00  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}
+Laptop      Lenovo Thinkpad  700.00   {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}
+Laptop      Sony VAIO        700.00   {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}
+Laptop      Dell             800.00   {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}
+Tablet      iPad             700.00   {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}
+Tablet      Kindle Fire      150.00   {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}
+Tablet      Samsung          200.00   {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}
 
 query TTRR
 SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name RANGE UNBOUNDED PRECEDING) AS avg_price FROM products ORDER BY group_id
@@ -2111,3 +2229,1636 @@ Dell             800.00   700.00   1200.00  1500.00  800.00
 iPad             700.00   700.00   700.00   1050.00  700.00
 Kindle Fire      150.00   150.00   700.00   1050.00  150.00
 Samsung          200.00   150.00   700.00   350.00   200.00
+
+query RRR
+SELECT avg(price) OVER w1, avg(price) OVER w2, avg(price) OVER w1 FROM products WINDOW w1 AS (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING), w2 AS (ORDER BY group_id ROWS 1 PRECEDING) ORDER BY group_id
+----
+300.00                 200.00   300.00
+366.66666666666666667  300.00   366.66666666666666667
+600.00                 450.00   600.00
+700.00                 700.00   700.00
+950.00                 1050.00  950.00
+866.66666666666666667  950.00   866.66666666666666667
+733.33333333333333333  700.00   733.33333333333333333
+750.00                 750.00   750.00
+425.00                 750.00   425.00
+350.00                 425.00   350.00
+175.00                 175.00   175.00
+
+# In the following 4 tests, since ORDER BY is omitted, all rows are peers, so frame includes all the rows for every row.
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (RANGE CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   6450.00
+Smartphone  HTC One          400.00   6450.00
+Smartphone  Nexus            500.00   6450.00
+Smartphone  iPhone           900.00   6450.00
+Laptop      HP Elite         1200.00  6450.00
+Laptop      Lenovo Thinkpad  700.00   6450.00
+Laptop      Sony VAIO        700.00   6450.00
+Laptop      Dell             800.00   6450.00
+Tablet      iPad             700.00   6450.00
+Tablet      Kindle Fire      150.00   6450.00
+Tablet      Samsung          200.00   6450.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   6450.00
+Smartphone  HTC One          400.00   6450.00
+Smartphone  Nexus            500.00   6450.00
+Smartphone  iPhone           900.00   6450.00
+Laptop      HP Elite         1200.00  6450.00
+Laptop      Lenovo Thinkpad  700.00   6450.00
+Laptop      Sony VAIO        700.00   6450.00
+Laptop      Dell             800.00   6450.00
+Tablet      iPad             700.00   6450.00
+Tablet      Kindle Fire      150.00   6450.00
+Tablet      Samsung          200.00   6450.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   6450.00
+Smartphone  HTC One          400.00   6450.00
+Smartphone  Nexus            500.00   6450.00
+Smartphone  iPhone           900.00   6450.00
+Laptop      HP Elite         1200.00  6450.00
+Laptop      Lenovo Thinkpad  700.00   6450.00
+Laptop      Sony VAIO        700.00   6450.00
+Laptop      Dell             800.00   6450.00
+Tablet      iPad             700.00   6450.00
+Tablet      Kindle Fire      150.00   6450.00
+Tablet      Samsung          200.00   6450.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   6450.00
+Smartphone  HTC One          400.00   6450.00
+Smartphone  Nexus            500.00   6450.00
+Smartphone  iPhone           900.00   6450.00
+Laptop      HP Elite         1200.00  6450.00
+Laptop      Lenovo Thinkpad  700.00   6450.00
+Laptop      Sony VAIO        700.00   6450.00
+Laptop      Dell             800.00   6450.00
+Tablet      iPad             700.00   6450.00
+Tablet      Kindle Fire      150.00   6450.00
+Tablet      Samsung          200.00   6450.00
+
+statement error aggregate functions are not allowed in FILTER
+SELECT count(*) FILTER (WHERE count(*) > 5) OVER () FROM products
+
+statement error window function calls cannot be nested
+SELECT count(*) FILTER (WHERE count(*) OVER () > 5) OVER () FROM products
+
+statement error incompatible FILTER expression type: int
+SELECT count(*) FILTER (WHERE 1) OVER () FROM products
+
+statement error at or near "filter": syntax error
+SELECT price FILTER (WHERE price=1) OVER () FROM products
+
+query II
+SELECT count(*) FILTER (WHERE true) OVER (), count(*) FILTER (WHERE false) OVER () FROM products
+----
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+
+query RRRR
+SELECT avg(price) FILTER (WHERE price > 300) OVER w1, sum(price) FILTER (WHERE group_name = 'Smartphone') OVER w2, avg(price) FILTER (WHERE price = 200 OR price = 700) OVER w1, avg(price) FILTER (WHERE price < 900) OVER w2 FROM products WINDOW w1 AS (ORDER BY group_id), w2 AS (PARTITION BY group_name ORDER BY price, group_id) ORDER BY group_id
+----
+NULL                   200.00   200.00                 200.00
+400.00                 600.00   200.00                 300.00
+450.00                 1100.00  200.00                 366.66666666666666667
+600.00                 2000.00  200.00                 366.66666666666666667
+750.00                 NULL     200.00                 733.33333333333333333
+740.00                 NULL     450.00                 700.00
+733.33333333333333333  NULL     533.33333333333333333  700.00
+742.85714285714285714  NULL     533.33333333333333333  733.33333333333333333
+737.50                 NULL     575.00                 350.00
+737.50                 NULL     575.00                 150.00
+737.50                 NULL     500.00                 175.00
+
+statement error DISTINCT is not implemented for window functions
+SELECT count(DISTINCT group_name) OVER (), count(DISTINCT product_name) OVER () FROM products
+
+statement error RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column
+SELECT sum(price) OVER (RANGE 100 PRECEDING) FROM products
+
+statement error RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column
+SELECT sum(price) OVER (ORDER BY price, priceint RANGE 100 PRECEDING) FROM products
+
+statement error invalid preceding or following size in window function
+SELECT sum(price) OVER (ORDER BY pdate RANGE '-1 days' PRECEDING) FROM products
+
+statement error invalid preceding or following size in window function
+SELECT sum(price) OVER (ORDER BY ptime RANGE BETWEEN '-1 hours' PRECEDING AND '1 hours' FOLLOWING) FROM products
+
+statement error invalid preceding or following size in window function
+SELECT sum(price) OVER (ORDER BY ptime RANGE BETWEEN '1 hours' PRECEDING AND '-1 hours' FOLLOWING) FROM products
+
+statement error argument of WINDOW FRAME START must be type interval, not type decimal
+SELECT sum(price) OVER (ORDER BY ptimestamp RANGE 123.4 PRECEDING) FROM products
+
+statement error argument of WINDOW FRAME START must be type interval, not type int
+SELECT sum(price) OVER (ORDER BY ptimestamptz RANGE BETWEEN 123 PRECEDING AND CURRENT ROW) FROM products
+
+statement error could not parse "1 days" as type decimal
+SELECT sum(price) OVER (ORDER BY price RANGE BETWEEN 123.4 PRECEDING AND '1 days' FOLLOWING) FROM products
+
+statement error RANGE with offset PRECEDING/FOLLOWING is not supported for column type varchar
+SELECT sum(price) OVER (ORDER BY product_name RANGE 'foo' PRECEDING) FROM products
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint RANGE 200 PRECEDING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   1400
+Laptop      Sony VAIO        700.00   1400
+Laptop      Dell             800.00   2200
+Laptop      HP Elite         1200.00  1200
+Smartphone  Microsoft Lumia  200.00   200
+Smartphone  HTC One          400.00   600
+Smartphone  Nexus            500.00   900
+Smartphone  iPhone           900.00   900
+Tablet      Kindle Fire      150.00   150
+Tablet      Samsung          200.00   350
+Tablet      iPad             700.00   700
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price RANGE 200.002 PRECEDING) FROM products ORDER BY group_name, price, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   1400.00
+Laptop      Sony VAIO        700.00   1400.00
+Laptop      Dell             800.00   2200.00
+Laptop      HP Elite         1200.00  1200.00
+Smartphone  Microsoft Lumia  200.00   200.00
+Smartphone  HTC One          400.00   600.00
+Smartphone  Nexus            500.00   900.00
+Smartphone  iPhone           900.00   900.00
+Tablet      Kindle Fire      150.00   150.00
+Tablet      Samsung          200.00   350.00
+Tablet      iPad             700.00   700.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(pricefloat) OVER (PARTITION BY group_name ORDER BY pricefloat RANGE BETWEEN 200.01 PRECEDING AND 99.99 FOLLOWING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   1400
+Laptop      Sony VAIO        700.00   1400
+Laptop      Dell             800.00   2200
+Laptop      HP Elite         1200.00  1200
+Smartphone  Microsoft Lumia  200.00   200
+Smartphone  HTC One          400.00   600
+Smartphone  Nexus            500.00   900
+Smartphone  iPhone           900.00   900
+Tablet      Kindle Fire      150.00   350
+Tablet      Samsung          200.00   350
+Tablet      iPad             700.00   700
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price RANGE BETWEEN 99.99 PRECEDING AND 100.00 PRECEDING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Laptop      Dell             800.00   NULL
+Laptop      HP Elite         1200.00  NULL
+Smartphone  Microsoft Lumia  200.00   NULL
+Smartphone  HTC One          400.00   NULL
+Smartphone  Nexus            500.00   NULL
+Smartphone  iPhone           900.00   NULL
+Tablet      Kindle Fire      150.00   NULL
+Tablet      Samsung          200.00   NULL
+Tablet      iPad             700.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint RANGE BETWEEN 300 PRECEDING AND 50 PRECEDING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Laptop      Dell             800.00   1400
+Laptop      HP Elite         1200.00  NULL
+Smartphone  Microsoft Lumia  200.00   NULL
+Smartphone  HTC One          400.00   200
+Smartphone  Nexus            500.00   600
+Smartphone  iPhone           900.00   NULL
+Tablet      Kindle Fire      150.00   NULL
+Tablet      Samsung          200.00   150
+Tablet      iPad             700.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint RANGE BETWEEN 50 FOLLOWING AND 300 FOLLOWING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   800
+Laptop      Sony VAIO        700.00   800
+Laptop      Dell             800.00   NULL
+Laptop      HP Elite         1200.00  NULL
+Smartphone  Microsoft Lumia  200.00   900
+Smartphone  HTC One          400.00   500
+Smartphone  Nexus            500.00   NULL
+Smartphone  iPhone           900.00   NULL
+Tablet      Kindle Fire      150.00   200
+Tablet      Samsung          200.00   NULL
+Tablet      iPad             700.00   NULL
+
+query TRR
+SELECT group_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price RANGE BETWEEN 49.999 FOLLOWING AND 300.001 FOLLOWING) FROM products ORDER BY group_name, price, group_id
+----
+Laptop      700.00   800.00
+Laptop      700.00   800.00
+Laptop      800.00   NULL
+Laptop      1200.00  NULL
+Smartphone  200.00   900.00
+Smartphone  400.00   500.00
+Smartphone  500.00   NULL
+Smartphone  900.00   NULL
+Tablet      150.00   200.00
+Tablet      200.00   NULL
+Tablet      700.00   NULL
+
+query TRR
+SELECT group_name, price, sum(pricefloat) OVER (PARTITION BY group_name ORDER BY pricefloat RANGE BETWEEN 50 FOLLOWING AND 300 FOLLOWING) FROM products ORDER BY group_name, price, group_id
+----
+Laptop      700.00   800
+Laptop      700.00   800
+Laptop      800.00   NULL
+Laptop      1200.00  NULL
+Smartphone  200.00   900
+Smartphone  400.00   500
+Smartphone  500.00   NULL
+Smartphone  900.00   NULL
+Tablet      150.00   200
+Tablet      200.00   NULL
+Tablet      700.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, nth_value(pricefloat, 2) OVER (PARTITION BY group_name ORDER BY pricefloat RANGE BETWEEN 1.23 FOLLOWING AND 500.23 FOLLOWING) FROM products ORDER BY group_name, pricefloat, group_id
+----
+Laptop      Lenovo Thinkpad   700.00  1200
+Laptop      Sony VAIO         700.00  1200
+Laptop      Dell              800.00  NULL
+Laptop      HP Elite         1200.00  NULL
+Smartphone  Microsoft Lumia   200.00  500
+Smartphone  HTC One           400.00  900
+Smartphone  Nexus             500.00  NULL
+Smartphone  iPhone            900.00  NULL
+Tablet      Kindle Fire       150.00  NULL
+Tablet      Samsung           200.00  NULL
+Tablet      iPad              700.00  NULL
+
+query TTTRR
+SELECT group_name, product_name, pdate, price, sum(price) OVER (ORDER BY pdate RANGE '1 days' PRECEDING) FROM products ORDER BY pdate, group_id
+----
+Smartphone  Microsoft Lumia  2018-07-30 00:00:00 +0000 +0000  200.00   3500.00
+Smartphone  Nexus            2018-07-30 00:00:00 +0000 +0000  500.00   3500.00
+Laptop      HP Elite         2018-07-30 00:00:00 +0000 +0000  1200.00  3500.00
+Laptop      Sony VAIO        2018-07-30 00:00:00 +0000 +0000  700.00   3500.00
+Tablet      iPad             2018-07-30 00:00:00 +0000 +0000  700.00   3500.00
+Tablet      Samsung          2018-07-30 00:00:00 +0000 +0000  200.00   3500.00
+Smartphone  HTC One          2018-07-31 00:00:00 +0000 +0000  400.00   6450.00
+Smartphone  iPhone           2018-07-31 00:00:00 +0000 +0000  900.00   6450.00
+Laptop      Lenovo Thinkpad  2018-07-31 00:00:00 +0000 +0000  700.00   6450.00
+Laptop      Dell             2018-07-31 00:00:00 +0000 +0000  800.00   6450.00
+Tablet      Kindle Fire      2018-07-31 00:00:00 +0000 +0000  150.00   6450.00
+
+query TTRR
+SELECT product_name, ptime, price, avg(price) OVER (ORDER BY ptime RANGE BETWEEN '1 hours 15 minutes' PRECEDING AND '1 hours 15 minutes' FOLLOWING) FROM products ORDER BY ptime, group_id
+----
+Microsoft Lumia  0000-01-01 01:23:45 +0000 UTC  200.00   700.00
+HP Elite         0000-01-01 01:23:45 +0000 UTC  1200.00  700.00
+iPad             0000-01-01 01:23:45 +0000 UTC  700.00   700.00
+iPhone           0000-01-01 07:34:56 +0000 UTC  900.00   850.00
+Dell             0000-01-01 07:34:56 +0000 UTC  800.00   850.00
+Nexus            0000-01-01 11:23:45 +0000 UTC  500.00   441.66666666666666667
+Sony VAIO        0000-01-01 11:23:45 +0000 UTC  700.00   441.66666666666666667
+Samsung          0000-01-01 11:23:45 +0000 UTC  200.00   441.66666666666666667
+HTC One          0000-01-01 12:34:56 +0000 UTC  400.00   441.66666666666666667
+Lenovo Thinkpad  0000-01-01 12:34:56 +0000 UTC  700.00   441.66666666666666667
+Kindle Fire      0000-01-01 12:34:56 +0000 UTC  150.00   441.66666666666666667
+
+query TTTRR
+SELECT group_name, product_name, ptime, price, min(price) OVER (PARTITION BY group_name ORDER BY ptime RANGE BETWEEN '1 hours' FOLLOWING AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_name, ptime
+----
+Laptop      HP Elite         0000-01-01 01:23:45 +0000 UTC  1200.00  700.00
+Laptop      Dell             0000-01-01 07:34:56 +0000 UTC  800.00   700.00
+Laptop      Sony VAIO        0000-01-01 11:23:45 +0000 UTC  700.00   700.00
+Laptop      Lenovo Thinkpad  0000-01-01 12:34:56 +0000 UTC  700.00   NULL
+Smartphone  Microsoft Lumia  0000-01-01 01:23:45 +0000 UTC  200.00   400.00
+Smartphone  iPhone           0000-01-01 07:34:56 +0000 UTC  900.00   400.00
+Smartphone  Nexus            0000-01-01 11:23:45 +0000 UTC  500.00   400.00
+Smartphone  HTC One          0000-01-01 12:34:56 +0000 UTC  400.00   NULL
+Tablet      iPad             0000-01-01 01:23:45 +0000 UTC  700.00   150.00
+Tablet      Samsung          0000-01-01 11:23:45 +0000 UTC  200.00   150.00
+Tablet      Kindle Fire      0000-01-01 12:34:56 +0000 UTC  150.00   NULL
+
+query TTTRR
+SELECT group_name, product_name, ptimestamp, price, first_value(price) OVER (PARTITION BY group_name ORDER BY ptimestamp RANGE BETWEEN '12 hours' PRECEDING AND '6 hours' FOLLOWING) FROM products ORDER BY group_name, ptimestamp
+----
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 +0000  1200.00  1200.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 +0000  700.00   1200.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 +0000  800.00   800.00
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 +0000  700.00   800.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 +0000  200.00   200.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 +0000  500.00   200.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 +0000  900.00   900.00
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 +0000  400.00   900.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   700.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 +0000  200.00   700.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   150.00
+
+query TTTRR
+SELECT group_name, product_name, ptimestamptz, price, avg(price) OVER (PARTITION BY group_name ORDER BY ptimestamptz RANGE BETWEEN '1 days 12 hours' PRECEDING AND CURRENT ROW) FROM products ORDER BY group_name, ptimestamptz
+----
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 UTC  1200.00  1200.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 UTC  700.00   950.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 UTC  800.00   900.00
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 UTC  700.00   850.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 UTC  200.00   200.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 UTC  500.00   350.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 UTC  900.00   533.33333333333333333
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 UTC  400.00   500.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 UTC  700.00   700.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 UTC  200.00   450.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 UTC  150.00   350.00
+
+query TTRR
+SELECT product_name, pinterval, price, avg(price) OVER (ORDER BY pinterval RANGE BETWEEN '2 hours 34 minutes 56 seconds' PRECEDING AND '3 months' FOLLOWING) FROM products ORDER BY pinterval, group_id
+----
+iPhone           00:01:02               900.00   586.36363636363636364
+Dell             00:01:02               800.00   586.36363636363636364
+Nexus            01:02:03               500.00   586.36363636363636364
+Sony VAIO        01:02:03               700.00   586.36363636363636364
+Samsung          01:02:03               200.00   586.36363636363636364
+HTC One          1 day 02:03:04         400.00   558.33333333333333333
+Lenovo Thinkpad  1 day 02:03:04         700.00   558.33333333333333333
+Kindle Fire      1 day 02:03:04         150.00   558.33333333333333333
+Microsoft Lumia  1 mon 2 days 03:04:05  200.00   700.00
+HP Elite         1 mon 2 days 03:04:05  1200.00  700.00
+iPad             1 mon 2 days 03:04:05  700.00   700.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint DESC RANGE 200 PRECEDING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  1200
+Laptop      Dell             800.00   800
+Laptop      Lenovo Thinkpad  700.00   2200
+Laptop      Sony VAIO        700.00   2200
+Smartphone  iPhone           900.00   900
+Smartphone  Nexus            500.00   500
+Smartphone  HTC One          400.00   900
+Smartphone  Microsoft Lumia  200.00   600
+Tablet      iPad             700.00   700
+Tablet      Samsung          200.00   200
+Tablet      Kindle Fire      150.00   350
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price DESC RANGE 200.002 PRECEDING) FROM products ORDER BY group_name, price DESC, group_id
+----
+Laptop      HP Elite         1200.00  1200.00
+Laptop      Dell             800.00   800.00
+Laptop      Lenovo Thinkpad  700.00   2200.00
+Laptop      Sony VAIO        700.00   2200.00
+Smartphone  iPhone           900.00   900.00
+Smartphone  Nexus            500.00   500.00
+Smartphone  HTC One          400.00   900.00
+Smartphone  Microsoft Lumia  200.00   600.00
+Tablet      iPad             700.00   700.00
+Tablet      Samsung          200.00   200.00
+Tablet      Kindle Fire      150.00   350.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(pricefloat) OVER (PARTITION BY group_name ORDER BY pricefloat DESC RANGE BETWEEN 200.01 PRECEDING AND 99.99 FOLLOWING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  1200
+Laptop      Dell             800.00   800
+Laptop      Lenovo Thinkpad  700.00   2200
+Laptop      Sony VAIO        700.00   2200
+Smartphone  iPhone           900.00   900
+Smartphone  Nexus            500.00   500
+Smartphone  HTC One          400.00   900
+Smartphone  Microsoft Lumia  200.00   600
+Tablet      iPad             700.00   700
+Tablet      Samsung          200.00   350
+Tablet      Kindle Fire      150.00   350
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price DESC RANGE BETWEEN 99.99 PRECEDING AND 100.00 PRECEDING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  NULL
+Laptop      Dell             800.00   NULL
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Smartphone  iPhone           900.00   NULL
+Smartphone  Nexus            500.00   NULL
+Smartphone  HTC One          400.00   NULL
+Smartphone  Microsoft Lumia  200.00   NULL
+Tablet      iPad             700.00   NULL
+Tablet      Samsung          200.00   NULL
+Tablet      Kindle Fire      150.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint DESC RANGE BETWEEN 300 PRECEDING AND 50 PRECEDING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  NULL
+Laptop      Dell             800.00   NULL
+Laptop      Lenovo Thinkpad  700.00   800
+Laptop      Sony VAIO        700.00   800
+Smartphone  iPhone           900.00   NULL
+Smartphone  Nexus            500.00   NULL
+Smartphone  HTC One          400.00   500
+Smartphone  Microsoft Lumia  200.00   900
+Tablet      iPad             700.00   NULL
+Tablet      Samsung          200.00   NULL
+Tablet      Kindle Fire      150.00   200
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint DESC RANGE BETWEEN 50 FOLLOWING AND 300 FOLLOWING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  NULL
+Laptop      Dell             800.00   1400
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Smartphone  iPhone           900.00   NULL
+Smartphone  Nexus            500.00   600
+Smartphone  HTC One          400.00   200
+Smartphone  Microsoft Lumia  200.00   NULL
+Tablet      iPad             700.00   NULL
+Tablet      Samsung          200.00   150
+Tablet      Kindle Fire      150.00   NULL
+
+query TRR
+SELECT group_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price DESC RANGE BETWEEN 49.999 FOLLOWING AND 300.001 FOLLOWING) FROM products ORDER BY group_name, price DESC, group_id
+----
+Laptop      1200.00  NULL
+Laptop      800.00   1400.00
+Laptop      700.00   NULL
+Laptop      700.00   NULL
+Smartphone  900.00   NULL
+Smartphone  500.00   600.00
+Smartphone  400.00   200.00
+Smartphone  200.00   NULL
+Tablet      700.00   NULL
+Tablet      200.00   150.00
+Tablet      150.00   NULL
+
+query TRR
+SELECT group_name, price, sum(pricefloat) OVER (PARTITION BY group_name ORDER BY pricefloat DESC RANGE BETWEEN 50 FOLLOWING AND 300 FOLLOWING) FROM products ORDER BY group_name, price DESC, group_id
+----
+Laptop      1200.00  NULL
+Laptop      800.00   1400
+Laptop      700.00   NULL
+Laptop      700.00   NULL
+Smartphone  900.00   NULL
+Smartphone  500.00   600
+Smartphone  400.00   200
+Smartphone  200.00   NULL
+Tablet      700.00   NULL
+Tablet      200.00   150
+Tablet      150.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, nth_value(pricefloat, 2) OVER (PARTITION BY group_name ORDER BY pricefloat DESC RANGE BETWEEN 1.23 FOLLOWING AND 500.23 FOLLOWING) FROM products ORDER BY group_name, pricefloat DESC, group_id
+----
+Laptop      HP Elite         1200.00  700
+Laptop      Dell             800.00   700
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Smartphone  iPhone           900.00   400
+Smartphone  Nexus            500.00   200
+Smartphone  HTC One          400.00   NULL
+Smartphone  Microsoft Lumia  200.00   NULL
+Tablet      iPad             700.00   NULL
+Tablet      Samsung          200.00   NULL
+Tablet      Kindle Fire      150.00   NULL
+
+query TTTRR
+SELECT group_name, product_name, pdate, price, sum(price) OVER (ORDER BY pdate DESC RANGE '1 days' PRECEDING) FROM products ORDER BY pdate DESC, group_id
+----
+Smartphone  HTC One          2018-07-31 00:00:00 +0000 +0000  400.00   2950.00
+Smartphone  iPhone           2018-07-31 00:00:00 +0000 +0000  900.00   2950.00
+Laptop      Lenovo Thinkpad  2018-07-31 00:00:00 +0000 +0000  700.00   2950.00
+Laptop      Dell             2018-07-31 00:00:00 +0000 +0000  800.00   2950.00
+Tablet      Kindle Fire      2018-07-31 00:00:00 +0000 +0000  150.00   2950.00
+Smartphone  Microsoft Lumia  2018-07-30 00:00:00 +0000 +0000  200.00   6450.00
+Smartphone  Nexus            2018-07-30 00:00:00 +0000 +0000  500.00   6450.00
+Laptop      HP Elite         2018-07-30 00:00:00 +0000 +0000  1200.00  6450.00
+Laptop      Sony VAIO        2018-07-30 00:00:00 +0000 +0000  700.00   6450.00
+Tablet      iPad             2018-07-30 00:00:00 +0000 +0000  700.00   6450.00
+Tablet      Samsung          2018-07-30 00:00:00 +0000 +0000  200.00   6450.00
+
+query TTRR
+SELECT product_name, ptime, price, avg(price) OVER (ORDER BY ptime DESC RANGE BETWEEN '1 hours 15 minutes' PRECEDING AND '1 hours 15 minutes' FOLLOWING) FROM products ORDER BY ptime DESC, group_id
+----
+HTC One          0000-01-01 12:34:56 +0000 UTC  400.00   441.66666666666666667
+Lenovo Thinkpad  0000-01-01 12:34:56 +0000 UTC  700.00   441.66666666666666667
+Kindle Fire      0000-01-01 12:34:56 +0000 UTC  150.00   441.66666666666666667
+Nexus            0000-01-01 11:23:45 +0000 UTC  500.00   441.66666666666666667
+Sony VAIO        0000-01-01 11:23:45 +0000 UTC  700.00   441.66666666666666667
+Samsung          0000-01-01 11:23:45 +0000 UTC  200.00   441.66666666666666667
+iPhone           0000-01-01 07:34:56 +0000 UTC  900.00   850.00
+Dell             0000-01-01 07:34:56 +0000 UTC  800.00   850.00
+Microsoft Lumia  0000-01-01 01:23:45 +0000 UTC  200.00   700.00
+HP Elite         0000-01-01 01:23:45 +0000 UTC  1200.00  700.00
+iPad             0000-01-01 01:23:45 +0000 UTC  700.00   700.00
+
+query TTTRR
+SELECT group_name, product_name, ptime, price, min(price) OVER (PARTITION BY group_name ORDER BY ptime DESC RANGE BETWEEN '1 hours' FOLLOWING AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_name, ptime DESC
+----
+Laptop      Lenovo Thinkpad  0000-01-01 12:34:56 +0000 UTC  700.00   700.00
+Laptop      Sony VAIO        0000-01-01 11:23:45 +0000 UTC  700.00   800.00
+Laptop      Dell             0000-01-01 07:34:56 +0000 UTC  800.00   1200.00
+Laptop      HP Elite         0000-01-01 01:23:45 +0000 UTC  1200.00  NULL
+Smartphone  HTC One          0000-01-01 12:34:56 +0000 UTC  400.00   200.00
+Smartphone  Nexus            0000-01-01 11:23:45 +0000 UTC  500.00   200.00
+Smartphone  iPhone           0000-01-01 07:34:56 +0000 UTC  900.00   200.00
+Smartphone  Microsoft Lumia  0000-01-01 01:23:45 +0000 UTC  200.00   NULL
+Tablet      Kindle Fire      0000-01-01 12:34:56 +0000 UTC  150.00   200.00
+Tablet      Samsung          0000-01-01 11:23:45 +0000 UTC  200.00   700.00
+Tablet      iPad             0000-01-01 01:23:45 +0000 UTC  700.00   NULL
+
+query TTTRR
+SELECT group_name, product_name, ptimestamp, price, first_value(price) OVER (PARTITION BY group_name ORDER BY ptimestamp DESC RANGE BETWEEN '12 hours' PRECEDING AND '6 hours' FOLLOWING) FROM products ORDER BY group_name, ptimestamp DESC
+----
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 +0000  700.00   700.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 +0000  800.00   700.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 +0000  700.00   700.00
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 +0000  1200.00  700.00
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 +0000  400.00   400.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 +0000  900.00   400.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 +0000  500.00   500.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 +0000  200.00   500.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   150.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 +0000  200.00   200.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   200.00
+
+query TTTRR
+SELECT group_name, product_name, ptimestamptz, price, avg(price) OVER (PARTITION BY group_name ORDER BY ptimestamptz DESC RANGE BETWEEN '1 days 12 hours' PRECEDING AND CURRENT ROW) FROM products ORDER BY group_name, ptimestamptz DESC
+----
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 UTC  700.00   700.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 UTC  800.00   750.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 UTC  700.00   733.33333333333333333
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 UTC  1200.00  850.00
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 UTC  400.00   400.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 UTC  900.00   650.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 UTC  500.00   600.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 UTC  200.00   500.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 UTC  150.00   150.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 UTC  200.00   175.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 UTC  700.00   350.00
+
+query TTRR
+SELECT product_name, pinterval, price, avg(price) OVER (ORDER BY pinterval DESC RANGE BETWEEN '2 hours 34 minutes 56 seconds' PRECEDING AND '3 months' FOLLOWING) FROM products ORDER BY pinterval DESC, group_id
+----
+Microsoft Lumia  1 mon 2 days 03:04:05  200.00   586.36363636363636364
+HP Elite         1 mon 2 days 03:04:05  1200.00  586.36363636363636364
+iPad             1 mon 2 days 03:04:05  700.00   586.36363636363636364
+HTC One          1 day 02:03:04         400.00   543.75
+Lenovo Thinkpad  1 day 02:03:04         700.00   543.75
+Kindle Fire      1 day 02:03:04         150.00   543.75
+Nexus            01:02:03               500.00   620.00
+Sony VAIO        01:02:03               700.00   620.00
+Samsung          01:02:03               200.00   620.00
+iPhone           00:01:02               900.00   620.00
+Dell             00:01:02               800.00   620.00
+
+query TRTT
+SELECT group_name, price, product_name, array_agg(product_name) OVER (PARTITION BY group_name ORDER BY price, group_id) FROM products ORDER BY group_id
+----
+Smartphone  200.00   Microsoft Lumia  {"Microsoft Lumia"}
+Smartphone  400.00   HTC One          {"Microsoft Lumia","HTC One"}
+Smartphone  500.00   Nexus            {"Microsoft Lumia","HTC One",Nexus}
+Smartphone  900.00   iPhone           {"Microsoft Lumia","HTC One",Nexus,iPhone}
+Laptop      1200.00  HP Elite         {"Lenovo Thinkpad","Sony VAIO",Dell,"HP Elite"}
+Laptop      700.00   Lenovo Thinkpad  {"Lenovo Thinkpad"}
+Laptop      700.00   Sony VAIO        {"Lenovo Thinkpad","Sony VAIO"}
+Laptop      800.00   Dell             {"Lenovo Thinkpad","Sony VAIO",Dell}
+Tablet      700.00   iPad             {"Kindle Fire",Samsung,iPad}
+Tablet      150.00   Kindle Fire      {"Kindle Fire"}
+Tablet      200.00   Samsung          {"Kindle Fire",Samsung}
+
+query TT
+SELECT product_name, array_agg(product_name) OVER (ORDER BY group_id) FROM products ORDER BY group_id
+----
+Microsoft Lumia  {"Microsoft Lumia"}
+HTC One          {"Microsoft Lumia","HTC One"}
+Nexus            {"Microsoft Lumia","HTC One",Nexus}
+iPhone           {"Microsoft Lumia","HTC One",Nexus,iPhone}
+HP Elite         {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite"}
+Lenovo Thinkpad  {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad"}
+Sony VAIO        {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO"}
+Dell             {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell}
+iPad             {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad}
+Kindle Fire      {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad,"Kindle Fire"}
+Samsung          {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad,"Kindle Fire",Samsung}
+
+statement error GROUPS mode requires an ORDER BY clause
+SELECT avg(price) OVER (GROUPS group_id PRECEDING) FROM products
+
+statement error GROUPS mode requires an ORDER BY clause
+SELECT avg(price) OVER (GROUPS 1 PRECEDING) FROM products
+
+statement error frame starting offset must not be null
+SELECT avg(price) OVER (ORDER BY group_id GROUPS NULL PRECEDING) FROM products
+
+statement error frame starting offset must not be null
+SELECT avg(price) OVER (ORDER BY group_id GROUPS BETWEEN NULL PRECEDING AND 1 FOLLOWING) FROM products
+
+statement error frame starting offset must not be negative
+SELECT price, avg(price) OVER (PARTITION BY price ORDER BY group_id GROUPS -1 PRECEDING) AS avg_price FROM products
+
+statement error frame starting offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price ORDER BY group_id GROUPS -1 PRECEDING)
+
+statement error frame ending offset must not be null
+SELECT avg(price) OVER (ORDER BY group_id GROUPS BETWEEN 1 PRECEDING AND NULL FOLLOWING) FROM products
+
+statement error frame ending offset must not be negative
+SELECT price, avg(price) OVER (PARTITION BY price ORDER BY group_id GROUPS BETWEEN 1 FOLLOWING AND -1 FOLLOWING) AS avg_price FROM products
+
+statement error frame ending offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price ORDER BY group_id GROUPS BETWEEN 1 FOLLOWING AND -1 FOLLOWING)
+
+statement error frame ending offset must not be negative
+SELECT product_name, price, min(price) OVER (PARTITION BY group_name ORDER BY group_id GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS min_over_three, max(price) OVER (PARTITION BY group_name ORDER BY group_id GROUPS BETWEEN UNBOUNDED PRECEDING AND -1 FOLLOWING) AS max_over_partition FROM products ORDER BY group_id
+
+statement error argument of WINDOW FRAME START must be type int, not type decimal
+SELECT avg(price) OVER (PARTITION BY group_name ORDER BY group_id GROUPS 1.5 PRECEDING) AS avg_price FROM products
+
+statement error argument of WINDOW FRAME START must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ORDER BY group_id GROUPS 1.5 PRECEDING)
+
+statement error argument of WINDOW FRAME START must be type int, not type decimal
+SELECT avg(price) OVER (PARTITION BY group_name ORDER BY group_id GROUPS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING) AS avg_price FROM products
+
+statement error argument of WINDOW FRAME START must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ORDER BY group_id GROUPS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING)
+
+statement error argument of WINDOW FRAME END must be type int, not type decimal
+SELECT avg(price) OVER (PARTITION BY group_name ORDER BY group_id GROUPS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING) AS avg_price FROM products
+
+statement error argument of WINDOW FRAME END must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ORDER BY group_id GROUPS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING)
+
+query RRRRR
+SELECT price, sum(price) OVER (ORDER BY price GROUPS UNBOUNDED PRECEDING), sum(price) OVER (ORDER BY price GROUPS 100 PRECEDING), sum(price) OVER (ORDER BY price GROUPS 1 PRECEDING), sum(price) OVER (ORDER BY group_name GROUPS CURRENT ROW) FROM products ORDER BY price, group_id
+----
+150.00   150.00   150.00   150.00   1050.00
+200.00   550.00   550.00   550.00   2000.00
+200.00   550.00   550.00   550.00   1050.00
+400.00   950.00   950.00   800.00   2000.00
+500.00   1450.00  1450.00  900.00   2000.00
+700.00   3550.00  3550.00  2600.00  3400.00
+700.00   3550.00  3550.00  2600.00  3400.00
+700.00   3550.00  3550.00  2600.00  1050.00
+800.00   4350.00  4350.00  2900.00  3400.00
+900.00   5250.00  5250.00  1700.00  2000.00
+1200.00  6450.00  6450.00  2100.00  3400.00
+
+query RIRRRRRR
+SELECT price, dense_rank() OVER w, avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 100 PRECEDING), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 2 PRECEDING), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 100 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (ORDER BY price) ORDER BY price
+----
+150.00   1  NULL  NULL                   150.00                 237.50                 586.36363636363636364  586.36363636363636364
+200.00   2  NULL  NULL                   183.33333333333333333  290.00                 586.36363636363636364  586.36363636363636364
+200.00   2  NULL  NULL                   183.33333333333333333  290.00                 586.36363636363636364  586.36363636363636364
+400.00   3  NULL  150.00                 237.50                 443.75                 586.36363636363636364  586.36363636363636364
+500.00   4  NULL  183.33333333333333333  290.00                 483.33333333333333333  586.36363636363636364  586.36363636363636364
+700.00   5  NULL  237.50                 443.75                 525.00                 586.36363636363636364  586.36363636363636364
+700.00   5  NULL  237.50                 443.75                 525.00                 586.36363636363636364  586.36363636363636364
+700.00   5  NULL  237.50                 443.75                 525.00                 586.36363636363636364  586.36363636363636364
+800.00   6  NULL  290.00                 483.33333333333333333  586.36363636363636364  586.36363636363636364  586.36363636363636364
+900.00   7  NULL  443.75                 525.00                 586.36363636363636364  586.36363636363636364  586.36363636363636364
+1200.00  8  NULL  483.33333333333333333  586.36363636363636364  586.36363636363636364  586.36363636363636364  586.36363636363636364
+
+query RIRRRRRR
+SELECT price, dense_rank() OVER w, avg(price) OVER (w GROUPS BETWEEN 4 PRECEDING AND 100 PRECEDING), avg(price) OVER (w GROUPS BETWEEN 3 PRECEDING AND 2 PRECEDING), avg(price) OVER (w GROUPS BETWEEN 2 PRECEDING AND CURRENT ROW), avg(price) OVER (w GROUPS BETWEEN 1 PRECEDING AND 2 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 1 PRECEDING AND 100 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (ORDER BY price) ORDER BY price
+----
+150.00   1  NULL  NULL                   150.00                 237.50                 586.36363636363636364  586.36363636363636364
+200.00   2  NULL  NULL                   183.33333333333333333  290.00                 586.36363636363636364  586.36363636363636364
+200.00   2  NULL  NULL                   183.33333333333333333  290.00                 586.36363636363636364  586.36363636363636364
+400.00   3  NULL  150.00                 237.50                 485.71428571428571429  630.00                 630.00
+500.00   4  NULL  183.33333333333333333  325.00                 633.33333333333333333  737.50                 737.50
+700.00   5  NULL  266.66666666666666667  600.00                 716.66666666666666667  785.71428571428571429  785.71428571428571429
+700.00   5  NULL  266.66666666666666667  600.00                 716.66666666666666667  785.71428571428571429  785.71428571428571429
+700.00   5  NULL  266.66666666666666667  600.00                 716.66666666666666667  785.71428571428571429  785.71428571428571429
+800.00   6  NULL  450.00                 680.00                 833.33333333333333333  833.33333333333333333  833.33333333333333333
+900.00   7  NULL  650.00                 760.00                 966.66666666666666667  966.66666666666666667  966.66666666666666667
+1200.00  8  NULL  725.00                 966.66666666666666667  1050.00                1050.00                1050.00
+
+query RIRRRRRRR
+SELECT price, dense_rank() OVER w, avg(price) OVER (w GROUPS BETWEEN 0 PRECEDING AND 0 PRECEDING), avg(price) OVER (w GROUPS BETWEEN 0 PRECEDING AND CURRENT ROW), avg(price) OVER (w GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN CURRENT ROW AND CURRENT ROW), avg(price) OVER (w GROUPS BETWEEN CURRENT ROW AND 2 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN CURRENT ROW AND 100 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (ORDER BY price) ORDER BY price
+----
+150.00   1  150.00   150.00   150.00   150.00   237.50                 586.36363636363636364  586.36363636363636364
+200.00   2  200.00   200.00   200.00   200.00   325.00                 630.00                 630.00
+200.00   2  200.00   200.00   200.00   200.00   325.00                 630.00                 630.00
+400.00   3  400.00   400.00   400.00   400.00   600.00                 737.50                 737.50
+500.00   4  500.00   500.00   500.00   500.00   680.00                 785.71428571428571429  785.71428571428571429
+700.00   5  700.00   700.00   700.00   700.00   760.00                 833.33333333333333333  833.33333333333333333
+700.00   5  700.00   700.00   700.00   700.00   760.00                 833.33333333333333333  833.33333333333333333
+700.00   5  700.00   700.00   700.00   700.00   760.00                 833.33333333333333333  833.33333333333333333
+800.00   6  800.00   800.00   800.00   800.00   966.66666666666666667  966.66666666666666667  966.66666666666666667
+900.00   7  900.00   900.00   900.00   900.00   1050.00                1050.00                1050.00
+1200.00  8  1200.00  1200.00  1200.00  1200.00  1200.00                1200.00                1200.00
+
+query RIRRRRRR
+SELECT price, dense_rank() OVER w, avg(price) OVER (w GROUPS BETWEEN 3 FOLLOWING AND 100 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 3 FOLLOWING AND 1 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 2 FOLLOWING AND 6 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 3 FOLLOWING AND 3 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 0 FOLLOWING AND 4 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 5 FOLLOWING AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (ORDER BY price) ORDER BY price
+----
+150.00   1  785.71428571428571429  NULL  671.42857142857142857  500.00   443.75                 966.66666666666666667
+200.00   2  833.33333333333333333  NULL  785.71428571428571429  700.00   525.00                 1050.00
+200.00   2  833.33333333333333333  NULL  785.71428571428571429  700.00   525.00                 1050.00
+400.00   3  966.66666666666666667  NULL  833.33333333333333333  800.00   671.42857142857142857  1200.00
+500.00   4  1050.00                NULL  966.66666666666666667  900.00   785.71428571428571429  NULL
+700.00   5  1200.00                NULL  1050.00                1200.00  833.33333333333333333  NULL
+700.00   5  1200.00                NULL  1050.00                1200.00  833.33333333333333333  NULL
+700.00   5  1200.00                NULL  1050.00                1200.00  833.33333333333333333  NULL
+800.00   6  NULL                   NULL  1200.00                NULL     966.66666666666666667  NULL
+900.00   7  NULL                   NULL  NULL                   NULL     1050.00                NULL
+1200.00  8  NULL                   NULL  NULL                   NULL     1200.00                NULL
+
+query TTRRR
+SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ORDER BY price GROUPS BETWEEN CURRENT ROW AND 3 FOLLOWING), avg(price) OVER (ORDER BY price GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   500.00   586.36363636363636364
+Smartphone  HTC One          400.00   600.00   586.36363636363636364
+Smartphone  Nexus            500.00   700.00   586.36363636363636364
+Smartphone  iPhone           900.00   900.00   586.36363636363636364
+Laptop      HP Elite         1200.00  1200.00  586.36363636363636364
+Laptop      Lenovo Thinkpad  700.00   850.00   586.36363636363636364
+Laptop      Sony VAIO        700.00   850.00   586.36363636363636364
+Laptop      Dell             800.00   1000.00  586.36363636363636364
+Tablet      iPad             700.00   700.00   586.36363636363636364
+Tablet      Kindle Fire      150.00   350.00   586.36363636363636364
+Tablet      Samsung          200.00   450.00   586.36363636363636364
+
+query TTRRR
+SELECT group_name, product_name, price, avg(price) OVER (ORDER BY group_id GROUPS BETWEEN 1 PRECEDING AND 2 PRECEDING), avg(price) OVER (ORDER BY price GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   NULL  200.00
+Smartphone  HTC One          400.00   NULL  400.00
+Smartphone  Nexus            500.00   NULL  500.00
+Smartphone  iPhone           900.00   NULL  900.00
+Laptop      HP Elite         1200.00  NULL  1200.00
+Laptop      Lenovo Thinkpad  700.00   NULL  700.00
+Laptop      Sony VAIO        700.00   NULL  700.00
+Laptop      Dell             800.00   NULL  800.00
+Tablet      iPad             700.00   NULL  700.00
+Tablet      Kindle Fire      150.00   NULL  150.00
+Tablet      Samsung          200.00   NULL  200.00
+
+query RTR
+SELECT
+	price, array_agg(price) OVER w, sum(price) OVER w
+FROM
+	products
+WINDOW
+	w AS (
+		ORDER BY
+			price
+		RANGE
+			UNBOUNDED PRECEDING EXCLUDE CURRENT ROW
+	)
+ORDER BY
+	price
+----
+150.00   NULL                                                                     NULL
+200.00   {150.00,200.00}                                                          350.00
+200.00   {150.00,200.00}                                                          350.00
+400.00   {150.00,200.00,200.00}                                                   550.00
+500.00   {150.00,200.00,200.00,400.00}                                            950.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00}                       2850.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00}                       2850.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00}                       2850.00
+800.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                3550.00
+900.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00}         4350.00
+1200.00  {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00}  5250.00
+
+query RTR
+SELECT
+	price, array_agg(price) OVER w, max(price) OVER w
+FROM
+	products
+WINDOW
+	w AS (
+		ORDER BY
+			price
+		RANGE
+			UNBOUNDED PRECEDING EXCLUDE GROUP
+	)
+ORDER BY
+	price
+----
+150.00   NULL                                                                     NULL
+200.00   {150.00}                                                                 150.00
+200.00   {150.00}                                                                 150.00
+400.00   {150.00,200.00,200.00}                                                   200.00
+500.00   {150.00,200.00,200.00,400.00}                                            400.00
+700.00   {150.00,200.00,200.00,400.00,500.00}                                     500.00
+700.00   {150.00,200.00,200.00,400.00,500.00}                                     500.00
+700.00   {150.00,200.00,200.00,400.00,500.00}                                     500.00
+800.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                700.00
+900.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00}         800.00
+1200.00  {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00}  900.00
+
+query RTR
+SELECT
+	price, array_agg(price) OVER w, avg(price) OVER w
+FROM
+	products
+WINDOW
+	w AS (
+		ORDER BY
+			price
+		RANGE
+			UNBOUNDED PRECEDING EXCLUDE TIES
+	)
+ORDER BY
+	price
+----
+150.00   {150.00}                                                                         150.00
+200.00   {150.00,200.00}                                                                  175.00
+200.00   {150.00,200.00}                                                                  175.00
+400.00   {150.00,200.00,200.00,400.00}                                                    237.50
+500.00   {150.00,200.00,200.00,400.00,500.00}                                             290.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00}                                      358.33333333333333333
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00}                                      358.33333333333333333
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00}                                      358.33333333333333333
+800.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00}                 483.33333333333333333
+900.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00}          525.00
+1200.00  {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00,1200.00}  586.36363636363636364
+
+query RTR
+SELECT
+	price, array_agg(price) OVER w, avg(price) OVER w
+FROM
+	products
+WINDOW
+	w AS (
+		ORDER BY
+			price
+		RANGE
+			UNBOUNDED PRECEDING EXCLUDE NO OTHERS
+	)
+ORDER BY
+	price
+----
+150.00   {150.00}                                                                         150.00
+200.00   {150.00,200.00,200.00}                                                           183.33333333333333333
+200.00   {150.00,200.00,200.00}                                                           183.33333333333333333
+400.00   {150.00,200.00,200.00,400.00}                                                    237.50
+500.00   {150.00,200.00,200.00,400.00,500.00}                                             290.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                        443.75
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                        443.75
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                        443.75
+800.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00}                 483.33333333333333333
+900.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00}          525.00
+1200.00  {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00,1200.00}  586.36363636363636364
+
+query TTTT
+SELECT
+	first_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW
+	),
+	first_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE GROUP
+	),
+	first_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE TIES
+	),
+	first_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS
+	)
+FROM
+	products
+WINDOW
+	w AS (ORDER BY group_id)
+ORDER BY
+	group_id
+----
+NULL             NULL             Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+
+query TTTT
+SELECT
+	last_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW
+	),
+	last_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE GROUP
+	),
+	last_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE TIES
+	),
+	last_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS
+	)
+FROM
+	products
+WINDOW
+	w AS (ORDER BY group_id)
+ORDER BY
+	group_id
+----
+NULL             NULL             Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  HTC One          HTC One
+HTC One          HTC One          Nexus            Nexus
+Nexus            Nexus            iPhone           iPhone
+iPhone           iPhone           HP Elite         HP Elite
+HP Elite         HP Elite         Lenovo Thinkpad  Lenovo Thinkpad
+Lenovo Thinkpad  Lenovo Thinkpad  Sony VAIO        Sony VAIO
+Sony VAIO        Sony VAIO        Dell             Dell
+Dell             Dell             iPad             iPad
+iPad             iPad             Kindle Fire      Kindle Fire
+Kindle Fire      Kindle Fire      Samsung          Samsung
+
+query TTTT
+SELECT
+	nth_value(product_name, 2) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW
+	),
+	nth_value(product_name, 3) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE GROUP
+	),
+	nth_value(product_name, 4) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE TIES
+	),
+	nth_value(product_name, 5) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS
+	)
+FROM
+	products
+WINDOW
+	w AS (ORDER BY group_id)
+ORDER BY
+	group_id
+----
+NULL     NULL   NULL    NULL
+NULL     NULL   NULL    NULL
+HTC One  NULL   NULL    NULL
+HTC One  Nexus  iPhone  NULL
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+
+# Test for #32702
+
+statement ok
+CREATE TABLE x (a INT)
+
+statement ok
+INSERT INTO x VALUES (1), (2), (3)
+
+query IT
+SELECT a, json_agg(a) OVER (ORDER BY a) FROM x ORDER BY a
+----
+1 [1]
+2 [1, 2]
+3 [1, 2, 3]
+
+# Test for #35267
+query I
+SELECT
+    row_number() OVER (PARTITION BY s)
+FROM
+    (SELECT sum(a) AS s FROM (SELECT a FROM x UNION ALL SELECT a FROM x) GROUP BY a)
+----
+1
+1
+1
+
+# Tests for #32050
+
+statement error window function calls cannot be nested
+SELECT sum(a) OVER (PARTITION BY count(a) OVER ()) FROM x
+
+statement error window function calls cannot be nested
+SELECT sum(a) OVER (ORDER BY count(a) OVER ()) FROM x
+
+statement error window function calls cannot be nested
+SELECT sum(a) OVER (PARTITION BY count(a) OVER () + 1) FROM x
+
+statement error window function calls cannot be nested
+SELECT sum(a) OVER (ORDER BY count(a) OVER () + 1) FROM x
+
+# TODO(justin): blocked by #37134.
+# statement error more than one row returned by a subquery used as an expression
+# SELECT sum(a) OVER (PARTITION BY (SELECT count(*) FROM x GROUP BY a)) FROM x
+
+query I
+SELECT sum(a) OVER (PARTITION BY (SELECT count(*) FROM x GROUP BY a LIMIT 1))::INT FROM x
+----
+6
+6
+6
+
+# Regression test for #27293 - make sure comparing two tuple types when
+# generating window functions expressions doesn't panic.
+
+query II
+SELECT
+    min(a) OVER (PARTITION BY (a, a)) AS min,
+    max(a) OVER (PARTITION BY (a, a)) AS max
+FROM
+    (SELECT 1 AS a)
+----
+1 1
+
+query II
+SELECT
+    min(a) OVER (PARTITION BY (())) AS min,
+    max(a) OVER (PARTITION BY (())) AS max
+FROM
+    (SELECT 1 AS a)
+----
+1 1
+
+query T
+SELECT string_agg('foo', s) OVER () FROM (SELECT * FROM kv LIMIT 1)
+----
+foo
+
+# Regression test for #37201.
+query I
+SELECT jsonb_agg(a) OVER (ORDER BY a GROUPS BETWEEN 5 FOLLOWING AND UNBOUNDED FOLLOWING) FROM x
+----
+NULL
+NULL
+NULL
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+INSERT INTO abc VALUES
+  (1, 10, 20),
+  (2, 10, 20),
+  (3, 10, 20),
+  (4, 10, 30),
+  (5, 10, 30),
+  (6, 10, 30)
+
+query TTTTTTTTTTTT rowsort
+SELECT
+  avg(a) OVER (),
+  avg(a) OVER (ORDER BY a),
+  avg(a) OVER (ORDER BY b),
+  avg(a) OVER (ORDER BY c),
+  avg(b) OVER (),
+  avg(b) OVER (ORDER BY a),
+  avg(b) OVER (ORDER BY b),
+  avg(b) OVER (ORDER BY c),
+  avg(c) OVER (),
+  avg(c) OVER (ORDER BY a),
+  avg(c) OVER (ORDER BY b),
+  avg(c) OVER (ORDER BY c)
+FROM abc
+----
+3.5  1    3.5  2    10  10  10  10  25  20    25  20
+3.5  1.5  3.5  2    10  10  10  10  25  20    25  20
+3.5  2    3.5  2    10  10  10  10  25  20    25  20
+3.5  2.5  3.5  3.5  10  10  10  10  25  22.5  25  25
+3.5  3    3.5  3.5  10  10  10  10  25  24    25  25
+3.5  3.5  3.5  3.5  10  10  10  10  25  25    25  25
+
+query TTTTTTTTTTTT rowsort
+SELECT
+  avg(a) OVER            (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(a) OVER (ORDER BY a RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(a) OVER (ORDER BY b RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(a) OVER (ORDER BY c RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(b) OVER            (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(b) OVER (ORDER BY a RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(b) OVER (ORDER BY b RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(b) OVER (ORDER BY c RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(c) OVER            (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(c) OVER (ORDER BY a RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(c) OVER (ORDER BY b RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(c) OVER (ORDER BY c RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+FROM abc
+----
+3.5  3.5  3.5  3.5  10  10  10  10  25  25  25  25
+3.5  3.5  3.5  3.5  10  10  10  10  25  25  25  25
+3.5  3.5  3.5  3.5  10  10  10  10  25  25  25  25
+3.5  3.5  3.5  3.5  10  10  10  10  25  25  25  25
+3.5  3.5  3.5  3.5  10  10  10  10  25  25  25  25
+3.5  3.5  3.5  3.5  10  10  10  10  25  25  25  25
+
+query T
+SELECT array_agg(a) OVER (w RANGE 1 PRECEDING) FROM x WINDOW w AS (ORDER BY a DESC) ORDER BY a
+----
+{2,1}
+{3,2}
+{3}
+
+statement error GROUPS mode requires an ORDER BY clause
+SELECT array_agg(a) OVER (w GROUPS 1 PRECEDING) FROM x WINDOW w AS (PARTITION BY a)
+
+query T
+SELECT array_agg(a) OVER (w GROUPS 1 PRECEDING) FROM x WINDOW w AS (PARTITION BY a ORDER BY a DESC) ORDER BY a
+----
+{1}
+{2}
+{3}
+
+# Regression tests for #38103
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO t VALUES (1, 1), (2, NULL), (3, 3)
+
+query I
+SELECT min(b) OVER () FROM t
+----
+1
+1
+1
+
+query IIR
+SELECT a, b, sum(b) OVER (ROWS 0 PRECEDING) FROM t ORDER BY a
+----
+1 1    1
+2 NULL NULL
+3 3    3
+
+query IIR
+SELECT a, b, avg(b) OVER () FROM t ORDER BY a
+----
+1  1    2
+2  NULL 2
+3  3    2
+
+query IIR
+SELECT a, b, avg(b) OVER (ROWS 0 PRECEDING) FROM t ORDER BY a
+----
+1  1     1
+2  NULL  NULL
+3  3     3
+
+statement ok
+CREATE TABLE wxyz (w INT PRIMARY KEY, x INT, y INT, z INT)
+
+statement ok
+INSERT INTO wxyz VALUES
+  (1, 10, 1, 1),
+  (2, 10, 2, 0),
+  (3, 10, 1, 1),
+  (4, 10, 2, 0),
+  (5, 10, 2, 1),
+  (6, 10, 2, 0)
+
+# Cases involving interaction between limits and window functions.
+query IIIII rowsort
+SELECT *, rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+3  10  1  1  1
+1  10  1  1  1
+
+query IIIII rowsort
+SELECT *, dense_rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+3  10  1  1  1
+1  10  1  1  1
+
+query IIIIR rowsort
+SELECT *, avg(w) OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+3  10  1  1  2
+1  10  1  1  2
+
+query IIIII rowsort
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+3  10  1  1  1
+1  10  1  1  1
+
+query IIIII rowsort
+SELECT *, dense_rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+3  10  1  1  1
+1  10  1  1  1
+
+query IIIIR rowsort
+SELECT *, avg(w) OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+3  10  1  1  3
+1  10  1  1  1
+
+query IIIII rowsort
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w, y LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  1
+
+query IIIII rowsort
+SELECT *, dense_rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w, y LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  1
+
+query IIIIR rowsort
+SELECT *, avg(w) OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w, y LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  2
+
+query IIIII rowsort
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  1
+
+query IIIII rowsort
+SELECT *, dense_rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  1
+
+query IIIIR rowsort
+SELECT *, avg(w) OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  2
+
+query IIIII rowsort
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y, w LIMIT 2
+----
+1  10  1  1  1
+3  10  1  1  1
+
+query IIIII rowsort
+SELECT *, dense_rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y, w LIMIT 2
+----
+1  10  1  1  1
+3  10  1  1  1
+
+query IIIIR rowsort
+SELECT *, avg(w) OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y, w LIMIT 2
+----
+1  10  1  1  1
+3  10  1  1  3
+
+query IIIII rowsort
+SELECT *, rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY w, z, y LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  1
+
+query IIIII rowsort
+SELECT *, dense_rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY w, z, y LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  1
+
+query IIIIR rowsort
+SELECT *, avg(w) OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY w, z, y LIMIT 2
+----
+1  10  1  1  1
+2  10  2  0  2
+
+query IIIII rowsort
+SELECT *, rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y LIMIT 2
+----
+2  10  2  0  1
+4  10  2  0  1
+
+query IIIII rowsort
+SELECT *, dense_rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y LIMIT 2
+----
+2  10  2  0  1
+4  10  2  0  1
+
+query IIIIR rowsort
+SELECT *, avg(w) OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y LIMIT 2
+----
+2  10  2  0  2
+4  10  2  0  4
+
+# Test that windower respects the memory limit set via the cluster setting.
+statement ok
+SET CLUSTER SETTING sql.distsql.temp_storage.workmem='200KB'
+
+statement ok
+CREATE TABLE l (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO l SELECT g FROM generate_series(0,10000) g(g)
+
+statement error memory budget exceeded
+SELECT array_agg(a) OVER () FROM l LIMIT 1
+
+statement ok
+RESET CLUSTER SETTING sql.distsql.temp_storage.workmem
+
+# Regression test for #38901 verifying that window frame takes precedence over
+# the concept of peers.
+query I
+SELECT count(a) OVER (ROWS 1 PRECEDING) FROM t
+----
+1
+2
+2
+
+statement ok
+CREATE TABLE t38901 (a INT PRIMARY KEY); INSERT INTO t38901 VALUES (1), (2), (3)
+
+query T
+SELECT array_agg(a) OVER (ORDER BY a ROWS BETWEEN 2 PRECEDING AND 1 PRECEDING) FROM t38901 ORDER BY a
+----
+NULL
+{1}
+{1,2}
+
+# Regression test for #42935.
+query IIIII
+SELECT
+	a,
+	b,
+	count(*) OVER (ORDER BY b),
+	count(*) OVER (
+		ORDER BY
+			b
+		RANGE
+			BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+	),
+	count(*) OVER (
+		ORDER BY
+			b
+		ROWS
+			BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+	)
+FROM
+	(VALUES (1, 1), (2, 1), (3, 2), (4, 2)) AS t (a, b)
+ORDER BY
+	a, b
+----
+1  1  2  2  1
+2  1  2  2  2
+3  2  4  4  3
+4  2  4  4  4
+
+query IIIRRTBTTTTTTTTT
+SELECT
+  *,
+  array_agg(v) OVER (wv RANGE BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING),
+  array_agg(v) OVER (wv RANGE BETWEEN 0 PRECEDING AND 1 PRECEDING),
+  array_agg(f) OVER (wf RANGE BETWEEN UNBOUNDED PRECEDING AND -0.0 PRECEDING),
+  array_agg(f) OVER (wf RANGE BETWEEN 0.0 PRECEDING AND 1.0 PRECEDING),
+  array_agg(d) OVER (wd RANGE BETWEEN 0.0 FOLLOWING AND 0.0 FOLLOWING),
+  array_agg(d) OVER (wd RANGE BETWEEN 1.0 FOLLOWING AND UNBOUNDED FOLLOWING),
+  array_agg(i) OVER (wi RANGE BETWEEN '1s'::INTERVAL PRECEDING AND '0s'::INTERVAL PRECEDING),
+  array_agg(i) OVER (wi RANGE BETWEEN '1s'::INTERVAL FOLLOWING AND '1s'::INTERVAL FOLLOWING)
+FROM
+  kv
+WINDOW
+  wv AS (ORDER BY v DESC),
+  wf AS (ORDER BY f),
+  wd AS (ORDER BY d DESC),
+  wi AS (ORDER BY i)
+ORDER BY
+  k
+----
+1   2     3  1    1     a     true   00:01:00      {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0}                      NULL  {1}               {-321,NULL,NULL,NULL}          {00:01:00}             NULL
+3   4     5  2    8     a     true   00:00:02      {4,4,4}                    NULL         {0.1,0.2,0.3,1.0,2.0}                  NULL  {8}               {4.4,3,1,-321,NULL,NULL,NULL}  {00:00:02}             NULL
+5   NULL  5  9.9  -321  NULL  false  NULL          {4,4,4,2,2,2,2,NULL,NULL}  {NULL,NULL}  {0.1,0.2,0.3,1.0,2.0,3.0,4.4,6.0,9.9}  NULL  {-321}            {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+6   2     3  4.4  4.4   b     true   00:00:00.001  {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0,2.0,3.0,4.4}          NULL  {4.4}             {3,1,-321,NULL,NULL,NULL}      {00:00:00.001}         NULL
+7   2     2  6    7.9   b     true   4 days        {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0,2.0,3.0,4.4,6.0}      NULL  {7.9}             {4.4,3,1,-321,NULL,NULL,NULL}  {"4 days"}             NULL
+8   4     2  3    3     A     false  3 years       {4,4,4}                    NULL         {0.1,0.2,0.3,1.0,2.0,3.0}              NULL  {3}               {1,-321,NULL,NULL,NULL}        {"3 years"}            NULL
+9   2     9  0.1  NULL  NULL  NULL   NULL          {4,4,4,2,2,2,2}            NULL         {0.1}                                  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+10  4     9  0.2  NULL  NULL  NULL   NULL          {4,4,4}                    NULL         {0.1,0.2}                              NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+11  NULL  9  0.3  NULL  NULL  NULL   NULL          {4,4,4,2,2,2,2,NULL,NULL}  {NULL,NULL}  {0.1,0.2,0.3}                          NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+
+# Regression test for #43083 (CBO optimizing out the single column from ORDER
+# BY clause which led to a crash in the execution engine).
+query IIIRRTBTTTTTTTTT
+SELECT
+  *,
+  array_agg(v) OVER (wv RANGE BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING),
+  array_agg(v) OVER (wv RANGE BETWEEN 0 PRECEDING AND 1 PRECEDING),
+  array_agg(f) OVER (wf RANGE BETWEEN UNBOUNDED PRECEDING AND -0.0 PRECEDING),
+  array_agg(f) OVER (wf RANGE BETWEEN 0.0 PRECEDING AND 1.0 PRECEDING),
+  array_agg(d) OVER (wd RANGE BETWEEN 0.0 FOLLOWING AND 0.0 FOLLOWING),
+  array_agg(d) OVER (wd RANGE BETWEEN 1.0 FOLLOWING AND UNBOUNDED FOLLOWING),
+  array_agg(i) OVER (wi RANGE BETWEEN '1s'::INTERVAL PRECEDING AND '0s'::INTERVAL PRECEDING),
+  array_agg(i) OVER (wi RANGE BETWEEN '1s'::INTERVAL FOLLOWING AND '1s'::INTERVAL FOLLOWING)
+FROM
+  kv
+WINDOW
+  wv AS (PARTITION BY v ORDER BY v),
+  wf AS (PARTITION BY f ORDER BY f DESC),
+  wd AS (PARTITION BY d ORDER BY d),
+  wi AS (PARTITION BY i ORDER BY i DESC)
+ORDER BY
+  k
+----
+1   2     3  1    1     a     true   00:01:00      {2,2,2,2}    NULL         {1.0}  NULL  {1}               NULL              {00:01:00}             NULL
+3   4     5  2    8     a     true   00:00:02      {4,4,4}      NULL         {2.0}  NULL  {8}               NULL              {00:00:02}             NULL
+5   NULL  5  9.9  -321  NULL  false  NULL          {NULL,NULL}  {NULL,NULL}  {9.9}  NULL  {-321}            NULL              {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+6   2     3  4.4  4.4   b     true   00:00:00.001  {2,2,2,2}    NULL         {4.4}  NULL  {4.4}             NULL              {00:00:00.001}         NULL
+7   2     2  6    7.9   b     true   4 days        {2,2,2,2}    NULL         {6.0}  NULL  {7.9}             NULL              {"4 days"}             NULL
+8   4     2  3    3     A     false  3 years       {4,4,4}      NULL         {3.0}  NULL  {3}               NULL              {"3 years"}            NULL
+9   2     9  0.1  NULL  NULL  NULL   NULL          {2,2,2,2}    NULL         {0.1}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+10  4     9  0.2  NULL  NULL  NULL   NULL          {4,4,4}      NULL         {0.2}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+11  NULL  9  0.3  NULL  NULL  NULL   NULL          {NULL,NULL}  {NULL,NULL}  {0.3}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+
+# Check that telemetry is being collected on the window functions' usage.
+query B
+SELECT count(*) >= 26 FROM crdb_internal.feature_usage WHERE feature_name LIKE 'sql.plan.window_function%' AND usage_count > 0
+----
+true
+
+statement ok
+DROP TABLE t; CREATE TABLE t (a INT, b INT, c INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES
+  (0, 1, 0),
+  (1, 1, 1),
+  (0, 2, 2),
+  (1, 2, 3)
+
+# We sort the output on all queries with row_number window function to get
+# deterministic results.
+query III
+SELECT a, b, row_number() OVER (ORDER BY a, b) FROM t ORDER BY a, b
+----
+0 1 1
+0 2 2
+1 1 3
+1 2 4
+
+query III
+SELECT a, b, row_number() OVER (PARTITION BY a ORDER BY b) FROM t ORDER BY a, b
+----
+0 1 1
+0 2 2
+1 1 1
+1 2 2
+
+query III
+SELECT a, b, row_number() OVER (PARTITION BY a, b) FROM t ORDER BY a, b
+----
+0 1 1
+0 2 1
+1 1 1
+1 2 1
+
+query III rowsort
+SELECT a, b, rank() OVER () FROM t
+----
+0 1 1
+0 2 1
+1 1 1
+1 2 1
+
+query III rowsort
+SELECT a, b, rank() OVER (ORDER BY a) FROM t
+----
+0 1 1
+0 2 1
+1 1 3
+1 2 3
+
+query IIII rowsort
+SELECT a, b, c, rank() OVER (PARTITION BY a ORDER BY c) FROM t
+----
+0 1 0 1
+0 2 2 2
+1 1 1 1
+1 2 3 2
+
+query III rowsort
+SELECT a, b, dense_rank() OVER () FROM t
+----
+0 1 1
+0 2 1
+1 1 1
+1 2 1
+
+query III rowsort
+SELECT a, b, dense_rank() OVER (ORDER BY a) FROM t
+----
+0 1 1
+0 2 1
+1 1 2
+1 2 2
+
+query IIII rowsort
+SELECT a, b, c, dense_rank() OVER (PARTITION BY a ORDER BY c) FROM t
+----
+0 1 0 1
+0 2 2 2
+1 1 1 1
+1 2 3 2
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS ()
+----
+0  1  1  1  0  1
+1  1  1  1  0  1
+0  2  1  1  0  1
+1  2  1  1  0  1
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a)
+----
+0  1  1  1  0  1
+0  2  1  1  0  1
+1  1  1  1  0  1
+1  2  1  1  0  1
+
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (ORDER BY a)
+----
+0  1  1  1  0                  0.5
+0  2  1  1  0                  0.5
+1  1  3  2  0.666666666666667  1
+1  2  3  2  0.666666666666667  1
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a ORDER BY b)
+----
+0  1  1  1  0  0.5
+0  2  2  2  1  1
+1  1  1  1  0  0.5
+1  2  2  2  1  1
+
+# Regression test for peer group number computation overflow (#53654).
+query II rowsort
+SELECT
+  max(k) OVER (w GROUPS BETWEEN 9223372036854775807 FOLLOWING AND UNBOUNDED FOLLOWING),
+  max(k) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 9223372036854775807 FOLLOWING)
+FROM kv WINDOW w AS (PARTITION BY b ORDER BY v)
+----
+NULL  11
+NULL  11
+NULL  11
+NULL  8
+NULL  8
+NULL  7
+NULL  7
+NULL  7
+NULL  7
+
+# Regression test for #53442. Ordering columns are not pruned with RANGE mode
+# and an offset boundary of PRECEDING or FOLLOWING.
+
+statement ok
+CREATE TABLE t53442_a (a INT8 PRIMARY KEY);
+CREATE TABLE t53442_b (b INT2 PRIMARY KEY);
+
+statement ok
+SELECT max(b::INT8) OVER (PARTITION BY b ORDER BY b RANGE 1 PRECEDING)
+FROM t53442_b NATURAL JOIN t53442_a
+WHERE false
+
+statement ok
+SELECT max(b::INT8) OVER (PARTITION BY b ORDER BY a RANGE 1 PRECEDING)
+FROM t53442_b NATURAL JOIN t53442_a
+WHERE false
+
+# Regression test for a crash with json_object_agg used as a window function
+# (#54604).
+statement ok
+CREATE TABLE t54604 (s STRING);
+INSERT INTO t54604 SELECT g::STRING FROM generate_series(1, 5) AS g
+
+query T rowsort
+SELECT json_object_agg(s, s) OVER (ORDER BY s DESC) FROM t54604
+----
+{"1": "1", "2": "2", "3": "3", "4": "4", "5": "5"}
+{"2": "2", "3": "3", "4": "4", "5": "5"}
+{"3": "3", "4": "4", "5": "5"}
+{"4": "4", "5": "5"}
+{"5": "5"}
+
+query T rowsort
+SELECT jsonb_object_agg(s, s) OVER (ORDER BY s RANGE UNBOUNDED PRECEDING) FROM t54604
+----
+{"1": "1"}
+{"1": "1", "2": "2"}
+{"1": "1", "2": "2", "3": "3"}
+{"1": "1", "2": "2", "3": "3", "4": "4"}
+{"1": "1", "2": "2", "3": "3", "4": "4", "5": "5"}

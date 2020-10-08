@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package parser
 
@@ -48,6 +44,12 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER TABLE blah RENAME TO blih ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah SPLIT AT (SELECT 1) ??`, `ALTER TABLE`},
 
+		{`ALTER TYPE ??`, `ALTER TYPE`},
+		{`ALTER TYPE t ??`, `ALTER TYPE`},
+		{`ALTER TYPE t ADD VALUE ??`, `ALTER TYPE`},
+		{`ALTER TYPE t SET ??`, `ALTER TYPE`},
+		{`ALTER TYPE t RENAME ??`, `ALTER TYPE`},
+
 		{`ALTER INDEX foo@bar RENAME ??`, `ALTER INDEX`},
 		{`ALTER INDEX foo@bar RENAME TO blih ??`, `ALTER INDEX`},
 		{`ALTER INDEX foo@bar SPLIT ??`, `ALTER INDEX`},
@@ -67,8 +69,25 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER SEQUENCE blah RENAME ??`, `ALTER SEQUENCE`},
 		{`ALTER SEQUENCE blah RENAME TO blih ??`, `ALTER SEQUENCE`},
 
-		{`ALTER USER IF ??`, `ALTER USER`},
-		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
+		{`ALTER SCHEMA ??`, `ALTER SCHEMA`},
+		{`ALTER SCHEMA x RENAME ??`, `ALTER SCHEMA`},
+		{`ALTER SCHEMA x OWNER ??`, `ALTER SCHEMA`},
+
+		{`ALTER USER IF ??`, `ALTER ROLE`},
+		{`ALTER USER foo WITH PASSWORD ??`, `ALTER ROLE`},
+
+		{`ALTER ROLE bleh ?? WITH NOCREATEROLE`, `ALTER ROLE`},
+
+		{`ALTER RANGE foo CONFIGURE ??`, `ALTER RANGE`},
+		{`ALTER RANGE ??`, `ALTER RANGE`},
+
+		{`ALTER PARTITION ??`, `ALTER PARTITION`},
+		{`ALTER PARTITION p OF INDEX tbl@idx ??`, `ALTER PARTITION`},
+
+		{`ANALYZE ??`, `ANALYZE`},
+		{`ANALYZE blah ??`, `ANALYZE`},
+		{`ANALYSE ??`, `ANALYZE`},
+		{`ANALYSE blah ??`, `ANALYZE`},
 
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOBS`},
@@ -98,10 +117,13 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE DATABASE IF NOT ??`, `CREATE DATABASE`},
 		{`CREATE DATABASE blih ??`, `CREATE DATABASE`},
 
-		{`CREATE USER blih ??`, `CREATE USER`},
-		{`CREATE USER blih WITH ??`, `CREATE USER`},
+		{`CREATE EXTENSION ??`, `CREATE EXTENSION`},
+
+		{`CREATE USER blih ??`, `CREATE ROLE`},
+		{`CREATE USER blih WITH ??`, `CREATE ROLE`},
 
 		{`CREATE ROLE bleh ??`, `CREATE ROLE`},
+		{`CREATE ROLE bleh ?? WITH CREATEROLE`, `CREATE ROLE`},
 
 		{`CREATE VIEW blah (??`, `CREATE VIEW`},
 		{`CREATE VIEW blah AS (SELECT c FROM x) ??`, `CREATE VIEW`},
@@ -120,6 +142,13 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE TABLE blah AS (SELECT 1) ??`, `CREATE TABLE`},
 		{`CREATE TABLE blah AS SELECT 1 ??`, `SELECT`},
 
+		{`CREATE TYPE blah AS ENUM ??`, `CREATE TYPE`},
+		{`DROP TYPE ??`, `DROP TYPE`},
+
+		{`CREATE SCHEMA IF ??`, `CREATE SCHEMA`},
+		{`CREATE SCHEMA IF NOT ??`, `CREATE SCHEMA`},
+		{`CREATE SCHEMA bli ??`, `CREATE SCHEMA`},
+
 		{`DELETE FROM ??`, `DELETE`},
 		{`DELETE FROM blah ??`, `DELETE`},
 		{`DELETE FROM blah WHERE ??`, `DELETE`},
@@ -135,6 +164,10 @@ func TestContextualHelp(t *testing.T) {
 
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
+
+		{`DROP USER ??`, `DROP ROLE`},
+		{`DROP USER IF ??`, `DROP ROLE`},
+		{`DROP USER IF EXISTS bluh ??`, `DROP ROLE`},
 
 		{`DROP ROLE ??`, `DROP ROLE`},
 		{`DROP ROLE IF ??`, `DROP ROLE`},
@@ -152,9 +185,10 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP VIEW IF ??`, `DROP VIEW`},
 		{`DROP VIEW IF EXISTS blih, bloh ??`, `DROP VIEW`},
 
-		{`DROP USER ??`, `DROP USER`},
-		{`DROP USER IF ??`, `DROP USER`},
-		{`DROP USER IF EXISTS bloh ??`, `DROP USER`},
+		{`DROP SCHEDULE ???`, `DROP SCHEDULES`},
+		{`DROP SCHEDULES ???`, `DROP SCHEDULES`},
+
+		{`DROP SCHEMA ??`, `DROP SCHEMA`},
 
 		{`EXPLAIN (??`, `EXPLAIN`},
 		{`EXPLAIN SELECT 1 ??`, `SELECT`},
@@ -204,9 +238,20 @@ func TestContextualHelp(t *testing.T) {
 		{`GRANT ALL ON foo TO ??`, `GRANT`},
 		{`GRANT ALL ON foo TO bar ??`, `GRANT`},
 
-		{`PAUSE ??`, `PAUSE JOBS`},
+		{`PAUSE ??`, `PAUSE`},
+		{`PAUSE JOB ??`, `PAUSE JOBS`},
+		{`PAUSE JOBS ??`, `PAUSE JOBS`},
+		{`PAUSE SCHEDULE ??`, `PAUSE SCHEDULES`},
+		{`PAUSE SCHEDULES ??`, `PAUSE SCHEDULES`},
 
-		{`RESUME ??`, `RESUME JOBS`},
+		{`REASSIGN OWNED BY ?? TO ??`, `REASSIGN OWNED BY`},
+		{`REASSIGN OWNED BY foo, bar TO ??`, `REASSIGN OWNED BY`},
+
+		{`RESUME ??`, `RESUME`},
+		{`RESUME JOB ??`, `RESUME JOBS`},
+		{`RESUME JOBS ??`, `RESUME JOBS`},
+		{`RESUME SCHEDULE ??`, `RESUME SCHEDULES`},
+		{`RESUME SCHEDULES ??`, `RESUME SCHEDULES`},
 
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},
@@ -230,6 +275,9 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SESSIONS ??`, `SHOW SESSIONS`},
 		{`SHOW LOCAL SESSIONS ??`, `SHOW SESSIONS`},
 
+		{`SHOW TRANSACTIONS ??`, `SHOW TRANSACTIONS`},
+		{`SHOW LOCAL TRANSACTIONS ??`, `SHOW TRANSACTIONS`},
+
 		{`SHOW STATISTICS ??`, `SHOW STATISTICS`},
 		{`SHOW STATISTICS FOR TABLE ??`, `SHOW STATISTICS`},
 
@@ -242,7 +290,12 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW TRACE FOR SESSION ??`, `SHOW TRACE`},
 		{`SHOW TRACE FOR ??`, `SHOW TRACE`},
 
+		{`SHOW JOB ??`, `SHOW JOBS`},
 		{`SHOW JOBS ??`, `SHOW JOBS`},
+		{`SHOW AUTOMATIC JOBS ??`, `SHOW JOBS`},
+
+		{`SHOW SCHEDULE ??`, `SHOW SCHEDULES`},
+		{`SHOW SCHEDULES ??`, `SHOW SCHEDULES`},
 
 		{`SHOW BACKUP 'foo' ??`, `SHOW BACKUP`},
 
@@ -262,6 +315,9 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SHOW DATABASES ??`, `SHOW DATABASES`},
 
+		{`SHOW ENUMS ??`, `SHOW ENUMS`},
+		{`SHOW TYPES ??`, `SHOW TYPES`},
+
 		{`SHOW GRANTS ON ??`, `SHOW GRANTS`},
 		{`SHOW GRANTS ON foo FOR ??`, `SHOW GRANTS`},
 		{`SHOW GRANTS ON foo FOR bar ??`, `SHOW GRANTS`},
@@ -275,10 +331,15 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW INDEXES FROM ??`, `SHOW INDEXES`},
 		{`SHOW INDEXES FROM blah ??`, `SHOW INDEXES`},
 
+		{`SHOW PARTITIONS FROM ??`, `SHOW PARTITIONS`},
+
 		{`SHOW ROLES ??`, `SHOW ROLES`},
 
 		{`SHOW SCHEMAS FROM ??`, `SHOW SCHEMAS`},
 		{`SHOW SCHEMAS FROM blah ??`, `SHOW SCHEMAS`},
+
+		{`SHOW SEQUENCES FROM ??`, `SHOW SEQUENCES`},
+		{`SHOW SEQUENCES FROM blah ??`, `SHOW SEQUENCES`},
 
 		{`SHOW TABLES FROM ??`, `SHOW TABLES`},
 		{`SHOW TABLES FROM blah ??`, `SHOW TABLES`},
@@ -289,8 +350,12 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW TRANSACTION ISOLATION LEVEL ??`, `SHOW TRANSACTION`},
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
+		{`SHOW SAVEPOINT STATUS ??`, `SHOW SAVEPOINT`},
+		{`SHOW LAST QUERY STATISTICS ??`, `SHOW LAST QUERY STATISTICS`},
 
-		{`SHOW EXPERIMENTAL_RANGES ??`, `SHOW RANGES`},
+		{`SHOW RANGE ??`, `SHOW RANGE`},
+
+		{`SHOW RANGES ??`, `SHOW RANGES`},
 
 		{`SHOW USERS ??`, `SHOW USERS`},
 
@@ -344,6 +409,8 @@ func TestContextualHelp(t *testing.T) {
 		{`COMMIT TRANSACTION ??`, `COMMIT`},
 		{`END ??`, `COMMIT`},
 
+		{`REFRESH ??`, `REFRESH`},
+
 		{`ROLLBACK TRANSACTION ??`, `ROLLBACK`},
 		{`ROLLBACK TO ??`, `ROLLBACK`},
 
@@ -369,6 +436,7 @@ func TestContextualHelp(t *testing.T) {
 		{`EXPORT ??`, `EXPORT`},
 		{`EXPORT INTO CSV 'a' ??`, `EXPORT`},
 		{`EXPORT INTO CSV 'a' FROM SELECT a ??`, `SELECT`},
+		{`CREATE SCHEDULE FOR BACKUP ??`, `CREATE SCHEDULE FOR BACKUP`},
 	}
 
 	// The following checks that the test definition above exercises all
@@ -395,13 +463,10 @@ func TestContextualHelp(t *testing.T) {
 				t.Fatalf("parser didn't trigger error")
 			}
 
-			if err.Error() != "help token in input" {
+			if !strings.HasPrefix(err.Error(), "help token in input") {
 				t.Fatal(err)
 			}
-			pgerr, ok := pgerror.GetPGCause(err)
-			if !ok {
-				t.Fatalf("expected pg error, got %v", err)
-			}
+			pgerr := pgerror.Flatten(err)
 			help := pgerr.Hint
 			msg := HelpMessage{Command: test.key, HelpMessageBody: HelpMessages[test.key]}
 			expected := msg.String()

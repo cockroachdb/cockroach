@@ -1,0 +1,187 @@
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
+----
+
+exec-ddl
+CREATE TABLE def (d INT, e INT, f INT)
+----
+
+expr
+(InnerJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  (Scan [ (Table "def") (Cols "d,e,f") ])
+  [ (Eq (Var "a") (Var "d")) ]
+  [ ]
+)
+----
+inner-join (hash)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:6(int!null) t.public.def.e:7(int) t.public.def.f:8(int)
+ ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
+ ├── cost: 2276.07
+ ├── fd: (1)==(6), (6)==(1)
+ ├── prune: (2,3,7,8)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    ├── cost: 1074.02
+ │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2)
+ │    └── unfiltered-cols: (1-5)
+ ├── scan t.public.def
+ │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
+ │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
+ │    ├── cost: 1074.02
+ │    ├── prune: (6-8)
+ │    └── unfiltered-cols: (6-10)
+ └── filters
+      └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── variable: t.public.abc.a:1 [type=int]
+           └── variable: t.public.def.d:6 [type=int]
+
+expr
+(MakeLookupJoin
+  (Scan [ (Table "def") (Cols "d,e") ])
+  [ (JoinType "left-join") (Table "abc") (Index "abc@ab") (KeyCols "a") (Cols "a,b") ]
+  [ (Gt (Var "a") (Var "e")) ]
+)
+----
+left-join (lookup abc@ab)
+ ├── columns: t.public.abc.a:6(int) t.public.abc.b:7(int)
+ ├── key columns: [6] = [6]
+ ├── stats: [rows=3333.33333, distinct(6)=100, null(6)=33.3333333]
+ ├── cost: 41664.04
+ ├── scan t.public.def
+ │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
+ │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
+ │    ├── cost: 1064.02
+ │    └── prune: (1,2)
+ └── filters
+      └── gt [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+           ├── variable: t.public.abc.a:6 [type=int]
+           └── variable: t.public.def.e:2 [type=int]
+
+expr
+(MergeJoin
+  (Sort (Scan [ (Table "abc") (Cols "a,b,c") ]))
+  (Sort (Scan [ (Table "def") (Cols "d,e,f") ]))
+  [ ]
+  [
+    (JoinType "inner-join")
+    (LeftEq "+a")
+    (RightEq "+d")
+    (LeftOrdering "+a")
+    (RightOrdering "+d")
+  ]
+)
+----
+inner-join (merge)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:6(int!null) t.public.def.e:7(int) t.public.def.f:8(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
+ ├── cost: 2704.71137
+ ├── fd: (1)==(6), (6)==(1)
+ ├── sort
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    ├── cost: 1293.34569
+ │    ├── ordering: +1
+ │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2)
+ │    └── scan t.public.abc
+ │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │         ├── cost: 1074.02
+ │         ├── prune: (1-3)
+ │         └── interesting orderings: (+1,+2)
+ ├── sort
+ │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
+ │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
+ │    ├── cost: 1293.34569
+ │    ├── ordering: +6
+ │    ├── prune: (6-8)
+ │    └── scan t.public.def
+ │         ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
+ │         ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
+ │         ├── cost: 1074.02
+ │         └── prune: (6-8)
+ └── filters (true)
+
+expr
+(InnerJoinApply
+  (Sort (Scan [ (Table "abc") (Cols "a,b,c") ]))
+  (Select
+    (Scan [ (Table "def") (Cols "d,e,f") ])
+    [ (Eq (Var "a") (Plus (Var "d") (Var "e"))) ]
+  )
+  [ ]
+  [ ]
+)
+----
+inner-join-apply
+ ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
+ ├── immutable
+ ├── stats: [rows=333333.333]
+ ├── cost: 5619.40451
+ ├── prune: (8)
+ ├── interesting orderings: (+1,+2)
+ ├── sort
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1183.68784
+ │    ├── interesting orderings: (+1,+2)
+ │    └── scan t.public.abc
+ │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │         ├── stats: [rows=1000]
+ │         ├── cost: 1074.02
+ │         └── interesting orderings: (+1,+2)
+ ├── select
+ │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
+ │    ├── outer: (1)
+ │    ├── immutable
+ │    ├── stats: [rows=333.333333, distinct(1)=1, null(1)=0]
+ │    ├── cost: 1084.04
+ │    ├── prune: (8)
+ │    ├── scan t.public.def
+ │    │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── cost: 1074.02
+ │    │    └── prune: (6-8)
+ │    └── filters
+ │         └── eq [type=bool, outer=(1,6,7), immutable, constraints=(/1: (/NULL - ])]
+ │              ├── variable: t.public.abc.a:1 [type=int]
+ │              └── plus [type=int]
+ │                   ├── variable: t.public.def.d:6 [type=int]
+ │                   └── variable: t.public.def.e:7 [type=int]
+ └── filters (true)
+
+expr
+(IndexJoin
+  (Scan
+    [
+      (Table "abc")
+      (Index "abc@ab")
+      (Cols "a")
+      (HardLimit 10)
+    ]
+  )
+  [
+    (Table (FindTable "abc"))
+    (Cols "c")
+  ]
+)
+----
+index-join abc
+ ├── columns: t.public.abc.c:3(int)
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 75.02
+ ├── interesting orderings: (+1)
+ └── scan t.public.abc@ab
+      ├── columns: t.public.abc.a:1(int)
+      ├── limit: 10
+      ├── stats: [rows=10]
+      ├── cost: 14.41
+      ├── prune: (1)
+      └── interesting orderings: (+1)

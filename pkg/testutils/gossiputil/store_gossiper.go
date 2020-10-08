@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package gossiputil
 
@@ -41,12 +37,14 @@ func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
 		storeKeyMap: make(map[string]struct{}),
 	}
 	sg.cond = sync.NewCond(&sg.mu)
+	// Redundant callbacks are required by StoreGossiper. See GossipWithFunction
+	// which waits for all of the callbacks to be invoked.
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ roachpb.Value) {
 		sg.mu.Lock()
 		defer sg.mu.Unlock()
 		delete(sg.storeKeyMap, key)
 		sg.cond.Broadcast()
-	})
+	}, gossip.Redundant)
 	return sg
 }
 

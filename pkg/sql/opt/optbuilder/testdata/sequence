@@ -1,0 +1,125 @@
+exec-ddl
+CREATE SEQUENCE x
+----
+
+exec-ddl
+CREATE SEQUENCE y
+----
+
+build
+SELECT * FROM x
+----
+sequence-select x
+ └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+
+build
+SELECT z.last_value FROM x AS z
+----
+project
+ ├── columns: last_value:1!null
+ └── sequence-select x
+      └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+
+build
+SELECT last_value FROM x
+----
+project
+ ├── columns: last_value:1!null
+ └── sequence-select x
+      └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+
+build
+SELECT log_cnt FROM x
+----
+project
+ ├── columns: log_cnt:2!null
+ └── sequence-select x
+      └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+
+# Multiple sequences in a query.
+build
+(SELECT * FROM x) UNION (SELECT * FROM y)
+----
+union
+ ├── columns: last_value:7!null log_cnt:8!null is_called:9!null
+ ├── left columns: last_value:1 log_cnt:2 is_called:3
+ ├── right columns: last_value:4 log_cnt:5 is_called:6
+ ├── sequence-select x
+ │    └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ └── sequence-select y
+      └── columns: last_value:4!null log_cnt:5!null is_called:6!null
+
+# Sequences occurring multiple times in a query.
+build
+(SELECT * FROM x)
+EXCEPT (SELECT * FROM x)
+EXCEPT (SELECT * FROM y)
+EXCEPT (SELECT * FROM x)
+EXCEPT (SELECT * FROM y)
+----
+except
+ ├── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ ├── left columns: last_value:1!null log_cnt:2!null is_called:3!null
+ ├── right columns: last_value:13 log_cnt:14 is_called:15
+ ├── except
+ │    ├── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ │    ├── left columns: last_value:1!null log_cnt:2!null is_called:3!null
+ │    ├── right columns: last_value:10 log_cnt:11 is_called:12
+ │    ├── except
+ │    │    ├── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ │    │    ├── left columns: last_value:1!null log_cnt:2!null is_called:3!null
+ │    │    ├── right columns: last_value:7 log_cnt:8 is_called:9
+ │    │    ├── except
+ │    │    │    ├── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ │    │    │    ├── left columns: last_value:1!null log_cnt:2!null is_called:3!null
+ │    │    │    ├── right columns: last_value:4 log_cnt:5 is_called:6
+ │    │    │    ├── sequence-select x
+ │    │    │    │    └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ │    │    │    └── sequence-select x
+ │    │    │         └── columns: last_value:4!null log_cnt:5!null is_called:6!null
+ │    │    └── sequence-select y
+ │    │         └── columns: last_value:7!null log_cnt:8!null is_called:9!null
+ │    └── sequence-select x
+ │         └── columns: last_value:10!null log_cnt:11!null is_called:12!null
+ └── sequence-select y
+      └── columns: last_value:13!null log_cnt:14!null is_called:15!null
+
+# Ensure index flags are ignored.
+build
+SELECT * FROM x@primary
+----
+sequence-select x
+ └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+
+build
+SELECT * FROM x@foobar
+----
+sequence-select x
+ └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+
+# Ordinal refs with a sequence.
+build
+SELECT @1 FROM x
+----
+project
+ ├── columns: "?column?":4!null
+ ├── sequence-select x
+ │    └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ └── projections
+      └── last_value:1 [as="?column?":4]
+
+# Check a query with an extra operator.
+build
+SELECT * FROM x WHERE last_value = 0
+----
+select
+ ├── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ ├── sequence-select x
+ │    └── columns: last_value:1!null log_cnt:2!null is_called:3!null
+ └── filters
+      └── last_value:1 = 0
+
+build
+INSERT INTO x VALUES (0, 0, false)
+----
+error (42809): "x" is not a table

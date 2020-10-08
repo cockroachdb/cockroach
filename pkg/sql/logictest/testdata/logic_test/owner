@@ -1,0 +1,240 @@
+# LogicTest: !3node-tenant(49854)
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+CREATE ROLE new_role
+
+user testuser
+
+statement ok
+CREATE TABLE t()
+
+# Even without any privileges, the owner of the table should be able perform
+# any operation on the table.
+statement ok
+REVOKE ALL ON t FROM testuser
+
+statement ok
+ALTER TABLE t RENAME to t2
+
+statement ok
+ALTER TABLE t2 RENAME to t
+
+statement ok
+REVOKE ALL ON t FROM testuser
+
+# Owner should able to grant all privileges to other roles.
+
+statement ok
+GRANT ALL ON t TO new_role
+
+# Test ownership of views.
+
+statement ok
+CREATE TABLE for_view(x INT);
+CREATE VIEW v as SELECT x FROM for_view;
+
+# Even without any privileges, the owner of the table should be able perform
+# any operation on the table.
+statement ok
+REVOKE ALL ON v FROM testuser
+
+statement ok
+ALTER VIEW v RENAME to v2
+
+statement ok
+ALTER TABLE v2 RENAME to v
+
+statement ok
+GRANT ALL ON v TO new_role
+
+statement ok
+DROP VIEW v
+
+statement ok
+DROP TABLE for_view
+
+# Test ownership of sequences.
+
+statement ok
+CREATE SEQUENCE s;
+
+# Even without any privileges, the owner of the table should be able perform
+# any operation on the table.
+statement ok
+REVOKE ALL ON s FROM testuser
+
+statement ok
+ALTER SEQUENCE s RENAME to s2
+
+statement ok
+ALTER SEQUENCE s2 RENAME to s
+
+statement ok
+GRANT ALL ON s TO new_role
+
+statement ok
+DROP SEQUENCE s
+
+# Test ownership of databases.
+
+user root
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement ok
+CREATE DATABASE d
+
+user testuser
+
+# The user doesn't have admin privilege or CREATE privilege on the db
+# but should be able to create a table due to being the db owner.
+
+statement ok
+CREATE TABLE d.t()
+
+statement ok
+ALTER TABLE d.t RENAME TO d.t2
+
+statement ok
+ALTER TABLE d.t2 RENAME TO d.t
+
+statement ok
+GRANT ALL ON DATABASE d TO new_role
+
+statement ok
+DROP TABLE d.t
+
+statement ok
+ALTER DATABASE d RENAME TO d2
+
+statement ok
+DROP DATABASE d2
+
+# Test inheritance of ownership.
+
+user root
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE d
+
+user root
+
+statement ok
+REVOKE admin FROM testuser
+
+statement ok
+GRANT testuser TO testuser2
+
+user testuser2
+
+# testuser2 has no privileges and is a member of testuser with no privileges
+# except ownership of database d.
+# Through this ownership, testuser2 is expected to have all privileges on d
+# through ownership inheritance.
+
+statement ok
+CREATE TABLE d.t()
+
+statement ok
+ALTER TABLE d.t RENAME TO d.t2
+
+statement ok
+ALTER TABLE d.t2 RENAME TO d.t
+
+statement ok
+GRANT ALL ON DATABASE d TO new_role
+
+statement ok
+DROP TABLE d.t
+
+# However the CREATEDB privilege is not inherited.
+statement error permission denied to rename database
+ALTER DATABASE d RENAME TO d2
+
+user root
+
+statement ok
+ALTER USER testuser2 WITH CREATEDB
+
+user testuser2
+
+statement ok
+ALTER DATABASE d RENAME TO d2
+
+statement ok
+DROP DATABASE d2
+
+# Ensure role cannot be dropped if it is the owner of an object.
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE d
+
+statement ok
+CREATE TABLE d.t()
+
+user root
+
+# Revoke privileges from testuser so the only dependency left on objects is
+# ownership.
+
+statement ok
+REVOKE ALL ON DATABASE test FROM testuser
+
+statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t
+DROP ROLE testuser
+
+# Cannot drop object due to owned objects message should only show the owned
+# objects for the first user with owned objects if multiple users have owned
+# objects.
+
+user testuser2
+
+statement ok
+CREATE TABLE t2()
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it.*\n.*owner of table test.public.t2
+DROP ROLE testuser2, testuser
+
+# Ensure role cannot be dropped if it is an owner of a schema.
+
+user testuser
+
+statement ok
+USE d
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE TYPE typ AS ENUM ()
+
+user root
+
+statement ok
+REVOKE ALL ON DATABASE test FROM testuser
+
+user testuser
+
+statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t.*\n.*owner of schema s.*\n.*owner of type d.public._?typ.*\n.*owner of type d.public._?typ
+DROP ROLE testuser

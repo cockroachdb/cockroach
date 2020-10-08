@@ -10,7 +10,7 @@ eexpect ":/# "
 
 start_test "Check that by default, an error prevents subsequent statements from running."
 send "(echo 'select foo;'; echo 'select 1;') | $argv sql\r"
-eexpect "pq: column \"foo\" does not exist"
+eexpect "ERROR: column \"foo\" does not exist"
 eexpect ":/# "
 send "echo \$?\r"
 eexpect "1\r\n:/# "
@@ -18,7 +18,7 @@ end_test
 
 start_test "Check that a user can request to continue upon failures."
 send "(echo '\\unset errexit'; echo 'select foo;'; echo 'select 1;') | $argv sql\r"
-eexpect "pq: column \"foo\" does not exist"
+eexpect "ERROR: column \"foo\" does not exist"
 eexpect "1 row"
 eexpect ":/# "
 send "echo \$?\r"
@@ -30,7 +30,7 @@ end_test
 
 start_test "Check that by default, an error does not cause an interactive failure."
 send "select foo;\r"
-eexpect "pq: column \"foo\" does not exist"
+eexpect "ERROR: column \"foo\" does not exist"
 eexpect "root@"
 end_test
 
@@ -38,7 +38,15 @@ start_test "Check that the user can ask for errors to terminate the interactive 
 send "\\set errexit\r"
 eexpect "root@"
 send "select foo;\r"
-eexpect "Error: pq: column \"foo\" does not exist"
+eexpect "ERROR: column \"foo\" does not exist"
+eexpect ":/# "
+send "echo \$?\r"
+eexpect "1\r\n:/# "
+end_test
+
+start_test "Check that unknown sub-commands report a non-zero exit status."
+send "$argv node wowowo\r"
+eexpect "ERROR: unknown sub-command"
 eexpect ":/# "
 send "echo \$?\r"
 eexpect "1\r\n:/# "

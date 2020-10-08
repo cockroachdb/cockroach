@@ -2,59 +2,64 @@
 # select.opt contains normalization rules for the Select operator.
 # =============================================================================
 
+# SimplifySelectFilters simplifies the Filters operator in several possible
+# ways:
+#   - Removes True operands
+#   - Replaces the Filters operator with False if any operand is False or Null
+#   - Flattens nested And operands by merging their conditions into parent
+#   - Simplifies Or operands where one side is a Null to the other side
+#
+# Note that the Null handling behavior is different than the SimplifyAnd rules,
+# because Filters only appears as a Select or Join filter condition, both of
+# which treat a Null filter conjunct exactly as if it were False.
+[SimplifySelectFilters, Normalize, HighPriority]
+(Select
+    $input:*
+    $filters:[
+            ...
+            $item:(FiltersItem
+                    (And | True | False | Null | Or)
+                ) &
+                ^(IsUnsimplifiableOr $item)
+            ...
+        ] &
+        ^(IsFilterFalse $filters)
+)
+=>
+(Select $input (SimplifyFilters $filters))
+
+# ConsolidateSelectFilters consolidates filters that constrain a single
+# variable. For example, filters x >= 5 and x <= 10 would be combined into a
+# single Range operation.
+#
+# The benefit of consolidating these filters is it allows a single constraint
+# to be generated for the variable instead of multiple. In the example above,
+# we can generate the single constraint [/5 - /10] instead of the two
+# constraints [/5 - ] and [ - /10]. The single constraint allows us to better
+# estimate the selectivity of the predicate when calculating statistics for
+# the Select expression.
+#
+# This rule is low priority so other rules in this file such as
+# RemoveNotNullCondition can run first.
+[ConsolidateSelectFilters, Normalize, LowPriority]
+(Select $input:* $filters:* & (CanConsolidateFilters $filters))
+=>
+(Select $input (ConsolidateFilters $filters))
 
 # EliminateSelect discards an unnecessary Select operator in the case where its
 # filter is always true. Keep this near the top of the file so that it tends to
 # be checked early.
 [EliminateSelect, Normalize]
-(Select $input:* (True)) => $input
-
-# EnsureSelectFiltersAnd replaces an And operator in a Select filter with the
-# Filters operator. This allows other rules to rely upon the presence of the
-# Filters when matching. See comment at top of bool.opt for more details. This
-# rule is a special-case of the EnsureSelectFilters rule, for performance
-# reasons (no need to construct a new conditions list) in a common case.
-[EnsureSelectFiltersAnd, Normalize]
-(Select
-    $input:*
-    (And $conditions:*)
-)
+(Select $input:* [])
 =>
-(Select
-    $input
-    (Filters $conditions)
-)
-
-# EnsureSelectFilters adds a Filters operator to a Select's filter condition
-# if it does not already exist. This allows other rules to rely upon the
-# presence of the Filters when matching. See comment at top of bool.opt for
-# more details.
-[EnsureSelectFilters, Normalize]
-(Select
-    $input:*
-    $filter:^(Filters | And | True | False)
-)
-=>
-(Select
-    $input
-    (Filters [ $filter ])
-)
+$input
 
 # MergeSelects combines two nested Select operators into a single Select that
 # ANDs the filter conditions of the two Selects.
 [MergeSelects, Normalize]
-(Select
-    (Select
-        $input:*
-        $innerFilter:*
-    )
-    $filter:*
-)
+(Select (Select $input:* $innerFilters:*) $filters:*)
 =>
-(Select
-    $input
-    (ConcatFilters $innerFilter $filter)
-)
+(Select $input (ConcatFilters $innerFilters $filters))
 
 # PushSelectIntoProject pushes the Select operator into its Project input. This
 # is typically preferable because it minimizes the number of rows which Project
@@ -62,24 +67,25 @@
 # computed columns.
 [PushSelectIntoProject, Normalize]
 (Select
-    (Project
-        $input:*
-        $projections:*
-    )
-    (Filters
-        $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ]
-    )
+    (Project $input:* $projections:* $passthrough:*)
+    $filters:[
+        ...
+        $item:* &
+            (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
 )
 =>
 (Select
     (Project
         (Select
             $input
-            (Filters (ExtractBoundConditions $list $input))
+            (ExtractBoundConditions $filters $inputCols)
         )
         $projections
+        $passthrough
     )
-    (Filters (ExtractUnboundConditions $list $input))
+    (ExtractUnboundConditions $filters $inputCols)
 )
 
 # MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
@@ -97,14 +103,16 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
-    $filter:*
+    $filters:*
 )
 =>
 ((OpName $input)
     $left
     $right
-    (ConcatFilters $on $filter)
+    (ConcatFilters $on $filters)
+    $private
 )
 
 # PushSelectCondLeftIntoJoinLeftAndRight applies to the case when a condition
@@ -130,76 +138,41 @@
 # the right side.
 [PushSelectCondLeftIntoJoinLeftAndRight, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
-            SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $input:(LeftJoin | LeftJoinApply | SemiJoin | SemiJoinApply
+            | AntiJoin | AntiJoinApply
         $left:*
         $right:*
         $on:*
+        $private:*
     )
-    (Filters
-        $list:[
-            ...
-            $condition:* &
-                (IsBoundBy $condition $left) &
-                (CanMap $on $condition $right)
-            ...
-        ]
-    )
+    $filters:[
+        ...
+        $item:(FiltersItem $condition:*) &
+            (IsBoundBy $item (OutputCols $left)) &
+            (CanMapJoinOpFilter
+                $item
+                $rightCols:(OutputCols $right)
+                $equivFD:(GetEquivFD $on $left $right)
+            )
+        ...
+    ]
 )
 =>
 (Select
     ((OpName $input)
-        (Select
-            $left
-            (Filters [$condition])
-        )
+        (Select $left [ (FiltersItem $condition) ])
         (Select
             $right
-            (Filters [(Map $on $condition $right)])
+            [
+                (FiltersItem
+                    (MapJoinOpFilter $item $rightCols $equivFD)
+                )
+            ]
         )
         $on
+        $private
     )
-    (Filters (RemoveListItem $list $condition))
-)
-
-# PushSelectCondRightIntoJoinLeftAndRight is symmetric with
-# PushSelectCondLeftIntoJoinLeftAndRight. It applies to the case when a
-# condition bound by the right side of a join can be mapped to the left side
-# using equality columns from the ON condition of the join. It pushes the
-# original filter to the right side, and the mapped filter to the left side.
-# See the comments above PushSelectCondLeftIntoJoinLeftAndRight for more
-# details.
-[PushSelectCondRightIntoJoinLeftAndRight, Normalize]
-(Select
-    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
-        $left:*
-        $right:*
-        $on:*
-    )
-    (Filters
-        $list:[
-            ...
-            $condition:* &
-                (IsBoundBy $condition $right) &
-                (CanMap $on $condition $left)
-            ...
-        ]
-    )
-)
-=>
-(Select
-    ((OpName $input)
-        (Select
-            $left
-            (Filters [(Map $on $condition $left)])
-        )
-        (Select
-            $right
-            (Filters [$condition])
-        )
-        $on
-    )
-    (Filters (RemoveListItem $list $condition))
+    (RemoveFiltersItem $filters $item)
 )
 
 # PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
@@ -218,56 +191,38 @@
 # Citations: [1]
 [PushSelectIntoJoinLeft, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
-            SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $input:(LeftJoin | LeftJoinApply | SemiJoin | SemiJoinApply
+            | AntiJoin | AntiJoinApply
         $left:*
         $right:*
         $on:*
+        $private:*
     )
-    $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $left) ... ])
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $left
-            (Filters (ExtractBoundConditions $list $left))
+            (ExtractBoundConditions $filters $leftCols)
         )
         $right
         $on
+        $private
     )
-    (Filters (ExtractUnboundConditions $list $left))
-)
-
-# PushSelectIntoJoinRight is symmetric with PushSelectIntoJoinLeft. It pushes
-# Select filter conditions into the right side of an input Join rather than
-# into the left side. See that rule's comments for more details.
-[PushSelectIntoJoinRight, Normalize]
-(Select
-    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
-        $left:*
-        $right:*
-        $on:*
-    )
-    $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $right) ... ])
-)
-=>
-(Select
-    ((OpName $input)
-        $left
-        (Select
-            $right
-            (Filters (ExtractBoundConditions $list $right))
-        )
-        $on
-    )
-    (Filters (ExtractUnboundConditions $list $right))
+    (ExtractUnboundConditions $filters $leftCols)
 )
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
-# where it does not reference any of the aggregation columns. This only works
-# if this is not an instance of the "scalar" GroupBy, which returns only one
-# row, and which exhibits different behavior if the input is empty:
+# where it only references grouping columns or ConstAgg columns.
+#
+# This rule doesn't work on ScalarGroupBy which exhibits different behavior if
+# the input is empty:
 #   SELECT MAX(y) FROM a
 #
 # If "a" is empty, this returns a single row containing a null value. This is
@@ -276,26 +231,41 @@
 #   SELECT MAX(y) FROM a GROUP BY x
 #
 # Citations: [2]
+#
+# Note: Do not add EnsureDistinctOn to the match pattern. Pushing the select
+# filters through the EnsureDistinctOn can prevent it from detecting duplicate
+# rows and therefore change error behavior.
 [PushSelectIntoGroupBy, Normalize]
 (Select
-    (GroupBy
-        $input:*
+    $input:(GroupBy | DistinctOn
+        $groupingInput:*
         $aggregations:*
-        $def:* & ^(IsScalarGroupBy $def)
+        $groupingPrivate:*
     )
-    (Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ])
+    $filters:[
+        ...
+        $item:* &
+            (IsBoundBy
+                $item
+                $passthrough:(GroupingAndConstCols
+                    $groupingPrivate
+                    $aggregations
+                )
+            )
+        ...
+    ]
 )
 =>
 (Select
-    (GroupBy
+    ((OpName $input)
         (Select
-            $input
-            (Filters (ExtractBoundConditions $list $input))
+            $groupingInput
+            (ExtractBoundConditions $filters $passthrough)
         )
         $aggregations
-        $def
+        $groupingPrivate
     )
-    (Filters (ExtractUnboundConditions $list $input))
+    (ExtractUnboundConditions $filters $passthrough)
 )
 
 # RemoveNotNullCondition removes a filter with an IS NOT NULL condition
@@ -303,14 +273,111 @@
 [RemoveNotNullCondition, Normalize]
 (Select
     $input:*
-    (Filters
-        $list:[ ... $condition:(IsNot (Variable $col:* & (IsColNotNull $col $input)) (Null))  ... ]
-    )
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (IsNot
+                (Variable $col:* & (IsColNotNull $col $input))
+                (Null)
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select $input (RemoveFiltersItem $filters $item))
+
+# PushSelectIntoProjectSet pushes filters into a ProjectSet. In particular,
+# the filters that are bound to the input columns of the ProjectSet are
+# pushed down into it, in hopes of being pushed down further into joins
+# and scans underneath the ProjectSet.
+[PushSelectIntoProjectSet, Normalize]
+(Select
+    (ProjectSet $input:* $zip:*)
+    $filters:[
+        ...
+        $item:* &
+            (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
 )
 =>
 (Select
-    $input
-    (Filters
-        (RemoveListItem $list $condition)
-     )
+    (ProjectSet
+        (Select
+            $input
+            (ExtractBoundConditions $filters $inputCols)
+        )
+        $zip
+    )
+    (ExtractUnboundConditions $filters $inputCols)
+)
+
+# PushFilterIntoSetOp pushes filters down to both the left and right sides
+# of all set operators. For example, consider this query:
+#
+#   SELECT * FROM (SELECT x FROM a UNION ALL SELECT y FROM b) WHERE x < 5
+#
+# In this case, we can map x < 5 to both sides based on the knowledge that
+# in the union the x out col corresponds to the x column in the (a) table and
+# the y column in the (b) table. Therefore our mapping becomes x < 5 in the
+# left side, and y <  5 in the right side. Given this mapping, we can now
+# safely push the filter down to both sides as follows:
+#
+# SELECT * FROM (SELECT x FROM a UNION ALL SELECT y FROM b) WHERE x < 5
+# =>
+# (SELECT x FROM a WHERE x < 5) UNION ALL (SELECT y FROM b WHERE y < 5)
+#
+# Pushing (all) the filters down for each of the set operators (Union, Union
+# All, Except, Except All, Intersect, Intersect All) is logically equivalent
+# to filtering after applying the set operator. Here's some justification for
+# this claim:
+#
+# Notice that each of the set operators this rule applies to, only works on
+# union compatible relations. The resulting column set after applying the set
+# operator, is also necessarily a subset of the column set of the (any)
+# relations it was composed of. And so, any filter applied must have a
+# corresponding column in each of the base relations.
+#
+# This works in the case of Union because a row passing the filter is
+# independent of the other rows in its relation. It works in the case of
+# Intersect because if a row `a` was filtered from the intersection, it will
+# also be filtered from the LHS and RHS. It works in the case of Except because
+# if a row is filtered from the RHS, preventing its removal from the LHS, it
+# will also have been filtered from the LHS.
+#
+# Visualization of the rule:
+# Let A and B be sets. Let the filter be represented by eliminating some set C.
+#
+# Union (All):        (A Union B) \ C => (A \ C) Union (B \ C)
+# Intersection (All): (A Intersect B) \ C => (A \ C) Intersect (B \ C)
+# Except (All):       (A Except B) \ C => (A \ C) Except (B \ C)
+#
+# We don't push a filter down if it references outer columns because doing so
+# prevents decorrelation.
+[PushFilterIntoSetOp, Normalize]
+(Select
+    $input:(Set $left:* $right:* $colmap:*)
+    $filter:[
+        ...
+        $item:* &
+            (CanMapOnSetOp $item) &
+            (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            [ (FiltersItem (MapSetOpFilterLeft $item $colmap)) ]
+        )
+        (Select
+            $right
+            [ (FiltersItem (MapSetOpFilterRight $item $colmap)) ]
+        )
+        $colmap
+    )
+    (RemoveFiltersItem $filter $item)
 )

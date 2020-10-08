@@ -1,0 +1,56 @@
+# LogicTest: 5node-default-configs
+
+# Regression test for #39317.
+
+statement ok
+CREATE TABLE l (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+statement ok
+CREATE TABLE r (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+statement ok
+INSERT INTO l VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+INSERT INTO r VALUES (2, 200), (3, 300), (4, 400)
+
+statement ok
+ALTER TABLE l SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE r SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE l EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
+
+statement ok
+ALTER TABLE r EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2), (ARRAY[2], 3), (ARRAY[3], 1)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE l] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         /3       {2}       2
+/3         NULL     {3}       3
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE r] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+/2         /3       {1}       1
+/3         NULL     {2}       2
+NULL       /2       {3}       3
+
+query III
+SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
+----
+2 20 200
+
+# Test that LEFT SEMI merge join outputs batches only with the columns from the
+# left side.
+query II rowsort
+SELECT * FROM l WHERE EXISTS(SELECT * FROM r WHERE r.a=l.a)
+----
+2  20
+3  30

@@ -1,0 +1,109 @@
+# This test verifies some of the pgwire encoding process for ENUMs.
+
+# Prepare the environment.
+send noncrdb_only
+Query {"String": "DROP TYPE IF EXISTS te"}
+----
+
+until noncrdb_only ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS tb"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TYPE te AS ENUM ('hi', 'hello')"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Use the enum now.
+send
+Query {"String": "SELECT 'hi'::te"}
+----
+
+# PostgreSQL uses float4 under the hood.
+until ignore_type_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"te","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+
+# Note that this is slightly different than Postgres -- in Postgres the
+# DataTypeSize for an enum is 4, as floats are used to represent enums
+# internally (4 bytes). Since our encodings are variable size, we report
+# the DataTypeSize to be -1, which is the variable length size.
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"te","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":100052,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"hi"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression for #53413. This test ensures that the wire protocol can handle
+# user defined type OIDs.
+
+send
+Query {"String": "CREATE TABLE tb (x te)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Prepare a query and type hint a user defined type. Then bind this prepared
+# statement with a user defined type argument ([104, 105] = 'hi').
+send
+Parse {"Name": "s1", "Query": "INSERT INTO tb VALUES ($1)", "ParameterOIDs": [100052]}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [[104, 105]]}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Ensure that our value was successfully inserted.
+send
+Query {"String": "SELECT * FROM tb"}
+----
+
+until ignore_table_oids ignore_type_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"x","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":0,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"x","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":100052,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+
+until
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"hi"}]}

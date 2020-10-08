@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree_test
 
@@ -19,83 +15,123 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestParseColumnType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		str          string
-		expectedType coltypes.T
+		expectedType *types.T
 	}{
-		{"BIT", &coltypes.TInt{Name: "BIT", Width: 1, ImplicitWidth: true}},
-		{"BIT(2)", &coltypes.TInt{Name: "BIT", Width: 2}},
-		{"BOOL", &coltypes.TBool{Name: "BOOL"}},
-		{"BOOLEAN", &coltypes.TBool{Name: "BOOLEAN"}},
-		{"SMALLINT", &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}},
-		{"BIGINT", &coltypes.TInt{Name: "BIGINT"}},
-		{"INTEGER", &coltypes.TInt{Name: "INTEGER"}},
-		{"INT", &coltypes.TInt{Name: "INT"}},
-		{"INT2", &coltypes.TInt{Name: "INT2", Width: 16, ImplicitWidth: true}},
-		{"INT4", &coltypes.TInt{Name: "INT4", Width: 32, ImplicitWidth: true}},
-		{"INT8", &coltypes.TInt{Name: "INT8"}},
-		{"INT64", &coltypes.TInt{Name: "INT64"}},
-		{"REAL", &coltypes.TFloat{Name: "REAL", Width: 32}},
-		{"DOUBLE PRECISION", &coltypes.TFloat{Name: "DOUBLE PRECISION", Width: 64}},
-		{"FLOAT", &coltypes.TFloat{Name: "FLOAT", Width: 64}},
-		{"FLOAT4", &coltypes.TFloat{Name: "FLOAT4", Width: 32}},
-		{"FLOAT8", &coltypes.TFloat{Name: "FLOAT8", Width: 64}},
-		{"FLOAT(4)", &coltypes.TFloat{Name: "FLOAT", Width: 64, Prec: 4, PrecSpecified: true}},
-		{"DEC", &coltypes.TDecimal{Name: "DEC"}},
-		{"DECIMAL", &coltypes.TDecimal{Name: "DECIMAL"}},
-		{"NUMERIC", &coltypes.TDecimal{Name: "NUMERIC"}},
-		{"NUMERIC(8)", &coltypes.TDecimal{Name: "NUMERIC", Prec: 8}},
-		{"NUMERIC(9,10)", &coltypes.TDecimal{Name: "NUMERIC", Prec: 9, Scale: 10}},
-		{"UUID", &coltypes.TUUID{}},
-		{"INET", &coltypes.TIPAddr{Name: "INET"}},
-		{"DATE", &coltypes.TDate{}},
-		{"TIME", &coltypes.TTime{}},
-		{"TIME WITH TIME ZONE", &coltypes.TTimeTZ{}},
-		{"TIMESTAMP", &coltypes.TTimestamp{}},
-		{"TIMESTAMP WITH TIME ZONE", &coltypes.TTimestampTZ{}},
-		{"INTERVAL", &coltypes.TInterval{}},
-		{"STRING", &coltypes.TString{Name: "STRING"}},
-		{"CHAR", &coltypes.TString{Name: "CHAR"}},
-		{"VARCHAR", &coltypes.TString{Name: "VARCHAR"}},
-		{"CHAR(11)", &coltypes.TString{Name: "CHAR", N: 11}},
-		{"TEXT", &coltypes.TString{Name: "TEXT"}},
-		{"BLOB", &coltypes.TBytes{Name: "BLOB"}},
-		{"BYTES", &coltypes.TBytes{Name: "BYTES"}},
-		{"BYTEA", &coltypes.TBytes{Name: "BYTEA"}},
-		{"STRING COLLATE da", &coltypes.TCollatedString{Name: "STRING", Locale: "da"}},
-		{"CHAR COLLATE de", &coltypes.TCollatedString{Name: "CHAR", Locale: "de"}},
-		{"VARCHAR COLLATE en", &coltypes.TCollatedString{Name: "VARCHAR", Locale: "en"}},
-		{"CHAR(11) COLLATE en", &coltypes.TCollatedString{Name: "CHAR", N: 11, Locale: "en"}},
+		{"BIT", types.MakeBit(1)},
+		{"VARBIT", types.MakeVarBit(0)},
+		{"BIT(2)", types.MakeBit(2)},
+		{"VARBIT(2)", types.MakeVarBit(2)},
+		{"BOOL", types.Bool},
+		{"INT2", types.Int2},
+		{"INT4", types.Int4},
+		{"INT8", types.Int},
+		{"FLOAT4", types.Float4},
+		{"FLOAT8", types.Float},
+		{"DECIMAL", types.Decimal},
+		{"DECIMAL(8)", types.MakeDecimal(8, 0)},
+		{"DECIMAL(10,9)", types.MakeDecimal(10, 9)},
+		{"UUID", types.Uuid},
+		{"INET", types.INet},
+		{"DATE", types.Date},
+		{"JSONB", types.Jsonb},
+		{"TIME", types.Time},
+		{"TIMESTAMP", types.Timestamp},
+		{"TIMESTAMP(0)", types.MakeTimestamp(0)},
+		{"TIMESTAMP(3)", types.MakeTimestamp(3)},
+		{"TIMESTAMP(6)", types.MakeTimestamp(6)},
+		{"TIMESTAMPTZ", types.TimestampTZ},
+		{"TIMESTAMPTZ(0)", types.MakeTimestampTZ(0)},
+		{"TIMESTAMPTZ(3)", types.MakeTimestampTZ(3)},
+		{"TIMESTAMPTZ(6)", types.MakeTimestampTZ(6)},
+		{"INTERVAL", types.Interval},
+		{"STRING", types.String},
+		{"CHAR", types.MakeChar(1)},
+		{"CHAR(11)", types.MakeChar(11)},
+		{"VARCHAR", types.VarChar},
+		{"VARCHAR(2)", types.MakeVarChar(2)},
+		{`"char"`, types.MakeQChar(0)},
+		{"BYTES", types.Bytes},
+		{"STRING COLLATE da", types.MakeCollatedString(types.String, "da")},
+		{"CHAR COLLATE de", types.MakeCollatedString(types.MakeChar(1), "de")},
+		{"CHAR(11) COLLATE de", types.MakeCollatedString(types.MakeChar(11), "de")},
+		{"VARCHAR COLLATE en", types.MakeCollatedString(types.VarChar, "en")},
+		{"VARCHAR(2) COLLATE en", types.MakeCollatedString(types.MakeVarChar(2), "en")},
 	}
 	for i, d := range testData {
-		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
-		stmt, err := parser.ParseOne(sql)
-		if err != nil {
-			t.Errorf("%d: %s", i, err)
-			continue
-		}
-		if sql != stmt.String() {
-			t.Errorf("%d: expected %s, but got %s", i, sql, stmt)
-		}
-		createTable, ok := stmt.(*tree.CreateTable)
-		if !ok {
-			t.Errorf("%d: expected tree.CreateTable, but got %T", i, stmt)
-			continue
-		}
-		columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
-		if !ok2 {
-			t.Errorf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
-			continue
-		}
-		if !reflect.DeepEqual(d.expectedType, columnDef.Type) {
-			t.Errorf("%d: expected %s, but got %s", i, d.expectedType, columnDef.Type)
-			continue
-		}
+		t.Run(d.str, func(t *testing.T) {
+			sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
+			stmt, err := parser.ParseOne(sql)
+			if err != nil {
+				t.Fatalf("%d: %s", i, err)
+			}
+			if sql != stmt.AST.String() {
+				t.Errorf("%d: expected %s, but got %s", i, sql, stmt.AST)
+			}
+			createTable, ok := stmt.AST.(*tree.CreateTable)
+			if !ok {
+				t.Fatalf("%d: expected tree.CreateTable, but got %T", i, stmt)
+			}
+			columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
+			if !ok2 {
+				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
+			}
+			colType := tree.MustBeStaticallyKnownType(columnDef.Type)
+			if !reflect.DeepEqual(d.expectedType, colType) {
+				t.Fatalf("%d: expected %s, but got %s",
+					i, d.expectedType.DebugString(), colType.DebugString())
+			}
+		})
+	}
+}
+
+func TestParseColumnTypeAliases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testData := []struct {
+		str          string
+		expectedStr  string
+		expectedType *types.T
+	}{
+		// FLOAT has always been FLOAT8
+		{"FLOAT", "CREATE TABLE a (b FLOAT8)", types.Float},
+		// A "naked" INT is 64 bits, for historical compatibility.
+		{"INT", "CREATE TABLE a (b INT8)", types.Int},
+		{"INTEGER", "CREATE TABLE a (b INT8)", types.Int},
+	}
+	for i, d := range testData {
+		t.Run(d.str, func(t *testing.T) {
+			sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
+			stmt, err := parser.ParseOne(sql)
+			if err != nil {
+				t.Fatalf("%d: %s", i, err)
+			}
+			if d.expectedStr != stmt.AST.String() {
+				t.Errorf("%d: expected %s, but got %s", i, d.expectedStr, stmt.AST)
+			}
+			createTable, ok := stmt.AST.(*tree.CreateTable)
+			if !ok {
+				t.Fatalf("%d: expected tree.CreateTable, but got %T", i, stmt.AST)
+			}
+			columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
+			if !ok2 {
+				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
+			}
+			colType := tree.MustBeStaticallyKnownType(columnDef.Type)
+			if !d.expectedType.Identical(colType) {
+				t.Fatalf("%d: expected %s, but got %s", i, d.expectedType.DebugString(), colType.DebugString())
+			}
+		})
 	}
 }

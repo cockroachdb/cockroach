@@ -1,30 +1,46 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 @require "~styl/base/palette.styl"
-@require "~styl/layout/layout.styl"
+@require "~styl/base/layout-vars.styl"
+@require '~src/components/core/index.styl'
 
 .page
   padding-top 0
 
   &>.section
-    padding 18px 24px
+    padding 18px 24px 0
 
   &> div > .section
-    padding 18px 24px
+    padding 18px 24px 0
 
 .database-summary-title h2
   padding-top 0
+
+.cluster-page
+  height 100%
+  display flex
+  flex-direction column
+  overflow auto
 
 .cluster-overview
   .cluster-summary
     background-color white
     padding 24px
     margin-top 0
-    margin-left 24px
-    margin-right 24px
     border 1px solid $table-border-color
+    font-family $font-family--base
 
     display grid
     align-items end
-    grid-template-columns 6fr 8fr 6fr 8fr 2fr 6fr 6fr 6fr 2fr 6fr 10fr 6fr
+    grid-template-columns 6fr 8fr 6fr minmax(auto,8fr) minmax(10px, 2fr) 6fr 6fr 6fr 2fr 6fr 10fr 6fr
     grid-template-rows repeat(3, auto)
     grid-template-areas "cap-t cap-t cap-t cap-t . live-t live-t live-t . rep-t rep-t rep-t" "cap-m cap-c cap-c cap-c . live-a live-b live-c . rep-a rep-b rep-c" "cap-a1 cap-a2 cap-a3 cap-a4 . live-1 live-2 live-3 . rep-1 rep-2 rep-3"
 
@@ -36,11 +52,15 @@
       grid-template-areas "cap-t cap-t live-t live-t rep-t rep-t" "cap-m2 cap-m live-1 live-a rep-1 rep-a" "cap-a1 cap-a2 live-2 live-b rep-2 rep-b" "cap-a3 cap-a4 live-3 live-c rep-3 rep-c"
 
     @media screen and (min-width: 1400px)
-      grid-template-columns 100px 135px 100px 135px 1fr 100px 100px 100px 1fr 100px 168px 100px
+      grid-template-columns 2fr 3fr 2fr 3fr 4fr 2fr 2fr 2fr 4fr 2fr 3fr 2fr
+
+    @media screen and (min-width: 1720px)
+      grid-template-columns 3fr 4fr 3fr 4fr 8fr 3fr 3fr 3fr 8fr 4fr 4fr 4fr
 
     .capacity-usage
       &.cluster-summary__title
-          grid-area cap-t
+        color $colors--neutral-7
+        grid-area cap-t
 
       &.cluster-summary__chart
           grid-area cap-c
@@ -71,7 +91,8 @@
 
     .node-liveness
       &.cluster-summary__title
-          grid-area live-t
+        color $colors--neutral-7
+        grid-area live-t
 
       &.cluster-summary__metric.live-nodes
           grid-area live-a
@@ -93,7 +114,8 @@
 
     .replication-status
       &.cluster-summary__title
-          grid-area rep-t
+        color $colors--neutral-7
+        grid-area rep-t
 
       &.cluster-summary__metric.total-ranges
           grid-area rep-a
@@ -129,7 +151,7 @@
     &__metric
       font-size 30px
       font-weight bold
-      color $link-color
+      color $colors--secondary-text
       white-space nowrap
       padding-right 12px
 
@@ -152,7 +174,11 @@
       &.alert
         color $alert-color
 
+      &.disabled
+        color $colors--neutral-5
+
       &.storage-used, &.storage-usable
+        color $colors--neutral-7
         @media screen and (min-width: 960px) and (max-width: 1400px)
           font-size 14px
           line-height 16px
@@ -170,7 +196,7 @@
       font-weight 500
       line-height 18px
       text-transform uppercase
-      color $tooltip-color
+      color $colors--neutral-5
       letter-spacing 2px
 
       @media screen and (max-width: 960px)
@@ -224,3 +250,10 @@
 
       &.bar
         fill $link-color
+
+
+.cluster-overview--fixed
+  flex-grow 1
+  max-width $max-window-width
+  position relative
+  padding $spacing-smaller $spacing-medium

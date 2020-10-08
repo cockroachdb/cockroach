@@ -1,0 +1,267 @@
+# Some tests for RENAME TYPE.
+statement ok
+CREATE TYPE greeting AS ENUM ('hi', 'hello');
+ALTER TYPE greeting RENAME TO newname
+
+# After renaming, we should be able to resolve the type with the new name.
+query T
+SELECT 'hi'::newname
+----
+hi
+
+# The array type should be renamed as well.
+query T
+SELECT ARRAY['hi']::_newname
+----
+{hi}
+
+# Test that we can use the new name within a transaction.
+statement ok
+BEGIN;
+ALTER TYPE newname RENAME TO renameagain
+
+query T
+SELECT 'hi'::renameagain
+----
+hi
+
+# newname is draining, so it should not be available for use.
+statement error pq: type \"newname\" already exists
+ALTER TYPE renameagain RENAME TO newname
+
+statement ok
+ROLLBACK
+
+# We should be able to rename a type multiple types in a transaction.
+statement ok
+BEGIN;
+ALTER TYPE newname RENAME TO new_name
+
+query T
+SELECT 'hi'::new_name
+----
+hi
+
+statement ok
+ALTER TYPE new_name RENAME TO new__name
+
+query T
+SELECT 'hi'::new__name
+----
+hi
+
+statement ok
+COMMIT
+
+# newname should be available for use after draining.
+statement ok
+ALTER TYPE new__name RENAME TO newname
+
+# We shouldn't be able to rename into a conflicting type.
+statement ok
+CREATE TABLE conflict (x INT)
+
+statement error pq: relation \"conflict\" already exists
+ALTER TYPE newname RENAME TO conflict
+
+# Renames should try and move around the array type to find a valid name.
+# This creates types _why and __why.
+statement ok
+CREATE TYPE _why AS ENUM ('pg', 'array', 'types', 'are', 'silly')
+
+# This should rename the array type to ___why.
+statement ok
+ALTER TYPE newname RENAME TO why
+
+query T
+SELECT ARRAY['hi']::___why
+----
+{hi}
+
+statement ok
+CREATE TYPE names AS ENUM ('james', 'johnny')
+
+# Cannot rename a value to a value that already a member of the type.
+statement error enum label johnny already exists
+ALTER TYPE names RENAME VALUE 'james' TO 'johnny'
+
+# Cannot rename a value that is not a member of the type.
+statement error jim is not an existing enum label
+ALTER TYPE names RENAME VALUE 'jim' TO 'jimmy'
+
+statement ok
+ALTER TYPE names RENAME VALUE 'james' to 'jimmy'
+
+# Make sure james is renamed to jimmy.
+query T
+SELECT enum_range('jimmy'::names);
+----
+{jimmy,johnny}
+
+# James should not be a member of names.
+statement error invalid input value for enum names: "james"
+SELECT 'james'::names
+
+# Try multiple renames in a single transaction.
+statement ok
+BEGIN
+
+statement ok
+ALTER TYPE names RENAME VALUE 'jimmy' TO 'jim'
+
+statement ok
+ALTER TYPE names RENAME VALUE 'johnny' TO 'john'
+
+statement ok
+COMMIT
+
+# Make sure both names were renamed and the old names are not members of names.
+query T
+SELECT enum_range('jim'::names);
+----
+{jim,john}
+
+statement error invalid input value for enum names: "jimmy"
+SELECT 'jimmy'::names
+
+statement error invalid input value for enum names: "johnny"
+SELECT 'johnny'::names
+
+subtest add_value
+
+# Start off with an empty enum, and add values to it.
+statement ok
+CREATE TYPE build AS ENUM ()
+
+statement ok
+ALTER TYPE build ADD VALUE 'c'
+
+query T
+SELECT enum_range('c'::build)
+----
+{c}
+
+# Test some error cases.
+statement error pq: enum label \"c\" already exists
+ALTER TYPE build ADD VALUE 'c'
+
+statement error pq: \"b\" is not an existing enum label
+ALTER TYPE build ADD VALUE 'a' BEFORE 'b'
+
+statement error pq: \"b\" is not an existing enum label
+ALTER TYPE build ADD VALUE 'a' AFTER 'b'
+
+statement ok
+ALTER TYPE build ADD VALUE IF NOT EXISTS 'c'
+
+statement ok
+ALTER TYPE build ADD VALUE 'f'
+
+query T
+SELECT enum_range('c'::build)
+----
+{c,f}
+
+statement ok
+ALTER TYPE build ADD VALUE 'd' AFTER 'c'
+
+query T
+SELECT enum_range('c'::build)
+----
+{c,d,f}
+
+statement ok
+ALTER TYPE build ADD VALUE 'e' BEFORE 'f'
+
+query T
+SELECT enum_range('c'::build)
+----
+{c,d,e,f}
+
+statement ok
+ALTER TYPE build ADD VALUE 'a' BEFORE 'c'
+
+query T
+SELECT enum_range('c'::build)
+----
+{a,c,d,e,f}
+
+statement ok
+ALTER TYPE build ADD VALUE 'b' AFTER 'a'
+
+query T
+SELECT enum_range('c'::build)
+----
+{a,b,c,d,e,f}
+
+# Ensure that we can't use/write an enum until it has become writeable.
+statement ok
+CREATE TABLE new_enum_values (x build)
+
+statement ok
+BEGIN;
+ALTER TYPE build ADD VALUE 'g';
+ALTER TYPE build ADD VALUE '_a' BEFORE 'a'
+
+# _a and g shouldn't be included in any of the builtins.
+query T
+SELECT enum_range('c'::build)
+----
+{a,b,c,d,e,f}
+
+query T
+SELECT enum_first('c'::build)
+----
+a
+
+query T
+SELECT enum_last('c'::build)
+----
+f
+
+statement error pq: enum label \"g\" is not yet public
+INSERT INTO new_enum_values VALUES ('g')
+
+statement ok
+ROLLBACK
+
+# Ensure that optimizer plan caching takes into account changes in types.
+statement ok
+CREATE TYPE cache AS ENUM ('lru', 'clock')
+
+# Run the statement once to put it into the cache.
+query T
+SELECT 'clock'::cache
+----
+clock
+
+# Now alter the type.
+statement ok
+ALTER TYPE cache RENAME VALUE 'clock' TO 'clock-pro'
+
+statement error pq: invalid input value for enum cache: "clock"
+SELECT 'clock'::cache
+
+# Put another query into the cache.
+query T
+SELECT 'lru'::cache
+----
+lru
+
+statement ok
+ALTER TYPE cache RENAME TO store
+
+statement error pq: type "cache" does not exist
+SELECT 'lru'::cache
+
+# Lastly, ensure that we error out in planning when trying to use a dropped type.
+query T
+SELECT 'lru'::store
+----
+lru
+
+statement ok
+DROP TYPE store
+
+statement error pq: type "store" does not exist
+SELECT 'lru'::store

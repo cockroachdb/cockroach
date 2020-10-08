@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package transform
 
@@ -24,9 +20,8 @@ import (
 // should be used in planner instance to avoid re-allocation of these
 // visitors between uses.
 type ExprTransformContext struct {
-	normalizeVisitor      tree.NormalizeVisitor
-	isAggregateVisitor    IsAggregateVisitor
-	containsWindowVisitor ContainsWindowVisitor
+	normalizeVisitor   tree.NormalizeVisitor
+	isAggregateVisitor IsAggregateVisitor
 }
 
 // NormalizeExpr is a wrapper around EvalContex.NormalizeExpr which
@@ -58,18 +53,9 @@ func (t *ExprTransformContext) AggregateInExpr(
 		return false
 	}
 
-	t.isAggregateVisitor.searchPath = searchPath
-	defer t.isAggregateVisitor.Reset()
+	t.isAggregateVisitor = IsAggregateVisitor{
+		searchPath: searchPath,
+	}
 	tree.WalkExprConst(&t.isAggregateVisitor, expr)
 	return t.isAggregateVisitor.Aggregated
-}
-
-// WindowFuncInExpr determines if an Expr contains a window function, using
-// the Parser's embedded visitor.
-// TODO(knz/radu): this is not the right way to go about checking
-// these things. Instead whatever analysis occurs prior on the expression
-// should collect scalar properties (see tree.ScalarProperties) and
-// then the collected properties should be tested directly.
-func (t *ExprTransformContext) WindowFuncInExpr(expr tree.Expr) bool {
-	return t.containsWindowVisitor.ContainsWindowFunc(expr)
 }

@@ -1,17 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -26,21 +21,23 @@ import (
 func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMonotonicityTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when introducing offset
-	if c.nodes != 1 {
-		t.Fatalf("Expected num nodes to be 1, got: %d", c.nodes)
+	if c.spec.NodeCount != 1 {
+		t.Fatalf("Expected num nodes to be 1, got: %d", c.spec.NodeCount)
 	}
 
 	t.Status("deploying offset injector")
 	offsetInjector := newOffsetInjector(c)
-	offsetInjector.deploy(ctx)
+	if err := offsetInjector.deploy(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx)
+	c.Start(ctx, t)
 
-	db := c.Conn(ctx, c.nodes)
+	db := c.Conn(ctx, c.spec.NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(`SET CLUSTER SETTING server.clock.persist_upper_bound_interval = '%v'`,
@@ -51,7 +48,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	// Wait for Cockroach to process the above cluster setting
 	time.Sleep(10 * time.Second)
 
-	if !isAlive(db) {
+	if !isAlive(db, c.l) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -60,17 +57,33 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 		t.Fatal(err)
 	}
 
-	defer offsetInjector.recover(ctx, c.nodes)
+	// Recover from the injected clock offset after validation completes.
+	defer func() {
+		if !isAlive(db, c.l) {
+			t.Fatal("Node unexpectedly crashed")
+		}
+		// Stop cockroach node before recovering from clock offset as this clock
+		// jump can crash the node.
+		c.Stop(ctx, c.Node(c.spec.NodeCount))
+		t.l.Printf("recovering from injected clock offset")
+
+		offsetInjector.recover(ctx, c.spec.NodeCount)
+
+		c.Start(ctx, t, c.Node(c.spec.NodeCount))
+		if !isAlive(db, c.l) {
+			t.Fatal("Node unexpectedly crashed")
+		}
+	}()
 
 	// Inject a clock offset after stopping a node
 	t.Status("stopping cockroach")
-	c.Stop(ctx, c.Node(c.nodes))
+	c.Stop(ctx, c.Node(c.spec.NodeCount))
 	t.Status("injecting offset")
-	offsetInjector.offset(ctx, c.nodes, tc.offset)
+	offsetInjector.offset(ctx, c.spec.NodeCount, tc.offset)
 	t.Status("starting cockroach post offset")
-	c.Start(ctx, c.Node(c.nodes))
+	c.Start(ctx, t, c.Node(c.spec.NodeCount))
 
-	if !isAlive(db) {
+	if !isAlive(db, c.l) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -80,10 +93,10 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	}
 
 	t.Status("validating clock monotonicity")
-	c.l.printf("pre-restart time:  %f\n", preRestartTime)
-	c.l.printf("post-restart time: %f\n", postRestartTime)
+	t.l.Printf("pre-restart time:  %f\n", preRestartTime)
+	t.l.Printf("post-restart time: %f\n", postRestartTime)
 	difference := postRestartTime - preRestartTime
-	c.l.printf("time-difference: %v\n", time.Duration(difference*float64(time.Second)))
+	t.l.Printf("time-difference: %v\n", time.Duration(difference*float64(time.Second)))
 
 	if tc.expectIncreasingWallTime {
 		if preRestartTime > postRestartTime {
@@ -103,7 +116,7 @@ type clockMonotonicityTestCase struct {
 	expectIncreasingWallTime bool
 }
 
-func makeClockMonotonicTests() testSpec {
+func registerClockMonotonicTests(r *testRegistry) {
 	testCases := []clockMonotonicityTestCase{
 		{
 			name:                     "persistent",
@@ -113,21 +126,18 @@ func makeClockMonotonicTests() testSpec {
 		},
 	}
 
-	spec := testSpec{
-		Name:   "monotonic",
-		Stable: true, // DO NOT COPY to new tests
-	}
-
 	for i := range testCases {
 		tc := testCases[i]
-		spec.SubTests = append(spec.SubTests, testSpec{
-			Name:   tc.name,
-			Stable: true, // DO NOT COPY to new tests
+		spec := testSpec{
+			Name:  "clock/monotonic/" + tc.name,
+			Owner: OwnerKV,
+			// These tests muck with NTP, therefor we don't want the cluster reused by
+			// others.
+			Cluster: makeClusterSpec(1, reuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},
-		})
+		}
+		r.Add(spec)
 	}
-
-	return spec
 }

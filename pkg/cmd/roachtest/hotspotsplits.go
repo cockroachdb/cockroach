@@ -1,46 +1,37 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"strconv"
 	"time"
-
-	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	_ "github.com/lib/pq"
+	"golang.org/x/sync/errgroup"
 )
 
-func registerHotSpotSplits(r *registry) {
+func registerHotSpotSplits(r *testRegistry) {
 	// This test sets up a cluster and runs kv on it with high concurrency and a large block size
 	// to force a large range. We then make sure that the largest range isn't larger than a threshold and
 	// that backpressure is working correctly.
 	runHotSpot := func(ctx context.Context, t *test, c *cluster, duration time.Duration, concurrency int) {
-		roachNodes := c.Range(1, c.nodes-1)
-		appNode := c.Node(c.nodes)
+		roachNodes := c.Range(1, c.spec.NodeCount-1)
+		appNode := c.Node(c.spec.NodeCount)
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
-		c.Start(ctx, roachNodes)
+		c.Start(ctx, t, roachNodes)
 
 		c.Put(ctx, workload, "./workload", appNode)
 		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
@@ -49,22 +40,18 @@ func registerHotSpotSplits(r *registry) {
 		m, ctx = errgroup.WithContext(ctx)
 
 		m.Go(func() error {
-			c.l.printf("starting load generator\n")
+			t.l.Printf("starting load generator\n")
 
-			quietL, err := newLogger("run kv", strconv.Itoa(0), "workload"+strconv.Itoa(0), ioutil.Discard, os.Stderr)
-			if err != nil {
-				return err
-			}
-			const blockSize = 1 << 19 // 512 KB
-			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
-				"./workload run kv --read-percent=0 --splits=0 --tolerate-errors --concurrency=%d "+
+			const blockSize = 1 << 18 // 256 KB
+			return c.RunE(ctx, appNode, fmt.Sprintf(
+				"./workload run kv --read-percent=0 --tolerate-errors --concurrency=%d "+
 					"--min-block-bytes=%d --max-block-bytes=%d --duration=%s {pgurl:1-3}",
-				concurrency, blockSize, blockSize+1, duration.String()))
+				concurrency, blockSize, blockSize, duration.String()))
 		})
 
 		m.Go(func() error {
 			t.Status(fmt.Sprintf("starting checks for range sizes"))
-			const sizeLimit = 3 * (1 << 26) // 192 MB
+			const sizeLimit = 3 * (1 << 29) // 3*512 MB (512 mb is default size)
 
 			db := c.Conn(ctx, 1)
 			defer db.Close()
@@ -102,9 +89,13 @@ func registerHotSpotSplits(r *registry) {
 	concurrency := 128
 
 	r.Add(testSpec{
-		Name:   fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
-		Nodes:  nodes(numNodes),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
+		Owner: OwnerKV,
+		// Test OOMs below this version because of scans over the large rows.
+		// No problem in 20.1 thanks to:
+		// https://github.com/cockroachdb/cockroach/pull/45323.
+		MinVersion: "v20.1.0",
+		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32

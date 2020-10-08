@@ -1,0 +1,22 @@
+feature-allowlist
+unimplemented.*
+----
+
+feature-usage
+SELECT ST_ClusterKMeans()
+----
+error: pq: st_clusterkmeans(): unimplemented: this function is not yet supported
+unimplemented.#48900.st_clusterkmeans
+
+feature-usage
+CREATE TABLE t(a GEOMETRY(GEOMETRYZ, 4326))
+----
+error: pq: at or near ",": syntax error: unimplemented: this syntax
+unimplemented.#53091.XYZ_type
+unimplemented.syntax.#53091.XYZ_type
+
+feature-usage
+SELECT 'POINT Z (1 2 3)'::geometry
+----
+error: pq: could not parse geometry: unimplemented: dimension XYZ is not currently supported
+unimplemented.#53091.XYZ_datum

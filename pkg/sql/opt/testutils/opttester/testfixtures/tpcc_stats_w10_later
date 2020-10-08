@@ -1,0 +1,686 @@
+# Stats for TPC-C with 10 warehouses, collected after the workload has been
+# running for several weeks.
+
+exec-ddl
+ALTER TABLE warehouse INJECT STATISTICS '[
+  {
+    "columns": ["w_street_1"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 5,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_name"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 5,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_id"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_street_2"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 6,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_city"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 6,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_state"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_zip"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_tax"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_ytd"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE district INJECT STATISTICS '[
+  {
+    "columns": ["d_street_1"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_id"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_name"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_w_id"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_street_2"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_city"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_state"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 95,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_zip"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_tax"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 97,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_ytd"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_next_o_id"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 99,
+    "null_count": 0,
+    "row_count": 100
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE customer INJECT STATISTICS '[
+  {
+    "columns": ["c_city"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 298858,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_id"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_d_id"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_first"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 300249,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_middle"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_last"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_street_1"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 297424,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_street_2"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 300347,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_w_id"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_state"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 676,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_zip"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 10018,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_phone"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 299040,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_since"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_credit"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 2,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_credit_lim"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_discount"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 5000,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_balance"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 299825,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_ytd_payment"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 296467,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_payment_cnt"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1452,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_delivery_cnt"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1456,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_data"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 298234,
+    "null_count": 0,
+    "row_count": 300000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE history INJECT STATISTICS '[
+  {
+    "columns": ["rowid"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 40498941,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_w_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_c_w_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_c_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_c_d_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_d_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_date"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 1707299,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_amount"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 489649,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_data"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 299903,
+    "null_count": 0,
+    "row_count": 40286242}
+]'
+----
+
+exec-ddl
+ALTER TABLE "order" INJECT STATISTICS '[
+  {
+    "columns": ["o_w_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 659249,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_d_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_c_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_entry_d"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 2845896,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_carrier_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 10,
+    "null_count": 11322,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_ol_cnt"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 11,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_all_local"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 2,
+    "null_count": 0,
+    "row_count": 65604710
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE new_order INJECT STATISTICS '[
+  {
+    "columns": ["no_w_id"],
+    "created_at": "2019-03-19 18:12:13.614374+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 11322},
+  {
+    "columns": ["no_o_id"],
+    "created_at": "2019-03-19 18:12:13.614374+00:00",
+    "distinct_count": 3473,
+    "null_count": 0,
+    "row_count": 11322},
+  {
+    "columns": ["no_d_id"],
+    "created_at": "2019-03-19 18:12:13.614374+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 11322}
+]'
+----
+
+exec-ddl
+ALTER TABLE item INJECT STATISTICS '[
+  {
+    "columns": ["i_id"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 101273,
+    "null_count": 0,
+    "row_count": 100000
+  },
+  {
+    "columns": ["i_im_id"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 10034,
+    "null_count": 0,
+    "row_count": 100000
+  },
+  {
+    "columns": ["i_name"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 99350,
+    "null_count": 0,
+    "row_count": 100000
+  },
+  {
+    "columns": ["i_price"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 9857,
+    "null_count": 0,
+    "row_count": 100000
+  },
+  {
+    "columns": ["i_data"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 100852,
+    "null_count": 0,
+    "row_count": 100000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE stock INJECT STATISTICS '[
+  {
+    "columns": ["s_dist_02"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 986857,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_i_id"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 101273,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_quantity"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 91,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_01"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 989838,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_w_id"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_03"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1008181,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_04"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1012198,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_05"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 986878,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_06"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 996501,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_07"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1002457,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_08"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1007497,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_09"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 995973,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_10"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1002525,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_ytd"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 29896,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_order_cnt"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 7810,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_remote_cnt"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 189,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_data"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1012256,
+    "null_count": 0,
+    "row_count": 1000000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE order_line INJECT STATISTICS '[
+  {
+    "columns": ["ol_supply_w_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_w_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_o_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 651111,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_d_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_number"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 15,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_i_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 101273,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_delivery_d"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 2351500,
+    "null_count": 106092,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_quantity"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_amount"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 609193,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_dist_info"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 13030568,
+    "null_count": 0,
+    "row_count": 646903924
+  }
+]'
+----

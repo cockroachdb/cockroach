@@ -1,37 +1,41 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package stop
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
-
-	opentracing "github.com/opentracing/opentracing-go"
+	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
+
+func init() {
+	leaktest.PrintLeakedStoppers = PrintLeakedStoppers
+}
 
 const asyncTaskNamePrefix = "[async] "
 
@@ -45,7 +49,8 @@ var ErrUnavailable = &roachpb.NodeUnavailableError{}
 
 func register(s *Stopper) {
 	trackedStoppers.Lock()
-	trackedStoppers.stoppers = append(trackedStoppers.stoppers, s)
+	trackedStoppers.stoppers = append(trackedStoppers.stoppers,
+		stopperWithStack{s: s, createdAt: string(debug.Stack())})
 	trackedStoppers.Unlock()
 }
 
@@ -54,7 +59,7 @@ func unregister(s *Stopper) {
 	defer trackedStoppers.Unlock()
 	sl := trackedStoppers.stoppers
 	for i, tracked := range sl {
-		if tracked == s {
+		if tracked.s == s {
 			trackedStoppers.stoppers = sl[:i+copy(sl[i:], sl[i+1:])]
 			return
 		}
@@ -62,9 +67,14 @@ func unregister(s *Stopper) {
 	panic("attempt to unregister untracked stopper")
 }
 
+type stopperWithStack struct {
+	s         *Stopper
+	createdAt string // stack from NewStopper()
+}
+
 var trackedStoppers struct {
 	syncutil.Mutex
-	stoppers []*Stopper
+	stoppers []stopperWithStack
 }
 
 // HandleDebug responds with the list of stopper tasks actively running.
@@ -72,10 +82,21 @@ func HandleDebug(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	trackedStoppers.Lock()
 	defer trackedStoppers.Unlock()
-	for _, s := range trackedStoppers.stoppers {
+	for _, ss := range trackedStoppers.stoppers {
+		s := ss.s
 		s.mu.Lock()
 		fmt.Fprintf(w, "%p: %d tasks\n%s", s, s.mu.numTasks, s.runningTasksLocked())
 		s.mu.Unlock()
+	}
+}
+
+// PrintLeakedStoppers prints (using `t`) the creation site of each Stopper
+// for which `.Stop()` has not yet been called.
+func PrintLeakedStoppers(t testing.TB) {
+	trackedStoppers.Lock()
+	defer trackedStoppers.Unlock()
+	for _, tracked := range trackedStoppers.stoppers {
+		t.Logf("leaked stopper, created at:\n%s", tracked.createdAt)
 	}
 }
 
@@ -121,7 +142,11 @@ type Stopper struct {
 		numTasks  int        // number of outstanding tasks
 		tasks     TaskMap
 		closers   []Closer
-		cancels   []func()
+		idAlloc   int
+		qCancels  map[int]func()
+		sCancels  map[int]func()
+
+		stopCalled bool // turns all but first call to Stop into noop
 	}
 }
 
@@ -154,6 +179,8 @@ func NewStopper(options ...Option) *Stopper {
 	}
 
 	s.mu.tasks = TaskMap{}
+	s.mu.qCancels = map[int]func(){}
+	s.mu.sCancels = map[int]func(){}
 
 	for _, opt := range options {
 		opt.apply(s)
@@ -197,10 +224,64 @@ func (s *Stopper) RunWorker(ctx context.Context, f func(context.Context)) {
 }
 
 // AddCloser adds an object to close after the stopper has been stopped.
+//
+// WARNING: memory resources acquired by this method will stay around for
+// the lifetime of the Stopper. Use with care to avoid leaking memory.
 func (s *Stopper) AddCloser(c Closer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.closers = append(s.mu.closers, c)
+	select {
+	case <-s.stopper:
+		// Close immediately.
+		c.Close()
+	default:
+		s.mu.closers = append(s.mu.closers, c)
+	}
+}
+
+// WithCancelOnQuiesce returns a child context which is canceled when the
+// returned cancel function is called or when the Stopper begins to quiesce,
+// whichever happens first.
+//
+// Canceling this context releases resources associated with it, so code should
+// call cancel as soon as the operations running in this Context complete.
+func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, func()) {
+	return s.withCancel(ctx, s.mu.qCancels, s.quiescer)
+}
+
+// WithCancelOnStop returns a child context which is canceled when the
+// returned cancel function is called or when the Stopper begins to stop,
+// whichever happens first.
+//
+// Canceling this context releases resources associated with it, so code should
+// call cancel as soon as the operations running in this Context complete.
+func (s *Stopper) WithCancelOnStop(ctx context.Context) (context.Context, func()) {
+	return s.withCancel(ctx, s.mu.sCancels, s.stopper)
+}
+
+func (s *Stopper) withCancel(
+	ctx context.Context, cancels map[int]func(), cancelCh chan struct{},
+) (context.Context, func()) {
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	select {
+	case <-cancelCh:
+		// Cancel immediately.
+		cancel()
+		return ctx, func() {}
+	default:
+		id := s.mu.idAlloc
+		s.mu.idAlloc++
+		cancels[id] = cancel
+		return ctx, func() {
+			cancel()
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			delete(cancels, id)
+		}
+	}
 }
 
 // RunTask adds one to the count of tasks left to quiesce in the system.
@@ -266,7 +347,6 @@ func (s *Stopper) RunAsyncTask(
 		f(ctx)
 	}()
 	return nil
-
 }
 
 // RunLimitedAsyncTask runs function f in a goroutine, using the given
@@ -275,44 +355,43 @@ func (s *Stopper) RunAsyncTask(
 // until the semaphore is available in order to push back on callers
 // that may be trying to create many tasks. If wait is false, returns
 // immediately with an error if the semaphore is not
-// available. Returns an error if the Stopper is quiescing, in which
-// case the function is not executed.
+// available. It is the caller's responsibility to ensure that sem is
+// closed when the stopper is quiesced. For quotapools which live for the
+// lifetime of the stopper, it is generally best to register the sem with the
+// stopper using AddCloser.
 func (s *Stopper) RunLimitedAsyncTask(
-	ctx context.Context, taskName string, sem chan struct{}, wait bool, f func(context.Context),
-) error {
+	ctx context.Context, taskName string, sem *quotapool.IntPool, wait bool, f func(context.Context),
+) (err error) {
 	// Wait for permission to run from the semaphore.
-	select {
-	case sem <- struct{}{}:
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.ShouldQuiesce():
-		return ErrUnavailable
-	default:
-		if !wait {
-			return ErrThrottled
-		}
-		log.Eventf(ctx, "stopper throttling task from %s due to semaphore", taskName)
-		// Retry the select without the default.
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.ShouldQuiesce():
-			return ErrUnavailable
-		}
+	var alloc *quotapool.IntAlloc
+	if wait {
+		alloc, err = sem.Acquire(ctx, 1)
+	} else {
+		alloc, err = sem.TryAcquire(ctx, 1)
 	}
+	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
+		err = ErrThrottled
+	} else if quotapool.HasErrClosed(err) {
+		err = ErrUnavailable
+	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// If the err is non-nil then we know that we did not start the async task
+		// and thus we need to release the acquired quota. If it is nil then we
+		// did start the task and it will release the quota.
+		if err != nil {
+			alloc.Release()
+		}
+	}()
 
 	// Check for canceled context: it's possible to get the semaphore even
 	// if the context is canceled.
-	select {
-	case <-ctx.Done():
-		<-sem
+	if ctx.Err() != nil {
 		return ctx.Err()
-	default:
 	}
-
 	if !s.runPrelude(taskName) {
-		<-sem
 		return ErrUnavailable
 	}
 
@@ -321,7 +400,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
-		defer func() { <-sem }()
+		defer alloc.Release()
 		defer tracing.FinishSpan(span)
 
 		f(ctx)
@@ -391,6 +470,15 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 // Stop signals all live workers to stop and then waits for each to
 // confirm it has stopped.
 func (s *Stopper) Stop(ctx context.Context) {
+	s.mu.Lock()
+	stopCalled := s.mu.stopCalled
+	s.mu.stopCalled = true
+	s.mu.Unlock()
+
+	if stopCalled {
+		return
+	}
+
 	defer s.Recover(ctx)
 	defer unregister(s)
 
@@ -416,7 +504,13 @@ func (s *Stopper) Stop(ctx context.Context) {
 	}
 
 	s.Quiesce(ctx)
+	s.mu.Lock()
+	for _, cancel := range s.mu.sCancels {
+		cancel()
+	}
 	close(s.stopper)
+	s.mu.Unlock()
+
 	s.stop.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -462,27 +556,22 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 	defer s.Recover(ctx)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, cancel := range s.mu.cancels {
+	for _, cancel := range s.mu.qCancels {
 		cancel()
 	}
 	if !s.mu.quiescing {
+		log.Infof(ctx, "quiescing")
 		s.mu.quiescing = true
 		close(s.quiescer)
 	}
 	for s.mu.numTasks > 0 {
-		log.Infof(ctx, "quiescing; tasks left:\n%s", s.runningTasksLocked())
+		t := time.AfterFunc(5*time.Second, func() {
+			// If we're waiting for 5+s without a task terminating, log the ones
+			// that remain.
+			log.Infof(ctx, "quiescing; tasks left:\n%s", s.RunningTasks())
+		})
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.mu.quiesce.Wait()
+		t.Stop()
 	}
-}
-
-// WithCancel returns a child context which is canceled when the Stopper
-// begins to quiesce.
-func (s *Stopper) WithCancel(ctx context.Context) context.Context {
-	var cancel func()
-	ctx, cancel = context.WithCancel(ctx)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.cancels = append(s.mu.cancels, cancel)
-	return ctx
 }

@@ -1,0 +1,590 @@
+statement ok
+SET experimental_enable_temp_tables = true;
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS public
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS crdb_internal
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS pg_catalog
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS information_schema
+
+statement ok
+CREATE SCHEMA derp
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS derp
+
+statement error schema \"derp\" already exists
+CREATE SCHEMA derp
+
+statement error schema .* already exists
+CREATE SCHEMA public
+
+statement error schema .* already exists
+CREATE SCHEMA crdb_internal
+
+statement error schema .* already exists
+CREATE SCHEMA pg_catalog
+
+statement error schema .* already exists
+CREATE SCHEMA information_schema
+
+statement error pq: unacceptable schema name \"pg_temp\"
+CREATE SCHEMA pg_temp
+
+# Create some tables and types in a user defined schema, and resolve them.
+statement ok
+CREATE SCHEMA myschema;
+CREATE TABLE myschema.tb (x INT);
+CREATE TYPE myschema.typ AS ENUM ('user', 'defined', 'schema');
+CREATE VIEW myschema.v AS SELECT x FROM myschema.tb;
+CREATE SEQUENCE myschema.s
+
+query I
+SELECT * FROM myschema.tb
+----
+
+query I
+SELECT * FROM myschema.v
+----
+
+query I
+SELECT last_value FROM myschema.s
+----
+0
+
+query TT
+SELECT 'user'::myschema.typ, ARRAY['defined']::myschema._typ
+----
+user {defined}
+
+# Set the search path to have myschema at the front.
+statement ok
+SET search_path TO myschema,public
+
+# Now we should be able to resolve tb and typ without qualification.
+query I
+SELECT * FROM tb
+----
+
+query TT
+SELECT 'user'::typ, ARRAY['defined']::_typ
+----
+user {defined}
+
+# New objects should be created into tb2 by default.
+statement ok
+CREATE TABLE tb2 (x typ)
+
+query T
+SELECT * FROM tb2
+----
+
+query T
+SELECT * FROM myschema.tb2
+----
+
+# Reset the search path.
+statement ok
+SET search_path TO public
+
+# Try to create a temp table in a user defined schema.
+statement error pq: cannot create temporary relation in non-temporary schema
+CREATE TEMP TABLE myschema.tmp (x int)
+
+# We should error out trying to modify any virtual schemas.
+statement error pq: schema cannot be modified: "pg_catalog"
+CREATE TABLE pg_catalog.bad (x int)
+
+# We shouldn't be able to alter virtual or public schemas.
+statement error pq: cannot modify schema "public"
+ALTER SCHEMA public RENAME TO private
+
+statement error pq: cannot modify schema "pg_catalog"
+ALTER SCHEMA pg_catalog RENAME TO mysql_catalog
+
+# We can't rename a schema to a pg_temp prefixed name.
+statement error pq: unacceptable schema name "pg_temp_not_temp"
+ALTER SCHEMA myschema RENAME TO pg_temp_not_temp
+
+# We can't rename to schemas that already exist.
+statement error pq: schema "public" already exists
+ALTER SCHEMA myschema RENAME TO public
+
+statement ok
+CREATE SCHEMA yourschema
+
+statement error pq: schema "yourschema" already exists
+ALTER SCHEMA myschema RENAME TO yourschema
+
+statement ok
+ALTER SCHEMA myschema RENAME TO myschema2
+
+# We should be able to resolve objects under the new schema name.
+query T
+SELECT * FROM myschema2.tb2
+----
+
+# The names should be drained after executing, so we should be able
+# to make another schema with the old name.
+statement ok
+CREATE SCHEMA myschema
+
+statement ok
+BEGIN
+
+statement ok
+ALTER SCHEMA myschema RENAME TO another_schema
+
+statement ok
+ALTER SCHEMA another_schema RENAME TO another_one
+
+# The names should be draining, so we can't use the old ones
+# anymore.
+statement error pq: schema "myschema" already exists
+ALTER SCHEMA another_one RENAME TO myschema
+
+statement ok
+ROLLBACK
+
+# We should be able to drop an empty schema without CASCADE.
+statement ok
+CREATE SCHEMA empty;
+DROP SCHEMA empty
+
+let $schema_id
+SELECT id FROM system.namespace WHERE name = 'myschema'
+
+# Create some objects under myschema, and have them reference some objects
+# in other schemas.
+statement ok
+CREATE TABLE myschema.myschema_t1 (x INT);
+CREATE TABLE myschema.myschema_t2 (x INT);
+CREATE SEQUENCE myschema.myschema_seq1;
+CREATE TABLE myschema.myschema_t3 (x INT DEFAULT nextval('myschema.myschema_seq1'));
+CREATE TYPE myschema.myschema_ty1 AS ENUM ('schema');
+CREATE SCHEMA otherschema;
+CREATE VIEW otherschema.otherschema_v1 AS SELECT x FROM myschema.myschema_t1;
+CREATE TABLE otherschema.otherschema_t1 (x INT);
+CREATE SEQUENCE otherschema.otherschema_seq1 OWNED BY myschema.myschema_t1.x;
+
+statement error pq: schema "myschema" is not empty and CASCADE was not specified
+DROP SCHEMA myschema
+
+# Now drop with cascade.
+statement ok
+DROP SCHEMA myschema CASCADE
+
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'myschema%' OR table_name LIKE 'otherschema%'
+----
+otherschema_t1
+
+query T
+SELECT name FROM [SHOW ENUMS] WHERE name LIKE 'myschema%'
+
+# The schema should be gone.
+query I
+SELECT id FROM system.namespace WHERE name = 'myschema'
+
+query IT
+SELECT * FROM system.descriptor WHERE id = $schema_id
+
+# We can't resolve a schema dropped in the same transaction.
+statement ok
+CREATE SCHEMA dropped;
+BEGIN
+
+statement ok
+DROP SCHEMA dropped
+
+statement error pq: cannot create "dropped.t" because the target database or schema does not exist
+CREATE TABLE dropped.t (x INT)
+
+statement ok
+ROLLBACK
+
+# We shouldn't be able to create a conflicting schema name in the same transaction
+# that it is dropped in.
+statement ok
+BEGIN
+
+statement ok
+DROP SCHEMA dropped
+
+statement error pq: schema "dropped" already exists
+CREATE SCHEMA dropped
+
+statement ok
+ROLLBACK
+
+# Test that we can drop multiple schemas as part of a single DROP statement.
+statement ok
+CREATE SCHEMA scdrop1;
+CREATE SCHEMA scdrop2;
+CREATE SCHEMA scdrop3;
+CREATE TABLE scdrop1.scdrop1_t1 (x INT);
+CREATE TABLE scdrop1.scdrop1_t2 (x INT);
+CREATE TABLE scdrop2.scdrop2_t1 (x INT);
+CREATE VIEW scdrop2.scdrop2_v1 AS SELECT x FROM scdrop1.scdrop1_t1;
+CREATE VIEW scdrop3.scdrop3_v1 AS SELECT x FROM scdrop2.scdrop2_v1;
+
+statement ok
+DROP SCHEMA scdrop1, scdrop2, scdrop3 CASCADE
+
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'scdrop%'
+
+subtest drop_database
+
+# Ensure that user defined schemas are dropped when dropping the parent database.
+statement ok
+CREATE DATABASE with_schemas;
+USE with_schemas;
+CREATE SCHEMA dropschema1;
+CREATE SCHEMA dropschema2;
+CREATE TABLE dropschema1.dropschema1_tb (x INT);
+CREATE TYPE dropschema1.dropschema1_typ AS ENUM ('schema');
+CREATE TABLE dropschema2.dropschema2_tb (y INT);
+USE test
+
+statement ok
+DROP DATABASE with_schemas CASCADE
+
+# There shouldn't be any left over namespace entries from the schemas
+# or elements within the schemas.
+query I
+SELECT id FROM system.namespace WHERE name LIKE 'dropschema%'
+
+# Test privilege interactions with schemas.
+subtest privileges
+
+# Have root create a schema.
+statement ok
+CREATE SCHEMA privs
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+# Test user shouldn't be able to create in privs yet.
+user testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE privs.denied (x INT)
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TYPE privs.denied AS ENUM ('denied')
+
+user root
+
+statement ok
+GRANT CREATE ON SCHEMA privs TO testuser
+
+statement ok
+CREATE DATABASE db2; USE db2; CREATE SCHEMA privs; USE test
+
+statement error target database or schema does not exist
+SHOW GRANTS ON SCHEMA non_existent
+
+query TTTT
+SELECT database_name, schema_name, grantee, privilege_type FROM
+[SHOW GRANTS ON SCHEMA privs]
+ORDER BY database_name, schema_name, grantee
+----
+test  privs  admin     ALL
+test  privs  root      ALL
+test  privs  testuser  CREATE
+
+user testuser
+
+# Now the testuser can create objects.
+statement ok
+CREATE TABLE privs.tbl (x INT)
+
+statement ok
+CREATE TYPE privs.typ AS ENUM ('allowed')
+
+# Now revoke the permissions.
+user root
+
+statement ok
+REVOKE CREATE ON SCHEMA privs FROM testuser
+
+user testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE privs.denied (x INT)
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TYPE privs.denied AS ENUM ('denied')
+
+# The testuser shouldn't be able to alter or drop the schema.
+statement error pq: must be owner of schema "privs"
+ALTER SCHEMA privs RENAME TO denied
+
+statement error pq: permission denied to drop schema "privs"
+DROP SCHEMA privs
+
+# Test the usage privilege.
+user root
+
+# Create some objects in privs (testuser doesn't have USAGE yet).
+statement ok
+CREATE TABLE privs.usage_tbl (x INT);
+CREATE TYPE privs.usage_typ AS ENUM ('usage');
+
+user testuser
+
+# Both mutable and immutable access should fail with this error.
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+SELECT * FROM privs.usage_tbl
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+SELECT 'usage'::privs.usage_typ
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+ALTER TABLE privs.usage_tbl ADD COLUMN y INT DEFAULT NULL
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+CREATE INDEX ON privs.usage_tbl (x)
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+COMMENT ON TABLE privs.usage_tbl IS 'foo'
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+COMMENT ON COLUMN privs.usage_tbl.x IS 'foo'
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+ALTER TYPE privs.usage_typ ADD VALUE 'denied'
+
+subtest authorization
+
+user root
+# Test the AUTHORIZATION argument to CREATE SCHEMA.
+
+# Create a user to create a schema for.
+statement ok
+CREATE USER user1;
+
+# Creates a schema for named with user1 as the owner.
+statement ok
+CREATE SCHEMA AUTHORIZATION user1
+
+statement error pq: schema "user1" already exists
+CREATE SCHEMA AUTHORIZATION user1
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION user1
+
+statement ok
+CREATE SCHEMA user1_schema AUTHORIZATION user1
+
+# The created schemas should both be owned by user1.
+query TT
+SELECT
+  nspname, usename
+FROM
+  pg_catalog.pg_namespace
+  LEFT JOIN pg_catalog.pg_user ON pg_namespace.nspowner = pg_user.usesysid
+WHERE
+  nspname LIKE 'user1%';
+----
+user1         user1
+user1_schema  user1
+
+# Ensure that we need CREATE on a database to create a schema.
+statement ok
+CREATE DATABASE perms
+
+user testuser
+
+statement ok
+USE perms
+
+statement error pq: user testuser does not have CREATE privilege on database perms
+CREATE SCHEMA test
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE perms TO testuser
+
+user testuser
+
+statement ok
+USE perms
+
+statement ok
+CREATE SCHEMA test
+
+user root
+
+statement ok
+USE defaultdb
+
+# Ensure that when we create a schema, we do not modify the database privileges.
+subtest create_schema_does_not_modify_db_privileges
+
+user root
+
+statement ok
+CREATE DATABASE new_db
+
+statement ok
+USE new_db
+
+user testuser
+
+statement ok
+USE new_db
+
+statement error user testuser does not have CREATE privilege on database new_db
+CREATE TABLE new_db.public.bar()
+
+user root
+
+statement ok
+CREATE SCHEMA AUTHORIZATION testuser
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database new_db
+CREATE TABLE new_db.public.bar()
+
+statement ok
+CREATE TABLE new_db.testuser.bar()
+
+# cleanup the testuser schema created as part of the CREATE SCHEMA AUTHORIZATION
+# command above
+statement ok
+DROP SCHEMA testuser CASCADE
+
+# If a schema with a username exists, then that should be the first entry in
+# the search path.
+subtest user_schema_search_path
+
+# Test setup
+user root
+
+statement ok
+CREATE SCHEMA testuser
+
+statement ok
+GRANT ALL ON SCHEMA testuser TO testuser
+
+statement ok
+CREATE TABLE public.public_table(a INT)
+
+statement ok
+GRANT SELECT ON public.public_table TO testuser
+
+user testuser
+
+statement ok
+CREATE TABLE test_table(a INT);
+
+statement error pq: relation "public.test_table" does not exist
+SELECT * FROM public.test_table
+
+statement ok
+SELECT * FROM testuser.test_table
+
+# Only root has privs to create inside public
+user root
+
+statement ok
+CREATE TABLE public.test_table(a INT, b INT)
+
+statement ok
+GRANT SELECT ON public.test_table TO testuser
+
+user testuser
+
+query I colnames
+SELECT * FROM test_table
+----
+a
+
+query II colnames
+SELECT * FROM public.test_table
+----
+a  b
+
+query I colnames
+SELECT * FROM public_table
+----
+a
+
+# The search path is configured to be user specific.
+user root
+
+query II colnames
+SELECT * FROM test_table
+----
+a  b
+
+query I colnames
+SELECT * FROM testuser.test_table
+----
+a
+
+query TITITI rowsort
+SELECT
+  database_name, parent_id, schema_name, parent_schema_id, name, table_id
+FROM crdb_internal.tables
+WHERE database_name IN ('test', 'new_db')
+----
+test    52   myschema2    54   tb                55
+test    52   myschema2    54   v                 58
+test    52   myschema2    54   s                 59
+test    52   myschema2    54   tb2               60
+test    52   [62]         62   myschema_t1       64
+test    52   [62]         62   myschema_t2       65
+test    52   [62]         62   myschema_seq1     66
+test    52   [62]         62   myschema_t3       67
+test    52   otherschema  70   otherschema_v1    71
+test    52   otherschema  70   otherschema_t1    72
+test    52   otherschema  70   otherschema_seq1  73
+test    52   [75]         75   scdrop1_t1        78
+test    52   [75]         75   scdrop1_t2        79
+test    52   [76]         76   scdrop2_t1        80
+test    52   [76]         76   scdrop2_v1        81
+test    52   [77]         77   scdrop3_v1        82
+test    52   privs        90   tbl               93
+test    52   privs        90   usage_tbl         96
+new_db  103  [104]        104  bar               105
+new_db  103  public       29   public_table      107
+new_db  103  testuser     106  test_table        108
+new_db  103  public       29   test_table        109
+
+# Ensure that when we create a schema, it inherits privileges from its parent
+# database, but only those which are valid for schemas.
+subtest create_schema_inherits_db_privileges
+
+user root
+
+statement ok
+CREATE DATABASE d54662;
+GRANT CREATE, SELECT ON DATABASE d54662 TO testuser;
+USE d54662;
+CREATE SCHEMA s
+
+query T
+SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
+----
+CREATE
+
+statement ok
+GRANT USAGE ON SCHEMA s TO testuser
+
+query T rowsort
+SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
+----
+CREATE
+USAGE

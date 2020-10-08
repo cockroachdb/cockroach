@@ -66,7 +66,24 @@ index-constraints vars=(string) index=(@1)
 [/'ABC' - /'ABC']
 
 index-constraints vars=(string) index=(@1)
-@1 SIMILAR TO '(ABC|ABCDEF)%'
+@1 SIMILAR TO '(ABC|ABCDEF).*'
 ----
 [/'ABC' - /'ABD')
-Remaining filter: @1 SIMILAR TO '(ABC|ABCDEF)%'
+Remaining filter: @1 SIMILAR TO '(ABC|ABCDEF).*'
+
+index-constraints vars=(string) index=(@1)
+@1 SIMILAR TO '.*'
+----
+[/'' - ]
+Remaining filter: @1 SIMILAR TO '.*'
+
+index-constraints vars=(string) index=(@1)
+@1 = 'eu' OR (@1 > 'eu' AND @1 < 'us')
+----
+[/'eu' - /'us')
+
+index-constraints vars=(string, string) index=(@1, @2)
+(@1 = 'us' AND @2 = 'cali') OR (@1 = 'eu') OR (@1 > 'eu' AND @1 < 'us')
+----
+[/'eu' - /'us')
+[/'us'/'cali' - /'us'/'cali']

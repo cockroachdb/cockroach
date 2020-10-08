@@ -1,23 +1,23 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package resolver
 
 import (
+	"context"
+	"net"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseResolverAddress(t *testing.T) {
@@ -84,5 +84,68 @@ func TestGetAddress(t *testing.T) {
 		if address.String() != tc.addressValue {
 			t.Errorf("#%d: expected address value=%s, got %+v", tcNum, tc.addressValue, address)
 		}
+	}
+}
+
+func TestSRV(t *testing.T) {
+	type lookupFunc func(service, proto, name string) (string, []*net.SRV, error)
+
+	lookupWithErr := func(err error) lookupFunc {
+		return func(service, proto, name string) (string, []*net.SRV, error) {
+			if service != "" || proto != "" {
+				t.Errorf("unexpected params in erroring LookupSRV() call")
+			}
+			return "", nil, err
+		}
+	}
+
+	dnsErr := &net.DNSError{Err: "no such host", Name: "", Server: "", IsTimeout: false}
+
+	lookupSuccess := func(service, proto, name string) (string, []*net.SRV, error) {
+		if service != "" || proto != "" {
+			t.Errorf("unexpected params in successful LookupSRV() call")
+		}
+
+		srvs := []*net.SRV{
+			{Target: "node1", Port: 26222},
+			{Target: "node2", Port: 35222},
+			{Target: "node3", Port: 0},
+		}
+
+		return "cluster", srvs, nil
+	}
+
+	expectedAddrs := []string{"node1:26222", "node2:35222"}
+
+	testCases := []struct {
+		address  string
+		lookuper lookupFunc
+		want     []string
+	}{
+		{":26222", nil, nil},
+		{"some.host", lookupWithErr(dnsErr), nil},
+		{"some.host", lookupWithErr(errors.New("another error")), nil},
+		{"some.host", lookupSuccess, expectedAddrs},
+		{"some.host:26222", lookupSuccess, expectedAddrs},
+		// "real" `lookupSRV` returns "no such host" when resolving IP addresses
+		{"127.0.0.1", lookupWithErr(dnsErr), nil},
+		{"127.0.0.1:26222", lookupWithErr(dnsErr), nil},
+		{"[2001:0db8:85a3:0000:0000:8a2e:0370:7334]", lookupWithErr(dnsErr), nil},
+		{"[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:26222", lookupWithErr(dnsErr), nil},
+	}
+
+	for tcNum, tc := range testCases {
+		func() {
+			defer TestingOverrideSRVLookupFn(tc.lookuper)()
+
+			resolvers, err := SRV(context.Background(), tc.address)
+
+			if err != nil {
+				t.Errorf("#%d: expected success, got err=%v", tcNum, err)
+			}
+
+			require.Equal(t, tc.want, resolvers, "Test #%d failed", tcNum)
+
+		}()
 	}
 }

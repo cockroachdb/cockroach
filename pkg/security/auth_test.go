@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package security_test
 
@@ -18,115 +14,213 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"fmt"
+	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/stretchr/testify/require"
 )
 
-// Construct a fake tls.ConnectionState object with one peer certificate
-// for each 'commonNames', and one chain of length 'chainLengths[i]' for each 'chainLengths'.
-func makeFakeTLSState(commonNames []string, chainLengths []int) *tls.ConnectionState {
-	tls := &tls.ConnectionState{
-		PeerCertificates: []*x509.Certificate{},
-		VerifiedChains:   [][]*x509.Certificate{},
-	}
-	for _, name := range commonNames {
-		tls.PeerCertificates = append(tls.PeerCertificates, &x509.Certificate{Subject: pkix.Name{CommonName: name}})
-	}
-	for i, length := range chainLengths {
-		chain := []*x509.Certificate{}
-		for j := 0; j < length; j++ {
-			name := fmt.Sprintf("chain%d:%d", i, j)
-			chain = append(chain, &x509.Certificate{Subject: pkix.Name{CommonName: name}})
+// Construct a fake tls.ConnectionState object. The spec is a semicolon
+// separated list if peer certificate specifications. Each peer certificate
+// specification can have an optional OU in parenthesis followed by
+// a comma separated list of names where the first name is the
+// CommonName and the remaining names are SubjectAlternateNames. For example,
+// "foo" creates a single peer certificate with the CommonName "foo". The spec
+// "foo,bar" creates a single peer certificate with the CommonName "foo" and a
+// single SubjectAlternateName "bar". "(Tenants)foo,bar" creates a single
+// tenant client certificate with OU=Tenants, CN=foo and subjectAlternativeName=bar
+// Contrast that with "foo;bar" which creates two peer certificates with the
+// CommonNames "foo" and "bar" respectively.
+func makeFakeTLSState(spec string) *tls.ConnectionState {
+	tls := &tls.ConnectionState{}
+	if spec != "" {
+		for _, peerSpec := range strings.Split(spec, ";") {
+			var ou []string
+			if strings.HasPrefix(peerSpec, "(") {
+				ouAndRest := strings.Split(peerSpec[1:], ")")
+				ou = ouAndRest[:1]
+				peerSpec = ouAndRest[1]
+			}
+			names := strings.Split(peerSpec, ",")
+			if len(names) == 0 {
+				continue
+			}
+			peerCert := &x509.Certificate{}
+			peerCert.Subject = pkix.Name{
+				CommonName:         names[0],
+				OrganizationalUnit: ou,
+			}
+			peerCert.DNSNames = names[1:]
+			tls.PeerCertificates = append(tls.PeerCertificates, peerCert)
 		}
-		tls.VerifiedChains = append(tls.VerifiedChains, chain)
 	}
 	return tls
 }
 
-func TestGetCertificateUser(t *testing.T) {
+func TestGetCertificateUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Nil TLS state.
-	if _, err := security.GetCertificateUser(nil); err == nil {
+	if _, err := security.GetCertificateUsers(nil); err == nil {
 		t.Error("unexpected success")
 	}
 
 	// No certificates.
-	if _, err := security.GetCertificateUser(makeFakeTLSState(nil, nil)); err == nil {
+	if _, err := security.GetCertificateUsers(makeFakeTLSState("")); err == nil {
 		t.Error("unexpected success")
 	}
 
 	// Good request: single certificate.
-	if name, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo"}, []int{2})); err != nil {
+	if names, err := security.GetCertificateUsers(makeFakeTLSState("foo")); err != nil {
 		t.Error(err)
-	} else if name != "foo" {
-		t.Errorf("expected name: foo, got: %s", name)
+	} else {
+		require.EqualValues(t, names, []string{"foo"})
 	}
 
 	// Request with multiple certs, but only one chain (eg: origin certs are client and CA).
-	if name, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo", "CA"}, []int{2})); err != nil {
+	if names, err := security.GetCertificateUsers(makeFakeTLSState("foo;CA")); err != nil {
 		t.Error(err)
-	} else if name != "foo" {
-		t.Errorf("expected name: foo, got: %s", name)
+	} else {
+		require.EqualValues(t, names, []string{"foo"})
 	}
 
 	// Always use the first certificate.
-	if name, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo", "bar"}, []int{2, 1})); err != nil {
+	if names, err := security.GetCertificateUsers(makeFakeTLSState("foo;bar")); err != nil {
 		t.Error(err)
-	} else if name != "foo" {
-		t.Errorf("expected name: foo, got: %s", name)
+	} else {
+		require.EqualValues(t, names, []string{"foo"})
+	}
+
+	// Extract all of the principals from the first certificate.
+	if names, err := security.GetCertificateUsers(makeFakeTLSState("foo,bar,blah;CA")); err != nil {
+		t.Error(err)
+	} else {
+		require.EqualValues(t, names, []string{"foo", "bar", "blah"})
+	}
+}
+
+func TestSetCertPrincipalMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func() { _ = security.SetCertPrincipalMap(nil) }()
+
+	testCases := []struct {
+		vals     []string
+		expected string
+	}{
+		{[]string{}, ""},
+		{[]string{"foo"}, "invalid <cert-principal>:<db-principal> mapping:"},
+		{[]string{"foo:bar"}, ""},
+		{[]string{"foo:bar", "blah:blah"}, ""},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			err := security.SetCertPrincipalMap(c.vals)
+			if !testutils.IsError(err, c.expected) {
+				t.Fatalf("expected %q, but found %v", c.expected, err)
+			}
+		})
+	}
+}
+
+func TestGetCertificateUsersMapped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func() { _ = security.SetCertPrincipalMap(nil) }()
+
+	testCases := []struct {
+		spec     string
+		val      string
+		expected string
+	}{
+		// No mapping present.
+		{"foo", "", "foo"},
+		// The basic mapping case.
+		{"foo", "foo:bar", "bar"},
+		// Identity mapping.
+		{"foo", "foo:foo", "foo"},
+		// Mapping does not apply to cert principals.
+		{"foo", "bar:bar", "foo"},
+		// The last mapping for a principal takes precedence.
+		{"foo", "foo:bar,foo:blah", "blah"},
+		// First principal mapped, second principal unmapped.
+		{"foo,bar", "foo:blah", "blah,bar"},
+		// First principal unmapped, second principal mapped.
+		{"bar,foo", "foo:blah", "bar,blah"},
+		// Both principals mapped.
+		{"foo,bar", "foo:bar,bar:foo", "bar,foo"},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			vals := strings.Split(c.val, ",")
+			if err := security.SetCertPrincipalMap(vals); err != nil {
+				t.Fatal(err)
+			}
+			names, err := security.GetCertificateUsers(makeFakeTLSState(c.spec))
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.EqualValues(t, strings.Join(names, ","), c.expected)
+		})
 	}
 }
 
 func TestAuthenticationHook(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Proto that does not implement GetUser.
-	badRequest := &roachpb.GetResponse{}
-	goodRequest := &roachpb.BatchRequest{}
+	defer func() { _ = security.SetCertPrincipalMap(nil) }()
 
 	testCases := []struct {
 		insecure           bool
-		tls                *tls.ConnectionState
-		request            protoutil.Message
+		tlsSpec            string
+		username           string
+		principalMap       string
 		buildHookSuccess   bool
 		publicHookSuccess  bool
 		privateHookSuccess bool
 	}{
-		// Insecure mode, nil request.
-		{true, nil, nil, true, false, false},
-		// Insecure mode, bad request.
-		{true, nil, badRequest, true, false, false},
-		// Insecure mode, good request.
-		{true, nil, goodRequest, true, true, true},
+		// Insecure mode, empty username.
+		{true, "", "", "", true, false, false},
+		// Insecure mode, non-empty username.
+		{true, "", "foo", "", true, true, false},
 		// Secure mode, no TLS state.
-		{false, nil, nil, false, false, false},
+		{false, "", "", "", false, false, false},
 		// Secure mode, bad user.
-		{false, makeFakeTLSState([]string{"foo"}, []int{1}), goodRequest, true, false, false},
+		{false, "foo", "node", "", true, false, false},
 		// Secure mode, node user.
-		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), goodRequest, true, true, true},
+		{false, security.NodeUser, "node", "", true, true, true},
 		// Secure mode, root user.
-		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), goodRequest, true, false, false},
+		{false, security.RootUser, "node", "", true, false, false},
+		// Secure mode, tenant cert, foo user.
+		{false, "(Tenants)foo", "foo", "", true, false, false},
+		// Secure mode, multiple cert principals.
+		{false, "foo,bar", "foo", "", true, true, false},
+		{false, "foo,bar", "bar", "", true, true, false},
+		// Secure mode, principal map.
+		{false, "foo,bar", "blah", "foo:blah", true, true, false},
+		{false, "foo,bar", "blah", "bar:blah", true, true, false},
 	}
 
-	for tcNum, tc := range testCases {
-		hook, err := security.ProtoAuthHook(tc.insecure, tc.tls)
-		if (err == nil) != tc.buildHookSuccess {
-			t.Fatalf("#%d: expected success=%t, got err=%v", tcNum, tc.buildHookSuccess, err)
-		}
-		if err != nil {
-			continue
-		}
-		err = hook(tc.request, true /*public*/)
-		if (err == nil) != tc.publicHookSuccess {
-			t.Fatalf("#%d: expected success=%t, got err=%v", tcNum, tc.publicHookSuccess, err)
-		}
-		err = hook(tc.request, false /*not public*/)
-		if (err == nil) != tc.privateHookSuccess {
-			t.Fatalf("#%d: expected success=%t, got err=%v", tcNum, tc.privateHookSuccess, err)
-		}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			err := security.SetCertPrincipalMap(strings.Split(tc.principalMap, ","))
+			if err != nil {
+				t.Fatal(err)
+			}
+			hook, err := security.UserAuthCertHook(tc.insecure, makeFakeTLSState(tc.tlsSpec))
+			if (err == nil) != tc.buildHookSuccess {
+				t.Fatalf("expected success=%t, got err=%v", tc.buildHookSuccess, err)
+			}
+			if err != nil {
+				return
+			}
+			_, err = hook(tc.username, true /* clientConnection */)
+			if (err == nil) != tc.publicHookSuccess {
+				t.Fatalf("expected success=%t, got err=%v", tc.publicHookSuccess, err)
+			}
+			_, err = hook(tc.username, false /* clientConnection */)
+			if (err == nil) != tc.privateHookSuccess {
+				t.Fatalf("expected success=%t, got err=%v", tc.privateHookSuccess, err)
+			}
+		})
 	}
 }

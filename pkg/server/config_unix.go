@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // +build !windows
 
@@ -20,8 +16,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // rlimit is a replacement struct for `unix.Rlimit` which abstracts
@@ -32,15 +29,15 @@ type rlimit struct {
 }
 
 func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
-	minimumOpenFileLimit := uint64(physicalStoreCount*engine.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
-	networkConstrainedFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + minimumNetworkFileDescriptors)
-	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + recommendedNetworkFileDescriptors)
+	minimumOpenFileLimit := uint64(physicalStoreCount*storage.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
+	networkConstrainedFileLimit := uint64(physicalStoreCount*storage.RecommendedMaxOpenFiles + minimumNetworkFileDescriptors)
+	recommendedOpenFileLimit := uint64(physicalStoreCount*storage.RecommendedMaxOpenFiles + recommendedNetworkFileDescriptors)
 	var rLimit rlimit
 	if err := getRlimitNoFile(&rLimit); err != nil {
 		if log.V(1) {
-			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the recommended value %d - %s", engine.RecommendedMaxOpenFiles, err)
+			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the recommended value %d - %s", storage.RecommendedMaxOpenFiles, err)
 		}
-		return engine.RecommendedMaxOpenFiles, nil
+		return storage.RecommendedMaxOpenFiles, nil
 	}
 
 	// The max open file descriptor limit is too low.
@@ -64,14 +61,37 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 			log.Infof(context.TODO(), "setting the soft limit for open file descriptors from %d to %d",
 				rLimit.Cur, newCurrent)
 		}
+		oldCurrent := rLimit.Cur
 		rLimit.Cur = newCurrent
 		if err := setRlimitNoFile(&rLimit); err != nil {
-			return 0, err
+			// It is surprising if setrlimit fails, because we were careful to check
+			// getrlimit first to construct a valid limit. However, the validation
+			// rules for setrlimit have been known to change between Go versions (for
+			// an example, see https://github.com/golang/go/issues/30401), so we don't
+			// want to fail hard if setrlimit fails. Instead we log a warning and
+			// carry on. If the rlimit is really too low, we'll bail out later in this
+			// function.
+			log.Warningf(context.TODO(), "adjusting the limit for open file descriptors to %d failed: %s",
+				rLimit.Cur, err)
+
+			// Setting the limit to our "recommended" level failed. This may
+			// be because getRlimitNoFile gave us the wrong answer (on some
+			// platforms there are limits that are not reflected by
+			// getrlimit()). If the previous limit is below our minimum, try
+			// one more time to increase it to the minimum.
+			if oldCurrent < minimumOpenFileLimit {
+				rLimit.Cur = minimumOpenFileLimit
+				if err := setRlimitNoFile(&rLimit); err != nil {
+					log.Warningf(context.TODO(), "adjusting the limit for open file descriptors to %d failed: %s",
+						rLimit.Cur, err)
+				}
+			}
 		}
-		// Sadly, the current limit is not always set as expected, (e.g. OSX)
-		// so fetch the limit again to see the new current limit.
+		// Sadly, even when setrlimit returns successfully, the new limit is not
+		// always set as expected (e.g. on macOS), so fetch the limit again to see
+		// the actual current limit.
 		if err := getRlimitNoFile(&rLimit); err != nil {
-			return 0, err
+			return 0, errors.Wrap(err, "getting updated soft limit for open file descriptors")
 		}
 		if log.V(1) {
 			log.Infof(context.TODO(), "soft open file descriptor limit is now %d", rLimit.Cur)
@@ -111,7 +131,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 	// for each store, than only constrain the network ones by giving the stores
 	// their full recommended number.
 	if rLimit.Cur >= networkConstrainedFileLimit {
-		return engine.RecommendedMaxOpenFiles, nil
+		return storage.RecommendedMaxOpenFiles, nil
 	}
 
 	// Always sacrifice all but the minimum needed network descriptors to be

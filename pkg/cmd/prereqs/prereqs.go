@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // prereqs generates Make prerequisites for Go binaries. It works much like the
 // traditional makedepend tool for C.
@@ -47,20 +43,16 @@ package main
 import (
 	"flag"
 	"fmt"
-	"go/build"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"golang.org/x/tools/go/packages"
 )
 
-var buildCtx = func() build.Context {
-	bc := build.Default
-	bc.CgoEnabled = true
-	return bc
-}()
-
-func collectFiles(path string, includeTest bool) ([]string, error) {
+func collectFiles(path string, includeTest bool, options testOptions) ([]string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -72,73 +64,82 @@ func collectFiles(path string, includeTest bool) ([]string, error) {
 		return nil, err
 	}
 
-	srcDir := cwd // top-level relative imports are relative to cwd
-	return collectFilesImpl(cwd, path, srcDir, includeTest, map[string]struct{}{})
-}
-
-func collectFilesImpl(
-	cwd, path, srcDir string, includeTest bool, seen map[string]struct{},
-) ([]string, error) {
-	// Skip packages we've seen before.
-	if _, ok := seen[path]; ok {
-		return nil, nil
-	}
-	seen[path] = struct{}{}
-
-	// Skip standard library packages.
-	if isStdlibPackage(path) {
-		return nil, nil
-	}
+	seen := make(map[string]struct{})
 
 	// Import the package.
-	pkg, err := buildCtx.Import(path, srcDir, 0)
+	config := &packages.Config{
+		Dir:   cwd,
+		Mode:  packages.NeedName | packages.NeedFiles | packages.NeedDeps | packages.NeedImports,
+		Tests: includeTest}
+	// We turn this off because it's hard to set up test data that works with the
+	// module system. Nevertheless, the tests are quite comprehensive.
+	config.Env = append(os.Environ(), "GO111MODULE=off")
+	if options.gopath != "" {
+		config.Env = append(config.Env, "GOPATH="+options.gopath)
+	}
+	if options.fsOverlay != nil {
+		config.Overlay = options.fsOverlay
+	}
+	p, err := packages.Load(config, path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to import %s: %w", path, err)
 	}
 
-	sourceFileSets := [][]string{
-		// Include all Go and Cgo source files.
-		pkg.GoFiles, pkg.CgoFiles, pkg.IgnoredGoFiles, pkg.InvalidGoFiles,
-		pkg.CFiles, pkg.CXXFiles, pkg.MFiles, pkg.HFiles, pkg.FFiles, pkg.SFiles,
-		pkg.SwigFiles, pkg.SwigCXXFiles, pkg.SysoFiles,
-
-		// Include the package directory itself so that the target is considered
-		// out-of-date if a new file is added to the directory.
-		{"."},
-	}
-	importSets := [][]string{pkg.Imports}
-	if includeTest {
-		sourceFileSets = append(sourceFileSets, pkg.TestGoFiles, pkg.XTestGoFiles)
-		importSets = append(importSets, pkg.TestImports, pkg.XTestImports)
-	}
-
-	// Collect files recursively from the package and its dependencies.
 	var out []string
-	for _, sourceFiles := range sourceFileSets {
-		for _, sourceFile := range sourceFiles {
-			if isFileAlwaysIgnored(sourceFile) || strings.HasPrefix(sourceFile, "zcgo_flags") {
-				continue
-			}
-			f, err := filepath.Rel(cwd, filepath.Join(pkg.Dir, sourceFile))
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, f)
+	var process func(pkg *packages.Package) error
+	process = func(pkg *packages.Package) error {
+		if len(pkg.Errors) > 0 {
+			return fmt.Errorf("failed to import %s: %s", path, pkg.Errors)
 		}
-	}
-	for _, imports := range importSets {
-		for _, imp := range imports {
-			// Only the root package's tests are included in test binaries, so
-			// unconditionally disable includeTest for imported packages.
-			files, err := collectFilesImpl(cwd, imp, pkg.Dir, false /* includeTest */, seen)
-			if err != nil {
-				return nil, err
+		// Skip packages we've seen before.
+		if _, ok := seen[pkg.PkgPath]; ok {
+			return nil
+		}
+		seen[pkg.PkgPath] = struct{}{}
+
+		// Skip standard library packages.
+		if isStdlibPackage(pkg.PkgPath) {
+			return nil
+		}
+		sourceFileSets := [][]string{
+			// Include all Go and Cgo source files.
+			pkg.GoFiles, pkg.OtherFiles,
+		}
+		if len(pkg.GoFiles) > 0 {
+			sourceFileSets = append(sourceFileSets, []string{
+				// Include the package directory itself so that the target is considered
+				// out-of-date if a new file is added to the directory.
+				filepath.Dir(pkg.GoFiles[0]),
+			})
+		}
+
+		// Collect files recursively from the package and its dependencies.
+		for _, sourceFiles := range sourceFileSets {
+			for _, sourceFile := range sourceFiles {
+				if isFileAlwaysIgnored(sourceFile) || strings.HasPrefix(sourceFile, "zcgo_flags") {
+					continue
+				}
+				f, err := filepath.Rel(cwd, sourceFile)
+				if err != nil {
+					return err
+				}
+				out = append(out, f)
 			}
-			out = append(out, files...)
+		}
+		for _, imp := range pkg.Imports {
+			if err := process(imp); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, pkg := range p {
+		if err := process(pkg); err != nil {
+			return nil, err
 		}
 	}
 
-	return out, nil
+	return out, err
 }
 
 func isStdlibPackage(path string) bool {
@@ -171,8 +172,13 @@ var filenameEscaper = strings.NewReplacer(
 	`#`, `\#`,
 )
 
-func run(w io.Writer, path string, includeTest bool) error {
-	files, err := collectFiles(path, includeTest)
+type testOptions struct {
+	fsOverlay map[string][]byte
+	gopath    string
+}
+
+func run(w io.Writer, path string, includeTest bool, binName string, options testOptions) error {
+	files, err := collectFiles(path, includeTest, options)
 	if err != nil {
 		return err
 	}
@@ -185,11 +191,15 @@ func run(w io.Writer, path string, includeTest bool) error {
 	if err != nil {
 		return err
 	}
-	pkgName := filepath.Base(absPath)
+	if binName == "" {
+		binName = filepath.Base(absPath)
+	}
+
+	sort.Strings(files)
 
 	fmt.Fprintln(w, "# Code generated by prereqs. DO NOT EDIT!")
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "bin/%s: %s\n", pkgName, strings.Join(files, " "))
+	fmt.Fprintf(w, "bin/%s: %s\n", binName, strings.Join(files, " "))
 	fmt.Fprintln(w)
 	for _, f := range files {
 		fmt.Fprintf(w, "%s:\n", f)
@@ -200,6 +210,7 @@ func run(w io.Writer, path string, includeTest bool) error {
 
 func main() {
 	includeTest := flag.Bool("test", false, "include test dependencies")
+	binName := flag.String("bin-name", "", "custom binary name (defaults to bin/<package name>)")
 	flag.Usage = func() { fmt.Fprintf(os.Stderr, "usage: %s [-test] <package>\n", os.Args[0]) }
 	flag.Parse()
 	if flag.NArg() != 1 {
@@ -207,7 +218,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(os.Stdout, flag.Arg(0), *includeTest); err != nil {
+	if err := run(os.Stdout, flag.Arg(0), *includeTest, *binName, testOptions{}); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err)
 		os.Exit(1)
 	}

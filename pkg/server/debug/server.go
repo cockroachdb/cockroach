@@ -1,42 +1,45 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package debug
 
 import (
+	"bytes"
 	"context"
 	"expvar"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"path"
 	"strings"
 
-	// Register the net/trace endpoint with http.DefaultServeMux.
-
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
-	"golang.org/x/net/trace"
-	"google.golang.org/grpc/metadata"
-
-	"github.com/pkg/errors"
-	"github.com/rcrowley/go-metrics"
-	"github.com/rcrowley/go-metrics/exp"
-
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	pebbletool "github.com/cockroachdb/pebble/tool"
+	"github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics/exp"
+	"github.com/spf13/cobra"
+	"golang.org/x/net/trace"
+	"google.golang.org/grpc/metadata"
 )
 
 func init() {
@@ -63,19 +66,24 @@ const Endpoint = "/debug/"
 
 // DebugRemote controls which clients are allowed to access certain
 // confidential debug pages, such as those served under the /debug/ prefix.
-var DebugRemote = settings.RegisterValidatedStringSetting(
-	"server.remote_debugging.mode",
-	"set to enable remote debugging, localhost-only or disable (any, local, off)",
-	"local",
-	func(sv *settings.Values, s string) error {
-		switch RemoteMode(strings.ToLower(s)) {
-		case RemoteOff, RemoteLocal, RemoteAny:
-			return nil
-		default:
-			return errors.Errorf("invalid mode: '%s'", s)
-		}
-	},
-)
+var DebugRemote = func() *settings.StringSetting {
+	s := settings.RegisterValidatedStringSetting(
+		"server.remote_debugging.mode",
+		"set to enable remote debugging, localhost-only or disable (any, local, off)",
+		"local",
+		func(sv *settings.Values, s string) error {
+			switch RemoteMode(strings.ToLower(s)) {
+			case RemoteOff, RemoteLocal, RemoteAny:
+				return nil
+			default:
+				return errors.Errorf("invalid mode: '%s'", s)
+			}
+		},
+	)
+	s.SetReportable(true)
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 // Server serves the /debug/* family of tools.
 type Server struct {
@@ -85,7 +93,7 @@ type Server struct {
 }
 
 // NewServer sets up a debug server.
-func NewServer(st *cluster.Settings) *Server {
+func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	mux := http.NewServeMux()
 
 	// Install a redirect to the UI's collection of debug tools.
@@ -95,7 +103,9 @@ func NewServer(st *cluster.Settings) *Server {
 	// https://golang.org/src/net/http/pprof/pprof.go
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/profile", func(w http.ResponseWriter, r *http.Request) {
+		CPUProfileHandler(st, w, r)
+	})
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
@@ -112,6 +122,12 @@ func NewServer(st *cluster.Settings) *Server {
 	// Also register /debug/vars (even though /debug/metrics is better).
 	mux.Handle("/debug/vars", expvar.Handler())
 
+	if hbaConfDebugFn != nil {
+		// Expose the processed HBA configuration through the debug
+		// interface for inspection during troubleshooting.
+		mux.HandleFunc("/debug/hba_conf", hbaConfDebugFn)
+	}
+
 	// Register the stopper endpoint, which lists all active tasks.
 	mux.HandleFunc("/debug/stopper", stop.HandleDebug)
 
@@ -122,15 +138,112 @@ func NewServer(st *cluster.Settings) *Server {
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
-	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0))
+	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, labels bool, do func()) {
+		ctx := context.Background()
+		tBegin := timeutil.Now()
+
+		if profile != "profile" {
+			do()
+			return
+		}
+
+		if err := CPUProfileDo(st, CPUProfileOptions{WithLabels: labels}.Type(), func() error {
+			var extra string
+			if labels {
+				extra = " (enabling profiler labels)"
+			}
+			log.Infof(context.Background(), "pprofui: recording %s%s", profile, extra)
+			do()
+			return nil
+		}); err != nil {
+			// NB: we don't have good error handling here. Could be changed if we find
+			// this problematic. In practice, `do()` wraps the pprof handler which will
+			// return an error if there's already a profile going on just the same.
+			log.Warningf(ctx, "unable to start CPU profile: %s", err)
+			return
+		}
+		log.Infof(ctx, "pprofui: recorded %s in %.2fs", profile, timeutil.Since(tBegin).Seconds())
+	})
 	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
+
+	mux.HandleFunc("/debug/pprof/goroutineui/", func(w http.ResponseWriter, req *http.Request) {
+		dump := goroutineui.NewDump(timeutil.Now())
+
+		_ = req.ParseForm()
+		switch req.Form.Get("sort") {
+		case "count":
+			dump.SortCountDesc()
+		case "wait":
+			dump.SortWaitDesc()
+		default:
+		}
+		_ = dump.HTML(w)
+	})
+
+	mux.HandleFunc("/debug/threads", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Add("Content-type", "text/plain")
+		fmt.Fprint(w, storage.ThreadStacks())
+	})
 
 	return &Server{
 		st:  st,
 		mux: mux,
 		spy: spy,
 	}
+}
 
+func analyzeLSM(dir string, writer io.Writer) error {
+	manifestName, err := ioutil.ReadFile(path.Join(dir, "CURRENT"))
+	if err != nil {
+		return err
+	}
+
+	manifestPath := path.Join(dir, string(bytes.TrimSpace(manifestName)))
+
+	t := pebbletool.New(pebbletool.Comparers(storage.MVCCComparer))
+
+	// TODO(yevgeniy): Consider exposing LSM tool directly.
+	var lsm *cobra.Command
+	for _, c := range t.Commands {
+		if c.Name() == "lsm" {
+			lsm = c
+		}
+	}
+	if lsm == nil {
+		return errors.New("no such command")
+	}
+
+	lsm.SetOutput(writer)
+	lsm.Run(lsm, []string{manifestPath})
+	return nil
+}
+
+// RegisterEngines setups up debug engine endpoints for the known storage engines.
+func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engine) error {
+	if len(specs) != len(engines) {
+		// TODO(yevgeniy): Consider adding accessors to storage.Engine to get their path.
+		return errors.New("number of store specs must match number of engines")
+	}
+	for i := 0; i < len(specs); i++ {
+		if specs[i].InMemory {
+			// TODO(yevgeniy): Add plumbing to support LSM visualization for in memory engines.
+			continue
+		}
+
+		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
+		if err != nil {
+			return err
+		}
+
+		dir := specs[i].Path
+		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm/%d", id.StoreID),
+			func(w http.ResponseWriter, req *http.Request) {
+				if err := analyzeLSM(dir, w); err != nil {
+					fmt.Fprintf(w, "error analyzing LSM at %s: %v", dir, err)
+				}
+			})
+	}
+	return nil
 }
 
 // ServeHTTP serves various tools under the /debug endpoint. It restricts access

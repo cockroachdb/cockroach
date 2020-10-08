@@ -1,38 +1,39 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
 import (
 	"context"
-	"flag"
+	"fmt"
 	"html/template"
 	"io"
-	"os"
-	"strings"
-
 	"io/ioutil"
+	"os"
+	"regexp"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var haProxyPath string
+var haProxyLocality roachpb.Locality
 
 var genHAProxyCmd = &cobra.Command{
 	Use:   "haproxy",
@@ -41,9 +42,20 @@ var genHAProxyCmd = &cobra.Command{
 reached through the client flags.
 The file is written to --out. Use "--out -" for stdout.
 
-The addresses used are those advertized by the nodes themselves. Make sure haproxy
+The addresses used are those advertised by the nodes themselves. Make sure haproxy
 can resolve the hostnames in the configuration file, either by using full-qualified names, or
 running haproxy in the same network.
+
+Notes that have been decommissioned are excluded from the generated configuration.
+
+Nodes to include can be filtered by localities matching the '--locality' regular expression. eg:
+  --locality=region=us-east                  # Nodes in region "us-east"
+  --locality=region=us.*                     # Nodes in the US
+  --locality=region=us.*,deployment=testing  # Nodes in the US AND in deployment tier "testing"
+
+A regular expression can be specified per locality tier and all specified tiers must match.
+The key (eg: 'region') must be fully specified, only values (eg: 'us-east1') can be regular expressions.
+An error is returned if no nodes match the locality filter.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runGenHAProxyCmd),
@@ -54,34 +66,149 @@ type haProxyNodeInfo struct {
 	NodeAddr string
 	// The port on which health checks are performed.
 	CheckPort string
+	Locality  roachpb.Locality
 }
 
-func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
-	fs := flag.NewFlagSet("haproxy", flag.ContinueOnError)
-	checkPort := fs.String(cliflags.ServerHTTPPort.Name, base.DefaultHTTPPort, "" /* usage */)
+func nodeStatusesToNodeInfos(nodes *serverpb.NodesResponse) []haProxyNodeInfo {
+	fs := pflag.NewFlagSet("haproxy", pflag.ContinueOnError)
+
+	httpAddr := ""
+	httpPort := base.DefaultHTTPPort
+	fs.Var(addrSetter{&httpAddr, &httpPort}, cliflags.ListenHTTPAddr.Name, "" /* usage */)
+	fs.Var(aliasStrVar{&httpPort}, cliflags.ListenHTTPPort.Name, "" /* usage */)
 
 	// Discard parsing output.
 	fs.SetOutput(ioutil.Discard)
 
-	nodeInfos := make([]haProxyNodeInfo, len(statuses))
-	for i, status := range statuses {
-		nodeInfos[i].NodeID = status.Desc.NodeID
-		nodeInfos[i].NodeAddr = status.Desc.Address.AddressField
+	nodeInfos := make([]haProxyNodeInfo, 0, len(nodes.Nodes))
 
-		*checkPort = base.DefaultHTTPPort
+	// The response can present nodes in arbitrary order. We want them sorted.
+	nodeIDs := make([]int, 0, len(nodes.Nodes))
+	statusByID := make(map[roachpb.NodeID]statuspb.NodeStatus)
+	for _, status := range nodes.Nodes {
+		statusByID[status.Desc.NodeID] = status
+		nodeIDs = append(nodeIDs, int(status.Desc.NodeID))
+	}
+	sort.Ints(nodeIDs)
+
+	for _, inodeID := range nodeIDs {
+		nodeID := roachpb.NodeID(inodeID)
+		status := statusByID[nodeID]
+		liveness := nodes.LivenessByNodeID[nodeID]
+		switch liveness {
+		case kvserverpb.NodeLivenessStatus_DECOMMISSIONING:
+			fmt.Fprintf(stderr, "warning: node %d status is %s, excluding from haproxy configuration\n",
+				nodeID, liveness)
+			fallthrough
+		case kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
+			continue
+		}
+
+		info := haProxyNodeInfo{
+			NodeID:   nodeID,
+			NodeAddr: status.Desc.Address.AddressField,
+			Locality: status.Desc.Locality,
+		}
+
+		httpPort = base.DefaultHTTPPort
 		// Iterate over the arguments until the ServerHTTPPort flag is found and
 		// parse the remainder of the arguments. This is done because Parse returns
 		// when it encounters an undefined flag and we do not want to define all
 		// possible flags.
-		for i, arg := range status.Args {
-			if strings.Contains(arg, cliflags.ServerHTTPPort.Name) {
-				_ = fs.Parse(status.Args[i:])
+		//
+		// TODO(knz): this logic is horrendously broken and
+		// incorrect. Replace it.
+		for j, arg := range status.Args {
+			if strings.Contains(arg, cliflags.ListenHTTPPort.Name) ||
+				strings.Contains(arg, cliflags.ListenHTTPAddr.Name) {
+				_ = fs.Parse(status.Args[j:])
+				break
 			}
 		}
 
-		nodeInfos[i].CheckPort = *checkPort
+		info.CheckPort = httpPort
+		nodeInfos = append(nodeInfos, info)
 	}
+
 	return nodeInfos
+}
+
+func localityMatches(locality roachpb.Locality, desired roachpb.Locality) (bool, error) {
+	for _, filterTier := range desired.Tiers {
+		// It's a little silly to recompile the regexp for each node, but not a big deal.
+		var b strings.Builder
+		b.WriteString("^")
+		b.WriteString(filterTier.Value)
+		b.WriteString("$")
+		re, err := regexp.Compile(b.String())
+		if err != nil {
+			return false, errors.Wrapf(err, "could not compile regular expression for %q", filterTier)
+		}
+
+		keyFound := false
+		for _, nodeTier := range locality.Tiers {
+			if filterTier.Key != nodeTier.Key {
+				continue
+			}
+
+			keyFound = true
+			if !re.MatchString(nodeTier.Value) {
+				// Mismatched tier value.
+				return false, nil
+			}
+
+			break
+		}
+
+		if !keyFound {
+			// Tier not found.
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func filterByLocality(nodeInfos []haProxyNodeInfo) ([]haProxyNodeInfo, error) {
+	if len(haProxyLocality.Tiers) == 0 {
+		// No filter.
+		return nodeInfos, nil
+	}
+
+	result := make([]haProxyNodeInfo, 0)
+	availableLocalities := make(map[string]struct{})
+
+	for _, info := range nodeInfos {
+		l := info.Locality
+		if len(l.Tiers) == 0 {
+			continue
+		}
+
+		// Save seen locality.
+		availableLocalities[l.String()] = struct{}{}
+
+		matches, err := localityMatches(l, haProxyLocality)
+		if err != nil {
+			return nil, err
+		}
+
+		if matches {
+			result = append(result, info)
+		}
+	}
+
+	if len(result) == 0 {
+		seenLocalities := make([]string, len(availableLocalities))
+		i := 0
+		for l := range availableLocalities {
+			seenLocalities[i] = l
+			i++
+		}
+		sort.Strings(seenLocalities)
+		return nil, fmt.Errorf("no nodes match locality filter %s. Found localities: %v", haProxyLocality.String(), seenLocalities)
+	}
+
+	return result, nil
 }
 
 func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
@@ -93,7 +220,7 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, _, finish, err := getClientGRPCConn(ctx)
+	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
@@ -109,13 +236,19 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 	var f *os.File
 	if haProxyPath == "-" {
 		w = os.Stdout
-	} else if f, err = os.OpenFile(haProxyPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755); err != nil {
+	} else if f, err = os.OpenFile(haProxyPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644); err != nil {
 		return err
 	} else {
 		w = f
 	}
 
-	err = configTemplate.Execute(w, nodeStatusesToNodeInfos(nodeStatuses.Nodes))
+	nodeInfos := nodeStatusesToNodeInfos(nodeStatuses)
+	filteredNodeInfos, err := filterByLocality(nodeInfos)
+	if err != nil {
+		return err
+	}
+
+	err = configTemplate.Execute(w, filteredNodeInfos)
 	if err != nil {
 		// Return earliest error, but still close the file.
 		_ = f.Close()

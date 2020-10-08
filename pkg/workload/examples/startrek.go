@@ -1,20 +1,17 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package examples
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -33,10 +30,11 @@ func init() {
 }
 
 var startrekMeta = workload.Meta{
-	Name:        `startrek`,
-	Description: `Star Trek models episodes and quotes from the tv show`,
-	Version:     `1.0.0`,
-	New:         func() workload.Generator { return startrek{} },
+	Name:         `startrek`,
+	Description:  `Star Trek models episodes and quotes from the tv show`,
+	Version:      `1.0.0`,
+	PublicFacing: true,
+	New:          func() workload.Generator { return startrek{} },
 }
 
 // Meta implements the Generator interface.
@@ -48,20 +46,30 @@ func (startrek) Tables() []workload.Table {
 		{
 			Name:   `episodes`,
 			Schema: episodesSchema,
-			InitialRows: workload.Tuples(
+			InitialRows: workload.TypedTuples(
 				len(startrekEpisodes),
+				episodesTypes,
 				func(rowIdx int) []interface{} { return startrekEpisodes[rowIdx] },
 			),
 		},
 		{
 			Name:   `quotes`,
 			Schema: quotesSchema,
-			InitialRows: workload.Tuples(
+			InitialRows: workload.TypedTuples(
 				len(startrekQuotes),
+				quotesTypes,
 				func(rowIdx int) []interface{} { return startrekQuotes[rowIdx] },
 			),
 		},
 	}
+}
+
+var episodesTypes = []*types.T{
+	types.Int,
+	types.Int,
+	types.Int,
+	types.Bytes,
+	types.Float,
 }
 
 // The data that follows was derived from the 'startrek' fortune cookie file.
@@ -146,6 +154,14 @@ var startrekEpisodes = [...][]interface{}{
 	{78, 3, 23, `All Our Yesterdays`, 5943.7},
 	{79, 3, 24, `Turnabout Intruder`, 5928.5},
 }
+
+var quotesTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Float,
+	types.Int,
+}
+
 var startrekQuotes = [...][]interface{}{
 	{`"... freedom ... is a worship word..." "It is our worship word too."`, `Cloud William and Kirk`, nil, 52},
 	{`"Beauty is transitory." "Beauty survives."`, `Spock and Kirk`, nil, 72},

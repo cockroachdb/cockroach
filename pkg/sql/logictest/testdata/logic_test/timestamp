@@ -1,0 +1,444 @@
+query T
+SELECT '2000-05-05 10:00:00+03':::TIMESTAMP
+----
+2000-05-05 10:00:00 +0000 +0000
+
+statement ok
+CREATE TABLE a (a int); INSERT INTO a VALUES(1)
+
+# Ensure that timestamp serialization doesn't break even if the computation is
+# distributed: #28110.
+
+query T
+SELECT '2000-05-05 10:00:00+03':::TIMESTAMP FROM a
+----
+2000-05-05 10:00:00 +0000 +0000
+
+query T
+select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ
+----
+2001-01-18 09:00:00.001 +0000 UTC
+
+# Test timezone() and ... AT TIME ZONE functions.
+subtest timezone
+
+statement ok
+SET TIME ZONE 'PST8PDT'
+
+query TT
+SELECT TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'MST', timezone('MST', TIMESTAMP '2001-02-16 20:38:40')
+----
+2001-02-16 19:38:40 -0800 PST  2001-02-16 19:38:40 -0800 PST
+
+query TT
+SELECT TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40-05' AT TIME ZONE 'MST', timezone('MST', TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40-05')
+----
+2001-02-16 18:38:40 +0000 +0000  2001-02-16 18:38:40 +0000 +0000
+
+query TT
+SELECT TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'MST', timezone('MST', TIMESTAMP '2001-02-16 20:38:40')
+----
+2001-02-16 19:38:40 -0800 PST  2001-02-16 19:38:40 -0800 PST
+
+# Test timestamp precisions
+subtest timestamp_precision
+
+query error precision 7 out of range
+select '1-1-18 1:00:00.001':::TIMESTAMP(7)
+
+query error precision 7 out of range
+select '1-1-18 1:00:00.001':::TIMESTAMPTZ(7)
+
+query T
+select '1-1-18 1:00:00.001':::TIMESTAMP(0)
+----
+2001-01-18 01:00:00 +0000 +0000
+
+query T
+select '1-1-18 1:00:00.001':::TIMESTAMP(6)
+----
+2001-01-18 01:00:00.001 +0000 +0000
+
+query T
+select '1-1-18 1:00:00.001':::TIMESTAMP
+----
+2001-01-18 01:00:00.001 +0000 +0000
+
+query T
+select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ(0)
+----
+2001-01-18 01:00:00 -0800 PST
+
+query T
+select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ(6)
+----
+2001-01-18 01:00:00.001 -0800 PST
+
+query B
+select current_timestamp(3) - current_timestamp <= '1ms'::interval
+----
+true
+
+statement ok
+CREATE TABLE timestamp_test (
+  id integer PRIMARY KEY,
+  t TIMESTAMP(5),
+  ttz TIMESTAMPTZ(4)
+)
+
+statement ok
+INSERT INTO timestamp_test VALUES
+  (1, '2001-01-01 12:00:00.123456', '2001-01-01 12:00:00.123456+4'),
+  (2, '2001-01-01 12:00:00.12345', '2001-01-01 12:00:00.12345+4'),
+  (3, '2001-01-01 12:00:00.1234', '2001-01-01 12:00:00.1234+4'),
+  (4, '2001-01-01 12:00:00.123', '2001-01-01 12:00:00.123+4'),
+  (5, '2001-01-01 12:00:00.12', '2001-01-01 12:00:00.12+4'),
+  (6, '2001-01-01 12:00:00.1', '2001-01-01 12:00:00.1+4'),
+  (7, '2001-01-01 12:00:00', '2001-01-01 12:00:00+4')
+
+query ITT
+SELECT * FROM timestamp_test ORDER BY id ASC
+----
+1  2001-01-01 12:00:00.12346 +0000 +0000  2001-01-01 00:00:00.1235 -0800 PST
+2  2001-01-01 12:00:00.12345 +0000 +0000  2001-01-01 00:00:00.1235 -0800 PST
+3  2001-01-01 12:00:00.1234 +0000 +0000   2001-01-01 00:00:00.1234 -0800 PST
+4  2001-01-01 12:00:00.123 +0000 +0000    2001-01-01 00:00:00.123 -0800 PST
+5  2001-01-01 12:00:00.12 +0000 +0000     2001-01-01 00:00:00.12 -0800 PST
+6  2001-01-01 12:00:00.1 +0000 +0000      2001-01-01 00:00:00.1 -0800 PST
+7  2001-01-01 12:00:00 +0000 +0000        2001-01-01 00:00:00 -0800 PST
+
+query TT
+select column_name, data_type FROM [SHOW COLUMNS FROM timestamp_test] ORDER BY column_name
+----
+id   INT8
+t    TIMESTAMP(5)
+ttz  TIMESTAMPTZ(4)
+
+query ITTTT
+SELECT id, t::timestamp(0), t::timestamp(3), ttz::timestamptz(0), ttz::timestamptz(3) FROM timestamp_test ORDER BY id
+----
+1  2001-01-01 12:00:00 +0000 +0000  2001-01-01 12:00:00.123 +0000 +0000  2001-01-01 00:00:00 -0800 PST  2001-01-01 00:00:00.124 -0800 PST
+2  2001-01-01 12:00:00 +0000 +0000  2001-01-01 12:00:00.123 +0000 +0000  2001-01-01 00:00:00 -0800 PST  2001-01-01 00:00:00.124 -0800 PST
+3  2001-01-01 12:00:00 +0000 +0000  2001-01-01 12:00:00.123 +0000 +0000  2001-01-01 00:00:00 -0800 PST  2001-01-01 00:00:00.123 -0800 PST
+4  2001-01-01 12:00:00 +0000 +0000  2001-01-01 12:00:00.123 +0000 +0000  2001-01-01 00:00:00 -0800 PST  2001-01-01 00:00:00.123 -0800 PST
+5  2001-01-01 12:00:00 +0000 +0000  2001-01-01 12:00:00.12 +0000 +0000   2001-01-01 00:00:00 -0800 PST  2001-01-01 00:00:00.12 -0800 PST
+6  2001-01-01 12:00:00 +0000 +0000  2001-01-01 12:00:00.1 +0000 +0000    2001-01-01 00:00:00 -0800 PST  2001-01-01 00:00:00.1 -0800 PST
+7  2001-01-01 12:00:00 +0000 +0000  2001-01-01 12:00:00 +0000 +0000      2001-01-01 00:00:00 -0800 PST  2001-01-01 00:00:00 -0800 PST
+
+# Altering type to more units of precision should work.
+statement ok
+ALTER TABLE timestamp_test ALTER COLUMN t TYPE timestamp
+
+statement ok
+ALTER TABLE timestamp_test ALTER COLUMN ttz TYPE timestamptz(5)
+
+statement ok
+INSERT INTO timestamp_test VALUES
+  (100, '2001-01-01 12:00:00.123456', '2001-01-01 12:00:00.123456+4')
+
+query ITT
+SELECT * FROM timestamp_test ORDER BY id ASC
+----
+1    2001-01-01 12:00:00.12346 +0000 +0000   2001-01-01 00:00:00.1235 -0800 PST
+2    2001-01-01 12:00:00.12345 +0000 +0000   2001-01-01 00:00:00.1235 -0800 PST
+3    2001-01-01 12:00:00.1234 +0000 +0000    2001-01-01 00:00:00.1234 -0800 PST
+4    2001-01-01 12:00:00.123 +0000 +0000     2001-01-01 00:00:00.123 -0800 PST
+5    2001-01-01 12:00:00.12 +0000 +0000      2001-01-01 00:00:00.12 -0800 PST
+6    2001-01-01 12:00:00.1 +0000 +0000       2001-01-01 00:00:00.1 -0800 PST
+7    2001-01-01 12:00:00 +0000 +0000         2001-01-01 00:00:00 -0800 PST
+100  2001-01-01 12:00:00.123456 +0000 +0000  2001-01-01 00:00:00.12346 -0800 PST
+
+query TT
+select column_name, data_type FROM [SHOW COLUMNS FROM timestamp_test] ORDER BY column_name
+----
+id   INT8
+t    TIMESTAMP
+ttz  TIMESTAMPTZ(5)
+
+subtest regression_timestamp_comparison
+
+statement ok
+SET TIME ZONE -5
+
+query B
+SELECT '2001-01-01'::date = '2001-01-01 00:00:00'::timestamp
+----
+true
+
+query B
+SELECT '2001-01-01'::date = '2001-01-01 00:00:00-5'::timestamptz
+----
+true
+
+query B
+SELECT '2001-01-01 00:00:00'::timestamp = '2001-01-01 01:00:00-4'::timestamptz
+----
+true
+
+subtest regression_django-cockroachdb_47
+
+statement ok
+SET TIME ZONE -3
+
+query R
+SELECT extract(hour FROM '2001-01-01 13:00:00+01'::timestamptz)
+----
+9
+
+query R
+SELECT extract(hour FROM '2001-01-01 13:00:00'::timestamp)
+----
+13
+
+query R
+SELECT extract(timezone FROM '2001-01-01 13:00:00+01:15'::timestamptz)
+----
+-10800
+
+statement ok
+SET TIME ZONE +3
+
+query R
+SELECT extract(hour FROM '2001-01-01 13:00:00+01'::timestamptz)
+----
+15
+
+query R
+SELECT extract(hour FROM '2001-01-01 13:00:00'::timestamp)
+----
+13
+
+query R
+SELECT extract(timezone FROM '2001-01-01 13:00:00+01:15'::timestamptz)
+----
+10800
+
+subtest regression_41776
+
+statement ok
+SET TIME ZONE 'GMT+1'
+
+query T
+SELECT '2001-01-01 00:00:00'::TIMESTAMP::TIMESTAMPTZ
+----
+2001-01-01 00:00:00 -0100 -0100
+
+statement ok
+SET TIME ZONE '+1:00'
+
+query T
+SELECT '2001-01-01 00:00:00'::TIMESTAMP::TIMESTAMPTZ
+----
+2001-01-01 00:00:00 -0100 -0100
+
+
+# test that current_timestamp is correct in different timezones.
+subtest current_timestamp_correct_in_timezone
+
+statement ok
+set time zone +3
+
+statement ok
+create table current_timestamp_test (a timestamp, b timestamptz)
+
+statement ok
+insert into current_timestamp_test values (current_timestamp, current_timestamp)
+
+statement ok
+set time zone 0
+
+# a was written at an interval 3 hours ahead, and should persist that way.
+# b will remember the timezone, so should be "constant" for comparison's sake.
+query TT
+select * from current_timestamp_test WHERE a - interval '3h' <> b
+----
+
+subtest localtimestamp_test
+
+query TTTT
+select pg_typeof(localtimestamp), pg_typeof(current_timestamp), pg_typeof(localtimestamp(3)), pg_typeof(current_timestamp(3))
+----
+timestamp without time zone  timestamp with time zone  timestamp without time zone  timestamp with time zone
+
+query B
+select localtimestamp(3) - localtimestamp <= '1ms'::interval
+----
+true
+
+# When doing daylight savings comparisons, ensure they compare correctly.
+# Test day before and after DST.
+subtest regression_django-cockroachdb_120
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query B
+SELECT '2011-03-13'::date = '2011-03-13'::timestamp
+----
+true
+
+query B
+SELECT '2011-03-13'::date = '2011-03-13'::timestamptz
+----
+true
+
+query B
+SELECT '2011-03-13'::timestamp = '2011-03-13'::timestamptz
+----
+true
+
+query B
+SELECT '2011-03-14'::date = '2011-03-14'::timestamp
+----
+true
+
+query B
+SELECT '2011-03-14'::date = '2011-03-14'::timestamptz
+----
+true
+
+query B
+SELECT '2011-03-14'::timestamp = '2011-03-14'::timestamptz
+----
+true
+
+statement ok
+SET TIME ZONE 0
+
+# Check default types and expressions get truncated on insert / update.
+subtest regression_44774
+
+statement ok
+CREATE TABLE regression_44774 (
+  a timestamp(3) DEFAULT '1970-02-03 12:13:14.123456',
+  b timestamptz(3) DEFAULT '1970-02-03 12:13:14.123456'
+)
+
+statement ok
+INSERT INTO regression_44774 VALUES (default, default), ('2020-02-05 19:21:57.261286', '2020-02-05 19:21:57.261286')
+
+query TT
+SELECT a, b FROM regression_44774 ORDER BY a
+----
+1970-02-03 12:13:14.123 +0000 +0000  1970-02-03 12:13:14.123 +0000 +0000
+2020-02-05 19:21:57.261 +0000 +0000  2020-02-05 19:21:57.261 +0000 +0000
+
+statement ok
+UPDATE regression_44774
+SET a = '1970-03-04 13:14:15.123456'::timestamp + '1 sec'::interval, b = '1970-03-04 13:14:15.123456'::timestamptz + '1 sec'::interval
+WHERE 1 = 1
+
+query TT
+SELECT a, b FROM regression_44774 ORDER BY a
+----
+1970-03-04 13:14:16.123 +0000 +0000  1970-03-04 13:14:16.123 +0000 +0000
+1970-03-04 13:14:16.123 +0000 +0000  1970-03-04 13:14:16.123 +0000 +0000
+
+statement ok
+DROP TABLE regression_44774
+
+# Test for timestamptz math with interval involving DST.
+subtest regression-cockroachdb/django-cockroachdb_57
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query T
+WITH a(a) AS ( VALUES
+  ('2010-11-06 23:59:00'::timestamptz + '24 hours'::interval), -- no offset specified
+  ('2010-11-06 23:59:00'::timestamptz + '1 day'::interval),
+  ('2010-11-06 23:59:00'::timestamptz + '1 month'::interval),
+  ('2010-11-07 23:59:00'::timestamptz - '24 hours'::interval),
+  ('2010-11-07 23:59:00'::timestamptz - '1 day'::interval),
+  ('2010-11-07 23:59:00'::timestamptz - '1 month'::interval),
+  ('2010-11-06 23:59:00-05'::timestamptz + '24 hours'::interval), -- offset at time zone
+  ('2010-11-06 23:59:00-05'::timestamptz + '1 day'::interval),
+  ('2010-11-06 23:59:00-05'::timestamptz + '1 month'::interval),
+  ('2010-11-07 23:59:00-06'::timestamptz - '24 hours'::interval),
+  ('2010-11-07 23:59:00-06'::timestamptz - '1 day'::interval),
+  ('2010-11-07 23:59:00-06'::timestamptz - '1 month'::interval),
+  ('2010-11-06 23:59:00-04'::timestamptz + '24 hours'::interval), -- different offset
+  ('2010-11-06 23:59:00-04'::timestamptz + '1 day'::interval),
+  ('2010-11-06 23:59:00-04'::timestamptz + '1 month'::interval),
+  ('2010-11-07 23:59:00-04'::timestamptz - '24 hours'::interval),
+  ('2010-11-07 23:59:00-04'::timestamptz - '1 day'::interval),
+  ('2010-11-07 23:59:00-04'::timestamptz - '1 month'::interval)
+) select * from a;
+----
+2010-11-07 22:59:00 -0600 CST
+2010-11-07 23:59:00 -0600 CST
+2010-12-06 23:59:00 -0600 CST
+2010-11-07 00:59:00 -0500 CDT
+2010-11-06 23:59:00 -0500 CDT
+2010-10-07 23:59:00 -0500 CDT
+2010-11-07 22:59:00 -0600 CST
+2010-11-07 23:59:00 -0600 CST
+2010-12-06 23:59:00 -0600 CST
+2010-11-07 00:59:00 -0500 CDT
+2010-11-06 23:59:00 -0500 CDT
+2010-10-07 23:59:00 -0500 CDT
+2010-11-07 21:59:00 -0600 CST
+2010-11-07 22:59:00 -0600 CST
+2010-12-06 22:59:00 -0600 CST
+2010-11-06 22:59:00 -0500 CDT
+2010-11-06 21:59:00 -0500 CDT
+2010-10-07 21:59:00 -0500 CDT
+
+statement ok
+CREATE TABLE example (a timestamptz)
+
+statement ok
+INSERT INTO example VALUES
+  ('2010-11-06 23:59:00'),
+  ('2010-11-07 23:59:00')
+
+query TTTTTTTTT
+SELECT
+  a + '24 hours'::interval, a + '1 day'::interval, a + '1 month'::interval,
+  a - '24 hours'::interval, a - '1 day'::interval, a - '1 month'::interval,
+  a - '2010-11-06 23:59:00'::timestamptz,
+  a - '2010-11-07 23:59:00'::timestamptz,
+  a::string
+FROM example
+ORDER BY a
+----
+2010-11-07 22:59:00 -0600 CST  2010-11-07 23:59:00 -0600 CST  2010-12-06 23:59:00 -0600 CST  2010-11-05 23:59:00 -0500 CDT  2010-11-05 23:59:00 -0500 CDT  2010-10-06 23:59:00 -0500 CDT  00:00:00  -1 days -01:00:00  2010-11-06 23:59:00-05:00
+2010-11-08 23:59:00 -0600 CST  2010-11-08 23:59:00 -0600 CST  2010-12-07 23:59:00 -0600 CST  2010-11-07 00:59:00 -0500 CDT  2010-11-06 23:59:00 -0500 CDT  2010-10-07 23:59:00 -0500 CDT  1 day 01:00:00  00:00:00   2010-11-07 23:59:00-06:00
+
+statement ok
+DROP TABLE example
+
+statement ok
+SET TIME ZONE 0
+
+subtest regression_46973
+
+statement ok
+CREATE TABLE regression_46973(c0 TIMESTAMP UNIQUE, c1 TIMESTAMPTZ UNIQUE)
+
+statement ok
+INSERT INTO regression_46973 VALUES ('1970-01-01 00:00:00', '1970-01-01 00:00:00')
+
+statement error "292277026596-12-04T15:30:08Z" exceeds supported timestamp bounds
+SELECT * FROM regression_46973 WHERE (-9223372036854775808)::TIMESTAMP!=regression_46973.c0
+
+statement error "292277026596-12-04T15:30:08Z" exceeds supported timestamp bounds
+SELECT * FROM regression_46973 WHERE (-9223372036854775808)::TIMESTAMPTZ!=regression_46973.c1
+
+statement error "294277-01-01T00:00:00Z" exceeds supported timestamp bounds
+SELECT '294276-12-31 23:59:59.999999'::TIMESTAMP(0)
+
+statement ok
+DROP TABLE regression_46973
+
+subtest regression_extract_epoch_timestamptz
+
+query R
+set time zone 'Europe/Berlin'; select extract(epoch from TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00')
+----
+1.28910594e+09
+
+query R
+set time zone 'UTC'; select extract(epoch from TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00')
+----
+1.28910594e+09

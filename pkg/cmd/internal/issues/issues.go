@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package issues
 
@@ -21,91 +17,121 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
+	"text/template"
 
-	"golang.org/x/oauth2"
-
+	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
-	version "github.com/hashicorp/go-version"
-	"github.com/pkg/errors"
+	"golang.org/x/oauth2"
 )
 
 const (
-	githubAPITokenEnv    = "GITHUB_API_TOKEN"
-	teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
-	teamcityBuildIDEnv   = "TC_BUILD_ID"
-	teamcityServerURLEnv = "TC_SERVER_URL"
-	tagsEnv              = "TAGS"
-	goFlagsEnv           = "GOFLAGS"
-	githubUser           = "cockroachdb"
-	githubRepo           = "cockroach"
-	cockroachPkgPrefix   = "github.com/cockroachdb/cockroach/pkg/"
+	githubOrgEnv           = "GITHUB_ORG"
+	githubRepoEnv          = "GITHUB_REPO"
+	githubAPITokenEnv      = "GITHUB_API_TOKEN"
+	teamcityVCSNumberEnv   = "BUILD_VCS_NUMBER"
+	teamcityBuildIDEnv     = "TC_BUILD_ID"
+	teamcityServerURLEnv   = "TC_SERVER_URL"
+	teamcityBuildBranchEnv = "TC_BUILD_BRANCH"
+	tagsEnv                = "TAGS"
+	goFlagsEnv             = "GOFLAGS"
+	// CockroachPkgPrefix is the crdb package prefix.
+	CockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
+	// Based on the following observed API response the maximum here is 1<<16-1.
+	// We shouldn't usually get near that limit but if we do, better to post a
+	// clipped issue.
+	//
+	// 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
+	// is too long (maximum is 65536 characters)}]
+	githubIssueBodyMaximumLength = 60000
 )
+
+func enforceMaxLength(s string) string {
+	if len(s) > githubIssueBodyMaximumLength {
+		return s[:githubIssueBodyMaximumLength]
+	}
+	return s
+}
+
+// UnitTestFailureTitle is a title template suitable for posting issues about
+// vanilla Go test failures.
+const UnitTestFailureTitle = `{{ shortpkg .PackageName }}: {{.TestName}} failed`
+
+// UnitTestFailureBody is a body template suitable for posting issues about vanilla Go
+// test failures.
+const UnitTestFailureBody = `[({{shortpkg .PackageName}}).{{.TestName}} failed]({{.URL}}) on [{{.Branch}}@{{.Commit}}]({{commiturl .Commit}}):
+
+{{ if (.CondensedMessage.FatalOrPanic 50).Error }}{{with $fop := .CondensedMessage.FatalOrPanic 50 -}}
+Fatal error:
+{{threeticks}}
+{{ .Error }}{{threeticks}}
+
+Stack:
+{{threeticks}}
+{{ $fop.FirstStack }}
+{{threeticks}}
+
+<details><summary>Log preceding fatal error</summary><p>
+
+{{threeticks}}
+{{ $fop.LastLines }}
+{{threeticks}}
+
+</p></details>{{end}}{{ else -}}
+{{threeticks}}
+{{ .CondensedMessage.Digest 50 }}
+{{ threeticks }}{{end}}
+
+<details><summary>More</summary><p>
+{{if .Parameters -}}
+Parameters:
+{{range .Parameters }}
+- {{ . }}{{end}}{{end}}
+
+{{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
+{{else -}}
+{{threeticks}}
+{{.ReproductionCommand}}
+{{threeticks}}
+
+{{end -}}
+
+{{ if .RelatedIssues }}Related:{{end}}{{range .RelatedIssues}}
+- #{{ .Number}} {{ .Title }} {{ range .Labels }} [{{ .Name }}]({{ .URL }}){{- end}}
+{{end}}
+[See this test on roachdash](https://roachdash.crdb.dev/?filter={{urlquery "status:open t:.*" .TestName ".*" }}&sort=title&restgroup=false&display=lastcommented+project)
+<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
+`
 
 var (
-	issueLabels  = []string{"O-robot", "C-test-failure"}
-	stacktraceRE = regexp.MustCompile(`(?m:^goroutine\s\d+)`)
+	// Set of labels attached to created issues.
+	issueLabels = []string{"O-robot", "C-test-failure"}
+	// Label we expect when checking existing issues. Sometimes users open
+	// issues about flakes and don't assign all the labels. We want to at
+	// least require the test-failure label to avoid pathological situations
+	// in which a test name is so generic that it matches lots of random issues.
+	// Note that we'll only post a comment into an existing label if the labels
+	// match 100%, but we also cross-link issues whose labels differ. But we
+	// require that they all have searchLabel as a baseline.
+	searchLabel = issueLabels[1]
 )
-
-// Based on the following observed API response:
-//
-// 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
-// is too long (maximum is 65536 characters)}]
-const githubIssueBodyMaximumLength = 1<<16 - 1
-
-// trimIssueRequestBody trims message such that the total size of an issue body
-// is less than githubIssueBodyMaximumLength. usedCharacters specifies the
-// number of characters that have already been used for the issue body (see
-// newIssueRequest below). message is usually the test failure message and
-// possibly includes stacktraces for all of the goroutines (which is what makes
-// the message very large).
-//
-// TODO(peter): Rather than trimming the message like this, perhaps it can be
-// added as an attachment or some other expandable comment.
-func trimIssueRequestBody(message string, usedCharacters int) string {
-	maxLength := githubIssueBodyMaximumLength - usedCharacters
-
-	if m := stacktraceRE.FindStringIndex(message); m != nil {
-		// We want the top stack traces plus a few lines before.
-		{
-			startIdx := m[0]
-			for i := 0; i < 100; i++ {
-				if idx := strings.LastIndexByte(message[:startIdx], '\n'); idx != -1 {
-					startIdx = idx
-				}
-			}
-			message = message[startIdx:]
-		}
-		for len(message) > maxLength {
-			if idx := strings.LastIndexByte(message, '\n'); idx != -1 {
-				message = message[:idx]
-			} else {
-				message = message[:maxLength]
-			}
-		}
-	} else {
-		// We want the FAIL line.
-		for len(message) > maxLength {
-			if idx := strings.IndexByte(message, '\n'); idx != -1 {
-				message = message[idx+1:]
-			} else {
-				message = message[len(message)-maxLength:]
-			}
-		}
-	}
-
-	return message
-}
 
 // If the assignee would be the key in this map, assign to the value instead.
 // Helpful to avoid pinging former employees.
+// An "" value means that issues that would have gone to the key are left
+// unassigned.
 var oldFriendsMap = map[string]string{
-	"tamird": "tschottdorf",
+	"a-robinson":   "andreimatei",
+	"benesch":      "nvanbenschoten",
+	"georgeutsin":  "yuzefovich",
+	"tamird":       "tbg",
+	"rohany":       "solongordon",
+	"vivekmenezes": "",
 }
 
-func getAssignee(
+func (p *poster) getAssignee(
 	ctx context.Context,
 	authorEmail string,
 	listCommits func(ctx context.Context, owner string, repo string,
@@ -114,7 +140,7 @@ func getAssignee(
 	if authorEmail == "" {
 		return "", nil
 	}
-	commits, _, err := listCommits(ctx, githubUser, githubRepo, &github.CommitsListOptions{
+	commits, _, err := listCommits(ctx, p.org, p.repo, &github.CommitsListOptions{
 		Author: authorEmail,
 		ListOptions: github.ListOptions{
 			PerPage: 1,
@@ -133,13 +159,16 @@ func getAssignee(
 	assignee := *commits[0].Author.Login
 
 	if newAssignee, ok := oldFriendsMap[assignee]; ok {
+		if newAssignee == "" {
+			return "", fmt.Errorf("old friend %s is friendless", assignee)
+		}
 		assignee = newAssignee
 	}
 	return assignee, nil
 }
 
 func getLatestTag() (string, error) {
-	cmd := exec.Command("git", "describe", "--abbrev=0", "--tags")
+	cmd := exec.Command("git", "describe", "--abbrev=0", "--tags", "--match=v[0-9]*")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err
@@ -147,32 +176,28 @@ func getLatestTag() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func getProbableMilestone(
+func (p *poster) getProbableMilestone(
 	ctx context.Context,
 	getLatestTag func() (string, error),
 	listMilestones func(ctx context.Context, owner string, repo string,
 		opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error),
 ) *int {
-	tag, err := getLatestTag()
+	tag, err := p.getLatestTag()
 	if err != nil {
 		log.Printf("unable to get latest tag: %s", err)
 		log.Printf("issues will be posted without milestone")
 		return nil
 	}
 
-	v, err := version.NewVersion(tag)
+	v, err := version.Parse(tag)
 	if err != nil {
 		log.Printf("unable to parse version from tag: %s", err)
 		log.Printf("issues will be posted without milestone")
 		return nil
 	}
-	if len(v.Segments()) < 2 {
-		log.Printf("version %s has less than two components; issues will be posted without milestone", tag)
-		return nil
-	}
-	vstring := fmt.Sprintf("%d.%d", v.Segments()[0], v.Segments()[1])
+	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
 
-	milestones, _, err := listMilestones(ctx, githubUser, githubRepo, &github.MilestoneListOptions{
+	milestones, _, err := p.listMilestones(ctx, p.org, p.repo, &github.MilestoneListOptions{
 		State: "open",
 	})
 	if err != nil {
@@ -190,9 +215,12 @@ func getProbableMilestone(
 }
 
 type poster struct {
+	org       string
+	repo      string
 	sha       string
 	buildID   string
 	serverURL string
+	branch    string
 	milestone *int
 
 	createIssue func(ctx context.Context, owner string, repo string,
@@ -205,6 +233,8 @@ type poster struct {
 		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 	listMilestones func(ctx context.Context, owner string, repo string,
 		opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error)
+	createProjectCard func(ctx context.Context, columnID int64,
+		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 	getLatestTag func() (string, error)
 }
 
@@ -220,17 +250,24 @@ func newPoster() *poster {
 	)))
 
 	return &poster{
-		createIssue:    client.Issues.Create,
-		searchIssues:   client.Search.Issues,
-		createComment:  client.Issues.CreateComment,
-		listCommits:    client.Repositories.ListCommits,
-		listMilestones: client.Issues.ListMilestones,
-		getLatestTag:   getLatestTag,
+		createIssue:       client.Issues.Create,
+		searchIssues:      client.Search.Issues,
+		createComment:     client.Issues.CreateComment,
+		listCommits:       client.Repositories.ListCommits,
+		listMilestones:    client.Issues.ListMilestones,
+		createProjectCard: client.Projects.CreateProjectCard,
+		getLatestTag:      getLatestTag,
 	}
 }
 
 func (p *poster) init() {
+	// Allow overriding the repository in which the issue is filed.
+	p.org = maybeEnv(githubOrgEnv, "cockroachdb")
+	p.repo = maybeEnv(githubRepoEnv, "cockroach")
+
 	var ok bool
+	// TODO(tbg): make these not fatals. It's better to post an incomplete issue than to add
+	// more weird failures to the CI pipeline.
 	if p.sha, ok = os.LookupEnv(teamcityVCSNumberEnv); !ok {
 		log.Fatalf("VCS number environment variable %s is not set", teamcityVCSNumberEnv)
 	}
@@ -240,84 +277,180 @@ func (p *poster) init() {
 	if p.serverURL, ok = os.LookupEnv(teamcityServerURLEnv); !ok {
 		log.Fatalf("teamcity server URL environment variable %s is not set", teamcityServerURLEnv)
 	}
-	p.milestone = getProbableMilestone(context.Background(), p.getLatestTag, p.listMilestones)
+	if p.branch, ok = os.LookupEnv(teamcityBuildBranchEnv); !ok {
+		p.branch = "unknown"
+	}
+	p.milestone = p.getProbableMilestone(context.Background(), p.getLatestTag, p.listMilestones)
 }
 
-func (p *poster) post(
-	ctx context.Context, detail, packageName, testName, message, authorEmail string,
-) error {
-	packageName = cockroachPkgPrefix + packageName
-
-	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
-
-Parameters:%[2]s
-
-Failed test: %[3]s`
-	const messageTemplate = "\n\n```\n%s\n```"
-
-	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
-		title := fmt.Sprintf("%s: %s failed%s",
-			strings.TrimPrefix(packageName, cockroachPkgPrefix), testName, detail)
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL()) + messageTemplate
-		// We insert a raw "%s" above so we can figure out the length of the
-		// body so far, without the actual error text. We need this length so we
-		// can calculate the maximum amount of error text we can include in the
-		// issue without exceeding GitHub's limit. We replace that %s in the
-		// following Sprintf.
-		body = fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
-
-		return &github.IssueRequest{
-			Title:     &title,
-			Body:      &body,
-			Labels:    &issueLabels,
-			Assignee:  &assignee,
-			Milestone: p.milestone,
-		}
+func maybeEnv(envKey, defaultValue string) string {
+	v := os.Getenv(envKey)
+	if v == "" {
+		return defaultValue
 	}
+	return v
+}
 
-	newIssueComment := func(packageName, testName string) *github.IssueComment {
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL())
-		return &github.IssueComment{Body: &body}
+// TemplateData holds the data available in (PostRequest).(Body|Title)Template,
+// respectively. On top of the below, there are also a few functions, for which
+// UnitTestFailureBody can serve as a reference.
+type TemplateData struct {
+	PostRequest
+	Parameters       []string
+	CondensedMessage CondensedMessage
+	Commit           string
+	Branch           string
+	ArtifactsURL     string
+	URL              string
+	Assignee         interface{} // lazy
+	RelatedIssues    []github.Issue
+}
+
+type lazy struct {
+	work func() interface{}
+
+	s    interface{}
+	once sync.Once
+}
+
+func (l *lazy) String() string {
+	l.once.Do(func() {
+		l.s = l.work()
+	})
+	return fmt.Sprint(l.s)
+}
+
+func (p *poster) templateData(
+	ctx context.Context, req PostRequest, relatedIssues []github.Issue,
+) TemplateData {
+	return TemplateData{
+		PostRequest:      req,
+		Parameters:       p.parameters(),
+		CondensedMessage: CondensedMessage(req.Message),
+		Branch:           p.branch,
+		Commit:           p.sha,
+		ArtifactsURL: func() string {
+			if req.Artifacts != "" {
+				return p.teamcityArtifactsURL(req.Artifacts).String()
+			}
+			return ""
+		}(),
+		URL: p.teamcityBuildLogURL().String(),
+		Assignee: &lazy{work: func() interface{} {
+			// NB: the laziness here isn't motivated by anything in particular,
+			// so rip it out if it ever causes problems.
+			handle, err := p.getAssignee(ctx, req.AuthorEmail, p.listCommits)
+			if err != nil {
+				return ""
+			}
+			return handle
+		}},
+		RelatedIssues: relatedIssues,
 	}
+}
 
-	assignee, err := getAssignee(ctx, authorEmail, p.listCommits)
+func (p *poster) execTemplate(ctx context.Context, tpl string, data TemplateData) (string, error) {
+	tlp, err := template.New("").Funcs(template.FuncMap{
+		"threeticks": func() string { return "```" },
+		"commiturl": func(sha string) string {
+			return fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.org, p.repo, p.sha)
+		},
+		"shortpkg": func(fullpkg string) string {
+			return strings.TrimPrefix(fullpkg, CockroachPkgPrefix)
+		},
+	}).Parse(tpl)
 	if err != nil {
-		// if we *can't* assign anyone, sigh, feel free to hard-code me.
-		// -- tschottdorf, 11/3/2017
-		assignee = "tschottdorf"
-		message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
+		return "", err
 	}
 
-	issueRequest := newIssueRequest(packageName, testName, message, assignee)
-	searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`,
-		*issueRequest.Title, githubUser, githubRepo)
-	for _, label := range issueLabels {
-		searchQuery = searchQuery + fmt.Sprintf(` label:"%s"`, label)
+	var buf strings.Builder
+	if err := tlp.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return enforceMaxLength(buf.String()), nil
+}
+
+func (p *poster) post(ctx context.Context, req PostRequest) error {
+	assignee, err := p.getAssignee(ctx, req.AuthorEmail, p.listCommits)
+	if err != nil {
+		req.Message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 	}
 
-	var foundIssue *int
-	result, _, err := p.searchIssues(ctx, searchQuery, &github.SearchOptions{
+	title, err := p.execTemplate(ctx, req.TitleTemplate, p.templateData(ctx, req, nil))
+	if err != nil {
+		return err
+	}
+
+	// We carry out two searches below, one attempting to find an issue that we
+	// adopt (i.e. add a comment to) and one finding "related issues", i.e. those
+	// that would match if it weren't for their branch label.
+	qBase := fmt.Sprintf(
+		`repo:%q user:%q is:issue is:open in:title label:%q sort:created-desc %q`,
+		p.repo, p.org, searchLabel, title)
+
+	releaseLabel := fmt.Sprintf("branch-%s", p.branch)
+	qExisting := qBase + " label:" + releaseLabel
+	qRelated := qBase + " -label:" + releaseLabel
+
+	rExisting, _, err := p.searchIssues(ctx, qExisting, &github.SearchOptions{
 		ListOptions: github.ListOptions{
 			PerPage: 1,
 		},
 	})
 	if err != nil {
-		return errors.Wrapf(err, "failed to search GitHub with query %s",
-			github.Stringify(searchQuery))
-	}
-	if *result.Total > 0 {
-		foundIssue = result.Issues[0].Number
+		return errors.Wrapf(err, "failed to search GitHub for %s", qExisting)
 	}
 
+	rRelated, _, err := p.searchIssues(ctx, qRelated, &github.SearchOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 10,
+		},
+	})
+	if err != nil {
+		return errors.Wrapf(err, "failed to search GitHub for %s", qRelated)
+	}
+
+	var foundIssue *int
+	if len(rExisting.Issues) > 0 {
+		// We found an existing issue to post a comment into.
+		foundIssue = rExisting.Issues[0].Number
+	}
+
+	body, err := p.execTemplate(ctx, req.BodyTemplate, p.templateData(ctx, req, rRelated.Issues))
+	if err != nil {
+		return err
+	}
+
+	createLabels := append(issueLabels, releaseLabel)
+	createLabels = append(createLabels, req.ExtraLabels...)
 	if foundIssue == nil {
-		if _, _, err := p.createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
+		issueRequest := github.IssueRequest{
+			Title:     &title,
+			Body:      &body,
+			Labels:    &createLabels,
+			Assignee:  &assignee,
+			Milestone: p.milestone,
+		}
+		issue, _, err := p.createIssue(ctx, p.org, p.repo, &issueRequest)
+		if err != nil {
 			return errors.Wrapf(err, "failed to create GitHub issue %s",
 				github.Stringify(issueRequest))
 		}
+
+		if req.ProjectColumnID != 0 {
+			_, _, err := p.createProjectCard(ctx, int64(req.ProjectColumnID), &github.ProjectCardOptions{
+				ContentID:   *issue.ID,
+				ContentType: "Issue",
+			})
+			if err != nil {
+				return errors.Wrapf(err, "failed to add GitHub issue %s to project column %d",
+					*issue.Title, req.ProjectColumnID)
+			}
+		}
 	} else {
-		comment := newIssueComment(packageName, testName)
+		comment := github.IssueComment{Body: &body}
 		if _, _, err := p.createComment(
-			ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
+			ctx, p.org, p.repo, *foundIssue, &comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",
 				*foundIssue, github.Stringify(comment))
 		}
@@ -326,10 +459,10 @@ Failed test: %[3]s`
 	return nil
 }
 
-func (p *poster) teamcityURL() *url.URL {
+func (p *poster) teamcityURL(tab, fragment string) *url.URL {
 	options := url.Values{}
 	options.Add("buildId", p.buildID)
-	options.Add("tab", "buildLog")
+	options.Add("tab", tab)
 
 	u, err := url.Parse(p.serverURL)
 	if err != nil {
@@ -338,10 +471,19 @@ func (p *poster) teamcityURL() *url.URL {
 	u.Scheme = "https"
 	u.Path = "viewLog.html"
 	u.RawQuery = options.Encode()
+	u.Fragment = fragment
 	return u
 }
 
-func (p *poster) parameters() string {
+func (p *poster) teamcityBuildLogURL() *url.URL {
+	return p.teamcityURL("buildLog", "")
+}
+
+func (p *poster) teamcityArtifactsURL(artifacts string) *url.URL {
+	return p.teamcityURL("artifacts", artifacts)
+}
+
+func (p *poster) parameters() []string {
 	var parameters []string
 	for _, parameter := range []string{
 		tagsEnv,
@@ -351,15 +493,12 @@ func (p *poster) parameters() string {
 			parameters = append(parameters, parameter+"="+val)
 		}
 	}
-	if len(parameters) == 0 {
-		return ""
-	}
-	return "\n```\n" + strings.Join(parameters, "\n") + "\n```"
+	return parameters
 }
 
 func isInvalidAssignee(err error) bool {
-	e, ok := errors.Cause(err).(*github.ErrorResponse)
-	if !ok {
+	var e *github.ErrorResponse
+	if !errors.As(err, &e) {
 		return false
 	}
 	if e.Response.StatusCode != 422 {
@@ -380,22 +519,59 @@ var defaultP struct {
 	*poster
 }
 
+// A PostRequest contains the information needed to create an issue about a
+// test failure.
+type PostRequest struct {
+	// The title of the issue. See UnitTestFailureTitleTemplate for an example.
+	TitleTemplate,
+	// The body of the issue. See UnitTestFailureBodyTemplate for an example.
+	BodyTemplate,
+	// The name of the package the test failure relates to.
+	PackageName,
+	// The name of the failing test.
+	TestName,
+	// The test output, ideally shrunk to contain only relevant details.
+	Message,
+	// A link to the test artifacts. If empty, defaults to a link constructed
+	// from the TeamCity env vars (if available).
+	Artifacts,
+	// The email of the author, used to determine which team/person to assign
+	// the issue to.
+	//
+	// TODO(irfansharif): We should re-think this, and our general approach to
+	// issue assignment, and move away from assigning individual authors.
+	// #51653.
+	AuthorEmail,
+	// The instructions to reproduce the failure.
+	ReproductionCommand string
+	// Additional labels that will be added to the issue. They will be created
+	// as necessary (as a side effect of creating an issue with them). An
+	// existing issue may be adopted even if it does not have these labels.
+	ExtraLabels []string
+
+	// ProjectColumnID is the id of the GitHub project column to add the issue to,
+	// or 0 if none.
+	ProjectColumnID int
+}
+
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue.
-func Post(ctx context.Context, detail, packageName, testName, message, authorEmail string) error {
+func Post(ctx context.Context, req PostRequest) error {
 	defaultP.Do(func() {
 		defaultP.poster = newPoster()
 		defaultP.init()
 	})
-	err := defaultP.post(ctx, detail, packageName, testName, message, authorEmail)
+	err := defaultP.post(ctx, req)
 	if !isInvalidAssignee(err) {
 		return err
 	}
-	return defaultP.post(ctx, detail, packageName, testName, message, "tobias.schottdorf@gmail.com")
+	req.AuthorEmail = "tobias.schottdorf@gmail.com"
+	return defaultP.post(ctx, req)
 }
 
-// CanPost returns true if the github API token environment variable is set.
+// CanPost returns true if the github API token environment variable is set to
+// a nontrivial value.
 func CanPost() bool {
-	_, ok := os.LookupEnv(githubAPITokenEnv)
-	return ok
+	s, ok := os.LookupEnv(githubAPITokenEnv)
+	return ok && len(s) > 0
 }

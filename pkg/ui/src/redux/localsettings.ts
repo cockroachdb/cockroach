@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 /**
  * The local settings reducer is designed to store local-only UI settings in
  * redux state. These settings are maintained within a session, but not saved
@@ -12,9 +22,12 @@
 import _ from "lodash";
 import { createSelector, Selector } from "reselect";
 import { Action } from "redux";
+import { call, takeEvery } from "redux-saga/effects";
+
 import { PayloadAction } from "src/interfaces/action";
 
-const SET_UI_VALUE = "cockroachui/ui/SET_UI_VALUE";
+const STORAGE_PREFIX = "cockroachui";
+const SET_UI_VALUE = `${STORAGE_PREFIX}/ui/SET_UI_VALUE`;
 
 export interface LocalSettingData {
   key: string;
@@ -26,6 +39,31 @@ export interface LocalSettingData {
  */
 export interface LocalSettingsState {
   [key: string]: any;
+}
+
+/**
+ * Persist local setting value in sessionStorage.
+ * Append STORAGE_PREFIX to organize keys in a group.
+ */
+function saveToSessionStorage(data: LocalSettingData) {
+  const value = JSON.stringify(data.value);
+  // Silently handle possible exception when saving data to sessionStorage.
+  // It is possible that sessionStorage is full, so it is not
+  // possible to persist data in it.
+  try {
+    sessionStorage.setItem(`${STORAGE_PREFIX}/${data.key}`, value);
+  } catch (e) {
+    console.warn(e.message);
+  }
+}
+
+/**
+ * Retrieve local setting value by key from sessionStorage.
+ * Value is stored as a stringified JSON so has to be parsed back.
+ */
+function getValueFromSessionStorage(key: string) {
+  const value = sessionStorage.getItem(`${STORAGE_PREFIX}/${key}`);
+  return JSON.parse(value);
 }
 
 /**
@@ -95,9 +133,18 @@ export class LocalSetting<S, T> {
   constructor(public key: string, innerSelector: Selector<S, LocalSettingsState>, defaultValue?: T) {
     this._value = createSelector(
       innerSelector,
-      (uiSettings) => {
-        return uiSettings[this.key] || defaultValue;
+      () => getValueFromSessionStorage(this.key),
+      (uiSettings, cachedValue) => {
+        return uiSettings[this.key] || cachedValue || defaultValue;
       },
     );
   }
+}
+
+export function* persistLocalSetting(action: PayloadAction<LocalSettingData>) {
+  yield call(saveToSessionStorage, action.payload);
+}
+
+export function* localSettingsSaga() {
+  yield takeEvery(SET_UI_VALUE, persistLocalSetting);
 }

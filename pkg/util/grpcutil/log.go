@@ -1,17 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package grpcutil
 
@@ -19,15 +14,12 @@ import (
 	"context"
 	"math"
 	"regexp"
-	"strings"
 	"time"
-
-	"github.com/petermattis/goid"
-	"google.golang.org/grpc/grpclog"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"google.golang.org/grpc/grpclog"
 )
 
 func init() {
@@ -79,7 +71,9 @@ func (severity *logger) Warning(args ...interface{}) {
 	if log.Severity(*severity) > log.Severity_WARNING {
 		return
 	}
-	log.WarningfDepth(context.TODO(), 2, "", args...)
+	if shouldPrintWarning(args...) {
+		log.WarningfDepth(context.TODO(), 2, "", args...)
+	}
 }
 
 func (severity *logger) Warningln(args ...interface{}) {
@@ -93,9 +87,7 @@ func (severity *logger) Warningf(format string, args ...interface{}) {
 	if log.Severity(*severity) > log.Severity_WARNING {
 		return
 	}
-	if shouldPrint(transportFailedRe, connectionRefusedRe, time.Minute, format, args...) {
-		log.WarningfDepth(context.TODO(), 2, format, args...)
-	}
+	log.WarningfDepth(context.TODO(), 2, format, args...)
 }
 
 func (severity *logger) Error(args ...interface{}) {
@@ -147,50 +139,68 @@ func (severity *logger) V(i int) bool {
 	if i > math.MaxInt32 {
 		i = math.MaxInt32
 	}
-	return log.VDepth(int32(i) /* level */, 1 /* depth */)
+	return log.VDepth(log.Level(i) /* level */, 1 /* depth */)
 }
 
-// https://github.com/grpc/grpc-go/blob/v1.7.0/clientconn.go#L937
-var (
-	transportFailedRe   = regexp.MustCompile("^" + regexp.QuoteMeta("grpc: addrConn.resetTransport failed to create client transport:"))
-	connectionRefusedRe = regexp.MustCompile(
-		strings.Join([]string{
-			// *nix
-			regexp.QuoteMeta("connection refused"),
-			// Windows
-			regexp.QuoteMeta("No connection could be made because the target machine actively refused it"),
-			// Host removed from the network and no longer resolvable:
-			// https://github.com/golang/go/blob/go1.8.3/src/net/net.go#L566
-			regexp.QuoteMeta("no such host"),
-		}, "|"),
-	)
+// https://github.com/grpc/grpc-go/blob/v1.29.1/clientconn.go#L1275
+const (
+	outgoingConnSpamReSrc = `^grpc: addrConn\.createTransport failed to connect to.*(` +
+		// *nix
+		`connection refused` + `|` +
+		// Windows
+		`No connection could be made because the target machine actively refused it` + `|` +
+		// Host removed from the network and no longer resolvable:
+		// https://github.com/golang/go/blob/go1.8.3/src/net/net.go#L566
+		`no such host` + `|` +
+		// RPC dialer is currently failing but also retrying.
+		errCannotReuseClientConnMsg +
+		`)`
+
+	// When a TCP probe simply opens and immediately closes the
+	// connection, gRPC is unhappy that the TLS handshake did not
+	// complete. We don't care.
+	incomingConnSpamReSrc = `^grpc: Server\.Serve failed to complete security handshake from "[^"]*": EOF`
 )
+
+var outgoingConnSpamRe = regexp.MustCompile(outgoingConnSpamReSrc)
+var incomingConnSpamRe = regexp.MustCompile(incomingConnSpamReSrc)
 
 var spamMu = struct {
 	syncutil.Mutex
-	gids map[int64]time.Time
+	strs map[string]time.Time
 }{
-	gids: make(map[int64]time.Time),
+	strs: make(map[string]time.Time),
 }
 
-func shouldPrint(
-	formatRe, argsRe *regexp.Regexp, freq time.Duration, format string, args ...interface{},
-) bool {
-	if formatRe.MatchString(format) {
-		for _, arg := range args {
-			if err, ok := arg.(error); ok {
-				if argsRe.MatchString(err.Error()) {
-					gid := goid.Get()
-					now := timeutil.Now()
-					spamMu.Lock()
-					t, ok := spamMu.gids[gid]
-					doPrint := !(ok && now.Sub(t) < freq)
-					if doPrint {
-						spamMu.gids[gid] = now
-					}
-					spamMu.Unlock()
-					return doPrint
+const minSpamLogInterval = 30 * time.Second
+
+// shouldPrintWarning returns true iff the gRPC warning message
+// identified by args can be logged now. It returns false for outgoing
+// connections errors that repeat within minSpamLogInterval of each
+// other, and also for certain types of incoming connection errors.
+func shouldPrintWarning(args ...interface{}) bool {
+	for _, arg := range args {
+		if argStr, ok := arg.(string); ok {
+			// Incoming connection errors that match the criteria are blocked
+			// always.
+			if incomingConnSpamRe.MatchString(argStr) {
+				return false
+			}
+
+			// Outgoing connection errors are only reported if performed too
+			// often.
+			// TODO(knz): Maybe the string map should be cleared periodically,
+			// to avoid unbounded memory growth.
+			if outgoingConnSpamRe.MatchString(argStr) {
+				now := timeutil.Now()
+				spamMu.Lock()
+				t, ok := spamMu.strs[argStr]
+				doPrint := !(ok && now.Sub(t) < minSpamLogInterval)
+				if doPrint {
+					spamMu.strs[argStr] = now
 				}
+				spamMu.Unlock()
+				return doPrint
 			}
 		}
 	}

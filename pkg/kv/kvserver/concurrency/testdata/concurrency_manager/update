@@ -1,0 +1,398 @@
+# -------------------------------------------------------------
+# A transaction writes an intent. The intent is pushed to a
+# higher timestamp by a second transaction. The transaction then
+# returns to re-acquire the intent at a new sequence number but
+# still at the original timestamp. This is permitted but the
+# lock's timestamp should not regress.
+#
+# Setup: txn1 acquires lock k
+#        txn2 reads k and waits
+#        txn2 pushes txn1
+#
+# Test:  txn2 succeeds in pushing txn1's ts forward
+#        txn2 proceeds
+#        txn1 re-acquires lock k at new seq num, lower ts
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=12,1
+  get key=k
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 2, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 2
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+on-txn-updated txn=txn1 status=pending ts=12,2
+----
+[-] update txn: increasing timestamp of txn1
+[2] sequence req2: resolving intent "k" for txn 00000001 with PENDING status
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# Issue another write to the same key for txn1 at its initial
+# timestamp. The timestamp in the lock table does not regress.
+
+new-request name=req3 txn=txn1 ts=10,1
+  put key=k value=v2 seq=1
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+on-lock-acquired req=req3 key=k seq=1
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0, 1]
+local: num=0
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# A transaction writes an intent. The intent is pushed to a
+# higher timestamp by a second transaction. The transaction then
+# returns to re-acquire the intent at a new epoch but still at
+# the original timestamp. This is permitted but the lock's
+# timestamp should not regress.
+#
+# Setup: txn1 acquires lock k
+#        txn2 reads k and waits
+#
+# Test:  txn2 pushes txn1's timestamp forward
+#        txn2 proceeds
+#        txn1 re-acquires lock k at new epoch, lower ts
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=12,1
+  get key=k
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 5, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 5
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+on-txn-updated txn=txn1 status=pending ts=12,2
+----
+[-] update txn: increasing timestamp of txn1
+[2] sequence req2: resolving intent "k" for txn 00000001 with PENDING status
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# The txn restarts at a new timestamp, but below the pushed
+# timestamp. It re-issues the same write at the new epoch. The
+# timestamp in the lock table does not regress.
+
+new-txn name=txn1 ts=11,1 epoch=1
+----
+
+new-request name=req3 txn=txn1 ts=11,1
+  put key=k value=v2
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+on-lock-acquired req=req3 key=k
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 1, seqs: [0]
+local: num=0
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# A transaction acquires an unreplicated lock. The lock is
+# pushed to a higher timestamp by a second transaction. The
+# transaction then returns to upgrade the unreplicated lock to a
+# replicated intent at a new sequence number but still at the
+# original timestamp. This is permitted and the lock's timestamp
+# regresses back down to the intent's timestamp. In practice, if
+# the pusher wanted to prevent its push from being reverted, it
+# should have also bumped the timestamp cache to ensure that the
+# intent couldn't be laid down at the original timestamp.
+#
+# Setup: txn1 acquires unreplicated lock k
+#        txn2 reads k and waits
+#        txn2 pushes txn1
+#
+# Test:  txn2 succeeds in pushing txn1's ts forward
+#        txn2 proceeds
+#        txn1 re-acquires replicated lock k at lower ts
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=12,1
+  get key=k
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k dur=u
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 8, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 8
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+on-txn-updated txn=txn1 status=pending ts=12,2
+----
+[-] update txn: increasing timestamp of txn1
+[2] sequence req2: resolving intent "k" for txn 00000001 with PENDING status
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# Issue another write to the same key for txn1 at its initial timestamp,
+# this time with a replicated durability. The timestamp in the lock
+# table should regress back down to reflect the replicated lock state.
+#
+# NOTE: we currently drop locks from the lockTable when they are
+# upgraded from unreplicated to replicated if they have no active
+# writers waiting on them. So to test what we want to test here, first
+# enqueue a writer on the lock.
+
+new-request name=req4 txn=none ts=10,1
+  put key=k value=v4
+----
+
+sequence req=req4
+----
+[3] sequence req4: sequencing request
+[3] sequence req4: acquiring latches
+[3] sequence req4: scanning lock table for conflicting locks
+[3] sequence req4: waiting in lock wait-queues
+[3] sequence req4: pushing txn 00000001 to abort
+[3] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+new-request name=req3 txn=txn1 ts=10,1
+  put key=k value=v2 seq=1
+----
+
+sequence req=req3
+----
+[4] sequence req3: sequencing request
+[4] sequence req3: acquiring latches
+[4] sequence req3: scanning lock table for conflicting locks
+[4] sequence req3: sequencing complete, returned guard
+
+on-lock-acquired req=req3 key=k seq=1 dur=r
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [1], unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 9, txn: none
+   distinguished req: 9
+local: num=0
+
+# Finish off txn1. Not needed once we can get rid of req4.
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[3] sequence req4: resolving intent "k" for txn 00000001 with COMMITTED status
+[3] sequence req4: acquiring latches
+[3] sequence req4: scanning lock table for conflicting locks
+[3] sequence req4: sequencing complete, returned guard
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
+reset namespace
+----

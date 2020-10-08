@@ -1,22 +1,16 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package settings
 
-import (
-	"github.com/pkg/errors"
-)
+import "github.com/cockroachdb/errors"
 
 // IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -27,15 +21,25 @@ type IntSetting struct {
 	validateFn   func(int64) error
 }
 
-var _ Setting = &IntSetting{}
+var _ extendedSetting = &IntSetting{}
 
 // Get retrieves the int value in the setting.
 func (i *IntSetting) Get(sv *Values) int64 {
-	return sv.getInt64(i.slotIdx)
+	return sv.container.getInt64(i.slotIdx)
 }
 
 func (i *IntSetting) String(sv *Values) string {
 	return EncodeInt(i.Get(sv))
+}
+
+// Encoded returns the encoded value of the current value of the setting.
+func (i *IntSetting) Encoded(sv *Values) string {
+	return i.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (i *IntSetting) EncodedDefault() string {
+	return EncodeInt(i.defaultValue)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
@@ -53,21 +57,32 @@ func (i *IntSetting) Validate(v int64) error {
 	return nil
 }
 
-// Override changes the setting without validation.
+// Override changes the setting without validation and also overrides the
+// default value.
+//
 // For testing usage only.
 func (i *IntSetting) Override(sv *Values, v int64) {
 	sv.setInt64(i.slotIdx, v)
+	sv.setDefaultOverrideInt64(i.slotIdx, v)
 }
 
 func (i *IntSetting) set(sv *Values, v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
-	i.Override(sv, v)
+	sv.setInt64(i.slotIdx, v)
 	return nil
 }
 
 func (i *IntSetting) setToDefault(sv *Values) {
+	// See if the default value was overridden.
+	ok, val, _ := sv.getDefaultOverride(i.slotIdx)
+	if ok {
+		// As per the semantics of override, these values don't go through
+		// validation.
+		_ = i.set(sv, val)
+		return
+	}
 	if err := i.set(sv, i.defaultValue); err != nil {
 		panic(err)
 	}
@@ -83,11 +98,28 @@ func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
 }
 
+// RegisterPublicIntSetting defines a new setting with type int and makes it public.
+func RegisterPublicIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	s := RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+	s.SetVisibility(Public)
+	return s
+}
+
 // RegisterNonNegativeIntSetting defines a new setting with type int.
 func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("cannot set %s to a negative value: %d", key, v)
+		}
+		return nil
+	})
+}
+
+// RegisterPositiveIntSetting defines a new setting with type int.
+func RegisterPositiveIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
+		if v < 1 {
+			return errors.Errorf("cannot set %s to a value < 1: %d", key, v)
 		}
 		return nil
 	})

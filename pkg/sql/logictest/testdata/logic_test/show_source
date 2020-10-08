@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 query T colnames
 SELECT * FROM [SHOW client_encoding]
@@ -18,49 +18,95 @@ SELECT * FROM [SHOW client_encoding] WITH ORDINALITY
 client_encoding     ordinality
 UTF8                1
 
-# We filter here because experimental_opt will be different depending on which
-# configuration this logic test is running in.
+# We filter here because optimizer will be different depending on which
+# configuration this logic test is running in, and session ID will vary.
 query TT colnames
-SELECT * FROM [SHOW ALL] WHERE variable != 'experimental_opt'
+SELECT *
+FROM [SHOW ALL]
+WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'session_id'
 ----
-variable                        value
-application_name                ·
-bytea_output                    hex
-client_encoding                 UTF8
-client_min_messages             ·
-database                        test
-datestyle                       ISO
-default_transaction_isolation   serializable
-default_transaction_read_only   off
-distsql                         off
-experimental_force_lookup_join  off
-experimental_force_zigzag_join  off
-extra_float_digits              ·
-intervalstyle                   postgres
-max_index_keys                  32
-node_id                         1
-search_path                     public
-server_version                  9.5.0
-server_version_num              90500
-session_user                    root
-sql_safe_updates                false
-standard_conforming_strings     on
-statement_timeout               0s
-timezone                        UTC
-tracing                         off
-transaction_isolation           serializable
-transaction_priority            normal
-transaction_read_only           off
-transaction_status              NoTxn
+variable                                       value
+application_name                               ·
+bytea_output                                   hex
+client_encoding                                UTF8
+client_min_messages                            notice
+database                                       test
+datestyle                                      ISO, MDY
+default_int_size                               8
+default_tablespace                             ·
+default_transaction_isolation                  serializable
+default_transaction_priority                   normal
+default_transaction_read_only                  off
+disable_partially_distributed_plans            off
+disallow_full_table_scans                      off
+distsql                                        off
+enable_experimental_alter_column_type_general  off
+enable_implicit_select_for_update              on
+enable_insert_fast_path                        on
+enable_seqscan                                 on
+enable_zigzag_join                             on
+experimental_distsql_planning                  off
+experimental_enable_hash_sharded_indexes       off
+experimental_enable_temp_tables                off
+extra_float_digits                             0
+force_savepoint_restart                        off
+foreign_key_cascades_limit                     10000
+idle_in_session_timeout                        0
+idle_in_transaction_session_timeout            0
+integer_datetimes                              on
+intervalstyle                                  postgres
+locality                                       region=test,dc=dc1
+lock_timeout                                   0
+max_identifier_length                          128
+max_index_keys                                 32
+node_id                                        1
+optimizer_use_histograms                       on
+optimizer_use_multicol_stats                   on
+prefer_lookup_joins_for_fks                    off
+reorder_joins_limit                            8
+require_explicit_primary_keys                  off
+results_buffer_size                            16384
+row_security                                   off
+search_path                                    $user,public
+serial_normalization                           rowid
+server_encoding                                UTF8
+server_version                                 9.5.0
+server_version_num                             90500
+session_user                                   root
+sql_safe_updates                               off
+standard_conforming_strings                    on
+statement_timeout                              0
+synchronize_seqscans                           on
+synchronous_commit                             on
+timezone                                       UTC
+tracing                                        off
+transaction_isolation                          serializable
+transaction_priority                           normal
+transaction_read_only                          off
+transaction_status                             NoTxn
+vectorize                                      on
+vectorize_row_count_threshold                  0
 
-query I colnames
+query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 ----
 sql.defaults.distsql
-0
+off
+
+query TTTBT colnames
+SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+----
+variable              value  setting_type  public  description
+cluster.organization  ·      s             true    organization name
 
 query TTTT colnames
-SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+----
+variable              value  setting_type  description
+cluster.organization  ·      s             organization name
+
+query TTTT colnames
+SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE '%organization'
 ----
 variable              value  setting_type  description
 cluster.organization  ·      s             organization name
@@ -77,16 +123,26 @@ SELECT * FROM [SHOW DATABASE]
 database
 test
 
-query T colnames
+query TT colnames
+SELECT * FROM [SHOW ZONE CONFIGURATIONS] LIMIT 0
+----
+target  raw_config_sql
+
+query TT colnames
+SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
+----
+target  raw_config_sql
+
+query TT colnames,rowsort
 SELECT * FROM [SHOW DATABASES]
 ----
-database_name
-defaultdb
-postgres
-system
-test
+database_name  owner
+defaultdb      root
+postgres       root
+system         node
+test           root
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
 database_name  schema_name  table_name  grantee  privilege_type
@@ -113,33 +169,88 @@ SELECT * FROM [SHOW KEYS FROM system.descriptor]
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 descriptor  primary     false       1             id           ASC        false    false
 
-query T colnames
+query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
 ----
-schema_name
-crdb_internal
-information_schema
-pg_catalog
-public
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
 
-query T colnames
+query TT colnames
+SELECT * FROM [SHOW SEQUENCES FROM system]
+----
+sequence_schema  sequence_name
+
+query TTTTI colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
-table_name
-descriptor
-eventlog
-jobs
-lease
-locations
-namespace
-rangelog
-role_members
-settings
-table_statistics
-ui
-users
-web_sessions
-zones
+schema_name  table_name                       type   owner  estimated_row_count
+public       namespace                        table  NULL   NULL
+public       descriptor                       table  NULL   NULL
+public       users                            table  NULL   NULL
+public       zones                            table  NULL   NULL
+public       settings                         table  NULL   NULL
+public       tenants                          table  NULL   NULL
+public       lease                            table  NULL   NULL
+public       eventlog                         table  NULL   NULL
+public       rangelog                         table  NULL   NULL
+public       ui                               table  NULL   NULL
+public       jobs                             table  NULL   NULL
+public       web_sessions                     table  NULL   NULL
+public       table_statistics                 table  NULL   NULL
+public       locations                        table  NULL   NULL
+public       role_members                     table  NULL   NULL
+public       comments                         table  NULL   NULL
+public       replication_constraint_stats     table  NULL   NULL
+public       replication_critical_localities  table  NULL   NULL
+public       replication_stats                table  NULL   NULL
+public       reports_meta                     table  NULL   NULL
+public       namespace2                       table  NULL   NULL
+public       protected_ts_meta                table  NULL   NULL
+public       protected_ts_records             table  NULL   NULL
+public       role_options                     table  NULL   NULL
+public       statement_bundle_chunks          table  NULL   NULL
+public       statement_diagnostics_requests   table  NULL   NULL
+public       statement_diagnostics            table  NULL   NULL
+public       scheduled_jobs                   table  NULL   NULL
+public       sqlliveness                      table  NULL   NULL
+
+query TTTTTT colnames,rowsort
+SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
+----
+schema_name  table_name                       type   owner  estimated_row_count  comment
+public       namespace                        table  NULL   NULL                 ·
+public       descriptor                       table  NULL   NULL                 ·
+public       users                            table  NULL   NULL                 ·
+public       zones                            table  NULL   NULL                 ·
+public       settings                         table  NULL   NULL                 ·
+public       tenants                          table  NULL   NULL                 ·
+public       lease                            table  NULL   NULL                 ·
+public       eventlog                         table  NULL   NULL                 ·
+public       rangelog                         table  NULL   NULL                 ·
+public       ui                               table  NULL   NULL                 ·
+public       jobs                             table  NULL   NULL                 ·
+public       web_sessions                     table  NULL   NULL                 ·
+public       table_statistics                 table  NULL   NULL                 ·
+public       locations                        table  NULL   NULL                 ·
+public       role_members                     table  NULL   NULL                 ·
+public       comments                         table  NULL   NULL                 ·
+public       replication_constraint_stats     table  NULL   NULL                 ·
+public       replication_critical_localities  table  NULL   NULL                 ·
+public       replication_stats                table  NULL   NULL                 ·
+public       reports_meta                     table  NULL   NULL                 ·
+public       namespace2                       table  NULL   NULL                 ·
+public       protected_ts_meta                table  NULL   NULL                 ·
+public       protected_ts_records             table  NULL   NULL                 ·
+public       role_options                     table  NULL   NULL                 ·
+public       statement_bundle_chunks          table  NULL   NULL                 ·
+public       statement_diagnostics_requests   table  NULL   NULL                 ·
+public       statement_diagnostics            table  NULL   NULL                 ·
+public       scheduled_jobs                   table  NULL   NULL                 ·
+public       sqlliveness                      table  NULL   NULL                 ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
@@ -156,20 +267,21 @@ node_id  user_name  query
 1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER QUERIES]
 
 
-query T colnames
+query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS]
 ----
-schema_name
-crdb_internal
-information_schema
-pg_catalog
-public
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
 
-query T colnames
+query TTTTI colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 ----
-table_name
-foo
+schema_name  table_name  type   owner  estimated_row_count
+public       foo         table  root   0
 
 
 query T colnames
@@ -210,41 +322,41 @@ query TT colnames
 SELECT * FROM [SHOW CREATE TABLE system.descriptor]
 ----
 table_name                create_statement
-system.public.descriptor  CREATE TABLE descriptor (
-                          id INT NOT NULL,
+system.public.descriptor  CREATE TABLE public.descriptor (
+                          id INT8 NOT NULL,
                           descriptor BYTES NULL,
                           CONSTRAINT "primary" PRIMARY KEY (id ASC),
                           FAMILY "primary" (id),
                           FAMILY fam_2_descriptor (descriptor)
 )
 
-
 query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----
 table_name  create_statement
-v           CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
+v           CREATE VIEW public.v (id) AS SELECT id FROM system.public.descriptor
 
 
-query T colnames
-SELECT * FROM [SHOW USERS]
+query TTT colnames
+SELECT * FROM [SHOW USERS] ORDER BY 1
 ----
-user_name
-root
-testuser
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 
-query TTITI colnames
-SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE system.descriptor]
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       NULL     1         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
 
-query TTITI colnames
-CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX foo@ix]
+query TTTI colnames
+CREATE INDEX ix ON foo(x); SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       NULL     1         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0
@@ -256,27 +368,151 @@ SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
 ----
 age  message  tag  operation
 
-query ITTTTTTTTRTI colnames
+query ITTTTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
-job_id  job_type  description  user_name  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+job_id  job_type  description  statement  user_name  status  running_status  created  started  finished  modified  fraction_completed  error  coordinator_id
 
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
 ----
-field  text
+field  message
 sql    SELECT 1
 sql    SELECT 2
 
 # Test the SHOW SYNTAX statement. We avoid printing out the line number
 # here because that is highly likely to change as code is edited.
 query TT colnames
-SELECT field, replace(text, e'\n', ' ') AS text FROM [SHOW SYNTAX 'foo']
+SELECT field, replace(message, e'\n', ' ') AS message FROM [SHOW SYNTAX 'foo']
  WHERE field != 'line'
 ----
-field     text
-error     syntax error at or near "foo"
+field     message
+error     at or near "foo": syntax error
 code      42601
-file      sql/show_syntax.go
-function  runShowSyntax
+file      lexer.go
+function  Error
 detail    source SQL: foo ^
+
+
+# Test the SHOW INDEXES FROM DATABASE COMMAND
+statement ok
+CREATE DATABASE showdbindexestest;
+
+statement ok
+CREATE TABLE showdbindexestest.table1 (key1 INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
+
+query TTBITTBB
+SHOW INDEXES FROM DATABASE showdbindexestest;
+----
+table1 primary false 1 key1 ASC false false
+table2 primary false 1 key2 ASC false false
+
+statement ok
+CREATE DATABASE "$peci@l";
+
+statement ok
+CREATE TABLE "$peci@l".table1 (key1 INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
+
+query TTBITTBB
+SHOW INDEXES FROM DATABASE "$peci@l";
+----
+table1 primary false 1 key1 ASC false false
+table2 primary false 1 key2 ASC false false
+
+# Test SHOW LOCALITY telemetry.
+query T
+SHOW LOCALITY
+----
+region=test,dc=dc1
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.locality' AND usage_count > 0
+----
+sql.show.locality
+
+# Test SHOW INDEXES telemetry.
+statement ok
+CREATE TABLE show_test (x INT PRIMARY KEY);
+SHOW INDEXES FROM show_test
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.indexes' AND usage_count > 0
+----
+sql.show.indexes
+
+# Test SHOW CONSTRAINTS telemetry.
+statement ok
+SHOW CONSTRAINTS FROM show_test
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.constraints' AND usage_count > 0
+----
+sql.show.constraints
+
+# Test SHOW QUERIES telemetry.
+statement ok
+SHOW QUERIES
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.queries' AND usage_count > 0
+----
+sql.show.queries
+
+# Test SHOW JOBS telemetry.
+statement ok
+SHOW JOBS
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.jobs' AND usage_count > 0
+----
+sql.show.jobs
+
+# Tests identically named indexes do not show up twice with SHOW INDEXES.
+subtest regression_46333
+
+statement ok
+CREATE TABLE t (
+  x INT,
+  y INT,
+  z INT,
+  INDEX i1 (x),
+  INDEX i2 (y),
+  INDEX i3 (z)
+); CREATE TABLE t2 (
+  x INT,
+  y INT,
+  z INT,
+  INDEX i1 (x),
+  INDEX i2 (y),
+  INDEX i3 (z)
+); COMMENT ON COLUMN t.x IS 'comment1';
+COMMENT ON COLUMN t.z IS 'comm"en"t2';
+COMMENT ON INDEX t@i2 IS 'comm''ent3'
+
+query TTBITTBBT
+SHOW INDEXES FROM t WITH COMMENT
+----
+t  primary  false  1  rowid  ASC  false  false  NULL
+t  i1       true   1  x      ASC  false  false  NULL
+t  i1       true   2  rowid  ASC  false  true   NULL
+t  i2       true   1  y      ASC  false  false  comm'ent3
+t  i2       true   2  rowid  ASC  false  true   comm'ent3
+t  i3       true   1  z      ASC  false  false  NULL
+t  i3       true   2  rowid  ASC  false  true   NULL
+
+query TTBITTBBT
+SHOW INDEXES FROM t2 WITH COMMENT
+----
+t2  primary  false  1  rowid  ASC  false  false  NULL
+t2  i1       true   1  x      ASC  false  false  NULL
+t2  i1       true   2  rowid  ASC  false  true   NULL
+t2  i2       true   1  y      ASC  false  false  NULL
+t2  i2       true   2  rowid  ASC  false  true   NULL
+t2  i3       true   1  z      ASC  false  false  NULL
+t2  i3       true   2  rowid  ASC  false  true   NULL

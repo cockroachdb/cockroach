@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package acceptance
 
@@ -23,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -46,7 +43,7 @@ func TestDockerCLI(t *testing.T) {
 	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
-		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
+		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
 	paths, err := filepath.Glob(testGlob)
@@ -95,35 +92,50 @@ func TestDockerCLI(t *testing.T) {
 	}
 }
 
-func TestDockerStartFlags(t *testing.T) {
+// TestDockerUnixSocket verifies that CockroachDB initializes a unix
+// socket useable by 'psql', even when the server runs insecurely.
+// TODO(knz): Replace this with a roachtest when roachtest/roachprod
+// know how to start secure clusters.
+func TestDockerUnixSocket(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
 	containerConfig := defaultContainerConfig()
 	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
 	ctx := context.Background()
-	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {
-		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
+
+	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
+		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
-	script := `
-set -eux
-bin=/cockroach/cockroach
-
-touch out
-function finish() {
-	cat out
-}
-trap finish EXIT
-
-HOST=$(hostname -f)
-$bin start --logtostderr=INFO --background --insecure --host="${HOST}" --port=12345 &> out
-$bin sql --insecure --host="${HOST}" --port=12345 -e "show databases"
-$bin quit --insecure --host="${HOST}" --port=12345
-`
-	containerConfig.Cmd = []string{"/bin/bash", "-c", script}
-	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {
+	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
+	containerConfig.Cmd = append(cmdBase,
+		"/mnt/data/psql/test-psql-unix.sh "+cluster.CockroachBinaryInContainer)
+	if err := testDockerOneShot(ctx, t, "unix_socket_test", containerConfig); err != nil {
 		t.Error(err)
 	}
+}
 
+// TestSQLWithoutTLS verifies that CockroachDB can accept clients
+// without a TLS handshake in secure mode.
+// TODO(knz): Replace this with a roachtest when roachtest/roachprod
+// know how to start secure clusters.
+func TestSQLWithoutTLS(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	containerConfig := defaultContainerConfig()
+	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
+	ctx := context.Background()
+
+	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
+		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
+	}
+
+	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
+	containerConfig.Cmd = append(cmdBase,
+		"/mnt/data/psql/test-psql-notls.sh "+cluster.CockroachBinaryInContainer)
+	if err := testDockerOneShot(ctx, t, "notls_secure_test", containerConfig); err != nil {
+		t.Error(err)
+	}
 }

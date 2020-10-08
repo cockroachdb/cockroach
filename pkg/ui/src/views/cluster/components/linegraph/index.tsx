@@ -1,20 +1,33 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import d3 from "d3";
 import React from "react";
 import moment from "moment";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
+import * as protos from  "src/js/protos";
 import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
-  ConfigureLineChart, InitLineChart, CHART_MARGINS,
+  ConfigureLineChart, InitLineChart, CHART_MARGINS, ConfigureLinkedGuideline,
 } from "src/views/cluster/util/graphs";
 import {
-  Metric, MetricProps, Axis, AxisProps,
+  Metric, MetricProps, Axis, AxisProps, QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
 import { NanoToMilli } from "src/util/convert";
+
+type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -27,14 +40,19 @@ interface LineGraphProps extends MetricsDataComponentProps {
   hoverState?: HoverState;
 }
 
+interface LineGraphState {
+  lastData?: TSResponse;
+  lastTimeInfo?: QueryTimeInfo;
+}
+
 /**
  * LineGraph displays queried metrics in a line graph. It currently only
  * supports a single Y-axis, but multiple metrics can be graphed on the same
  * axis.
  */
-export class LineGraph extends React.Component<LineGraphProps, {}> {
-  // The SVG Element in the DOM used to render the graph.
-  graphEl: SVGElement;
+export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
+  // The SVG Element reference in the DOM used to render the graph.
+  graphEl: React.RefObject<SVGSVGElement> = React.createRef();
 
   // A configured NVD3 chart used to render the chart.
   chart: nvd3.LineChart;
@@ -42,7 +60,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   axis = createSelector(
     (props: {children?: React.ReactNode}) => props.children,
     (children) => {
-      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children, Axis);
+      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children as any, Axis);
       if (axes.length === 0) {
         console.warn("LineGraph requires the specification of at least one axis.");
         return null;
@@ -56,7 +74,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   metrics = createSelector(
     (props: {children?: React.ReactNode}) => props.children,
     (children) => {
-      return findChildrenOfType(children, Metric) as React.ReactElement<MetricProps>[];
+      return findChildrenOfType(children as any, Metric) as React.ReactElement<MetricProps>[];
     });
 
   initChart() {
@@ -83,7 +101,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
     // To get the x-coordinate within the chart we subtract the left side of the SVG
     // element and the left side margin.
-    const x = e.clientX - this.graphEl.getBoundingClientRect().left - CHART_MARGINS.left;
+    const x = e.clientX - this.graphEl.current.getBoundingClientRect().left - CHART_MARGINS.left;
     // Find the time value of the coordinate by asking the scale to invert the value.
     const t = Math.floor(timeScale.invert(x));
 
@@ -148,6 +166,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         return;
       }
 
+      ConfigureLineChart(
+        this.chart, this.graphEl.current, metrics, axis, this.props.data, this.props.timeInfo,
+      );
+    }
+  }
+
+  drawLine = () => {
+    if (!document.hidden) {
       let hoverTime: moment.Moment;
       if (this.props.hoverState) {
         const { currentlyHovering, hoverChart } = this.props.hoverState;
@@ -157,15 +183,23 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         }
       }
 
-      ConfigureLineChart(
-        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, hoverTime,
-      );
+      const axis = this.axis(this.props);
+      ConfigureLinkedGuideline(this.chart, this.graphEl.current, axis, this.props.data, hoverTime);
     }
+  }
+
+  constructor(props: any) {
+    super(props);
+    this.state = {
+      lastData: null,
+      lastTimeInfo: null,
+    };
   }
 
   componentDidMount() {
     this.initChart();
     this.drawChart();
+    this.drawLine();
     // NOTE: This might not work on Android:
     // http://caniuse.com/#feat=pagevisibility
     // TODO (maxlang): Check if this element is visible based on scroll state.
@@ -177,7 +211,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   componentDidUpdate() {
-    this.drawChart();
+    if (this.props.data !== this.state.lastData || this.props.timeInfo !== this.state.lastTimeInfo) {
+      this.drawChart();
+      this.setState({
+        lastData: this.props.data,
+        lastTimeInfo: this.props.timeInfo,
+      });
+    }
+    this.drawLine();
   }
 
   render() {
@@ -194,7 +235,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     return (
       <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
         <div className="linegraph">
-          <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} {...hoverProps} />
+          <svg className="graph linked-guideline" ref={this.graphEl} {...hoverProps} />
         </div>
       </Visualization>
     );

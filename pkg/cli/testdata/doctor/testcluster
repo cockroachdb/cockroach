@@ -1,0 +1,7 @@
+doctor cluster
+----
+debug doctor cluster
+Examining 34 descriptors and 35 namespace entries...
+   Table  53: ParentID  50, ParentSchemaID 29, Name 'foo': not being dropped but no namespace entry found
+Examining 1 running jobs...
+ERROR: validation failed

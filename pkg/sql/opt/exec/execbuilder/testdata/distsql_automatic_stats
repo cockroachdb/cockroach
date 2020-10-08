@@ -1,0 +1,227 @@
+# Note that this file was moved from the regular logic tests as a part of
+# introducing the randomization of the max batch size of mutations. That
+# randomization needs to be disabled for these queries because they become
+# non-deterministic. However, there is no easy to do so just for a single file,
+# so the file was moved into execbuilder tests which disable that
+# randomization.
+# The file didn't explicitly specify the configs to run with, and it wasn't
+# changed, but if later it becomes a concern, it should be ok to restrict the
+# number of configs here.
+
+# Disable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX d_idx (d))
+
+# Enable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, NULL FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c)
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b}         1000       100             0
+__auto__         {a}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {d}           1000       1               1000
+
+# Disable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+# Update more than 20% of the table.
+statement ok
+UPDATE data SET d = 10 WHERE (a = 1 OR a = 2 OR a = 3) AND b > 1
+
+# There should be no change to stats.
+query TTIII colnames,rowsort
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b}         1000       100             0
+__auto__         {a}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {d}           1000       1               1000
+
+# Enable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
+
+# Update more than 20% of the table.
+statement ok
+UPDATE data SET d = 12 WHERE d = 10
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1000       100             0
+__auto__         {a}           1000       10              0
+__auto__         {a}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {d}           1000       1               1000
+__auto__         {d}           1000       2               730
+
+# Upsert more than 20% of the table.
+statement ok
+UPSERT INTO data SELECT a, b, c::FLOAT, 1 FROM
+generate_series(1, 11) AS a(a),
+generate_series(1, 10) AS b(b),
+generate_series(1, 5) AS c(c)
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1050       1050            0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1050       110             0
+__auto__         {a}           1000       10              0
+__auto__         {a}           1000       10              0
+__auto__         {a}           1050       11              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1050       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1050       10              0
+__auto__         {d}           1000       1               1000
+__auto__         {d}           1000       2               730
+__auto__         {d}           1050       3               365
+
+# Delete more than 20% of the table.
+statement ok
+DELETE FROM data WHERE c > 5
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1050       1050            0
+__auto__         {a,b,c}       550        550             0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1050       110             0
+__auto__         {a,b}         550        110             0
+__auto__         {a}           1000       10              0
+__auto__         {a}           1000       10              0
+__auto__         {a}           1050       11              0
+__auto__         {a}           550        11              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1050       10              0
+__auto__         {b}           550        10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1050       10              0
+__auto__         {c}           550        5               0
+__auto__         {d}           1000       1               1000
+__auto__         {d}           1000       2               730
+__auto__         {d}           1050       3               365
+__auto__         {d}           550        1               0
+
+# Test CREATE TABLE ... AS
+statement ok
+CREATE TABLE copy AS SELECT * FROM data
+
+# Distinct count for rowid can be flaky, so don't show it. The estimate is
+# almost always 550, but occasionally it is 549...
+query TTII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, null_count
+FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count
+__auto__         {a}           550        0
+__auto__         {b}           550        0
+__auto__         {c}           550        0
+__auto__         {d}           550        0
+__auto__         {rowid}       550        0
+
+statement ok
+CREATE TABLE test_create (x INT PRIMARY KEY, y CHAR)
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE test_create] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {x}           0          0               0
+__auto__         {y}           0          0               0
+
+# Test fast path delete.
+statement ok
+DELETE FROM copy WHERE true
+
+query TTII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, null_count
+FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count
+__auto__         {a}           550        0
+__auto__         {a}           0          0
+__auto__         {b}           550        0
+__auto__         {b}           0          0
+__auto__         {c}           550        0
+__auto__         {c}           0          0
+__auto__         {d}           550        0
+__auto__         {d}           0          0
+__auto__         {rowid}       550        0
+__auto__         {rowid}       0          0
+
+
+# Test user-defined schemas.
+
+# Disable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+statement ok
+CREATE SCHEMA my_schema;
+CREATE TABLE my_schema.my_table (k INT PRIMARY KEY, v STRING);
+
+# Enable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
+
+# Insert 10 rows.
+statement ok
+INSERT INTO my_schema.my_table SELECT k, NULL FROM
+   generate_series(1, 10) AS k(k)
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE my_schema.my_table] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {k}           10         10              0
+__auto__         {v}           10         1               10

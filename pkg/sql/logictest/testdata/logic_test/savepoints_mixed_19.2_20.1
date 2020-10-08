@@ -1,0 +1,48 @@
+# LogicTest: local-mixed-19.2-20.1
+
+statement error savepoints cannot be used until the version upgrade is finalized
+BEGIN;
+  SAVEPOINT foo
+
+statement ok
+ROLLBACK
+
+statement error savepoints cannot be used until the version upgrade is finalized
+BEGIN;
+  SAVEPOINT cockroach_restart;
+  SAVEPOINT foo
+
+statement ok
+ROLLBACK
+
+## Verify that restart savepoints still work fine.
+
+statement ok
+CREATE TABLE test(x INT); INSERT INTO test(x) VALUES (1);
+
+statement ok
+BEGIN;
+  SAVEPOINT cockroach_restart;
+  INSERT INTO test(x) VALUES (2);
+  ROLLBACK TO SAVEPOINT cockroach_restart;
+  COMMIT
+
+query I
+SELECT * FROM test
+----
+1
+
+statement error column "nonexistent" does not exist
+BEGIN;
+  SAVEPOINT cockroach_restart;
+  INSERT INTO test(x) VALUES (2);
+  SELECT nonexistent
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart;
+  COMMIT
+
+query I
+SELECT * FROM test
+----
+1

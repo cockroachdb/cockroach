@@ -1,25 +1,24 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package exec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -33,157 +32,54 @@ type Node interface{}
 // trees (see ConstructPlan).
 type Plan interface{}
 
-// Factory defines the interface for building an execution plan, which consists
-// of a tree of execution nodes (currently a sql.planNode tree).
-//
-// The tree is always built bottom-up. The Construct methods either construct
-// leaf nodes, or they take other nodes previously constructed by this same
-// factory as children.
-//
-// The TypedExprs passed to these functions refer to columns of the input node
-// via IndexedVars.
-type Factory interface {
-	// ConstructValues returns a node that outputs the given rows as results.
-	ConstructValues(rows [][]tree.TypedExpr, cols sqlbase.ResultColumns) (Node, error)
+// ScanParams contains all the parameters for a table scan.
+type ScanParams struct {
+	// Only columns in this set are scanned and produced.
+	NeededCols TableColumnOrdinalSet
 
-	// ConstructScan returns a node that represents a scan of the given index on
-	// the given table.
-	//   - Only the given set of needed columns are part of the result.
-	//   - If indexConstraint is not nil, the scan is restricted to the spans in
-	//     in the constraint.
-	//   - If hardLimit > 0, then only up to hardLimit rows can be returned from
-	//     the scan.
-	//
-	// The required ordering (reqOrder) is necessary for distributed execution:
-	// this annotation indicates how results from multiple nodes are merged. It
-	// refers to the scanned columns by ordinal: specifically, ColIdx=0 is the
-	// first column in the needed set, ColIdx=1 is the second column, etc.
-	ConstructScan(
-		table opt.Table,
-		index opt.Index,
-		needed ColumnOrdinalSet,
-		indexConstraint *constraint.Constraint,
-		hardLimit int64,
-		reverse bool,
-		reqOrder sqlbase.ColumnOrdering,
-	) (Node, error)
+	// At most one of IndexConstraint or InvertedConstraint is non-nil, depending
+	// on the index type.
+	IndexConstraint    *constraint.Constraint
+	InvertedConstraint invertedexpr.InvertedSpans
 
-	// ConstructVirtualScan returns a node that represents the scan of a virtual
-	// table. Virtual tables are system tables that are populated "on the fly"
-	// with rows synthesized from system metadata and other state.
-	ConstructVirtualScan(table opt.Table) (Node, error)
+	// If non-zero, the scan returns this many rows.
+	HardLimit int64
 
-	// ConstructFilter returns a node that applies a filter on the results of
-	// the given input node.
-	ConstructFilter(n Node, filter tree.TypedExpr) (Node, error)
+	// If non-zero, the scan may still be required to return up to all its rows
+	// (or up to the HardLimit if it is set, but can be optimized under the
+	// assumption that only SoftLimit rows will be needed.
+	SoftLimit int64
 
-	// ConstructSimpleProject returns a node that applies a "simple" projection on the
-	// results of the given input node. A simple projection is one that does not
-	// involve new expressions; it's just a reshuffling of columns. This is a
-	// more efficient version of ConstructRender.
-	// The colNames argument is optional; if it is nil, the names of the
-	// corresponding input columns are kept.
-	ConstructSimpleProject(n Node, cols []ColumnOrdinal, colNames []string) (Node, error)
+	Reverse bool
 
-	// ConstructRender returns a node that applies a projection on the results of
-	// the given input node. The projection can contain new expressions.
-	ConstructRender(n Node, exprs tree.TypedExprs, colNames []string) (Node, error)
+	// If true, the scan will scan all spans in parallel. It should only be set to
+	// true if there is a known upper bound on the number of rows that will be
+	// scanned. It should not be set if there is a hard or soft limit.
+	Parallelize bool
 
-	// ConstructHashJoin returns a node that runs a hash-join between the results
-	// of two input nodes. The expression can refer to columns from both inputs
-	// using IndexedVars (first the left columns, then the right columns).
-	ConstructHashJoin(joinType sqlbase.JoinType, left, right Node, onCond tree.TypedExpr) (Node, error)
+	Locking *tree.LockingItem
 
-	// ConstructMergeJoin returns a node that (under distsql) runs a merge join.
-	// The ON expression can refer to columns from both inputs using IndexedVars
-	// (first the left columns, then the right columns). In addition, the i-th
-	// column in leftOrdering is constrained to equal the i-th column in
-	// rightOrdering. The directions must match between the two orderings.
-	ConstructMergeJoin(
-		joinType sqlbase.JoinType,
-		left, right Node,
-		onCond tree.TypedExpr,
-		leftOrdering, rightOrdering sqlbase.ColumnOrdering,
-	) (Node, error)
-
-	// ConstructGroupBy returns a node that runs an aggregation. A set of
-	// aggregations is performed for each group of values on the groupCols.
-	ConstructGroupBy(input Node, groupCols []ColumnOrdinal, aggregations []AggInfo) (Node, error)
-
-	// ConstructScalarGroupBy returns a node that runs a scalar aggregation, i.e.
-	// one which performs a set of aggregations on all the input rows (as a single
-	// group) and has exactly one result row (even when there are no input rows).
-	ConstructScalarGroupBy(input Node, aggregations []AggInfo) (Node, error)
-
-	// ConstructSetOp returns a node that performs a UNION / INTERSECT / EXCEPT
-	// operation (either the ALL or the DISTINCT version). The left and right
-	// nodes must have the same number of columns.
-	ConstructSetOp(typ tree.UnionType, all bool, left, right Node) (Node, error)
-
-	// ConstructSort returns a node that performs a resorting of the rows produced
-	// by the input node.
-	ConstructSort(input Node, ordering sqlbase.ColumnOrdering) (Node, error)
-
-	// ConstructOrdinality returns a node that appends an ordinality column to
-	// each row in the input node.
-	ConstructOrdinality(input Node, colName string) (Node, error)
-
-	// ConstructIndexJoin returns a node that performs an index join.
-	// The input must be created by ConstructScan for the same table; cols is the
-	// set of columns produced by the index join.
-	ConstructIndexJoin(
-		input Node, table opt.Table, cols ColumnOrdinalSet, reqOrder sqlbase.ColumnOrdering,
-	) (Node, error)
-
-	// ConstructLookupJoin returns a node that preforms a lookup join.
-	// The keyCols are columns from the input used as keys for the columns of the
-	// index (or a prefix of them); lookupCols are ordinals for the table columns
-	// we are retrieving.
-	//
-	// The node produces the columns in the input and lookupCols (ordered by
-	// ordinal). The ON condition can refer to these using IndexedVars.
-	ConstructLookupJoin(
-		joinType sqlbase.JoinType,
-		input Node,
-		table opt.Table,
-		index opt.Index,
-		keyCols []ColumnOrdinal,
-		lookupCols ColumnOrdinalSet,
-		onCond tree.TypedExpr,
-		reqOrder sqlbase.ColumnOrdering,
-	) (Node, error)
-
-	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
-	// results of the given node. If one or the other is not needed, then it is
-	// set to nil.
-	ConstructLimit(input Node, limit, offset tree.TypedExpr) (Node, error)
-
-	// ConstructProjectSet returns a node that performs a lateral cross join
-	// between the output of the given node and the functional zip of the given
-	// expressions.
-	ConstructProjectSet(n Node, exprs tree.TypedExprs, cols sqlbase.ResultColumns) (Node, error)
-
-	// RenameColumns modifies the column names of a node.
-	RenameColumns(input Node, colNames []string) (Node, error)
-
-	// ConstructPlan creates a plan enclosing the given plan and (optionally)
-	// subqueries.
-	ConstructPlan(root Node, subqueries []Subquery) (Plan, error)
-
-	// ConstructExplain returns a node that implements EXPLAIN, showing
-	// information about the given plan.
-	ConstructExplain(options *tree.ExplainOptions, plan Plan) (Node, error)
-
-	// ConstructShowTrace returns a node that implements a SHOW TRACE
-	// FOR SESSION statement.
-	ConstructShowTrace(typ tree.ShowTraceType, compact bool) (Node, error)
+	EstimatedRowCount float64
 }
+
+// OutputOrdering indicates the required output ordering on a Node that is being
+// created. It refers to the output columns of the node by ordinal.
+//
+// This ordering is used for distributed execution planning, to know how to
+// merge results from different nodes. For example, scanning a table can be
+// executed as multiple hosts scanning different pieces of the table. When the
+// results from the nodes get merged, we they are merged according to the output
+// ordering.
+//
+// The node must be able to support this output ordering given its other
+// configuration parameters.
+type OutputOrdering colinfo.ColumnOrdering
 
 // Subquery encapsulates information about a subquery that is part of a plan.
 type Subquery struct {
-	// ExprNode is a reference to a tree.Subquery node that has been created for
-	// this query; it is part of a scalar expression inside some Node.
-	ExprNode *tree.Subquery
+	// ExprNode is a reference to a AST node that can be used for printing the SQL
+	// of the subquery (for EXPLAIN).
+	ExprNode tree.NodeFormatter
 	Mode     SubqueryMode
 	// Root is the root Node of the plan for this subquery. This Node returns
 	// results as required for the specific Type.
@@ -205,18 +101,193 @@ const (
 	// normalized). As a special case, if there is only one column selected, the
 	// result is a tuple of the selected values (instead of a tuple of 1-tuples).
 	SubqueryAnyRows
+	// SubqueryAllRows - the subquery is an argument to ARRAY. The result is a
+	// tuple of rows.
+	SubqueryAllRows
 )
 
-// ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.
-type ColumnOrdinal int32
+// TableColumnOrdinal is the 0-based ordinal index of a cat.Table column.
+// It is used when operations involve a table directly (e.g. scans, index/lookup
+// joins, mutations).
+type TableColumnOrdinal int32
 
-// ColumnOrdinalSet contains a set of ColumnOrdinal values as ints.
-type ColumnOrdinalSet = util.FastIntSet
+// TableColumnOrdinalSet contains a set of TableColumnOrdinal values.
+type TableColumnOrdinalSet = util.FastIntSet
+
+// NodeColumnOrdinal is the 0-based ordinal index of a column produced by a
+// Node. It is used when referring to a column in an input to an operator.
+type NodeColumnOrdinal int32
+
+// NodeColumnOrdinalSet contains a set of NodeColumnOrdinal values.
+type NodeColumnOrdinalSet = util.FastIntSet
+
+// CheckOrdinalSet contains the ordinal positions of a set of check constraints
+// taken from the opt.Table.Check collection.
+type CheckOrdinalSet = util.FastIntSet
 
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {
 	FuncName   string
-	Builtin    *tree.Overload
-	ResultType types.T
-	ArgCols    []ColumnOrdinal
+	Distinct   bool
+	ResultType *types.T
+	ArgCols    []NodeColumnOrdinal
+
+	// ConstArgs is the list of any constant arguments to the aggregate,
+	// for instance, the separator in string_agg.
+	ConstArgs []tree.Datum
+
+	// Filter is the index of the column, if any, which should be used as the
+	// FILTER condition for the aggregate. If there is no filter, Filter is -1.
+	Filter NodeColumnOrdinal
 }
+
+// WindowInfo represents the information about a window function that must be
+// passed through to the execution engine.
+type WindowInfo struct {
+	// Cols is the set of columns that are returned from the windowing operator.
+	Cols colinfo.ResultColumns
+
+	// TODO(justin): refactor this to be a single array of structs.
+
+	// Exprs is the list of window function expressions.
+	Exprs []*tree.FuncExpr
+
+	// OutputIdxs are the indexes that the various window functions being computed
+	// should put their output in.
+	OutputIdxs []int
+
+	// ArgIdxs is the list of column ordinals each function takes as arguments,
+	// in the same order as Exprs.
+	ArgIdxs [][]NodeColumnOrdinal
+
+	// FilterIdxs is the list of column indices to use as filters.
+	FilterIdxs []int
+
+	// Partition is the set of input columns to partition on.
+	Partition []NodeColumnOrdinal
+
+	// Ordering is the set of input columns to order on.
+	Ordering colinfo.ColumnOrdering
+}
+
+// ExplainEnvData represents the data that's going to be displayed in EXPLAIN (env).
+type ExplainEnvData struct {
+	ShowEnv   bool
+	Tables    []tree.TableName
+	Sequences []tree.TableName
+	Views     []tree.TableName
+}
+
+// KVOption represents information about a statement option
+// (see tree.KVOptions).
+type KVOption struct {
+	Key string
+	// If there is no value, Value is DNull.
+	Value tree.TypedExpr
+}
+
+// RecursiveCTEIterationFn creates a plan for an iteration of WITH RECURSIVE,
+// given the result of the last iteration (as a node created by
+// ConstructBuffer).
+type RecursiveCTEIterationFn func(ef Factory, bufferRef Node) (Plan, error)
+
+// ApplyJoinPlanRightSideFn creates a plan for an iteration of ApplyJoin, given
+// a row produced from the left side. The plan is guaranteed to produce the
+// rightColumns passed to ConstructApplyJoin (in order).
+type ApplyJoinPlanRightSideFn func(ef Factory, leftRow tree.Datums) (Plan, error)
+
+// Cascade describes a cascading query. The query uses a node created by
+// ConstructBuffer as an input; it should only be triggered if this buffer is
+// not empty.
+type Cascade struct {
+	// FKName is the name of the foreign key constraint.
+	FKName string
+
+	// Buffer is the Node returned by ConstructBuffer which stores the input to
+	// the mutation.
+	Buffer Node
+
+	// PlanFn builds the cascade query and creates the plan for it.
+	// Note that the generated Plan can in turn contain more cascades (as well as
+	// checks, which should run after all cascades are executed).
+	//
+	// The bufferRef is a reference that can be used with ConstructWithBuffer to
+	// read the mutation input. It is conceptually the same as the Buffer field;
+	// however, we allow the execution engine to provide a different copy or
+	// implementation of the node (e.g. to facilitate early cleanup of the
+	// original plan).
+	//
+	// This method does not mutate any captured state; it is ok to call PlanFn
+	// methods concurrently (provided that they don't use a single non-thread-safe
+	// execFactory).
+	PlanFn func(
+		ctx context.Context,
+		semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext,
+		execFactory Factory,
+		bufferRef Node,
+		numBufferedRows int,
+		allowAutoCommit bool,
+	) (Plan, error)
+}
+
+// InsertFastPathMaxRows is the maximum number of rows for which we can use the
+// insert fast path.
+const InsertFastPathMaxRows = 10000
+
+// InsertFastPathFKCheck contains information about a foreign key check to be
+// performed by the insert fast-path (see ConstructInsertFastPath). It
+// identifies the index into which we can perform the lookup.
+type InsertFastPathFKCheck struct {
+	ReferencedTable cat.Table
+	ReferencedIndex cat.Index
+
+	// InsertCols contains the FK columns from the origin table, in the order of
+	// the ReferencedIndex columns. For each, the value in the array indicates the
+	// index of the column in the input table.
+	InsertCols []TableColumnOrdinal
+
+	MatchMethod tree.CompositeKeyMatchMethod
+
+	// MkErr is called when a violation is detected (i.e. the index has no entries
+	// for a given inserted row). The values passed correspond to InsertCols
+	// above.
+	MkErr MkErrFn
+}
+
+// MkErrFn is a function that generates an error which includes values from a
+// relevant row.
+type MkErrFn func(tree.Datums) error
+
+// ExplainFactory is an extension of Factory used when constructing a plan that
+// can be explained. It allows annotation of nodes with extra information.
+type ExplainFactory interface {
+	Factory
+
+	// AnnotateNode annotates a constructed Node with extra information.
+	AnnotateNode(n Node, id ExplainAnnotationID, value interface{})
+}
+
+// ExplainAnnotationID identifies the type of a node annotation.
+type ExplainAnnotationID int
+
+const (
+	// EstimatedStatsID is an annotation with a *EstimatedStats value.
+	EstimatedStatsID ExplainAnnotationID = iota
+)
+
+// EstimatedStats  contains estimated statistics about a given operator.
+type EstimatedStats struct {
+	// TableStatsAvailable is true if all the tables involved by this operator
+	// (directly or indirectly) had table statistics.
+	TableStatsAvailable bool
+	// RowCount is the estimated number of rows produced by the operator.
+	RowCount float64
+	// Cost is the estimated cost of the operator. This cost includes the costs of
+	// the child operators.
+	Cost float64
+}
+
+// BuildPlanForExplainFn builds an execution plan against the given
+// ExplainFactory.
+type BuildPlanForExplainFn func(ef ExplainFactory) (Plan, error)

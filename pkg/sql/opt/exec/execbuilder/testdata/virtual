@@ -1,0 +1,159 @@
+# LogicTest: !local-spec-planning !fakedist-spec-planning !3node-tenant
+# Note that the new factory currently has limited support of EXPLAIN (PLAN)
+# statements, so spec-planning configurations are currently skipped.
+
+query TTT
+EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50
+----
+·              distribution  local
+·              vectorized    false
+virtual table  ·             ·
+·              table         pg_class@pg_class_oid_idx
+·              spans         [/50 - /50]
+
+query TTT
+EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE relname = 'blah'
+----
+·                   distribution  local
+·                   vectorized    false
+filter              ·             ·
+ │                  filter        relname = 'blah'
+ └── virtual table  ·             ·
+·                   table         pg_class@primary
+
+
+# We can push the filter into information_schema.tables, which has an index
+# on the table_name field.
+query TTT
+EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah'
+----
+·              distribution  local
+·              vectorized    false
+virtual table  ·             ·
+·              table         tables@tables_table_name_idx
+·              spans         [/'blah' - /'blah']
+
+# Make sure that if we need an ordering on one of the virtual indexes we
+# provide it using a sortNode even though the optimizer expects the virtual
+# index to provide it "naturally".
+query TTT
+EXPLAIN SELECT * FROM information_schema.tables WHERE table_name > 'blah' ORDER BY table_name
+----
+·              distribution  local
+·              vectorized    false
+virtual table  ·             ·
+·              table         tables@tables_table_name_idx
+·              spans         [/e'blah\x00' - ]
+
+# Make sure that we properly push down just part of a filter on two columns
+# where only one of them is satisfied by the virtual index.
+query TTT
+EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah' AND table_type = 'foo'
+----
+·                   distribution  local
+·                   vectorized    false
+filter              ·             ·
+ │                  filter        table_type = 'foo'
+ └── virtual table  ·             ·
+·                   table         tables@tables_table_name_idx
+·                   spans         [/'blah' - /'blah']
+
+# Lookup joins into virtual indexes.
+
+query TTT
+EXPLAIN SELECT * FROM pg_constraint INNER LOOKUP JOIN pg_class on conrelid=pg_class.oid
+----
+·                          distribution  local
+·                          vectorized    false
+virtual table lookup join  ·             ·
+ │                         table         pg_class@pg_class_oid_idx
+ │                         equality      (conrelid) = (oid)
+ └── virtual table         ·             ·
+·                          table         pg_constraint@primary
+
+query TTT
+EXPLAIN SELECT * FROM pg_constraint LEFT LOOKUP JOIN pg_class on conrelid=pg_class.oid
+----
+·                                       distribution  local
+·                                       vectorized    false
+virtual table lookup join (left outer)  ·             ·
+ │                                      table         pg_class@pg_class_oid_idx
+ │                                      equality      (conrelid) = (oid)
+ └── virtual table                      ·             ·
+·                                       table         pg_constraint@primary
+
+# Can't lookup into a vtable with no index.
+query error could not produce
+EXPLAIN SELECT * FROM pg_constraint INNER LOOKUP JOIN pg_index on true
+
+# Test that a gnarly ORM query from ActiveRecord uses lookup joins for speed.
+
+query TTT
+EXPLAIN SELECT
+        t2.oid::REGCLASS AS to_table,
+        a1.attname AS column,
+        a2.attname AS primary_key,
+        c.conname AS name,
+        c.confupdtype AS on_update,
+        c.confdeltype AS on_delete,
+        c.convalidated AS valid
+FROM
+        pg_constraint AS c
+        JOIN pg_class AS t1 ON c.conrelid = t1.oid
+        JOIN pg_class AS t2 ON c.confrelid = t2.oid
+        JOIN pg_attribute AS a1 ON
+                        (a1.attnum = c.conkey[1]) AND (a1.attrelid = t1.oid)
+        JOIN pg_attribute AS a2 ON
+                        (a2.attnum = c.confkey[1]) AND (a2.attrelid = t2.oid)
+        JOIN pg_namespace AS t3 ON c.connamespace = t3.oid
+WHERE
+        ((c.contype = 'f') AND (t1.oid = 'b'::regclass))
+        AND (t3.nspname = ANY (current_schemas(false)))
+ORDER BY
+        c.conname
+----
+·                                                                  distribution  local
+·                                                                  vectorized    false
+sort                                                               ·             ·
+ │                                                                 order         +conname
+ └── render                                                        ·             ·
+      └── hash join                                                ·             ·
+           │                                                       equality      (oid) = (connamespace)
+           ├── filter                                              ·             ·
+           │    │                                                  filter        nspname IN ('public',)
+           │    └── virtual table                                  ·             ·
+           │                                                       table         pg_namespace@primary
+           └── virtual table lookup join                           ·             ·
+                │                                                  table         pg_attribute@pg_attribute_attrelid_idx
+                │                                                  equality      (oid) = (attrelid)
+                │                                                  pred          column135 = attnum
+                └── render                                         ·             ·
+                     └── hash join                                 ·             ·
+                          │                                        equality      (attrelid, attnum) = (oid, column110)
+                          ├── filter                               ·             ·
+                          │    │                                   filter        attrelid = 'b'::REGCLASS
+                          │    └── virtual table                   ·             ·
+                          │                                        table         pg_attribute@primary
+                          └── render                               ·             ·
+                               └── virtual table lookup join       ·             ·
+                                    │                              table         pg_class@pg_class_oid_idx
+                                    │                              equality      (confrelid) = (oid)
+                                    └── virtual table lookup join  ·             ·
+                                         │                         table         pg_class@pg_class_oid_idx
+                                         │                         equality      (conrelid) = (oid)
+                                         │                         pred          oid = 'b'::REGCLASS
+                                         └── filter                ·             ·
+                                              │                    filter        (conrelid = 'b'::REGCLASS) AND (contype = 'f')
+                                              └── virtual table    ·             ·
+·                                                                  table         pg_constraint@primary
+
+# Test that limits are respected.
+query TTT
+EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50 LIMIT 1
+----
+·              distribution  local
+·              vectorized    false
+virtual table  ·             ·
+·              table         pg_class@pg_class_oid_idx
+·              spans         [/50 - /50]
+·              limit         1

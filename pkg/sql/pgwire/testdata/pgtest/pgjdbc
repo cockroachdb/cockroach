@@ -1,0 +1,70 @@
+# deallocate_test checks that we can run DEALLOCATE ALL using a prepared
+# statement. See #52915.
+send
+Query {"String": "DROP TABLE IF EXISTS deallocate_test"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE deallocate_test (a INT)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 80 = ASCII 'P' for Portal
+send
+Parse {"Name": "s1", "Query": "DEALLOCATE ALL"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1"}
+Describe {"ObjectType": 80, "Name": "p1"}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DISCARD ALL"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"application_name","Value":""}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"UTC"}
+{"Type":"CommandComplete","CommandTag":"DISCARD"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Send a simple query in the middle of extended protocol, which is apparently
+# allowed. (See #41511, #33693)
+send
+Parse {"Name": "S_3", "Query": "BEGIN"}
+Bind {"PreparedStatement": "S_3"}
+Execute
+Query {"String": "SAVEPOINT PGJDBC_AUTOSAVE"}
+----
+
+until
+CommandComplete
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}

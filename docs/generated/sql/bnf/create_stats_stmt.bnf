@@ -1,0 +1,2 @@
+create_stats_stmt ::=
+	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options

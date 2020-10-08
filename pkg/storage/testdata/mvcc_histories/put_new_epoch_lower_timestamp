@@ -1,0 +1,46 @@
+# Tests a scenario where a put operation of an older timestamp but a
+# higher epoch comes after a put operation of a newer timestamp but an
+# older epoch. The timestamp of the resulting intent remains equal to
+# the higher timestamp - it does not regress.
+#
+# Transaction coordinators shouldn't issue this series of operations
+# directly, but it is possible to create such a situation if the
+# transaction is pushed.
+
+# Populate a txn and an intent.
+
+run ok
+with t=A
+  txn_begin   ts=1
+  txn_advance ts=5
+  txn_step    n=4
+  put  k=k v=v
+  get  k=k ts=3
+----
+get: "k" -> /BYTES/v @0.000000005,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=4} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=4} ts=0.000000005,0 del=false klen=12 vlen=6
+data: "k"/0.000000005,0 -> /BYTES/v
+
+run ok
+with t=A
+  txn_advance ts=3
+  txn_restart
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000003,0 wto=false max=0,0
+
+
+# We're operating at a higher epoch but a lower timestamp.
+# We're expecting v2 here, but still at timestamp 5.
+
+run ok
+with t=A
+  put k=k v=v2
+  get k=k
+----
+get: "k" -> /BYTES/v2 @0.000000005,0
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000005,0 min=0,0 seq=0} ts=0.000000005,0 del=false klen=12 vlen=7
+data: "k"/0.000000005,0 -> /BYTES/v2

@@ -1,4 +1,6 @@
-# LogicTest: local local-opt
+# LogicTest: default-configs local-mixed-20.1-20.2
+# The mixed configuration is enabled to test backward compatibility for database
+# schema changes.
 
 statement ok
 CREATE DATABASE a
@@ -13,13 +15,15 @@ a              information_schema  admin    ALL
 a              information_schema  root     ALL
 a              pg_catalog          admin    ALL
 a              pg_catalog          root     ALL
+a              pg_extension        admin    ALL
+a              pg_extension        root     ALL
 a              public              admin    ALL
 a              public              root     ALL
 
-statement error user root must have exactly ALL privileges on system object with ID=.*
+statement error user root must have exactly ALL privileges on system database with ID=.*
 REVOKE SELECT ON DATABASE a FROM root
 
-statement error user admin must have exactly ALL privileges on system object with ID=.*
+statement error user admin must have exactly ALL privileges on system database with ID=.*
 REVOKE SELECT ON DATABASE a FROM admin
 
 statement ok
@@ -55,6 +59,10 @@ a  pg_catalog          admin      ALL
 a  pg_catalog          readwrite  ALL
 a  pg_catalog          root       ALL
 a  pg_catalog          test-user  ALL
+a  pg_extension        admin      ALL
+a  pg_extension        readwrite  ALL
+a  pg_extension        root       ALL
+a  pg_extension        test-user  ALL
 a  public              admin      ALL
 a  public              readwrite  ALL
 a  public              root       ALL
@@ -82,6 +90,8 @@ a  information_schema  readwrite  ALL
 a  information_schema  test-user  ALL
 a  pg_catalog          readwrite  ALL
 a  pg_catalog          test-user  ALL
+a  pg_extension        readwrite  ALL
+a  pg_extension        test-user  ALL
 a  public              readwrite  ALL
 a  public              test-user  ALL
 
@@ -93,96 +103,58 @@ SHOW GRANTS ON DATABASE a
 ----
 a  crdb_internal       admin      ALL
 a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  DELETE
-a  crdb_internal       readwrite  DROP
 a  crdb_internal       readwrite  GRANT
-a  crdb_internal       readwrite  SELECT
 a  crdb_internal       root       ALL
 a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  DELETE
-a  crdb_internal       test-user  DROP
 a  crdb_internal       test-user  GRANT
-a  crdb_internal       test-user  SELECT
 a  information_schema  admin      ALL
 a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  DELETE
-a  information_schema  readwrite  DROP
 a  information_schema  readwrite  GRANT
-a  information_schema  readwrite  SELECT
 a  information_schema  root       ALL
 a  information_schema  test-user  CREATE
-a  information_schema  test-user  DELETE
-a  information_schema  test-user  DROP
 a  information_schema  test-user  GRANT
-a  information_schema  test-user  SELECT
 a  pg_catalog          admin      ALL
 a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  DELETE
-a  pg_catalog          readwrite  DROP
 a  pg_catalog          readwrite  GRANT
-a  pg_catalog          readwrite  SELECT
 a  pg_catalog          root       ALL
 a  pg_catalog          test-user  CREATE
-a  pg_catalog          test-user  DELETE
-a  pg_catalog          test-user  DROP
 a  pg_catalog          test-user  GRANT
-a  pg_catalog          test-user  SELECT
+a  pg_extension        admin      ALL
+a  pg_extension        readwrite  CREATE
+a  pg_extension        readwrite  GRANT
+a  pg_extension        root       ALL
+a  pg_extension        test-user  CREATE
+a  pg_extension        test-user  GRANT
 a  public              admin      ALL
 a  public              readwrite  CREATE
-a  public              readwrite  DELETE
-a  public              readwrite  DROP
 a  public              readwrite  GRANT
-a  public              readwrite  SELECT
 a  public              root       ALL
 a  public              test-user  CREATE
-a  public              test-user  DELETE
-a  public              test-user  DROP
 a  public              test-user  GRANT
-a  public              test-user  SELECT
 
 query TTTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  DELETE
-a  crdb_internal       readwrite  DROP
 a  crdb_internal       readwrite  GRANT
-a  crdb_internal       readwrite  SELECT
 a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  DELETE
-a  crdb_internal       test-user  DROP
 a  crdb_internal       test-user  GRANT
-a  crdb_internal       test-user  SELECT
-a  information_schema  readwrite  SELECT
-a  information_schema  readwrite  DELETE
-a  information_schema  readwrite  DROP
-a  information_schema  readwrite  GRANT
 a  information_schema  readwrite  CREATE
+a  information_schema  readwrite  GRANT
 a  information_schema  test-user  CREATE
-a  information_schema  test-user  DELETE
-a  information_schema  test-user  DROP
 a  information_schema  test-user  GRANT
-a  information_schema  test-user  SELECT
-a  pg_catalog          readwrite  SELECT
-a  pg_catalog          readwrite  DELETE
-a  pg_catalog          readwrite  DROP
-a  pg_catalog          readwrite  GRANT
 a  pg_catalog          readwrite  CREATE
-a  pg_catalog          test-user  DELETE
-a  pg_catalog          test-user  DROP
-a  pg_catalog          test-user  GRANT
-a  pg_catalog          test-user  SELECT
+a  pg_catalog          readwrite  GRANT
 a  pg_catalog          test-user  CREATE
-a  public              readwrite  SELECT
+a  pg_catalog          test-user  GRANT
+a  pg_extension        readwrite  CREATE
+a  pg_extension        readwrite  GRANT
+a  pg_extension        test-user  CREATE
+a  pg_extension        test-user  GRANT
 a  public              readwrite  CREATE
-a  public              readwrite  DELETE
 a  public              readwrite  GRANT
-a  public              readwrite  DROP
 a  public              test-user  CREATE
-a  public              test-user  DELETE
-a  public              test-user  DROP
 a  public              test-user  GRANT
-a  public              test-user  SELECT
 
 statement ok
 REVOKE SELECT ON DATABASE a FROM "test-user"
@@ -191,48 +163,34 @@ query TTTT
 SHOW GRANTS ON DATABASE a
 ----
 a  crdb_internal       admin      ALL
-a  crdb_internal       readwrite  SELECT
 a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  DELETE
-a  crdb_internal       readwrite  DROP
 a  crdb_internal       readwrite  GRANT
 a  crdb_internal       root       ALL
 a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  DELETE
-a  crdb_internal       test-user  DROP
 a  crdb_internal       test-user  GRANT
 a  information_schema  admin      ALL
 a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  DELETE
-a  information_schema  readwrite  DROP
 a  information_schema  readwrite  GRANT
-a  information_schema  readwrite  SELECT
 a  information_schema  root       ALL
 a  information_schema  test-user  CREATE
-a  information_schema  test-user  DELETE
-a  information_schema  test-user  DROP
 a  information_schema  test-user  GRANT
 a  pg_catalog          admin      ALL
 a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  DELETE
-a  pg_catalog          readwrite  DROP
 a  pg_catalog          readwrite  GRANT
-a  pg_catalog          readwrite  SELECT
 a  pg_catalog          root       ALL
 a  pg_catalog          test-user  CREATE
-a  pg_catalog          test-user  DELETE
-a  pg_catalog          test-user  DROP
 a  pg_catalog          test-user  GRANT
+a  pg_extension        admin      ALL
+a  pg_extension        readwrite  CREATE
+a  pg_extension        readwrite  GRANT
+a  pg_extension        root       ALL
+a  pg_extension        test-user  CREATE
+a  pg_extension        test-user  GRANT
 a  public              admin      ALL
 a  public              readwrite  CREATE
-a  public              readwrite  DELETE
-a  public              readwrite  DROP
 a  public              readwrite  GRANT
-a  public              readwrite  SELECT
 a  public              root       ALL
 a  public              test-user  CREATE
-a  public              test-user  DELETE
-a  public              test-user  DROP
 a  public              test-user  GRANT
 
 statement ok
@@ -242,25 +200,15 @@ query TTTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  DELETE
-a  crdb_internal       readwrite  DROP
 a  crdb_internal       readwrite  GRANT
-a  crdb_internal       readwrite  SELECT
 a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  DELETE
-a  information_schema  readwrite  DROP
 a  information_schema  readwrite  GRANT
-a  information_schema  readwrite  SELECT
-a  pg_catalog          readwrite  SELECT
-a  pg_catalog          readwrite  DELETE
-a  pg_catalog          readwrite  DROP
-a  pg_catalog          readwrite  GRANT
 a  pg_catalog          readwrite  CREATE
+a  pg_catalog          readwrite  GRANT
+a  pg_extension        readwrite  CREATE
+a  pg_extension        readwrite  GRANT
 a  public              readwrite  CREATE
-a  public              readwrite  DELETE
-a  public              readwrite  DROP
 a  public              readwrite  GRANT
-a  public              readwrite  SELECT
 
 statement ok
 REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
@@ -274,6 +222,8 @@ a  information_schema  admin  ALL
 a  information_schema  root   ALL
 a  pg_catalog          admin  ALL
 a  pg_catalog          root   ALL
+a  pg_extension        admin  ALL
+a  pg_extension        root   ALL
 a  public              admin  ALL
 a  public              root   ALL
 
@@ -290,3 +240,8 @@ a              public       t           admin      ALL
 a              public       t           readwrite  ALL
 a              public       t           root       ALL
 a              public       t           test-user  ALL
+
+# Usage privilege should not be grantable on databases.
+
+statement error pq: invalid privilege type USAGE for database
+GRANT USAGE ON DATABASE a TO testuser

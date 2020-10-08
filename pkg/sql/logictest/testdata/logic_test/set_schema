@@ -1,0 +1,445 @@
+statement ok
+CREATE SCHEMA s1
+
+statement ok
+CREATE SCHEMA s2
+
+statement ok
+CREATE TABLE t(x INT)
+
+# No error should happen if IF EXISTS is used and the table does not exist.
+statement ok
+ALTER TABLE IF EXISTS does_not_exist SET SCHEMA s2
+
+# Ensure setting the table to the same schema is valid.
+statement ok
+ALTER TABLE t SET SCHEMA public
+
+# Cannot set schema to one that does not exist.
+statement error pq: unknown schema "does_not_exist"
+ALTER TABLE t SET SCHEMA does_not_exist
+
+# Ensure we cannot set schema if there is already a table with the same name
+# in the schema.
+statement ok
+CREATE TABLE s2.t();
+
+statement error pq: relation "t" already exists
+ALTER TABLE t SET SCHEMA s2
+
+# Ensure we cannot set schema to a virtual schema.
+statement error pq: cannot move objects into or out of virtual schemas
+ALTER TABLE t SET SCHEMA information_schema
+
+# Ensure we cannot set schema for a table in a virtual schema.
+statement error pq: views is a virtual object and cannot be modified
+ALTER TABLE information_schema.views SET SCHEMA public
+
+# Ensure we cannot set schema to a temporary schema.
+statement ok
+SET experimental_enable_temp_tables = 'on'
+
+statement ok
+CREATE TEMPORARY TABLE temp1()
+
+let $temp_schema
+SELECT schema_name FROM [show schemas] WHERE schema_name LIKE '%pg_temp%'
+
+statement error pq: cannot move objects into or out of temporary schemas
+ALTER TABLE t SET SCHEMA $temp_schema
+
+# Ensure we cannot set schema for a temporary table.
+statement error pq: cannot move objects into or out of temporary schemas
+ALTER TABLE temp1 SET SCHEMA public
+
+# Test setting a table from public to s1.
+
+statement ok
+INSERT INTO t VALUES (1)
+
+statement ok
+ALTER TABLE t SET SCHEMA s1
+
+# Check that the table is in the designated schema.
+query I rowsort
+SELECT * FROM s1.t
+----
+1
+
+# Check that we can insert into the table.
+statement ok
+INSERT INTO s1.t VALUES (2)
+
+# Ensure we can't select from the public schema.
+statement error pq: relation "public.t" does not exist
+SELECT * FROM public.t
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+# Testing setting a table to the public schema.
+
+statement ok
+ALTER TABLE s1.t SET SCHEMA public
+
+# Check that the table is in the designated schema.
+query I rowsort
+SELECT * FROM public.t
+----
+1
+2
+
+# Check that we can insert into the table.
+statement ok
+INSERT INTO public.t VALUES (2)
+
+# Ensure we can't select from the old s1 schema.
+statement error pq: relation "s1.t" does not exist
+SELECT * FROM s1.t
+
+# Test moving from one user defined schema to another.
+statement ok
+CREATE TABLE s1.t2(x INT)
+
+statement ok
+INSERT INTO s1.t2 VALUES (1)
+
+statement ok
+ALTER TABLE s1.t2 SET SCHEMA s2
+
+query I rowsort
+SELECT * FROM s2.t2
+----
+1
+
+# Ensure we cannot select from the old table.
+statement error pq: relation "s1.t2" does not exist
+SELECT * FROM s1.t2
+
+# Test SET SCHEMA for a sequence.
+statement ok
+CREATE SEQUENCE s1.s
+
+statement ok
+ALTER SEQUENCE s1.s SET SCHEMA s2
+
+statement ok
+SELECT * FROM s2.s
+
+statement error pq: relation "s1.s" does not exist
+SELECT * FROM s1.s
+
+# ALTER TABLE should also work for a sequence.
+statement ok
+ALTER SEQUENCE s2.s SET SCHEMA s1
+
+# ALTER SEQUENCE should not work on a table or view.
+statement ok
+CREATE TABLE not_seq(x INT)
+
+statement error pq: "not_seq" is not a sequence
+ALTER SEQUENCE not_seq SET SCHEMA s1
+
+statement ok
+CREATE VIEW view_not_seq AS SELECT x FROM not_seq
+
+statement error pq: "view_not_seq" is not a sequence
+ALTER SEQUENCE view_not_seq SET SCHEMA s1
+
+# Test SET SCHEMA for a view.
+statement ok
+CREATE TABLE for_view(x INT)
+
+statement ok
+CREATE VIEW s1.vx AS SELECT x FROM for_view
+
+statement ok
+ALTER VIEW s1.vx SET SCHEMA s2
+
+statement ok
+SELECT * FROM s2.vx
+
+statement error pq: relation "s1.vx" does not exist
+SELECT * FROM s1.vx
+
+# ALTER TABLE should also work for a view.
+statement ok
+ALTER VIEW s2.vx SET SCHEMA s1
+
+# ALTER VIEW should not work on a table or view.
+statement ok
+CREATE TABLE not_view()
+
+statement ok
+CREATE SEQUENCE seq_not_view
+
+statement error pq: "not_view" is not a view
+ALTER VIEW not_view SET SCHEMA s1
+
+statement error pq: "seq_not_view" is not a view
+ALTER VIEW seq_not_view SET SCHEMA s1
+
+# Set schema should not work for a table that is depended on by a view.
+statement error pq: cannot set schema on relation "for_view" because view "vx" depends on it
+ALTER TABLE for_view SET SCHEMA s2
+
+statement ok
+CREATE TABLE s1.t3(x INT)
+
+statement ok
+INSERT INTO s1.t3 VALUES (1)
+
+# Test ALTER TABLE SET SCHEMA inside a transaction.
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE s1.t3 SET SCHEMA s2
+
+# ALTER TABLE SET SCHEMA changes should inside the transaction.
+query I rowsort
+SELECT * FROM s2.t3
+----
+1
+
+statement error pq: relation "s1.t2" does not exist
+SELECT * FROM s1.t2
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE s1.t3 SET SCHEMA s2
+
+statement ok
+COMMIT
+
+# ALTER TABLE SET SCHEMA changes should reflect after commit.
+
+query I rowsort
+SELECT * FROM s2.t3
+----
+1
+
+# Ensure we cannot select from the old table.
+statement error pq: relation "s1.t2" does not exist
+SELECT * FROM s1.t2
+
+statement ok
+CREATE TABLE s1.t4(x INT)
+
+# Ensure set schema gets rolled back if the transaction is canceled.
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE s1.t4 SET SCHEMA s2
+
+statement ok
+ROLLBACK
+
+# Ensure we can select from s1.t4.
+statement ok
+SELECT * FROM s1.t4
+
+# Ensure we cannot select from s2.t4.
+statement error pq: relation "s2.t4" does not exist
+SELECT * FROM s2.t4
+
+# Ensure the user has DROP privilege on the table to set the schema.
+statement ok
+CREATE TABLE t5()
+
+user testuser
+
+statement error pq: user testuser does not have DROP privilege on relation t5
+ALTER TABLE t5 SET SCHEMA s1
+
+# Ensure the user has CREATE privilege on the target schema.
+user root
+
+statement ok
+GRANT DROP ON t5 TO testuser
+
+user testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema s1
+ALTER TABLE t5 SET SCHEMA s1
+
+# Sub-tests for ALTER TYPE SET SCHEMA.
+user root
+
+statement ok
+CREATE TYPE typ AS ENUM ('hello')
+
+# Ensure setting the type to the same schema is valid.
+statement ok
+ALTER TYPE typ SET SCHEMA public
+
+# Cannot set schema to one that does not exist.
+statement error pq: unknown schema "does_not_exist"
+ALTER TYPE typ SET SCHEMA does_not_exist
+
+# Ensure we cannot set schema if there is already a type with the same name
+# in the schema.
+statement ok
+CREATE TYPE s2.typ AS ENUM ()
+
+statement error type "typ" already exists
+ALTER TYPE typ SET SCHEMA s2
+
+# Ensure we cannot set schema to a virtual schema.
+statement error pq: cannot move objects into or out of virtual schemas
+ALTER TYPE typ SET SCHEMA information_schema
+
+# Ensure we cannot set schema to a temporary schema.
+let $temp_schema
+SELECT schema_name FROM [show schemas] WHERE schema_name LIKE '%pg_temp%'
+
+statement error pq: cannot move objects into or out of temporary schemas
+ALTER TYPE typ SET SCHEMA $temp_schema
+
+# Test setting a type from public to s1.
+
+statement ok
+ALTER TYPE typ SET SCHEMA s1
+
+# Ensure that the type is in the designated schema.
+statement ok
+SELECT 'hello'::s1.typ
+
+# Ensure the array type is set to the new schema as well.
+statement ok
+SELECT ARRAY['hello']::s1._typ
+
+# Ensure the type does not exist in the public schema.
+statement error pq: type "public.typ" does not exist
+SELECT 'hello'::public.typ
+
+statement error pq: type "typ" does not exist
+SELECT 'hello'::typ
+
+# Ensure the array type is removed from the old schema.
+statement error pq: type "public._typ" does not exist
+SELECT ARRAY['hello']::public._typ
+
+statement error pq: type "_typ" does not exist
+SELECT ARRAY['hello']::_typ
+
+# Testing setting a type to the public schema.
+
+statement ok
+ALTER TYPE s1.typ SET SCHEMA public
+
+# Check that the type is in the designated schema.
+statement ok
+SELECT 'hello'::public.typ
+
+# Ensure the array type is set to the new schema as well.
+statement ok
+SELECT ARRAY['hello']::public._typ
+
+# Ensure the type does not exist in the s1 schema.
+statement error pq: type "s1.typ" does not exist
+SELECT 'hello'::s1.typ
+
+# Ensure the array type is removed from the old schema.
+statement error pq: type "s1._typ" does not exist
+SELECT ARRAY['hello']::s1._typ
+
+# Test moving from one user defined schema to another.
+statement ok
+CREATE TYPE s1.typ2 AS ENUM ('hello')
+
+statement ok
+ALTER TYPE s1.typ2 SET SCHEMA s2
+
+statement ok
+SELECT 'hello'::s2.typ2
+
+# Ensure the array type is set to the new schema as well.
+statement ok
+SELECT ARRAY['hello']::s2._typ2
+
+# Ensure the type does not exist in the s1 schema.
+statement error pq: type "s1.typ2" does not exist
+SELECT 'hello'::s1.typ2
+
+# Ensure the array type is removed from the old schema.
+statement error pq: type "s1._typ2" does not exist
+SELECT ARRAY['hello']::s1._typ2
+
+statement ok
+CREATE TYPE s1.typ3 AS ENUM ('hello')
+
+# Test ALTER TYPE SET SCHEMA inside a transaction.
+statement ok
+BEGIN
+
+statement ok
+ALTER TYPE s1.typ3 SET SCHEMA s2
+
+# ALTER TYPE SET SCHEMA changes should reflect in the transaction.
+statement ok
+SELECT 'hello'::s2.typ3
+
+statement error pq: type "s1.typ3" does not exist
+SELECT 'hello'::s1.typ3
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TYPE s1.typ3 SET SCHEMA s2
+
+statement ok
+COMMIT
+
+# ALTER TYPE SET SCHEMA changes should reflect after commit.
+
+statement ok
+SELECT 'hello'::s2.typ3
+
+# Ensure the type does not exist in the s1 schema.
+statement error pq: type "s1.typ3" does not exist
+SELECT 'hello'::s1.typ3
+
+statement ok
+CREATE TYPE s1.typ4 AS ENUM ('hello')
+
+# Ensure set schema gets rolled back if the transaction is canceled.
+statement ok
+BEGIN
+
+statement ok
+ALTER TYPE s1.typ4 SET SCHEMA s2
+
+statement ok
+ROLLBACK
+
+# Ensure that the type is in the original schema.
+statement ok
+SELECT 'hello'::s1.typ4
+
+# Ensure that the type is not in the s2 schema.
+statement error pq: type "s2.typ4" does not exist
+SELECT 'hello'::s2.typ4
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+# The user must have create privilege on the target schema to set the schema.
+
+user testuser
+
+statement ok
+CREATE TYPE typ5 AS ENUM ()
+
+statement error pq: user testuser does not have CREATE privilege on schema s1
+ALTER TYPE typ5 SET SCHEMA s1

@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -16,14 +14,32 @@ user root
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error duplicate index name: \"foo\"
+statement error relation \"foo\" already exists
 CREATE INDEX foo ON t (a)
 
-statement error index \"bar\" contains unknown column \"c\"
+statement error column "c" does not exist
 CREATE INDEX bar ON t (c)
 
 statement error index \"bar\" contains duplicate column \"b\"
 CREATE INDEX bar ON t (b, b);
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INDEX bar ON t ((a+b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INDEX bar ON t (abs(b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE UNIQUE INDEX bar ON t (abs(b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INVERTED INDEX bar ON t ((ARRAY[a,b]))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE TABLE t2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE TABLE t2 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -36,7 +52,7 @@ t           foo         true        2             a            ASC        false 
 statement ok
 INSERT INTO t VALUES (2,1)
 
-statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
+statement error pgcode 23505 violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
 
 query TTBITTBB colnames
@@ -85,7 +101,7 @@ CREATE INDEX fail ON foo (b DESC)
 statement ok
 CREATE VIEW v AS SELECT a,b FROM t
 
-statement error pgcode 42809 "v" is not a table
+statement error pgcode 42809 "v" is not a table or materialized view
 CREATE INDEX failview ON v (b DESC)
 
 statement ok
@@ -119,3 +135,93 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 privs       primary     false       1             a            ASC        false    false
 privs       foo         true        1             b            ASC        false    false
 privs       foo         true        2             a            ASC        false    true
+
+
+user root
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true;
+CREATE TABLE telemetry (
+  x INT PRIMARY KEY,
+  y INT,
+  z JSONB
+)
+
+statement ok
+CREATE INVERTED INDEX ON telemetry (z);
+CREATE INDEX ON telemetry (y) USING HASH WITH BUCKET_COUNT = 4
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.inverted_index',
+  'sql.schema.hash_sharded_index'
+)
+----
+sql.schema.inverted_index
+sql.schema.hash_sharded_index
+
+subtest create_index_concurrently
+
+statement ok
+CREATE TABLE create_index_concurrently_tbl (a int)
+
+query T noticetrace
+CREATE INDEX CONCURRENTLY create_index_concurrently_idx ON create_index_concurrently_tbl(a)
+----
+NOTICE: CONCURRENTLY is not required as all indexes are created concurrently
+
+query T noticetrace
+CREATE INDEX CONCURRENTLY IF NOT EXISTS create_index_concurrently_idx ON create_index_concurrently_tbl(a)
+----
+
+query TT
+SHOW CREATE TABLE create_index_concurrently_tbl
+----
+create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
+                               a INT8 NULL,
+                               INDEX create_index_concurrently_idx (a ASC),
+                               FAMILY "primary" (a, rowid)
+)
+
+query T noticetrace
+DROP INDEX CONCURRENTLY create_index_concurrently_idx
+----
+NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+query T noticetrace
+DROP INDEX CONCURRENTLY IF EXISTS create_index_concurrently_idx
+----
+NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
+
+query TT
+SHOW CREATE TABLE create_index_concurrently_tbl
+----
+create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
+                               a INT8 NULL,
+                               FAMILY "primary" (a, rowid)
+)
+
+statement ok
+DROP TABLE create_index_concurrently_tbl
+
+# Test that creating an index on a column which is currently being dropped
+# causes an error.
+subtest create_index_on_dropping_column
+
+statement ok
+CREATE TABLE create_idx_drop_column (c0 INT PRIMARY KEY, c1 INT);
+
+statement ok
+begin; ALTER TABLE create_idx_drop_column DROP COLUMN c1;
+
+statement error column "c1" does not exist
+CREATE INDEX idx_create_idx_drop_column ON create_idx_drop_column (c1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP TABLE create_idx_drop_column;

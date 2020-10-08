@@ -1,0 +1,70 @@
+# Change the application name.
+
+send
+Query {"String": "SET application_name = 'pgtest'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change the time zone using an offset.
+
+send
+Query {"String": "SET TIME ZONE +6"}
+----
+
+until crdb_only
+ParameterStatus
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"6"}
+
+
+# TODO(#42404): postgres has a different output. This is what we have right now
+# as code, but we need to dig into what/why we use this format in param status.
+until noncrdb_only
+ParameterStatus
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"\u003c+06\u003e-06"}
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET TIME ZONE -11.5"}
+----
+
+until crdb_only
+ParameterStatus
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"-11.5"}
+
+until noncrdb_only
+ParameterStatus
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"\u003c-11:30\u003e+11:30"}
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change the time zone using a real string.
+
+send
+Query {"String": "SET TIME ZONE 'America/New_York'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/New_York"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

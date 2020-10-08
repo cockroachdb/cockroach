@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // +build !windows
 
@@ -22,6 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// dupFD is used to initialize OrigStderr (see stderr_redirect.go).
 func dupFD(fd uintptr) (uintptr, error) {
 	// Warning: failing to set FD_CLOEXEC causes the duplicated file descriptor
 	// to leak into subprocesses created by exec.Command. If the file descriptor
@@ -35,13 +32,26 @@ func dupFD(fd uintptr) (uintptr, error) {
 	// subprocesses that hold references to the stdin or stderr pipes, go test
 	// will hang until the subprocesses exit, rather defeating the purpose of
 	// a timeout.
-	nfd, _, errno := unix.Syscall(unix.SYS_FCNTL, fd, unix.F_DUPFD_CLOEXEC, 0)
-	if errno != 0 {
-		return 0, errno
+	nfd, err := unix.FcntlInt(fd, unix.F_DUPFD_CLOEXEC, 0)
+	if err != nil {
+		return 0, err
 	}
-	return nfd, nil
+	return uintptr(nfd), nil
 }
 
+// redirectStderr is used to redirect internal writes to fd 2 to the
+// specified file. This is needed to ensure that harcoded writes to fd
+// 2 by e.g. the Go runtime are redirected to a log file of our
+// choosing.
+//
+// We also override os.Stderr for those other parts of Go which use
+// that and not fd 2 directly.
 func redirectStderr(f *os.File) error {
-	return unix.Dup2(int(f.Fd()), unix.Stderr)
+	osStderrMu.Lock()
+	defer osStderrMu.Unlock()
+	if err := unix.Dup2(int(f.Fd()), unix.Stderr); err != nil {
+		return err
+	}
+	os.Stderr = f
+	return nil
 }

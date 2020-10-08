@@ -1,0 +1,62 @@
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
+----
+
+expr
+(Scan [ (Table "abc") (Cols "a") ])
+----
+scan t.public.abc
+ ├── columns: t.public.abc.a:1(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1054.02
+ ├── prune: (1)
+ └── interesting orderings: (+1)
+
+expr
+(Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
+----
+scan t.public.abc@ab
+ ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1054.02
+ ├── prune: (1,2)
+ └── interesting orderings: (+1,+2)
+
+expr
+(Root
+  (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
+  (Presentation "a,b")
+  (OrderingChoice "+a,+b")
+)
+----
+scan t.public.abc@ab
+ ├── columns: a:1(int) b:2(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1054.02
+ ├── ordering: +1,+2
+ ├── prune: (1,2)
+ └── interesting orderings: (+1,+2)
+
+expr
+(Select
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (Eq (Var "a") (Const 1 "int")) ]
+)
+----
+select
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+ ├── cost: 1084.04
+ ├── fd: ()-->(1)
+ ├── prune: (2,3)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    ├── cost: 1074.02
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
+ └── filters
+      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           ├── variable: t.public.abc.a:1 [type=int]
+           └── const: 1 [type=int]

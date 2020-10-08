@@ -1,29 +1,30 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package workload
 
 import (
+	"bytes"
 	"context"
-	"encoding/csv"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"unsafe"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -38,6 +39,9 @@ const (
 func WriteCSVRows(
 	ctx context.Context, w io.Writer, table Table, rowStart, rowEnd int, sizeBytesLimit int64,
 ) (rowBatchIdx int, err error) {
+	cb := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
+	var a bufalloc.ByteAllocator
+
 	bytesWrittenW := &bytesWrittenWriter{w: w}
 	csvW := csv.NewWriter(bytesWrittenW)
 	var rowStrings []string
@@ -51,14 +55,16 @@ func WriteCSVRows(
 			return 0, ctx.Err()
 		default:
 		}
-		for _, row := range table.InitialRows.Batch(rowBatchIdx) {
-			if cap(rowStrings) < len(row) {
-				rowStrings = make([]string, len(row))
-			} else {
-				rowStrings = rowStrings[:len(row)]
-			}
-			for i, datum := range row {
-				rowStrings[i] = datumToCSVString(datum)
+		a = a[:0]
+		table.InitialRows.FillBatch(rowBatchIdx, cb, &a)
+		if numCols := cb.Width(); cap(rowStrings) < numCols {
+			rowStrings = make([]string, numCols)
+		} else {
+			rowStrings = rowStrings[:numCols]
+		}
+		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
+			for colIdx, col := range cb.ColVecs() {
+				rowStrings[colIdx] = colDatumToCSVString(col, rowIdx)
 			}
 			if err := csvW.Write(rowStrings); err != nil {
 				return 0, err
@@ -69,22 +75,82 @@ func WriteCSVRows(
 	return rowBatchIdx, csvW.Error()
 }
 
-func datumToCSVString(datum interface{}) string {
-	if datum == nil {
+type csvRowsReader struct {
+	t                    Table
+	batchStart, batchEnd int
+
+	buf  bytes.Buffer
+	csvW *csv.Writer
+
+	batchIdx int
+	cb       coldata.Batch
+	a        bufalloc.ByteAllocator
+
+	stringsBuf []string
+}
+
+func (r *csvRowsReader) Read(p []byte) (n int, err error) {
+	if r.cb == nil {
+		r.cb = coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
+	}
+
+	for {
+		if r.buf.Len() > 0 {
+			return r.buf.Read(p)
+		}
+		r.buf.Reset()
+		if r.batchIdx == r.batchEnd {
+			return 0, io.EOF
+		}
+		r.a = r.a[:0]
+		r.t.InitialRows.FillBatch(r.batchIdx, r.cb, &r.a)
+		r.batchIdx++
+		if numCols := r.cb.Width(); cap(r.stringsBuf) < numCols {
+			r.stringsBuf = make([]string, numCols)
+		} else {
+			r.stringsBuf = r.stringsBuf[:numCols]
+		}
+		for rowIdx, numRows := 0, r.cb.Length(); rowIdx < numRows; rowIdx++ {
+			for colIdx, col := range r.cb.ColVecs() {
+				r.stringsBuf[colIdx] = colDatumToCSVString(col, rowIdx)
+			}
+			if err := r.csvW.Write(r.stringsBuf); err != nil {
+				return 0, err
+			}
+		}
+		r.csvW.Flush()
+	}
+}
+
+// NewCSVRowsReader returns an io.Reader that outputs the initial data of the
+// given table as CSVs. If batchEnd is the zero-value it defaults to the end of
+// the table.
+func NewCSVRowsReader(t Table, batchStart, batchEnd int) io.Reader {
+	if batchEnd == 0 {
+		batchEnd = t.InitialRows.NumBatches
+	}
+	r := &csvRowsReader{t: t, batchStart: batchStart, batchEnd: batchEnd, batchIdx: batchStart}
+	r.csvW = csv.NewWriter(&r.buf)
+	return r
+}
+
+func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
+	if col.Nulls().NullAt(rowIdx) {
 		return `NULL`
 	}
-	switch t := datum.(type) {
-	case int:
-		return strconv.Itoa(t)
-	case int64:
-		return fmt.Sprint(t)
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	case string:
-		return t
-	default:
-		panic(fmt.Sprintf("unsupported type %T: %v", datum, datum))
+	switch col.CanonicalTypeFamily() {
+	case types.BoolFamily:
+		return strconv.FormatBool(col.Bool()[rowIdx])
+	case types.IntFamily:
+		return strconv.FormatInt(col.Int64()[rowIdx], 10)
+	case types.FloatFamily:
+		return strconv.FormatFloat(col.Float64()[rowIdx], 'f', -1, 64)
+	case types.BytesFamily:
+		// See the HACK comment in ColBatchToRows.
+		bytes := col.Bytes().Get(rowIdx)
+		return *(*string)(unsafe.Pointer(&bytes))
 	}
+	panic(fmt.Sprintf(`unhandled type %s`, col.Type()))
 }
 
 // HandleCSV configures a Generator with url params and outputs the data for a
@@ -122,6 +188,9 @@ func HandleCSV(w http.ResponseWriter, req *http.Request, prefix string, meta Met
 	}
 	if table == nil {
 		return errors.Errorf(`could not find table %s in generator %s`, tableName, meta.Name)
+	}
+	if table.InitialRows.FillBatch == nil {
+		return errors.Errorf(`csv-server is not supported for workload %s`, meta.Name)
 	}
 
 	rowStart, rowEnd := 0, table.InitialRows.NumBatches

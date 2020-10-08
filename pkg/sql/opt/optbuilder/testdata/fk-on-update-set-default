@@ -1,0 +1,764 @@
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT DEFAULT 0 NOT NULL REFERENCES parent(p) ON UPDATE SET DEFAULT)
+----
+
+build-cascades
+UPDATE parent SET p = p * 10 WHERE p > 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── update-mapping:
+ │    │    └── p_new:5 => p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── project
+ │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── select
+ │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── scan parent
+ │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    └── filters
+ │         │         └── p:3 > 1
+ │         └── projections
+ │              └── p:3 * 10 [as=p_new:5]
+ └── cascade
+      └── update child
+           ├── columns: <none>
+           ├── fetch columns: c:9 child.p:10
+           ├── update-mapping:
+           │    └── p_new:14 => child.p:7
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: p_new:14!null c:9!null child.p:10!null p:12!null p_new:13!null
+           │    ├── inner-join (hash)
+           │    │    ├── columns: c:9!null child.p:10!null p:12!null p_new:13!null
+           │    │    ├── scan child
+           │    │    │    └── columns: c:9!null child.p:10!null
+           │    │    ├── select
+           │    │    │    ├── columns: p:12!null p_new:13!null
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p:12!null p_new:13!null
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  parent.p:3 => p:12
+           │    │    │    │         └──  p_new:5 => p_new:13
+           │    │    │    └── filters
+           │    │    │         └── p:12 IS DISTINCT FROM p_new:13
+           │    │    └── filters
+           │    │         └── child.p:10 = p:12
+           │    └── projections
+           │         └── 0 [as=p_new:14]
+           └── f-k-checks
+                └── f-k-checks-item: child(p) -> parent(p)
+                     └── anti-join (hash)
+                          ├── columns: p_new:15!null
+                          ├── with-scan &2
+                          │    ├── columns: p_new:15!null
+                          │    └── mapping:
+                          │         └──  p_new:14 => p_new:15
+                          ├── scan parent
+                          │    └── columns: parent.p:16!null
+                          └── filters
+                               └── p_new:15 = parent.p:16
+
+exec-ddl
+CREATE TABLE parent_multi (
+  pk INT PRIMARY KEY,
+  p INT, q INT,
+  UNIQUE (p, q),
+  FAMILY (pk),
+  FAMILY (p),
+  FAMILY (q)
+)
+----
+
+exec-ddl
+CREATE TABLE child_multi (
+  c INT PRIMARY KEY,
+  p INT DEFAULT 0,
+  q INT DEFAULT 1,
+  UNIQUE (c, q),
+  CONSTRAINT fk FOREIGN KEY (p, q) REFERENCES parent_multi(p, q) ON UPDATE SET DEFAULT 
+)
+----
+
+build-cascades
+UPDATE parent_multi SET p = p * 10, q = q + 1 WHERE pk > 1
+----
+root
+ ├── update parent_multi
+ │    ├── columns: <none>
+ │    ├── fetch columns: pk:5 p:6 q:7
+ │    ├── update-mapping:
+ │    │    ├── p_new:9 => p:2
+ │    │    └── q_new:10 => q:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── project
+ │         ├── columns: p_new:9 q_new:10 pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         ├── select
+ │         │    ├── columns: pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         │    ├── scan parent_multi
+ │         │    │    └── columns: pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         │    └── filters
+ │         │         └── pk:5 > 1
+ │         └── projections
+ │              ├── p:6 * 10 [as=p_new:9]
+ │              └── q:7 + 1 [as=q_new:10]
+ └── cascade
+      └── update child_multi
+           ├── columns: <none>
+           ├── fetch columns: c:15 child_multi.p:16 child_multi.q:17
+           ├── update-mapping:
+           │    ├── p_new:23 => child_multi.p:12
+           │    └── q_new:24 => child_multi.q:13
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: p_new:23!null q_new:24!null c:15!null child_multi.p:16!null child_multi.q:17!null p:19!null q:20!null p_new:21 q_new:22
+           │    ├── inner-join (hash)
+           │    │    ├── columns: c:15!null child_multi.p:16!null child_multi.q:17!null p:19!null q:20!null p_new:21 q_new:22
+           │    │    ├── scan child_multi
+           │    │    │    └── columns: c:15!null child_multi.p:16 child_multi.q:17
+           │    │    ├── select
+           │    │    │    ├── columns: p:19 q:20 p_new:21 q_new:22
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p:19 q:20 p_new:21 q_new:22
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  parent_multi.p:6 => p:19
+           │    │    │    │         ├──  parent_multi.q:7 => q:20
+           │    │    │    │         ├──  p_new:9 => p_new:21
+           │    │    │    │         └──  q_new:10 => q_new:22
+           │    │    │    └── filters
+           │    │    │         └── (p:19 IS DISTINCT FROM p_new:21) OR (q:20 IS DISTINCT FROM q_new:22)
+           │    │    └── filters
+           │    │         ├── child_multi.p:16 = p:19
+           │    │         └── child_multi.q:17 = q:20
+           │    └── projections
+           │         ├── 0 [as=p_new:23]
+           │         └── 1 [as=q_new:24]
+           └── f-k-checks
+                └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
+                     └── anti-join (hash)
+                          ├── columns: p_new:25!null q_new:26!null
+                          ├── with-scan &2
+                          │    ├── columns: p_new:25!null q_new:26!null
+                          │    └── mapping:
+                          │         ├──  p_new:23 => p_new:25
+                          │         └──  q_new:24 => q_new:26
+                          ├── scan parent_multi
+                          │    └── columns: parent_multi.p:28 parent_multi.q:29
+                          └── filters
+                               ├── p_new:25 = parent_multi.p:28
+                               └── q_new:26 = parent_multi.q:29
+
+# Update only one of the two FK columns. The "before" and "after" values of q
+# come from the same column in the mutation input.
+build-cascades
+UPDATE parent_multi SET p = p * 10 WHERE p > 1
+----
+root
+ ├── update parent_multi
+ │    ├── columns: <none>
+ │    ├── fetch columns: pk:5 p:6 q:7
+ │    ├── update-mapping:
+ │    │    └── p_new:9 => p:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── project
+ │         ├── columns: p_new:9!null pk:5!null p:6!null q:7 crdb_internal_mvcc_timestamp:8
+ │         ├── select
+ │         │    ├── columns: pk:5!null p:6!null q:7 crdb_internal_mvcc_timestamp:8
+ │         │    ├── scan parent_multi
+ │         │    │    └── columns: pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         │    └── filters
+ │         │         └── p:6 > 1
+ │         └── projections
+ │              └── p:6 * 10 [as=p_new:9]
+ └── cascade
+      └── update child_multi
+           ├── columns: <none>
+           ├── fetch columns: c:14 child_multi.p:15 child_multi.q:16
+           ├── update-mapping:
+           │    ├── p_new:22 => child_multi.p:11
+           │    └── q_new:23 => child_multi.q:12
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: p_new:22!null q_new:23!null c:14!null child_multi.p:15!null child_multi.q:16!null p:18!null q:19!null p_new:20!null q:21
+           │    ├── inner-join (hash)
+           │    │    ├── columns: c:14!null child_multi.p:15!null child_multi.q:16!null p:18!null q:19!null p_new:20!null q:21
+           │    │    ├── scan child_multi
+           │    │    │    └── columns: c:14!null child_multi.p:15 child_multi.q:16
+           │    │    ├── select
+           │    │    │    ├── columns: p:18!null q:19 p_new:20!null q:21
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p:18!null q:19 p_new:20!null q:21
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  parent_multi.p:6 => p:18
+           │    │    │    │         ├──  parent_multi.q:7 => q:19
+           │    │    │    │         ├──  p_new:9 => p_new:20
+           │    │    │    │         └──  parent_multi.q:7 => q:21
+           │    │    │    └── filters
+           │    │    │         └── (p:18 IS DISTINCT FROM p_new:20) OR (q:19 IS DISTINCT FROM q:21)
+           │    │    └── filters
+           │    │         ├── child_multi.p:15 = p:18
+           │    │         └── child_multi.q:16 = q:19
+           │    └── projections
+           │         ├── 0 [as=p_new:22]
+           │         └── 1 [as=q_new:23]
+           └── f-k-checks
+                └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
+                     └── anti-join (hash)
+                          ├── columns: p_new:24!null q_new:25!null
+                          ├── with-scan &2
+                          │    ├── columns: p_new:24!null q_new:25!null
+                          │    └── mapping:
+                          │         ├──  p_new:22 => p_new:24
+                          │         └──  q_new:23 => q_new:25
+                          ├── scan parent_multi
+                          │    └── columns: parent_multi.p:27 parent_multi.q:28
+                          └── filters
+                               ├── p_new:24 = parent_multi.p:27
+                               └── q_new:25 = parent_multi.q:28
+
+# Test a two-level cascade.
+exec-ddl
+CREATE TABLE grandchild (
+  g INT PRIMARY KEY,
+  c INT DEFAULT 10, q INT DEFAULT 11,
+  CONSTRAINT fk2 FOREIGN KEY (c, q) REFERENCES child_multi(c, q) ON UPDATE SET DEFAULT
+)
+----
+
+build-cascades
+UPDATE parent_multi SET q = q * 10 WHERE p > 1
+----
+root
+ ├── update parent_multi
+ │    ├── columns: <none>
+ │    ├── fetch columns: pk:5 p:6 q:7
+ │    ├── update-mapping:
+ │    │    └── q_new:9 => q:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── project
+ │         ├── columns: q_new:9 pk:5!null p:6!null q:7 crdb_internal_mvcc_timestamp:8
+ │         ├── select
+ │         │    ├── columns: pk:5!null p:6!null q:7 crdb_internal_mvcc_timestamp:8
+ │         │    ├── scan parent_multi
+ │         │    │    └── columns: pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         │    └── filters
+ │         │         └── p:6 > 1
+ │         └── projections
+ │              └── q:7 * 10 [as=q_new:9]
+ └── cascade
+      ├── update child_multi
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:14 child_multi.p:15 child_multi.q:16
+      │    ├── update-mapping:
+      │    │    ├── p_new:22 => child_multi.p:11
+      │    │    └── q_new:23 => child_multi.q:12
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── fk2
+      │    ├── project
+      │    │    ├── columns: p_new:22!null q_new:23!null c:14!null child_multi.p:15!null child_multi.q:16!null p:18!null q:19!null p:20!null q_new:21
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: c:14!null child_multi.p:15!null child_multi.q:16!null p:18!null q:19!null p:20!null q_new:21
+      │    │    │    ├── scan child_multi
+      │    │    │    │    └── columns: c:14!null child_multi.p:15 child_multi.q:16
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: p:18!null q:19 p:20!null q_new:21
+      │    │    │    │    ├── with-scan &1
+      │    │    │    │    │    ├── columns: p:18!null q:19 p:20!null q_new:21
+      │    │    │    │    │    └── mapping:
+      │    │    │    │    │         ├──  parent_multi.p:6 => p:18
+      │    │    │    │    │         ├──  parent_multi.q:7 => q:19
+      │    │    │    │    │         ├──  parent_multi.p:6 => p:20
+      │    │    │    │    │         └──  q_new:9 => q_new:21
+      │    │    │    │    └── filters
+      │    │    │    │         └── (p:18 IS DISTINCT FROM p:20) OR (q:19 IS DISTINCT FROM q_new:21)
+      │    │    │    └── filters
+      │    │    │         ├── child_multi.p:15 = p:18
+      │    │    │         └── child_multi.q:16 = q:19
+      │    │    └── projections
+      │    │         ├── 0 [as=p_new:22]
+      │    │         └── 1 [as=q_new:23]
+      │    └── f-k-checks
+      │         └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
+      │              └── anti-join (hash)
+      │                   ├── columns: p_new:24!null q_new:25!null
+      │                   ├── with-scan &2
+      │                   │    ├── columns: p_new:24!null q_new:25!null
+      │                   │    └── mapping:
+      │                   │         ├──  p_new:22 => p_new:24
+      │                   │         └──  q_new:23 => q_new:25
+      │                   ├── scan parent_multi
+      │                   │    └── columns: parent_multi.p:27 parent_multi.q:28
+      │                   └── filters
+      │                        ├── p_new:24 = parent_multi.p:27
+      │                        └── q_new:25 = parent_multi.q:28
+      └── cascade
+           └── update grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:34 grandchild.c:35 grandchild.q:36
+                ├── update-mapping:
+                │    ├── c_new:42 => grandchild.c:31
+                │    └── q_new:43 => grandchild.q:32
+                ├── input binding: &3
+                ├── project
+                │    ├── columns: c_new:42!null q_new:43!null g:34!null grandchild.c:35!null grandchild.q:36!null c:38!null q:39!null c:40!null q_new:41!null
+                │    ├── inner-join (hash)
+                │    │    ├── columns: g:34!null grandchild.c:35!null grandchild.q:36!null c:38!null q:39!null c:40!null q_new:41!null
+                │    │    ├── scan grandchild
+                │    │    │    └── columns: g:34!null grandchild.c:35 grandchild.q:36
+                │    │    ├── select
+                │    │    │    ├── columns: c:38!null q:39!null c:40!null q_new:41!null
+                │    │    │    ├── with-scan &2
+                │    │    │    │    ├── columns: c:38!null q:39!null c:40!null q_new:41!null
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  child_multi.c:14 => c:38
+                │    │    │    │         ├──  child_multi.q:16 => q:39
+                │    │    │    │         ├──  child_multi.c:14 => c:40
+                │    │    │    │         └──  q_new:23 => q_new:41
+                │    │    │    └── filters
+                │    │    │         └── (c:38 IS DISTINCT FROM c:40) OR (q:39 IS DISTINCT FROM q_new:41)
+                │    │    └── filters
+                │    │         ├── grandchild.c:35 = c:38
+                │    │         └── grandchild.q:36 = q:39
+                │    └── projections
+                │         ├── 10 [as=c_new:42]
+                │         └── 11 [as=q_new:43]
+                └── f-k-checks
+                     └── f-k-checks-item: grandchild(c,q) -> child_multi(c,q)
+                          └── anti-join (hash)
+                               ├── columns: c_new:44!null q_new:45!null
+                               ├── with-scan &3
+                               │    ├── columns: c_new:44!null q_new:45!null
+                               │    └── mapping:
+                               │         ├──  c_new:42 => c_new:44
+                               │         └──  q_new:43 => q_new:45
+                               ├── scan child_multi
+                               │    └── columns: child_multi.c:46!null child_multi.q:48
+                               └── filters
+                                    ├── c_new:44 = child_multi.c:46
+                                    └── q_new:45 = child_multi.q:48
+
+build-cascades
+UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
+----
+root
+ ├── upsert parent_multi
+ │    ├── columns: <none>
+ │    ├── arbiter indexes: primary
+ │    ├── canary column: pk:8
+ │    ├── fetch columns: pk:8 p:9 q:10
+ │    ├── insert-mapping:
+ │    │    ├── column1:5 => pk:1
+ │    │    ├── column2:6 => p:2
+ │    │    └── column3:7 => q:3
+ │    ├── update-mapping:
+ │    │    ├── column2:6 => p:2
+ │    │    └── column3:7 => q:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── project
+ │         ├── columns: upsert_pk:12 column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         ├── left-join (hash)
+ │         │    ├── columns: column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    ├── ensure-upsert-distinct-on
+ │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    ├── grouping columns: column1:5!null
+ │         │    │    ├── values
+ │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    │    ├── (1, 10, 10)
+ │         │    │    │    └── (2, 20, 20)
+ │         │    │    └── aggregations
+ │         │    │         ├── first-agg [as=column2:6]
+ │         │    │         │    └── column2:6
+ │         │    │         └── first-agg [as=column3:7]
+ │         │    │              └── column3:7
+ │         │    ├── scan parent_multi
+ │         │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    └── filters
+ │         │         └── column1:5 = pk:8
+ │         └── projections
+ │              └── CASE WHEN pk:8 IS NULL THEN column1:5 ELSE pk:8 END [as=upsert_pk:12]
+ └── cascade
+      ├── update child_multi
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:17 child_multi.p:18 child_multi.q:19
+      │    ├── update-mapping:
+      │    │    ├── p_new:25 => child_multi.p:14
+      │    │    └── q_new:26 => child_multi.q:15
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── fk2
+      │    ├── project
+      │    │    ├── columns: p_new:25!null q_new:26!null c:17!null child_multi.p:18!null child_multi.q:19!null p:21!null q:22!null column2:23!null column3:24!null
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p:21!null q:22!null column2:23!null column3:24!null
+      │    │    │    ├── scan child_multi
+      │    │    │    │    └── columns: c:17!null child_multi.p:18 child_multi.q:19
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: p:21 q:22 column2:23!null column3:24!null
+      │    │    │    │    ├── with-scan &1
+      │    │    │    │    │    ├── columns: p:21 q:22 column2:23!null column3:24!null
+      │    │    │    │    │    └── mapping:
+      │    │    │    │    │         ├──  parent_multi.p:9 => p:21
+      │    │    │    │    │         ├──  parent_multi.q:10 => q:22
+      │    │    │    │    │         ├──  column2:6 => column2:23
+      │    │    │    │    │         └──  column3:7 => column3:24
+      │    │    │    │    └── filters
+      │    │    │    │         └── (p:21 IS DISTINCT FROM column2:23) OR (q:22 IS DISTINCT FROM column3:24)
+      │    │    │    └── filters
+      │    │    │         ├── child_multi.p:18 = p:21
+      │    │    │         └── child_multi.q:19 = q:22
+      │    │    └── projections
+      │    │         ├── 0 [as=p_new:25]
+      │    │         └── 1 [as=q_new:26]
+      │    └── f-k-checks
+      │         └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
+      │              └── anti-join (hash)
+      │                   ├── columns: p_new:27!null q_new:28!null
+      │                   ├── with-scan &2
+      │                   │    ├── columns: p_new:27!null q_new:28!null
+      │                   │    └── mapping:
+      │                   │         ├──  p_new:25 => p_new:27
+      │                   │         └──  q_new:26 => q_new:28
+      │                   ├── scan parent_multi
+      │                   │    └── columns: parent_multi.p:30 parent_multi.q:31
+      │                   └── filters
+      │                        ├── p_new:27 = parent_multi.p:30
+      │                        └── q_new:28 = parent_multi.q:31
+      └── cascade
+           └── update grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:37 grandchild.c:38 grandchild.q:39
+                ├── update-mapping:
+                │    ├── c_new:45 => grandchild.c:34
+                │    └── q_new:46 => grandchild.q:35
+                ├── input binding: &3
+                ├── project
+                │    ├── columns: c_new:45!null q_new:46!null g:37!null grandchild.c:38!null grandchild.q:39!null c:41!null q:42!null c:43!null q_new:44!null
+                │    ├── inner-join (hash)
+                │    │    ├── columns: g:37!null grandchild.c:38!null grandchild.q:39!null c:41!null q:42!null c:43!null q_new:44!null
+                │    │    ├── scan grandchild
+                │    │    │    └── columns: g:37!null grandchild.c:38 grandchild.q:39
+                │    │    ├── select
+                │    │    │    ├── columns: c:41!null q:42!null c:43!null q_new:44!null
+                │    │    │    ├── with-scan &2
+                │    │    │    │    ├── columns: c:41!null q:42!null c:43!null q_new:44!null
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  child_multi.c:17 => c:41
+                │    │    │    │         ├──  child_multi.q:19 => q:42
+                │    │    │    │         ├──  child_multi.c:17 => c:43
+                │    │    │    │         └──  q_new:26 => q_new:44
+                │    │    │    └── filters
+                │    │    │         └── (c:41 IS DISTINCT FROM c:43) OR (q:42 IS DISTINCT FROM q_new:44)
+                │    │    └── filters
+                │    │         ├── grandchild.c:38 = c:41
+                │    │         └── grandchild.q:39 = q:42
+                │    └── projections
+                │         ├── 10 [as=c_new:45]
+                │         └── 11 [as=q_new:46]
+                └── f-k-checks
+                     └── f-k-checks-item: grandchild(c,q) -> child_multi(c,q)
+                          └── anti-join (hash)
+                               ├── columns: c_new:47!null q_new:48!null
+                               ├── with-scan &3
+                               │    ├── columns: c_new:47!null q_new:48!null
+                               │    └── mapping:
+                               │         ├──  c_new:45 => c_new:47
+                               │         └──  q_new:46 => q_new:48
+                               ├── scan child_multi
+                               │    └── columns: child_multi.c:49!null child_multi.q:51
+                               └── filters
+                                    ├── c_new:47 = child_multi.c:49
+                                    └── q_new:48 = child_multi.q:51
+
+# Upsert that only touches one of the FK columns.
+build-cascades
+UPSERT INTO parent_multi(pk, p) VALUES (1, 10), (2, 20)
+----
+root
+ ├── upsert parent_multi
+ │    ├── columns: <none>
+ │    ├── arbiter indexes: primary
+ │    ├── canary column: pk:8
+ │    ├── fetch columns: pk:8 p:9 q:10
+ │    ├── insert-mapping:
+ │    │    ├── column1:5 => pk:1
+ │    │    ├── column2:6 => p:2
+ │    │    └── column7:7 => q:3
+ │    ├── update-mapping:
+ │    │    └── column2:6 => p:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── project
+ │         ├── columns: upsert_pk:12 upsert_q:13 column1:5!null column2:6!null column7:7 pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         ├── left-join (hash)
+ │         │    ├── columns: column1:5!null column2:6!null column7:7 pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    ├── ensure-upsert-distinct-on
+ │         │    │    ├── columns: column1:5!null column2:6!null column7:7
+ │         │    │    ├── grouping columns: column1:5!null
+ │         │    │    ├── project
+ │         │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+ │         │    │    │    ├── values
+ │         │    │    │    │    ├── columns: column1:5!null column2:6!null
+ │         │    │    │    │    ├── (1, 10)
+ │         │    │    │    │    └── (2, 20)
+ │         │    │    │    └── projections
+ │         │    │    │         └── NULL::INT8 [as=column7:7]
+ │         │    │    └── aggregations
+ │         │    │         ├── first-agg [as=column2:6]
+ │         │    │         │    └── column2:6
+ │         │    │         └── first-agg [as=column7:7]
+ │         │    │              └── column7:7
+ │         │    ├── scan parent_multi
+ │         │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    └── filters
+ │         │         └── column1:5 = pk:8
+ │         └── projections
+ │              ├── CASE WHEN pk:8 IS NULL THEN column1:5 ELSE pk:8 END [as=upsert_pk:12]
+ │              └── CASE WHEN pk:8 IS NULL THEN column7:7 ELSE q:10 END [as=upsert_q:13]
+ └── cascade
+      ├── update child_multi
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:18 child_multi.p:19 child_multi.q:20
+      │    ├── update-mapping:
+      │    │    ├── p_new:26 => child_multi.p:15
+      │    │    └── q_new:27 => child_multi.q:16
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── fk2
+      │    ├── project
+      │    │    ├── columns: p_new:26!null q_new:27!null c:18!null child_multi.p:19!null child_multi.q:20!null p:22!null q:23!null column2:24!null q:25
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: c:18!null child_multi.p:19!null child_multi.q:20!null p:22!null q:23!null column2:24!null q:25
+      │    │    │    ├── scan child_multi
+      │    │    │    │    └── columns: c:18!null child_multi.p:19 child_multi.q:20
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: p:22 q:23 column2:24!null q:25
+      │    │    │    │    ├── with-scan &1
+      │    │    │    │    │    ├── columns: p:22 q:23 column2:24!null q:25
+      │    │    │    │    │    └── mapping:
+      │    │    │    │    │         ├──  parent_multi.p:9 => p:22
+      │    │    │    │    │         ├──  parent_multi.q:10 => q:23
+      │    │    │    │    │         ├──  column2:6 => column2:24
+      │    │    │    │    │         └──  parent_multi.q:10 => q:25
+      │    │    │    │    └── filters
+      │    │    │    │         └── (p:22 IS DISTINCT FROM column2:24) OR (q:23 IS DISTINCT FROM q:25)
+      │    │    │    └── filters
+      │    │    │         ├── child_multi.p:19 = p:22
+      │    │    │         └── child_multi.q:20 = q:23
+      │    │    └── projections
+      │    │         ├── 0 [as=p_new:26]
+      │    │         └── 1 [as=q_new:27]
+      │    └── f-k-checks
+      │         └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
+      │              └── anti-join (hash)
+      │                   ├── columns: p_new:28!null q_new:29!null
+      │                   ├── with-scan &2
+      │                   │    ├── columns: p_new:28!null q_new:29!null
+      │                   │    └── mapping:
+      │                   │         ├──  p_new:26 => p_new:28
+      │                   │         └──  q_new:27 => q_new:29
+      │                   ├── scan parent_multi
+      │                   │    └── columns: parent_multi.p:31 parent_multi.q:32
+      │                   └── filters
+      │                        ├── p_new:28 = parent_multi.p:31
+      │                        └── q_new:29 = parent_multi.q:32
+      └── cascade
+           └── update grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:38 grandchild.c:39 grandchild.q:40
+                ├── update-mapping:
+                │    ├── c_new:46 => grandchild.c:35
+                │    └── q_new:47 => grandchild.q:36
+                ├── input binding: &3
+                ├── project
+                │    ├── columns: c_new:46!null q_new:47!null g:38!null grandchild.c:39!null grandchild.q:40!null c:42!null q:43!null c:44!null q_new:45!null
+                │    ├── inner-join (hash)
+                │    │    ├── columns: g:38!null grandchild.c:39!null grandchild.q:40!null c:42!null q:43!null c:44!null q_new:45!null
+                │    │    ├── scan grandchild
+                │    │    │    └── columns: g:38!null grandchild.c:39 grandchild.q:40
+                │    │    ├── select
+                │    │    │    ├── columns: c:42!null q:43!null c:44!null q_new:45!null
+                │    │    │    ├── with-scan &2
+                │    │    │    │    ├── columns: c:42!null q:43!null c:44!null q_new:45!null
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  child_multi.c:18 => c:42
+                │    │    │    │         ├──  child_multi.q:20 => q:43
+                │    │    │    │         ├──  child_multi.c:18 => c:44
+                │    │    │    │         └──  q_new:27 => q_new:45
+                │    │    │    └── filters
+                │    │    │         └── (c:42 IS DISTINCT FROM c:44) OR (q:43 IS DISTINCT FROM q_new:45)
+                │    │    └── filters
+                │    │         ├── grandchild.c:39 = c:42
+                │    │         └── grandchild.q:40 = q:43
+                │    └── projections
+                │         ├── 10 [as=c_new:46]
+                │         └── 11 [as=q_new:47]
+                └── f-k-checks
+                     └── f-k-checks-item: grandchild(c,q) -> child_multi(c,q)
+                          └── anti-join (hash)
+                               ├── columns: c_new:48!null q_new:49!null
+                               ├── with-scan &3
+                               │    ├── columns: c_new:48!null q_new:49!null
+                               │    └── mapping:
+                               │         ├──  c_new:46 => c_new:48
+                               │         └──  q_new:47 => q_new:49
+                               ├── scan child_multi
+                               │    └── columns: child_multi.c:50!null child_multi.q:52
+                               └── filters
+                                    ├── c_new:48 = child_multi.c:50
+                                    └── q_new:49 = child_multi.q:52
+
+build-cascades
+INSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20) ON CONFLICT (p,q) DO UPDATE SET p = 100
+----
+root
+ ├── upsert parent_multi
+ │    ├── columns: <none>
+ │    ├── arbiter indexes: secondary
+ │    ├── canary column: pk:8
+ │    ├── fetch columns: pk:8 p:9 q:10
+ │    ├── insert-mapping:
+ │    │    ├── column1:5 => pk:1
+ │    │    ├── column2:6 => p:2
+ │    │    └── column3:7 => q:3
+ │    ├── update-mapping:
+ │    │    └── upsert_p:14 => p:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── project
+ │         ├── columns: upsert_pk:13 upsert_p:14!null upsert_q:15 column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11 p_new:12!null
+ │         ├── project
+ │         │    ├── columns: p_new:12!null column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    ├── left-join (hash)
+ │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    │    ├── ensure-upsert-distinct-on
+ │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    │    ├── grouping columns: column2:6!null column3:7!null
+ │         │    │    │    ├── values
+ │         │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+ │         │    │    │    │    ├── (1, 10, 10)
+ │         │    │    │    │    └── (2, 20, 20)
+ │         │    │    │    └── aggregations
+ │         │    │    │         └── first-agg [as=column1:5]
+ │         │    │    │              └── column1:5
+ │         │    │    ├── scan parent_multi
+ │         │    │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    │    └── filters
+ │         │    │         ├── column2:6 = p:9
+ │         │    │         └── column3:7 = q:10
+ │         │    └── projections
+ │         │         └── 100 [as=p_new:12]
+ │         └── projections
+ │              ├── CASE WHEN pk:8 IS NULL THEN column1:5 ELSE pk:8 END [as=upsert_pk:13]
+ │              ├── CASE WHEN pk:8 IS NULL THEN column2:6 ELSE p_new:12 END [as=upsert_p:14]
+ │              └── CASE WHEN pk:8 IS NULL THEN column3:7 ELSE q:10 END [as=upsert_q:15]
+ └── cascade
+      ├── update child_multi
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:20 child_multi.p:21 child_multi.q:22
+      │    ├── update-mapping:
+      │    │    ├── p_new:28 => child_multi.p:17
+      │    │    └── q_new:29 => child_multi.q:18
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── fk2
+      │    ├── project
+      │    │    ├── columns: p_new:28!null q_new:29!null c:20!null child_multi.p:21!null child_multi.q:22!null p:24!null q:25!null upsert_p:26!null q:27
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p:24!null q:25!null upsert_p:26!null q:27
+      │    │    │    ├── scan child_multi
+      │    │    │    │    └── columns: c:20!null child_multi.p:21 child_multi.q:22
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: p:24 q:25 upsert_p:26!null q:27
+      │    │    │    │    ├── with-scan &1
+      │    │    │    │    │    ├── columns: p:24 q:25 upsert_p:26!null q:27
+      │    │    │    │    │    └── mapping:
+      │    │    │    │    │         ├──  parent_multi.p:9 => p:24
+      │    │    │    │    │         ├──  parent_multi.q:10 => q:25
+      │    │    │    │    │         ├──  upsert_p:14 => upsert_p:26
+      │    │    │    │    │         └──  parent_multi.q:10 => q:27
+      │    │    │    │    └── filters
+      │    │    │    │         └── (p:24 IS DISTINCT FROM upsert_p:26) OR (q:25 IS DISTINCT FROM q:27)
+      │    │    │    └── filters
+      │    │    │         ├── child_multi.p:21 = p:24
+      │    │    │         └── child_multi.q:22 = q:25
+      │    │    └── projections
+      │    │         ├── 0 [as=p_new:28]
+      │    │         └── 1 [as=q_new:29]
+      │    └── f-k-checks
+      │         └── f-k-checks-item: child_multi(p,q) -> parent_multi(p,q)
+      │              └── anti-join (hash)
+      │                   ├── columns: p_new:30!null q_new:31!null
+      │                   ├── with-scan &2
+      │                   │    ├── columns: p_new:30!null q_new:31!null
+      │                   │    └── mapping:
+      │                   │         ├──  p_new:28 => p_new:30
+      │                   │         └──  q_new:29 => q_new:31
+      │                   ├── scan parent_multi
+      │                   │    └── columns: parent_multi.p:33 parent_multi.q:34
+      │                   └── filters
+      │                        ├── p_new:30 = parent_multi.p:33
+      │                        └── q_new:31 = parent_multi.q:34
+      └── cascade
+           └── update grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:40 grandchild.c:41 grandchild.q:42
+                ├── update-mapping:
+                │    ├── c_new:48 => grandchild.c:37
+                │    └── q_new:49 => grandchild.q:38
+                ├── input binding: &3
+                ├── project
+                │    ├── columns: c_new:48!null q_new:49!null g:40!null grandchild.c:41!null grandchild.q:42!null c:44!null q:45!null c:46!null q_new:47!null
+                │    ├── inner-join (hash)
+                │    │    ├── columns: g:40!null grandchild.c:41!null grandchild.q:42!null c:44!null q:45!null c:46!null q_new:47!null
+                │    │    ├── scan grandchild
+                │    │    │    └── columns: g:40!null grandchild.c:41 grandchild.q:42
+                │    │    ├── select
+                │    │    │    ├── columns: c:44!null q:45!null c:46!null q_new:47!null
+                │    │    │    ├── with-scan &2
+                │    │    │    │    ├── columns: c:44!null q:45!null c:46!null q_new:47!null
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  child_multi.c:20 => c:44
+                │    │    │    │         ├──  child_multi.q:22 => q:45
+                │    │    │    │         ├──  child_multi.c:20 => c:46
+                │    │    │    │         └──  q_new:29 => q_new:47
+                │    │    │    └── filters
+                │    │    │         └── (c:44 IS DISTINCT FROM c:46) OR (q:45 IS DISTINCT FROM q_new:47)
+                │    │    └── filters
+                │    │         ├── grandchild.c:41 = c:44
+                │    │         └── grandchild.q:42 = q:45
+                │    └── projections
+                │         ├── 10 [as=c_new:48]
+                │         └── 11 [as=q_new:49]
+                └── f-k-checks
+                     └── f-k-checks-item: grandchild(c,q) -> child_multi(c,q)
+                          └── anti-join (hash)
+                               ├── columns: c_new:50!null q_new:51!null
+                               ├── with-scan &3
+                               │    ├── columns: c_new:50!null q_new:51!null
+                               │    └── mapping:
+                               │         ├──  c_new:48 => c_new:50
+                               │         └──  q_new:49 => q_new:51
+                               ├── scan child_multi
+                               │    └── columns: child_multi.c:52!null child_multi.q:54
+                               └── filters
+                                    ├── c_new:50 = child_multi.c:52
+                                    └── q_new:51 = child_multi.q:54

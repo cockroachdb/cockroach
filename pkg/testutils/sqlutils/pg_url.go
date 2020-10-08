@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqlutils
 
@@ -41,6 +37,14 @@ import (
 // Args:
 //  prefix: A prefix to be prepended to the temp file names generated, for debugging.
 func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.URL, func()) {
+	return PGUrlWithOptionalClientCerts(t, servingAddr, prefix, user, true /* withCerts */)
+}
+
+// PGUrlWithOptionalClientCerts is like PGUrl but the caller can
+// customize whether the client certificates are loaded on-disk and in the URL.
+func PGUrlWithOptionalClientCerts(
+	t testing.TB, servingAddr, prefix string, user *url.Userinfo, withClientCerts bool,
+) (url.URL, func()) {
 	host, port, err := net.SplitHostPort(servingAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -54,19 +58,24 @@ func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.UR
 	}
 
 	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
-	keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
-
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
 	tempCAPath := securitytest.RestrictedCopy(t, caPath, tempDir, "ca")
-	tempCertPath := securitytest.RestrictedCopy(t, certPath, tempDir, "cert")
-	tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
 	options := url.Values{}
-	options.Add("sslmode", "verify-full")
 	options.Add("sslrootcert", tempCAPath)
-	options.Add("sslcert", tempCertPath)
-	options.Add("sslkey", tempKeyPath)
+
+	if withClientCerts {
+		certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
+		keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
+
+		// Copy these assets to disk from embedded strings, so this test can
+		// run from a standalone binary.
+		tempCertPath := securitytest.RestrictedCopy(t, certPath, tempDir, "cert")
+		tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
+		options.Add("sslcert", tempCertPath)
+		options.Add("sslkey", tempKeyPath)
+		options.Add("sslmode", "verify-full")
+	} else {
+		options.Add("sslmode", "verify-ca")
+	}
 
 	return url.URL{
 			Scheme:   "postgres",

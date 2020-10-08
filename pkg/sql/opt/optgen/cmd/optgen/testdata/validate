@@ -10,13 +10,13 @@ define True {}
 test.opt:3:1: Name rule is missing "Normalize" or "Explore" tag
 
 #
-# Ensure that there is only one private field in define, and that it is the
-# last field.
+# Ensure that there is only one private field in define, and it is after the
+# child expressions and before unexported fields.
 #
 optgen compile test.opt
 define Op {
     Private Type
-    Other   Expr
+    Other   RelExpr
 }
 
 define Op2 {
@@ -24,28 +24,54 @@ define Op2 {
     Private2 Type
 }
 ----
-test.opt:2:5: private field 'Private' is not the last field in 'Op'
-test.opt:7:5: private field 'Private' is not the last field in 'Op2'
+test.opt:3:5: expression field 'Other' cannot follow private or unexported fields in 'Op'
+test.opt:8:5: private field 'Private2' cannot follow private or unexported field in 'Op2'
 
-#
-# Ensure that there is only one list field in define, and that it is the last
-# field.
-#
 optgen compile test.opt
 define Op {
-    List    ExprList
-    Private Type
+    unexported Type
+    Private    Type
 }
 
 define Op2 {
-    List  ExprList
-    Input Expr
-}
-
-define Op3 {
-    List  ExprList
-    List2 ExprList
+    unexported1 Type
+    _           Type
+    unexported2 Type
 }
 ----
-test.opt:7:5: list field 'List' is not the last non-private field in 'Op2'
-test.opt:12:5: list field 'List' is not the last non-private field in 'Op3'
+test.opt:3:5: private field 'Private' cannot follow private or unexported field in 'Op'
+test.opt:8:5: private field '_' cannot follow private or unexported field in 'Op2'
+
+#
+# Ensure that unexported fields are at the end.
+#
+optgen compile test.opt
+
+define Op {
+    undexported Type
+    Other       RelExpr
+}
+
+define Op2 {
+    Other       RelExpr
+    unexported  Type
+    Private     Type
+}
+----
+test.opt:3:5: expression field 'Other' cannot follow private or unexported fields in 'Op'
+test.opt:9:5: private field 'Private' cannot follow private or unexported field in 'Op2'
+
+#
+# Ensure that list match type exists.
+#
+optgen compile test.opt
+[Scalar]
+define And {
+    Left  ScalarExpr
+    Right ScalarExpr
+}
+
+[InvalidRule, Normalize]
+(And $left:* []) => $left
+----
+test.opt:8:14: list match operator cannot match field of type ScalarExpr

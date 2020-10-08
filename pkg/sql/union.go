@@ -1,29 +1,24 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // unionNode is a planNode whose rows are the result of one of three set
@@ -67,66 +62,33 @@ type unionNode struct {
 	// right and left are the data source operands.
 	// right is read first, to populate the `emit` field.
 	right, left planNode
+
 	// columns contains the metadata for the results of this node.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 	// inverted, when true, indicates that the right plan corresponds to
 	// the left operand in the input SQL syntax, and vice-versa.
 	inverted bool
 	// emitAll is a performance optimization for UNION ALL. When set
 	// the union logic avoids the `emit` logic entirely.
 	emitAll bool
-	// emit contains the rows seen on the right so far and performs the
-	// selection/filtering logic.
-	emit unionNodeEmit
 
 	// unionType is the type of operation (UNION, INTERSECT, EXCEPT)
 	unionType tree.UnionType
 	// all indicates if the operation is the ALL or DISTINCT version
 	all bool
-
-	run unionRun
-}
-
-// Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) Union(
-	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
-) (planNode, error) {
-	left, err := p.newPlan(ctx, n.Left, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-	right, err := p.newPlan(ctx, n.Right, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.newUnionNode(n.Type, n.All, left, right)
 }
 
 func (p *planner) newUnionNode(
 	typ tree.UnionType, all bool, left, right planNode,
 ) (planNode, error) {
-	var emitAll = false
-	var emit unionNodeEmit
+	emitAll := false
 	switch typ {
 	case tree.UnionOp:
 		if all {
 			emitAll = true
-		} else {
-			emit = make(unionNodeEmitDistinct)
 		}
 	case tree.IntersectOp:
-		if all {
-			emit = make(intersectNodeEmitAll)
-		} else {
-			emit = make(intersectNodeEmitDistinct)
-		}
 	case tree.ExceptOp:
-		if all {
-			emit = make(exceptNodeEmitAll)
-		} else {
-			emit = make(exceptNodeEmitDistinct)
-		}
 	default:
 		return nil, errors.Errorf("%v is not supported", typ)
 	}
@@ -134,27 +96,24 @@ func (p *planner) newUnionNode(
 	leftColumns := planColumns(left)
 	rightColumns := planColumns(right)
 	if len(leftColumns) != len(rightColumns) {
-		return nil, pgerror.NewErrorf(
-			pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(
+			pgcode.Syntax,
 			"each %v query must have the same number of columns: %d vs %d",
 			typ, len(leftColumns), len(rightColumns),
 		)
 	}
-	unionColumns := append(sqlbase.ResultColumns(nil), leftColumns...)
+	unionColumns := append(colinfo.ResultColumns(nil), leftColumns...)
 	for i := 0; i < len(unionColumns); i++ {
 		l := leftColumns[i]
 		r := rightColumns[i]
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.Typ.Equivalent(r.Typ) || l.Typ == types.Unknown || r.Typ == types.Unknown) {
-			return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+		if !(l.Typ.Equivalent(r.Typ) || l.Typ.Family() == types.UnknownFamily || r.Typ.Family() == types.UnknownFamily) {
+			return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 				"%v types %s and %s cannot be matched", typ, l.Typ, r.Typ)
 		}
-		if l.Hidden != r.Hidden {
-			return nil, fmt.Errorf("%v types cannot be matched", typ)
-		}
-		if l.Typ == types.Unknown {
+		if l.Typ.Family() == types.UnknownFamily {
 			unionColumns[i].Typ = r.Typ
 		}
 	}
@@ -176,184 +135,25 @@ func (p *planner) newUnionNode(
 		columns:   unionColumns,
 		inverted:  inverted,
 		emitAll:   emitAll,
-		emit:      emit,
 		unionType: typ,
 		all:       all,
 	}
 	return node, nil
 }
 
-// unionRun contains the run-time state of unionNode during local execution.
-type unionRun struct {
-	// scratch is a preallocated buffer for formatting the key of the
-	// current row on the right.
-	scratch []byte
-}
-
 func (n *unionNode) startExec(params runParams) error {
-	n.run.scratch = make([]byte, 0)
-	return nil
+	panic("unionNode cannot be run in local mode")
 }
 
 func (n *unionNode) Next(params runParams) (bool, error) {
-	if err := params.p.cancelChecker.Check(); err != nil {
-		return false, err
-	}
-	if n.right != nil {
-		return n.readRight(params)
-	}
-	if n.left != nil {
-		return n.readLeft(params)
-	}
-	return false, nil
+	panic("unionNode cannot be run in local mode")
 }
 
 func (n *unionNode) Values() tree.Datums {
-	if n.right != nil {
-		return n.right.Values()
-	}
-	if n.left != nil {
-		return n.left.Values()
-	}
-	return nil
+	panic("unionNode cannot be run in local mode")
 }
 
 func (n *unionNode) Close(ctx context.Context) {
-	if n.right != nil {
-		n.right.Close(ctx)
-		n.right = nil
-	}
-	if n.left != nil {
-		n.left.Close(ctx)
-		n.left = nil
-	}
-}
-
-func (n *unionNode) readRight(params runParams) (bool, error) {
-	next, err := n.right.Next(params)
-	for ; next; next, err = n.right.Next(params) {
-		if n.emitAll {
-			return true, nil
-		}
-		n.run.scratch = n.run.scratch[:0]
-		if n.run.scratch, err = sqlbase.EncodeDatums(n.run.scratch, n.right.Values()); err != nil {
-			return false, err
-		}
-		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
-		// use a lot of memory for big rows or big resultsets. Consider using a hash
-		// of the bytes instead.
-		if n.emit.emitRight(n.run.scratch) {
-			return true, nil
-		}
-	}
-	if err != nil {
-		return false, err
-	}
-
-	n.right.Close(params.ctx)
-	n.right = nil
-	return n.readLeft(params)
-}
-
-func (n *unionNode) readLeft(params runParams) (bool, error) {
-	next, err := n.left.Next(params)
-	for ; next; next, err = n.left.Next(params) {
-		if n.emitAll {
-			return true, nil
-		}
-		n.run.scratch = n.run.scratch[:0]
-		if n.run.scratch, err = sqlbase.EncodeDatums(n.run.scratch, n.left.Values()); err != nil {
-			return false, err
-		}
-		if n.emit.emitLeft(n.run.scratch) {
-			return true, nil
-		}
-	}
-	if err != nil {
-		return false, err
-	}
-	n.left.Close(params.ctx)
-	n.left = nil
-	return false, nil
-}
-
-// unionNodeEmit represents the emitter logic for one of the six combinations of
-// UNION/INTERSECT/EXCEPT and ALL/DISTINCT. As right and then left are iterated,
-// state is kept and used to compute the set operation as well as distinctness.
-type unionNodeEmit interface {
-	emitRight([]byte) bool
-	emitLeft([]byte) bool
-}
-
-type unionNodeEmitDistinct map[string]int
-type intersectNodeEmitAll map[string]int
-type intersectNodeEmitDistinct map[string]int
-type exceptNodeEmitAll map[string]int
-type exceptNodeEmitDistinct map[string]int
-
-// NB: the compiler optimizes out the string allocation in
-// `myMap[string(myBytes)]`. See:
-// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
-func (e unionNodeEmitDistinct) emitRight(b []byte) bool {
-	_, ok := e[string(b)]
-	e[string(b)] = 1
-	return !ok
-}
-
-func (e unionNodeEmitDistinct) emitLeft(b []byte) bool {
-	_, ok := e[string(b)]
-	e[string(b)] = 1
-	return !ok
-}
-
-func (e intersectNodeEmitAll) emitRight(b []byte) bool {
-	e[string(b)]++
-	return false
-}
-
-func (e intersectNodeEmitAll) emitLeft(b []byte) bool {
-	if v, ok := e[string(b)]; ok && v > 0 {
-		e[string(b)]--
-		return true
-	}
-	return false
-}
-
-func (e intersectNodeEmitDistinct) emitRight(b []byte) bool {
-	e[string(b)]++
-	return false
-}
-
-func (e intersectNodeEmitDistinct) emitLeft(b []byte) bool {
-	if v, ok := e[string(b)]; ok && v > 0 {
-		e[string(b)] = 0
-		return true
-	}
-	return false
-}
-
-func (e exceptNodeEmitAll) emitRight(b []byte) bool {
-	e[string(b)]++
-	return false
-}
-
-func (e exceptNodeEmitAll) emitLeft(b []byte) bool {
-	if v, ok := e[string(b)]; ok && v > 0 {
-		e[string(b)]--
-		return false
-	}
-	return true
-}
-
-func (e exceptNodeEmitDistinct) emitRight(b []byte) bool {
-	e[string(b)]++
-	return false
-}
-
-func (e exceptNodeEmitDistinct) emitLeft(b []byte) bool {
-	if _, ok := e[string(b)]; !ok {
-		e[string(b)] = 0
-		return true
-	}
-	return false
+	n.right.Close(ctx)
+	n.left.Close(ctx)
 }

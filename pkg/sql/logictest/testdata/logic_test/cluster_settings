@@ -1,0 +1,117 @@
+statement ok
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1ms'
+
+statement error pq: cannot set sql.log.slow_query.latency_threshold to a negative duration
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '-1ms'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '-1'
+
+statement error pq: could not parse "true" as type interval: interval
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = 'true'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = true
+
+statement error buffer message size must be at least 16 kB
+SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '1b'
+
+statement ok
+SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '64MB'
+
+# Test permissions for modifying cluster settings.
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to show cluster setting 'sql.defaults.default_int_size'
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+
+statement error only users with the admin role are allowed to set cluster setting 'cloudstorage.gs.default.key'
+SET CLUSTER SETTING cloudstorage.gs.default.key = 'foo'
+
+statement error only users with the admin role are allowed to show cluster setting 'cloudstorage.gs.default.key'
+SHOW CLUSTER SETTING cloudstorage.gs.default.key
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to SHOW CLUSTER SETTINGS
+SHOW CLUSTER SETTINGS
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to SHOW CLUSTER SETTINGS
+SHOW ALL CLUSTER SETTINGS
+
+user root
+
+statement ok
+ALTER USER testuser MODIFYCLUSTERSETTING
+
+user testuser
+
+statement ok
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+query I
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+----
+4
+
+statement error only users with the admin role are allowed to set cluster setting 'cloudstorage.gs.default.key'
+SET CLUSTER SETTING cloudstorage.gs.default.key = 'foo'
+
+statement error only users with the admin role are allowed to show cluster setting 'cloudstorage.gs.default.key'
+SHOW CLUSTER SETTING cloudstorage.gs.default.key
+
+query TT
+SELECT variable, value FROM [SHOW CLUSTER SETTINGS]
+WHERE variable IN ('cloudstorage.gs.default.key', 'sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+query TT
+SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('cloudstorage.gs.default.key', 'sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+user root
+
+statement ok
+ALTER USER testuser NOMODIFYCLUSTERSETTING
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+SET CLUSTER SETTING cloudstorage.gs.default.key = 'foo'
+
+query T
+SHOW CLUSTER SETTING cloudstorage.gs.default.key
+----
+foo
+
+query TT rowsort
+SELECT variable, value FROM [SHOW CLUSTER SETTINGS]
+WHERE variable IN ('cloudstorage.gs.default.key', 'sql.defaults.default_int_size')
+----
+cloudstorage.gs.default.key    foo
+sql.defaults.default_int_size  4
+
+query TT rowsort
+SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('cloudstorage.gs.default.key', 'sql.defaults.default_int_size')
+----
+cloudstorage.gs.default.key    foo
+sql.defaults.default_int_size  4

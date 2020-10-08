@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
@@ -22,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -33,11 +29,22 @@ const defaultKeySize = 2048
 const defaultCALifetime = 10 * 366 * 24 * time.Hour  // ten years
 const defaultCertLifetime = 5 * 366 * 24 * time.Hour // five years
 
+// Options settable via command-line flags. See below for defaults.
 var keySize int
 var caCertificateLifetime time.Duration
 var certificateLifetime time.Duration
 var allowCAKeyReuse bool
 var overwriteFiles bool
+var generatePKCS8Key bool
+
+func initPreFlagsCertDefaults() {
+	keySize = defaultKeySize
+	caCertificateLifetime = defaultCALifetime
+	certificateLifetime = defaultCertLifetime
+	allowCAKeyReuse = false
+	overwriteFiles = false
+	generatePKCS8Key = false
+}
 
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
@@ -67,6 +74,44 @@ func runCreateCACert(cmd *cobra.Command, args []string) error {
 			allowCAKeyReuse,
 			overwriteFiles),
 		"failed to generate CA cert and key")
+}
+
+// A createClientCACert command generates a client CA certificate and stores it
+// in the cert directory.
+var createClientCACertCmd = &cobra.Command{
+	Use:   "create-client-ca --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-client-ca-key>",
+	Short: "create client CA certificate and key",
+	Long: `
+Generate a client CA certificate "<certs-dir>/ca-client.crt" and CA key "<client-ca-key>".
+The certs directory is created if it does not exist.
+
+If the CA key exists and --allow-ca-key-reuse is true, the key is used.
+If the CA certificate exists and --overwrite is true, the new CA certificate is prepended to it.
+
+The client CA is optional and should only be used when separate CAs are desired for server certificates
+and client certificates.
+
+If the client CA exists, a client.node.crt client certificate must be created using:
+  cockroach cert create-client node
+
+Once the client.node.crt exists, all client certificates will be verified using the client CA.
+`,
+	Args: cobra.NoArgs,
+	RunE: MaybeDecorateGRPCError(runCreateClientCACert),
+}
+
+// runCreateClientCACert generates a key and CA certificate and writes them
+// to their corresponding files.
+func runCreateClientCACert(cmd *cobra.Command, args []string) error {
+	return errors.Wrap(
+		security.CreateClientCAPair(
+			baseCfg.SSLCertsDir,
+			baseCfg.SSLCAKey,
+			keySize,
+			caCertificateLifetime,
+			allowCAKeyReuse,
+			overwriteFiles),
+		"failed to generate client CA cert and key")
 }
 
 // A createNodeCert command generates a node certificate and stores it
@@ -137,7 +182,8 @@ Creation fails if the CA expiration time is before the desired certificate expir
 func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	var err error
 	var username string
-	if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
+	// We intentionally allow the `node` user to have a cert.
+	if username, err = sql.NormalizeAndValidateUsernameNoBlocklist(args[0]); err != nil {
 		return errors.Wrap(err, "failed to generate client certificate and key")
 	}
 
@@ -148,7 +194,8 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 			keySize,
 			certificateLifetime,
 			overwriteFiles,
-			username),
+			username,
+			generatePKCS8Key),
 		"failed to generate client certificate and key")
 }
 
@@ -166,9 +213,9 @@ List certificates and keys found in the certificate directory.
 
 // runListCerts loads and lists all certs.
 func runListCerts(cmd *cobra.Command, args []string) error {
-	cm, err := baseCfg.GetCertificateManager()
+	cm, err := security.NewCertificateManager(baseCfg.SSLCertsDir, security.CommandTLSSettings{})
 	if err != nil {
-		return errors.Wrap(err, "could not get certificate manager")
+		return errors.Wrap(err, "cannot load certificates")
 	}
 
 	fmt.Fprintf(os.Stdout, "Certificate directory: %s\n", baseCfg.SSLCertsDir)
@@ -200,7 +247,37 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 		addRow(cert, notes)
 	}
 
+	if cert := cm.ClientCACert(); cert != nil {
+		var notes string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			notes = fmt.Sprintf("num certs: %d", len(cert.ParsedCertificates))
+		}
+		addRow(cert, notes)
+	}
+
+	if cert := cm.UICACert(); cert != nil {
+		var notes string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			notes = fmt.Sprintf("num certs: %d", len(cert.ParsedCertificates))
+		}
+		addRow(cert, notes)
+	}
+
 	if cert := cm.NodeCert(); cert != nil {
+		var addresses []string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			addresses = cert.ParsedCertificates[0].DNSNames
+			for _, ip := range cert.ParsedCertificates[0].IPAddresses {
+				addresses = append(addresses, ip.String())
+			}
+		} else {
+			addresses = append(addresses, "<unknown>")
+		}
+
+		addRow(cert, fmt.Sprintf("addresses: %s", strings.Join(addresses, ",")))
+	}
+
+	if cert := cm.UICert(); cert != nil {
 		var addresses []string
 		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
 			addresses = cert.ParsedCertificates[0].DNSNames
@@ -230,6 +307,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 
 var certCmds = []*cobra.Command{
 	createCACertCmd,
+	createClientCACertCmd,
 	createNodeCertCmd,
 	createClientCertCmd,
 	listCertsCmd,
@@ -238,9 +316,7 @@ var certCmds = []*cobra.Command{
 var certCmd = &cobra.Command{
 	Use:   "cert",
 	Short: "create ca, node, and client certs",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 func init() {

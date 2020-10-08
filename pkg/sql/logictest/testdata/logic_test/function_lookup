@@ -1,21 +1,19 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE foo(x INT DEFAULT length(pg_typeof(1234))-1)
 
 statement ok
-CREATE TABLE bar(x INT, CHECK(pg_typeof(123) = 'int'))
+CREATE TABLE bar(x INT, CHECK(pg_typeof(123) = 'bigint'))
 
 statement ok
 ALTER TABLE foo ALTER COLUMN x SET DEFAULT length(pg_typeof(123))
 
 statement ok
-ALTER TABLE foo ADD CONSTRAINT z CHECK(pg_typeof(123) = 'int')
+ALTER TABLE foo ADD CONSTRAINT z CHECK(pg_typeof(123) = 'bigint')
 
 query T
 SELECT pg_typeof(123)
 ----
-int
+bigint
 
 query I
 SELECT count(*) FROM foo GROUP BY pg_typeof(x)
@@ -26,13 +24,13 @@ SELECT * FROM foo LIMIT length(pg_typeof(123))
 ----
 
 query I
-SELECT * FROM foo WHERE pg_typeof(x) = 'int'
+SELECT * FROM foo WHERE pg_typeof(x) = 'bigint'
 ----
 
 query T
 INSERT INTO foo(x) VALUES (42) RETURNING pg_typeof(x)
 ----
-int
+bigint
 
 # CockroachDB is case-preserving for quoted identifiers like pg, and
 # function names only exist in lowercase.

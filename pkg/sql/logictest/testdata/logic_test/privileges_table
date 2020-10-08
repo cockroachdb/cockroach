@@ -1,4 +1,6 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+# Disable automatic stats to avoid flakiness.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 # Test default table-level permissions.
 # Default user is root.
@@ -10,6 +12,9 @@ SET DATABASE = a
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+SELECT * from [54 as num_ref]
 
 statement ok
 SHOW GRANTS ON t
@@ -24,7 +29,7 @@ statement ok
 REVOKE ALL ON t FROM bar
 
 statement ok
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
 
 statement ok
 SELECT * from t
@@ -66,6 +71,9 @@ SHOW COLUMNS FROM t
 statement error pq: user testuser does not have SELECT privilege on relation t
 SELECT r FROM t
 
+statement error pq: user testuser does not have SELECT privilege on relation t
+SELECT * from [55 as num_ref]
+
 statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar
 
@@ -73,7 +81,7 @@ statement error user testuser does not have GRANT privilege on relation t
 REVOKE ALL ON t FROM bar
 
 statement error user testuser does not have INSERT privilege on relation t
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
 
 statement error user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
@@ -107,11 +115,11 @@ GRANT SELECT ON t TO testuser
 
 user testuser
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM t
 ----
-k  INT  false  NULL  ·  {"primary"}
-v  INT  true   NULL  ·  {}
+k  INT8  false  NULL  ·  {primary}  false
+v  INT8  true   NULL  ·  {}         false
 
 statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar
@@ -120,7 +128,10 @@ statement error user testuser does not have GRANT privilege on relation t
 REVOKE ALL ON t FROM bar
 
 statement error user testuser does not have INSERT privilege on relation t
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
+
+statement error user testuser does not have INSERT privilege on relation t
+UPSERT INTO t VALUES (1, 1), (2, 2)
 
 statement ok
 SELECT * FROM t
@@ -158,13 +169,19 @@ REVOKE SELECT ON t FROM testuser
 user testuser
 
 statement ok
+GRANT INSERT ON t TO bar
+
+statement ok
+REVOKE INSERT ON t FROM bar
+
+statement error user testuser does not have ALL privilege on relation t
 GRANT ALL ON t TO bar
 
-statement ok
-REVOKE ALL ON t FROM bar
+statement error user testuser does not have SELECT privilege on relation t
+GRANT SELECT ON t TO bar
 
 statement ok
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
 
 statement error user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
@@ -208,7 +225,7 @@ statement ok
 REVOKE ALL ON t FROM bar
 
 statement ok
-INSERT INTO t VALUES(1, 1),(2, 2)
+INSERT INTO t VALUES (1, 1), (2, 2)
 
 statement ok
 SELECT * FROM t
@@ -246,7 +263,29 @@ GRANT INSERT ON t TO testuser
 user testuser
 
 statement ok
+INSERT INTO t VALUES (1, 2)
+
+statement error user testuser does not have SELECT privilege on relation t
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+
+statement error user testuser does not have SELECT privilege on relation t
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+statement error user testuser does not have SELECT privilege on relation t
+UPSERT INTO t VALUES (1, 2)
+
+user root
+
+statement ok
+GRANT SELECT ON t TO testuser
+
+user testuser
+
+statement ok
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+
+statement error user testuser does not have UPDATE privilege on relation t
+UPSERT INTO t VALUES (1, 2)
 
 statement error user testuser does not have UPDATE privilege on relation t
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
@@ -260,7 +299,7 @@ GRANT UPDATE ON t TO testuser
 user testuser
 
 statement ok
-INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+UPSERT INTO t VALUES (1, 2)
 
 statement ok
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v

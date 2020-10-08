@@ -1,52 +1,44 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
-query T
+# LogicTest: !3node-tenant(49854)
+query TT
 SHOW DATABASES
 ----
-defaultdb
-postgres
-system
-test
+defaultdb  root
+postgres   root
+system     node
+test       root
 
-query T
+query TTTTI
 SHOW TABLES FROM system
 ----
-descriptor
-eventlog
-jobs
-lease
-locations
-namespace
-rangelog
-role_members
-settings
-table_statistics
-ui
-users
-web_sessions
-zones
-
-query ITI rowsort
-SELECT * FROM system.namespace
-----
-0  defaultdb         50
-0  postgres          51
-0  system            1
-0  test              52
-1  descriptor        3
-1  eventlog          12
-1  jobs              15
-1  lease             11
-1  locations         21
-1  namespace         2
-1  rangelog          13
-1  role_members      23
-1  settings          6
-1  table_statistics  20
-1  ui                14
-1  users             4
-1  web_sessions      19
-1  zones             5
+public  comments                         table  NULL  NULL
+public  descriptor                       table  NULL  NULL
+public  eventlog                         table  NULL  NULL
+public  jobs                             table  NULL  NULL
+public  lease                            table  NULL  NULL
+public  locations                        table  NULL  NULL
+public  namespace                        table  NULL  NULL
+public  namespace2                       table  NULL  NULL
+public  protected_ts_meta                table  NULL  NULL
+public  protected_ts_records             table  NULL  NULL
+public  rangelog                         table  NULL  NULL
+public  replication_constraint_stats     table  NULL  NULL
+public  replication_critical_localities  table  NULL  NULL
+public  replication_stats                table  NULL  NULL
+public  reports_meta                     table  NULL  NULL
+public  role_members                     table  NULL  NULL
+public  role_options                     table  NULL  NULL
+public  scheduled_jobs                   table  NULL  NULL
+public  settings                         table  NULL  NULL
+public  sqlliveness                      table  NULL  NULL
+public  statement_bundle_chunks          table  NULL  NULL
+public  statement_diagnostics            table  NULL  NULL
+public  statement_diagnostics_requests   table  NULL  NULL
+public  table_statistics                 table  NULL  NULL
+public  tenants                          table  NULL  NULL
+public  ui                               table  NULL  NULL
+public  users                            table  NULL  NULL
+public  web_sessions                     table  NULL  NULL
+public  zones                            table  NULL  NULL
 
 query I rowsort
 SELECT id FROM system.descriptor
@@ -57,6 +49,7 @@ SELECT id FROM system.descriptor
 4
 5
 6
+8
 11
 12
 13
@@ -66,6 +59,20 @@ SELECT id FROM system.descriptor
 20
 21
 23
+24
+25
+26
+27
+28
+30
+31
+32
+33
+34
+35
+36
+37
+39
 50
 51
 52
@@ -76,246 +83,364 @@ SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
 ----
 0
 
-# Verify format of system tables.
-query TTBTTT
-SHOW COLUMNS FROM system.namespace
-----
-parentID  INT     false  NULL  ·  {"primary"}
-name      STRING  false  NULL  ·  {"primary"}
-id        INT     true   NULL  ·  {}
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.descriptor
 ----
-id          INT    false  NULL  ·  {"primary"}
-descriptor  BYTES  true   NULL  ·  {}
+id          INT8   false  NULL  ·  {primary}  false
+descriptor  BYTES  true   NULL  ·  {}         false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
-username        STRING  false  NULL   ·  {"primary"}
-hashedPassword  BYTES   true   NULL   ·  {}
-isRole          BOOL    false  false  ·  {}
+username        STRING  false  NULL   ·  {primary}  false
+hashedPassword  BYTES   true   NULL   ·  {}         false
+isRole          BOOL    false  false  ·  {}         false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.zones
 ----
-id      INT    false  NULL  ·  {"primary"}
-config  BYTES  true   NULL  ·  {}
+id      INT8   false  NULL  ·  {primary}  false
+config  BYTES  true   NULL  ·  {}         false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.lease
 ----
-descID      INT        false  NULL  ·  {"primary"}
-version     INT        false  NULL  ·  {"primary"}
-nodeID      INT        false  NULL  ·  {"primary"}
-expiration  TIMESTAMP  false  NULL  ·  {"primary"}
+descID      INT8       false  NULL  ·  {primary}  false
+version     INT8       false  NULL  ·  {primary}  false
+nodeID      INT8       false  NULL  ·  {primary}  false
+expiration  TIMESTAMP  false  NULL  ·  {primary}  false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.eventlog
 ----
-timestamp    TIMESTAMP  false  NULL       ·  {"primary"}
-eventType    STRING     false  NULL       ·  {}
-targetID     INT        false  NULL       ·  {}
-reportingID  INT        false  NULL       ·  {}
-info         STRING     true   NULL       ·  {}
-uniqueID     BYTES      false  uuid_v4()  ·  {"primary"}
+timestamp    TIMESTAMP  false  NULL       ·  {primary}  false
+eventType    STRING     false  NULL       ·  {}         false
+targetID     INT8       false  NULL       ·  {}         false
+reportingID  INT8       false  NULL       ·  {}         false
+info         STRING     true   NULL       ·  {}         false
+uniqueID     BYTES      false  uuid_v4()  ·  {primary}  false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.rangelog
 ----
-timestamp     TIMESTAMP  false  NULL            ·  {"primary"}
-rangeID       INT        false  NULL            ·  {}
-storeID       INT        false  NULL            ·  {}
-eventType     STRING     false  NULL            ·  {}
-otherRangeID  INT        true   NULL            ·  {}
-info          STRING     true   NULL            ·  {}
-uniqueID      INT        false  unique_rowid()  ·  {"primary"}
+timestamp     TIMESTAMP  false  NULL            ·  {primary}  false
+rangeID       INT8       false  NULL            ·  {}         false
+storeID       INT8       false  NULL            ·  {}         false
+eventType     STRING     false  NULL            ·  {}         false
+otherRangeID  INT8       true   NULL            ·  {}         false
+info          STRING     true   NULL            ·  {}         false
+uniqueID      INT8       false  unique_rowid()  ·  {primary}  false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.ui
 ----
-key          STRING     false  NULL  ·  {"primary"}
-value        BYTES      true   NULL  ·  {}
-lastUpdated  TIMESTAMP  false  NULL  ·  {}
+key          STRING     false  NULL  ·  {primary}  false
+value        BYTES      true   NULL  ·  {}         false
+lastUpdated  TIMESTAMP  false  NULL  ·  {}         false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
-id        INT        false  unique_rowid()  ·  {"primary","jobs_status_created_idx"}
-status    STRING     false  NULL            ·  {"jobs_status_created_idx"}
-created   TIMESTAMP  false  now()           ·  {"jobs_status_created_idx"}
-payload   BYTES      false  NULL            ·  {}
-progress  BYTES      true   NULL            ·  {}
+id                 INT8       false  unique_rowid()     ·  {primary,jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}  false
+status             STRING     false  NULL               ·  {jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}          false
+created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}                                                 false
+payload            BYTES      false  NULL               ·  {}                                                                        false
+progress           BYTES      true   NULL               ·  {}                                                                        false
+created_by_type    STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
+created_by_id      INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
+claim_session_id   BYTES      true   NULL               ·  {}                                                                        false
+claim_instance_id  INT8       true   NULL               ·  {}                                                                        false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.settings
 ----
-name         STRING     false  NULL   ·  {"primary"}
-value        STRING     false  NULL   ·  {}
-lastUpdated  TIMESTAMP  false  now()  ·  {}
-valueType    STRING     true   NULL   ·  {}
+name         STRING     false  NULL               ·  {primary}  false
+value        STRING     false  NULL               ·  {}         false
+lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {}         false
+valueType    STRING     true   NULL               ·  {}         false
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM system.role_members
 ----
-role     STRING  false  NULL  ·  {"primary","role_members_role_idx","role_members_member_idx"}
-member   STRING  false  NULL  ·  {"primary","role_members_role_idx","role_members_member_idx"}
-isAdmin  BOOL    false  NULL  ·  {}
+role     STRING  false  NULL  ·  {primary,role_members_role_idx,role_members_member_idx}  false
+member   STRING  false  NULL  ·  {primary,role_members_role_idx,role_members_member_idx}  false
+isAdmin  BOOL    false  NULL  ·  {}                                                       false
 
 
 # Verify default privileges on system tables.
 query TTTT
 SHOW GRANTS ON DATABASE system
 ----
-system  crdb_internal       admin  SELECT
 system  crdb_internal       admin  GRANT
-system  crdb_internal       root   SELECT
 system  crdb_internal       root   GRANT
 system  information_schema  admin  GRANT
-system  information_schema  admin  SELECT
 system  information_schema  root   GRANT
-system  information_schema  root   SELECT
-system  pg_catalog          admin  SELECT
 system  pg_catalog          admin  GRANT
 system  pg_catalog          root   GRANT
-system  pg_catalog          root   SELECT
+system  pg_extension        admin  GRANT
+system  pg_extension        root   GRANT
 system  public              admin  GRANT
-system  public              admin  SELECT
 system  public              root   GRANT
-system  public              root   SELECT
 
 query TTTTT
 SHOW GRANTS ON system.*
 ----
-system  public  descriptor        admin  GRANT
-system  public  descriptor        admin  SELECT
-system  public  descriptor        root   GRANT
-system  public  descriptor        root   SELECT
-system  public  eventlog          admin  GRANT
-system  public  eventlog          admin  DELETE
-system  public  eventlog          admin  SELECT
-system  public  eventlog          admin  UPDATE
-system  public  eventlog          admin  INSERT
-system  public  eventlog          root   GRANT
-system  public  eventlog          root   DELETE
-system  public  eventlog          root   INSERT
-system  public  eventlog          root   SELECT
-system  public  eventlog          root   UPDATE
-system  public  jobs              admin  INSERT
-system  public  jobs              admin  DELETE
-system  public  jobs              admin  SELECT
-system  public  jobs              admin  UPDATE
-system  public  jobs              admin  GRANT
-system  public  jobs              root   UPDATE
-system  public  jobs              root   DELETE
-system  public  jobs              root   INSERT
-system  public  jobs              root   GRANT
-system  public  jobs              root   SELECT
-system  public  lease             admin  DELETE
-system  public  lease             admin  INSERT
-system  public  lease             admin  UPDATE
-system  public  lease             admin  SELECT
-system  public  lease             admin  GRANT
-system  public  lease             root   INSERT
-system  public  lease             root   UPDATE
-system  public  lease             root   SELECT
-system  public  lease             root   GRANT
-system  public  lease             root   DELETE
-system  public  locations         admin  SELECT
-system  public  locations         admin  UPDATE
-system  public  locations         admin  INSERT
-system  public  locations         admin  DELETE
-system  public  locations         admin  GRANT
-system  public  locations         root   DELETE
-system  public  locations         root   UPDATE
-system  public  locations         root   SELECT
-system  public  locations         root   GRANT
-system  public  locations         root   INSERT
-system  public  namespace         admin  GRANT
-system  public  namespace         admin  SELECT
-system  public  namespace         root   GRANT
-system  public  namespace         root   SELECT
-system  public  rangelog          admin  INSERT
-system  public  rangelog          admin  UPDATE
-system  public  rangelog          admin  GRANT
-system  public  rangelog          admin  SELECT
-system  public  rangelog          admin  DELETE
-system  public  rangelog          root   SELECT
-system  public  rangelog          root   GRANT
-system  public  rangelog          root   INSERT
-system  public  rangelog          root   DELETE
-system  public  rangelog          root   UPDATE
-system  public  role_members      admin  INSERT
-system  public  role_members      admin  SELECT
-system  public  role_members      admin  GRANT
-system  public  role_members      admin  DELETE
-system  public  role_members      admin  UPDATE
-system  public  role_members      root   DELETE
-system  public  role_members      root   GRANT
-system  public  role_members      root   SELECT
-system  public  role_members      root   INSERT
-system  public  role_members      root   UPDATE
-system  public  settings          admin  UPDATE
-system  public  settings          admin  SELECT
-system  public  settings          admin  INSERT
-system  public  settings          admin  GRANT
-system  public  settings          admin  DELETE
-system  public  settings          root   GRANT
-system  public  settings          root   UPDATE
-system  public  settings          root   DELETE
-system  public  settings          root   SELECT
-system  public  settings          root   INSERT
-system  public  table_statistics  admin  SELECT
-system  public  table_statistics  admin  INSERT
-system  public  table_statistics  admin  GRANT
-system  public  table_statistics  admin  UPDATE
-system  public  table_statistics  admin  DELETE
-system  public  table_statistics  root   DELETE
-system  public  table_statistics  root   GRANT
-system  public  table_statistics  root   SELECT
-system  public  table_statistics  root   UPDATE
-system  public  table_statistics  root   INSERT
-system  public  ui                admin  UPDATE
-system  public  ui                admin  SELECT
-system  public  ui                admin  INSERT
-system  public  ui                admin  GRANT
-system  public  ui                admin  DELETE
-system  public  ui                root   GRANT
-system  public  ui                root   DELETE
-system  public  ui                root   UPDATE
-system  public  ui                root   INSERT
-system  public  ui                root   SELECT
-system  public  users             admin  INSERT
-system  public  users             admin  SELECT
-system  public  users             admin  DELETE
-system  public  users             admin  UPDATE
-system  public  users             admin  GRANT
-system  public  users             root   GRANT
-system  public  users             root   SELECT
-system  public  users             root   DELETE
-system  public  users             root   UPDATE
-system  public  users             root   INSERT
-system  public  web_sessions      admin  DELETE
-system  public  web_sessions      admin  GRANT
-system  public  web_sessions      admin  INSERT
-system  public  web_sessions      admin  UPDATE
-system  public  web_sessions      admin  SELECT
-system  public  web_sessions      root   UPDATE
-system  public  web_sessions      root   SELECT
-system  public  web_sessions      root   INSERT
-system  public  web_sessions      root   GRANT
-system  public  web_sessions      root   DELETE
-system  public  zones             admin  DELETE
-system  public  zones             admin  GRANT
-system  public  zones             admin  INSERT
-system  public  zones             admin  SELECT
-system  public  zones             admin  UPDATE
-system  public  zones             root   DELETE
-system  public  zones             root   GRANT
-system  public  zones             root   SELECT
-system  public  zones             root   UPDATE
-system  public  zones             root   INSERT
+system  public  comments                         admin   DELETE
+system  public  comments                         admin   GRANT
+system  public  comments                         admin   INSERT
+system  public  comments                         admin   SELECT
+system  public  comments                         admin   UPDATE
+system  public  comments                         public  SELECT
+system  public  comments                         root    DELETE
+system  public  comments                         root    GRANT
+system  public  comments                         root    INSERT
+system  public  comments                         root    SELECT
+system  public  comments                         root    UPDATE
+system  public  descriptor                       admin   GRANT
+system  public  descriptor                       admin   SELECT
+system  public  descriptor                       root    GRANT
+system  public  descriptor                       root    SELECT
+system  public  eventlog                         admin   DELETE
+system  public  eventlog                         admin   GRANT
+system  public  eventlog                         admin   INSERT
+system  public  eventlog                         admin   SELECT
+system  public  eventlog                         admin   UPDATE
+system  public  eventlog                         root    DELETE
+system  public  eventlog                         root    GRANT
+system  public  eventlog                         root    INSERT
+system  public  eventlog                         root    SELECT
+system  public  eventlog                         root    UPDATE
+system  public  jobs                             admin   DELETE
+system  public  jobs                             admin   GRANT
+system  public  jobs                             admin   INSERT
+system  public  jobs                             admin   SELECT
+system  public  jobs                             admin   UPDATE
+system  public  jobs                             root    DELETE
+system  public  jobs                             root    GRANT
+system  public  jobs                             root    INSERT
+system  public  jobs                             root    SELECT
+system  public  jobs                             root    UPDATE
+system  public  lease                            admin   DELETE
+system  public  lease                            admin   GRANT
+system  public  lease                            admin   INSERT
+system  public  lease                            admin   SELECT
+system  public  lease                            admin   UPDATE
+system  public  lease                            root    DELETE
+system  public  lease                            root    GRANT
+system  public  lease                            root    INSERT
+system  public  lease                            root    SELECT
+system  public  lease                            root    UPDATE
+system  public  locations                        admin   DELETE
+system  public  locations                        admin   GRANT
+system  public  locations                        admin   INSERT
+system  public  locations                        admin   SELECT
+system  public  locations                        admin   UPDATE
+system  public  locations                        root    DELETE
+system  public  locations                        root    GRANT
+system  public  locations                        root    INSERT
+system  public  locations                        root    SELECT
+system  public  locations                        root    UPDATE
+system  public  namespace                        admin   GRANT
+system  public  namespace                        admin   SELECT
+system  public  namespace                        root    GRANT
+system  public  namespace                        root    SELECT
+system  public  namespace2                       admin   GRANT
+system  public  namespace2                       admin   SELECT
+system  public  namespace2                       root    GRANT
+system  public  namespace2                       root    SELECT
+system  public  protected_ts_meta                admin   GRANT
+system  public  protected_ts_meta                admin   SELECT
+system  public  protected_ts_meta                root    GRANT
+system  public  protected_ts_meta                root    SELECT
+system  public  protected_ts_records             admin   GRANT
+system  public  protected_ts_records             admin   SELECT
+system  public  protected_ts_records             root    GRANT
+system  public  protected_ts_records             root    SELECT
+system  public  rangelog                         admin   DELETE
+system  public  rangelog                         admin   GRANT
+system  public  rangelog                         admin   INSERT
+system  public  rangelog                         admin   SELECT
+system  public  rangelog                         admin   UPDATE
+system  public  rangelog                         root    DELETE
+system  public  rangelog                         root    GRANT
+system  public  rangelog                         root    INSERT
+system  public  rangelog                         root    SELECT
+system  public  rangelog                         root    UPDATE
+system  public  replication_constraint_stats     admin   DELETE
+system  public  replication_constraint_stats     admin   GRANT
+system  public  replication_constraint_stats     admin   INSERT
+system  public  replication_constraint_stats     admin   SELECT
+system  public  replication_constraint_stats     admin   UPDATE
+system  public  replication_constraint_stats     root    DELETE
+system  public  replication_constraint_stats     root    GRANT
+system  public  replication_constraint_stats     root    INSERT
+system  public  replication_constraint_stats     root    SELECT
+system  public  replication_constraint_stats     root    UPDATE
+system  public  replication_critical_localities  admin   DELETE
+system  public  replication_critical_localities  admin   GRANT
+system  public  replication_critical_localities  admin   INSERT
+system  public  replication_critical_localities  admin   SELECT
+system  public  replication_critical_localities  admin   UPDATE
+system  public  replication_critical_localities  root    DELETE
+system  public  replication_critical_localities  root    GRANT
+system  public  replication_critical_localities  root    INSERT
+system  public  replication_critical_localities  root    SELECT
+system  public  replication_critical_localities  root    UPDATE
+system  public  replication_stats                admin   DELETE
+system  public  replication_stats                admin   GRANT
+system  public  replication_stats                admin   INSERT
+system  public  replication_stats                admin   SELECT
+system  public  replication_stats                admin   UPDATE
+system  public  replication_stats                root    DELETE
+system  public  replication_stats                root    GRANT
+system  public  replication_stats                root    INSERT
+system  public  replication_stats                root    SELECT
+system  public  replication_stats                root    UPDATE
+system  public  reports_meta                     admin   DELETE
+system  public  reports_meta                     admin   GRANT
+system  public  reports_meta                     admin   INSERT
+system  public  reports_meta                     admin   SELECT
+system  public  reports_meta                     admin   UPDATE
+system  public  reports_meta                     root    DELETE
+system  public  reports_meta                     root    GRANT
+system  public  reports_meta                     root    INSERT
+system  public  reports_meta                     root    SELECT
+system  public  reports_meta                     root    UPDATE
+system  public  role_members                     admin   DELETE
+system  public  role_members                     admin   GRANT
+system  public  role_members                     admin   INSERT
+system  public  role_members                     admin   SELECT
+system  public  role_members                     admin   UPDATE
+system  public  role_members                     root    DELETE
+system  public  role_members                     root    GRANT
+system  public  role_members                     root    INSERT
+system  public  role_members                     root    SELECT
+system  public  role_members                     root    UPDATE
+system  public  role_options                     admin   DELETE
+system  public  role_options                     admin   GRANT
+system  public  role_options                     admin   INSERT
+system  public  role_options                     admin   SELECT
+system  public  role_options                     admin   UPDATE
+system  public  role_options                     root    DELETE
+system  public  role_options                     root    GRANT
+system  public  role_options                     root    INSERT
+system  public  role_options                     root    SELECT
+system  public  role_options                     root    UPDATE
+system  public  scheduled_jobs                   admin   DELETE
+system  public  scheduled_jobs                   admin   GRANT
+system  public  scheduled_jobs                   admin   INSERT
+system  public  scheduled_jobs                   admin   SELECT
+system  public  scheduled_jobs                   admin   UPDATE
+system  public  scheduled_jobs                   root    DELETE
+system  public  scheduled_jobs                   root    GRANT
+system  public  scheduled_jobs                   root    INSERT
+system  public  scheduled_jobs                   root    SELECT
+system  public  scheduled_jobs                   root    UPDATE
+system  public  settings                         admin   DELETE
+system  public  settings                         admin   GRANT
+system  public  settings                         admin   INSERT
+system  public  settings                         admin   SELECT
+system  public  settings                         admin   UPDATE
+system  public  settings                         root    DELETE
+system  public  settings                         root    GRANT
+system  public  settings                         root    INSERT
+system  public  settings                         root    SELECT
+system  public  settings                         root    UPDATE
+system  public  sqlliveness                      admin   DELETE
+system  public  sqlliveness                      admin   GRANT
+system  public  sqlliveness                      admin   INSERT
+system  public  sqlliveness                      admin   SELECT
+system  public  sqlliveness                      admin   UPDATE
+system  public  sqlliveness                      root    DELETE
+system  public  sqlliveness                      root    GRANT
+system  public  sqlliveness                      root    INSERT
+system  public  sqlliveness                      root    SELECT
+system  public  sqlliveness                      root    UPDATE
+system  public  statement_bundle_chunks          admin   DELETE
+system  public  statement_bundle_chunks          admin   GRANT
+system  public  statement_bundle_chunks          admin   INSERT
+system  public  statement_bundle_chunks          admin   SELECT
+system  public  statement_bundle_chunks          admin   UPDATE
+system  public  statement_bundle_chunks          root    DELETE
+system  public  statement_bundle_chunks          root    GRANT
+system  public  statement_bundle_chunks          root    INSERT
+system  public  statement_bundle_chunks          root    SELECT
+system  public  statement_bundle_chunks          root    UPDATE
+system  public  statement_diagnostics            admin   DELETE
+system  public  statement_diagnostics            admin   GRANT
+system  public  statement_diagnostics            admin   INSERT
+system  public  statement_diagnostics            admin   SELECT
+system  public  statement_diagnostics            admin   UPDATE
+system  public  statement_diagnostics            root    DELETE
+system  public  statement_diagnostics            root    GRANT
+system  public  statement_diagnostics            root    INSERT
+system  public  statement_diagnostics            root    SELECT
+system  public  statement_diagnostics            root    UPDATE
+system  public  statement_diagnostics_requests   admin   DELETE
+system  public  statement_diagnostics_requests   admin   GRANT
+system  public  statement_diagnostics_requests   admin   INSERT
+system  public  statement_diagnostics_requests   admin   SELECT
+system  public  statement_diagnostics_requests   admin   UPDATE
+system  public  statement_diagnostics_requests   root    DELETE
+system  public  statement_diagnostics_requests   root    GRANT
+system  public  statement_diagnostics_requests   root    INSERT
+system  public  statement_diagnostics_requests   root    SELECT
+system  public  statement_diagnostics_requests   root    UPDATE
+system  public  table_statistics                 admin   DELETE
+system  public  table_statistics                 admin   GRANT
+system  public  table_statistics                 admin   INSERT
+system  public  table_statistics                 admin   SELECT
+system  public  table_statistics                 admin   UPDATE
+system  public  table_statistics                 root    DELETE
+system  public  table_statistics                 root    GRANT
+system  public  table_statistics                 root    INSERT
+system  public  table_statistics                 root    SELECT
+system  public  table_statistics                 root    UPDATE
+system  public  tenants                          admin   GRANT
+system  public  tenants                          admin   SELECT
+system  public  tenants                          root    GRANT
+system  public  tenants                          root    SELECT
+system  public  ui                               admin   DELETE
+system  public  ui                               admin   GRANT
+system  public  ui                               admin   INSERT
+system  public  ui                               admin   SELECT
+system  public  ui                               admin   UPDATE
+system  public  ui                               root    DELETE
+system  public  ui                               root    GRANT
+system  public  ui                               root    INSERT
+system  public  ui                               root    SELECT
+system  public  ui                               root    UPDATE
+system  public  users                            admin   DELETE
+system  public  users                            admin   GRANT
+system  public  users                            admin   INSERT
+system  public  users                            admin   SELECT
+system  public  users                            admin   UPDATE
+system  public  users                            root    DELETE
+system  public  users                            root    GRANT
+system  public  users                            root    INSERT
+system  public  users                            root    SELECT
+system  public  users                            root    UPDATE
+system  public  web_sessions                     admin   DELETE
+system  public  web_sessions                     admin   GRANT
+system  public  web_sessions                     admin   INSERT
+system  public  web_sessions                     admin   SELECT
+system  public  web_sessions                     admin   UPDATE
+system  public  web_sessions                     root    DELETE
+system  public  web_sessions                     root    GRANT
+system  public  web_sessions                     root    INSERT
+system  public  web_sessions                     root    SELECT
+system  public  web_sessions                     root    UPDATE
+system  public  zones                            admin   DELETE
+system  public  zones                            admin   GRANT
+system  public  zones                            admin   INSERT
+system  public  zones                            admin   SELECT
+system  public  zones                            admin   UPDATE
+system  public  zones                            root    DELETE
+system  public  zones                            root    GRANT
+system  public  zones                            root    INSERT
+system  public  zones                            root    SELECT
+system  public  zones                            root    UPDATE
 
 statement error user root does not have DROP privilege on database system
 ALTER DATABASE system RENAME TO not_system
@@ -323,20 +448,19 @@ ALTER DATABASE system RENAME TO not_system
 statement error user root does not have DROP privilege on database system
 DROP DATABASE system
 
-# Users cannot exceed allowed privileges on system objects.
-statement error user testuser must not have ALL privileges on system object with ID=.*
+statement error user root does not have ALL privilege on database system
 GRANT ALL ON DATABASE system TO testuser
 
-statement error user testuser must not have INSERT privileges on system object with ID=.*
+statement error user root does not have INSERT privilege on database system
 GRANT GRANT, SELECT, INSERT ON DATABASE system TO testuser
 
 statement ok
 GRANT GRANT, SELECT ON DATABASE system TO testuser
 
-statement error user testuser must not have ALL privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation namespace
 GRANT ALL ON system.namespace TO testuser
 
-statement error user testuser must not have INSERT privileges on system object with ID=.*
+statement error user root does not have INSERT privilege on relation namespace
 GRANT GRANT, SELECT, INSERT ON system.namespace TO testuser
 
 statement ok
@@ -346,76 +470,88 @@ statement ok
 GRANT SELECT ON system.descriptor TO testuser
 
 # Superusers must have exactly the allowed privileges.
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have ALL privilege on database system
 GRANT ALL ON DATABASE system TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have DELETE privilege on database system
 GRANT DELETE, INSERT ON DATABASE system TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation namespace
 GRANT ALL ON system.namespace TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have DELETE privilege on relation descriptor
 GRANT DELETE, INSERT ON system.descriptor TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation descriptor
 GRANT ALL ON system.descriptor TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system database with ID=.*
 REVOKE GRANT ON DATABASE system FROM root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system table with ID=.*
 REVOKE GRANT ON system.namespace FROM root
 
-statement error user root does not have privileges
+statement error user root does not have ALL privilege on relation namespace
 REVOKE ALL ON system.namespace FROM root
 
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have privileges over system table with ID=.*
+REVOKE GRANT,SELECT ON system.namespace FROM root
+
+statement error user root does not have ALL privilege on database system
 GRANT ALL ON DATABASE system TO admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have DELETE privilege on database system
 GRANT DELETE, INSERT ON DATABASE system TO admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
-GRANT ALL ON system.namespace TO admin
-
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
-GRANT DELETE, INSERT ON system.descriptor TO admin
-
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
-GRANT ALL ON system.descriptor TO admin
-
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT privileges on system database with ID=.*
 REVOKE GRANT ON DATABASE system FROM admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation namespace
+GRANT ALL ON system.namespace TO admin
+
+statement error user root does not have DELETE privilege on relation descriptor
+GRANT DELETE, INSERT ON system.descriptor TO admin
+
+statement error user root does not have ALL privilege on relation descriptor
+GRANT ALL ON system.descriptor TO admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system table with ID=.*
+REVOKE GRANT ON system.descriptor FROM admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system database with ID=.*
+REVOKE GRANT ON DATABASE system FROM admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system table with ID=.*
 REVOKE GRANT ON system.namespace FROM admin
 
-statement error user admin does not have privileges
+statement error user root does not have ALL privilege on relation namespace
 REVOKE ALL ON system.namespace FROM admin
+
+statement error user admin does not have privileges over system table with ID=.*
+REVOKE GRANT,SELECT ON system.namespace FROM admin
 
 # Some tables (we test system.lease here) used to allow multiple privilege sets for
 # backwards compatibility, and superusers were allowed very wide privileges.
 # We make sure this is no longer the case.
-statement error user testuser must not have ALL privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation lease
 GRANT ALL ON system.lease TO testuser
 
-statement error user root must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+statement error user root does not have CREATE privilege on relation lease
 GRANT CREATE on system.lease to root
 
-statement error user admin must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+statement error user root does not have CREATE privilege on relation lease
 GRANT CREATE on system.lease to admin
 
-statement error user testuser must not have CREATE privileges on system object with ID=.*
+statement error user root does not have CREATE privilege on relation lease
 GRANT CREATE on system.lease to testuser
 
-statement error user root must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation lease
 GRANT ALL ON system.lease TO root
 
-statement error user admin must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation lease
 GRANT ALL ON system.lease TO admin
 
-statement error user testuser must not have ALL privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation lease
 GRANT ALL ON system.lease TO testuser
 
 # NB: the "order by" is necessary or this test is flaky under DistSQL.
@@ -424,11 +560,16 @@ query T
 SELECT name
 FROM system.settings
 WHERE name != 'sql.defaults.distsql'
+AND name != 'sql.stats.automatic_collection.enabled'
+AND name NOT LIKE '%sql.defaults.vectorize%'
+AND name NOT LIKE '%sql.testing%'
+AND name NOT LIKE '%sql.defaults.experimental_distsql_planning%'
 ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
-trace.debug.enable
+kv.range_merge.queue_enabled
+sql.stats.automatic_collection.min_stale_rows
 version
 
 statement ok
@@ -437,12 +578,18 @@ INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 query TT
 SELECT name, value
 FROM system.settings
-WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret')
+WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
+  'sql.stats.automatic_collection.enabled', 'sql.defaults.vectorize',
+  'sql.defaults.vectorize_row_count_threshold',
+  'sql.testing.vectorize.batch_size',
+  'sql.defaults.experimental_distsql_planning',
+  'sql.testing.mutations.max_batch_size')
 ORDER BY name
 ----
-diagnostics.reporting.enabled  true
-somesetting                    somevalue
-trace.debug.enable             false
+diagnostics.reporting.enabled                  true
+kv.range_merge.queue_enabled                   false
+somesetting                                    somevalue
+sql.stats.automatic_collection.min_stale_rows  5
 
 user testuser
 

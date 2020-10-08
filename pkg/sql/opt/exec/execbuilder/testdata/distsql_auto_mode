@@ -1,19 +1,24 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 #
 # Tests that verify DistSQL support and auto mode determination.
 # The cluster size or distsql mode aren't important for these tests.
 #
 
+# "local" logic test configuration overrides the DistSQL mode to 'off', but
+# we're interested in behavior with 'auto' in this test file.
+statement ok
+SET distsql=auto
+
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
 # Verify that EXPLAIN (DISTSQL) hides the JSON column by default (#21089)
 query BT colnames
-EXPLAIN (DISTSQL) VALUES (1)
+EXPLAIN (DISTSQL) SELECT 1
 ----
-automatic url
-false       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
+automatic  url
+false      https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj0FLxDAUhO_-ijAnhYDtNTfRHgplXe0eBOkhJI-lEPtqXipCyX-XTQ5ee5xvZt7wdsh3gEH3cR6e-pO6f-nHy_g2PKixG7rni2qhsbCnk_0igflEi0ljjexIhOMN7SXQ-1-YRmNe1i3d8KThOBLMjjSnQDAI7GxQPzZsJKp5bKDhKdk5lHzW4C39tyXZK8G0WR9feCdZeRE6dLnJkwb5K9UvhLfo6BzZlZkqX0uvAE-SqttW0S_VylO--wsAAP__NiFqpA==
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames
@@ -39,11 +44,11 @@ SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1]
 ----
 false
 
-# Partial scan with filter - distribute.
+# Partial scan with filter - don't distribute.
 query B
 SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 AND v=1]
 ----
-true
+false
 
 # Sort - distribute.
 query B
@@ -64,10 +69,11 @@ SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv LIMIT 1]
 true
 
 # Soft limit in scan - don't distribute.
+# TODO(yuzefovich): soft limits are currently ignored in scans.
 query B
 SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1]
 ----
-false
+true
 
 # Limit after sort - distribute.
 query B
@@ -99,29 +105,20 @@ true
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b))
 
-# TODO(radu): can't execbuild index join yet.
-## Index join - don't distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
-#----
-#false
-#
-## Index join with filter on result - don't distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
-#----
-#false
-#
-## Index join with filter on index scan - distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
-#----
-#true
+# Index join - don't distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
+----
+false
 
-# OID cast - don't distribute (#22249).
-statement error pq: cast to REGCLASS is not supported by distsql
-EXPLAIN (DISTSQL) SELECT t1.a FROM abc t1 INNER JOIN abc t2 on t1.a::REGCLASS = t2.a::REGCLASS;
+# Index join with filter on result - don't distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
+----
+false
 
-# Query with OID expression - don't distribute (#24423).
-statement error pq: OID expressions are not supported by distsql
-EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
+# Index join with filter on index scan - don't distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
+----
+false

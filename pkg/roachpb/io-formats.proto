@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto2";
 package cockroach.roachpb;
@@ -27,6 +23,7 @@ message IOFileFormat {
     Mysqldump = 3;
     PgCopy = 4;
     PgDump = 5;
+    Avro = 6;
   }
 
   optional FileFormat format = 1 [(gogoproto.nullable) = false];
@@ -34,6 +31,7 @@ message IOFileFormat {
   optional MySQLOutfileOptions mysql_out = 3 [(gogoproto.nullable) = false];
   optional PgCopyOptions pg_copy = 4 [(gogoproto.nullable) = false];
   optional PgDumpOptions pg_dump = 6 [(gogoproto.nullable) = false];
+  optional AvroOptions avro = 8 [(gogoproto.nullable) = false];
 
   enum Compression {
     Auto = 0;
@@ -42,6 +40,8 @@ message IOFileFormat {
     Bzip = 3;
   }
   optional Compression compression = 5 [(gogoproto.nullable) = false];
+  // If true, don't abort on failures but instead save the offending row and keep on.
+  optional bool save_rejected = 7 [(gogoproto.nullable) = false];
 }
 
 
@@ -55,6 +55,9 @@ message CSVOptions {
   optional string null_encoding = 3 [(gogoproto.nullable) = true];
   // skip the first N lines of the input (e.g. to ignore column headers) when reading.
   optional uint32 skip = 4 [(gogoproto.nullable) = false];
+  // If strict_quotes is true, a quote may NOT appear in an unquoted field and a
+  // non-doubled quote may NOT appear in a quoted field.
+  optional bool strict_quotes = 5 [(gogoproto.nullable) = false];
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
@@ -77,6 +80,11 @@ message MySQLOutfileOptions {
   optional bool has_escape = 5 [(gogoproto.nullable) = false];
   // escape is the character used to prefix the other delimiters (--fields-escaped-by)
   optional int32 escape = 6 [(gogoproto.nullable) = false];
+  // skip the first N lines of the input (e.g. to ignore column headers) when reading.
+  optional uint32 skip = 7 [(gogoproto.nullable) = false];
+  // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
+  optional string null_encoding = 8 [(gogoproto.nullable) = true];
+  reserved 9;
 }
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
@@ -93,4 +101,28 @@ message PgCopyOptions {
 message PgDumpOptions {
   // maxRowSize is the maximum row size
   optional int32 maxRowSize = 1 [(gogoproto.nullable) = false];
+}
+
+message AvroOptions {
+  enum Format {
+    // Avro object container file input
+    OCF = 0;
+    // Input file contains avro binary encoded records; one record per line
+    BIN_RECORDS = 1;
+    // Input file contains avro JSON encoded records; one record per line
+    JSON_RECORDS =2;
+  }
+
+  optional Format format = 1 [(gogoproto.nullable) = false];
+
+  // Strict mode import will reject avro records that do not have
+  // a one-to-one mapping to our target schema.
+  // The default is to ignore unknown avro fields, and to set any missing
+  // columns to null value if they were not set in the avro record.
+  optional bool strict_mode = 2 [(gogoproto.nullable) = false];
+
+  // Applicable for records only.
+  optional string schemaJSON = 3 [(gogoproto.nullable) = false];
+  optional int32 max_record_size = 4 [(gogoproto.nullable) = false];
+  optional int32 record_separator = 5 [(gogoproto.nullable) = false];
 }

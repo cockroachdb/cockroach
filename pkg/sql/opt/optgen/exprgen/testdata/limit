@@ -1,0 +1,56 @@
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
+----
+
+expr
+(Limit
+  (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
+  (Const 10 "int")
+  (OrderingChoice "+a")
+)
+----
+limit
+ ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 25.13
+ ├── prune: (2)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc@ab
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 25.02
+ │    ├── ordering: +1
+ │    ├── limit hint: 10.00
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1,+2)
+ └── const: 10 [type=int]
+
+expr
+(Limit
+  (Sort (Scan [ (Table "abc") (Cols "a,b") ]))
+  (Const 10 "int")
+  (OrderingChoice "+a")
+)
+----
+limit
+ ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 1283.45569
+ ├── interesting orderings: (+1,+2)
+ ├── sort
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1283.34569
+ │    ├── ordering: +1
+ │    ├── limit hint: 10.00
+ │    ├── interesting orderings: (+1,+2)
+ │    └── scan t.public.abc
+ │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ │         ├── stats: [rows=1000]
+ │         ├── cost: 1064.02
+ │         └── interesting orderings: (+1,+2)
+ └── const: 10 [type=int]

@@ -1,26 +1,28 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto2";
 package cockroach.sql;
 option go_package = "roachpb";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
 
+// N.B. When fields are added to this struct, make sure to update
+// (*StatementStatistics).Add and (*StatementStatistics).AlmostEqual
+// in app_stats.go.
 message StatementStatistics {
   // Count is the total number of times this statement was executed
   // since the begin of the reporting period.
+  // When transmitted to the reporting server, this value gets
+  // quantized into buckets (few <10, dozens 10+, 100 or more).
   optional int64 count = 1 [(gogoproto.nullable) = false];
 
   // FirstAttemptCount collects the total number of times a first
@@ -31,17 +33,24 @@ message StatementStatistics {
   // can be computed as FirstAttemptCount / Count.
   // The cumulative number of retries can be computed with
   // Count - FirstAttemptCount.
+  //
+  // When transmitted to the reporting server, this value gets
+  // simplified so that the proportion of statements that could be
+  // executed without retry remains as FirstAttemptCount / Count.
   optional int64 first_attempt_count = 2 [(gogoproto.nullable) = false];
 
   // MaxRetries collects the maximum observed number of automatic
   // retries in the reporting period.
+  // When transmitted to the reporting server, this value gets
+  // quantized into buckets (few <10, dozens 10+, 100 or more).
   optional int64 max_retries = 3 [(gogoproto.nullable) = false];
 
-  // LastErr collects the last error encountered.
-  optional string last_err = 4 [(gogoproto.nullable) = false];
+  // DEPRECATED: LastErr collects the last error encountered.
+  // Use sensitive_info.last_err instead.
+  optional string legacy_last_err = 4 [(gogoproto.nullable) = false];
 
-  // LastErrRedacted collects the last error, redacted for reporting.
-  optional string last_err_redacted = 11 [(gogoproto.nullable) = false];
+  // DEPRECATED: LastErrRedacted collects the last error, redacted for reporting.
+  optional string legacy_last_err_redacted = 11 [(gogoproto.nullable) = false];
 
   // NumRows collects the number of rows returned or observed.
   optional NumericStat num_rows = 5 [(gogoproto.nullable) = false];
@@ -64,8 +73,64 @@ message StatementStatistics {
   // We store it separately (as opposed to computing it post-hoc) because the combined
   // variance for the overhead cannot be derived from the variance of the separate latencies.
   optional NumericStat overhead_lat = 10 [(gogoproto.nullable) = false];
+
+  // SensitiveInfo is info that needs to be scrubbed or redacted before being
+  // sent to the reg cluster.
+  optional SensitiveInfo sensitive_info = 12 [(gogoproto.nullable) = false];
+
+  reserved 13, 14;
+
+  // BytesRead collects the number of bytes read from disk.
+  optional NumericStat bytes_read = 15 [(gogoproto.nullable) = false];
+
+  // RowsRead collects the number of rows read from disk.
+  optional NumericStat rows_read = 16 [(gogoproto.nullable) = false];
+
+  // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 
+message TransactionStatistics {
+  // Count is the total number of times this transaction was executed
+  // since the beginning of the reporting period.
+  optional int64 count = 1 [(gogoproto.nullable) = false];
+
+  // MaxRetries collects the maximum observed number of automatic
+  // retries in the reporting period.
+  optional int64 max_retries = 2 [(gogoproto.nullable) = false];
+
+  // NumRows collects the total number of rows returned, observed or affected
+  // across all statements.
+  optional NumericStat num_rows = 3 [(gogoproto.nullable) = false];
+
+  // ServiceLat is the time to service the transaction, from the time a
+  // transaction was received to end of execution.
+  optional NumericStat service_lat = 4 [(gogoproto.nullable) = false];
+
+  // RetryLat is the amount of time spent retrying the transaction.
+  optional NumericStat retry_lat = 5 [(gogoproto.nullable) = false];
+
+  // CommitLat is the amount of time required to commit the transaction after
+  // all statement operations have been applied.
+  optional NumericStat commit_lat = 6 [(gogoproto.nullable) = false];
+}
+
+
+message SensitiveInfo {
+  option (gogoproto.equal) = true;
+  // LastErr collects the last error encountered.
+  // It is only reported once it's been redacted.
+  // See also: https://github.com/cockroachdb/cockroach/issues/53191
+  optional string last_err = 1 [(gogoproto.nullable) = false];
+
+  // MostRecentPlanDescription is a serialized representation of the logical plan most recently captured for this query.
+  optional ExplainTreePlanNode most_recent_plan_description = 2 [(gogoproto.nullable) = false];
+
+  // Timestamp is the time at which the logical plan was last sampled.
+  optional google.protobuf.Timestamp most_recent_plan_timestamp = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
+
+// N.B. When this changes, make sure to update (*NumericStat).AlmostEqual
+// in app_stats.go.
 message NumericStat {
   // NumericStat keeps track of two running values --- the running mean and
   // the running sum of squared differences from the mean. Using this along
@@ -82,10 +147,66 @@ message StatementStatisticsKey {
   optional string app = 2 [(gogoproto.nullable) = false];
   optional bool distSQL = 3 [(gogoproto.nullable) = false];
   optional bool failed = 4 [(gogoproto.nullable) = false];
+  optional bool opt = 5 [(gogoproto.nullable) = false];
+  optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
+  optional bool vec = 7 [(gogoproto.nullable) = false];
 }
 
-// CollectedStats wraps collected timings and metadata for some query's execution.
+// CollectedStatementStatistics wraps collected timings and metadata for some
+// query's execution.
 message CollectedStatementStatistics {
+  // ID is a hash of the statement key (query fingerprint, failure status,
+  // implicit txn or not) which can be used to identify the statement
+  // for instance in transaction statistics.
+  optional uint64 id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "StmtID"];
   optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
   optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+}
+
+
+// CollectedTransactionStatistics wraps collected timings and metadata for some
+// transaction executions.
+message CollectedTransactionStatistics {
+  // StatementIDs is the IDs of the statements which this transaction comprises,
+  // in order.
+  repeated uint64 statement_ids = 1 [(gogoproto.customname) = "StatementIDs", (gogoproto.casttype) = "StmtID"] ;
+  // App is the name of the app which executed the transaction.
+  optional string app = 2 [(gogoproto.nullable) = false];
+  optional TransactionStatistics stats = 3[(gogoproto.nullable) = false];
+}
+
+
+// ExplainTreePlanNode is a serialized representation of an EXPLAIN tree for a logical plan.
+message ExplainTreePlanNode {
+  option (gogoproto.equal) = true;
+  // Name is the type of node this is, e.g. "scan" or "index-join".
+  optional string name = 1 [(gogoproto.nullable) = false];
+
+  message Attr {
+    option (gogoproto.equal) = true;
+    optional string key = 1 [(gogoproto.nullable) = false];
+    optional string value = 2 [(gogoproto.nullable) = false];
+  }
+
+  // Attrs are attributes of this plan node.
+  // Often there are many attributes with the same key, e.g. "render".
+  repeated Attr attrs = 2;
+
+  // Children are the nodes that feed into this one, e.g. two scans for a join.
+  repeated ExplainTreePlanNode children = 3;
+}
+
+// TxnStats contains statistics about transactions of one application.
+// N.B. When field are added to this struct, make sure to updated
+// (*TxnStats).Add in app_stats.go.
+message TxnStats {
+  optional int64 txn_count = 1 [(gogoproto.nullable) = false];
+
+  optional NumericStat txn_time_sec = 2 [(gogoproto.nullable) = false];
+
+  optional int64 committed_count = 3 [(gogoproto.nullable) = false];
+
+  optional int64 implicit_count = 4 [(gogoproto.nullable) = false];
+
+  // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }

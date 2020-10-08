@@ -1,0 +1,26 @@
+# Mode of operation below VersionUnreplicatedRaftTruncatedState.
+# We don't mess with the on-disk state nor do we ever drop updates.
+
+prev index=100 term=9
+----
+
+put legacy=true index=100 term=9
+----
+
+handle index=100 term=9
+----
+apply: true
+/Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+
+# Note that the below aren't actually possible in practice
+# as a divergence won't happen before the migration.
+
+handle index=150 term=9
+----
+apply: true
+/Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+
+handle index=60 term=9
+----
+apply: true
+/Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9

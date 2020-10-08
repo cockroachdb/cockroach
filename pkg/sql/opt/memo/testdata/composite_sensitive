@@ -1,0 +1,76 @@
+# Non-composite variable.
+composite-sensitive vars=(int)
+@1::string
+----
+false
+
+composite-sensitive vars=(decimal)
+@1::string
+----
+true
+
+composite-sensitive vars=(decimal)
+@1::string = '1.0'
+----
+true
+
+# Composite insensitive operator.
+composite-sensitive vars=(decimal)
+@1 >= 2
+----
+false
+
+composite-sensitive vars=(decimal, decimal)
+@1 <= @2
+----
+false
+
+composite-sensitive vars=(decimal, decimal)
+(@1 + @2)::string
+----
+true
+
+composite-sensitive vars=(decimal, decimal, decimal)
+(@1 + @2 <= @3)::string
+----
+false
+
+composite-sensitive vars=(decimal, decimal)
+@1 + @2 < 10
+----
+false
+
+composite-sensitive vars=(decimal, decimal)
+@1 = 10 AND @2 > 10 
+----
+false
+
+composite-sensitive vars=(int, decimal)
+concat(@1::string, @2::string)
+----
+true
+
+composite-sensitive vars=(int, int)
+concat(@1::string, @2::string)
+----
+false
+
+# Even though the expression contains a potentially problematic cast from
+# decimal to string, it is not sensitive because the input to the cast only
+# depends on non-composite columns.
+composite-sensitive vars=(int, decimal, decimal)
+@1::decimal::string || (@2 > @3)::string
+----
+false
+
+# This is actually not sensitive; we could whitelist certain functions.
+composite-sensitive vars=(decimal, decimal)
+log(@1, @2)
+----
+true
+
+# This is actually not sensitive; we could whitelist certain casts.
+composite-sensitive vars=(decimal)
+@1::float
+----
+true

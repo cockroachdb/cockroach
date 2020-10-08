@@ -2,120 +2,207 @@
 # select.opt contains exploration rules for the Select operator.
 # =============================================================================
 
-# ConstrainScan matches a Select over an unconstrained Scan and tries to push
-# down the filter (or part of it) as index constraints. The result is either
-# a constrained Scan or a Select (with a remaining filter) on top of a
-# constrained Scan.
-[ConstrainScan, Explore]
+# GeneratePartialIndexScans generates a set of unconstrained Scan expressions,
+# one for each eligible partial index on the scanned table. A partial index is
+# eligible to be scanned if the filters imply the partial index predicate.
+#
+# Note that this rule differs from both the GenerateIndexScans and
+# GenerateConstrainedScans. GenerateIndexScans matches only Scan operators and
+# does not deal with filters. GenerateConstrainedScans does not generate
+# unconstrained scans. These subtle differences require this rule to be
+# separate from the other rules.
+#
+# The resulting Scan expressions can consist of Scans, Selects, and IndexJoins,
+# depending on remaining filters and the columns included in the index. See the
+# comment for the GeneratePartialIndexScans custom method for more details and
+# examples.
+[GeneratePartialIndexScans, Explore]
 (Select
-  (Scan $def:* & (CanConstrainScan $def))
-  $filter:*
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
 )
 =>
-(ConstrainScan $filter $def)
+(GeneratePartialIndexScans $scanPrivate $filters)
 
-# PushFilterIntoIndexJoinNoRemainder matches a Select over an index join in
-# which the Select filter condition is fully bound by the input to the index
-# join. If this rule matches, it pushes the Select fully below the index join.
-#
-# Note that the below rule, PushFilterIntoIndexJoin, would cover this case if
-# its Filter match condition ^(IsBoundBy $filter $input) were removed. But the
-# problem is that PushFilterIntoIndexJoin would construct a Select with filter
-# condition True, which would not get normalized away (since exploration rules
-# don't re-construct the root node). We need two rules in order to avoid
-# constructing no-op Select operators.
-#
-# In addition, PushFilterIntoIndexJoinNoRemainder serves as an optimization:
-# if the filter is fully bound by the index join input, it is not necessary to
-# check each condition. In order to avoid checking each condition,
-# PushFilterIntoIndexJoin must be ordered after this rule.
-[PushFilterIntoIndexJoinNoRemainder, Explore]
+# GenerateConstrainedScans generates a set of constrained Scan expressions, one
+# for each matching index on the scanned table. The expressions consist of
+# either a standalone Scan operator (if no remaining filter), or else a Scan
+# wrapped by a Select (with a remaining filter). Or, if a secondary index cannot
+# provide all the output columns, an IndexJoin is introduced to supply them. See
+# the comment for the GenerateConstrainedScans custom method for more details
+# and examples.
+[GenerateConstrainedScans, Explore]
 (Select
-  (IndexJoin
-    $input:*
-    $def:*
-  )
-  $filter:* & (IsBoundBy $filter $input)
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
 )
 =>
-(IndexJoin
-  (Select
-    $input
-    $filter
-  )
-  $def
-)
-
-
-# PushFilterIntoIndexJoin matches a Select over a index join in which some of
-# the Select filter conditions are bound by the input to the index join, and
-# some are not. If this rule matches, it pushes the bound conditions below the
-# index join.
-[PushFilterIntoIndexJoin, Explore]
-(Select
-  (IndexJoin
-    $input:*
-    $def:*
-  )
-  $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ]) & ^(IsBoundBy $filter $input)
-)
-=>
-(Select
-  (IndexJoin
-    (Select
-      $input
-      (Filters (ExtractBoundConditions $list $input))
-    )
-    $def
-  )
-  (Filters (ExtractUnboundConditions $list $input))
-)
-
-# ConstrainIndexJoinScan matches a Select over a index join with an
-# unconstrained Scan and tries to push down the filter (or part of it) as index
-# constraints. The result is either a index join with a constrained index Scan
-# or a Select (with a remaining filter) on top of a index join with a
-# constrained index Scan.
-#
-# This rule is needed in addition to the above two rules for the cases where
-# an index constraint can be inferred, but there is no conjunct in the filter
-# that is fully bound by the index scan. For example, consider the query:
-#
-#   SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10)
-#
-# in which there is a secondary index on (a, b). The best plan is an index join
-# using a constrained scan of the secondary index, with the constraint
-# (a, b) >= (1, 2) AND (a, b) <= (8, 9) pushed down to the scan, and the
-# original filter preserved above the index join:
-#
-#   (Select
-#     (IndexJoin abc
-#       (Scan abc@secondary, constraint: /a/b/rowid: [/1/2 - /8/9])
-#     )
-#     (Filter (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10))
-#   )
-#
-# Neither of the above two rules would find this plan.
-#
-# TODO(rytaft): try to find a mechanism for pushdown that is more powerful than
-# finding conjuncts that are fully bound.
-[ConstrainIndexJoinScan, Explore]
-(Select
-  (IndexJoin
-    (Scan $scanDef:* & (CanConstrainScan $scanDef))
-    $indexJoinDef:*
-  )
-  $filter:*
-)
-=>
-(ConstrainIndexJoinScan $filter $scanDef $indexJoinDef)
+(GenerateConstrainedScans $scanPrivate $filters)
 
 # GenerateInvertedIndexScans creates alternate expressions for filters that can
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]
 (Select
-  (Scan $def:* & (CanGenerateInvertedIndexScans $def))
-  $filter:*
+    (Scan
+        $scanPrivate:* &
+            (IsCanonicalScan $scanPrivate) &
+            (HasInvertedIndexes $scanPrivate)
+    )
+    $filters:*
 )
 =>
-(GenerateInvertedIndexScans $def $filter)
+(GenerateInvertedIndexScans $scanPrivate $filters)
+
+# SplitDisjunction splits disjunctions (Or expressions) into a Union of two
+# Select expressions, the first containing the left sub-expression of the Or
+# expression and the second containing the right sub-expression. All other
+# filter items in the original expression are preserved in the new Select
+# expressions.
+#
+# This can produce better query plans in cases where indexes cover both sides of
+# the Or expression. The execution plan can use both indexes to satisfy both
+# sides of the disjunction and union the results together.
+#
+# Note that this rule only matches Selects with canonical scans. Therefore scan
+# constraints do not need to be duplicated in the left and right scans of the
+# union.
+#
+# Also note that this rule only matches Selects that have strict keys. See
+# SplitDisjunctionAddKey which handles Selects that do not have strict keys.
+[SplitDisjunction, Explore]
+(Select
+    $input:(Scan
+            $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+        ) &
+        (HasStrictKey $input)
+    $filters:* &
+        (ExprPairSucceeded
+            $pair:(ExprPairForSplitDisjunction
+                $scanPrivate
+                $filters
+            )
+        )
+)
+=>
+(DistinctOn
+    (UnionAll
+        (Select
+            $input
+            (ReplaceFiltersItem
+                $filters
+                (ExprPairFiltersItemToReplace $pair)
+                (ExprPairLeft $pair)
+            )
+        )
+        (Select
+            (Scan
+                $rightScanPrivate:(DuplicateScanPrivate
+                    $scanPrivate
+                )
+            )
+            (MapScanFilterCols
+                (ReplaceFiltersItem
+                    $filters
+                    (ExprPairFiltersItemToReplace $pair)
+                    (ExprPairRight $pair)
+                )
+                $scanPrivate
+                $rightScanPrivate
+            )
+        )
+        (MakeSetPrivateForSplitDisjunction
+            $scanPrivate
+            $rightScanPrivate
+        )
+    )
+    (MakeAggCols ConstAgg (NonKeyCols $input))
+    (MakeGrouping (KeyCols $input) (EmptyOrdering))
+)
+
+# SplitDisjunctionAddKey performs a transformation similar to
+# SplitDisjunction, but it handles the special case when the original Scan
+# does not have a strict key in its ColSet.
+#
+# For this special case, the replace pattern adds primary key columns to the
+# original Scan ColSet. It also adds a Project to remove those columns after the
+# Union operation. Inclusion of the primary keys is required to prevent the
+# generated Union from de-duplicating rows that have the same selected values.
+#
+# To understand why the addition of the primary key columns to the Scans is
+# necessary, consider the following:
+#
+#     CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT)
+#     INSERT INTO t VALUES (1, 1, 3)
+#     INSERT INTO t VALUES (2, 1, 3)
+#     SELECT a, b FROM t WHERE a = 1 OR b = 3
+#
+# The expected result of the Select query is 2 rows, with values (1, 3). Now
+# consider the following query:
+#
+#     SELECT a, b FROM t WHERE a = 1
+#     UNION
+#     SELECT a, b FROM t WHERE b = 3
+#
+# Union de-duplicates all tuples with the same set of values. So, this
+# query returns only a single row.
+#
+# By adding a primary key in the output columns, each input row to the Union is
+# guaranteed to be unique. This prevents incorrect de-duplication and guarantees
+# that the newly generated plan is equivalent to the original plan.
+[SplitDisjunctionAddKey, Explore]
+(Select
+    $input:(Scan
+            $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+        ) &
+        ^(HasStrictKey $input)
+    $filters:* &
+        (ExprPairSucceeded
+            $pair:(ExprPairForSplitDisjunction
+                $scanPrivate
+                $filters
+            )
+        )
+)
+=>
+(Project
+    (DistinctOn
+        (UnionAll
+            (Select
+                $leftScan:(Scan
+                    $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate
+                        $scanPrivate
+                    )
+                )
+                (ReplaceFiltersItem
+                    $filters
+                    (ExprPairFiltersItemToReplace $pair)
+                    (ExprPairLeft $pair)
+                )
+            )
+            (Select
+                (Scan
+                    $rightScanPrivate:(DuplicateScanPrivate
+                        $leftScanPrivate
+                    )
+                )
+                (MapScanFilterCols
+                    (ReplaceFiltersItem
+                        $filters
+                        (ExprPairFiltersItemToReplace $pair)
+                        (ExprPairRight $pair)
+                    )
+                    $leftScanPrivate
+                    $rightScanPrivate
+                )
+            )
+            (MakeSetPrivateForSplitDisjunction
+                $leftScanPrivate
+                $rightScanPrivate
+            )
+        )
+        (MakeAggCols ConstAgg (NonKeyCols $leftScan))
+        (MakeGrouping (KeyCols $leftScan) (EmptyOrdering))
+    )
+    []
+    (OutputCols $input)
+)

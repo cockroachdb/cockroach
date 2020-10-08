@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package testutils
 
@@ -22,12 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/errors"
 )
 
 // RunEchoServer runs a network server that accepts one connection from ln and
@@ -110,7 +105,7 @@ func TestPartitionableConnBasic(t *testing.T) {
 	defer pConn.Close()
 
 	exp := "let's see if this value comes back\n"
-	fmt.Fprintf(pConn, exp)
+	fmt.Fprint(pConn, exp)
 	got, err := bufio.NewReader(pConn).ReadString('\n')
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +151,7 @@ func TestPartitionableConnPartitionC2S(t *testing.T) {
 
 	// Client sends data.
 	exp := "let's see when this value comes back\n"
-	fmt.Fprintf(pConn, exp)
+	fmt.Fprint(pConn, exp)
 
 	// In the background, the client waits on a read.
 	clientDoneCh := make(chan error)
@@ -239,7 +234,7 @@ func TestPartitionableConnPartitionS2C(t *testing.T) {
 
 	// Client sends data.
 	exp := "let's see when this value comes back\n"
-	fmt.Fprintf(pConn, exp)
+	fmt.Fprint(pConn, exp)
 
 	if s := <-serverSideCh; string(s) != exp {
 		t.Fatalf("expected server to receive %q, got %q", exp, s)

@@ -1,0 +1,347 @@
+# Row
+
+eval
+ROW()
+----
+()
+
+# Row (tuple) comparisons.
+
+eval
+ROW(1) = ROW(1)
+----
+true
+
+eval
+ROW(1, true) = (1, NOT false)
+----
+true
+
+eval
+(1, 'a') = (1, 'a')
+----
+true
+
+eval
+(1, 'a' || 1::char) = (1, 'a1')
+----
+true
+
+eval
+(1+1, (2+2, (3+3))) = (2, (4, (6)))
+----
+true
+
+eval
+(1, 'a') != (1, 'a')
+----
+false
+
+eval
+(1, 'a') != (1, 'b')
+----
+true
+
+eval
+(1, 2, 3) = (1, 2, 3)
+----
+true
+
+eval
+(1, 2, 3) != (1, 2, 3)
+----
+false
+
+eval
+(1, 2, 3) > (1, 2, 3)
+----
+false
+
+eval
+(1, 2, 3) >= (1, 2, 3)
+----
+true
+
+eval
+(1, 2, 3) < (1, 2, 3)
+----
+false
+
+eval
+(1, 2, 3) <= (1, 2, 3)
+----
+true
+
+eval
+(1, 2, 3) = (1, 2, 4)
+----
+false
+
+eval
+(1, 2, 3) != (1, 2, 4)
+----
+true
+
+eval
+(1, 2, 3) > (1, 2, 4)
+----
+false
+
+eval
+(1, 2, 3) >= (1, 2, 4)
+----
+false
+
+eval
+(1, 2, 4) = (1, 2, 3)
+----
+false
+
+eval
+(1, 2, 4) != (1, 2, 3)
+----
+true
+
+eval
+(1, 2, 4) > (1, 2, 3)
+----
+true
+
+eval
+(1, 2, 4) >= (1, 2, 3)
+----
+true
+
+# Row (tuple) comparisons with NULLs.
+
+eval
+(1, 2, 3) = (1, NULL, 3)
+----
+NULL
+
+eval
+(1, 2, 3) != (1, NULL, 3)
+----
+NULL
+
+eval
+(1, 2, 3) > (1, NULL, 3)
+----
+NULL
+
+eval
+(1, 2, 3) >= (1, NULL, 3)
+----
+NULL
+
+eval
+(1, 2, 3) = (0, NULL, 3)
+----
+false
+
+eval
+(1, 2, 3) != (0, NULL, 3)
+----
+true
+
+eval
+(1, 2, 3) > (0, NULL, 3)
+----
+true
+
+eval
+(1, 2, 3) >= (0, NULL, 3)
+----
+true
+
+eval
+(1, 2, 3) = (2, NULL, 3)
+----
+false
+
+eval
+(1, 2, 3) != (2, NULL, 3)
+----
+true
+
+eval
+(1, 2, 3) > (2, NULL, 3)
+----
+false
+
+eval
+(1, 2, 3) >= (2, NULL, 3)
+----
+false
+
+eval
+(1, 2, 3) = (1, NULL, 4)
+----
+false
+
+eval
+(1, 2, 3) != (1, NULL, 4)
+----
+true
+
+eval
+(1, 2, 3) > (1, NULL, 4)
+----
+NULL
+
+eval
+(1, 2, 3) >= (1, NULL, 4)
+----
+NULL
+
+eval
+(1, NULL, 3) = (1, 2, 3)
+----
+NULL
+
+eval
+(1, NULL, 3) != (1, 2, 3)
+----
+NULL
+
+eval
+(1, NULL, 3) > (1, 2, 3)
+----
+NULL
+
+eval
+(1, NULL, 3) >= (1, 2, 3)
+----
+NULL
+
+eval
+(1, NULL, 3) = (0, 2, 3)
+----
+false
+
+eval
+(1, NULL, 3) != (0, 2, 3)
+----
+true
+
+eval
+(1, NULL, 3) > (0, 2, 3)
+----
+true
+
+eval
+(1, NULL, 3) >= (0, 2, 3)
+----
+true
+
+eval
+(1, NULL, 3) = (2, 2, 3)
+----
+false
+
+eval
+(1, NULL, 3) != (2, 2, 3)
+----
+true
+
+eval
+(1, NULL, 3) > (2, 2, 3)
+----
+false
+
+eval
+(1, NULL, 3) >= (2, 2, 3)
+----
+false
+
+eval
+(1, NULL, 3) = (1, 2, 4)
+----
+false
+
+eval
+(1, NULL, 3) != (1, 2, 4)
+----
+true
+
+eval
+(1, NULL, 3) > (1, 2, 4)
+----
+NULL
+
+eval
+(1, NULL, 3) >= (1, 2, 4)
+----
+NULL
+
+# Tuple equality is equivalent to conjunctive equality.
+
+eval
+(1, 2, 3) = (1, 2, 3)
+----
+true
+
+eval
+1 = 1 AND 2 = 2 AND 3 = 3
+----
+true
+
+eval
+(1, 2, 3) = (2, 2, 3)
+----
+false
+
+eval
+1 = 2 AND 2 = 2 AND 3 = 3
+----
+false
+
+eval
+(1, 2, 4) = (1, 2, 3)
+----
+false
+
+eval
+1 = 1 AND 2 = 2 AND 4 = 3
+----
+false
+
+eval
+(NULL, 2, 3) = (1, 2, 3)
+----
+NULL
+
+eval
+NULL = 1 AND 2 = 2 AND 3 = 3
+----
+NULL
+
+eval
+(NULL, 2, 3) = (NULL, 2, 3)
+----
+NULL
+
+eval
+NULL = NULL AND 2 = 2 AND 3 = 3
+----
+NULL
+
+eval
+(NULL, 2, 3) = (NULL, 3, 3)
+----
+false
+
+eval
+NULL = NULL AND 2 = 3 AND 3 = 3
+----
+false
+
+eval
+(NULL, 2, 3) = (1, 2, NULL)
+----
+NULL
+
+eval
+NULL = 1 AND 2 = 2 AND 3 = NULL
+----
+NULL

@@ -1,0 +1,187 @@
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX b (b), UNIQUE INDEX bc (b,c))
+----
+
+# Tests for ALTER TABLE SPLIT AT.
+build
+ALTER TABLE abc SPLIT AT VALUES (1), (2)
+----
+alter-table-split abc
+ ├── columns: key:2 pretty:3 split_enforced_until:4
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    └── (2,)
+ └── CAST(NULL AS STRING)
+
+build
+ALTER TABLE abc SPLIT AT VALUES (1), (2) WITH EXPIRATION '2200-01-01 00:00:00.0'
+----
+alter-table-split abc
+ ├── columns: key:2 pretty:3 split_enforced_until:4
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    └── (2,)
+ └── '2200-01-01 00:00:00.0'
+
+build
+ALTER TABLE abc SPLIT AT VALUES (1, 2), (3, 4)
+----
+error (42601): too many columns in SPLIT AT data
+
+build
+ALTER INDEX abc@bc SPLIT AT VALUES (1), (2) WITH EXPIRATION '2200-01-01 00:00:00.0'
+----
+alter-table-split abc@bc
+ ├── columns: key:2 pretty:3 split_enforced_until:4
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    └── (2,)
+ └── '2200-01-01 00:00:00.0'
+
+build
+ALTER INDEX abc@bc SPLIT AT VALUES (1, 'foo'), (2, 'bar')
+----
+alter-table-split abc@bc
+ ├── columns: key:3 pretty:4 split_enforced_until:5
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── (1, 'foo')
+ │    └── (2, 'bar')
+ └── CAST(NULL AS STRING)
+
+build
+ALTER INDEX abc@bc SPLIT AT VALUES (1, 2), (3, 4)
+----
+error (42601): SPLIT AT data column 2 (c) must be of type string, not type int
+
+build
+ALTER INDEX abc@bc SPLIT AT SELECT b FROM abc ORDER BY a
+----
+alter-table-split abc@bc
+ ├── columns: key:5 pretty:6 split_enforced_until:7
+ ├── project
+ │    ├── columns: b:2  [hidden: a:1!null]
+ │    ├── ordering: +1
+ │    └── scan abc
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+ │         └── ordering: +1
+ └── CAST(NULL AS STRING)
+
+# Tests for ALTER TABLE UNSPLIT.
+build
+ALTER TABLE abc UNSPLIT AT VALUES (1), (2)
+----
+alter-table-unsplit abc
+ ├── columns: key:1 pretty:2
+ └── values
+      ├── columns: column1:7!null
+      ├── (1,)
+      └── (2,)
+
+build
+ALTER TABLE abc UNSPLIT ALL
+----
+alter-table-unsplit-all abc
+ └── columns: key:1 pretty:2
+
+build
+ALTER TABLE abc UNSPLIT AT VALUES (1, 2), (3, 4)
+----
+error (42601): too many columns in UNSPLIT AT data
+
+build
+ALTER INDEX abc@bc UNSPLIT ALL
+----
+alter-table-unsplit-all abc@bc
+ └── columns: key:1 pretty:2
+
+build
+ALTER INDEX abc@bc UNSPLIT AT VALUES (1, 'foo'), (2, 'bar')
+----
+alter-table-unsplit abc@bc
+ ├── columns: key:1 pretty:2
+ └── values
+      ├── columns: column1:7!null column2:8!null
+      ├── (1, 'foo')
+      └── (2, 'bar')
+
+build
+ALTER INDEX abc@bc UNSPLIT AT VALUES (1, 2), (3, 4)
+----
+error (42601): UNSPLIT AT data column 2 (c) must be of type string, not type int
+
+build
+ALTER INDEX abc@bc UNSPLIT AT SELECT b FROM abc ORDER BY a
+----
+alter-table-unsplit abc@bc
+ ├── columns: key:1 pretty:2
+ └── project
+      ├── columns: b:8  [hidden: a:7!null]
+      ├── ordering: +7
+      └── scan abc
+           ├── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:10
+           └── ordering: +7
+
+# Tests for ALTER TABLE EXPERIMENTAL_RELOCATE.
+build
+ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1), (ARRAY[4], 2)
+----
+alter-table-relocate abc
+ ├── columns: key:1 pretty:2
+ └── values
+      ├── columns: column1:3 column2:4!null
+      ├── (ARRAY[1,2,3], 1)
+      └── (ARRAY[4], 2)
+
+build
+ALTER TABLE abc EXPERIMENTAL_RELOCATE LEASE VALUES (10), (11)
+----
+error (42601): less than 2 columns in EXPERIMENTAL_RELOCATE LEASE data
+
+build
+ALTER TABLE abc EXPERIMENTAL_RELOCATE LEASE VALUES (10, 1, 2), (11, 3, 4)
+----
+error (42601): too many columns in EXPERIMENTAL_RELOCATE LEASE data
+
+build
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
+----
+alter-table-relocate abc@bc
+ ├── columns: key:1 pretty:2
+ └── values
+      ├── columns: column1:3 column2:4!null column3:5!null
+      ├── (ARRAY[5], 1, 'foo')
+      └── (ARRAY[6,7,8], 2, 'bar')
+
+build
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (5, 1, 'foo'), (6, 2, 'bar')
+----
+error (42601): EXPERIMENTAL_RELOCATE data column 1 (relocation array) must be of type int[], not type int
+
+build
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE LEASE VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
+----
+error (42601): EXPERIMENTAL_RELOCATE LEASE data column 1 (target leaseholder) must be of type int, not type int[]
+
+build
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (1, 2), (3, 4)
+----
+error (42601): EXPERIMENTAL_RELOCATE data column 1 (relocation array) must be of type int[], not type int
+
+build
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2], 1, 2), (ARRAY[3,4], 3, 4)
+----
+error (42601): EXPERIMENTAL_RELOCATE data column 3 (c) must be of type string, not type int
+
+build
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE LEASE VALUES (10, 1, 'foo'), (11, 3, 'bar')
+----
+alter-table-relocate abc@bc [lease]
+ ├── columns: key:1 pretty:2
+ └── values
+      ├── columns: column1:3!null column2:4!null column3:5!null
+      ├── (10, 1, 'foo')
+      └── (11, 3, 'bar')

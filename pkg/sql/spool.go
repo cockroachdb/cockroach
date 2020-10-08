@@ -1,24 +1,21 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // spoolNode ensures that a child planNode is executed to completion
@@ -28,16 +25,11 @@ import (
 // the child node is still run to completion.
 type spoolNode struct {
 	source    planNode
-	rows      *sqlbase.RowContainer
+	rows      *rowcontainer.RowContainer
 	hardLimit int64
 	curRowIdx int
 }
 
-func (p *planner) makeSpool(source planNode) planNode {
-	return &spoolNode{source: source}
-}
-
-// startExec implements the execStartable interface.
 func (s *spoolNode) startExec(params runParams) error {
 	// If FastPathResults() on the source indicates that the results are
 	// already available (2nd value true), then the computation is
@@ -49,10 +41,9 @@ func (s *spoolNode) startExec(params runParams) error {
 		}
 	}
 
-	s.rows = sqlbase.NewRowContainer(
+	s.rows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(planColumns(s.source)),
-		0, /* rowCapacity */
+		colinfo.ColTypeInfoFromResCols(planColumns(s.source)),
 	)
 
 	// Accumulate all the rows up to the hardLimit, if any.

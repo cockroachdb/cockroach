@@ -1,0 +1,508 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT NOT NULL,
+    b INT,
+    c INT DEFAULT (10),
+    d INT AS (b + c + 1) STORED,
+    e INT AS (a) STORED
+)
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8,
+    z FLOAT8
+)
+----
+
+exec-ddl
+CREATE TABLE uv (
+    u DECIMAL,
+    v BYTES
+)
+----
+
+exec-ddl
+CREATE TABLE mutation (
+    m INT PRIMARY KEY,
+    n INT,
+    "o:write-only" INT DEFAULT(10),
+    "p:delete-only" INT AS (o + n) STORED
+)
+----
+
+# ------------------------------------------------------------------------------
+# Basic tests.
+# ------------------------------------------------------------------------------
+
+# No extra clauses.
+build
+DELETE FROM abcde
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
+ └── scan abcde
+      ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      └── computed column expressions
+           ├── d:11
+           │    └── (b:9 + c:10) + 1
+           └── e:12
+                └── a:8
+
+# Use WHERE, ORDER BY, LIMIT.
+build
+DELETE FROM abcde WHERE a>0 ORDER BY a LIMIT 10
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
+ └── limit
+      ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      ├── internal-ordering: +8
+      ├── sort
+      │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      │    ├── ordering: +8
+      │    ├── limit hint: 10.00
+      │    └── select
+      │         ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      │         ├── scan abcde
+      │         │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      │         │    └── computed column expressions
+      │         │         ├── d:11
+      │         │         │    └── (b:9 + c:10) + 1
+      │         │         └── e:12
+      │         │              └── a:8
+      │         └── filters
+      │              └── a:8 > 0
+      └── 10
+
+# Use aliased table name.
+build
+DELETE FROM abcde AS foo WHERE foo.a>0 ORDER BY foo.a LIMIT 10
+----
+delete foo
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
+ └── limit
+      ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      ├── internal-ordering: +8
+      ├── sort
+      │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      │    ├── ordering: +8
+      │    ├── limit hint: 10.00
+      │    └── select
+      │         ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      │         ├── scan foo
+      │         │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      │         │    └── computed column expressions
+      │         │         ├── d:11
+      │         │         │    └── (b:9 + c:10) + 1
+      │         │         └── e:12
+      │         │              └── a:8
+      │         └── filters
+      │              └── a:8 > 0
+      └── 10
+
+# DELETE with index hints.
+exec-ddl
+CREATE TABLE xyzw (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  INDEX foo (z, y)
+)
+----
+
+build
+DELETE FROM xyzw@primary
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:6 y:7 z:8 w:9
+ └── scan xyzw
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
+      └── flags: force-index=primary
+
+build
+DELETE FROM xyzw@foo
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:6 y:7 z:8 w:9
+ └── scan xyzw
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
+      └── flags: force-index=foo
+
+build
+DELETE FROM xyzw@{FORCE_INDEX=foo,ASC}
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:6 y:7 z:8 w:9
+ └── scan xyzw
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
+      └── flags: force-index=foo,fwd
+
+build
+DELETE FROM xyzw@{FORCE_INDEX=foo,DESC}
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:6 y:7 z:8 w:9
+ └── scan xyzw,rev
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
+      └── flags: force-index=foo,rev
+
+build
+DELETE FROM xyzw@{NO_INDEX_JOIN}
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:6 y:7 z:8 w:9
+ └── scan xyzw
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
+      └── flags: no-index-join
+
+build
+DELETE FROM xyzw@bad_idx
+----
+error: index "bad_idx" not found
+
+# Use placeholders.
+build
+DELETE FROM xyz WHERE x=$1 ORDER BY y+$2 DESC LIMIT 2
+----
+delete xyz
+ ├── columns: <none>
+ ├── fetch columns: x:5 y:6 z:7
+ └── limit
+      ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8 column9:9
+      ├── internal-ordering: -9
+      ├── sort
+      │    ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8 column9:9
+      │    ├── ordering: -9
+      │    ├── limit hint: 2.00
+      │    └── project
+      │         ├── columns: column9:9 x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
+      │         ├── select
+      │         │    ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
+      │         │    ├── scan xyz
+      │         │    │    └── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
+      │         │    └── filters
+      │         │         └── x:5 = $1
+      │         └── projections
+      │              └── y:6 + $2 [as=column9:9]
+      └── 2
+
+
+# Use CTE within WHERE clause.
+build
+WITH cte AS (SELECT x FROM xyz) DELETE FROM abcde WHERE EXISTS(SELECT * FROM cte)
+----
+with &1 (cte)
+ ├── project
+ │    ├── columns: xyz.x:1!null
+ │    └── scan xyz
+ │         └── columns: xyz.x:1!null y:2 z:3 xyz.crdb_internal_mvcc_timestamp:4
+ └── delete abcde
+      ├── columns: <none>
+      ├── fetch columns: a:12 b:13 c:14 d:15 e:16 rowid:17
+      └── select
+           ├── columns: a:12!null b:13 c:14 d:15 e:16 rowid:17!null abcde.crdb_internal_mvcc_timestamp:18
+           ├── scan abcde
+           │    ├── columns: a:12!null b:13 c:14 d:15 e:16 rowid:17!null abcde.crdb_internal_mvcc_timestamp:18
+           │    └── computed column expressions
+           │         ├── d:15
+           │         │    └── (b:13 + c:14) + 1
+           │         └── e:16
+           │              └── a:12
+           └── filters
+                └── exists
+                     └── with-scan &1 (cte)
+                          ├── columns: x:19!null
+                          └── mapping:
+                               └──  xyz.x:1 => x:19
+
+# Unknown target table.
+build
+DELETE FROM unknown WHERE x=1
+----
+error (42P01): no data source matches prefix: "unknown"
+
+# Try to use non-returning UPDATE as expression.
+build
+SELECT * FROM [DELETE FROM abcde WHERE a=1]
+----
+error (42703): statement source "DELETE FROM abcde WHERE a = 1" does not return any columns
+
+# Non-referenced CTE with mutation.
+build
+WITH cte AS (SELECT b FROM [DELETE FROM abcde WHERE a=b RETURNING *]) DELETE FROM abcde WHERE a=b
+----
+with &1
+ ├── project
+ │    ├── columns: abcde.a:1!null abcde.b:2!null abcde.c:3 abcde.d:4 abcde.e:5
+ │    └── delete abcde
+ │         ├── columns: abcde.a:1!null abcde.b:2!null abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
+ │         ├── fetch columns: abcde.a:8 abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13
+ │         └── select
+ │              ├── columns: abcde.a:8!null abcde.b:9!null abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              ├── scan abcde
+ │              │    ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              │    └── computed column expressions
+ │              │         ├── abcde.d:11
+ │              │         │    └── (abcde.b:9 + abcde.c:10) + 1
+ │              │         └── abcde.e:12
+ │              │              └── abcde.a:8
+ │              └── filters
+ │                   └── abcde.a:8 = abcde.b:9
+ └── with &2 (cte)
+      ├── project
+      │    ├── columns: b:16!null
+      │    └── with-scan &1
+      │         ├── columns: a:15!null b:16!null c:17 d:18 e:19
+      │         └── mapping:
+      │              ├──  abcde.a:1 => a:15
+      │              ├──  abcde.b:2 => b:16
+      │              ├──  abcde.c:3 => c:17
+      │              ├──  abcde.d:4 => d:18
+      │              └──  abcde.e:5 => e:19
+      └── delete abcde
+           ├── columns: <none>
+           ├── fetch columns: abcde.a:27 abcde.b:28 abcde.c:29 abcde.d:30 abcde.e:31 rowid:32
+           └── select
+                ├── columns: abcde.a:27!null abcde.b:28!null abcde.c:29 abcde.d:30 abcde.e:31 rowid:32!null crdb_internal_mvcc_timestamp:33
+                ├── scan abcde
+                │    ├── columns: abcde.a:27!null abcde.b:28 abcde.c:29 abcde.d:30 abcde.e:31 rowid:32!null crdb_internal_mvcc_timestamp:33
+                │    └── computed column expressions
+                │         ├── abcde.d:30
+                │         │    └── (abcde.b:28 + abcde.c:29) + 1
+                │         └── abcde.e:31
+                │              └── abcde.a:27
+                └── filters
+                     └── abcde.a:27 = abcde.b:28
+
+# With alias, original table name should be inaccessible.
+build
+DELETE FROM abcde AS foo WHERE a=abcde.b
+----
+error (42P01): no data source matches prefix: abcde in this context
+
+# ORDER BY can only be used with LIMIT.
+build
+DELETE FROM abcde WHERE b=1 ORDER BY c
+----
+error (42601): DELETE statement requires LIMIT when ORDER BY is used
+
+# ------------------------------------------------------------------------------
+# Test RETURNING.
+# ------------------------------------------------------------------------------
+
+# Return values from delete.
+build
+DELETE FROM abcde WHERE a=1 RETURNING *
+----
+project
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
+ └── delete abcde
+      ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
+      ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
+      └── select
+           ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+           ├── scan abcde
+           │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+           │    └── computed column expressions
+           │         ├── d:11
+           │         │    └── (b:9 + c:10) + 1
+           │         └── e:12
+           │              └── a:8
+           └── filters
+                └── a:8 = 1
+
+# Return values from aliased table.
+build
+DELETE FROM abcde AS foo WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
+----
+project
+ ├── columns: "?column?":15!null "?column?":16
+ ├── delete foo
+ │    ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
+ │    ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
+ │    └── select
+ │         ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │         ├── scan foo
+ │         │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │         │    └── computed column expressions
+ │         │         ├── d:11
+ │         │         │    └── (b:9 + c:10) + 1
+ │         │         └── e:12
+ │         │              └── a:8
+ │         └── filters
+ │              └── a:8 = 1
+ └── projections
+      ├── a:1 + 1 [as="?column?":15]
+      └── b:2 * d:4 [as="?column?":16]
+
+# Use returning DELETE as a FROM expression.
+build
+SELECT a, d FROM [DELETE FROM abcde WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
+----
+with &1
+ ├── columns: a:15!null d:18
+ ├── project
+ │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5
+ │    └── delete abcde
+ │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
+ │         ├── fetch columns: abcde.a:8 abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13
+ │         └── limit
+ │              ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              ├── internal-ordering: +9
+ │              ├── sort
+ │              │    ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              │    ├── ordering: +9
+ │              │    ├── limit hint: 10.00
+ │              │    └── select
+ │              │         ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              │         ├── scan abcde
+ │              │         │    ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              │         │    └── computed column expressions
+ │              │         │         ├── abcde.d:11
+ │              │         │         │    └── (abcde.b:9 + abcde.c:10) + 1
+ │              │         │         └── abcde.e:12
+ │              │         │              └── abcde.a:8
+ │              │         └── filters
+ │              │              └── abcde.a:8 > 0
+ │              └── 10
+ └── project
+      ├── columns: a:15!null d:18
+      └── with-scan &1
+           ├── columns: a:15!null b:16 c:17 d:18 e:19
+           └── mapping:
+                ├──  abcde.a:1 => a:15
+                ├──  abcde.b:2 => b:16
+                ├──  abcde.c:3 => c:17
+                ├──  abcde.d:4 => d:18
+                └──  abcde.e:5 => e:19
+
+# ------------------------------------------------------------------------------
+# Tests with mutations.
+# ------------------------------------------------------------------------------
+
+# Without RETURNING clause.
+build
+DELETE FROM mutation WHERE m=1
+----
+delete mutation
+ ├── columns: <none>
+ ├── fetch columns: m:6 n:7 o:8 p:9
+ └── select
+      ├── columns: m:6!null n:7 o:8 p:9 crdb_internal_mvcc_timestamp:10
+      ├── scan mutation
+      │    └── columns: m:6!null n:7 o:8 p:9 crdb_internal_mvcc_timestamp:10
+      └── filters
+           └── m:6 = 1
+
+# With RETURNING clause.
+build
+DELETE FROM mutation WHERE m=1 RETURNING *
+----
+delete mutation
+ ├── columns: m:1!null n:2
+ ├── fetch columns: m:6 n:7 o:8 p:9
+ └── select
+      ├── columns: m:6!null n:7 o:8 p:9 crdb_internal_mvcc_timestamp:10
+      ├── scan mutation
+      │    └── columns: m:6!null n:7 o:8 p:9 crdb_internal_mvcc_timestamp:10
+      └── filters
+           └── m:6 = 1
+
+
+# Try to return a mutation column.
+build
+DELETE FROM mutation RETURNING o
+----
+error (42703): column "o" does not exist
+
+# Try to use mutation column in WHERE clause.
+build
+DELETE FROM mutation WHERE o=10
+----
+error (42P10): column "o" is being backfilled
+
+# Try to use mutation column in ORDER BY expression.
+build
+DELETE FROM mutation ORDER BY p LIMIT 2
+----
+error (42P10): column "p" is being backfilled
+
+# ------------------------------------------------------------------------------
+# Test partial index column values.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE partial_indexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX (b),
+    INDEX (b) WHERE c = 'foo',
+    INDEX (c) WHERE a > b AND c = 'bar',
+    INDEX "b:delete-only" (b) WHERE c = 'delete-only',
+    INDEX "b:write-only" (b) WHERE c = 'write-only'
+)
+----
+
+build
+DELETE FROM partial_indexes
+----
+delete partial_indexes
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 c:7
+ ├── partial index del columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12
+ └── project
+      ├── columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      ├── scan partial_indexes
+      │    ├── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      │    └── partial index predicates
+      │         ├── secondary: filters
+      │         │    └── c:7 = 'foo'
+      │         └── secondary: filters
+      │              └── (a:5 > b:6) AND (c:7 = 'bar')
+      └── projections
+           ├── c:7 = 'foo' [as=partial_index_del1:9]
+           ├── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]
+           ├── c:7 = 'delete-only' [as=partial_index_del3:11]
+           └── c:7 = 'write-only' [as=partial_index_del4:12]
+
+# Do not error with "column reference is ambiguous" when table column names
+# match synthesized column names.
+exec-ddl
+CREATE TABLE t (
+    partial_index_del1 INT,
+    UNIQUE INDEX (partial_index_del1) WHERE partial_index_del1 > 0
+)
+----
+
+build
+DELETE FROM t WHERE partial_index_del1 = 5
+----
+delete t
+ ├── columns: <none>
+ ├── fetch columns: t.partial_index_del1:4 rowid:5
+ ├── partial index del columns: partial_index_del1:7
+ └── project
+      ├── columns: partial_index_del1:7!null t.partial_index_del1:4!null rowid:5!null crdb_internal_mvcc_timestamp:6
+      ├── select
+      │    ├── columns: t.partial_index_del1:4!null rowid:5!null crdb_internal_mvcc_timestamp:6
+      │    ├── scan t
+      │    │    ├── columns: t.partial_index_del1:4 rowid:5!null crdb_internal_mvcc_timestamp:6
+      │    │    └── partial index predicates
+      │    │         └── secondary: filters
+      │    │              └── t.partial_index_del1:4 > 0
+      │    └── filters
+      │         └── t.partial_index_del1:4 = 5
+      └── projections
+           └── t.partial_index_del1:4 > 0 [as=partial_index_del1:7]

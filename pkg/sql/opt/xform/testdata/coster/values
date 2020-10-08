@@ -2,9 +2,9 @@ opt
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6))
 ----
 values
- ├── columns: column1:1(int) column2:2(int) column3:3(int)
+ ├── columns: column1:1!null column2:2!null column3:3!null
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
- ├── cost: 0.02
- ├── (1, 2, 3) [type=tuple{int, int, int}]
- └── (4, 5, 6) [type=tuple{int, int, int}]
+ ├── cost: 0.03
+ ├── (1, 2, 3)
+ └── (4, 5, 6)

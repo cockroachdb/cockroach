@@ -1,224 +1,885 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
+
+exec-ddl
+CREATE TABLE computed (a INT PRIMARY KEY, b INT, c INT AS (a+b+1) STORED)
+----
+
+exec-ddl
+CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
+----
+
+# --------------------------------------------------
+# InlineConstVar
+# --------------------------------------------------
+
+norm expect=InlineConstVar
+SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4, 5)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan b
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+
+norm expect=InlineConstVar
+SELECT k FROM b WHERE i=8 AND 3 = mod(i, 5)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan b
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 = 8 [outer=(2), constraints=(/2: [/8 - /8]; tight), fd=()-->(2)]
+
+norm expect=InlineConstVar
+SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4)
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Case that requires multiple iterations to fully inline.
+norm expect=InlineConstVar
+SELECT * FROM xy WHERE x=y AND y=4 AND x IN (1, 2, 3, 4)
+----
+select
+ ├── columns: x:1!null y:2!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      ├── x:1 = 4 [outer=(1), constraints=(/1: [/4 - /4]; tight), fd=()-->(1)]
+      └── y:2 = 4 [outer=(2), constraints=(/2: [/4 - /4]; tight), fd=()-->(2)]
+
+norm expect=InlineConstVar
+SELECT * FROM xy WHERE x=y AND y=4 AND x=3
+----
+values
+ ├── columns: x:1!null y:2!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+# Can't inline composite types.
+norm expect-not=InlineConstVar
+SELECT * FROM (VALUES (0.0), (0.00), (0.000)) AS v (x) WHERE x = 0 AND x::STRING = '0.00';
+----
+select
+ ├── columns: x:1!null
+ ├── cardinality: [0 - 3]
+ ├── immutable
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (0.0,)
+ │    ├── (0.00,)
+ │    └── (0.000,)
+ └── filters
+      ├── column1:1 = 0 [outer=(1), immutable, constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
+      └── column1:1::STRING = '0.00' [outer=(1), immutable]
+
+# The rule should trigger, but not inline the composite type.
+norm expect=InlineConstVar
+SELECT * FROM (VALUES (0.0, 'a'), (0.00, 'b'), (0.000, 'b')) AS v (x, y) WHERE x = 0 AND x::STRING = '0.00' AND y = 'b' AND y IN ('a', 'b');
+----
+select
+ ├── columns: x:1!null y:2!null
+ ├── cardinality: [0 - 3]
+ ├── immutable
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (0.0, 'a')
+ │    ├── (0.00, 'b')
+ │    └── (0.000, 'b')
+ └── filters
+      ├── column1:1 = 0 [outer=(1), immutable, constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
+      ├── column1:1::STRING = '0.00' [outer=(1), immutable]
+      └── column2:2 = 'b' [outer=(2), constraints=(/2: [/'b' - /'b']; tight), fd=()-->(2)]
+
+# Ensure that InlineConstVar fires before filter pushdown rules.
+norm expect=InlineConstVar
+SELECT * FROM a INNER JOIN xy ON True WHERE y=10 AND i<y
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8!null
+ ├── key: (1,7)
+ ├── fd: ()-->(8), (1)-->(2-5)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── i:2 < 10 [outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+ ├── select
+ │    ├── columns: x:7!null y:8!null
+ │    ├── key: (7)
+ │    ├── fd: ()-->(8)
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── y:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
+ └── filters (true)
+
+# --------------------------------------------------
+# InlineProjectConstants
+# --------------------------------------------------
+
+# Inline constants from Project expression.
+norm expect=InlineProjectConstants
+UPDATE computed SET a=1, b=2
+----
+update computed
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 c:7
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    ├── b_new:10 => b:2
+ │    └── column11:11 => c:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: column11:11!null a_new:9!null b_new:10!null a:5!null b:6 c:7
+      ├── key: (5)
+      ├── fd: ()-->(9-11), (5)-->(6,7)
+      ├── scan computed
+      │    ├── columns: a:5!null b:6 c:7
+      │    ├── computed column expressions
+      │    │    └── c:7
+      │    │         └── (a:5 + b:6) + 1
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6,7)
+      └── projections
+           ├── 4 [as=column11:11]
+           ├── 1 [as=a_new:9]
+           └── 2 [as=b_new:10]
+
+# Inline constants from Values expression.
+norm expect=InlineProjectConstants
+SELECT one+two+three+four FROM (VALUES (1, $1:::int, 2, $2:::int)) AS t(one, two, three, four)
+----
+project
+ ├── columns: "?column?":5
+ ├── cardinality: [1 - 1]
+ ├── immutable, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── values
+ │    ├── columns: column2:2 column4:4
+ │    ├── cardinality: [1 - 1]
+ │    ├── has-placeholder
+ │    ├── key: ()
+ │    ├── fd: ()-->(2,4)
+ │    └── ($1, $2)
+ └── projections
+      └── column4:4 + ((column2:2 + 1) + 2) [as="?column?":5, outer=(2,4), immutable]
+
+# Multiple constant columns, multiple refs to each, interspersed with other
+# columns.
+norm expect=InlineProjectConstants
+SELECT one+two, x, one*two, y FROM (SELECT x, 1 AS one, y, 2 AS two FROM xy)
+----
+project
+ ├── columns: "?column?":6!null x:1!null "?column?":7!null y:2
+ ├── key: (1)
+ ├── fd: ()-->(6,7), (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      ├── 3 [as="?column?":6]
+      └── 2 [as="?column?":7]
+
+# Constant column reference within correlated subquery (which becomes
+# uncorrelated as a result).
+norm expect=InlineProjectConstants
+SELECT EXISTS(SELECT * FROM a WHERE k=one AND i=two) FROM (VALUES (1, 2)) AS t(one, two)
+----
+values
+ ├── columns: exists:9
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(9)
+ └── tuple
+      └── exists
+           └── select
+                ├── columns: k:3!null i:4!null f:5 s:6 j:7
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(3-7)
+                ├── scan a
+                │    ├── columns: k:3!null i:4 f:5 s:6 j:7
+                │    ├── key: (3)
+                │    └── fd: (3)-->(4-7)
+                └── filters
+                     ├── k:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+                     └── i:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
+
+# Do not inline constants from Values expression with multiple rows.
+norm expect-not=InlineProjectConstants
+SELECT one+two FROM (VALUES (1, 2), (3, 4)) AS t(one, two)
+----
+project
+ ├── columns: "?column?":3!null
+ ├── cardinality: [2 - 2]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 2)
+ │    └── (3, 4)
+ └── projections
+      └── column1:1 + column2:2 [as="?column?":3, outer=(1,2), immutable]
+
+# --------------------------------------------------
+# InlineSelectConstants
+# --------------------------------------------------
+
+# Inline constants from Project expression.
+norm expect=InlineSelectConstants
+SELECT * FROM (SELECT 1 AS one from xy) WHERE one > 0
+----
+project
+ ├── columns: one:4!null
+ ├── fd: ()-->(4)
+ ├── scan xy
+ └── projections
+      └── 1 [as=one:4]
+
+# Inline constants from Values expression.
+norm expect=InlineSelectConstants
+SELECT *
+FROM (VALUES ($1:::int, 1, $2:::float, 2)) AS t(one, two, three, four)
+WHERE one = two OR three = four
+----
+select
+ ├── columns: one:1 two:2!null three:3 four:4!null
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── values
+ │    ├── columns: column1:1 column2:2!null column3:3 column4:4!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── has-placeholder
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    └── ($1, 1, $2, 2)
+ └── filters
+      └── (column1:1 = 1) OR (column3:3 = 2.0) [outer=(1,3)]
+
+# Multiple constant columns, multiple refs to each, interspersed with other
+# columns.
+norm expect=InlineSelectConstants
+SELECT * FROM (SELECT x, 1 AS one, y, 2 AS two FROM xy) WHERE x=one AND y=two
+----
+project
+ ├── columns: x:1!null one:4!null y:2!null two:5!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2,4,5)
+ ├── select
+ │    ├── columns: x:1!null y:2!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── filters
+ │         ├── x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │         └── y:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+ └── projections
+      ├── 1 [as=one:4]
+      └── 2 [as=two:5]
+
+# Do not inline constants from Values expression with multiple rows.
+norm expect-not=InlineSelectConstants
+SELECT * FROM (VALUES (1, 2), (3, 4)) AS t(one, two) WHERE one=two
+----
+select
+ ├── columns: one:1!null two:2!null
+ ├── cardinality: [0 - 2]
+ ├── fd: (1)==(2), (2)==(1)
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 2)
+ │    └── (3, 4)
+ └── filters
+      └── column1:1 = column2:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
+# --------------------------------------------------
+# InlineJoinConstantsLeft + InlineJoinConstantsRight
+# --------------------------------------------------
+norm expect=InlineJoinConstantsLeft
+SELECT * FROM (SELECT 1 AS one) LEFT JOIN a ON k=one
+----
+left-join (cross)
+ ├── columns: one:1!null k:2 i:3 f:4 s:5 j:6
+ ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── key: ()
+ ├── fd: ()-->(1-6)
+ ├── values
+ │    ├── columns: one:1!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,)
+ ├── select
+ │    ├── columns: k:2!null i:3 f:4 s:5 j:6
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2-6)
+ │    ├── scan a
+ │    │    ├── columns: k:2!null i:3 f:4 s:5 j:6
+ │    │    ├── key: (2)
+ │    │    └── fd: (2)-->(3-6)
+ │    └── filters
+ │         └── k:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ └── filters (true)
+
+norm expect=InlineJoinConstantsRight
+SELECT * FROM a FULL JOIN (SELECT 1 AS one) ON k=one
+----
+full-join (cross)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 one:7
+ ├── cardinality: [1 - ]
+ ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,7)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── values
+ │    ├── columns: one:7!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7)
+ │    └── (1,)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm expect=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
+SELECT * FROM (SELECT 1 AS one) INNER JOIN (SELECT 2 AS two) ON one=two
+----
+values
+ ├── columns: one:1!null two:2!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+# Constant column exists in input, but is not referenced.
+norm expect-not=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
+SELECT * FROM a INNER JOIN (SELECT 1 AS one, y FROM xy) ON k=y
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 one:10!null y:8!null
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── fd: ()-->(10), (1)-->(2-5), (1)==(8), (8)==(1)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── project
+ │    ├── columns: one:10!null y:8
+ │    ├── fd: ()-->(10)
+ │    ├── scan xy
+ │    │    └── columns: y:8
+ │    └── projections
+ │         └── 1 [as=one:10]
+ └── filters
+      └── k:1 = y:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# Regression test for #50841
+exec-ddl
+CREATE TABLE kv  (k  INT8 PRIMARY KEY, v  INT8);
+----
+
+exec-ddl
+CREATE TABLE kv2 (k2 INT8 PRIMARY KEY, v2 INT8);
+----
+
+# Ensure that lookup joins are used.
+opt expect-not=InlineJoinConstantsLeft format=hide-all
+SELECT v, v2
+FROM (SELECT unnest('{1}'::INT8[]) AS lookup_k)
+INNER LOOKUP JOIN (SELECT k, v FROM kv) ON k = lookup_k
+INNER LOOKUP JOIN (SELECT k2, v2 FROM kv2) ON k2 = lookup_k;
+----
+project
+ └── inner-join (lookup kv2)
+      ├── flags: force lookup join (into right side)
+      ├── lookup columns are key
+      ├── inner-join (lookup kv)
+      │    ├── flags: force lookup join (into right side)
+      │    ├── lookup columns are key
+      │    ├── values
+      │    │    └── (1,)
+      │    └── filters (true)
+      └── filters (true)
+
+# Ensure that merge joins are used.
+opt expect-not=InlineJoinConstantsLeft format=hide-all
+SELECT v, v2
+FROM (SELECT unnest('{1}'::INT8[]) AS lookup_k)
+INNER MERGE JOIN (SELECT k, v FROM kv) ON k = lookup_k
+INNER MERGE JOIN (SELECT k2, v2 FROM kv2) ON k2 = lookup_k;
+----
+project
+ └── inner-join (merge)
+      ├── flags: force merge join
+      ├── inner-join (merge)
+      │    ├── flags: force merge join
+      │    ├── values
+      │    │    └── (1,)
+      │    ├── scan kv
+      │    └── filters (true)
+      ├── scan kv2
+      └── filters (true)
+
+# Ensure that merge joins are used.
+opt expect-not=InlineJoinConstantsRight format=hide-all
+SELECT v, v2
+FROM (SELECT k, v FROM kv)
+INNER MERGE JOIN (SELECT unnest('{1}'::INT8[]) AS lookup_k) ON k = lookup_k
+INNER MERGE JOIN (SELECT k2, v2 FROM kv2) ON k2 = lookup_k;
+----
+project
+ └── inner-join (merge)
+      ├── flags: force merge join
+      ├── inner-join (merge)
+      │    ├── flags: force merge join
+      │    ├── scan kv
+      │    ├── values
+      │    │    └── (1,)
+      │    └── filters (true)
+      ├── scan kv2
+      └── filters (true)
 
 # --------------------------------------------------
 # PushSelectIntoInlinableProject
 # --------------------------------------------------
 
 # Inline comparison.
-opt
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k=1 AS expr FROM a) a WHERE expr IS NULL
 ----
 project
- ├── columns: expr:6(bool)
+ ├── columns: expr:7!null
  ├── select
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    ├── key: (1)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null)
+ │    │    ├── columns: k:1!null
  │    │    └── key: (1)
- │    └── filters [type=bool, outer=(1)]
- │         └── (a.k = 1) IS NULL [type=bool, outer=(1)]
- └── projections [outer=(1)]
-      └── a.k = 1 [type=bool, outer=(1)]
+ │    └── filters
+ │         └── (k:1 = 1) IS NULL [outer=(1)]
+ └── projections
+      └── k:1 = 1 [as=expr:7, outer=(1)]
 
 # Inline arithmetic.
-opt
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k*2+1 AS expr FROM a) a WHERE expr > 10
 ----
 project
- ├── columns: expr:6(int)
+ ├── columns: expr:7!null
+ ├── immutable
  ├── select
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null)
+ │    │    ├── columns: k:1!null
  │    │    └── key: (1)
- │    └── filters [type=bool, outer=(1)]
- │         └── ((a.k * 2) + 1) > 10 [type=bool, outer=(1)]
- └── projections [outer=(1)]
-      └── (a.k * 2) + 1 [type=int, outer=(1)]
+ │    └── filters
+ │         └── (k:1 * 2) > 9 [outer=(1), immutable]
+ └── projections
+      └── (k:1 * 2) + 1 [as=expr:7, outer=(1), immutable]
 
 # Inline boolean logic.
-opt
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT NOT(k>1 AND k<=5) AS expr FROM a) a WHERE expr
 ----
 project
- ├── columns: expr:6(bool)
- ├── scan a
- │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [ - /1] [/6 - ]
- │    └── key: (1)
- └── projections [outer=(1)]
-      └── (a.k <= 1) OR (a.k > 5) [type=bool, outer=(1)]
+ ├── columns: expr:7!null
+ ├── select
+ │    ├── columns: k:1!null
+ │    ├── key: (1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (k:1 <= 1) OR (k:1 > 5) [outer=(1), constraints=(/1: (/NULL - /1] [/6 - ]; tight)]
+ └── projections
+      └── (k:1 <= 1) OR (k:1 > 5) [as=expr:7, outer=(1)]
 
 # Inline constants.
-opt
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT (f IS NULL OR f != 10.5) AS expr FROM a) a WHERE expr
 ----
 project
- ├── columns: expr:6(bool)
+ ├── columns: expr:7
  ├── select
- │    ├── columns: f:3(float)
+ │    ├── columns: f:3
  │    ├── scan a
- │    │    └── columns: f:3(float)
- │    └── filters [type=bool, outer=(3)]
- │         └── (a.f IS NULL) OR (a.f != 10.5) [type=bool, outer=(3)]
- └── projections [outer=(3)]
-      └── (a.f IS NULL) OR (a.f != 10.5) [type=bool, outer=(3)]
+ │    │    └── columns: f:3
+ │    └── filters
+ │         └── (f:3 IS NULL) OR (f:3 != 10.5) [outer=(3), constraints=(/3: [/NULL - /10.499999999999998] [/10.500000000000002 - ]; tight)]
+ └── projections
+      └── (f:3 IS NULL) OR (f:3 != 10.5) [as=expr:7, outer=(3)]
 
 # Reference the expression to inline multiple times.
-opt
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT f+1 AS expr FROM a) a WHERE expr=expr
 ----
 project
- ├── columns: expr:6(float)
+ ├── columns: expr:7
+ ├── immutable
  ├── select
- │    ├── columns: f:3(float)
+ │    ├── columns: f:3
+ │    ├── immutable
  │    ├── scan a
- │    │    └── columns: f:3(float)
- │    └── filters [type=bool, outer=(3)]
- │         └── (a.f + 1.0) = (a.f + 1.0) [type=bool, outer=(3)]
- └── projections [outer=(3)]
-      └── a.f + 1.0 [type=float, outer=(3)]
+ │    │    └── columns: f:3
+ │    └── filters
+ │         └── (f:3 + 1.0) IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(3), immutable]
+ └── projections
+      └── f:3 + 1.0 [as=expr:7, outer=(3), immutable]
 
 # Use outer references in both inlined expression and in referencing expression.
-opt
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT (x-i) AS expr FROM xy) WHERE expr > i*i)
 ----
-semi-join
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+semi-join (cross)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan xy
- │    ├── columns: x:6(int!null)
- │    └── key: (6)
- └── filters [type=bool, outer=(2,6)]
-      └── (xy.x - a.i) > (a.i * a.i) [type=bool, outer=(2,6)]
+ │    ├── columns: x:7!null
+ │    └── key: (7)
+ └── filters
+      └── (x:7 - i:2) > (i:2 * i:2) [outer=(2,7), immutable]
+
+exec-ddl
+CREATE TABLE crdb_internal.zones (
+    zone_id INT NOT NULL,
+    cli_specifier STRING NULL,
+    config_yaml BYTES NOT NULL,
+    config_protobuf BYTES NOT NULL
+)
+----
+
+# Regression test for #28827. Ensure that inlining is not applied when there
+# is a correlated subquery in the filter.
+norm
+SELECT
+  subq_0.c0 AS c0
+FROM (SELECT zone_id+1 AS c0, zone_id+2 as c1 FROM crdb_internal.zones) AS subq_0
+WHERE
+  1
+  >= CASE
+    WHEN subq_0.c1 IS NOT NULL
+    THEN pg_catalog.extract(
+      CAST(
+        CASE
+        WHEN
+        (
+            EXISTS(
+              SELECT
+                ref_1.config_yaml AS c0,
+                ref_1.config_yaml AS c1,
+                subq_0.c0 AS c2,
+                ref_1.config_yaml AS c3
+              FROM
+                crdb_internal.zones AS ref_1
+              WHERE
+                subq_0.c0 IS NOT NULL
+              LIMIT
+                52
+            )
+          )
+        THEN pg_catalog.version()
+        ELSE pg_catalog.version()
+        END
+          AS TEXT
+      ),
+      CAST(pg_catalog.current_date() AS DATE)
+    )
+    ELSE 1
+    END
+LIMIT
+  107
+----
+project
+ ├── columns: c0:7!null
+ ├── cardinality: [0 - 107]
+ ├── volatile
+ └── limit
+      ├── columns: c0:7!null c1:8!null
+      ├── cardinality: [0 - 107]
+      ├── volatile
+      ├── select
+      │    ├── columns: c0:7!null c1:8!null
+      │    ├── volatile
+      │    ├── limit hint: 107.00
+      │    ├── project
+      │    │    ├── columns: c0:7!null c1:8!null
+      │    │    ├── immutable
+      │    │    ├── limit hint: 321.00
+      │    │    ├── scan crdb_internal.public.zones
+      │    │    │    ├── columns: crdb_internal.public.zones.zone_id:1!null
+      │    │    │    └── limit hint: 321.00
+      │    │    └── projections
+      │    │         ├── crdb_internal.public.zones.zone_id:1 + 1 [as=c0:7, outer=(1), immutable]
+      │    │         └── crdb_internal.public.zones.zone_id:1 + 2 [as=c1:8, outer=(1), immutable]
+      │    └── filters
+      │         └── le [outer=(7,8), volatile, correlated-subquery]
+      │              ├── case
+      │              │    ├── true
+      │              │    ├── when
+      │              │    │    ├── c1:8 IS NOT NULL
+      │              │    │    └── function: extract
+      │              │    │         ├── case
+      │              │    │         │    ├── true
+      │              │    │         │    ├── when
+      │              │    │         │    │    ├── exists
+      │              │    │         │    │    │    └── select
+      │              │    │         │    │    │         ├── columns: ref_1.config_yaml:11!null
+      │              │    │         │    │    │         ├── outer: (7)
+      │              │    │         │    │    │         ├── scan ref_1
+      │              │    │         │    │    │         │    └── columns: ref_1.config_yaml:11!null
+      │              │    │         │    │    │         └── filters
+      │              │    │         │    │    │              └── c0:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+      │              │    │         │    │    └── version()
+      │              │    │         │    └── version()
+      │              │    │         └── '2017-05-10'
+      │              │    └── 1.0
+      │              └── 1.0
+      └── 107
 
 # --------------------------------------------------
 # InlineProjectInProject
 # --------------------------------------------------
-opt
-SELECT expr, i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
+norm expect=InlineProjectInProject
+SELECT NOT(expr), i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
- ├── columns: expr:6(bool) r:7(int)
+ ├── columns: "?column?":8!null r:9
+ ├── immutable
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── projections [outer=(1,2)]
-      ├── a.i + 1 [type=int, outer=(2)]
-      └── a.k = 1 [type=bool, outer=(1)]
+ └── projections
+      ├── k:1 != 1 [as="?column?":8, outer=(1)]
+      └── i:2 + 1 [as=r:9, outer=(2), immutable]
+
+# Multiple synthesized column references to same inner passthrough column
+# (should still inline).
+norm expect=InlineProjectInProject
+SELECT x+1, x+2, y1+2 FROM (SELECT x, y+1 AS y1 FROM xy)
+----
+project
+ ├── columns: "?column?":5!null "?column?":6!null "?column?":7
+ ├── immutable
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      ├── x:1 + 1 [as="?column?":5, outer=(1), immutable]
+      ├── x:1 + 2 [as="?column?":6, outer=(1), immutable]
+      └── (y:2 + 1) + 2 [as="?column?":7, outer=(2), immutable]
+
+# Synthesized and passthrough references to same inner passthrough column
+# (should still inline).
+norm expect=InlineProjectInProject
+SELECT x+y1 FROM (SELECT x, y+1 AS y1 FROM xy) ORDER BY x
+----
+project
+ ├── columns: "?column?":5  [hidden: x:1!null]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(5)
+ ├── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ └── projections
+      └── x:1 + (y:2 + 1) [as="?column?":5, outer=(1,2), immutable]
 
 # Inline multiple expressions.
-opt
+norm expect=InlineProjectInProject
 SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
 ----
 project
- ├── columns: r:8(int) i:2(int) s:9(string)
+ ├── columns: r:9!null i:2 s:10
+ ├── immutable
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
+ │    ├── columns: k:1!null i:2 a.s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
- └── projections [outer=(1,2,4)]
-      ├── (a.k + 1) + 1 [type=int, outer=(1)]
-      └── (a.s || 'foo') || 'bar' [type=string, outer=(4)]
+ └── projections
+      ├── (k:1 + 1) + 1 [as=r:9, outer=(1), immutable]
+      └── (a.s:4 || 'foo') || 'bar' [as=s:10, outer=(4), immutable]
 
 # Don't inline when there are multiple references.
-opt
+norm expect-not=InlineProjectInProject
 SELECT expr, expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: expr:6(int) r:7(int)
- ├── fd: (6)-->(7)
+ ├── columns: expr:7!null r:8!null
+ ├── immutable
+ ├── fd: (7)-->(8)
  ├── project
- │    ├── columns: expr:6(int)
+ │    ├── columns: expr:7!null
+ │    ├── immutable
  │    ├── scan a
- │    │    ├── columns: k:1(int!null)
+ │    │    ├── columns: k:1!null
  │    │    └── key: (1)
- │    └── projections [outer=(1)]
- │         └── a.k + 1 [type=int, outer=(1)]
- └── projections [outer=(6)]
-      └── expr * 2 [type=int, outer=(6)]
+ │    └── projections
+ │         └── k:1 + 1 [as=expr:7, outer=(1), immutable]
+ └── projections
+      └── expr:7 * 2 [as=r:8, outer=(7), immutable]
 
 # Uncorrelated subquery should not block inlining.
-opt
+norm expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: exists:9(bool) r:10(int)
- ├── fd: ()-->(9)
+ ├── columns: exists:11 r:12!null
+ ├── immutable
+ ├── fd: ()-->(11)
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    └── key: (1)
- └── projections [outer=(1)]
-      ├── exists [type=bool]
-      │    └── scan xy
-      │         ├── columns: x:7(int!null) y:8(int)
-      │         ├── constraint: /7: [/1 - /2]
-      │         ├── key: (7)
-      │         └── fd: (7)-->(8)
-      └── (a.k + 1) * 2 [type=int, outer=(1)]
+ └── projections
+      ├── exists [as=exists:11, subquery]
+      │    └── limit
+      │         ├── columns: x:8!null y:9
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(8,9)
+      │         ├── select
+      │         │    ├── columns: x:8!null y:9
+      │         │    ├── cardinality: [0 - 2]
+      │         │    ├── key: (8)
+      │         │    ├── fd: (8)-->(9)
+      │         │    ├── limit hint: 1.00
+      │         │    ├── scan xy
+      │         │    │    ├── columns: x:8!null y:9
+      │         │    │    ├── key: (8)
+      │         │    │    ├── fd: (8)-->(9)
+      │         │    │    └── limit hint: 500.00
+      │         │    └── filters
+      │         │         └── (x:8 = 1) OR (x:8 = 2) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2]; tight)]
+      │         └── 1
+      └── (k:1 + 1) * 2 [as=r:12, outer=(1), immutable]
 
 # Correlated subquery should be hoisted as usual.
-opt
+norm expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: exists:9(bool)
+ ├── columns: exists:11!null
+ ├── immutable
  ├── group-by
- │    ├── columns: any_not_null:11(bool) rownum:13(int!null)
- │    ├── grouping columns: rownum:13(int!null)
- │    ├── key: (13)
- │    ├── fd: (13)-->(11)
- │    ├── left-join
- │    │    ├── columns: expr:6(int) true:10(bool) rownum:13(int!null)
- │    │    ├── fd: (13)-->(6), ()~~>(10)
- │    │    ├── row-number
- │    │    │    ├── columns: expr:6(int) rownum:13(int!null)
- │    │    │    ├── key: (13)
- │    │    │    ├── fd: (13)-->(6)
+ │    ├── columns: true_agg:13 rownum:15!null
+ │    ├── grouping columns: rownum:15!null
+ │    ├── immutable
+ │    ├── key: (15)
+ │    ├── fd: (15)-->(13)
+ │    ├── left-join (cross)
+ │    │    ├── columns: expr:7!null true:12 rownum:15!null
+ │    │    ├── immutable
+ │    │    ├── fd: (15)-->(7)
+ │    │    ├── ordinality
+ │    │    │    ├── columns: expr:7!null rownum:15!null
+ │    │    │    ├── immutable
+ │    │    │    ├── key: (15)
+ │    │    │    ├── fd: (15)-->(7)
  │    │    │    └── project
- │    │    │         ├── columns: expr:6(int)
+ │    │    │         ├── columns: expr:7!null
+ │    │    │         ├── immutable
  │    │    │         ├── scan a
- │    │    │         │    ├── columns: k:1(int!null)
+ │    │    │         │    ├── columns: k:1!null
  │    │    │         │    └── key: (1)
- │    │    │         └── projections [outer=(1)]
- │    │    │              └── a.k + 1 [type=int, outer=(1)]
+ │    │    │         └── projections
+ │    │    │              └── k:1 + 1 [as=expr:7, outer=(1), immutable]
  │    │    ├── project
- │    │    │    ├── columns: true:10(bool!null)
- │    │    │    ├── fd: ()-->(10)
+ │    │    │    ├── columns: true:12!null
+ │    │    │    ├── fd: ()-->(12)
  │    │    │    ├── scan xy
  │    │    │    └── projections
- │    │    │         └── true [type=bool]
- │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
- │    │         └── expr < 0 [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
- │    └── aggregations [outer=(10)]
- │         └── any-not-null [type=bool, outer=(10)]
- │              └── variable: true [type=bool, outer=(10)]
- └── projections [outer=(11)]
-      └── any_not_null IS NOT NULL [type=bool, outer=(11)]
+ │    │    │         └── true [as=true:12]
+ │    │    └── filters
+ │    │         └── expr:7 < 0 [outer=(7), constraints=(/7: (/NULL - /-1]; tight)]
+ │    └── aggregations
+ │         └── const-not-null-agg [as=true_agg:13, outer=(12)]
+ │              └── true:12
+ └── projections
+      └── true_agg:13 IS NOT NULL [as=exists:11, outer=(13)]
+
+# After c is replaced with k+2, (k+2) > 2 should be simplified to k > 0.
+norm
+SELECT c FROM (SELECT k+2 AS c FROM a) AS t WHERE c > 2;
+----
+project
+ ├── columns: c:7!null
+ ├── immutable
+ ├── select
+ │    ├── columns: k:1!null
+ │    ├── key: (1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── k:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ └── projections
+      └── k:1 + 2 [as=c:7, outer=(1), immutable]

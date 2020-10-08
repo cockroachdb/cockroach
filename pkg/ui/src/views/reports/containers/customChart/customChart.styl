@@ -1,5 +1,16 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 @require nib
 @require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
 
 .metric-table-dropdown
   line-height 17px
@@ -24,18 +35,37 @@
     &:hover
       background-color $dropdown-hover-color
 
-.metric-edit-button
-    padding 3px 9px
-    margin 0px 9px
+    .Select-menu-outer
+      margin-top $spacing-base
 
-    &--add
-      margin 17px 9px
+  .Select-control
+    width 100%!important
+
+  .Select-placeholder
+    padding-left 10px!important
+
+button.edit-button
+  padding 12px 24px
+  margin 0px 9px
+  background-color inherit
+  text-transform uppercase
+  color $link-color
+  font-size 14px
+  letter-spacing 2px
+  border 1px solid $button-border-color
+  border-radius 3px
+  vertical-align middle
+  cursor pointer
+
+.metric-edit-button
+  &--add
+    margin 17px 9px
 
 .metric-table
   &__header
     background white
     padding 10px 20px
-    font-family Lato-Regular
+    font-family $font-family--base
     font-size 12px
     font-weight bold
     letter-spacing 2px
@@ -43,10 +73,10 @@
     text-align left
     color $body-color
 
-    &--no-title
-      background inherit
-      padding 0
-
   &__cell
     text-align center
 
+.custom-metric__chart-controls-container
+  display flex
+  flex-direction row
+  margin-bottom $spacing-medium

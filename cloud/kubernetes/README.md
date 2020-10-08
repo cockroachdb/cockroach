@@ -17,7 +17,7 @@ testing and don't care about data persistence, you can do so with just a single
 command instead of following this guide (which sets up a more reliable cluster):
 
 ```shell
-kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start --insecure
+kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start-single-node --insecure --logtostderr
 ```
 
 ## Limitations
@@ -70,6 +70,13 @@ deployment until node-local storage has been more rigorously hardened.
 ### Secure mode
 
 Secure mode currently works by requesting node/client certificates from the kubernetes controller at pod initialization time.
+
+### Geographically distributed clusters
+
+The configuration files and instructions in this directory are limited to
+deployments that exist entirely within a single Kubernetes cluster. If you'd
+like to deploy CockroachDB across multiple geographically distributed Kubernetes
+clusters, see the [multiregion subdirectory](multiregion).
 
 ## Creating your kubernetes cluster
 
@@ -291,6 +298,65 @@ If more pods are then added through `kubectl scale deployment example-secure --r
 certificate will be reused.
 **WARNING**: the example app in secure mode should be started with only one replica, or concurrent and
 conflicting certificate requests will be sent, causing issues.
+
+
+## Secure client apps with other users
+
+Applications should be run with a user other than `root`. This can be done using the following:
+
+#### Create the desired user and database
+
+Connect to the `cockroachdb-client-secure` pod (created in the "Accessing the database" section):
+```shell
+kubectl exec -it cockroachdb-client-secure -- ./cockroach sql --certs-dir=/cockroach-certs --host=cockroachdb-public
+```
+
+Create the the app user, its database, and grant it privileges:
+```shell
+root@:26257/defaultdb> CREATE USER myapp;
+CREATE USER 1
+
+Time: 164.811054ms
+
+root@:26257/defaultdb> CREATE DATABASE myappdb;
+CREATE DATABASE
+
+Time: 153.44247ms
+
+root@:26257/defaultdb> GRANT ALL ON DATABASE myappdb TO myapp;
+GRANT
+
+Time: 90.488168ms
+```
+
+#### Create the client pod
+
+Modify [example-app-secure.yaml](example-app-secure.yaml) to match your user and app:
+
+The init container `init-certs` needs to request a certificate and key for your new user:
+```shell
+"/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=client -user=myapp -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+```
+
+The `loadgen` container should be modified for your client app docker image and command, and the connection url modified to match the user and database:
+```shell
+"postgres://myapp@cockroachdb-public:26257/myappdb?sslmode=verify-full&sslcert=/cockroach-certs/client.myapp.crt&sslkey=/cockroach-certs/client.myapp.key&sslrootcert=/cockroach-certs/ca.crt"
+```
+
+You can now create the client pod:
+```shell
+kubectl create -f example-app-secure.yaml
+```
+
+#### Approve the client CSR
+
+The init container sends a CSR and waits for approval. You can approve it using:
+```shell
+kubectl certificate approve default.client.myapp
+```
+
+Once approved, the init container copies the certificate and key to `/cockroach-certs` and terminates. The app container now starts, using the mounted certificate directory.
+
 
 ## Simulating failures
 

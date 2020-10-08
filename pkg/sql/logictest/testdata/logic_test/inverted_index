@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata local-parallel-stmts
-
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -15,36 +13,44 @@ INSERT INTO t VALUES (1,1,1)
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error pq: column b is of type INT and thus is not indexable with an inverted index
+statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
 CREATE INVERTED INDEX foo_inv ON t(b)
 
-statement error pq: column b is of type INT and thus is not indexable with an inverted index
+statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
 CREATE INDEX foo_inv2 ON t USING GIN (b)
 
-statement error pq: syntax error at or near "inverted"
+statement error pq: inverted indexes can't be unique
 CREATE UNIQUE INVERTED INDEX foo_inv ON t(b)
 
 statement ok
 CREATE TABLE c (
   id INT PRIMARY KEY,
   foo JSON,
-  bar JSON,
+  "bAr" JSON,
+  "qUuX" JSON,
   INVERTED INDEX (foo),
-  INVERTED INDEX (bar)
+  INVERTED INDEX ("bAr"),
+  FAMILY "primary" (id, foo, "bAr", "qUuX")
 )
 
 query TT
 SHOW CREATE TABLE c
 ----
-c  CREATE TABLE c (
-     id INT NOT NULL,
-     foo JSON NULL,
-     bar JSON NULL,
-     CONSTRAINT "primary" PRIMARY KEY (id ASC),
-     INVERTED INDEX c_foo_idx (foo),
-     INVERTED INDEX c_bar_idx (bar),
-     FAMILY "primary" (id, foo, bar)
-   )
+c  CREATE TABLE public.c (
+   id INT8 NOT NULL,
+   foo JSONB NULL,
+   "bAr" JSONB NULL,
+   "qUuX" JSONB NULL,
+   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   INVERTED INDEX c_foo_idx (foo),
+   INVERTED INDEX "c_bAr_idx" ("bAr"),
+   FAMILY "primary" (id, foo, "bAr", "qUuX")
+)
+
+# Regression test for #42944: make sure that mixed-case columns can be
+# inverted indexed.
+statement ok
+CREATE INVERTED INDEX ON c("qUuX")
 
 statement error indexing more than one column with an inverted index is not supported
 CREATE TABLE d (
@@ -54,7 +60,7 @@ CREATE TABLE d (
   INVERTED INDEX (foo, bar)
 )
 
-statement error column foo is of type INT and thus is not indexable with an inverted index
+statement error column foo is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo INT,
@@ -72,7 +78,7 @@ CREATE INDEX c on t1 USING GIN (id2)
 statement error pq: inverted indexes don't support stored columns
 CREATE INDEX c on t1 USING GIN (id2) STORING (id1,id3);
 
-statement error pq: syntax error at or near "storing"
+statement error pq: inverted indexes don't support stored columns
 CREATE INVERTED INDEX c on t1 (id2) STORING (id1,id3);
 
 statement error pq: inverted indexes can't be unique
@@ -666,7 +672,7 @@ SELECT * from update_cascade_test ORDER BY update_cascade;
 2  {"a": "b", "c": "d"}
 3  ["b", "c"]
 
-statement error pq: foreign key violation: values \[1\] in columns \[i\] referenced in table "del_cascade_test"
+statement error pq: update on table "update_test" violates foreign key constraint "fk_delete_cascade_ref_update_test" on table "del_cascade_test"\nDETAIL: Key \(i\)=\(1\) is still referenced from table "del_cascade_test"\.
 UPDATE update_test SET (i,j)  = (5, '{"a":"b", "a":"b"}') WHERE i = 1;
 
 statement ok
@@ -681,3 +687,130 @@ SELECT * from update_cascade_test ORDER BY update_cascade;
 2  {"a": "b", "c": "d"}
 3  ["b", "c"]
 5  ["a", "b"]
+
+# Test that inverted index validation correctly handles NULL values on creation (#38714)
+
+statement ok
+CREATE TABLE table_with_nulls (a JSON)
+
+statement ok
+INSERT INTO table_with_nulls VALUES (NULL)
+
+statement ok
+CREATE INVERTED INDEX ON table_with_nulls (a)
+
+statement ok
+DROP TABLE table_with_nulls
+
+statement ok
+DROP TABLE c
+
+subtest arrays
+
+statement ok
+CREATE TABLE c (
+  id INT PRIMARY KEY,
+  foo INT[],
+  bar STRING[],
+  INVERTED INDEX (foo),
+  FAMILY "primary" (id, foo, bar)
+)
+
+statement ok
+INSERT INTO c VALUES(0, NULL, NULL)
+
+statement ok
+INSERT INTO c VALUES(1, ARRAY[], ARRAY['foo', 'bar', 'baz'])
+
+statement ok
+CREATE INDEX ON c USING GIN (bar)
+
+query TT
+SHOW CREATE TABLE c
+----
+c  CREATE TABLE public.c (
+   id INT8 NOT NULL,
+   foo INT8[] NULL,
+   bar STRING[] NULL,
+   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   INVERTED INDEX c_foo_idx (foo),
+   INVERTED INDEX c_bar_idx (bar),
+   FAMILY "primary" (id, foo, bar)
+)
+
+query ITT
+SELECT * from c WHERE bar @> ARRAY['foo']
+----
+1  {}  {foo,bar,baz}
+
+query ITT
+SELECT * from c WHERE bar @> ARRAY['bar', 'baz']
+----
+1  {}  {foo,bar,baz}
+
+query ITT
+SELECT * from c WHERE bar @> ARRAY['bar', 'qux']
+----
+
+statement ok
+INSERT INTO c VALUES(2, NULL, NULL)
+
+statement ok
+INSERT INTO c VALUES(3, ARRAY[0,1,NULL], ARRAY['a',NULL,'b',NULL])
+
+statement ok
+INSERT INTO c VALUES(4, ARRAY[1,2,3], ARRAY['b',NULL,'c'])
+
+statement ok
+INSERT INTO c VALUES(5, ARRAY[], ARRAY[NULL, NULL])
+
+# Create a second inverted index on c, to test backfills.
+statement ok
+CREATE INVERTED INDEX ON c(foo)
+
+statement ok
+CREATE INVERTED INDEX ON c(bar)
+
+query ITT
+SELECT * FROM c WHERE foo @> ARRAY[0]
+----
+3  {0,1,NULL}  {a,NULL,b,NULL}
+
+query error unsupported comparison operator
+SELECT * FROM c WHERE foo @> 0
+
+query ITT
+SELECT * FROM c WHERE foo @> ARRAY[1] ORDER BY id
+----
+3  {0,1,NULL}  {a,NULL,b,NULL}
+4  {1,2,3}     {b,NULL,c}
+
+# This is expected, although it looks odd, because in SQL,
+# ARRAY[NULL] @> ARRAY[NULL] returns false.
+query ITT
+SELECT * FROM c WHERE foo @> ARRAY[NULL]::INT[]
+----
+
+query ITT
+SELECT * FROM c WHERE bar @> ARRAY['a']
+----
+3  {0,1,NULL}  {a,NULL,b,NULL}
+
+query ITT
+SELECT * FROM c WHERE bar @> ARRAY['b'] ORDER BY id
+----
+3  {0,1,NULL}  {a,NULL,b,NULL}
+4  {1,2,3}     {b,NULL,c}
+
+query ITT
+SELECT * FROM c WHERE bar @> ARRAY['c']
+----
+4  {1,2,3}  {b,NULL,c}
+
+query ITT
+SELECT * FROM c WHERE bar @> ARRAY[]::TEXT[] ORDER BY id
+----
+1  {}          {foo,bar,baz}
+3  {0,1,NULL}  {a,NULL,b,NULL}
+4  {1,2,3}     {b,NULL,c}
+5  {}          {NULL,NULL}

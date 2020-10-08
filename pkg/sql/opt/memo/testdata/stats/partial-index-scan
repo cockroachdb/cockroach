@@ -1,0 +1,1630 @@
+# ------------------------
+# Tests without Histograms
+# ------------------------
+
+exec-ddl
+CREATE TABLE a (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING,
+  t STRING
+)
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 50,
+    "null_count": 275
+  },
+  {
+    "columns": ["t"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500,
+    "null_count": 50
+  }
+]'
+----
+
+# Unconstrained partial index scan.
+# Distinct and null counts are updated based on the partial index predicate.
+
+exec-ddl
+CREATE INDEX idx ON a (i) WHERE s = 'foo'
+----
+
+opt
+SELECT * FROM a WHERE s = 'foo'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int) s:3(string!null) t:4(string)
+ ├── stats: [rows=96.4285714, distinct(3)=1, null(3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int)
+      ├── stats: [rows=96.4285714, distinct(3)=1, null(3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for select filter applied after an unconstrained partial index scan.
+
+exec-ddl
+CREATE INDEX idx ON a (s) WHERE i > 0 AND i < 50
+----
+
+opt
+SELECT * FROM a WHERE i > 25 AND i < 50
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── stats: [rows=240, distinct(2)=24, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
+ │    ├── stats: [rows=490]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan a@idx,partial
+ │         ├── columns: k:1(int!null) s:3(string)
+ │         ├── stats: [rows=490, distinct(2)=49, null(2)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3)
+ └── filters
+      └── i:2 > 25 [type=bool, outer=(2), constraints=(/2: [/26 - ]; tight)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for multiple unapplied conjunctions due to non-tight constraints.
+
+exec-ddl
+CREATE INDEX idx ON a (i) WHERE i < k AND i % 3 = 0
+----
+
+opt
+SELECT * FROM a WHERE i < k AND i % 3 = 0
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── immutable
+ ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0, distinct(2)=500, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0, distinct(2)=500, null(2)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for an indexed column that is also constrained by partial index predicate.
+
+exec-ddl
+CREATE INDEX idx ON a (i) WHERE i > 0 AND i < 50
+----
+
+opt
+SELECT * FROM a WHERE i > 15 AND i < 30
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/16 - /29]
+      ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt disable=GenerateConstrainedScans
+SELECT * FROM a WHERE i > 15 AND i < 30
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a@idx,partial
+      │    ├── columns: k:1(int!null) i:2(int!null)
+      │    ├── stats: [rows=490, distinct(1)=490, null(1)=0, distinct(2)=49, null(2)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── (i:2 > 15) AND (i:2 < 30) [type=bool, outer=(2), constraints=(/2: [/16 - /29]; tight)]
+
+opt
+SELECT * FROM a WHERE (i > 0 AND i < 10) OR (i > 40 AND i < 50)
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── stats: [rows=180, distinct(2)=18, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1
+      │    ├── [/1 - /9]
+      │    └── [/41 - /49]
+      ├── stats: [rows=180, distinct(2)=18, null(2)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for FuncDep equivalencies.
+
+exec-ddl
+CREATE INDEX idx ON a (s, t) WHERE s = t
+----
+
+opt
+SELECT * FROM a WHERE s = t AND s LIKE '%foo%' AND t LIKE '%bar%'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int) s:3(string!null) t:4(string!null)
+ ├── stats: [rows=1.04895, distinct(3)=1.04895, null(3)=0, distinct(4)=1.04895, null(4)=0, distinct(3,4)=1.04895, null(3,4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)==(4), (4)==(3)
+ └── select
+      ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
+      ├── stats: [rows=1.0395, distinct(3)=1.0395, null(3)=0, distinct(4)=1.0395, null(4)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(3,4), (3)==(4), (4)==(3)
+      ├── scan a@idx,partial
+      │    ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
+      │    ├── stats: [rows=9.3555, distinct(1)=9.3555, null(1)=0, distinct(3)=9.3555, null(3)=0, distinct(4)=9.3555, null(4)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3,4), (3)==(4), (4)==(3)
+      └── filters
+           ├── s:3 LIKE '%foo%' [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
+           └── t:4 LIKE '%bar%' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for null predicate.
+
+exec-ddl
+CREATE INDEX idx ON a (i) WHERE s IS NULL
+----
+
+opt
+SELECT * FROM a WHERE s IS NULL
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
+ ├── stats: [rows=275, distinct(3)=1, null(3)=275]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int)
+      ├── stats: [rows=275, distinct(3)=1, null(3)=275]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a partial index with a predicate that references an un-indexed
+# column.
+
+exec-ddl
+CREATE INDEX idx ON a (i) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s IN ('foo', 'bar', 'baz')
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/11 - /19]
+      ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s = 'baz'
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
+ │    ├── stats: [rows=24.8207143]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan a@idx,partial
+ │         ├── columns: k:1(int!null) i:2(int!null)
+ │         ├── constraint: /2/1: [/11 - /19]
+ │         ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── s:3 = 'baz' [type=bool, outer=(3), constraints=(/3: [/'baz' - /'baz']; tight), fd=()-->(3)]
+
+opt
+SELECT * FROM a WHERE (i = 100 AND s = 'foo') OR (i = 200 AND s = 'bar')
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=1.22571429, distinct(2)=1.22571429, null(2)=0, distinct(3)=1.22571429, null(3)=0, distinct(2,3)=1.22571429, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
+ │    ├── stats: [rows=5.51571429]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan a@idx,partial
+ │         ├── columns: k:1(int!null) i:2(int!null)
+ │         ├── constraint: /2/1
+ │         │    ├── [/100 - /100]
+ │         │    └── [/200 - /200]
+ │         ├── stats: [rows=5.51571429, distinct(2)=2, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=5.51571429, null(2,3)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── ((i:2 = 100) AND (s:3 = 'foo')) OR ((i:2 = 200) AND (s:3 = 'bar')) [type=bool, outer=(2,3), constraints=(/2: [/100 - /100] [/200 - /200]; /3: [/'bar' - /'bar'] [/'foo' - /'foo'])]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a partial index with a predicate that references indexed and
+# un-indexed columns.
+
+exec-ddl
+CREATE INDEX idx ON a (i) WHERE i > 0 AND i < 50 AND s = 'foo'
+----
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s = 'foo'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/11 - /19]
+      ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a multi-column partial index with a predicate the references one
+# indexed column.
+
+exec-ddl
+CREATE INDEX idx ON a (i, s) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s IN ('foo', 'bar', 'baz')
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+      ├── constraint: /2/3/1: [/11 - /19]
+      ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 50 AND s = 'baz'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=35.8521429, distinct(2)=35.8521429, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=35.8521429, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+      ├── stats: [rows=35.8521429, distinct(3)=1, null(3)=0]
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── scan a@idx,partial
+      │    ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+      │    ├── constraint: /2/3/1: [/11/'baz' - /49/'baz']
+      │    ├── stats: [rows=107.556429, distinct(1)=107.556429, null(1)=0, distinct(2)=39, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=107.556429, null(2,3)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── s:3 = 'baz' [type=bool, outer=(3), constraints=(/3: [/'baz' - /'baz']; tight), fd=()-->(3)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a multi-column partial index with a predicate that references all
+# indexed columns.
+
+exec-ddl
+CREATE INDEX idx ON a (i, s) WHERE i > 0 AND i < 50 AND s = 'foo'
+----
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s = 'foo'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+      ├── constraint: /2/3/1: [/11 - /19]
+      ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+      ├── key: (1)
+      └── fd: ()-->(3), (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# ---------------------
+# Tests with Histograms
+# ---------------------
+
+exec-ddl
+CREATE TABLE hist (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING
+)
+----
+
+exec-ddl
+ALTER TABLE hist INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 41,
+    "null_count": 30,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
+  }
+]'
+----
+
+# TODO(mgartner): The distinct(2) stat for the partial index scan should be 5.454545
+# not 6.454545. It is currently one more than it should be because
+# updateDistinctCountFromHistogram increments the distinct count before the null
+# count has been set to zero.
+
+exec-ddl
+CREATE INDEX idx ON hist (s) WHERE i > 100 AND i <= 150
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 150
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ │   histogram(2)=  0   0   41.818 1.8182
+ │                <--- 125 -------- 149 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join hist
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=90.9090909]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan hist@idx,partial
+ │         ├── columns: k:1(int!null) s:3(string)
+ │         ├── stats: [rows=90.9090909, distinct(2)=6.45454545, null(2)=0]
+ │         │   histogram(2)=  0   0   89.091 1.8182
+ │         │                <--- 100 -------- 150 -
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3)
+ └── filters
+      └── (i:2 > 125) AND (i:2 < 150) [type=bool, outer=(2), constraints=(/2: [/126 - /149]; tight)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for an indexed column that is also constrained by partial index predicate.
+
+exec-ddl
+CREATE INDEX idx ON hist (i) WHERE i > 100 AND i <= 200
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 150
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ │   histogram(2)=  0   0   41.818 1.8182
+ │                <--- 125 -------- 149 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan hist@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/126 - /149]
+      ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+      │   histogram(2)=  0   0   41.818 1.8182
+      │                <--- 125 -------- 149 -
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt disable=GenerateConstrainedScans
+SELECT * FROM hist WHERE i > 125 AND i < 150
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ │   histogram(2)=  0   0   41.818 1.8182
+ │                <--- 125 -------- 149 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0]
+      │   histogram(2)=  0   0   41.818 1.8182
+      │                <--- 125 -------- 149 -
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan hist@idx,partial
+      │    ├── columns: k:1(int!null) i:2(int!null)
+      │    ├── stats: [rows=190, distinct(1)=190, null(1)=0, distinct(2)=11, null(2)=0]
+      │    │   histogram(2)=  0   0   180  10
+      │    │                <--- 100 ----- 200
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── (i:2 > 125) AND (i:2 < 150) [type=bool, outer=(2), constraints=(/2: [/126 - /149]; tight)]
+
+opt
+SELECT * FROM hist WHERE (i > 100 AND i < 125) OR (i > 150 AND i < 175)
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=87.2727273, distinct(2)=7.18181818, null(2)=0]
+ │   histogram(2)=  0   0   41.818 1.8182 0   0   41.818 1.8182
+ │                <--- 100 -------- 124 ---- 150 -------- 174 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan hist@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1
+      │    ├── [/101 - /124]
+      │    └── [/151 - /174]
+      ├── stats: [rows=87.2727273, distinct(2)=7.18181818, null(2)=0]
+      │   histogram(2)=  0   0   41.818 1.8182 0   0   41.818 1.8182
+      │                <--- 100 -------- 124 ---- 150 -------- 174 -
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a partial index with a predicate that references an un-indexed
+# column.
+
+exec-ddl
+CREATE INDEX idx ON hist (i) WHERE s IN ('banana', 'cherry', 'mango')
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mango')
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │   histogram(2)=  0   0   3.4572 1.1524
+ │                <--- 125 -------- 129 -
+ │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+ │                <--- 'banana' --- 'cherry' --- 'mango'
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan hist@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/126 - /129]
+      ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+      │   histogram(2)=  0   0   3.4572 1.1524
+      │                <--- 125 -------- 129 -
+      │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+      │                <--- 'banana' --- 'cherry' --- 'mango'
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'mango'
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=2.30477976, distinct(2)=2.27272727, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2.27272727, null(2,3)=0]
+ │   histogram(2)=  0   0   1.7286 0.57619
+ │                <--- 125 --------- 129 -
+ │   histogram(3)=  0  2.3048
+ │                <--- 'mango'
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── index-join hist
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=4.60955951]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan hist@idx,partial
+ │         ├── columns: k:1(int!null) i:2(int!null)
+ │         ├── constraint: /2/1: [/126 - /129]
+ │         ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │         │   histogram(2)=  0   0   3.4572 1.1524
+ │         │                <--- 125 -------- 129 -
+ │         │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+ │         │                <--- 'banana' --- 'cherry' --- 'mango'
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── s:3 = 'mango' [type=bool, outer=(3), constraints=(/3: [/'mango' - /'mango']; tight), fd=()-->(3)]
+
+opt
+SELECT * FROM hist WHERE (i = 100 AND s = 'banana') OR (i = 200 AND s = 'cherry')
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=1.28083333, distinct(2)=1.28083333, null(2)=0, distinct(3)=1.28083333, null(3)=0, distinct(2,3)=1.28083333, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join hist
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=12.6762887]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan hist@idx,partial
+ │         ├── columns: k:1(int!null) i:2(int!null)
+ │         ├── constraint: /2/1
+ │         │    ├── [/100 - /100]
+ │         │    └── [/200 - /200]
+ │         ├── stats: [rows=12.6762887, distinct(2)=3, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=9, null(2,3)=0]
+ │         │   histogram(2)=  0 6.3381 0 6.3381
+ │         │                <--- 100 ---- 200 -
+ │         │   histogram(3)=  0   3.1691   0   3.1691   0  6.3381
+ │         │                <--- 'banana' --- 'cherry' --- 'mango'
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── ((i:2 = 100) AND (s:3 = 'banana')) OR ((i:2 = 200) AND (s:3 = 'cherry')) [type=bool, outer=(2,3), constraints=(/2: [/100 - /100] [/200 - /200]; /3: [/'banana' - /'banana'] [/'cherry' - /'cherry'])]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a partial index with a predicate that references indexed and
+# un-indexed columns.
+
+exec-ddl
+CREATE INDEX idx ON hist (i) WHERE i > 100 AND i <= 200 AND s = 'banana'
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 150 AND s = 'banana'
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=6.91433927, distinct(2)=4.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=4.09090909, null(2,3)=0]
+ │   histogram(2)=  0   0   6.6262 0.2881
+ │                <--- 125 -------- 149 -
+ │   histogram(3)=  0   6.9143
+ │                <--- 'banana'
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ └── scan hist@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/126 - /149]
+      ├── stats: [rows=6.91433927, distinct(2)=4.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=4.09090909, null(2,3)=0]
+      │   histogram(2)=  0   0   6.6262 0.2881
+      │                <--- 125 -------- 149 -
+      │   histogram(3)=  0   6.9143
+      │                <--- 'banana'
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a multi-column partial index with a predicate the references one
+# indexed column.
+
+exec-ddl
+CREATE INDEX idx ON hist (i, s) WHERE s IN ('banana', 'cherry', 'mango')
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mango')
+----
+scan hist@idx,partial
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── constraint: /2/3/1: [/126 - /129]
+ ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │   histogram(2)=  0   0   3.4572 1.1524
+ │                <--- 125 -------- 129 -
+ │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+ │                <--- 'banana' --- 'cherry' --- 'mango'
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'mango'
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=2.30477976, distinct(2)=2.27272727, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2.27272727, null(2,3)=0]
+ │   histogram(2)=  0   0   1.7286 0.57619
+ │                <--- 125 --------- 129 -
+ │   histogram(3)=  0  2.3048
+ │                <--- 'mango'
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── scan hist@idx,partial
+ │    ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ │    ├── constraint: /2/3/1: [/126/'mango' - /129/'mango']
+ │    ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │    │   histogram(2)=  0   0   3.4572 1.1524
+ │    │                <--- 125 -------- 129 -
+ │    │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+ │    │                <--- 'banana' --- 'cherry' --- 'mango'
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── s:3 = 'mango' [type=bool, outer=(3), constraints=(/3: [/'mango' - /'mango']; tight), fd=()-->(3)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a multi-column partial index with a predicate that references all
+# indexed columns.
+
+exec-ddl
+CREATE INDEX idx ON hist (i, s) WHERE i > 100 AND i <= 200 AND s = 'banana'
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'banana'
+----
+scan hist@idx,partial
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── constraint: /2/3/1: [/126 - /129]
+ ├── stats: [rows=1.15238988, distinct(2)=1.15238988, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1.15238988, null(2,3)=0]
+ │   histogram(2)=  0   0   0.86429 0.2881
+ │                <--- 125 --------- 129 -
+ │   histogram(3)=  0   1.1524
+ │                <--- 'banana'
+ ├── key: (1)
+ └── fd: ()-->(3), (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# ----------------------------------
+# Tests for partial inverted indexes
+# ----------------------------------
+
+exec-ddl
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  s STRING,
+  INVERTED INDEX partial (j) WHERE s IN ('foo', 'bar')
+)
+----
+
+exec-ddl
+ALTER TABLE inv INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500,
+    "null_count": 50
+  }
+]'
+----
+
+opt
+SELECT k FROM inv@partial WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=2.20440882]
+ ├── key: (1)
+ └── scan inv@partial,partial
+      ├── columns: k:1(int!null)
+      ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+      ├── flags: force-index=partial
+      ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+      └── key: (1)
+
+opt
+SELECT * FROM inv@partial WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+index-join inv
+ ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan inv@partial,partial
+      ├── columns: k:1(int!null)
+      ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+      ├── flags: force-index=partial
+      ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+      └── key: (1)
+
+opt
+SELECT k FROM inv@partial WHERE j @> '{"x": "y"}' AND s = 'foo'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=1.10220441]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) j:3(jsonb!null) s:4(string!null)
+      ├── immutable
+      ├── stats: [rows=1.10220441, distinct(4)=1, null(4)=0]
+      ├── key: (1)
+      ├── fd: ()-->(4), (1)-->(3)
+      ├── index-join inv
+      │    ├── columns: k:1(int!null) j:3(jsonb) s:4(string)
+      │    ├── stats: [rows=2.20440882]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3,4)
+      │    └── scan inv@partial,partial
+      │         ├── columns: k:1(int!null)
+      │         ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+      │         ├── flags: force-index=partial
+      │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+      │         └── key: (1)
+      └── filters
+           └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+opt
+SELECT * FROM inv@partial WHERE j @> '{"x": "y"}' AND s = 'foo'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=1.10220441, distinct(4)=1, null(4)=0]
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── index-join inv
+ │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
+ │    ├── stats: [rows=2.20440882]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan inv@partial,partial
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+ │         ├── flags: force-index=partial
+ │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+ │         └── key: (1)
+ └── filters
+      └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+opt
+SELECT * FROM inv@partial WHERE j @> '{"x": "y"}' AND s = 'foo' AND i > 0 AND i < 10
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=0.901983968, distinct(2)=0.901983968, null(2)=0, distinct(4)=0.901983968, null(4)=0, distinct(2,4)=0.901983968, null(2,4)=0]
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── index-join inv
+ │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
+ │    ├── stats: [rows=2.20440882]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan inv@partial,partial
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+ │         ├── flags: force-index=partial
+ │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+ │         └── key: (1)
+ └── filters
+      ├── (i:2 > 0) AND (i:2 < 10) [type=bool, outer=(2), constraints=(/2: [/1 - /9]; tight)]
+      └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# --------------------------------------------------
+# Tests for partial inverted indexes with histograms
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE inv_hist (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  s STRING,
+  INVERTED INDEX partial (j) WHERE s IN ('apple', 'banana', 'cherry')
+)
+----
+
+# Histogram boundaries are from JSON values '{"a": 1}', '{"g": 7}', and '{"n":
+# 14}'.
+exec-ddl
+ALTER TABLE inv_hist INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 41,
+    "null_count": 30,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 201,
+    "null_count": 200,
+    "histo_col_type": "bytes",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "\\\\x376100012a0200"},
+      {"num_eq": 100, "num_range": 200, "distinct_range": 99, "upper_bound": "\\\\x376700012a0e00"},
+      {"num_eq": 200, "num_range": 300, "distinct_range": 99, "upper_bound": "\\\\x376e00012a1c00"}
+    ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
+  }
+]'
+----
+
+opt
+SELECT k FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s IN ('apple', 'banana', 'cherry')
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=17.7777778]
+ ├── key: (1)
+ └── scan inv_hist@partial,partial
+      ├── columns: k:1(int!null)
+      ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+      ├── flags: force-index=partial
+      ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+      │   histogram(4)=  0   8.8889   0   8.8889
+      │                <--- 'banana' --- 'cherry'
+      └── key: (1)
+
+opt
+SELECT * FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s IN ('apple', 'banana', 'cherry')
+----
+index-join inv_hist
+ ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+ │   histogram(4)=  0   8.8889   0   8.8889
+ │                <--- 'banana' --- 'cherry'
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan inv_hist@partial,partial
+      ├── columns: k:1(int!null)
+      ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+      ├── flags: force-index=partial
+      ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+      │   histogram(4)=  0   8.8889   0   8.8889
+      │                <--- 'banana' --- 'cherry'
+      └── key: (1)
+
+opt
+SELECT k FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s = 'banana'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=8.88888889]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) j:3(jsonb!null) s:4(string!null)
+      ├── immutable
+      ├── stats: [rows=8.88888889, distinct(4)=1, null(4)=0]
+      │   histogram(4)=  0   8.8889
+      │                <--- 'banana'
+      ├── key: (1)
+      ├── fd: ()-->(4), (1)-->(3)
+      ├── index-join inv_hist
+      │    ├── columns: k:1(int!null) j:3(jsonb) s:4(string)
+      │    ├── stats: [rows=17.7777778]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3,4)
+      │    └── scan inv_hist@partial,partial
+      │         ├── columns: k:1(int!null)
+      │         ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+      │         ├── flags: force-index=partial
+      │         ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+      │         │   histogram(4)=  0   8.8889   0   8.8889
+      │         │                <--- 'banana' --- 'cherry'
+      │         └── key: (1)
+      └── filters
+           └── s:4 = 'banana' [type=bool, outer=(4), constraints=(/4: [/'banana' - /'banana']; tight), fd=()-->(4)]
+
+opt
+SELECT * FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s = 'banana'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=8.88888889, distinct(4)=1, null(4)=0]
+ │   histogram(4)=  0   8.8889
+ │                <--- 'banana'
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── index-join inv_hist
+ │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
+ │    ├── stats: [rows=17.7777778]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan inv_hist@partial,partial
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+ │         ├── flags: force-index=partial
+ │         ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+ │         │   histogram(4)=  0   8.8889   0   8.8889
+ │         │                <--- 'banana' --- 'cherry'
+ │         └── key: (1)
+ └── filters
+      └── s:4 = 'banana' [type=bool, outer=(4), constraints=(/4: [/'banana' - /'banana']; tight), fd=()-->(4)]
+
+opt
+SELECT * FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s IN ('apple', 'banana', 'cherry') AND i > 0 AND i <= 100
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=2.81695304, distinct(2)=2.81695304, null(2)=0, distinct(4)=2, null(4)=0, distinct(2,4)=2.81695304, null(2,4)=0]
+ │   histogram(2)=  0  0  2.5353 0.2817
+ │                <--- 0 -------- 100 -
+ │   histogram(4)=  0   1.4085   0   1.4085
+ │                <--- 'banana' --- 'cherry'
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join inv_hist
+ │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
+ │    ├── stats: [rows=17.7777778]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan inv_hist@partial,partial
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+ │         ├── flags: force-index=partial
+ │         ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+ │         │   histogram(4)=  0   8.8889   0   8.8889
+ │         │                <--- 'banana' --- 'cherry'
+ │         └── key: (1)
+ └── filters
+      └── (i:2 > 0) AND (i:2 <= 100) [type=bool, outer=(2), constraints=(/2: [/1 - /100]; tight)]
+
+# ----------------------------------------------------------
+# Tests for partial inverted spatial indexes
+# ----------------------------------------------------------
+
+exec-ddl
+CREATE TABLE spatial (
+    k INT PRIMARY KEY,
+    g GEOMETRY,
+    s STRING,
+    INVERTED INDEX i (g),
+    INVERTED INDEX p (g) WHERE s IN ('apple', 'banana', 'cherry')
+)
+----
+
+# Add non-histogram stats.
+exec-ddl
+ALTER TABLE spatial INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 0
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 40,
+    "null_count": 0
+  }
+]'
+----
+
+# The partial index should be preferred over the non-partial index or PK.
+opt
+SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND s IN ('apple', 'banana', 'cherry')
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=16.6666667]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=16.6666667, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── index-join spatial
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=16.6666667]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=16.6666667]
+      │         ├── key: (1)
+      │         └── scan spatial@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── stats: [rows=16.6666667, distinct(1)=16.6666667, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=16.6666667, null(6)=0]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# The partial index should be preferred over the non-partial index or PK when
+# there is an additional filter to apply on s.
+opt
+SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND s = 'banana'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=5.55555556]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=5.55555556, distinct(2)=5.55555556, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── index-join spatial
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=16.6666667]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=16.6666667]
+      │         ├── key: (1)
+      │         └── scan spatial@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── stats: [rows=16.6666667, distinct(1)=16.6666667, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=16.6666667, null(6)=0]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:3 = 'banana' [type=bool, outer=(3), constraints=(/3: [/'banana' - /'banana']; tight), fd=()-->(3)]
+
+# Add null values for s.
+exec-ddl
+ALTER TABLE spatial INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 0
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 40,
+    "null_count": 1000
+  }
+]'
+----
+
+opt
+SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND s IN ('apple', 'banana', 'cherry')
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=8.54700855]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=8.54700855, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── index-join spatial
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=8.54700855]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=8.54700855]
+      │         ├── key: (1)
+      │         └── scan spatial@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── stats: [rows=8.54700855, distinct(1)=8.54700855, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=8.54700855, null(6)=0]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt
+SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND s = 'banana'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=2.84900285]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=2.84900285, distinct(2)=2.84900285, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── index-join spatial
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=8.54700855]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=8.54700855]
+      │         ├── key: (1)
+      │         └── scan spatial@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── stats: [rows=8.54700855, distinct(1)=8.54700855, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=8.54700855, null(6)=0]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:3 = 'banana' [type=bool, outer=(3), constraints=(/3: [/'banana' - /'banana']; tight), fd=()-->(3)]
+
+# Add histogram statistics.
+#
+# Histogram boundaries are from a `POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0,
+# 0.0 1.0, 0.0 0.0))` row. The row_count is lower than the sum of the
+# histogram's num_eq and num_range because there are more entries in
+# the inverted index than rows in the table.
+exec-ddl
+ALTER TABLE spatial INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 0,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[
+      {"num_eq": 1000, "num_range": 0, "distinct_range": 0, "upper_bound": "\\x42fd0555555555555555"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd0fffffff00000000"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd1000000100000000"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd1aaaaaab00000000"}
+     ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 40,
+    "null_count": 0,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 300, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 300, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
+  }
+]'
+----
+
+# The partial index should be preferred over the non-partial index or PK.
+opt
+SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND s IN ('apple', 'banana', 'cherry')
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=22.2222222]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=22.2222222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      │   histogram(3)=  0   11.111   0   11.111
+      │                <--- 'banana' --- 'cherry'
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── index-join spatial
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=300]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=300]
+      │         ├── key: (1)
+      │         └── scan spatial@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── stats: [rows=300, distinct(1)=85.7142857, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
+      │              │   histogram(3)=  0    100     0    100
+      │              │                <--- 'banana' --- 'cherry'
+      │              │   histogram(6)=  0             0              50             0              50            100             50             0              0             0              50             0
+      │              │                <--- '\x42fd1000000000000000' ---- '\x42fd1000000000000001' ---- '\x42fd1000000100000000' ---- '\x42fd1200000000000000' --- '\x42fd1400000000000000' ---- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# The partial index should be preferred over the non-partial index or PK when
+# there is an additional filter to apply on s.
+opt
+SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND s = 'banana'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=11.1111111]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=11.1111111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      │   histogram(3)=  0   11.111
+      │                <--- 'banana'
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── index-join spatial
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=300]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=300]
+      │         ├── key: (1)
+      │         └── scan spatial@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── stats: [rows=300, distinct(1)=85.7142857, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
+      │              │   histogram(3)=  0    100     0    100
+      │              │                <--- 'banana' --- 'cherry'
+      │              │   histogram(6)=  0             0              50             0              50            100             50             0              0             0              50             0
+      │              │                <--- '\x42fd1000000000000000' ---- '\x42fd1000000000000001' ---- '\x42fd1000000100000000' ---- '\x42fd1200000000000000' --- '\x42fd1400000000000000' ---- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:3 = 'banana' [type=bool, outer=(3), constraints=(/3: [/'banana' - /'banana']; tight), fd=()-->(3)]
+
+# Add null values for s.
+exec-ddl
+ALTER TABLE spatial INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 0,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[
+      {"num_eq": 1000, "num_range": 0, "distinct_range": 0, "upper_bound": "\\x42fd0555555555555555"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd0fffffff00000000"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd1000000100000000"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd1aaaaaab00000000"}
+     ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 40,
+    "null_count": 100,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 200, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 300, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
+  }
+]'
+----
+
+opt
+SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND s IN ('apple', 'banana', 'cherry')
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=22.2222222]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=22.2222222, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0]
+      │   histogram(3)=  0   11.111   0   11.111
+      │                <--- 'banana' --- 'cherry'
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── index-join spatial
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=307.105263]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=307.105263]
+      │         ├── key: (1)
+      │         └── scan spatial@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
+      │              │   histogram(3)=  0    100     0    100
+      │              │                <--- 'banana' --- 'cherry'
+      │              │   histogram(6)=  0             0              51.184             0              51.184           102.37           51.184             0              0             0              51.184             0
+      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt
+SELECT k FROM spatial WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) AND s = 'banana'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=11.1111111]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=11.1111111, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      │   histogram(3)=  0   11.111
+      │                <--- 'banana'
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── index-join spatial
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=307.105263]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=307.105263]
+      │         ├── key: (1)
+      │         └── scan spatial@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
+      │              │   histogram(3)=  0    100     0    100
+      │              │                <--- 'banana' --- 'cherry'
+      │              │   histogram(6)=  0             0              51.184             0              51.184           102.37           51.184             0              0             0              51.184             0
+      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:3 = 'banana' [type=bool, outer=(3), constraints=(/3: [/'banana' - /'banana']; tight), fd=()-->(3)]

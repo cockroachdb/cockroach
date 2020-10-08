@@ -1,22 +1,19 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package metric
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"regexp"
 
@@ -74,13 +71,14 @@ func (r *Registry) AddMetric(metric Iterable) {
 	defer r.Unlock()
 	r.tracked = append(r.tracked, metric)
 	if log.V(2) {
-		log.Infof(context.TODO(), "Added metric: %s (%T)", metric.GetName(), metric)
+		log.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(), metric)
 	}
 }
 
 // AddMetricStruct examines all fields of metricStruct and adds
 // all Iterable or metric.Struct objects to the registry.
 func (r *Registry) AddMetricStruct(metricStruct interface{}) {
+	ctx := context.TODO()
 	v := reflect.ValueOf(metricStruct)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
@@ -89,22 +87,51 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 
 	for i := 0; i < v.NumField(); i++ {
 		vfield, tfield := v.Field(i), t.Field(i)
+		tname := tfield.Name
 		if !vfield.CanInterface() {
 			if log.V(2) {
-				log.Infof(context.TODO(), "Skipping unexported field %s", tfield.Name)
+				log.Infof(ctx, "skipping unexported field %s", tname)
 			}
 			continue
 		}
-		val := vfield.Interface()
-		switch typ := val.(type) {
-		case Iterable:
-			r.AddMetric(typ)
-		case Struct:
-			r.AddMetricStruct(typ)
-		default:
-			if log.V(2) {
-				log.Infof(context.TODO(), "Skipping non-metric field %s", tfield.Name)
+		switch vfield.Kind() {
+		case reflect.Array:
+			for i := 0; i < vfield.Len(); i++ {
+				velem := vfield.Index(i)
+				telemName := fmt.Sprintf("%s[%d]", tname, i)
+				// Permit elements in the array to be nil.
+				const skipNil = true
+				r.addMetricValue(ctx, velem, telemName, skipNil)
 			}
+		default:
+			// No metric fields should be nil.
+			const skipNil = false
+			r.addMetricValue(ctx, vfield, tname, skipNil)
+		}
+	}
+}
+
+func (r *Registry) addMetricValue(
+	ctx context.Context, val reflect.Value, name string, skipNil bool,
+) {
+	switch typ := val.Interface().(type) {
+	case Iterable:
+		if val.Kind() == reflect.Ptr && val.IsNil() {
+			if skipNil {
+				if log.V(2) {
+					log.Infof(ctx, "skipping nil metric field %s", name)
+				}
+			} else {
+				log.Fatalf(ctx, "found nil metric field %s", name)
+			}
+			return
+		}
+		r.AddMetric(typ)
+	case Struct:
+		r.AddMetricStruct(typ)
+	default:
+		if log.V(2) {
+			log.Infof(ctx, "skipping non-metric field %s", name)
 		}
 	}
 }

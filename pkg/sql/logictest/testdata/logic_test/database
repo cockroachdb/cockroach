@@ -1,4 +1,6 @@
-# LogicTest: local local-opt
+# LogicTest: default-configs local-mixed-20.1-20.2
+# The mixed configuration is enabled to test backward compatibility for database
+# schema changes.
 
 statement ok
 CREATE DATABASE a
@@ -9,27 +11,41 @@ CREATE DATABASE a
 statement ok
 CREATE DATABASE IF NOT EXISTS a
 
-statement error empty database name
+statement error pgcode 42601 empty database name
 CREATE DATABASE ""
 
-query T colnames
+query TT colnames
 SHOW DATABASES
 ----
-database_name
-a
-defaultdb
-postgres
-system
-test
+database_name  owner
+a              root
+defaultdb      root
+postgres       root
+system         node
+test           root
 
-query T colnames
+statement ok
+COMMENT ON DATABASE a IS 'A'
+
+query TTT colnames
+SHOW DATABASES WITH COMMENT
+----
+database_name  owner  comment
+a              root   A
+defaultdb      root   NULL
+postgres       root   NULL
+system         node   NULL
+test           root   NULL
+
+query TT colnames
 SHOW SCHEMAS FROM a
 ----
-schema_name
-crdb_internal
-information_schema
-pg_catalog
-public
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
 
 statement ok
 CREATE DATABASE b TEMPLATE=template0
@@ -74,23 +90,30 @@ statement ok
 CREATE DATABASE b6 TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'
 
 statement ok
+CREATE DATABASE b7 WITH CONNECTION LIMIT -1
+
+statement error only connection limit -1 is supported, got: 1
+CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
+
+statement ok
 CREATE DATABASE c
 
-query T
+query TT
 SHOW DATABASES
 ----
-a
-b
-b2
-b3
-b4
-b5
-b6
-c
-defaultdb
-postgres
-system
-test
+a          root
+b          root
+b2         root
+b3         root
+b4         root
+b5         root
+b6         root
+b7         root
+c          root
+defaultdb  root
+postgres   root
+system     node
+test       root
 
 statement ok
 CREATE TABLE b.a (id INT PRIMARY KEY)
@@ -125,21 +148,22 @@ DROP DATABASE b2 CASCADE;
   DROP DATABASE b3 CASCADE;
   DROP DATABASE b4 CASCADE;
   DROP DATABASE b5 CASCADE;
-  DROP DATABASE b6 CASCADE
+  DROP DATABASE b6 CASCADE;
+  DROP DATABASE b7 CASCADE
 
-statement error empty database name
+statement error pgcode 42601 empty database name
 DROP DATABASE ""
 
-query T colnames
+query TT colnames
 SHOW DATABASES
 ----
-database_name
-a
-c
-defaultdb
-postgres
-system
-test
+database_name  owner
+a              root
+c              root
+defaultdb      root
+postgres       root
+system         node
+test           root
 
 statement ok
 CREATE DATABASE b
@@ -154,27 +178,47 @@ query I
 SELECT * FROM b.a
 ----
 
+# Non-admin users need the CREATEDB role option to create databases.
 user testuser
 
-statement error only superusers are allowed to CREATE DATABASE
+statement error permission denied to create database
 CREATE DATABASE privs
 
 user root
 
 statement ok
-CREATE DATABASE privs
+ALTER USER testuser CREATEDB
 
 user testuser
 
-statement error user testuser does not have DROP privilege on database privs
+statement ok
+CREATE DATABASE privs
+
+# As the owner, testuser has DROP privileges.
+statement ok
 DROP DATABASE privs CASCADE
+
+# But needs explicit DROP privileges on databases where they're not the owner.
+statement error user testuser does not have DROP privilege on database a
+DROP DATABASE a CASCADE
 
 user root
 
 statement ok
-GRANT DROP ON DATABASE privs TO testuser
+GRANT DROP ON DATABASE a TO testuser
 
 user testuser
 
 statement ok
-DROP DATABASE privs CASCADE
+DROP DATABASE a CASCADE
+
+# Test revoking CREATEDB.
+user root
+
+statement ok
+ALTER USER testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE privs

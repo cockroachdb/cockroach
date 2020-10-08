@@ -1,0 +1,62 @@
+# These tests exercise the "hostname" filter in HBA rules.
+
+config secure
+----
+
+subtest nomatch
+
+# If the CIDR mask does not match, auth doesn't find a rule.
+
+set_hba
+host all all 0.0.0.0/32 cert
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all all 0.0.0.0/32 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS    METHOD        OPTIONS
+host   all      root all        cert-password
+host   all      all  0.0.0.0/32 cert
+
+connect user=testuser
+----
+ERROR: no server.host_based_authentication.configuration entry for host "127.0.0.1", user "testuser"
+
+subtest nomatch/root_override
+
+# However, even if no rule matches root can still log in.
+
+connect user=root
+----
+ok defaultdb
+
+subtest end nomatch/root_override
+
+
+subtest end nomatch
+
+subtest match_net
+
+# It's possible to use a network mask. Since the test is connecting using 127.0.0.1,
+# then all the 127/8 network matches.
+
+set_hba
+host all all 127.0.0.0/8 cert
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all all 127.0.0.0/8 cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS     METHOD        OPTIONS
+host   all      root all         cert-password
+host   all      all  127.0.0.0/8 cert
+
+connect user=testuser
+----
+ok defaultdb
+
+subtest end match_net

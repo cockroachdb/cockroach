@@ -1,0 +1,38 @@
+build
+SELECT * FROM information_schema.does_not_exist
+----
+error (42P01): no data source matches prefix: "information_schema.public.does_not_exist"
+
+build
+SELECT * FROM information_schema.columns
+----
+project
+ ├── columns: table_catalog:2!null table_schema:3!null table_name:4!null column_name:5!null ordinal_position:6!null column_default:7 is_nullable:8!null data_type:9!null character_maximum_length:10 character_octet_length:11 numeric_precision:12 numeric_precision_radix:13 numeric_scale:14 datetime_precision:15 interval_type:16 interval_precision:17 character_set_catalog:18 character_set_schema:19 character_set_name:20 collation_catalog:21 collation_schema:22 collation_name:23 domain_catalog:24 domain_schema:25 domain_name:26 udt_catalog:27 udt_schema:28 udt_name:29 scope_catalog:30 scope_schema:31 scope_name:32 maximum_cardinality:33 dtd_identifier:34 is_self_referencing:35 is_identity:36 identity_generation:37 identity_start:38 identity_increment:39 identity_maximum:40 identity_minimum:41 identity_cycle:42 is_generated:43 generation_expression:44 is_updatable:45 is_hidden:46!null crdb_sql_type:47!null
+ └── scan information_schema.columns
+      └── columns: crdb_internal_vtable_pk:1!null table_catalog:2!null table_schema:3!null table_name:4!null column_name:5!null ordinal_position:6!null column_default:7 is_nullable:8!null data_type:9!null character_maximum_length:10 character_octet_length:11 numeric_precision:12 numeric_precision_radix:13 numeric_scale:14 datetime_precision:15 interval_type:16 interval_precision:17 character_set_catalog:18 character_set_schema:19 character_set_name:20 collation_catalog:21 collation_schema:22 collation_name:23 domain_catalog:24 domain_schema:25 domain_name:26 udt_catalog:27 udt_schema:28 udt_name:29 scope_catalog:30 scope_schema:31 scope_name:32 maximum_cardinality:33 dtd_identifier:34 is_self_referencing:35 is_identity:36 identity_generation:37 identity_start:38 identity_increment:39 identity_maximum:40 identity_minimum:41 identity_cycle:42 is_generated:43 generation_expression:44 is_updatable:45 is_hidden:46!null crdb_sql_type:47!null
+
+# Since we lazily create these, the name resolution codepath is slightly
+# different on the second resolution.
+build
+SELECT * FROM information_schema.columns
+----
+project
+ ├── columns: table_catalog:2!null table_schema:3!null table_name:4!null column_name:5!null ordinal_position:6!null column_default:7 is_nullable:8!null data_type:9!null character_maximum_length:10 character_octet_length:11 numeric_precision:12 numeric_precision_radix:13 numeric_scale:14 datetime_precision:15 interval_type:16 interval_precision:17 character_set_catalog:18 character_set_schema:19 character_set_name:20 collation_catalog:21 collation_schema:22 collation_name:23 domain_catalog:24 domain_schema:25 domain_name:26 udt_catalog:27 udt_schema:28 udt_name:29 scope_catalog:30 scope_schema:31 scope_name:32 maximum_cardinality:33 dtd_identifier:34 is_self_referencing:35 is_identity:36 identity_generation:37 identity_start:38 identity_increment:39 identity_maximum:40 identity_minimum:41 identity_cycle:42 is_generated:43 generation_expression:44 is_updatable:45 is_hidden:46!null crdb_sql_type:47!null
+ └── scan information_schema.columns
+      └── columns: crdb_internal_vtable_pk:1!null table_catalog:2!null table_schema:3!null table_name:4!null column_name:5!null ordinal_position:6!null column_default:7 is_nullable:8!null data_type:9!null character_maximum_length:10 character_octet_length:11 numeric_precision:12 numeric_precision_radix:13 numeric_scale:14 datetime_precision:15 interval_type:16 interval_precision:17 character_set_catalog:18 character_set_schema:19 character_set_name:20 collation_catalog:21 collation_schema:22 collation_name:23 domain_catalog:24 domain_schema:25 domain_name:26 udt_catalog:27 udt_schema:28 udt_name:29 scope_catalog:30 scope_schema:31 scope_name:32 maximum_cardinality:33 dtd_identifier:34 is_self_referencing:35 is_identity:36 identity_generation:37 identity_start:38 identity_increment:39 identity_maximum:40 identity_minimum:41 identity_cycle:42 is_generated:43 generation_expression:44 is_updatable:45 is_hidden:46!null crdb_sql_type:47!null
+
+# Alias the virtual table name.
+build
+SELECT * FROM information_schema.columns c
+----
+project
+ ├── columns: table_catalog:2!null table_schema:3!null table_name:4!null column_name:5!null ordinal_position:6!null column_default:7 is_nullable:8!null data_type:9!null character_maximum_length:10 character_octet_length:11 numeric_precision:12 numeric_precision_radix:13 numeric_scale:14 datetime_precision:15 interval_type:16 interval_precision:17 character_set_catalog:18 character_set_schema:19 character_set_name:20 collation_catalog:21 collation_schema:22 collation_name:23 domain_catalog:24 domain_schema:25 domain_name:26 udt_catalog:27 udt_schema:28 udt_name:29 scope_catalog:30 scope_schema:31 scope_name:32 maximum_cardinality:33 dtd_identifier:34 is_self_referencing:35 is_identity:36 identity_generation:37 identity_start:38 identity_increment:39 identity_maximum:40 identity_minimum:41 identity_cycle:42 is_generated:43 generation_expression:44 is_updatable:45 is_hidden:46!null crdb_sql_type:47!null
+ └── scan c
+      └── columns: crdb_internal_vtable_pk:1!null table_catalog:2!null table_schema:3!null table_name:4!null column_name:5!null ordinal_position:6!null column_default:7 is_nullable:8!null data_type:9!null character_maximum_length:10 character_octet_length:11 numeric_precision:12 numeric_precision_radix:13 numeric_scale:14 datetime_precision:15 interval_type:16 interval_precision:17 character_set_catalog:18 character_set_schema:19 character_set_name:20 collation_catalog:21 collation_schema:22 collation_name:23 domain_catalog:24 domain_schema:25 domain_name:26 udt_catalog:27 udt_schema:28 udt_name:29 scope_catalog:30 scope_schema:31 scope_name:32 maximum_cardinality:33 dtd_identifier:34 is_self_referencing:35 is_identity:36 identity_generation:37 identity_start:38 identity_increment:39 identity_maximum:40 identity_minimum:41 identity_cycle:42 is_generated:43 generation_expression:44 is_updatable:45 is_hidden:46!null crdb_sql_type:47!null
+
+# Virtual tables can't have index hints.
+
+build
+SELECT * FROM information_schema.tables@primary
+----
+error (42601): index flags not allowed with virtual tables

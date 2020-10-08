@@ -16,7 +16,9 @@ fi
 tc_end_block "Check build tag"
 
 tc_start_block "Build archive"
-run build/builder.sh make archive -Otarget ARCHIVE=build/cockroach.src.tgz
+# Buffer noisy output and only print it on failure.
+run build/builder.sh make archive -Otarget ARCHIVE=build/cockroach.src.tgz &> artifacts/build-archive.log || (cat artifacts/build-archive.log && false)
+rm artifacts/build-archive.log
 tc_end_block "Build archive"
 
 tc_start_block "Test archive"
@@ -30,7 +32,7 @@ run docker run \
   --rm \
   --volume="$(cd "$(dirname "$0")" && pwd):/work:ro" \
   --workdir="/work" \
-  golang:stretch ./verify-archive.sh
+  golang:1.13-buster ./verify-archive.sh
 tc_end_block "Test archive"
 
 tc_start_block "Clean up"

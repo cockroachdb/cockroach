@@ -1,32 +1,35 @@
-import * as hljs from "highlight.js";
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import React from "react";
+import { Highlight } from "./highlight";
+import classNames from "classnames/bind";
 
-import "./sqlhighlight.styl";
+import styles from "./sqlhighlight.module.styl";
+import * as protos from "src/js/protos";
 
-interface SqlBoxProps {
+export interface SqlBoxProps {
   value: string;
+  zone?: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 }
 
-export class SqlBox extends React.Component<SqlBoxProps> {
-  preNode: Node;
+const cx = classNames.bind(styles);
 
-  shouldComponentUpdate(newProps: SqlBoxProps) {
-    return newProps.value !== this.props.value;
-  }
-
-  componentDidMount() {
-    hljs.highlightBlock(this.preNode);
-  }
-
-  componentDidUpdate() {
-    hljs.highlightBlock(this.preNode);
-  }
-
+class SqlBox extends React.Component<SqlBoxProps> {
+  preNode: React.RefObject<HTMLPreElement> = React.createRef();
   render() {
     return (
-      <pre className="sql-highlight" ref={ (node) => this.preNode = node }>
-        { this.props.value }
-      </pre>
+      <div className={cx("box-highlight")}>
+        <Highlight {...this.props} />
+      </div>
     );
   }
 }
+export default SqlBox;

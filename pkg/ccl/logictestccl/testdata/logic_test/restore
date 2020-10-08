@@ -1,5 +1,5 @@
 # LogicTest: local
 
 # Check that we get through parsing and license check.
-statement error pq: failed to read backup descriptor: unsupported storage scheme: ""
+statement error pq: failed to open backup storage location: unsupported storage scheme: ""
 RESTORE foo FROM "bar"

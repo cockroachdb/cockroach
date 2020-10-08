@@ -1,0 +1,84 @@
+config secure
+----
+
+subtest auth_reject
+
+# Smoke test: the test user can log in.
+connect user=testuser
+----
+ok defaultdb
+
+# With a 'reject' rule, they can't log in anymore even though a later
+# rule lets them.
+set_hba
+host all testuser all reject
+host all all all cert-password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testuser all reject
+# host all all all cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER     ADDRESS METHOD        OPTIONS
+host   all      root     all     cert-password
+host   all      testuser all     reject
+host   all      all      all     cert-password
+
+connect user=testuser
+----
+ERROR: authentication rejected by configuration
+
+subtest end
+
+
+subtest auth_trust
+
+# Create a user with a seemingly required password.
+sql
+CREATE USER nocert WITH PASSWORD 'required'
+----
+ok
+
+# Use the "trust" auth type to auth the user even without
+# a valid cert or password.
+set_hba
+host all nocert all trust
+host all all all cert
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all nocert all trust
+# host all all all cert
+#
+# Interpreted configuration:
+# TYPE DATABASE USER   ADDRESS METHOD        OPTIONS
+host   all      root   all     cert-password
+host   all      nocert all     trust
+host   all      all    all     cert
+
+
+connect user=nocert sslcert= sslmode=require
+----
+ok defaultdb
+
+subtest auth_trust/inexistent_user
+
+# If the user does not exist, a "trust" rule is not sufficient to
+# authorize a login.
+
+sql
+DROP USER nocert
+----
+ok
+
+connect user=nocert sslcert= sslmode=require
+----
+ERROR: password authentication failed for user nocert
+
+
+subtest end
+
+subtest end

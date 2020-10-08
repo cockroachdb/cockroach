@@ -38,7 +38,7 @@ interface OwnProps {
   enterpriseEnabled: boolean;
 }
 
-function mapStateToProps<T>(state: AdminUIState, _ownProps: T) {
+function mapStateToProps(state: AdminUIState): OwnProps {
   return {
     enterpriseEnabled: selectEnterpriseEnabled(state),
   };
@@ -50,25 +50,25 @@ function mapStateToProps<T>(state: AdminUIState, _ownProps: T) {
  */
 export default function swapByLicense<TProps>(
   // tslint:disable:variable-name
-  OSSComponent: Component<TProps>,
-  CCLComponent: Component<TProps>,
+  OSSComponent: React.ComponentClass<TProps>,
+  CCLComponent: React.ComponentClass<TProps>,
   // tslint:enable:variable-name
-): ComponentClass<TProps> {
+) {
   const ossName = getComponentName(OSSComponent);
   const cclName = getComponentName(CCLComponent);
 
-  class LicenseSwap extends React.Component<TProps & OwnProps, {}> {
+  class LicenseSwap extends React.Component<TProps & OwnProps & any> {
     public static displayName = `LicenseSwap(${combineNames(ossName, cclName)})`;
 
     render() {
       const props = _.omit(this.props, ["enterpriseEnabled"]);
 
       if (!this.props.enterpriseEnabled) {
-        return <OSSComponent {...props} />;
+        return <OSSComponent {...props as TProps} />;
       }
-      return <CCLComponent {...props} />;
+      return <CCLComponent {...props as TProps} />;
     }
   }
 
-  return connect(mapStateToProps)(LicenseSwap);
+  return connect<OwnProps, null, TProps, AdminUIState>(mapStateToProps)(LicenseSwap);
 }

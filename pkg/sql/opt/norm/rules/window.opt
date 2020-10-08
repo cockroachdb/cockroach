@@ -1,0 +1,175 @@
+# =============================================================================
+# window.opt contains normalization rules for the Window operator.
+# =============================================================================
+
+# TODO(justin): add a rule to best-effort collapse same ordering+partition
+# window functions, like in:
+# SELECT
+#     rank() OVER (PARTITION BY i), rank() OVER (PARTITION BY i, 1), rank() OVER (PARTITION BY i, 2)
+# FROM
+#     a
+
+# EliminateWindow removes a Window operator with no window functions (which can
+# occur via column pruning).
+[EliminateWindow, Normalize]
+(Window $input:* [])
+=>
+$input
+
+# ReduceWindowPartitionCols reduces a set of partition columns to a simpler form
+# using FDs. Window partition columns are redundant if they are functionally
+# determined by other window partition columns.
+[ReduceWindowPartitionCols, Normalize]
+(Window
+    $input:*
+    $fn:*
+    $private:* &
+        ^(ColsAreEmpty
+            $redundantCols:(RedundantCols
+                $input
+                (WindowPartition $private)
+            )
+        )
+)
+=>
+(Window
+    $input
+    $fn
+    (RemoveWindowPartitionCols $private $redundantCols)
+)
+
+# SimplifyWindowOrdering reduces an ordering to a simpler form using FDs.
+#
+# This rules does not match when window functions have a RANGE frame with an
+# offset, like max(a) OVER (PARTITION BY a ORDER BY a RANGE 1 PRECEDING). The
+# ordering column cannot be pruned because the execution engine requires an
+# ordering column in this case, even if the ordering is constant.
+[SimplifyWindowOrdering, Normalize]
+(Window
+    $input:*
+    $fn:*
+    $private:* &
+        (CanSimplifyWindowOrdering $input $private) &
+        ^(HasRangeFrameWithOffset $fn)
+)
+=>
+(Window $input $fn (SimplifyWindowOrdering $input $private))
+
+# PushSelectIntoWindow pushes down a Select which can be satisfied by only the
+# functional closure of the columns being partitioned over. This is valid
+# because it's "all-or-nothing" - we only entirely eliminate a partition or
+# don't eliminate it at all.
+[PushSelectIntoWindow, Normalize]
+(Select
+    (Window $input:* $fn:* $private:*)
+    $filters:[
+        ...
+        $item:* &
+            (ColsAreDeterminedBy
+                (OuterCols $item)
+                $partitionCols:(WindowPartition $private)
+                $input
+            )
+        ...
+    ]
+)
+=>
+(Select
+    (Window
+        (Select
+            $input
+            (ExtractDeterminedConditions
+                $filters
+                $partitionCols
+                $input
+            )
+        )
+        $fn
+        $private
+    )
+    (ExtractUndeterminedConditions
+        $filters
+        $partitionCols
+        $input
+    )
+)
+
+# PushLimitIntoWindow moves a Limit below a Window when able. This is
+# all-or-nothing. Even if we could push the limit below *some* of the window
+# functions, if there are any we cannot, then we don't. This is because
+# computing additional window functions is not that expensive, and the
+# expensive part is doing the sorting and partitioning. Once exec supports
+# passing orderings through and does not require re-partitioning and re-sorting
+# of window functions, pushing past some-but-not-all of the window functions
+# might be profitable.
+# 
+# SELECT rank() OVER (ORDER BY c) FROM abc ORDER BY c LIMIT 10
+# => 
+# SELECT
+#     rank() OVER (ORDER BY c)
+# FROM
+#     (SELECT c FROM abc ORDER BY c LIMIT 10)
+# 
+# SELECT rank() OVER (PARTITION BY b ORDER BY c) FROM abc LIMIT 10
+# => 
+# SELECT
+#     rank() OVER (PARTITION BY b ORDER BY c)
+# FROM
+#     (SELECT b, c FROM abc ORDER BY b, c LIMIT 10)
+# 
+# First, we construct a "segmented ordering" consisting of the Window's
+# partition columns followed by its ordering columns (the relative positions of
+# the partition columns are arbitrary). This ordering is useful because it
+# performs the partitioning and then the ordering within each partition.  If
+# this ordering does not imply the Limit's ordering, we do not proceed.
+# 
+# Since we now know that the segmented ordering is stronger than the Limit's
+# ordering, it's safe to replace the limit's ordering with it.
+# 
+# The Limit having the segmented ordering means that there are three kinds of
+# partitions:
+#   1. those that are completely contained within the limited set of rows,
+#   2. those that are completely excluded from the set of rows, and
+#   3. *at most one* partition which is "cut off" partway through.
+# Including the window function's ordering in the Limit's ordering does not
+# matter for (1)- and (2)-style partitions (since the window function itself
+# will re-sort them), but for the (3)-style partition, we need to ensure that
+# the limit operator allows through a prefix of it, rather than an arbitrary
+# subset.
+# 
+# Finally, we require that every window function+frame pair being computed has
+# the "prefix-safe" property. A window function is prefix safe if it can be
+# correctly computed over only a prefix of a partition. For example, rank() has
+# this property because rows that come later in the ordering don't affect the
+# rank of the rows before, but avg()+UNBOUNDED {PRECEDING,FOLLOWING} doesn't,
+# because we must see the entire partition to compute the average over it.
+#
+# TODO(justin): Add a rule that translates a limit with an ordering on rank()
+# or dense_rank() into one using the ordering of the window function. This will
+# allow us to push down limits in cases like:
+#
+# SELECT rank() OVER (ORDER BY f) rnk FROM a ORDER BY rnk LIMIT 10
+# =>
+# SELECT rank() OVER (ORDER BY f) rnk FROM a ORDER BY f LIMIT 10
+# =>
+# SELECT rank() OVER (ORDER BY f) rnk FROM (SELECT * FROM a ORDER BY f LIMIT 10)
+[PushLimitIntoWindow, Normalize]
+(Limit
+    (Window $input:* $fns:* & (AllArePrefixSafe $fns) $private:*)
+    $limit:*
+    $ordering:* &
+        (OrderingSucceeded
+            $newOrdering:(MakeSegmentedOrdering
+                $input
+                (WindowPartition $private)
+                (WindowOrdering $private)
+                $ordering
+            )
+        )
+)
+=>
+(Window
+    (Limit $input $limit (DerefOrderingChoice $newOrdering))
+    $fns
+    $private
+)

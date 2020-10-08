@@ -1,26 +1,24 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-import "config/zone.proto";
-import "sql/jobs/jobspb/jobs.proto";
-import "storage/engine/enginepb/mvcc.proto";
-import "storage/liveness.proto";
-import "storage/log.proto";
+import "config/zonepb/zone.proto";
+import "jobs/jobspb/jobs.proto";
+import "server/serverpb/status.proto";
+import "storage/enginepb/mvcc.proto";
+import "kv/kvserver/kvserverpb/liveness.proto";
+import "kv/kvserver/kvserverpb/log.proto";
+import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
@@ -70,15 +68,17 @@ message DatabaseDetailsResponse {
   // grants are the results of SHOW GRANTS for this database.
   repeated Grant grants = 1 [(gogoproto.nullable) = false];
 
-  // table_names contains the names of all tables (SHOW TABLES) in this
-  // database.
+  // table_names contains the names of all tables in this database. Note that
+  // all responses will be schema-qualified (schema.table) and that every schema
+  // or table that contains a "sql unsafe character" such as uppercase letters
+  // or dots will be surrounded with double quotes, such as "naughty schema".table.
   repeated string table_names = 2;
   // descriptor_id is an identifier used to uniquely identify this database.
   // It can be used to find events pertaining to this database by filtering on
   // the 'target_id' field of events.
   int64 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID"];
   // The zone configuration in effect for this database.
-  cockroach.config.ZoneConfig zone_config = 4 [(gogoproto.nullable) = false];
+  cockroach.config.zonepb.ZoneConfig zone_config = 4 [(gogoproto.nullable) = false];
   // The level at which this object's zone configuration is set.
   ZoneConfigurationLevel zone_config_level = 5;
 }
@@ -88,7 +88,10 @@ message TableDetailsRequest {
   // database is the database that contains the table we're interested in.
   string database = 1;
 
-  // table is the name of the table that we're querying.
+  // table is the name of the table that we're querying. Table may be
+  // schema-qualified (schema.table) and each name component that contains
+  // sql unsafe characters such as . or uppercase letters must be surrounded
+  // in double quotes like "naughty schema".table.
   string table = 2;
 }
 
@@ -119,6 +122,9 @@ message TableDetailsResponse {
 
     // generation_expression is the generator expression if the column is computed.
     string generation_expression = 5;
+
+    // hidden is whether this column is hidden.
+    bool hidden = 6;
   }
 
   message Index {
@@ -161,7 +167,7 @@ message TableDetailsResponse {
   // executed.
   string create_table_statement = 5;
   // The zone configuration in effect for this table.
-  cockroach.config.ZoneConfig zone_config = 6 [(gogoproto.nullable) = false];
+  cockroach.config.zonepb.ZoneConfig zone_config = 6 [(gogoproto.nullable) = false];
   // The level at which this object's zone configuration is set.
   ZoneConfigurationLevel zone_config_level = 7;
   // descriptor_id is an identifier used to uniquely identify this table.
@@ -175,7 +181,10 @@ message TableDetailsResponse {
 message TableStatsRequest {
   // database is the database that contains the table we're interested in.
   string database = 1;
-  // table is the name of the table that we're querying.
+  // table is the name of the table that we're querying. Table may be
+  // schema-qualified (schema.table) and each name component that contains
+  // sql unsafe characters such as . or uppercase letters must be surrounded
+  // in double quotes like "naughty schema".table.
   string table = 2;
 }
 
@@ -195,7 +204,7 @@ message TableStatsResponse {
   int64 node_count = 3;
   // stats is the summation of MVCCStats for all replicas of this table
   // across the cluster.
-  cockroach.storage.engine.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
+  cockroach.storage.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
   // approximate_disk_bytes is an approximation of the disk space (in bytes)
   // used for all replicas of this table across the cluster.
   uint64 approximate_disk_bytes = 6;
@@ -221,8 +230,10 @@ message NonTableStatsRequest {
 // that do not belong to SQL tables. The statistics for each range are returned
 // as a TableStatsResponse.
 message NonTableStatsResponse {
-  // Information on time series ranges,
+  // Information on time series ranges.
   TableStatsResponse time_series_stats = 1;
+  // Information for remaining (non-table, non-time-series) ranges.
+  TableStatsResponse internal_use_stats = 2;
 }
 
 // UsersRequest requests a list of users.
@@ -250,6 +261,12 @@ message EventsRequest {
   // returned. When set to > 0, at most only that number of results are
   // returned. When set to < 0, an unlimited number of results are returned.
   int32 limit = 3;
+  // unredacted_events indicates that the values in the events should
+  // not be redacted. The default is to redact, so that older versions
+  // of `cockroach zip` do not see un-redacted values by default.
+  // For good security, this field is only obeyed by the server after
+  // checking that the client of the RPC is an admin user.
+  bool unredacted_events = 4;
 }
 
 // EventsResponse contains a set of event log entries. This is always limited
@@ -326,34 +343,101 @@ message ClusterResponse {
   bool enterprise_enabled = 3;
 }
 
-enum DrainMode {
-    // CLIENT instructs the server to refuse new SQL clients.
-    // TODO(tschottdorf): also terminate existing clients in a graceful manner.
-    CLIENT = 0;
-    // LEADERSHIP instructs the server to gracefully let all its Replicas'
-    // range leases expire.
-    LEASES = 1;
-}
-
 // DrainRequest requests the server to enter the specified draining mode. The
 // server first deactivates all the modes specified in 'off' and then activates
 // all those in 'on'.
 message DrainRequest {
-  // These are actually of type DrainMode, but grpc-gateway does not support
-  // proxying enum fields (yet:
-  // https://github.com/grpc-ecosystem/grpc-gateway/issues/5) and it fails in
-  // pretty dramatic ways (panics the server).
-  repeated int32 on = 1;
-  repeated int32 off = 2;
-  // When true, terminates the process after the given drain modes have been
-  // activated.
+  // deprecated_probe_indicator works as follows:
+  // - if nil, it indicates that the request is a probe only and
+  //   the server should not actually drain. This indicator
+  //   is supported for pre-20.1 RPC clients which do not know
+  //   about the skip_drain field below.
+  // - if non-nil, it must be exactly equal to the slice [0, 1].
+  //   Other values result in an error. When non-nil,
+  //   it implies do_drain = true regardless of the value of the
+  //   other field (pre-20.1 clients don't populate the other field).
+  //
+  // This field will be removed in 20.2 in favor of
+  // do_drain below.
+  repeated int32 deprecated_probe_indicator = 1;
+  reserved 2;
+  // When true, terminates the process after the server has started draining.
+  // Setting both shutdown and do_drain to false causes
+  // the request to only operate as a probe.
+  // Setting do_drain to false and shutdown to true causes
+  // the server to shut down immediately without
+  // first draining.
   bool shutdown = 3;
+  // When true, perform the drain phase. See the comment above on
+  // shutdown for an explanation of the interaction between the two.
+  // do_drain is also implied by a non-nil deprecated_probe_indicator.
+  bool do_drain = 4;
 }
 
-// DrainResponse is the response to a successful DrainRequest and lists the
-// modes which are activated after having processing the request.
+// DrainResponse is the response to a successful DrainRequest.
 message DrainResponse {
-  repeated int32 on = 1;
+  // deprecated_drain_status works as follows:
+  // - if the server is NOT currently draining,
+  //   it will be set to an empty or nil slice.
+  // - a non-nil slice indicates the server is currently
+  //   draining.
+  //
+  // This field exists for the benefit of 19.x clients
+  // and will be removed in 20.2.
+  repeated int32 deprecated_drain_status = 1;
+  // is_draining is set to true iff the server is currently draining.
+  // This is set to true in response to a request where skip_drain
+  // is false; but it can also be set to true in response
+  // to a probe request (!shutdown && skip_drain) if another
+  // drain request has been issued prior or asynchronously.
+  bool is_draining = 2;
+  // drain_remaining_indicator measures, at the time of starting to
+  // process the corresponding drain request, how many actions to
+  // fully drain the node were deemed to be necessary. Some, but not
+  // all, of these actions may already have been carried out by the
+  // time this indicator is received by the client. The client should
+  // issue requests until this indicator first reaches zero, which
+  // indicates that the node is fully drained.
+  //
+  // The API contract is the following:
+  //
+  // - upon a first Drain call with do_drain set, the remaining
+  //   indicator will have some value >=0. If >0, it indicates that
+  //   drain is pushing state away from the node. (What this state
+  //   precisely means is left unspecified for this field. See below
+  //   for details.)
+  //
+  // - upon a subsequent Drain call with do_drain set, the remaining
+  //   indicator should have reduced in value. The drain process does best
+  //   effort at shedding state away from the node; hopefully, all the
+  //   state is shed away upon the first call and the progress
+  //   indicator can be zero as early as the second call. However,
+  //   if there was a lot of state to shed, it is possible for
+  //   timeout to be encountered upon the first call. In that case, the
+  //   second call will do some more work and return a non-zero value
+  //   as well.
+  //
+  // - eventually, in an iterated sequence of DrainRequests with
+  //   do_drain set, the remaining indicator should reduce to zero. At
+  //   that point the client can conclude that no state is left to
+  //   shed, and it should be safe to shut down the node with a
+  //   DrainRequest with shutdown = true.
+  //
+  // Note that this field is left unpopulated (and thus remains at
+  // zero) for pre-20.1 nodes. A client can recognize this by
+  // observing is_draining to be false after a request with do_drain =
+  // true: the is_draining field is also left unpopulated by pre-20.1
+  // nodes.
+  uint64 drain_remaining_indicator = 3;
+
+  // drain_remaining_description is an informal (= not
+  // machine-parsable) string that explains the progress of the drain
+  // process to human eyes. This is intended for use mainly for
+  // troubleshooting.
+  //
+  // The field is only populated if do_drain is true in the
+  // request.
+  string drain_remaining_description = 4;
 }
 
 // DecommissionStatusRequest requests the decommissioning status for the
@@ -363,14 +447,14 @@ message DecommissionStatusRequest {
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
-// DecommissionRequest requests the server to set the Decommissioning flag on
-// all nodes specified by 'node_id' to the value of 'decommissioning'.
+// DecommissionRequest requests the server to set the membership status on
+// all nodes specified by NodeIDs to the value of TargetMembership.
 //
-// If no 'node_id' is given, targets the recipient node.
+// If no NodeIDs are given, it targets the recipient node.
 message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  bool decommissioning = 2;
+  cockroach.kv.kvserver.storagepb.MembershipStatus target_membership = 2;
 }
 
 // DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
@@ -381,7 +465,8 @@ message DecommissionStatusResponse {
     bool is_live = 2;
     // The number of replicas on the node, computed by scanning meta2 ranges.
     int64 replica_count = 3;
-    bool decommissioning = 4;
+    // The membership status of the given node.
+    cockroach.kv.kvserver.storagepb.MembershipStatus membership = 4;
     bool draining = 5;
   }
   // Status of all affected nodes.
@@ -393,6 +478,13 @@ message SettingsRequest {
   // The array of setting names to retrieve.
   // An empty keys array means "all".
   repeated string keys = 1;
+
+  // Indicate whether to see unredacted setting values.
+  // This is opt-in so that a previous version `cockroach zip`
+  // does not start reporting values when this becomes active.
+  // For good security, the server only obeys this after it checks
+  // that the logger-in user has admin privilege.
+  bool unredacted_values = 2;
 }
 
 // SettingsResponse is the response to SettingsRequest.
@@ -401,17 +493,37 @@ message SettingsResponse {
       string value = 1;
       string type = 2;
       string description = 3;
+      bool public = 4;
    }
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }
 
-// HealthRequest inquires whether the addressed node is healthy.
+// HealthRequest requests a liveness or readiness check.
+//
+// A liveness check is triggered via ready set to false. In this mode,
+// an empty response is returned immediately, that is, the caller merely
+// learns that the process is running.
+//
+// A readiness check (ready == true) is suitable for determining whether
+// user traffic should be directed at a given node, for example by a load
+// balancer. In this mode, a successful response is returned only if the
+// node:
+//
+// - is not in the process of shutting down or booting up (including
+//   waiting for cluster bootstrap);
+// - is regarded as healthy by the cluster via the recent broadcast of
+//   a liveness beacon. Absent either of these conditions, an error
+//   code will result.
+//
 message HealthRequest {
+  // ready specifies whether the client wants to know whether the
+  // target node is ready to receive traffic. If a node is unready, an
+  // error will be returned.
+  bool ready = 1;
 }
 
 // HealthResponse is the response to HealthRequest. It currently does not
-// contain any information. The request fails however if the node is not live.
-// TODO(tschottdorf): Should it contain information, and if so, what?
+// contain any information.
 message HealthResponse {
 }
 
@@ -421,8 +533,8 @@ message LivenessRequest {
 
 // LivenessResponse contains the liveness status of each node on the cluster.
 message LivenessResponse {
-  repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
-  map<int32, cockroach.storage.NodeLivenessStatus> statuses = 2 [
+  repeated cockroach.kv.kvserver.storagepb.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+  map<int32, cockroach.kv.kvserver.storagepb.NodeLivenessStatus> statuses = 2 [
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
@@ -441,10 +553,11 @@ message JobsResponse {
     int64 id = 1 [(gogoproto.customname) = "ID"];
     string type = 2;
     string description = 3;
+    string statement = 16;
     string username = 4;
     repeated uint32 descriptor_ids = 5 [
       (gogoproto.customname) = "DescriptorIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
     ];
     string status = 6;
     google.protobuf.Timestamp created = 7 [(gogoproto.stdtime) = true];
@@ -453,6 +566,14 @@ message JobsResponse {
     google.protobuf.Timestamp modified = 10 [(gogoproto.stdtime) = true];
     float fraction_completed = 11;
     string error = 12;
+    // highwater_timestamp is the highwater timestamp returned as normal
+    // timestamp. This is appropriate for display to humans.
+    google.protobuf.Timestamp highwater_timestamp = 13 [(gogoproto.stdtime) = true];
+    // highwater_decimal is the highwater timestamp in the proprietary decimal
+    // form used by logical timestamps internally. This is appropriate to pass
+    // to a "AS OF SYSTEM TIME" SQL statement.
+    string highwater_decimal = 14;
+    string running_status = 15;
   }
 
   repeated Job jobs = 1 [(gogoproto.nullable) = false];
@@ -500,7 +621,7 @@ message RangeLogResponse {
     string details = 6;
   }
   message Event {
-    storage.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
+    cockroach.kv.kvserver.storagepb.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
     PrettyInfo pretty_info = 2 [(gogoproto.nullable) = false];
   }
   reserved 1; // Previously used.
@@ -524,20 +645,23 @@ message DataDistributionRequest {
 
 message DataDistributionResponse {
   message ZoneConfig {
-    // cli_specifier is ".default" for the default zone config.
-    // Otherwise, it's of the form [database.]table[@index[.partition]]
-    string cli_specifier = 1;
+    // target is the object the zone config applies to, e.g. "DATABASE db" or
+    // "PARTITION north_america OF TABLE users".
+    string target = 1;
 
-    config.ZoneConfig config = 2 [(gogoproto.nullable) = false];
+    config.zonepb.ZoneConfig config = 2 [(gogoproto.nullable) = false];
 
-    // config_yaml is the YAML representation of config.
-    string config_yaml = 3;
+    reserved 3;
+
+    // config_sql is the SQL representation of config.
+    string config_sql = 4 [(gogoproto.customname) = "ConfigSQL"];
   }
 
   message TableInfo {
     map<int32, int64> replica_count_by_node_id = 1 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
     int64 zone_config_id = 2;
+    google.protobuf.Timestamp dropped_at = 3 [(gogoproto.stdtime) = true];
   }
 
   message DatabaseInfo {
@@ -548,17 +672,56 @@ message DataDistributionResponse {
   // By database name.
   map<string, DatabaseInfo> database_info = 1 [(gogoproto.nullable) = false];
 
-  // By zone config id.
-  map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
+  reserved 2;
+
+  // By zone name.
+  map<string, ZoneConfig> zone_configs = 3 [(gogoproto.nullable) = false];
 }
 
-  // MetricMetadataRequest requests metadata for all metrics.
+// MetricMetadataRequest requests metadata for all metrics.
 message MetricMetadataRequest {
 }
 
 // MetricMetadataResponse contains the metadata for all metics.
 message MetricMetadataResponse {
   map<string, cockroach.util.metric.Metadata> metadata = 1 [(gogoproto.nullable) = false];
+}
+
+message EnqueueRangeRequest {
+  // The node on which the queue should process the range. If node_id is 0,
+  // the request will be forwarded to all other nodes.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // The name of the replica queue to run the range through. Matched against
+  // each queue's name field. See the implementation of baseQueue for details.
+  string queue = 2;
+  // The ID of the range to run through the queue.
+  int32 range_id = 3 [(gogoproto.customname) = "RangeID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // If set, run the queue's process method without first checking whether the
+  // replica should be processed by calling shouldQueue.
+  bool skip_should_queue = 4;
+}
+
+message EnqueueRangeResponse {
+  message Details {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    // All trace events collected while processing the range in the queue.
+    repeated TraceEvent events = 2;
+    // The error message from the queue's processing, if any.
+    string error = 3;
+  }
+  repeated Details details = 1;
+}
+
+// ChartCatalogRequest requests returns a catalog of Admin UI charts.
+message ChartCatalogRequest {
+}
+
+// ChartCatalogResponse returns a catalog of Admin UI charts useful for debugging.
+message ChartCatalogResponse {
+  repeated cockroach.ts.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -674,6 +837,7 @@ service Admin {
   rpc Health(HealthRequest) returns (HealthResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/health"
+      additional_bindings {get : "/health"}
     };
   }
 
@@ -707,18 +871,20 @@ service Admin {
 
   // Drain puts the node into the specified drain mode(s) and optionally
   // instructs the process to terminate.
+  // We do not expose this via HTTP unless we have a way to authenticate
+  // + authorize streaming RPC connections. See #42567.
   rpc Drain(DrainRequest) returns (stream DrainResponse) {
-    option (google.api.http) = {
-      post: "/_admin/v1/drain"
-      body: "*"
-    };
   }
 
   // Decommission puts the node(s) into the specified decommissioning state.
+  // If this ever becomes exposed via HTTP, ensure that it performs
+  // authorization. See #42567.
   rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
   }
 
   // DecommissionStatus retrieves the decommissioning status of the specified nodes.
+  // If this ever becomes exposed via HTTP, ensure that it performs
+  // authorization. See #42567.
   rpc DecommissionStatus(DecommissionStatusRequest) returns (DecommissionStatusResponse) {
   }
 
@@ -740,11 +906,36 @@ service Admin {
       get: "/_admin/v1/data_distribution"
     };
   }
-  
+
   // URL: /_admin/v1/metricmetadata
   rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/metricmetadata"
+    };
+  }
+
+  // URL: /_admin/v1/chartcatalog
+  rpc ChartCatalog(ChartCatalogRequest) returns (ChartCatalogResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/chartcatalog"
+    };
+  }
+
+
+  // EnqueueRange runs the specified range through the specified queue on the
+  // range's leaseholder store, returning the detailed trace and error
+  // information from doing so. Parameters must be provided in the body of the
+  // POST request.
+  // For example:
+  //
+  // {
+  //   "queue": "raftlog",
+  //   "rangeId": 10
+  // }
+  rpc EnqueueRange(EnqueueRangeRequest) returns (EnqueueRangeResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/enqueue_range"
+      body : "*"
     };
   }
 }

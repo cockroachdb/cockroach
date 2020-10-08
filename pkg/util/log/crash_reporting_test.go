@@ -1,36 +1,39 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package log
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
+// Renumber lines so they're stable no matter what changes above. (We
+// could make the regexes accept any string of digits, but we also
+// want to make sure that the correct line numbers get captured).
+//
+//line crash_reporting_test.go:1000
+
 type safeErrorTestCase struct {
-	format string
-	rs     []interface{}
+	err    error
 	expErr string
 }
 
@@ -38,89 +41,298 @@ type safeErrorTestCase struct {
 var safeErrorTestCases = func() []safeErrorTestCase {
 	var errSentinel = struct{ error }{} // explodes if Error() called
 	var errFundamental = errors.Errorf("%s", "not recoverable :(")
-	var errWrapped1 = errors.Wrap(errFundamental, "not recoverable :(")
-	var errWrapped2 = errors.Wrapf(errWrapped1, "not recoverable :(")
-	var errWrapped3 = errors.Wrap(errWrapped2, "not recoverable :(")
-	var errWrappedSentinel = errors.Wrap(errors.Wrapf(errSentinel, "unseen"), "unsung")
+	var errWrapped1 = errors.Wrap(errFundamental, "this is reportable")
+	var errWrapped2 = errors.Wrapf(errWrapped1, "this is reportable too")
+	var errWrapped3 = errors.Wrap(errWrapped2, "this is reportable as well")
+	var errFormatted = errors.Newf("this embed an error: %v", errWrapped2)
+	var errWrappedSentinel = errors.Wrap(
+		errors.Wrapf(errSentinel,
+			"this is reportable"),
+		"this is also reportable")
 
-	runtimeErr := &runtime.TypeAssertionError{}
+	// rm is the redaction mark, what remains after redaction when
+	// the redaction markers are removed.
+	rm := string(redact.RedactableBytes(redact.RedactedMarker()).StripMarkers())
+
+	runtimeErr := makeTypeAssertionErr()
 
 	return []safeErrorTestCase{
 		{
-			// Intended result of panic(context.DeadlineExceeded). Note that this is a known sentinel
-			// error but a safeError is returned.
-			format: "", rs: []interface{}{context.DeadlineExceeded},
-			expErr: "?:0: context.deadlineExceededError: context deadline exceeded",
+			// Special case in redaction.
+			err: context.DeadlineExceeded,
+			expErr: `context deadline exceeded
+(1) context deadline exceeded
+Error types: (1) context.deadlineExceededError`,
 		},
 		{
-			// Intended result of panic(runtimeErr) which exhibits special case of known safe error.
-			format: "", rs: []interface{}{runtimeErr},
-			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
+			// Special case in redaction.
+			err: runtimeErr,
+			expErr: `interface conversion: interface {} is nil, not int
+(1) interface conversion: interface {} is nil, not int
+Error types: (1) *runtime.TypeAssertionError`,
 		},
 		{
 			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
-			format: "", rs: []interface{}{errors.Wrap(runtimeErr, "unseen")},
-			expErr: "?:0: crash_reporting_test.go:62: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
+			err: errors.Wrap(runtimeErr, "some visible detail"),
+			expErr: `some visible detail: interface conversion: interface {} is nil, not int
+(1) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
+  | 	...crash_reporting_test.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.main
+  | 	...proc.go:NN
+  | runtime.goexit
+  | 	...asm_amd64.s:NN
+Wraps: (2) some visible detail
+Wraps: (3) interface conversion: interface {} is nil, not int
+Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *runtime.TypeAssertionError`,
 		},
 		{
-			// Special-casing switched off when format string present.
-			format: "%s", rs: []interface{}{runtimeErr},
-			expErr: "?:0: %s | *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
+			// Safe errors revealed in safe details of error wraps/objects.
+			err: errors.Newf("%s", runtimeErr),
+			expErr: `interface conversion: interface {} is nil, not int
+(1) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
+  | 	...crash_reporting_test.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.main
+  | 	...proc.go:NN
+  | runtime.goexit
+  | 	...asm_amd64.s:NN
+Wraps: (2) secondary error attachment
+  | interface conversion: interface {} is nil, not int
+  | (1) interface conversion: interface {} is nil, not int
+  | Error types: (1) *runtime.TypeAssertionError
+Wraps: (3) interface conversion: interface {} is nil, not int
+Error types: (1) *withstack.withStack (2) *secondary.withSecondaryError (3) *errutil.leafError`,
 		},
 		{
-			// Special-casing switched off when more than one reportable present.
-			format: "", rs: []interface{}{runtimeErr, "foo"},
-			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface is nil, not ; string",
+			// More embedding of safe details.
+			err: errors.WithSafeDetails(runtimeErr, "foo"),
+			expErr: `interface conversion: interface {} is nil, not int
+(1) foo
+Wraps: (2) interface conversion: interface {} is nil, not int
+Error types: (1) *safedetails.withSafeDetails (2) *runtime.TypeAssertionError`,
 		},
 		{
-			format: "I like %s and %q and my pin code is %d", rs: []interface{}{Safe("A"), &SafeType{V: "B"}, 1234},
-			expErr: "?:0: I like %s and %q and my pin code is %d | A; B; int",
+			err: errors.Newf("I like %s and my pin code is %d or %d", Safe("A"), 1234, Safe(9999)),
+			expErr: `I like A and my pin code is ` + rm + ` or 9999
+(1) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
+  | 	...crash_reporting_test.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.main
+  | 	...proc.go:NN
+  | runtime.goexit
+  | 	...asm_amd64.s:NN
+Wraps: (2) I like A and my pin code is ` + rm + ` or 9999
+Error types: (1) *withstack.withStack (2) *errutil.leafError`,
 		},
 		{
-			format: "outer %+v", rs: []interface{}{
-				errors.Wrapf(context.Canceled, "this will unfortunately be lost: %d", Safe(6)),
-			},
-			expErr: "?:0: outer %+v | crash_reporting_test.go:81: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
+			err: errors.Wrapf(context.Canceled, "this is preserved: %d", Safe(6)),
+			expErr: `this is preserved: 6: context canceled
+(1) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
+  | 	...crash_reporting_test.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.main
+  | 	...proc.go:NN
+  | runtime.goexit
+  | 	...asm_amd64.s:NN
+Wraps: (2) this is preserved: 6
+Wraps: (3) context canceled
+Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *errors.errorString`,
 		},
 		{
 			// Verify that the special case still scrubs inside of the error.
-			format: "", rs: []interface{}{&os.LinkError{Op: "moo", Old: "sec", New: "cret", Err: errors.New("assumed safe")}},
-			expErr: "?:0: *os.LinkError: moo <redacted> <redacted>: assumed safe",
+			err: &os.LinkError{Op: "moo", Old: "sec", New: "cret", Err: errors.WithSafeDetails(leafErr{}, "assumed safe")},
+			expErr: `moo ` + rm + ` ` + rm + `: ` + rm + `
+(1) moo ` + rm + ` ` + rm + `
+Wraps: (2) assumed safe
+Wraps: (3) ` + rm + `
+Error types: (1) *os.LinkError (2) *safedetails.withSafeDetails (3) log.leafErr`,
 		},
 		{
-			// Verify that unknown sentinel errors print at least their type (regression test).
-			// Also, that its Error() is never called (since it would panic).
-			format: "%s", rs: []interface{}{errWrappedSentinel},
-			expErr: "?:0: %s | crash_reporting_test.go:44: caused by *errors.withMessage: caused by crash_reporting_test.go:44: caused by *errors.withMessage: caused by struct { error }",
+			// Verify that invalid sentinel errors print something and don't
+			// crash the test.
+			err:    errWrappedSentinel,
+			expErr: `%!v(PANIC=SafeFormatter method: runtime error: invalid memory address or nil pointer dereference)`,
 		},
 		{
-			format: "", rs: []interface{}{errWrapped3},
-			expErr: "?:0: crash_reporting_test.go:43: caused by *errors.withMessage: caused by crash_reporting_test.go:42: caused by *errors.withMessage: caused by crash_reporting_test.go:41: caused by *errors.withMessage: caused by crash_reporting_test.go:40",
+			err: errWrapped3,
+			expErr: `this is reportable as well: this is reportable too: this is reportable: ` + rm + `
+(1) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
+  | 	...crash_reporting_test.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.main
+  | 	...proc.go:NN
+Wraps: (2) this is reportable as well
+Wraps: (3) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
+  | 	...crash_reporting_test.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.main
+  | 	...proc.go:NN
+Wraps: (4) this is reportable too
+Wraps: (5) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | [...repeated from below...]
+Wraps: (6) this is reportable
+Wraps: (7) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
+  | 	...crash_reporting_test.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.main
+  | 	...proc.go:NN
+  | runtime.goexit
+  | 	...asm_amd64.s:NN
+Wraps: (8) ` + rm + `
+Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *withstack.withStack (4) *errutil.withPrefix (5) *withstack.withStack (6) *errutil.withPrefix (7) *withstack.withStack (8) *errutil.leafError`,
 		},
 		{
-			format: "", rs: []interface{}{&net.OpError{Op: "write", Net: "tcp", Source: &util.UnresolvedAddr{AddressField: "sensitive-source"}, Addr: &util.UnresolvedAddr{AddressField: "sensitive-addr"}, Err: errors.New("not safe")}},
-			expErr: "?:0: *net.OpError: write tcp redacted->redacted: crash_reporting_test.go:101",
+			err: &net.OpError{
+				Op:     "write",
+				Net:    "tcp",
+				Source: &util.UnresolvedAddr{AddressField: "sensitive-source"},
+				Addr:   &util.UnresolvedAddr{AddressField: "sensitive-addr"},
+				Err:    leafErr{},
+			},
+			expErr: `write tcp ` + rm + ` -> ` + rm + `: ` + rm + `
+(1) write tcp ` + rm + ` -> ` + rm + `
+Wraps: (2) ` + rm + `
+Error types: (1) *net.OpError (2) log.leafErr`,
+		},
+		{
+			err: errFormatted,
+			expErr: `this embed an error: this is reportable too: this is reportable: ` + rm + `
+(1) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  | 	...crash_reporting_test.go:NN
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
+  | 	...crash_reporting_test.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.doInit
+  | 	...proc.go:NN
+  | runtime.main
+  | 	...proc.go:NN
+  | runtime.goexit
+  | 	...asm_amd64.s:NN
+Wraps: (2) secondary error attachment
+  | this is reportable too: this is reportable: ` + rm + `
+  | (1) attached stack trace
+  |   -- stack trace:
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  |   | 	...crash_reporting_test.go:NN
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.init
+  |   | 	...crash_reporting_test.go:NN
+  |   | runtime.doInit
+  |   | 	...proc.go:NN
+  |   | runtime.doInit
+  |   | 	...proc.go:NN
+  |   | runtime.main
+  |   | 	...proc.go:NN
+  | Wraps: (2) this is reportable too
+  | Wraps: (3) attached stack trace
+  |   -- stack trace:
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  |   | 	...crash_reporting_test.go:NN
+  |   | [...repeated from below...]
+  | Wraps: (4) this is reportable
+  | Wraps: (5) attached stack trace
+  |   -- stack trace:
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  |   | 	...crash_reporting_test.go:NN
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.init
+  |   | 	...crash_reporting_test.go:NN
+  |   | runtime.doInit
+  |   | 	...proc.go:NN
+  |   | runtime.doInit
+  |   | 	...proc.go:NN
+  |   | runtime.main
+  |   | 	...proc.go:NN
+  |   | runtime.goexit
+  |   | 	...asm_amd64.s:NN
+  | Wraps: (6) ` + rm + `
+  | Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *withstack.withStack (4) *errutil.withPrefix (5) *withstack.withStack (6) *errutil.leafError
+Wraps: (3) this embed an error: this is reportable too: this is reportable: ` + rm + `
+Error types: (1) *withstack.withStack (2) *secondary.withSecondaryError (3) *errutil.leafError`,
 		},
 	}
 }()
 
 func TestCrashReportingSafeError(t *testing.T) {
+	fileref := regexp.MustCompile(`((?:[a-zA-Z0-9\._@-]*/)*)([a-zA-Z0-9._@-]*\.(?:go|s)):\d+`)
+
 	for _, test := range safeErrorTestCases {
-		t.Run("", func(t *testing.T) {
-			err := ReportablesToSafeError(0, test.format, test.rs)
-			if err == nil {
-				t.Fatal(err)
-			}
-			const expType = "*log.safeError"
-			if typStr := fmt.Sprintf("%T", err); typStr != expType {
-				t.Errorf("expected type:\n%s\ngot type:\n%s", expType, typStr)
-			}
-			if errStr := err.Error(); errStr != test.expErr {
-				t.Errorf("expected:\n%q\ngot:\n%q", test.expErr, errStr)
+		t.Run("safeErr", func(t *testing.T) {
+			errStr := redact.Sprintf("%+v", test.err).Redact().StripMarkers()
+			errStr = fileref.ReplaceAllString(errStr, "...$2:NN")
+			if errStr != test.expErr {
+				diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+					A:        difflib.SplitLines(test.expErr),
+					B:        difflib.SplitLines(errStr),
+					FromFile: "Expected",
+					FromDate: "",
+					ToFile:   "Actual",
+					ToDate:   "",
+					Context:  1,
+				})
+				t.Errorf("Diff:\n%s", diff)
 			}
 		})
 	}
 }
+
+type leafErr struct{}
+
+func (leafErr) Error() string { return "error" }
 
 func TestingSetCrashReportingURL(url string) func() {
 	oldCrashReportURL := crashReportURL
@@ -161,25 +373,14 @@ func TestUptimeTag(t *testing.T) {
 	}
 }
 
-func TestWithCause(t *testing.T) {
-	parent := Safe("roses are safe").
-		WithCause(
-			Safe("violets").
-				WithCause("are").
-				WithCause(Safe("too")),
-		).WithCause("bugs sure do suck").
-		WithCause("and so do you").
-		WithCause(Safe("j/k ❤"))
-
-	if a, e := parent.SafeMessage(), "roses are safe"; a != e {
-		t.Fatalf("expected %s, got %s", e, a)
-	}
-
-	act := ReportablesToSafeError(0, "", []interface{}{parent}).Error()
-	const exp = "?:0: roses are safe: caused by violets: caused by <redacted>: " +
-		"caused by too: caused by <redacted>: caused by <redacted>: caused by j/k ❤"
-
-	if act != exp {
-		t.Fatalf("wanted %s, got %s", exp, act)
-	}
+// makeTypeAssertionErr returns a runtime.Error with the message:
+//     interface conversion: interface {} is nil, not int
+func makeTypeAssertionErr() (result runtime.Error) {
+	defer func() {
+		e := recover()
+		result = e.(runtime.Error)
+	}()
+	var x interface{}
+	_ = x.(int)
+	return nil
 }

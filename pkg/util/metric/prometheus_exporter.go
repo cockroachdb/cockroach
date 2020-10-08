@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package metric
 
@@ -67,17 +63,29 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 // family map, holding on only to the scraped data (which is no longer
 // connected to the registry and metrics within) when returning from the the
 // call. It creates new families as needed.
-func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry) {
+func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMetrics bool) {
 	labels := registry.getLabels()
 	registry.Each(func(_ string, v interface{}) {
-		if prom, ok := v.(PrometheusExportable); ok {
-			m := prom.ToPrometheusMetric()
-			// Set registry and metric labels.
-			m.Label = append(labels, prom.GetLabels()...)
-
-			family := pm.findOrCreateFamily(prom)
-			family.Metric = append(family.Metric, m)
+		prom, ok := v.(PrometheusExportable)
+		if !ok {
+			return
 		}
+		m := prom.ToPrometheusMetric()
+		// Set registry and metric labels.
+		m.Label = append(labels, prom.GetLabels()...)
+
+		family := pm.findOrCreateFamily(prom)
+		family.Metric = append(family.Metric, m)
+
+		// Deal with metrics which have children which are exposed to
+		// prometheus if we should.
+		promIter, ok := v.(PrometheusIterable)
+		if !ok || !includeChildMetrics {
+			return
+		}
+		promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
+			family.Metric = append(family.Metric, metric)
+		})
 	})
 }
 
@@ -89,9 +97,8 @@ func (pm *PrometheusExporter) PrintAsText(w io.Writer) error {
 		if _, err := expfmt.MetricFamilyToText(w, family); err != nil {
 			return err
 		}
-		// Clear metrics for reuse.
-		family.Metric = []*prometheusgo.Metric{}
 	}
+	pm.clearMetrics()
 	return nil
 }
 
@@ -107,4 +114,12 @@ func (pm *PrometheusExporter) Gather() ([]*prometheusgo.MetricFamily, error) {
 		i++
 	}
 	return v, nil
+}
+
+// Clear metrics for reuse.
+func (pm *PrometheusExporter) clearMetrics() {
+	for _, family := range pm.families {
+		// Set to nil to avoid allocation if the family never gets any metrics.
+		family.Metric = nil
+	}
 }

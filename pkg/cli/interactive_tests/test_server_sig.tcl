@@ -9,7 +9,7 @@ send "PS1='\\h:''/# '\r"
 eexpect ":/# "
 
 start_test "Check that the server shuts down upon receiving SIGTERM"
-send "$argv start --insecure --pid-file=server_pid --log-dir=logs \r"
+send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs -s=path=logs/db \r"
 eexpect "initialized"
 
 system "kill `cat server_pid`"
@@ -25,7 +25,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that the server shuts down upon receiving Ctrl+C."
-send "$argv start --insecure --pid-file=server_pid --log-dir=logs \r"
+send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs -s=path=logs/db \r"
 eexpect "restarted"
 
 interrupt
@@ -43,7 +43,7 @@ end_test
 start_test "Check that the server shuts down fast upon receiving Ctrl+C twice."
 
 # Start a server via the shell
-send "$argv start --insecure --pid-file=server_pid --log-dir=logs \r"
+send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs -s=path=logs/db \r"
 eexpect "restarted"
 
 # Make a client open a connection and keep using it with an open txn.
@@ -64,8 +64,8 @@ send "\003"
 set interrupted false
 expect {
     "hard shutdown" {
-	global interrupted
-	set interrupted true
+        global interrupted
+        set interrupted true
     }
     "shutdown completed" {}
     timeout { handle_timeout "server shutdown message" }
@@ -86,7 +86,40 @@ set spawn_id $client_spawn_id
 send "\\q\r"
 eexpect eof
 
-# terminate the shell
+start_test "Check that the server shuts keeps gracefully shutting down upon receiving SIGTERM twice."
+
+# Start a server via the shell
+set spawn_id $shell_spawn_id
+send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs -s=path=logs/db \r"
+eexpect "restarted"
+
+# Make a client open a connection and keep using it with an open txn.
+spawn $argv sql
+set client_spawn_id $spawn_id
+eexpect root@
+send "begin;\r\rselect 1;\r"
+eexpect "1 row"
+eexpect root@
+
+# Now interrupt the server twice.
+set spawn_id $shell_spawn_id
+system "kill `cat server_pid`"
+eexpect "graceful shutdown"
+system "kill `cat server_pid`"
+# There's still a very small chance the server could finish draining
+# before the second signal is sent, but oh well.
+expect {
+    "shutdown completed" {}
+    "hard shutdown" {
+        report "unexpected hard shutdown"
+        exit 1
+    }
+    timeout { handle_timeout "server shutdown message" }
+}
+eexpect ":/# "
+end_test
+
+# Terminate the SQL shell.
 set spawn_id $shell_spawn_id
 send "exit\r"
 eexpect eof

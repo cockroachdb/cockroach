@@ -25,136 +25,183 @@
 #   contributors change their git name and/or email address.
 #
 # Note: there are unit tests in the release-notes subdirectory!
+#
+# pylint: disable=line-too-long, invalid-name, missing-function-docstring, too-many-branches, redefined-outer-name
 
 import sys
 import itertools
 import re
-import os
-import datetime, time
+import datetime
+import time
+from gitdb import exc
 import subprocess
-from git import Repo
+import os.path
+
 from optparse import OptionParser
+from gitdb import exc
+from git import Repo
 from git.repo.fun import name_to_object
 from git.util import Stats
+import os.path
 
-### Global behavior constants ###
+#
+# Global behavior constants
+#
 
 # minimum sha length to disambiguate
 shamin = 9
 
-# FIXME(knz): This probably needs to use the .mailmap.
-author_aliases = {
-    'dianasaur323': "Diana Hsieh",
-    'kena': "Raphael 'kena' Poss",
-    'vivekmenezes': "Vivek Menezes",
-    'RaduBerinde': "Radu Berinde",
-    'Andy Kimball': "Andrew Kimball",
-    'marc': "Marc Berhault",
-    'Lauren': "Lauren Hirata",
-    'lhirata' : "Lauren Hirata",
-    'MBerhault': "Marc Berhault",
-    'Nate': "Nathaniel Stewart",
-    'a6802739': "Song Hao",
-    'Abhemailk abhi.madan01@gmail.com': "Abhishek Madan",
-    'rytaft': "Rebecca Taft",
-    'songhao': "Song Hao",
-    'solongordon': "Solon Gordon",
-    'Amruta': "Amruta Ranade",
-    'yuzefovich': "Yahor Yuzefovich",
-    'madhavsuresh': "Madhav Suresh",
-}
+# Basic mailmap functionality using the AUTHORS file.
+mmre = re.compile(r'^(?P<name>.*?)\s+<(?P<addr>[^>]*)>(?P<aliases>(?:[^<]*<[^>]*>)*)$')
+mmare = re.compile('(?P<alias>[^<]*)<(?P<addr>[^>]*)>')
+crdb_folk = set()
 
-# FIXME(knz): This too.
-crdb_folk = set([
-    "Abhishek Madan",
-    "Alex Robinson",
-    "Alfonso Subiotto Marqués",
-    "Amruta Ranade",
-    "Andrei Matei",
-    "Andrew Couch",
-    "Andrew Kimball",
-    "Andy Woods",
-    "Arjun Narayan",
-    "Ben Darnell",
-    "Bob Vawter",
-    "Bram Gruneir",
-    "Daniel Harrison",
-    "David Taylor",
-    "Diana Hsieh",
-    "Jesse Seldess",
-    "Jessica Edwards",
-    "Joey Pereira",
-    "Jordan Lewis",
-    "Justin Jaffray",
-    "Kuan Luo",
-    "Lauren Hirata",
-    "Madhav Suresh",
-    "Marc Berhault",
-    "Masha Schneider",
-    "Matt Jibson",
-    "Matt Tracy",
-    "Nathan VanBenschoten",
-    "Nathaniel Stewart",
-    "Nikhil Benesch",
-    "Paul Bardea",
-    "Pete Vilter",
-    "Peter Mattis",
-    "Radu Berinde",
-    "Raphael 'kena' Poss",
-    "Rebecca Taft",
-    "Rich Loveland",
-    "Richard Wu",
-    "Sean Loiselle",
-    "Solon Gordon",
-    "Spencer Kimball",
-    "Tamir Duberstein",
-    "Tobias Schottdorf",
-    "Victor Chen",
-    "Vivek Menezes",
-    "Yahor Yuzefovich",
-])
+class P:
+    def __init__(self, name, addr):
+        self.name = name
+        self.email = addr
+        self.aliases = [(name, addr)]
+        self.crdb = '@cockroachlabs.com' in addr
+        if self.crdb:
+            crdb_folk.add(self)
+    def __repr__(self):
+        return "%s <%s>" % (self.name, self.email)
+    def __lt__(self, other):
+        return self.name < other.name or (self.name == other.name and self.email < other.email)
+mmap_bycanon = {}
+mmap_byaddr = {}
+mmap_byname = {}
+def define_person(name, addr):
+        p = P(name, addr)
+        canon = (name, addr)
+        if canon in mmap_bycanon:
+            print('warning: duplicate person %r, ignoring', canon)
+            return None
+        mmap_bycanon[canon] = p
+        byaddr = mmap_byaddr.get(addr, [])
+        byaddr.append(p)
+        mmap_byaddr[addr] = byaddr
+        byname = mmap_byname.get(name, [])
+        byname.append(p)
+        mmap_byname[name] = byname
+        return p
 
+if not os.path.exists('AUTHORS'):
+    print('warning: AUTHORS missing in current directory.', file=sys.stderr)
+    print('Maybe use "cd" to navigate to the working tree root.', file=sys.stderr)
+else:
+    with open('AUTHORS', 'r') as f:
+        for line in f.readlines():
+            if line.strip().startswith('#'):
+                continue
+            m = mmre.match(line)
+            if m is None:
+                continue
+            p = define_person(m.group('name'), m.group('addr'))
+            if p is None:
+                continue
+            p.crdb = '@cockroachlabs.com' in line
+            if p.crdb:
+                crdb_folk.add(p)
+            aliases = m.group('aliases')
+            aliases = mmare.findall(aliases)
+            for alias, addr in aliases:
+                name = alias.strip()
+                byaddr = mmap_byaddr.get(addr, [])
+                if p not in byaddr:
+                    byaddr.append(p)
+                mmap_byaddr[addr] = byaddr
+                if name == '':
+                    name = p.name
+                canon = (name, addr)
+                if canon in mmap_bycanon:
+                    print('warning: duplicate alias %r, ignoring', canon)
+                    continue
+                mmap_bycanon[canon] = p
+                p.aliases.append(canon)
+                byname = mmap_byname.get(name, [])
+                if p not in byname:
+                    byname.append(p)
+                mmap_byname[name] = byname
+
+# lookup_person retrieves the main identity of a person given one of their
+# names or email aliases in the mailmap.
+def lookup_person(name, email):
+    key = (name, email)
+    if key in mmap_bycanon:
+        # lucky case.
+        return mmap_bycanon[key]
+    # Name+email didn't work.
+    # Let's see email next.
+    if email in mmap_byaddr:
+        candidates = mmap_byaddr[email]
+        if len(candidates) > 1:
+            print('warning: no direct name match for', (name, email),
+                  'and addr', email, 'is ambiguous,',
+                  'keeping as-is', file=sys.stderr)
+            return define_person(name, email)
+        return candidates[0]
+    # Email didn't work either. That's not great.
+    if name in mmap_byname:
+        candidates = mmap_byname[name]
+        if len(candidates) > 1:
+            print('warning: no direct name match for', (name, email),
+                  'and name', name, 'is ambiguous,',
+                  'keeping as-is', file=sys.stderr)
+            return define_person(name, email)
+        return candidates[0]
+    return define_person(name, email)
 
 # Section titles for release notes.
 relnotetitles = {
-    'cli change': "Command-Line Changes",
-    'sql change': "SQL Language Changes",
-    'admin ui change': "Admin UI Changes",
-    'general change': "General Changes",
-    'build change': "Build Changes",
-    'enterprise change': "Enterprise Edition Changes",
-    'backward-incompatible change': "Backward-Incompatible Changes",
-    'performance improvement': "Performance Improvements",
-    'bug fix': "Bug Fixes",
+    'cli change': "Command-line changes",
+    'sql change': "SQL language changes",
+    'api change': "API endpoint changes",
+    'admin ui change': "Admin UI changes",
+    'general change': "General changes",
+    'build change': "Build changes",
+    'enterprise change': "Enterprise edition changes",
+    'backward-incompatible change': "Backward-incompatible changes",
+    'performance improvement': "Performance improvements",
+    'bug fix': "Bug fixes",
+    'security update': "Security updates",
 }
 
 # Order in which to show the sections.
 relnote_sec_order = [
     'backward-incompatible change',
+    'security update',
     'general change',
     'enterprise change',
     'sql change',
     'cli change',
+    'api change',
     'admin ui change',
     'bug fix',
     'performance improvement',
     'build change',
-    ]
+]
 
 # Release note category common misspellings.
 cat_misspells = {
-    'sql' : 'sql change',
+    'sql': 'sql change',
     'general': 'general change',
     'core change': 'general change',
     'bugfix': 'bug fix',
-    'performance change' : 'performance improvement',
-    'performance' : 'performance improvement',
-    'ui' : 'admin ui change',
+    'performance change': 'performance improvement',
+    'performance': 'performance improvement',
+    'ui': 'admin ui change',
+    'api': 'api change',
+    'http': 'api change',
     'backwards-incompatible change': 'backward-incompatible change',
-    'enterprise': 'enterprise change'
-    }
+    'enterprise': 'enterprise change',
+    'security': 'security update',
+    'security change': 'security update',
+}
 
-## Release note format ##
+#
+# Release note format
+#
 
 # The following release note formats have been seen in the wild:
 #
@@ -179,15 +226,21 @@ relnote = re.compile(r'(?:^|[\n\r])[rR]elease [nN]otes? *(?:' + form1 + '|' + fo
 coauthor = re.compile(r'^Co-authored-by: (?P<name>[^<]*) <(?P<email>.*)>', flags=re.M)
 fixannot = re.compile(r'^([fF]ix(es|ed)?|[cC]lose(d|s)?) #', flags=re.M)
 
-## Merge commit format ##
+#
+# Merge commit format
+#
 
 # The following merge commits have been seen in the wild:
 #
 # Merge pull request #XXXXX from ...      <- GitHub merges
+# .... (#XXXX)                            <- GitHub merges (alt format)
 # Merge #XXXXX #XXXXX #XXXXX              <- Bors merges
 merge_numbers = re.compile(r'^Merge( pull request)?(?P<numbers>( #[0-9]+)+)')
+simple_merge = re.compile(r'.*\((?P<numbers>#[0-9]+)\)$', re.M)
 
-### Initialization / option parsing ###
+#
+# Initialization / option parsing
+#
 
 parser = OptionParser()
 parser.add_option("-k", "--sort-key", dest="sort_key", default="title",
@@ -204,10 +257,18 @@ parser.add_option("--hide-unambiguous-shas", action="store_true", dest="hide_sha
                   help="omit commit SHAs from the release notes and per-contributor sections")
 parser.add_option("--hide-per-contributor-section", action="store_true", dest="hide_per_contributor", default=False,
                   help="omit the per-contributor section")
+parser.add_option("--hide-crdb-folk", dest="hide_crdb_folk", action="store_true", default=False,
+                  help="don't show crdb folk in the per-contributor section")
 parser.add_option("--hide-downloads-section", action="store_true", dest="hide_downloads", default=False,
                   help="omit the email sign-up and downloads section")
 parser.add_option("--hide-header", action="store_true", dest="hide_header", default=False,
                   help="omit the title and date header")
+parser.add_option("--exclude-from", dest="exclude_from_commit",
+                  help="exclude history starting after COMMIT. Note: COMMIT itself is excluded.", metavar="COMMIT")
+parser.add_option("--exclude-until", dest="exclude_until_commit",
+                  help="exclude history ending at COMMIT", metavar="COMMIT")
+parser.add_option("--one-line", dest="one_line", action="store_true", default=False,
+                  help="unwrap release notes on a single line")
 
 (options, args) = parser.parse_args()
 
@@ -218,24 +279,59 @@ hideshas = options.hide_shas
 hidepercontributor = options.hide_per_contributor
 hidedownloads = options.hide_downloads
 hideheader = options.hide_header
+hidecrdbfolk = options.hide_crdb_folk
 
 repo = Repo('.')
 heads = repo.heads
 
-try:
-    firstCommit = repo.commit(options.from_commit)
-except:
-    print("Unable to find the first commit of the range.", file=sys.stderr)
-    print("No ref named %s." % options.from_commit, file=sys.stderr)
-    exit(0)
+
+def reformat_note(note_lines):
+    sep = '\n'
+    if options.one_line:
+        sep = ' '
+    return sep.join(note_lines).strip()
+
+
+# Check that pull_ref_prefix is valid
+testrefname = "%s/1" % pull_ref_prefix
 
 try:
-    commit = repo.commit(options.until_commit)
-except:
-    print("Unable to find the last commit of the range.", file=sys.stderr)
-    print("No ref named %s." % options.until_commit, file=sys.stderr)
-    exit(0)
+    repo.commit(testrefname)
+except exc.ODBError:
+    print("Unable to find pull request refs at %s." % pull_ref_prefix, file=sys.stderr)
+    print("Is your repo set up to fetch them?  Try adding", file=sys.stderr)
+    print("  fetch = +refs/pull/*/head:%s/*" % pull_ref_prefix, file=sys.stderr)
+    print("to the GitHub remote section of .git/config.", file=sys.stderr)
+    sys.exit(1)
 
+
+
+def find_commits(from_commit_ref, until_commit_ref):
+    try:
+        firstCommit = repo.commit(from_commit_ref)
+    except exc.ODBError:
+        print("Unable to find the first commit of the range.", file=sys.stderr)
+        print("No ref named %s." % from_commit_ref, file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        finalCommit = repo.commit(until_commit_ref)
+    except exc.ODBError:
+        print("Unable to find the last commit of the range.", file=sys.stderr)
+        print("No ref named %s." % until_commit_ref, file=sys.stderr)
+        sys.exit(1)
+
+    return firstCommit, finalCommit
+
+
+if not options.until_commit:
+    print("no value specified with --until, try --until=xxxxx (without space after =)", file=sys.stderr)
+    sys.exit(1)
+if not options.from_commit:
+    print("no value specified with --from, try --from=xxxx (without space after =)", file=sys.stderr)
+    sys.exit(1)
+
+firstCommit, commit = find_commits(options.from_commit, options.until_commit)
 if commit == firstCommit:
     print("Commit range is empty!", file=sys.stderr)
     print(parser.get_usage(), file=sys.stderr)
@@ -244,76 +340,56 @@ if commit == firstCommit:
     print("  %s --from xxx >output.md" % sys.argv[0], file=sys.stderr)
     print("  %s --from xxx --until yyy >output.md" % sys.argv[0], file=sys.stderr)
     print("Note: the first commit is excluded. Use e.g.: --from <prev-release-tag> --until <new-release-candidate-sha>", file=sys.stderr)
-    exit(0)
+    sys.exit(0)
 
-# Check that pull_ref_prefix is valid
-testrefname = "%s/1" % pull_ref_prefix
-try:
-    repo.commit(testrefname)
-except:
-    print("Unable to find pull request refs at %s." % pull_ref_prefix, file=sys.stderr)
-    print("Is your repo set up to fetch them?  Try adding", file=sys.stderr)
-    print("  fetch = +refs/pull/*/head:%s/*" % pull_ref_prefix, file=sys.stderr)
-    print("to the GitHub remote section of .git/config.", file=sys.stderr)
-    exit(0)
+excludedFirst, excludedLast = None, None
+if options.exclude_from_commit or options.exclude_until_commit:
+    if not options.exclude_from_commit or not options.exclude_until_commit:
+        print("Both -xf and -xt must be specified, or not at all.")
+        sys.exit(1)
+    excludedFirst, excludedLast = find_commits(options.exclude_from_commit, options.exclude_until_commit)
 
-### Reading data from repository ###
+#
+# Reading data from repository
+#
 
-def identify_commit(commit):
+
+def identify_commit(c):
     return '%s ("%s", %s)' % (
-        commit.hexsha, commit.message.split('\n',1)[0],
-        datetime.datetime.fromtimestamp(commit.committed_date).ctime())
-
-# Is the first commit reachable from the current one?
-base = repo.merge_base(firstCommit, commit)
-if len(base) == 0:
-    print("error: %s:%s\nand %s:%s\nhave no common ancestor" % (
-        options.from_commit, identify_commit(firstCommit),
-        options.until_commit, identify_commit(commit)), file=sys.stderr)
-    exit(1)
-commonParent = base[0]
-if firstCommit != commonParent:
-    print("warning: %s:%s\nis not an ancestor of %s:%s!" % (
-        options.from_commit, identify_commit(firstCommit),
-        options.until_commit, identify_commit(commit)), file=sys.stderr)
-    print(file=sys.stderr)
-    ageindays = int((firstCommit.committed_date - commonParent.committed_date)/86400)
-    prevlen = sum((1 for x in repo.iter_commits(commonParent.hexsha + '...' + firstCommit.hexsha)))
-    print("The first common ancestor is %s" % identify_commit(commonParent), file=sys.stderr)
-    print("which is %d commits older than %s:%s\nand %d days older. Using that as origin." %\
-          (prevlen, options.from_commit, identify_commit(firstCommit), ageindays), file=sys.stderr)
-    print(file=sys.stderr)
-    firstCommit = commonParent
-    options.from_commit = commonParent.hexsha
-
-print("Changes from\n%s\nuntil\n%s" % (identify_commit(firstCommit), identify_commit(commit)), file=sys.stderr)
-
-release_notes = {}
-missing_release_notes = []
-
-def collect_authors(commit):
-    authors = set()
-    author = author_aliases.get(commit.author.name, commit.author.name)
-    if author != 'GitHub':
-        authors.add(author)
-    author = author_aliases.get(commit.committer.name, commit.committer.name)
-    if author != 'GitHub':
-        authors.add(author)
-    for m in coauthor.finditer(commit.message):
-        aname = m.group('name').strip()
-        author = author_aliases.get(aname, aname)
-        authors.add(author)
-    return authors
+        c.hexsha, c.message.split('\n', 1)[0],
+        datetime.datetime.fromtimestamp(c.committed_date).ctime())
 
 
-def extract_release_notes(pr, title, commit):
-    authors = collect_authors(commit)
-    if norelnote.search(commit.message) is not None:
-        # Explicitly no release note. Nothing to do.
-        # Just report the author(s).
-        return None, authors
+def check_reachability(start, end):
+    # Is the first commit reachable from the current one?
+    base = repo.merge_base(start, end)
+    if len(base) == 0:
+        print("error: %s:%s\nand %s:%s\nhave no common ancestor" % (
+            options.from_commit, identify_commit(start),
+            options.until_commit, identify_commit(end)), file=sys.stderr)
+        sys.exit(1)
+    commonParent = base[0]
+    if start != commonParent:
+        print("warning: %s:%s\nis not an ancestor of %s:%s!" % (
+            options.from_commit, identify_commit(start),
+            options.until_commit, identify_commit(end)), file=sys.stderr)
+        print(file=sys.stderr)
+        ageindays = int((start.committed_date - commonParent.committed_date) / 86400)
+        prevlen = sum((1 for x in repo.iter_commits(commonParent.hexsha + '...' + start.hexsha)))
+        print("The first common ancestor is %s" % identify_commit(commonParent), file=sys.stderr)
+        print("which is %d commits older than %s:%s\nand %d days older. Using that as origin." %\
+              (prevlen, options.from_commit, identify_commit(start), ageindays), file=sys.stderr)
+        print(file=sys.stderr)
+        start = commonParent
+    return start, end
 
-    msglines = commit.message.split('\n')
+
+firstCommit, commit = check_reachability(firstCommit, commit)
+options.from_commit = firstCommit.hexsha
+
+
+def extract_release_notes(currentCommit):
+    msglines = currentCommit.message.split('\n')
     curnote = []
     innote = False
     foundnote = False
@@ -331,6 +407,15 @@ def extract_release_notes(pr, title, commit):
             # Fix/Close etc. Ignore.
             continue
 
+        m = norelnote.search(line)
+        if m is not None:
+            # Release note: None
+            #
+            # Remember we found a note (so the commit is not marked as "missing
+            # a release note"), but we won't collect it.
+            foundnote = True
+            continue
+
         m = relnote.search(line)
         if m is None:
             # Current line does not contain a release note separator.
@@ -342,7 +427,7 @@ def extract_release_notes(pr, title, commit):
         # We have a release note boundary. If we were collecting a
         # note already, complete it.
         if innote:
-            notes.append((cat, curnote))
+            notes.append((cat, reformat_note(curnote)))
             curnote = []
             innote = False
 
@@ -375,14 +460,102 @@ def extract_release_notes(pr, title, commit):
             cat = cat_misspells[cat]
 
     if innote:
-        notes.append((cat, curnote))
+        notes.append((cat, reformat_note(curnote)))
+
+    return foundnote, notes
+
+
+spinner = itertools.cycle(['/', '-', '\\', '|'])
+spin_counter = 0
+
+
+def spin():
+    global spin_counter
+    # Display a progress bar
+    spin_counter += 1
+    if spin_counter % 10 == 0:
+        if spin_counter % 100 == 0:
+            print("\b..", end='', file=sys.stderr)
+        print("\b", end='', file=sys.stderr)
+        print(next(spinner), end='', file=sys.stderr)
+        sys.stderr.flush()
+
+
+def get_direct_history(startCommit, lastCommit):
+    history = []
+    for c in repo.iter_commits(startCommit.hexsha + '..' + lastCommit.hexsha, first_parent=True):
+        history.append(c)
+    return history
+
+
+excluded_notes = set()
+if excludedFirst is not None:
+    #
+    # Collect all the notes to exclude during collection below.
+    #
+    print("Collecting EXCLUDED release notes from\n%s\nuntil\n%s" %
+          (identify_commit(excludedFirst), identify_commit(excludedLast)), file=sys.stderr)
+
+    # First ensure that the loop below will terminate.
+    excludedFirst, excludedLast = check_reachability(excludedFirst, excludedLast)
+    # Collect all the merge points, so we can measure progress.
+    mergepoints = get_direct_history(excludedFirst, excludedLast)
+
+    # Now collect all commits.
+    print("Collecting EXCLUDED release notes...", file=sys.stderr)
+    i = 0
+    progress = 0
+    lastTime = time.time()
+    for c in repo.iter_commits(excludedFirst.hexsha + '..' + excludedLast.hexsha):
+        progress = int(100. * float(i) / len(mergepoints))
+        newTime = time.time()
+        if newTime >= lastTime + 5:
+            print("\b%d%%.." % progress, file=sys.stderr, end='')
+            lastTime = newTime
+        i += 1
+
+        spin()
+        # Collect the release notes in that commit.
+        _, notes = extract_release_notes(c)
+        for cat, note in notes:
+            excluded_notes.add((cat, note))
+
+    print("\b100%\n", file=sys.stderr)
+
+print("Collecting release notes from\n%s\nuntil\n%s" % (identify_commit(firstCommit), identify_commit(commit)), file=sys.stderr)
+
+release_notes = {}
+missing_release_notes = []
+
+
+def collect_authors(commit):
+    authors = set()
+    author = lookup_person(commit.author.name, commit.author.email)
+    if author.name != 'GitHub':
+        authors.add(author)
+    author = lookup_person(commit.committer.name, commit.committer.email)
+    if author.name != 'GitHub':
+        authors.add(author)
+    for m in coauthor.finditer(commit.message):
+        aname = m.group('name').strip()
+        amail = m.group('email').strip()
+        author = lookup_person(aname, amail)
+        authors.add(author)
+    return authors
+
+
+def process_release_notes(pr, title, commit):
+    authors = collect_authors(commit)
+
+    foundnote, notes = extract_release_notes(commit)
 
     # At the end the notes will be presented in reverse order, because
     # we explore the commits in reverse order. However within 1 commit
     # the notes are in the correct order. So reverse them upfront here,
     # so that the 2nd reverse gets them in the right order again.
     for cat, note in reversed(notes):
-        completenote(commit, cat, note, authors, pr, title)
+        if (cat, note) not in excluded_notes:
+            completenote(commit, cat, note, authors, pr, title)
 
     missing_item = None
     if not foundnote:
@@ -390,15 +563,16 @@ def extract_release_notes(pr, title, commit):
         missing_item = makeitem(pr, title, commit.hexsha[:shamin], authors)
     return missing_item, authors
 
+
 def makeitem(pr, prtitle, sha, authors):
-    return {'authors': ', '.join(sorted(authors)),
+    return {'authors': authors,
             'sha': sha,
             'pr': pr,
             'title': prtitle,
             'note': None}
 
-def completenote(commit, cat, curnote, authors, pr, title):
-    notemsg = '\n'.join(curnote).strip()
+
+def completenote(commit, cat, notemsg, authors, pr, title):
     item = makeitem(pr, title, commit.hexsha[:shamin], authors)
     item['note'] = notemsg
 
@@ -407,23 +581,11 @@ def completenote(commit, cat, curnote, authors, pr, title):
     catnotes.append(item)
     release_notes[cat] = catnotes
 
+
 per_group_history = {}
 individual_authors = set()
 allprs = set()
 
-spinner = itertools.cycle(['/', '-', '\\', '|'])
-counter = 0
-
-def spin():
-    global counter
-    # Display a progress bar
-    counter += 1
-    if counter % 10 == 0:
-        if counter % 100 == 0:
-            print("\b..", end='', file=sys.stderr)
-        print("\b", end='', file=sys.stderr)
-        print(next(spinner),  end='', file=sys.stderr)
-        sys.stderr.flush()
 
 # This function groups and counts all the commits that belong to a particular PR.
 # Some description is in order regarding the logic here: it should visit all
@@ -483,40 +645,56 @@ def spin():
 # C, E, F, and G will each be checked. F is an ancestor of B, so it will be
 # excluded. E starts with "Merge", so it will not be counted. Only C and G will
 # have statistics included.
-def analyze_pr(merge, pr):
+def analyze_pr(merge, pr, parent_idx):
     allprs.add(pr)
 
-    refname = pull_ref_prefix + "/" + pr[1:]
-    tip = name_to_object(repo, refname)
 
     noteexpr = re.compile("^%s: (?P<message>.*) r=.* a=.*" % pr[1:], flags=re.M)
     m = noteexpr.search(merge.message)
-    note = ''
+    title = ''
     if m is None:
         # GitHub merge
-        note = merge.message.split('\n',3)[2]
+        title = merge.message.split('\n', 3)[2]
     else:
         # Bors merge
-        note = m.group('message')
-    note = note.strip()
+        title = m.group('message')
+    title = title.strip()
+
+    try:
+        refname = pull_ref_prefix + "/" + pr[1:]
+        tip = name_to_object(repo, refname)
+    except exc.BadName:
+        # Oddly, we have at least one PR (#47761) which does not have a tip
+        # at /refs/pull/47761, although it's valid and merged.
+        # As of 2020-06-08 it's the only PR missing a branch tip there.
+        print("\nuh-oh!  can't find PR head in repo", pr, file=sys.stderr)
+        # We deal with it here assuming that the order of the parents
+        # of the merge commit is the same as reported by the
+        # "Merge ..." string in the merge commit's message.
+        # This happens to be true of the missing PR above as well
+        # as for several other merge commits with more than two parents.
+        tip = merge.parents[parent_idx]
+        print("check at https://github.com/cockroachdb/cockroach/pull/%s that the last commit is %s" % (pr[1:], tip.hexsha), file=sys.stderr)
+        # TODO(knz): If this method is reliable, this means we don't
+        # need the pull tips at /refs/pull *at all* which could
+        # streamline the whole experience.
+        # This should be investigated further.
 
     merge_base_result = repo.merge_base(merge.parents[0], tip)
     if len(merge_base_result) == 0:
         print("uh-oh!  can't find merge base!  pr", pr, file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     merge_base = merge_base_result[0]
 
-    commits_to_analyze = [tip]
     seen_commits = set()
 
     missing_items = []
     authors = set()
     ncommits = 0
-    while len(commits_to_analyze) > 0:
+    for commit in repo.iter_commits(merge_base.hexsha + '..' + tip.hexsha):
         spin()
 
-        commit = commits_to_analyze.pop(0)
         if commit in seen_commits:
             # We may be seeing the same commit twice if a feature branch has
             # been forked in sub-branches. Just skip over what we've seen
@@ -525,20 +703,11 @@ def analyze_pr(merge, pr):
         seen_commits.add(commit)
 
         if not commit.message.startswith("Merge"):
-            missing_item, prauthors = extract_release_notes(pr, note, commit)
+            missing_item, prauthors = process_release_notes(pr, title, commit)
             authors.update(prauthors)
             ncommits += 1
             if missing_item is not None:
                 missing_items.append(missing_item)
-
-        for parent in commit.parents:
-            if not repo.is_ancestor(parent, merge.parents[0]):
-                # We're not yet back on the main branch. Just continue digging.
-                commits_to_analyze.append(parent)
-            else:
-                # The parent is on the main branch. We're done digging.
-                # print("found merge parent, stopping. final authors", authors)
-                pass
 
     if ncommits == len(missing_items):
         # None of the commits found had a release note. List them.
@@ -548,7 +717,9 @@ def analyze_pr(merge, pr):
     text = repo.git.diff(merge_base.hexsha, tip.hexsha, '--', numstat=True)
     stats = Stats._list_from_string(repo, text)
 
-    collect_item(pr, note, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
+    collect_item(pr, title, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
+
+
 
 def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
     individual_authors.update(authors)
@@ -563,51 +734,73 @@ def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
                  'date': datetime.date.fromtimestamp(prts).isoformat(),
                  })
 
-    history = per_group_history.get(item['authors'], [])
-    history.append(item)
-    per_group_history[item['authors']] = history
+    al = item['authors']
+    k = str(sorted(al))
+    history = per_group_history.get(k, (al, []))
+    history[1].append(item)
+    per_group_history[k] = history
+
+
 
 def analyze_standalone_commit(commit):
     # Some random out-of-branch commit. Let's not forget them.
     authors = collect_authors(commit)
-    title = commit.message.split('\n',1)[0].strip()
+    title = commit.message.split('\n', 1)[0].strip()
     item = makeitem('#unknown', title, commit.hexsha[:shamin], authors)
     missing_release_notes.append(item)
     collect_item('#unknown', title, commit.hexsha[:shamin], 1, authors, commit.stats.total, commit.committed_date)
 
-while commit != firstCommit:
+
+# Collect all the merge points so we can report progress.
+mergepoints = get_direct_history(firstCommit, commit)
+i = 0
+progress = 0
+lastTime = time.time()
+for commit in mergepoints:
+    progress = int(100. * float(i) / len(mergepoints))
+    newTime = time.time()
+    if newTime >= lastTime + 5:
+        print("\b.%d%%\n." % progress, file=sys.stderr, end='')
+        lastTime = newTime
+    i += 1
     spin()
 
+    ctime = datetime.datetime.fromtimestamp(commit.committed_date).ctime()
     numbermatch = merge_numbers.search(commit.message)
+    if numbermatch is None:
+        # Try again with the alternate format.
+        firstline = commit.message.split('\n', 1)[0]
+        numbermatch = simple_merge.search(firstline)
     # Analyze the commit
     if numbermatch is not None:
         prs = numbermatch.group("numbers").strip().split(" ")
-        for pr in prs:
-            analyze_pr(commit, pr)
+        for idx, pr in enumerate(prs):
+            print("                                \r%s (%s) " % (pr, ctime), end='', file=sys.stderr)
+            analyze_pr(commit, pr, idx+1)
     else:
+        print("                                \r%s (%s) " % (commit.hexsha[:shamin], ctime), end='', file=sys.stderr)
         analyze_standalone_commit(commit)
 
-    if len(commit.parents) == 0:
-        break
-    commit = commit.parents[0]
+
+print("\b\nAnalyzing authors...", file=sys.stderr)
+sys.stderr.flush()
 
 allgroups = list(per_group_history.keys())
-allgroups.sort(key=lambda x:x.lower())
+allgroups.sort(key=lambda x: x.lower())
+
+print("\b\nComputing first-time contributors...", end='', file=sys.stderr)
 
 ext_contributors = individual_authors - crdb_folk
 firsttime_contributors = []
 for a in individual_authors:
     # Find all aliases known for this person
-    aliases = [a]
-    for alias, name in author_aliases.items():
-        if name == a:
-            aliases.append(alias)
+    aliases = a.aliases
     # Collect the history for every alias
     hist = b''
     for al in aliases:
         spin()
-        c = subprocess.run(["git", "log", "--author=%s" % al, options.from_commit, '-n', '1'], stdout=subprocess.PIPE, check=True)
-        hist += c.stdout
+        cmd = subprocess.run(["git", "log", "--author=%s <%s>" % al, options.from_commit, '-n', '1'], stdout=subprocess.PIPE, check=True)
+        hist += cmd.stdout
     if len(hist) == 0:
         # No commit from that author older than the first commit
         # selected, so that's a first-time author.
@@ -616,26 +809,29 @@ for a in individual_authors:
 print("\b\n", file=sys.stderr)
 sys.stderr.flush()
 
-### Presentation of results ###
+#
+# Presentation of results.
+#
 
-## Print the release notes.
+# Print the release notes.
 
 # Start with known sections.
 
-current_version = subprocess.check_output(["git", "describe", "--tags", options.until_commit], universal_newlines=True).strip()
-previous_version = subprocess.check_output(["git", "describe", "--tags", options.from_commit], universal_newlines=True).strip()
+current_version = subprocess.check_output(["git", "describe", "--tags", "--match=v[0-9]*", options.until_commit], universal_newlines=True).strip()
+previous_version = subprocess.check_output(["git", "describe", "--tags", "--match=v[0-9]*", options.from_commit], universal_newlines=True).strip()
 
 if not hideheader:
     print("---")
     print("title: What&#39;s New in", current_version)
-    print("toc: false")
+    print("toc: true")
     print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
     print("---")
     print()
     print("## " + time.strftime("%B %d, %Y"))
     print()
 
-## Print the release notes sign-up and Downloads section.
+# Print the release notes sign-up and Downloads section.
+
 if not hidedownloads:
     print("""Get future release notes emailed to you:
 
@@ -660,11 +856,22 @@ if not hidedownloads:
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
-</div>""")
+</div>
+""")
+
+    print("""### Docker image
+
+{% include copy-clipboard.html %}
+~~~shell
+$ docker pull cockroachdb/cockroach""" + ("-unstable:" if "-" in current_version else ":") + current_version + """
+~~~
+""")
     print()
 
 seenshas = set()
 seenprs = set()
+
+
 def renderlinks(item):
     ret = '[%(pr)s][%(pr)s]' % item
     seenprs.add(item['pr'])
@@ -672,6 +879,7 @@ def renderlinks(item):
         ret += ' [%(sha)s][%(sha)s]' % item
         seenshas.add(item['sha'])
     return ret
+
 
 for sec in relnote_sec_order:
     r = release_notes.get(sec, None)
@@ -699,7 +907,7 @@ if len(extrasec) > 0 or len(missing_release_notes) > 0:
 if len(extrasec) > 0:
     extrasec_sorted = sorted(list(extrasec))
     for extrasec in extrasec_sorted:
-        print("#### %s" % extrasec.title())
+        print("#### %s" % extrasec.capitalize())
         print()
         for item in release_notes[extrasec]:
             print("-", item['note'].replace('\n', '\n  '), renderlinks(item))
@@ -709,51 +917,42 @@ if len(missing_release_notes) > 0:
     print("#### Changes without release note annotation")
     print()
     for item in missing_release_notes:
-        authors = item['authors']
+        authors = ', '.join(str(x) for x in sorted(item['authors']))
         print("- [%(pr)s][%(pr)s] [%(sha)s][%(sha)s] %(title)s" % item, "(%s)" % authors)
         seenshas.add(item['sha'])
         seenprs.add(item['pr'])
     print()
 
-## Print the Doc Updates section.
-print("### Doc Updates")
+# Print the Doc Updates section.
+print("### Doc updates")
 print()
 print("Docs team: Please add these manually.")
 print()
 
-## Print the Contributors section.
+# Print the Contributors section.
 print("### Contributors")
 print()
 print("This release includes %d merged PR%s by %s author%s." %
       (len(allprs), len(allprs) != 1 and "s" or "",
-       len(individual_authors), (len(individual_authors) != 1 and "s" or ""),
-      ), end='')
+       len(individual_authors), (len(individual_authors) != 1 and "s" or "")))
 
 ext_contributors = individual_authors - crdb_folk
 
-if len(ext_contributors) > 0:
-    ext_contributors = sorted(ext_contributors)
-    # # Note: CRDB folk can be first-time contributors too, so
-    # # not part of the if ext_contributors above.
-    if len(firsttime_contributors) > 0:
-        print(" We would like to thank the following contributors from the CockroachDB community, with special thanks to first-time contributors ", end='')
-        for i, n in enumerate(sorted(firsttime_contributors)):
-            if i > 0 and i < len(firsttime_contributors)-1:
-                print(', ', end='')
-            elif i > 0:
-                print(', and ', end='')
-            print(n, end='')
-        print('.')
-    else:
-        print(" We would like to thank the following contributors from the CockroachDB community:")
-        print()
-    for a in ext_contributors:
-        print("-", a)
-else:
+notified_authors = sorted(set(ext_contributors) | set(firsttime_contributors))
+if len(notified_authors) > 0:
+    print("We would like to thank the following contributors from the CockroachDB community:")
     print()
+    for person in notified_authors:
+        print("-", person.name, end='')
+        if person in firsttime_contributors:
+            annot = ""
+            if person.crdb:
+                annot = ", CockroachDB team member"
+            print(" (first-time contributor%s)" % annot, end='')
+        print()
 print()
 
-## Print the per-author contribution list.
+# Print the per-author contribution list.
 if not hidepercontributor:
     print("### PRs merged by contributors")
     print()
@@ -763,9 +962,11 @@ if not hidepercontributor:
         fmt = "  - %(date)s [%(pr)-6s][%(pr)-6s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
 
     for group in allgroups:
-        items = per_group_history[group]
-        print("- %s:" % group)
-        items.sort(key=lambda x:x[sortkey],reverse=not revsort)
+        al, items = per_group_history[group]
+        if hidecrdbfolk and all(map(lambda x: x in crdb_folk, al)):
+            continue
+        items.sort(key=lambda x: x[sortkey], reverse=not revsort)
+        print("- %s:" % ', '.join(a.name for a in sorted(al)))
         for item in items:
             print(fmt % item, end='')
             if not hideshas:

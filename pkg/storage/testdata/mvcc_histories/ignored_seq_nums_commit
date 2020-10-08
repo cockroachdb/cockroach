@@ -1,0 +1,77 @@
+
+# Perform some writes at various sequence numbers.
+
+run ok
+with t=A
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  put       k=k/10 v=10
+  txn_step  seq=20
+  put       k=k  v=b
+  put       k=k/20 v=20
+  txn_step  seq=30
+  put       k=k  v=c
+  put       k=k/30 v=30
+  txn_step  seq=40
+# Mask a single write.
+# The third write should be hidden now.
+  txn_ignore_seqs seqs=(25-35)
+  resolve_intent k=k
+  resolve_intent k=k/10
+  resolve_intent k=k/20
+  resolve_intent k=k/30
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+data: "k"/0.000000011,0 -> /BYTES/b
+data: "k/10"/0.000000011,0 -> /BYTES/10
+data: "k/20"/0.000000011,0 -> /BYTES/20
+
+run ok
+scan k=k end=-k
+get  k=k
+----
+scan: "k"-"l" -> <no data>
+get: "k" -> <no data>
+
+run ok
+clear_range k=k end=-k
+txn_remove t=A
+----
+>> at end:
+<no data>
+
+run ok
+with t=A
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  put       k=k/10 v=10
+  txn_step  seq=20
+  put       k=k  v=b
+  put       k=k/20 v=20
+  txn_step  seq=30
+  put       k=k  v=c
+  put       k=k/30 v=30
+  txn_step  seq=40
+# Mask a single write.
+# The middle write should be hidden now.
+  txn_ignore_seqs seqs=(15-25)
+  resolve_intent k=k
+  resolve_intent k=k/10
+  resolve_intent k=k/20
+  resolve_intent k=k/30
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+data: "k"/0.000000011,0 -> /BYTES/c
+data: "k/10"/0.000000011,0 -> /BYTES/10
+data: "k/30"/0.000000011,0 -> /BYTES/30
+
+run ok
+scan k=k end=-k
+get  k=k
+----
+scan: "k"-"l" -> <no data>
+get: "k" -> <no data>

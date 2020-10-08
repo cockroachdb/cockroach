@@ -1,0 +1,182 @@
+# =============================================================================
+# fold_constants.opt contains normalization rules for folding constants.
+# =============================================================================
+
+# FoldNullCast discards the cast operator if it has a null input. The resulting
+# null value has the same type as the Cast operator would have had.
+[FoldNullCast, Normalize]
+(Cast $input:(Null) $targetTyp:*)
+=>
+(Null $targetTyp)
+
+# FoldNullUnary discards any unary operator with a null input, and replaces it
+# with a null value having the same type as the unary expression would have.
+[FoldNullUnary, Normalize]
+(Unary $input:(Null))
+=>
+(FoldNullUnary (OpName) $input)
+
+# FoldNullBinaryLeft replaces the binary operator with null if its left input
+# is null and it does not allow null arguments.
+[FoldNullBinaryLeft, Normalize]
+(Binary
+    $left:(Null)
+    $right:* & ^(AllowNullArgs (OpName) $left $right)
+)
+=>
+(FoldNullBinary (OpName) $left $right)
+
+# FoldNullBinaryRight replaces the binary operator with null if its right input
+# is null and it does not allow null arguments.
+[FoldNullBinaryRight, Normalize]
+(Binary
+    $left:*
+    $right:(Null) & ^(AllowNullArgs (OpName) $left $right)
+)
+=>
+(FoldNullBinary (OpName) $left $right)
+
+# FoldNullInNonEmpty replaces the In/NotIn with null when the left input is
+# null and the right input is not empty. Null is the unknown value, and if the
+# set is non-empty, it is unknown whether it's in/not in the set.
+[FoldNullInNonEmpty, Normalize]
+(In | NotIn (Null) (Tuple ^[]))
+=>
+(Null (BoolType))
+
+# FoldInEmpty replaces the In with False when the the right input is empty. Note
+# that this is correct even if the left side is Null, since even an unknown
+# value can't be in an empty set.
+[FoldInEmpty, Normalize]
+(In * (Tuple []))
+=>
+(False)
+
+# FoldNotInEmpty replaces the NotIn with True when the right input is empty.
+# Note that this is correct even if the left side is Null, since even an unknown
+# value can't be in an empty set.
+[FoldNotInEmpty, Normalize]
+(NotIn * (Tuple []))
+=>
+(True)
+
+# FoldArray evaluates an Array expression with constant inputs. It replaces the
+# Array with a Const datum with type TArray.
+[FoldArray, Normalize]
+(Array $elems:* & (IsListOfConstants $elems) $typ:*)
+=>
+(FoldArray $elems $typ)
+
+# FoldBinary evaluates a binary operation over constant inputs, replacing the
+# entire expression with a constant. The rule applies as long as the evaluation
+# would not cause an error. Any errors should be saved for execution time,
+# since it's possible that the given operation will not be executed. For
+# example:
+#
+#   SELECT CASE WHEN true THEN 42 ELSE 1/0 END
+#
+# In this query, the ELSE clause is not executed, so the divide-by-zero error
+# should not be triggered.
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrTuple $left)
+    $right:* &
+        (IsConstValueOrTuple $right) &
+        (Succeeded $result:(FoldBinary (OpName) $left $right))
+)
+=>
+$result
+
+# FoldUnary is similar to FoldBinary, but it involves a unary operation over a
+# single constant input. As with FoldBinary, FoldUnary applies as long as the
+# evaluation would not cause an error.
+[FoldUnary, Normalize]
+(Unary
+    $input:* &
+        (IsConstValueOrTuple $input) &
+        (Succeeded $result:(FoldUnary (OpName) $input))
+)
+=>
+$result
+
+# FoldComparison is similar to FoldBinary, but it involves a comparison
+# operation. As with FoldBinary, FoldComparison applies as long as the
+# evaluation would not cause an error.
+[FoldComparison, Normalize]
+(Comparison
+    $left:* & (IsConstValueOrTuple $left)
+    $right:* &
+        (IsConstValueOrTuple $right) &
+        (Succeeded
+            $result:(FoldComparison (OpName) $left $right)
+        )
+)
+=>
+$result
+
+# FoldCast is similar to FoldUnary, but it involves a cast operation. As with
+# FoldUnary, FoldCast applies as long as the evaluation would not cause an
+# error.
+[FoldCast, Normalize]
+(Cast
+    $input:*
+    $typ:* &
+        (IsConstValueOrTuple $input) &
+        (Succeeded $result:(FoldCast $input $typ))
+)
+=>
+$result
+
+# FoldIndirection eliminates a constant array indirection operator applied to an
+# array with a statically known number of elements, like this:
+#
+#   ARRAY[i, i+1][1]
+#   ARRAY[1, 2, 3][2]
+#
+# The rule replaces the indirection operator with the referenced array element.
+[FoldIndirection, Normalize]
+(Indirection
+    $input:*
+    $index:* &
+        (IsConstValueOrTuple $index) &
+        (Succeeded $result:(FoldIndirection $input $index))
+)
+=>
+$result
+
+# FoldColumnAccess eliminates a column access operator applied to a tuple value
+# that is statically constructed, like this:
+#
+#   (((i, i+1) as foo, bar)).foo
+#   (((1, 2) as foo, bar)).bar
+#
+# The rule replaces the column access operator with the referenced tuple
+# element.
+[FoldColumnAccess, Normalize]
+(ColumnAccess
+    $input:*
+    $idx:* & (Succeeded $result:(FoldColumnAccess $input $idx))
+)
+=>
+$result
+
+# FoldFunction is similar to FoldBinary, but it involves a function with
+# constant inputs. As with FoldBinary, FoldFunction applies as long as the
+# evaluation would not cause an error. Additionally, only certain functions
+# are safe to fold as part of normalization. Other functions rely on context
+# that may change between runs of a prepared query.
+[FoldFunction, Normalize]
+(Function
+    $args:* & (IsListOfConstants $args)
+    $private:* &
+        (Succeeded $result:(FoldFunction $args $private))
+)
+=>
+$result
+
+# FoldEqualsAnyNull, conversts a scalar ANY operation to NULL if the right-hand
+# side tuple is NULL, e.g. x = ANY(NULL::int[]). See #42562.
+[FoldEqualsAnyNull, Normalize]
+(AnyScalar * (Null) *)
+=>
+(Null (BoolType))

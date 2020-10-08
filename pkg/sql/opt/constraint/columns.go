@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package constraint
 
@@ -90,6 +86,20 @@ func (c *Columns) Equals(other *Columns) bool {
 	return true
 }
 
+// IsPrefixOf returns true if the columns in c are a prefix of the columns in
+// other.
+func (c *Columns) IsPrefixOf(other *Columns) bool {
+	if c.firstCol != other.firstCol || len(c.otherCols) > len(other.otherCols) {
+		return false
+	}
+	for i := range c.otherCols {
+		if c.otherCols[i] != other.otherCols[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // IsStrictSuffixOf returns true if the columns in c are a strict suffix of the
 // columns in other.
 func (c *Columns) IsStrictSuffixOf(other *Columns) bool {
@@ -113,6 +123,29 @@ func (c *Columns) IsStrictSuffixOf(other *Columns) bool {
 		}
 	}
 	return true
+}
+
+// RemapColumns returns a new Columns object with all ColumnIDs remapped to
+// ones that come from the 'to' table. The old ColumnIDs must come from the
+// 'from' table.
+func (c *Columns) RemapColumns(from, to opt.TableID) Columns {
+	var newColumns Columns
+	newColumns.firstCol = c.firstCol.RemapColumn(from, to)
+	newColumns.otherCols = make([]opt.OrderingColumn, len(c.otherCols))
+	for i := range c.otherCols {
+		newColumns.otherCols[i] = c.otherCols[i].RemapColumn(from, to)
+	}
+	return newColumns
+}
+
+// ColSet returns the columns as a ColSet.
+func (c *Columns) ColSet() opt.ColSet {
+	var r opt.ColSet
+	r.Add(c.firstCol.ID())
+	for _, c := range c.otherCols {
+		r.Add(c.ID())
+	}
+	return r
 }
 
 func (c Columns) String() string {

@@ -1,0 +1,273 @@
+statement ok
+CREATE TABLE t (i INT)
+
+statement ok
+INSERT INTO t VALUES (2)
+
+# Verify that transacations can be used for historical reads using BEGIN
+# or SET TRANSACTION
+
+statement error pq: relation "t" does not exist
+BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t
+
+statement ok
+COMMIT
+
+statement error pq: relation "t" does not exist
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1h'; SELECT * FROM t
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1us'
+
+query I
+SELECT * FROM t
+----
+2
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1us'
+
+query I
+SELECT * FROM t
+----
+2
+
+statement ok
+COMMIT
+
+# Subqueries are only allowed if the exact same timestamp is used.
+# This first two fails because '-1h' is computed for each statement based on
+# statement time so the timestamps will not be identical. The following two 
+# tests which use a matching, fixed timestamp should be semantically valid
+# leading to a failure due to the relation not existing.
+
+statement error pq: inconsistent AS OF SYSTEM TIME timestamp.
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1h'; SELECT * FROM t AS OF SYSTEM TIME '-1h'
+
+statement ok
+COMMIT
+
+statement error pq: inconsistent AS OF SYSTEM TIME timestamp.
+BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t AS OF SYSTEM TIME '-1h'
+
+statement ok
+COMMIT
+
+statement error pq: relation "t" does not exist
+BEGIN AS OF SYSTEM TIME '2018-12-30'; SELECT * FROM t AS OF SYSTEM TIME '2018-12-30'
+
+statement ok
+COMMIT
+
+statement error pq: relation "t" does not exist
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '2018-12-30'; SELECT * FROM t AS OF SYSTEM TIME '2018-12-30'
+
+statement ok
+COMMIT
+
+# Verify transactions with a historical timestamps imply READ ONLY.
+
+statement ok
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1us'
+
+statement error pq: cannot execute INSERT in a read-only transaction
+INSERT INTO t VALUES (3)
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1us'
+
+statement error pq: cannot execute INSERT in a read-only transaction
+INSERT INTO t VALUES (3)
+
+statement ok
+COMMIT
+
+# Verify setting the timestamp after beginning with a timestamp overwrites
+# the previous value.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION AS OF SYSTEM TIME '-1us';
+
+query I
+SELECT * FROM t
+----
+2
+
+statement ok
+COMMIT
+
+# Verify that setting other parts of a transaction mode does not overwrite
+# the AOST from the BEGIN.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION PRIORITY HIGH;
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+statement ok
+COMMIT
+
+# Verify that setting a TRANSACTION READ WRITE is an error if the transaction
+# has a historical timestamp.
+
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
+BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION READ WRITE;
+
+statement ok
+COMMIT
+
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
+BEGIN AS OF SYSTEM TIME '-1h', READ WRITE
+
+statement ok
+BEGIN
+
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
+SET TRANSACTION AS OF SYSTEM TIME '-1h', READ WRITE
+
+statement ok
+COMMIT
+
+# Verify that the TxnTimestamp used to generate now() and current_timestamp() is
+# set to the historical timestamp.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '2018-01-01';
+
+query T
+SELECT * FROM (SELECT now()) AS OF SYSTEM TIME '2018-01-01'
+----
+2018-01-01 00:00:00 +0000 UTC
+
+statement ok
+COMMIT
+
+# Verify that the the historical timestamp used in a SET TRANSACTION can
+# overwrite the timestamp set in a BEGIN.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '2019-01-01'
+
+statement ok
+SET TRANSACTION AS OF SYSTEM TIME '2018-01-01'
+
+query T
+SELECT * FROM (SELECT now())
+----
+2018-01-01 00:00:00 +0000 UTC
+
+statement ok
+COMMIT
+
+# Verify that a historical timestamp is preserved after a ROLLBACK to a
+# SAVEPOINT for a historical transaction initiated in the BEGIN.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '2019-01-01'
+
+statement ok
+SAVEPOINT cockroach_restart;
+
+query T
+SELECT * FROM (SELECT now())
+----
+2019-01-01 00:00:00 +0000 UTC
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart;
+
+query T
+SELECT * FROM (SELECT now())
+----
+2019-01-01 00:00:00 +0000 UTC
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart
+
+statement ok
+COMMIT;
+
+# Verify that a historical timestamp is preserved after a ROLLBACK to a
+# SAVEPOINT for a historical transaction initiated in SET TRANSACTION
+
+statement ok
+BEGIN;
+
+statement ok
+SET TRANSACTION AS OF SYSTEM TIME '2019-01-01'
+
+statement ok
+SAVEPOINT cockroach_restart;
+
+query T
+SELECT * FROM (SELECT now())
+----
+2019-01-01 00:00:00 +0000 UTC
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart;
+
+query T
+SELECT * FROM (SELECT now())
+----
+2019-01-01 00:00:00 +0000 UTC
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart
+
+statement ok
+COMMIT;
+
+# Verify that rolling back after a syntax error which moves the conn to the
+# aborted state maintains the transaction timestamp.
+
+statement ok
+BEGIN;
+
+statement ok
+SET TRANSACTION AS OF SYSTEM TIME '2019-01-01'
+
+statement ok
+SAVEPOINT cockroach_restart;
+
+statement error at or near "selct": syntax error
+SELCT;
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart;
+
+query T
+SELECT * FROM (SELECT now())
+----
+2019-01-01 00:00:00 +0000 UTC
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart
+
+statement ok
+COMMIT
+
+# Ensure that errors evaluating AOST clauses in BEGIN and SET TRANSACTION do not
+# cause problems.
+
+statement error pq: AS OF SYSTEM TIME: zero timestamp is invalid
+BEGIN AS OF SYSTEM TIME '0'
+
+statement ok
+BEGIN
+
+statement error pq: AS OF SYSTEM TIME: zero timestamp is invalid
+SET TRANSACTION AS OF SYSTEM TIME '0'
+
+statement ok
+ROLLBACK

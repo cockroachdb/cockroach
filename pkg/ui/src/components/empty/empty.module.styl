@@ -1,0 +1,86 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.cl-empty-view
+  display flex
+  flex-direction column
+  background-color $colors--white
+  position relative
+  padding $spacing-large 0 $spacing-large $spacing-large
+  background-position top right
+  background-size contain
+  background-repeat no-repeat
+
+  &__title
+    display flex
+    flex-direction row
+    justify-content space-between
+    font-size $font-size--x-large
+    color $colors--neutral-7
+    line-height $line-height--x-large
+    margin-bottom 0
+
+  &__footer
+    margin 20px 0 0
+
+  &__content
+    max-width 600px
+
+  &__main
+    &--text
+      color $colors--neutral-6
+      font-size $font-size--medium
+      line-height $line-height--medium-small
+    &--anchor
+      margin-left 6px
+
+  &__actions-column
+    display flex
+    flex-direction row
+    flex-wrap nowrap
+
+  &__vertical-line
+    width 1px
+    min-height 100%
+    border-left 1px solid $colors--neutral-3
+    margin 0 $spacing-x-small
+
+  &__icon
+    display inline-block
+    color inherit
+    font-style normal
+    line-height 0
+    text-align center
+    text-transform none
+    vertical-align -0.125em
+    margin-right $spacing-x-small
+
+  &__actions-column
+    display flex
+    flex-direction row
+    flex-wrap nowrap
+
+  &__vertical-line
+    width 1px
+    min-height 100%
+    border-left 1px solid $colors--neutral-3
+    margin 0 $spacing-x-small
+
+  &__icon
+    display inline-block
+    color inherit
+    font-style normal
+    line-height 0
+    text-align center
+    text-transform none
+    vertical-align -0.125em
+    margin-right $spacing-x-small

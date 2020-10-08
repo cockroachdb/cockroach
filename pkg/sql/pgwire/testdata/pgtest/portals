@@ -1,0 +1,487 @@
+# Verify that a completed portal can't be re-executed.
+
+send
+Parse {"Query": "SELECT 1"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that closing a bound portal prevents execution.
+
+# 80 = ASCII 'P'
+send
+Parse {"Name": "s", "Query": "SELECT 1"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Close {"ObjectType": 80, "Name": "p"}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CloseComplete"}
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The spec says that closing a prepared statement also closes its portals,
+# but that doesn't seem to be the case. Below I would expect that Bind,
+# Close, Execute causes the execute to return an error, but it instead
+# returns the portal result. This happens in both Postgres and Cockroach.
+
+# 83 = ASCII 'S'
+# After closing, re-parse with the same name to make sure the execute
+# happens on the old statement.
+send
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Close {"ObjectType": 83, "Name": "s"}
+Parse {"Name": "s", "Query": "SELECT 2"}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CloseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Portal still isn't destroyed within a transaction either, in PG or CR.
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Close {"ObjectType": 83, "Name": "s"}
+Parse {"Name": "s", "Query": "SELECT 3"}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CloseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal with limited rows inside a transaction.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# This is the second of 2 rows, but we don't expect a command complete
+# yet.
+
+send
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# There were only 2 rows, so this third execute should return a command
+# complete.
+
+send
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal first with a row limit and then without.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 4)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal with a result limit. This is outside of a transaction
+# so we expect an error. This differs slightly from the postgres behavior,
+# which will do the first execute, auto close the portal, and then fail
+# on the second.
+
+send
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Try the second execute, which we expect to fail because implicit
+# transactions auto close portals after the first suspension.
+
+send
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal partially and close it.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Close the empty portal then try to execute it. 80 = 'P'
+send
+Close {"ObjectType": 80}
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CloseComplete"}
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression for restarting portal's execution after it has been exhausted
+# (#48448). We will execute a portal with a limit (so that it becomes
+# suspended) and exhaust it later; afterwards, we'll attempt to execute it
+# again, but we expect it to always return 0 rows after exhaustion.
+send
+Query {"String": "DROP TABLE IF EXISTS foo; CREATE TABLE foo (id INT8); INSERT INTO foo (id) VALUES (1), (2), (3)"}
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM foo ORDER BY id"}
+Bind
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Try executing a "values clause" multiple times.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "VALUES (0), (1), (2), (3)"}
+Bind
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

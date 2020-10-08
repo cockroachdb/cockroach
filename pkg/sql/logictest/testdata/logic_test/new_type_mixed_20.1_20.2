@@ -1,0 +1,40 @@
+# LogicTest: local-mixed-20.1-20.2
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+statement error type GEOMETRY is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a GEOMETRY)
+
+statement error type GEOMETRY\[\] is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a GEOMETRY[])
+
+statement error type GEOGRAPHY.* is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a GEOGRAPHY)
+
+statement error type GEOGRAPHY\[\] is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a GEOGRAPHY[])
+
+statement error type GEOMETRY is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo GEOMETRY
+
+statement error type GEOGRAPHY.* is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo GEOGRAPHY
+
+statement error type GEOMETRY\[\] is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo GEOMETRY[]
+
+statement error type GEOGRAPHY\[\].* is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo GEOGRAPHY[]
+
+statement error type BOX2D is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a BOX2D)
+
+statement error type BOX2D\[\] is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a BOX2D[])
+
+statement error type BOX2D.* is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo BOX2D
+
+statement error type BOX2D\[\].* is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo BOX2D[]

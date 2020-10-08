@@ -1,6 +1,4 @@
-# LogicTest: local local-opt
-
-statement error unknown variable: "foo"
+statement error unrecognized configuration parameter "foo"
 RESET FOO
 
 statement ok
@@ -17,12 +15,12 @@ RESET SEARCH_PATH
 query T
 SHOW SEARCH_PATH
 ----
-public
+$user,public
 
-statement error variable "server_version" cannot be reset
+statement error parameter "server_version" cannot be changed
 RESET SERVER_VERSION
 
-statement error variable "server_version_num" cannot be reset
+statement error parameter "server_version_num" cannot be changed
 RESET SERVER_VERSION_NUM
 
 # Lower case
@@ -41,7 +39,7 @@ RESET search_path
 query T
 SHOW search_path
 ----
-public
+$user,public
 
 statement ok
 RESET client_encoding; RESET NAMES

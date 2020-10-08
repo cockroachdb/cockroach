@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqlmigrations
 
@@ -23,19 +19,33 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -65,19 +75,19 @@ type fakeLeaseManager struct {
 
 func (f *fakeLeaseManager) AcquireLease(
 	ctx context.Context, key roachpb.Key,
-) (*client.Lease, error) {
-	return &client.Lease{}, nil
+) (*leasemanager.Lease, error) {
+	return &leasemanager.Lease{}, nil
 }
 
-func (f *fakeLeaseManager) ExtendLease(ctx context.Context, l *client.Lease) error {
+func (f *fakeLeaseManager) ExtendLease(ctx context.Context, l *leasemanager.Lease) error {
 	return f.extendErr
 }
 
-func (f *fakeLeaseManager) ReleaseLease(ctx context.Context, l *client.Lease) error {
+func (f *fakeLeaseManager) ReleaseLease(ctx context.Context, l *leasemanager.Lease) error {
 	return f.releaseErr
 }
 
-func (f *fakeLeaseManager) TimeRemaining(l *client.Lease) time.Duration {
+func (f *fakeLeaseManager) TimeRemaining(l *leasemanager.Lease) time.Duration {
 	// Default to a reasonable amount of time left if the field wasn't set.
 	if f.leaseTimeRemaining == 0 {
 		return leaseRefreshInterval * 2
@@ -86,6 +96,7 @@ func (f *fakeLeaseManager) TimeRemaining(l *client.Lease) time.Duration {
 }
 
 type fakeDB struct {
+	codec   keys.SQLCodec
 	kvs     map[string][]byte
 	scanErr error
 	putErr  error
@@ -93,19 +104,21 @@ type fakeDB struct {
 
 func (f *fakeDB) Scan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
-) ([]client.KeyValue, error) {
+) ([]kv.KeyValue, error) {
 	if f.scanErr != nil {
 		return nil, f.scanErr
 	}
-	if !bytes.Equal(begin.(roachpb.Key), keys.MigrationPrefix) {
-		return nil, errors.Errorf("expected begin key %q, got %q", keys.MigrationPrefix, begin)
+	min := f.codec.MigrationKeyPrefix()
+	max := min.PrefixEnd()
+	if !bytes.Equal(begin.(roachpb.Key), min) {
+		return nil, errors.Errorf("expected begin key %q, got %q", min, begin)
 	}
-	if !bytes.Equal(end.(roachpb.Key), keys.MigrationKeyMax) {
-		return nil, errors.Errorf("expected end key %q, got %q", keys.MigrationKeyMax, end)
+	if !bytes.Equal(end.(roachpb.Key), max) {
+		return nil, errors.Errorf("expected end key %q, got %q", max, end)
 	}
-	var results []client.KeyValue
+	var results []kv.KeyValue
 	for k, v := range f.kvs {
-		results = append(results, client.KeyValue{
+		results = append(results, kv.KeyValue{
 			Key:   []byte(k),
 			Value: &roachpb.Value{RawBytes: v},
 		})
@@ -113,31 +126,35 @@ func (f *fakeDB) Scan(
 	return results, nil
 }
 
-func (f *fakeDB) Get(ctx context.Context, key interface{}) (client.KeyValue, error) {
-	return client.KeyValue{}, errors.New("unimplemented")
+func (f *fakeDB) Get(ctx context.Context, key interface{}) (kv.KeyValue, error) {
+	return kv.KeyValue{}, errors.New("unimplemented")
 }
 
 func (f *fakeDB) Put(ctx context.Context, key, value interface{}) error {
 	if f.putErr != nil {
 		return f.putErr
 	}
-	f.kvs[string(key.(roachpb.Key))] = []byte(value.(string))
+	if f.kvs != nil {
+		f.kvs[string(key.(roachpb.Key))] = []byte(value.(string))
+	}
 	return nil
 }
 
-func (f *fakeDB) Txn(context.Context, func(context.Context, *client.Txn) error) error {
+func (f *fakeDB) Txn(context.Context, func(context.Context, *kv.Txn) error) error {
 	return errors.New("unimplemented")
 }
 
 func TestEnsureMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := &fakeDB{}
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
 		db:           db,
+		codec:        codec,
 	}
-	defer mgr.stopper.Stop(context.TODO())
+	defer mgr.stopper.Stop(context.Background())
 
 	fnGotCalled := false
 	fnGotCalledDescriptor := migrationDescriptor{
@@ -200,11 +217,11 @@ func TestEnsureMigrations(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			db.kvs = make(map[string][]byte)
 			for _, name := range tc.preCompleted {
-				db.kvs[string(migrationKey(name))] = []byte{}
+				db.kvs[string(migrationKey(codec, name))] = []byte{}
 			}
 			backwardCompatibleMigrations = tc.migrations
 
-			err := mgr.EnsureMigrations(context.Background())
+			err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */)
 			if !testutils.IsError(err, tc.expectedErr) {
 				t.Errorf("expected error %q, got error %v", tc.expectedErr, err)
 			}
@@ -213,8 +230,8 @@ func TestEnsureMigrations(t *testing.T) {
 			}
 
 			for _, migration := range tc.migrations {
-				if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
-					t.Errorf("expected key %s to be written, but it wasn't", migrationKey(migration))
+				if _, ok := db.kvs[string(migrationKey(codec, migration))]; !ok {
+					t.Errorf("expected key %s to be written, but it wasn't", migrationKey(codec, migration))
 				}
 			}
 			if len(db.kvs) != len(tc.migrations) {
@@ -228,15 +245,91 @@ func TestEnsureMigrations(t *testing.T) {
 	}
 }
 
-func TestDBErrors(t *testing.T) {
+func TestSkipMigrationsIncludedInBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := &fakeDB{}
+	ctx := context.Background()
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
 		db:           db,
+		codec:        codec,
 	}
-	defer mgr.stopper.Stop(context.TODO())
+	defer mgr.stopper.Stop(ctx)
+	defer func(prev []migrationDescriptor) {
+		backwardCompatibleMigrations = prev
+	}(backwardCompatibleMigrations)
+
+	v := roachpb.MustParseVersion("19.1")
+	fnGotCalled := false
+	backwardCompatibleMigrations = []migrationDescriptor{{
+		name:                "got-called-verifier",
+		includedInBootstrap: v,
+		workFn: func(context.Context, runner) error {
+			fnGotCalled = true
+			return nil
+		},
+	}}
+	// If the cluster has been bootstrapped at an old version, the migration should run.
+	require.NoError(t, mgr.EnsureMigrations(ctx, roachpb.Version{} /* bootstrapVersion */))
+	require.True(t, fnGotCalled)
+	fnGotCalled = false
+	// If the cluster has been bootstrapped at a new version, the migration should
+	// not run.
+	require.NoError(t, mgr.EnsureMigrations(ctx, v /* bootstrapVersion */))
+	require.False(t, fnGotCalled)
+}
+
+func TestClusterWideMigrationOnlyRunBySystemTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutils.RunTrueAndFalse(t, "system tenant", func(t *testing.T, systemTenant bool) {
+		var codec keys.SQLCodec
+		if systemTenant {
+			codec = keys.SystemSQLCodec
+		} else {
+			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+		}
+
+		ctx := context.Background()
+		db := &fakeDB{codec: codec}
+		mgr := Manager{
+			stopper:      stop.NewStopper(),
+			leaseManager: &fakeLeaseManager{},
+			db:           db,
+			codec:        codec,
+		}
+		defer mgr.stopper.Stop(ctx)
+		defer func(prev []migrationDescriptor) {
+			backwardCompatibleMigrations = prev
+		}(backwardCompatibleMigrations)
+
+		fnGotCalled := false
+		backwardCompatibleMigrations = []migrationDescriptor{{
+			name:        "got-called-verifier",
+			clusterWide: true,
+			workFn: func(context.Context, runner) error {
+				fnGotCalled = true
+				return nil
+			},
+		}}
+		// The migration should only be run by the system tenant.
+		require.NoError(t, mgr.EnsureMigrations(ctx, roachpb.Version{} /* bootstrapVersion */))
+		require.Equal(t, systemTenant, fnGotCalled)
+	})
+}
+
+func TestDBErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec}
+	mgr := Manager{
+		stopper:      stop.NewStopper(),
+		leaseManager: &fakeLeaseManager{},
+		db:           db,
+		codec:        codec,
+	}
+	defer mgr.stopper.Stop(context.Background())
 
 	migration := noopMigration1
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
@@ -267,15 +360,15 @@ func TestDBErrors(t *testing.T) {
 			db.scanErr = tc.scanErr
 			db.putErr = tc.putErr
 			db.kvs = make(map[string][]byte)
-			err := mgr.EnsureMigrations(context.Background())
+			err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */)
 			if !testutils.IsError(err, tc.expectedErr) {
 				t.Errorf("expected error %q, got error %v", tc.expectedErr, err)
 			}
 			if err != nil {
 				return
 			}
-			if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
-				t.Errorf("expected key %s to be written, but it wasn't", migrationKey(migration))
+			if _, ok := db.kvs[string(migrationKey(codec, migration))]; !ok {
+				t.Errorf("expected key %s to be written, but it wasn't", migrationKey(codec, migration))
 			}
 			if len(db.kvs) != len(backwardCompatibleMigrations) {
 				t.Errorf("expected %d key to be written, but %d were",
@@ -291,25 +384,27 @@ func TestDBErrors(t *testing.T) {
 // its retry settings to allow for testing it in a reasonable amount of time.
 func TestLeaseErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := &fakeDB{kvs: make(map[string][]byte)}
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec, kvs: make(map[string][]byte)}
 	mgr := Manager{
 		stopper: stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{
 			extendErr:  fmt.Errorf("context deadline exceeded"),
 			releaseErr: fmt.Errorf("context deadline exceeded"),
 		},
-		db: db,
+		db:    db,
+		codec: codec,
 	}
-	defer mgr.stopper.Stop(context.TODO())
+	defer mgr.stopper.Stop(context.Background())
 
 	migration := noopMigration1
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{migration}
-	if err := mgr.EnsureMigrations(context.Background()); err != nil {
+	if err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */); err != nil {
 		t.Error(err)
 	}
-	if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
-		t.Errorf("expected key %s to be written, but it wasn't", migrationKey(migration))
+	if _, ok := db.kvs[string(migrationKey(codec, migration))]; !ok {
+		t.Errorf("expected key %s to be written, but it wasn't", migrationKey(codec, migration))
 	}
 	if len(db.kvs) != len(backwardCompatibleMigrations) {
 		t.Errorf("expected %d key to be written, but %d were",
@@ -321,13 +416,15 @@ func TestLeaseErrors(t *testing.T) {
 // cause the process to exit via a call to log.Fatal.
 func TestLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	db := &fakeDB{kvs: make(map[string][]byte)}
+	codec := keys.SystemSQLCodec
+	db := &fakeDB{codec: codec, kvs: make(map[string][]byte)}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{leaseTimeRemaining: time.Nanosecond},
 		db:           db,
+		codec:        codec,
 	}
-	defer mgr.stopper.Stop(context.TODO())
+	defer mgr.stopper.Stop(context.Background())
 
 	oldLeaseRefreshInterval := leaseRefreshInterval
 	leaseRefreshInterval = time.Microsecond
@@ -352,7 +449,7 @@ func TestLeaseExpiration(t *testing.T) {
 	}
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{waitForExitMigration}
-	if err := mgr.EnsureMigrations(context.Background()); err != nil {
+	if err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */); err != nil {
 		t.Error(err)
 	}
 }
@@ -367,7 +464,7 @@ type migrationTest struct {
 	oldMigrations []migrationDescriptor
 	server        serverutils.TestServerInterface
 	sqlDB         *sqlutils.SQLRunner
-	kvDB          *client.DB
+	kvDB          *kv.DB
 	memMetrics    *sql.MemoryMetrics
 }
 
@@ -433,6 +530,8 @@ func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor
 		return nil
 	}
 	return m.workFn(ctx, runner{
+		settings:    mt.server.ClusterSettings(),
+		codec:       keys.SystemSQLCodec,
 		db:          mt.kvDB,
 		sqlExecutor: mt.server.InternalExecutor().(*sql.InternalExecutor),
 	})
@@ -450,24 +549,24 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := sqlbase.NamespaceTable
+	table := tabledesc.NewExistingMutable(systemschema.NamespaceTable.TableDescriptor)
 	table.ID = keys.MaxReservedDescID
 
-	prevPrivileges, ok := sqlbase.SystemAllowedPrivileges[table.ID]
+	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
 	defer func() {
 		if ok {
 			// Restore value of privileges.
-			sqlbase.SystemAllowedPrivileges[table.ID] = prevPrivileges
+			descpb.SystemAllowedPrivileges[table.ID] = prevPrivileges
 		} else {
-			delete(sqlbase.SystemAllowedPrivileges, table.ID)
+			delete(descpb.SystemAllowedPrivileges, table.ID)
 		}
 	}()
-	sqlbase.SystemAllowedPrivileges[table.ID] = sqlbase.SystemAllowedPrivileges[keys.NamespaceTableID]
+	descpb.SystemAllowedPrivileges[table.ID] = descpb.SystemAllowedPrivileges[keys.NamespaceTableID]
 
 	table.Name = "dummy"
-	nameKey := sqlbase.MakeNameMetadataKey(table.ParentID, table.Name)
-	descKey := sqlbase.MakeDescMetadataKey(table.ID)
-	descVal := sqlbase.WrapDescriptor(&table)
+	nameKey := catalogkeys.NewPublicTableKey(table.ParentID, table.Name).Key(keys.SystemSQLCodec)
+	descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, table.ID)
+	descVal := table.DescriptorProto()
 
 	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
@@ -502,7 +601,7 @@ func TestCreateSystemTable(t *testing.T) {
 	} else if !kv.Exists() {
 		t.Errorf("expected %q to exist, got that it doesn't exist", nameKey)
 	}
-	var descriptor sqlbase.Descriptor
+	var descriptor descpb.Descriptor
 	if err := mt.kvDB.GetProto(ctx, descKey, &descriptor); err != nil {
 		t.Error(err)
 	} else if !proto.Equal(descVal, &descriptor) {
@@ -528,7 +627,7 @@ func TestAdminUserExists(t *testing.T) {
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
 	// knows about "isRole", but the migration hasn't run yet.
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
-		sqlbase.AdminRole)
+		security.AdminRole)
 
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
 	if err := mt.runMigration(ctx, migration); err != nil {
@@ -549,7 +648,7 @@ func TestPublicRoleExists(t *testing.T) {
 	// Create a user (we check for user or role) named "public".
 	// We have to do a manual insert as "CREATE USER" knows to disallow "public".
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)`,
-		sqlbase.PublicRole)
+		security.PublicRole)
 
 	e := `found a user named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -558,9 +657,9 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Now try with a role instead of a user.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, sqlbase.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, security.PublicRole)
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)`,
-		sqlbase.PublicRole)
+		security.PublicRole)
 
 	e = `found a role named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -569,7 +668,7 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Drop it and try again.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, sqlbase.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, security.PublicRole)
 	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Errorf("expected success, got %q", err)
 	}
@@ -601,12 +700,12 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		lastMigration := backwardCompatibleMigrations[len(backwardCompatibleMigrations)-1]
-		if _, err := kvDB.Get(ctx, migrationKey(lastMigration)); err != nil {
+		if _, err := kvDB.Get(ctx, migrationKey(keys.SystemSQLCodec, lastMigration)); err != nil {
 			return errors.New("last migration has not completed")
 		}
 
-		sysCfg, ok := s.Gossip().GetSystemConfig()
-		if !ok {
+		sysCfg := s.GossipI().(*gossip.Gossip).GetSystemConfig()
+		if sysCfg == nil {
 			return errors.New("gossipped system config not available")
 		}
 
@@ -622,7 +721,7 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 			if err := rows.Scan(&rangeID, &startKey, &endKey); err != nil {
 				return err
 			}
-			if sysCfg.NeedsSplit(startKey, endKey) {
+			if sysCfg.NeedsSplit(ctx, startKey, endKey) {
 				return fmt.Errorf("range %d needs split", rangeID)
 			}
 			nranges++
@@ -641,4 +740,324 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 
 		return nil
 	})
+}
+
+func TestUpdateSystemLocationData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "update system.locations with default location data")
+	mt.start(t, base.TestServerArgs{})
+
+	// Check that we don't have any data in the system.locations table without the migration.
+	var count int
+	mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.locations`).Scan(&count)
+	if count != 0 {
+		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
+	}
+
+	// Run the migration to insert locations.
+	if err := mt.runMigration(ctx, migration); err != nil {
+		t.Errorf("expected success, got %q", err)
+	}
+
+	// Check that we have all of the expected locations.
+	mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.locations`).Scan(&count)
+	if count != len(roachpb.DefaultLocationInformation) {
+		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
+	}
+}
+
+func TestMigrateNamespaceTableDescriptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "create new system.namespace table")
+	mt.start(t, base.TestServerArgs{})
+
+	// Since we're already on 20.1, mimic the beginning state by deleting the
+	// new namespace descriptor.
+	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.NamespaceTableID)
+	require.NoError(t, mt.kvDB.Del(ctx, key))
+
+	deprecatedKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.DeprecatedNamespaceTableID)
+	desc := &descpb.Descriptor{}
+	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
+		return err
+	}))
+
+	// Run the migration.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Check that the persisted descriptors now match our in-memory versions,
+		// ignoring create and modification times.
+		{
+			ts, err := txn.GetProtoTs(ctx, key, desc)
+			require.NoError(t, err)
+			table := descpb.TableFromDescriptor(desc, ts)
+			table.CreateAsOfTime = systemschema.NamespaceTable.CreateAsOfTime
+			table.ModificationTime = systemschema.NamespaceTable.ModificationTime
+			require.True(t, table.Equal(systemschema.NamespaceTable.TableDesc()))
+		}
+		{
+			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
+			require.NoError(t, err)
+			table := descpb.TableFromDescriptor(desc, ts)
+			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.CreateAsOfTime
+			table.ModificationTime = systemschema.DeprecatedNamespaceTable.ModificationTime
+			require.True(t, table.Equal(systemschema.DeprecatedNamespaceTable.TableDesc()))
+		}
+		return nil
+	}))
+}
+
+func TestAlterSystemJobsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// We need to use "old" jobs table descriptor without newly added columns
+	// in order to test migration.
+	// oldJobsTableSchema is system.jobs definition prior to 20.2
+	oldJobsTableSchema := `
+CREATE TABLE system.jobs (
+	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
+	status            STRING    NOT NULL,
+	created           TIMESTAMP NOT NULL DEFAULT now(),
+	payload           BYTES     NOT NULL,
+	progress          BYTES,
+	INDEX (status, created),
+
+	FAMILY (id, status, created, payload),
+	FAMILY progress (progress)
+)
+`
+	oldJobsTable, err := sql.CreateTestTableDescriptor(
+		context.Background(),
+		keys.SystemDatabaseID,
+		keys.JobsTableID,
+		oldJobsTableSchema,
+		systemschema.JobsTable.Privileges,
+	)
+	require.NoError(t, err)
+
+	const primaryFamilyName = "fam_0_id_status_created_payload"
+	oldPrimaryFamilyColumns := []string{"id", "status", "created", "payload"}
+	newPrimaryFamilyColumns := append(
+		oldPrimaryFamilyColumns, "created_by_type", "created_by_id")
+
+	// Sanity check oldJobsTable does not have new columns.
+	require.Equal(t, 5, len(oldJobsTable.Columns))
+	require.Equal(t, 2, len(oldJobsTable.Families))
+	require.Equal(t, primaryFamilyName, oldJobsTable.Families[0].Name)
+	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
+
+	jobsTable := systemschema.JobsTable
+	systemschema.JobsTable = tabledesc.NewImmutable(*oldJobsTable.TableDesc())
+	defer func() {
+		systemschema.JobsTable = jobsTable
+	}()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add new sqlliveness table and claim columns to system.jobs")
+	migration = mt.pop(t, "add created_by columns to system.jobs")
+	ver201 := cluster.MakeTestingClusterSettingsWithVersions(
+		roachpb.Version{Major: 20, Minor: 1},
+		roachpb.Version{Major: 20, Minor: 1},
+		true)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Settings = ver201
+	mt.start(t, params)
+
+	// Run migration and verify we have added columns and renamed column family.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	newJobsTable := catalogkv.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.Equal(t, 7, len(newJobsTable.Columns))
+	require.Equal(t, "created_by_type", newJobsTable.Columns[5].Name)
+	require.Equal(t, "created_by_id", newJobsTable.Columns[6].Name)
+	require.Equal(t, 2, len(newJobsTable.Families))
+	// Ensure we keep old family name.
+	require.Equal(t, primaryFamilyName, newJobsTable.Families[0].Name)
+	// Make sure our primary family has new columns added to it.
+	require.Equal(t, newPrimaryFamilyColumns, newJobsTable.Families[0].ColumnNames)
+
+	// Run the migration again -- it should be a no-op.
+	require.NoError(t, mt.runMigration(ctx, migration))
+	newJobsTableAgain := catalogkv.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.True(t, proto.Equal(newJobsTable.TableDesc(), newJobsTableAgain.TableDesc()))
+}
+
+func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// We need to use "old" jobs table descriptor without newly added columns
+	// in order to test migration.
+	// oldJobsTableSchema is system.jobs definition prior to 20.2
+
+	oldJobsTableSchema := `
+	CREATE TABLE system.jobs (
+		id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
+		status            STRING    NOT NULL,
+		created           TIMESTAMP NOT NULL DEFAULT now(),
+		payload           BYTES     NOT NULL,
+		progress          BYTES,
+		created_by_type   STRING,
+		created_by_id     INT,
+		INDEX (status, created),
+		INDEX (created_by_type, created_by_id) STORING (status),
+
+		FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
+		FAMILY progress (progress)
+	);`
+
+	oldJobsTable, err := sql.CreateTestTableDescriptor(
+		context.Background(),
+		keys.SystemDatabaseID,
+		keys.JobsTableID,
+		oldJobsTableSchema,
+		systemschema.JobsTable.Privileges,
+	)
+	require.NoError(t, err)
+
+	oldPrimaryFamilyColumns := []string{"id", "status", "created", "payload", "created_by_type", "created_by_id"}
+
+	// Sanity check oldJobsTable does not have new columns.
+	require.Equal(t, 7, len(oldJobsTable.Columns))
+	require.Equal(t, 2, len(oldJobsTable.Families))
+	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
+
+	jobsTable := systemschema.JobsTable
+	systemschema.JobsTable = tabledesc.NewImmutable(*oldJobsTable.TableDesc())
+	defer func() {
+		systemschema.JobsTable = jobsTable
+	}()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add created_by columns to system.jobs")
+	migration = mt.pop(t, "add new sqlliveness table and claim columns to system.jobs")
+
+	ver201 := cluster.MakeTestingClusterSettingsWithVersions(
+		roachpb.Version{Major: 20, Minor: 1},
+		roachpb.Version{Major: 20, Minor: 1},
+		true)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Settings = ver201
+	mt.start(t, params)
+
+	// Run migration and verify we have added columns and renamed column family.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	newJobsTable := catalogkv.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.Equal(t, 9, len(newJobsTable.Columns))
+	require.Equal(t, "claim_session_id", newJobsTable.Columns[7].Name)
+	require.Equal(t, "claim_instance_id", newJobsTable.Columns[8].Name)
+	require.Equal(t, 3, len(newJobsTable.Families))
+	// Ensure we keep old family names.
+	require.Equal(t, "fam_0_id_status_created_payload", newJobsTable.Families[0].Name)
+	require.Equal(t, "progress", newJobsTable.Families[1].Name)
+	// ... and that the new one is here.
+	require.Equal(t, "claim", newJobsTable.Families[2].Name)
+
+	// Run the migration again -- it should be a no-op.
+	require.NoError(t, mt.runMigration(ctx, migration))
+	newJobsTableAgain := catalogkv.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.Equal(t, newJobsTable, newJobsTableAgain)
+}
+
+func TestMarkDeprecatedSchemaChangeJobsFailed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "mark non-terminal schema change jobs with a pre-20.1 format version as failed")
+	mt.start(t, base.TestServerArgs{})
+
+	// Write some fake job records for schema changes with a pre-20.1 format
+	// version. Due to their format version, they will never be adopted. We just
+	// verify that the migration marks them as failed if in a non-terminal state,
+	// and otherwise leaves them alone.
+
+	payload := jobspb.Payload{
+		Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{
+			FormatVersion: jobspb.BaseFormatVersion,
+		}),
+	}
+	payloadBytes, err := protoutil.Marshal(&payload)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		initialState        jobs.Status
+		expectedFinalStatus jobs.Status
+		expectedErrorPrefix string
+		jobID               int64
+	}{
+		{
+			initialState:        jobs.StatusRunning,
+			expectedFinalStatus: jobs.StatusFailed,
+			expectedErrorPrefix: "schema change jobs started prior to v20.1",
+			jobID:               int64(builtins.GenerateUniqueInt(base.SQLInstanceID(mt.server.NodeID()))),
+		},
+		{
+			initialState:        jobs.StatusReverting,
+			expectedFinalStatus: jobs.StatusFailed,
+			expectedErrorPrefix: "schema change jobs started prior to v20.1",
+			jobID:               int64(builtins.GenerateUniqueInt(base.SQLInstanceID(mt.server.NodeID()))),
+		},
+		{
+			initialState:        jobs.StatusSucceeded,
+			expectedFinalStatus: jobs.StatusSucceeded,
+			jobID:               int64(builtins.GenerateUniqueInt(base.SQLInstanceID(mt.server.NodeID()))),
+		},
+		{
+			initialState:        jobs.StatusCanceled,
+			expectedFinalStatus: jobs.StatusCanceled,
+			jobID:               int64(builtins.GenerateUniqueInt(base.SQLInstanceID(mt.server.NodeID()))),
+		},
+	}
+
+	insertStmt := `INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`
+	for _, testCase := range testCases {
+		mt.sqlDB.Exec(t, insertStmt, testCase.jobID, testCase.initialState, payloadBytes)
+	}
+
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	query := `SELECT status, payload FROM system.jobs WHERE id = $1`
+	for _, testCase := range testCases {
+		var status string
+		var payloadBytes []byte
+		row := mt.sqlDB.QueryRow(t, query, testCase.jobID)
+		row.Scan(&status, &payloadBytes)
+
+		require.Equal(t, status, string(testCase.expectedFinalStatus))
+
+		var payload jobspb.Payload
+		require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+		if testCase.expectedErrorPrefix != "" {
+			require.Regexp(t, testCase.expectedErrorPrefix, payload.Error)
+		} else {
+			require.Empty(t, payload.Error)
+		}
+	}
 }

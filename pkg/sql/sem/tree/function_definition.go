@@ -1,18 +1,16 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
+
+import "github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 
 // FunctionDefinition implements a reference to the (possibly several)
 // overloads for a built-in function.
@@ -33,6 +31,23 @@ type FunctionDefinition struct {
 // FunctionProperties defines the properties of the built-in
 // functions that are common across all overloads.
 type FunctionProperties struct {
+	// UnsupportedWithIssue, if non-zero indicates the built-in is not
+	// really supported; the name is a placeholder. Value -1 just says
+	// "not supported" without an issue to link; values > 0 provide an
+	// issue number to link.
+	UnsupportedWithIssue int
+
+	// Undocumented, when set to true, indicates that the built-in function is
+	// hidden from documentation. This is currently used to hide experimental
+	// functionality as it is being developed.
+	Undocumented bool
+
+	// Private, when set to true, indicates the built-in function is not
+	// available for use by user queries. This is currently used by some
+	// aggregates due to issue #10495. Private functions are implicitly
+	// considered undocumented.
+	Private bool
+
 	// NullableArgs is set to true when a function's definition can
 	// handle NULL arguments. When set, the function will be given the
 	// chance to see NULL arguments. When not, the function will
@@ -42,38 +57,15 @@ type FunctionProperties struct {
 	// be NULL and should act accordingly.
 	NullableArgs bool
 
-	// Private, when set to true, indicates the built-in function is not
-	// available for use by user queries. This is currently used by some
-	// aggregates due to issue #10495.
-	Private bool
-
-	// NeedsRepeatedEvaluation is set to true when a function may change
-	// at every row whether or not it is applied to an expression that
-	// contains row-dependent variables. Used e.g. by `random` and
-	// aggregate functions.
-	NeedsRepeatedEvaluation bool
-
-	// Impure is set to true when a function potentially returns a
-	// different value when called in the same statement with the same
-	// parameters. e.g.: random(), clock_timestamp(). Some functions
-	// like now() return the same value in the same statement, but
-	// different values in separate statements, and should not be marked
-	// as impure.
-	Impure bool
-
-	// DistsqlBlacklist is set to true when a function depends on
+	// DistsqlBlocklist is set to true when a function depends on
 	// members of the EvalContext that are not marshaled by DistSQL
 	// (e.g. planner). Currently used for DistSQL to determine if
 	// expressions can be evaluated on a different node without sending
 	// over the EvalContext.
 	//
 	// TODO(andrei): Get rid of the planner from the EvalContext and then we can
-	// get rid of this blacklist.
-	DistsqlBlacklist bool
-
-	// Privileged is set to true when the built-in can only be used by
-	// security.RootUser.
-	Privileged bool
+	// get rid of this blocklist.
+	DistsqlBlocklist bool
 
 	// Class is the kind of built-in function (normal/aggregate/window/etc.)
 	Class FunctionClass
@@ -81,10 +73,33 @@ type FunctionProperties struct {
 	// Category is used to generate documentation strings.
 	Category string
 
-	// ReturnLabels is used by transformSRF until the transform
-	// is properly migrated to a point past type checking.
-	// TODO(knz): remove this field once it becomes unneeded.
+	// AvailableOnPublicSchema indicates whether the function can be resolved
+	// if it is found on the public schema.
+	AvailableOnPublicSchema bool
+
+	// ReturnLabels can be used to override the return column name of a
+	// function in a FROM clause.
+	// This satisfies a Postgres quirk where some json functions have
+	// different return labels when used in SELECT or FROM clause.
 	ReturnLabels []string
+
+	// AmbiguousReturnType is true if the builtin's return type can't be
+	// determined without extra context. This is used for formatting builtins
+	// with the FmtParsable directive.
+	AmbiguousReturnType bool
+
+	// HasSequenceArguments is true if the builtin function takes in a sequence
+	// name (string) and can be used in a scalar expression.
+	// TODO(richardjcai): When implicit casting is supported, these builtins
+	// should take RegClass as the arg type for the sequence name instead of
+	// string, we will add a dependency on all RegClass types used in a view.
+	HasSequenceArguments bool
+}
+
+// ShouldDocument returns whether the built-in function should be included in
+// external-facing documentation.
+func (fp *FunctionProperties) ShouldDocument() bool {
+	return !(fp.Undocumented || fp.Private)
 }
 
 // FunctionClass specifies the class of the builtin function.
@@ -99,6 +114,18 @@ const (
 	WindowClass
 	// GeneratorClass is a builtin generator function.
 	GeneratorClass
+	// SQLClass is a builtin function that executes a SQL statement as a side
+	// effect of the function call.
+	//
+	// For example, AddGeometryColumn is a SQLClass function that executes an
+	// ALTER TABLE ... ADD COLUMN statement to add a geometry column to an
+	// existing table. It returns metadata about the column added.
+	//
+	// All builtin functions of this class should include a definition for
+	// Overload.SQLFn, which returns the SQL statement to be executed. They
+	// should also include a definition for Overload.Fn, which is executed
+	// like a NormalClass function and returns a Datum.
+	SQLClass
 )
 
 // Avoid vet warning about unused enum value.
@@ -110,7 +137,15 @@ func NewFunctionDefinition(
 	name string, props *FunctionProperties, def []Overload,
 ) *FunctionDefinition {
 	overloads := make([]overloadImpl, len(def))
+
 	for i := range def {
+		if def[i].PreferredOverload {
+			// Builtins with a preferred overload are always ambiguous.
+			props.AmbiguousReturnType = true
+		}
+		// Produce separate telemetry for each overload.
+		def[i].counter = sqltelemetry.BuiltinCounter(name, def[i].Signature(false))
+
 		overloads[i] = &def[i]
 	}
 	return &FunctionDefinition{

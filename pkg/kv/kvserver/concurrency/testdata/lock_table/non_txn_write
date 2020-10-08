@@ -1,0 +1,310 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=0
+----
+
+new-txn txn=txn2 ts=10 epoch=0
+----
+
+new-txn txn=txn3 ts=10 epoch=0
+----
+
+# First locks at a, b, c are acquired by txn1
+new-request r=req1 txn=txn1 ts=10 spans=w@a+w@b+w@c
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+acquire r=req1 k=b durability=u
+----
+global: num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+acquire r=req1 k=c durability=u
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+dequeue r=req1
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# Next, two different transactional requests wait at a and b.
+new-request r=req2 txn=txn2 ts=10 spans=w@a
+----
+
+scan r=req2
+----
+start-waiting: true
+
+new-request r=req3 txn=txn3 ts=10 spans=w@b
+----
+
+scan r=req3
+----
+start-waiting: true
+
+# Next, a non-transactional request that wants to write a, b, c waits at a.
+
+new-request r=req4 txn=none ts=10 spans=w@a+w@b+w@c
+----
+
+scan r=req4
+----
+start-waiting: true
+
+# Next, a transactional request that arrives later than the non-transactional request waits at c
+
+new-request r=req5 txn=txn3 ts=10 spans=w@c
+----
+
+scan r=req5
+----
+start-waiting: true
+
+print
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, txn: none
+   distinguished req: 2
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 3
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 5, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 5
+local: num=0
+
+# The locks at a, b, c are released. The non-transactional request waits behind
+# the reservation holder at a.
+
+release txn=txn1 span=a,d
+----
+global: num=3
+ lock: "a"
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, seq: 0
+   queued writers:
+    active: true req: 4, txn: none
+   distinguished req: 4
+ lock: "b"
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+local: num=0
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+guard-state r=req3
+----
+new: state=doneWaiting
+
+guard-state r=req4
+----
+new: state=waitForDistinguished txn=txn2 key="a" held=false guard-access=write
+
+guard-state r=req5
+----
+new: state=doneWaiting
+
+# Add another transactional request at a. It will wait behind the non-transactional request.
+
+new-request r=req6 txn=txn1 ts=10 spans=w@a
+----
+
+scan r=req6
+----
+start-waiting: true
+
+print
+----
+global: num=3
+ lock: "a"
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, seq: 0
+   queued writers:
+    active: true req: 4, txn: none
+    active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 4
+ lock: "b"
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+local: num=0
+
+# Release the reservation at a. The first waiter is non-transactional so it will not acquire the
+# reservation. The second waiter will acquire the reservation. The non-transactional request will
+# wait behind the reservation holder at b.
+
+dequeue r=req2
+----
+global: num=3
+ lock: "a"
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "b"
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+local: num=0
+
+guard-state r=req4
+----
+new: state=waitForDistinguished txn=txn3 key="b" held=false guard-access=write
+
+guard-state r=req6
+----
+new: state=doneWaiting
+
+print
+----
+global: num=3
+ lock: "a"
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "b"
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+   queued writers:
+    active: true req: 4, txn: none
+   distinguished req: 4
+ lock: "c"
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+local: num=0
+
+# Release the reservation at b. The non-transactional waiter will be done at b, and when it gets
+# to c it will see a reservation holder with a higher sequence num and ignore it.
+
+dequeue r=req3
+----
+global: num=2
+ lock: "a"
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+local: num=0
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+guard-state r=req5
+----
+old: state=doneWaiting
+
+print
+----
+global: num=2
+ lock: "a"
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+local: num=0
+
+# Non-transactional request scans again and proceeds to evaluation and discovers a lock at c
+
+scan r=req4
+----
+start-waiting: false
+
+add-discovered r=req4 k=c txn=txn2
+----
+global: num=2
+ lock: "a"
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 4, txn: none
+    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+local: num=0
+
+scan r=req4
+----
+start-waiting: true
+
+scan r=req5
+----
+start-waiting: true
+
+guard-state r=req4
+----
+new: state=waitForDistinguished txn=txn2 key="c" held=true guard-access=write
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn2 key="c" held=true guard-access=write
+
+# Release the lock. The non-transactional request does not acquire the reservation.
+
+release txn=txn2 span=c
+----
+global: num=2
+ lock: "a"
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+local: num=0
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+guard-state r=req5
+----
+new: state=doneWaiting
+
+# Make all requests done.
+
+dequeue r=req4
+----
+global: num=2
+ lock: "a"
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+ lock: "c"
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
+local: num=0
+
+dequeue r=req5
+----
+global: num=1
+ lock: "a"
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
+local: num=0
+
+dequeue r=req6
+----
+global: num=0
+local: num=0

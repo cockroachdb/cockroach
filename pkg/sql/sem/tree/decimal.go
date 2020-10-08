@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -18,7 +14,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
@@ -32,7 +29,8 @@ var (
 		Rounding:    apd.RoundHalfUp,
 		MaxExponent: 2000,
 		MinExponent: -2000,
-		Traps:       apd.DefaultTraps,
+		// Don't error on invalid operation, return NaN instead.
+		Traps: apd.DefaultTraps &^ apd.InvalidOperation,
 	}
 	// ExactCtx is a decimal context with exact precision.
 	ExactCtx = DecimalCtx.WithPrecision(0)
@@ -51,11 +49,12 @@ var (
 		return &ctx
 	}()
 
-	errScaleOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "scale out of range")
+	errScaleOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "scale out of range")
 )
 
 // LimitDecimalWidth limits d's precision (total number of digits) and scale
-// (number of digits after the decimal point).
+// (number of digits after the decimal point). Note that this any limiting will
+// modify the decimal in-place.
 func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 	if d.Form != apd.Finite || precision <= 0 {
 		return nil
@@ -65,7 +64,7 @@ func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 		return errScaleOutOfRange
 	}
 	if scale > precision {
-		return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "scale (%d) must be between 0 and precision (%d)", scale, precision)
+		return pgerror.Newf(pgcode.InvalidParameterValue, "scale (%d) must be between 0 and precision (%d)", scale, precision)
 	}
 
 	// http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
@@ -87,7 +86,7 @@ func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 		default:
 			lt = fmt.Sprintf("10^%d", v)
 		}
-		return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "value with precision %d, scale %d must round to an absolute value less than %s", precision, scale, lt)
+		return pgerror.Newf(pgcode.NumericValueOutOfRange, "value with precision %d, scale %d must round to an absolute value less than %s", precision, scale, lt)
 	}
 	return nil
 }

@@ -1,0 +1,118 @@
+# Type annotation expressions.
+
+eval
+ANNOTATE_TYPE('s', string)
+----
+'s'
+
+eval
+ANNOTATE_TYPE('s', bytes)
+----
+'\x73'
+
+eval
+ANNOTATE_TYPE('2010-09-28', date)
+----
+'2010-09-28'
+
+eval
+ANNOTATE_TYPE('12:00:00', time)
+----
+'12:00:00'
+
+eval
+ANNOTATE_TYPE('PT12H2M', interval)
+----
+'12:02:00'
+
+eval
+ANNOTATE_TYPE('2 02:12', interval)
+----
+'2 days 02:12:00'
+
+eval
+ANNOTATE_TYPE('2 02:12:34', interval)
+----
+'2 days 02:12:34'
+
+eval
+ANNOTATE_TYPE('1-2 02:12', interval)
+----
+'1 year 2 mons 02:12:00'
+
+eval
+ANNOTATE_TYPE('2010-09-28', timestamp)
+----
+'2010-09-28 00:00:00'
+
+eval
+ANNOTATE_TYPE('2010-09-28', timestamptz)
+----
+'2010-09-28 00:00:00+00:00'
+
+eval
+ANNOTATE_TYPE(123, int) + 1
+----
+124
+
+eval
+ANNOTATE_TYPE(123, float) + 1
+----
+124.0
+
+eval
+ANNOTATE_TYPE(123, decimal) + 1
+----
+124
+
+eval
+ANNOTATE_TYPE(123.5, float) + 1
+----
+124.5
+
+eval
+ANNOTATE_TYPE(123.5, decimal) + 1
+----
+124.5
+
+eval
+ANNOTATE_TYPE(NULL, int)
+----
+NULL
+
+eval
+ANNOTATE_TYPE(NULL, string)
+----
+NULL
+
+eval
+ANNOTATE_TYPE(NULL, timestamp)
+----
+NULL
+
+# Shorthand type annotation notation.
+
+eval
+123:::int + 1
+----
+124
+
+eval
+123:::float + 1
+----
+124.0
+
+eval
+(123 + 1):::int
+----
+124
+
+eval
+(123 + 1):::float
+----
+124.0
+
+eval
+ANNOTATE_TYPE('12:00:00-01', timetz)
+----
+'12:00:00-01:00:00'

@@ -1,0 +1,352 @@
+exec-ddl
+CREATE TABLE abc (a int primary key, b int, c int)
+----
+
+exec-ddl
+CREATE TABLE new_abc (a int, b int, c int)
+----
+
+# Test a self join.
+opt
+UPDATE abc SET b = other.b + 1, c = other.c + 1 FROM abc AS other WHERE abc.a = other.a
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
+ ├── update-mapping:
+ │    ├── b_new:13 => abc.b:2
+ │    └── c_new:14 => abc.c:3
+ └── project
+      ├── columns: b_new:13 c_new:14 abc.a:5!null abc.b:6 abc.c:7 other.a:9!null other.b:10 other.c:11 other.crdb_internal_mvcc_timestamp:12
+      ├── inner-join (merge)
+      │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 other.a:9!null other.b:10 other.c:11 other.crdb_internal_mvcc_timestamp:12
+      │    ├── left ordering: +5
+      │    ├── right ordering: +9
+      │    ├── scan abc
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7
+      │    │    └── ordering: +5
+      │    ├── scan other
+      │    │    ├── columns: other.a:9!null other.b:10 other.c:11 other.crdb_internal_mvcc_timestamp:12
+      │    │    └── ordering: +9
+      │    └── filters (true)
+      └── projections
+           ├── other.b:10 + 1 [as=b_new:13]
+           └── other.c:11 + 1 [as=c_new:14]
+
+# Test when Update uses multiple tables.
+opt
+UPDATE abc SET b = other.b, c = other.c FROM new_abc AS other WHERE abc.a = other.a
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
+ ├── update-mapping:
+ │    ├── other.b:10 => abc.b:2
+ │    └── other.c:11 => abc.c:3
+ └── distinct-on
+      ├── columns: abc.a:5!null abc.b:6 abc.c:7 other.a:9!null other.b:10 other.c:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13
+      ├── grouping columns: abc.a:5!null
+      ├── inner-join (hash)
+      │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 other.a:9!null other.b:10 other.c:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13
+      │    ├── scan abc
+      │    │    └── columns: abc.a:5!null abc.b:6 abc.c:7
+      │    ├── scan other
+      │    │    └── columns: other.a:9 other.b:10 other.c:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13
+      │    └── filters
+      │         └── abc.a:5 = other.a:9
+      └── aggregations
+           ├── first-agg [as=abc.b:6]
+           │    └── abc.b:6
+           ├── first-agg [as=abc.c:7]
+           │    └── abc.c:7
+           ├── first-agg [as=other.a:9]
+           │    └── other.a:9
+           ├── first-agg [as=other.b:10]
+           │    └── other.b:10
+           ├── first-agg [as=other.c:11]
+           │    └── other.c:11
+           ├── first-agg [as=rowid:12]
+           │    └── rowid:12
+           └── first-agg [as=other.crdb_internal_mvcc_timestamp:13]
+                └── other.crdb_internal_mvcc_timestamp:13
+
+# Check if UPDATE FROM works well with RETURNING expressions that reference the FROM tables.
+opt
+UPDATE abc
+SET
+  b = old.b + 1, c = old.c + 2
+FROM
+  abc AS old
+WHERE
+  abc.a = old.a
+RETURNING
+  abc.a, abc.b AS new_b, old.b as old_b, abc.c as new_c, old.c as old_c
+----
+update abc
+ ├── columns: a:1!null new_b:2 old_b:10 new_c:3 old_c:11
+ ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
+ ├── update-mapping:
+ │    ├── b_new:13 => abc.b:2
+ │    └── c_new:14 => abc.c:3
+ └── project
+      ├── columns: b_new:13 c_new:14 abc.a:5!null abc.b:6 abc.c:7 old.b:10 old.c:11
+      ├── inner-join (merge)
+      │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11
+      │    ├── left ordering: +5
+      │    ├── right ordering: +9
+      │    ├── scan abc
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7
+      │    │    └── ordering: +5
+      │    ├── scan old
+      │    │    ├── columns: old.a:9!null old.b:10 old.c:11
+      │    │    └── ordering: +9
+      │    └── filters (true)
+      └── projections
+           ├── old.b:10 + 1 [as=b_new:13]
+           └── old.c:11 + 2 [as=c_new:14]
+
+# Check if RETURNING * returns everything
+opt
+UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a RETURNING *
+----
+update abc
+ ├── columns: a:1!null b:2 c:3 a:9 b:10 c:11
+ ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
+ ├── update-mapping:
+ │    ├── b_new:13 => abc.b:2
+ │    └── c_new:14 => abc.c:3
+ └── project
+      ├── columns: b_new:13 c_new:14 abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11
+      ├── inner-join (merge)
+      │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11
+      │    ├── left ordering: +5
+      │    ├── right ordering: +9
+      │    ├── scan abc
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7
+      │    │    └── ordering: +5
+      │    ├── scan old
+      │    │    ├── columns: old.a:9!null old.b:10 old.c:11
+      │    │    └── ordering: +9
+      │    └── filters (true)
+      └── projections
+           ├── old.b:10 + 1 [as=b_new:13]
+           └── old.c:11 + 2 [as=c_new:14]
+
+# Check if the joins are optimized (check if the filters are pushed down).
+opt
+UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a AND abc.a = 2
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
+ ├── update-mapping:
+ │    ├── b_new:13 => abc.b:2
+ │    └── c_new:14 => abc.c:3
+ └── project
+      ├── columns: b_new:13 c_new:14 abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11 old.crdb_internal_mvcc_timestamp:12
+      ├── inner-join (cross)
+      │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11 old.crdb_internal_mvcc_timestamp:12
+      │    ├── scan abc
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7
+      │    │    └── constraint: /5: [/2 - /2]
+      │    ├── scan old
+      │    │    ├── columns: old.a:9!null old.b:10 old.c:11 old.crdb_internal_mvcc_timestamp:12
+      │    │    └── constraint: /9: [/2 - /2]
+      │    └── filters (true)
+      └── projections
+           ├── old.b:10 + 1 [as=b_new:13]
+           └── old.c:11 + 2 [as=c_new:14]
+
+# Update values of table from values expression
+opt
+UPDATE abc SET b = other.b, c = other.c FROM (values (1, 2, 3), (2, 3, 4)) as other ("a", "b", "c") WHERE abc.a = other.a
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 c:7
+ ├── update-mapping:
+ │    ├── column2:10 => b:2
+ │    └── column3:11 => c:3
+ └── distinct-on
+      ├── columns: a:5!null b:6 c:7 column1:9!null column2:10!null column3:11!null
+      ├── grouping columns: a:5!null
+      ├── inner-join (lookup abc)
+      │    ├── columns: a:5!null b:6 c:7 column1:9!null column2:10!null column3:11!null
+      │    ├── key columns: [9] = [5]
+      │    ├── lookup columns are key
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    ├── (1, 2, 3)
+      │    │    └── (2, 3, 4)
+      │    └── filters (true)
+      └── aggregations
+           ├── first-agg [as=b:6]
+           │    └── b:6
+           ├── first-agg [as=c:7]
+           │    └── c:7
+           ├── first-agg [as=column1:9]
+           │    └── column1:9
+           ├── first-agg [as=column2:10]
+           │    └── column2:10
+           └── first-agg [as=column3:11]
+                └── column3:11
+
+# Check if UPDATE ... FROM works with multiple tables.
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+
+exec-ddl
+CREATE TABLE ac (a INT, c INT)
+----
+
+opt
+UPDATE abc SET b = ab.b, c = ac.c FROM ab, ac WHERE abc.a = ab.a AND abc.a = ac.a
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
+ ├── update-mapping:
+ │    ├── ab.b:10 => abc.b:2
+ │    └── ac.c:14 => abc.c:3
+ └── distinct-on
+      ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ab.rowid:11!null ab.crdb_internal_mvcc_timestamp:12 ac.a:13!null ac.c:14 ac.rowid:15!null ac.crdb_internal_mvcc_timestamp:16
+      ├── grouping columns: abc.a:5!null
+      ├── inner-join (hash)
+      │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ab.rowid:11!null ab.crdb_internal_mvcc_timestamp:12 ac.a:13!null ac.c:14 ac.rowid:15!null ac.crdb_internal_mvcc_timestamp:16
+      │    ├── scan ab
+      │    │    └── columns: ab.a:9 ab.b:10 ab.rowid:11!null ab.crdb_internal_mvcc_timestamp:12
+      │    ├── inner-join (hash)
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ac.a:13!null ac.c:14 ac.rowid:15!null ac.crdb_internal_mvcc_timestamp:16
+      │    │    ├── scan abc
+      │    │    │    └── columns: abc.a:5!null abc.b:6 abc.c:7
+      │    │    ├── scan ac
+      │    │    │    └── columns: ac.a:13 ac.c:14 ac.rowid:15!null ac.crdb_internal_mvcc_timestamp:16
+      │    │    └── filters
+      │    │         └── abc.a:5 = ac.a:13
+      │    └── filters
+      │         └── ab.a:9 = ac.a:13
+      └── aggregations
+           ├── first-agg [as=abc.b:6]
+           │    └── abc.b:6
+           ├── first-agg [as=abc.c:7]
+           │    └── abc.c:7
+           ├── first-agg [as=ab.a:9]
+           │    └── ab.a:9
+           ├── first-agg [as=ab.b:10]
+           │    └── ab.b:10
+           ├── first-agg [as=ab.rowid:11]
+           │    └── ab.rowid:11
+           ├── first-agg [as=ab.crdb_internal_mvcc_timestamp:12]
+           │    └── ab.crdb_internal_mvcc_timestamp:12
+           ├── first-agg [as=ac.a:13]
+           │    └── ac.a:13
+           ├── first-agg [as=ac.c:14]
+           │    └── ac.c:14
+           ├── first-agg [as=ac.rowid:15]
+           │    └── ac.rowid:15
+           └── first-agg [as=ac.crdb_internal_mvcc_timestamp:16]
+                └── ac.crdb_internal_mvcc_timestamp:16
+
+# Make sure UPDATE ... FROM works with LATERAL.
+opt
+UPDATE abc
+SET
+  b=ab.b, c = other.c
+FROM
+  ab, LATERAL
+    (SELECT * FROM ac WHERE ab.a=ac.a) AS other
+WHERE
+  abc.a=ab.a
+RETURNING
+  *
+----
+update abc
+ ├── columns: a:1!null b:2 c:3 a:9 b:10 a:13 c:14
+ ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
+ ├── update-mapping:
+ │    ├── ab.b:10 => abc.b:2
+ │    └── ac.c:14 => abc.c:3
+ └── distinct-on
+      ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ac.a:13!null ac.c:14
+      ├── grouping columns: abc.a:5!null
+      ├── inner-join (hash)
+      │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ac.a:13!null ac.c:14
+      │    ├── scan ab
+      │    │    └── columns: ab.a:9 ab.b:10
+      │    ├── inner-join (hash)
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ac.a:13!null ac.c:14
+      │    │    ├── scan abc
+      │    │    │    └── columns: abc.a:5!null abc.b:6 abc.c:7
+      │    │    ├── scan ac
+      │    │    │    └── columns: ac.a:13 ac.c:14
+      │    │    └── filters
+      │    │         └── abc.a:5 = ac.a:13
+      │    └── filters
+      │         └── ab.a:9 = ac.a:13
+      └── aggregations
+           ├── first-agg [as=abc.b:6]
+           │    └── abc.b:6
+           ├── first-agg [as=abc.c:7]
+           │    └── abc.c:7
+           ├── first-agg [as=ab.a:9]
+           │    └── ab.a:9
+           ├── first-agg [as=ab.b:10]
+           │    └── ab.b:10
+           ├── first-agg [as=ac.a:13]
+           │    └── ac.a:13
+           └── first-agg [as=ac.c:14]
+                └── ac.c:14
+
+# Make sure UPDATE ... FROM can return hidden columns.
+opt
+UPDATE abc
+SET
+  b=ab.b, c = ac.c
+FROM
+  ab, ac
+WHERE
+  abc.a=ab.a AND abc.a = ac.a
+RETURNING
+  *, ab.rowid, ac.rowid
+----
+update abc
+ ├── columns: a:1!null b:2 c:3 a:9 b:10 a:13 c:14 rowid:11 rowid:15
+ ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
+ ├── update-mapping:
+ │    ├── ab.b:10 => abc.b:2
+ │    └── ac.c:14 => abc.c:3
+ └── distinct-on
+      ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ab.rowid:11!null ac.a:13!null ac.c:14 ac.rowid:15!null
+      ├── grouping columns: abc.a:5!null
+      ├── inner-join (hash)
+      │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ab.rowid:11!null ac.a:13!null ac.c:14 ac.rowid:15!null
+      │    ├── scan ab
+      │    │    └── columns: ab.a:9 ab.b:10 ab.rowid:11!null
+      │    ├── inner-join (hash)
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ac.a:13!null ac.c:14 ac.rowid:15!null
+      │    │    ├── scan abc
+      │    │    │    └── columns: abc.a:5!null abc.b:6 abc.c:7
+      │    │    ├── scan ac
+      │    │    │    └── columns: ac.a:13 ac.c:14 ac.rowid:15!null
+      │    │    └── filters
+      │    │         └── abc.a:5 = ac.a:13
+      │    └── filters
+      │         └── ab.a:9 = ac.a:13
+      └── aggregations
+           ├── first-agg [as=abc.b:6]
+           │    └── abc.b:6
+           ├── first-agg [as=abc.c:7]
+           │    └── abc.c:7
+           ├── first-agg [as=ab.a:9]
+           │    └── ab.a:9
+           ├── first-agg [as=ab.b:10]
+           │    └── ab.b:10
+           ├── first-agg [as=ab.rowid:11]
+           │    └── ab.rowid:11
+           ├── first-agg [as=ac.a:13]
+           │    └── ac.a:13
+           ├── first-agg [as=ac.c:14]
+           │    └── ac.c:14
+           └── first-agg [as=ac.rowid:15]
+                └── ac.rowid:15

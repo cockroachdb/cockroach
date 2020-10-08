@@ -1,0 +1,20 @@
+# LogicTest: local
+
+# ------------------------------------------------------------------------------
+# Create a simple schema that models customers and orders. Each customer has an
+# id (c_id), and has zero or more orders that are related via a foreign key of
+# the same name. A customer has a billing state and an order has a shipping
+# state, either of which could be NULL. This schema, while simple, is rich
+# enough to provide many interesting correlated subquery variations.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE c (c_id INT PRIMARY KEY, bill TEXT);
+CREATE TABLE o (o_id INT PRIMARY KEY, c_id INT, ship TEXT);
+
+# We can't decorrelate cases which don't use a scalar type in the
+# ARRAY(...) operator.
+statement error can't execute a correlated ARRAY\(...\) over tuple\{int, string\}
+SELECT
+  c_id,
+  ARRAY(SELECT (o_id, ship) FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
+FROM c ORDER BY c_id

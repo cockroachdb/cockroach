@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 //
 // Data structures and basic infrastructure for distributed SQL APIs. See
 // docs/RFCS/distributed_sql.md.
@@ -21,7 +17,7 @@ package cockroach.sql.stats;
 option go_package = "stats";
 
 import "gogoproto/gogo.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/types/types.proto";
 
 // HistogramData encodes the data for a histogram, which captures the
 // distribution of values on a specific column.
@@ -40,13 +36,21 @@ message HistogramData {
     // compressed histogram).
     int64 num_range = 2;
 
+    // The estimated number of distinct values in the bucket (excluding
+    // those that are equal to upper_bound). This is a floating point
+    // value because it is estimated by distributing the known distinct
+    // count for the column among the buckets, in proportion to the number
+    // of rows in each bucket. This value is in fact derived from the rest
+    // of the data, but is included to avoid re-computing it later.
+    double distinct_range = 4;
+
     // The upper boundary of the bucket. The column values for the upper bound
     // are encoded using the ascending key encoding of the column type.
     bytes upper_bound = 3;
   }
 
   // Value type for the column.
-  sqlbase.ColumnType column_type = 2 [(gogoproto.nullable) = false];
+  sql.sem.types.T column_type = 2;
 
   // Histogram buckets. Note that NULL values are excluded from the
   // histogram.

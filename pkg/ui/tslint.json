@@ -54,13 +54,16 @@
     "no-require-imports": false,
     "no-string-literal": true,
     "no-switch-case-fall-through": true,
-    "trailing-comma": [true, {
-      "multiline": "always",
-      "singleline": "never"
-    }],
+    "trailing-comma": [
+      true,
+      {
+        "multiline": "always",
+        "singleline": "never"
+      }
+    ],
     "no-trailing-whitespace": true,
     "no-unused-expression": true,
-    "no-use-before-declare": true,
+    "no-use-before-declare": false,
     "no-var-keyword": true,
     "no-var-requires": true,
     "one-line": [
@@ -105,7 +108,8 @@
     ],
     "variable-name": [
       true,
-      "allow-leading-underscore"
+      "allow-leading-underscore",
+      "allow-pascal-case"
     ],
     "whitespace": [
       true,
@@ -128,13 +132,17 @@
     "eofline": true,
     "forin": true,
     "import-spacing": true,
-    "indent":  {
-      "options": ["spaces"]
+    "indent": {
+      "options": [
+        "spaces"
+      ]
     },
     "jsdoc-format": true,
     "label-position": true,
     "max-line-length": {
-      "options": [120]
+      "options": [
+        120
+      ]
     },
     "new-parens": true,
     "no-arg": true,
@@ -167,7 +175,9 @@
       ]
     },
     "one-variable-per-declaration": {
-      "options": ["ignore-for-loop"]
+      "options": [
+        "ignore-for-loop"
+      ]
     },
     "quotemark": {
       "options": [
@@ -177,7 +187,9 @@
     },
     "radix": true,
     "semicolon": {
-      "options": ["always"]
+      "options": [
+        "always"
+      ]
     },
     "space-before-function-paren": {
       "options": {
@@ -195,7 +207,9 @@
       }
     },
     "triple-equals": {
-      "options": ["allow-null-check"]
+      "options": [
+        "allow-null-check"
+      ]
     },
     "use-isnan": true,
     "variable-name": {

@@ -1,0 +1,16 @@
+# LogicTest: !3node-tenant
+
+query T
+SELECT crdb_internal.locality_value('region')
+----
+test
+
+query T
+SELECT crdb_internal.locality_value('dc')
+----
+dc1
+
+query T
+SELECT crdb_internal.locality_value('unk')
+----
+NULL

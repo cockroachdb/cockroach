@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package security
 
@@ -19,12 +15,13 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"math/big"
 	"net"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Utility to generate x509 certificates, both CA and not.
@@ -37,11 +34,17 @@ const (
 	validFrom     = -time.Hour * 24
 	maxPathLength = 1
 	caCommonName  = "Cockroach CA"
+
+	// TenantsOU is the OrganizationalUnit that determines a client certificate should be treated as a tenant client
+	// certificate (as opposed to a KV node client certificate).
+	TenantsOU = "Tenants"
 )
 
 // newTemplate returns a partially-filled template.
 // It should be further populated based on whether the cert is for a CA or node.
-func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, error) {
+func newTemplate(
+	commonName string, lifetime time.Duration, orgUnits ...string,
+) (*x509.Certificate, error) {
 	// Generate a random serial number.
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
@@ -56,8 +59,9 @@ func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, 
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Cockroach"},
-			CommonName:   commonName,
+			Organization:       []string{"Cockroach"},
+			OrganizationalUnit: orgUnits,
+			CommonName:         commonName,
 		},
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
@@ -118,10 +122,54 @@ func GenerateServerCert(
 	caPrivateKey crypto.PrivateKey,
 	nodePublicKey crypto.PublicKey,
 	lifetime time.Duration,
+	user string,
 	hosts []string,
 ) ([]byte, error) {
-	// Create template for user "NodeUser".
-	template, err := newTemplate(NodeUser, lifetime)
+	// Create template for user.
+	template, err := newTemplate(user, lifetime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
+		return nil, err
+	}
+
+	// Both server and client authentication are allowed (for inter-node RPC).
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
+	addHostsToTemplate(template, hosts)
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, nodePublicKey, caPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
+}
+
+func addHostsToTemplate(template *x509.Certificate, hosts []string) {
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+}
+
+// GenerateUIServerCert generates a server certificate for the Admin UI and returns the cert bytes.
+// Takes in the CA cert and private key, the UI cert public key, the certificate lifetime,
+// and the list of hosts/ip addresses this certificate applies to.
+func GenerateUIServerCert(
+	caCert *x509.Certificate,
+	caPrivateKey crypto.PrivateKey,
+	certPublicKey crypto.PublicKey,
+	lifetime time.Duration,
+	hosts []string,
+) ([]byte, error) {
+	// Use the first host as the CN. We still place all in the alternative subject name.
+	template, err := newTemplate(hosts[0], lifetime)
 	if err != nil {
 		return nil, err
 	}
@@ -132,16 +180,51 @@ func GenerateServerCert(
 	}
 
 	// Only server authentication is allowed.
-	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
-	for _, h := range hosts {
-		if ip := net.ParseIP(h); ip != nil {
-			template.IPAddresses = append(template.IPAddresses, ip)
-		} else {
-			template.DNSNames = append(template.DNSNames, h)
-		}
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+	addHostsToTemplate(template, hosts)
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, certPublicKey, caPrivateKey)
+	if err != nil {
+		return nil, err
 	}
 
-	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, nodePublicKey, caPrivateKey)
+	return certBytes, nil
+}
+
+// GenerateTenantClientCert generates a tenant client certificate and returns the cert bytes.
+// Takes in the CA cert and private key, the tenant client public key, the certificate lifetime,
+// and the tenant id.
+//
+// Tenant client certificates add OU=Tenants in the subject field to prevent
+// using them as user certificates.
+func GenerateTenantClientCert(
+	caCert *x509.Certificate,
+	caPrivateKey crypto.PrivateKey,
+	clientPublicKey crypto.PublicKey,
+	lifetime time.Duration,
+	tenantID uint64,
+) ([]byte, error) {
+
+	if tenantID == 0 {
+		return nil, errors.Errorf("tenantId %d is invalid (requires != 0)", tenantID)
+	}
+
+	// Create template for user.
+	template, err := newTemplate(fmt.Sprintf("%d", tenantID), lifetime, TenantsOU)
+	if err != nil {
+		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
+		return nil, err
+	}
+
+	// Set client-specific fields.
+	// Client authentication only.
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +235,9 @@ func GenerateServerCert(
 // GenerateClientCert generates a client certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the client public key, the certificate lifetime,
 // and the username.
+//
+// This is used both for vanilla CockroachDB user client certs as well as for the
+// multi-tenancy KV auth broker (in which case the user is a SQL tenant).
 func GenerateClientCert(
 	caCert *x509.Certificate,
 	caPrivateKey crypto.PrivateKey,
@@ -165,7 +251,7 @@ func GenerateClientCert(
 		return nil, errors.Errorf("user cannot be empty")
 	}
 
-	// Create template for "user".
+	// Create template for user.
 	template, err := newTemplate(user, lifetime)
 	if err != nil {
 		return nil, err

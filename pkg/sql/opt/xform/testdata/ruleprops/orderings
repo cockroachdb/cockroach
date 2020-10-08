@@ -3,27 +3,14 @@
 exec-ddl
 CREATE TABLE abc (a INT, b INT, c INT, INDEX (a, b), UNIQUE INDEX (c))
 ----
-TABLE abc
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── a int
- │    ├── b int
- │    └── rowid int not null (hidden)
- └── INDEX secondary
-      ├── c int
-      └── rowid int not null (hidden) (storing)
 
 # Scan operator.
 opt
 SELECT * FROM abc
 ----
 scan abc
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
+ ├── lax-key: (1-3)
  ├── fd: (3)~~>(1,2)
  ├── prune: (1-3)
  └── interesting orderings: (+1,+2) (+3)
@@ -32,7 +19,8 @@ opt
 SELECT a, c FROM abc
 ----
 scan abc
- ├── columns: a:1(int) c:3(int)
+ ├── columns: a:1 c:3
+ ├── lax-key: (1,3)
  ├── fd: (3)~~>(1)
  ├── prune: (1,3)
  └── interesting orderings: (+1) (+3)
@@ -41,7 +29,8 @@ opt
 SELECT b, c FROM abc
 ----
 scan abc
- ├── columns: b:2(int) c:3(int)
+ ├── columns: b:2 c:3
+ ├── lax-key: (2,3)
  ├── fd: (3)~~>(2)
  ├── prune: (2,3)
  └── interesting orderings: (+3)
@@ -52,30 +41,32 @@ build
 SELECT a, c FROM abc
 ----
 project
- ├── columns: a:1(int) c:3(int)
+ ├── columns: a:1 c:3
+ ├── lax-key: (1,3)
  ├── fd: (3)~~>(1)
  ├── prune: (1,3)
  ├── interesting orderings: (+1) (+3)
  └── scan abc
-      ├── columns: a:1(int) b:2(int) c:3(int) rowid:4(int!null)
+      ├── columns: a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       ├── key: (4)
-      ├── fd: (4)-->(1-3), (3)~~>(1,2,4)
-      ├── prune: (1-4)
+      ├── fd: (4)-->(1-3,5), (3)~~>(1,2,4,5)
+      ├── prune: (1-5)
       └── interesting orderings: (+4) (+1,+2,+4) (+3,+4)
 
 build
 SELECT b, c FROM abc
 ----
 project
- ├── columns: b:2(int) c:3(int)
+ ├── columns: b:2 c:3
+ ├── lax-key: (2,3)
  ├── fd: (3)~~>(2)
  ├── prune: (2,3)
  ├── interesting orderings: (+3)
  └── scan abc
-      ├── columns: a:1(int) b:2(int) c:3(int) rowid:4(int!null)
+      ├── columns: a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       ├── key: (4)
-      ├── fd: (4)-->(1-3), (3)~~>(1,2,4)
-      ├── prune: (1-4)
+      ├── fd: (4)-->(1-3,5), (3)~~>(1,2,4,5)
+      ├── prune: (1-5)
       └── interesting orderings: (+4) (+1,+2,+4) (+3,+4)
 
 # GroupBy operator.
@@ -83,79 +74,110 @@ opt
 SELECT min(b), a FROM abc GROUP BY a
 ----
 group-by
- ├── columns: min:5(int) a:1(int)
- ├── grouping columns: a:1(int)
+ ├── columns: min:6 a:1
+ ├── grouping columns: a:1
+ ├── internal-ordering: +1
  ├── key: (1)
- ├── fd: (1)-->(5)
- ├── prune: (5)
+ ├── fd: (1)-->(6)
+ ├── prune: (6)
  ├── interesting orderings: (+1)
  ├── scan abc@secondary
- │    ├── columns: a:1(int) b:2(int)
+ │    ├── columns: a:1 b:2
+ │    ├── ordering: +1
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1,+2)
- └── aggregations [outer=(2)]
-      └── min [type=int, outer=(2)]
-           └── variable: abc.b [type=int, outer=(2)]
+ └── aggregations
+      └── min [as=min:6, outer=(2)]
+           └── b:2
 
 opt
 SELECT min(b), c FROM abc GROUP BY c
 ----
 group-by
- ├── columns: min:5(int) c:3(int)
- ├── grouping columns: c:3(int)
+ ├── columns: min:6 c:3
+ ├── grouping columns: c:3
  ├── key: (3)
- ├── fd: (3)-->(5)
- ├── prune: (5)
+ ├── fd: (3)-->(6)
+ ├── prune: (6)
  ├── interesting orderings: (+3)
  ├── scan abc
- │    ├── columns: b:2(int) c:3(int)
+ │    ├── columns: b:2 c:3
+ │    ├── lax-key: (2,3)
  │    ├── fd: (3)~~>(2)
  │    ├── prune: (2,3)
  │    └── interesting orderings: (+3)
- └── aggregations [outer=(2)]
-      └── min [type=int, outer=(2)]
-           └── variable: abc.b [type=int, outer=(2)]
+ └── aggregations
+      └── min [as=min:6, outer=(2)]
+           └── b:2
 
 # GroupBy with required ordering.
 opt
 SELECT array_agg(a), b, c FROM (SELECT * FROM abc ORDER BY b, a) GROUP BY b, c
 ----
 group-by
- ├── columns: array_agg:5(int[]) b:2(int) c:3(int)
- ├── grouping columns: b:2(int) c:3(int)
- ├── ordering: +2,+1
+ ├── columns: array_agg:6 b:2 c:3
+ ├── grouping columns: b:2 c:3
+ ├── internal-ordering: +1 opt(2,3)
  ├── key: (2,3)
- ├── fd: (3)~~>(2), (2,3)-->(5)
- ├── prune: (5)
- ├── interesting orderings: (+2)
+ ├── fd: (3)~~>(2), (2,3)-->(6)
+ ├── prune: (6)
  ├── sort
- │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    ├── columns: a:1 b:2 c:3
+ │    ├── lax-key: (1-3)
  │    ├── fd: (3)~~>(1,2)
- │    ├── ordering: +2,+1
+ │    ├── ordering: +1 opt(2,3) [actual: +1]
  │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2) (+3)
  │    └── scan abc
- │         ├── columns: a:1(int) b:2(int) c:3(int)
+ │         ├── columns: a:1 b:2 c:3
+ │         ├── lax-key: (1-3)
  │         ├── fd: (3)~~>(1,2)
- │         └── prune: (1-3)
- └── aggregations [outer=(1)]
-      └── array-agg [type=int[], outer=(1)]
-           └── variable: abc.a [type=int, outer=(1)]
+ │         ├── prune: (1-3)
+ │         └── interesting orderings: (+1,+2) (+3)
+ └── aggregations
+      └── array-agg [as=array_agg:6, outer=(1)]
+           └── a:1
+
+# Scalar GroupBy case.
+opt
+SELECT max(a), min(b), sum(c) FROM abc
+----
+scalar-group-by
+ ├── columns: max:6 min:7 sum:8
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6-8)
+ ├── prune: (6-8)
+ ├── scan abc
+ │    ├── columns: a:1 b:2 c:3
+ │    ├── lax-key: (1-3)
+ │    ├── fd: (3)~~>(1,2)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2) (+3)
+ └── aggregations
+      ├── max [as=max:6, outer=(1)]
+      │    └── a:1
+      ├── min [as=min:7, outer=(2)]
+      │    └── b:2
+      └── sum [as=sum:8, outer=(3)]
+           └── c:3
 
 # LookupJoin operator.
 opt
 SELECT * FROM abc WHERE a = 1
 ----
 index-join abc
- ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── columns: a:1!null b:2 c:3
+ ├── lax-key: (2,3)
  ├── fd: ()-->(1), (3)~~>(2)
  ├── prune: (2,3)
- ├── interesting orderings: (+4) (+1,+2,+4)
+ ├── interesting orderings: (+1,+2) (+3)
  └── scan abc@secondary
-      ├── columns: a:1(int!null) b:2(int) rowid:4(int!null)
+      ├── columns: a:1!null b:2 rowid:4!null
       ├── constraint: /1/2/4: [/1 - /1]
       ├── key: (4)
       ├── fd: ()-->(1), (4)-->(2)
-      ├── prune: (2,4)
+      ├── prune: (1,2,4)
       └── interesting orderings: (+4) (+1,+2,+4)
 
 # Limit operator.
@@ -163,98 +185,103 @@ opt
 SELECT * FROM abc ORDER BY a LIMIT 10
 ----
 index-join abc
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
  ├── cardinality: [0 - 10]
+ ├── lax-key: (1-3)
  ├── fd: (3)~~>(1,2)
  ├── ordering: +1
  ├── prune: (2,3)
- ├── interesting orderings: (+4) (+1,+2,+4)
+ ├── interesting orderings: (+1,+2)
  └── scan abc@secondary
-      ├── columns: a:1(int) b:2(int) rowid:4(int!null)
+      ├── columns: a:1 b:2 rowid:4!null
       ├── limit: 10
       ├── key: (4)
       ├── fd: (4)-->(1,2)
       ├── ordering: +1
-      ├── prune: (2,4)
+      ├── prune: (1,2,4)
       └── interesting orderings: (+4) (+1,+2,+4)
 
 opt
 SELECT * FROM abc ORDER BY b LIMIT 10
 ----
 limit
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
+ ├── internal-ordering: +2
  ├── cardinality: [0 - 10]
+ ├── lax-key: (1-3)
  ├── fd: (3)~~>(1,2)
  ├── ordering: +2
  ├── prune: (1,3)
  ├── interesting orderings: (+2)
  ├── sort
- │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    ├── columns: a:1 b:2 c:3
+ │    ├── lax-key: (1-3)
  │    ├── fd: (3)~~>(1,2)
  │    ├── ordering: +2
+ │    ├── limit hint: 10.00
  │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2) (+3)
  │    └── scan abc
- │         ├── columns: a:1(int) b:2(int) c:3(int)
+ │         ├── columns: a:1 b:2 c:3
+ │         ├── lax-key: (1-3)
  │         ├── fd: (3)~~>(1,2)
- │         └── prune: (1-3)
- └── const: 10 [type=int]
+ │         ├── prune: (1-3)
+ │         └── interesting orderings: (+1,+2) (+3)
+ └── 10
 
 opt
 SELECT * FROM abc ORDER BY a OFFSET 10
 ----
 offset
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
+ ├── internal-ordering: +1
+ ├── lax-key: (1-3)
  ├── fd: (3)~~>(1,2)
  ├── ordering: +1
  ├── prune: (2,3)
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+1,+2)
  ├── sort
- │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    ├── columns: a:1 b:2 c:3
+ │    ├── lax-key: (1-3)
  │    ├── fd: (3)~~>(1,2)
  │    ├── ordering: +1
  │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2) (+3)
  │    └── scan abc
- │         ├── columns: a:1(int) b:2(int) c:3(int)
+ │         ├── columns: a:1 b:2 c:3
+ │         ├── lax-key: (1-3)
  │         ├── fd: (3)~~>(1,2)
- │         └── prune: (1-3)
- └── const: 10 [type=int]
+ │         ├── prune: (1-3)
+ │         └── interesting orderings: (+1,+2) (+3)
+ └── 10
 
 exec-ddl
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z), UNIQUE INDEX(x,y))
 ----
-TABLE xyz
- ├── x int
- ├── y int
- ├── z int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── z int
- │    └── rowid int not null (hidden)
- └── INDEX secondary
-      ├── x int
-      ├── y int
-      └── rowid int not null (hidden) (storing)
 
 # Join operator.
 opt
 SELECT * FROM abc JOIN xyz ON a=x 
 ----
-inner-join
- ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
- ├── fd: (3)~~>(1,2), (5,6)~~>(7), (1)==(5), (5)==(1)
- ├── prune: (2,3,6,7)
- ├── interesting orderings: (+1,+2) (+3) (+7) (+5,+6)
+inner-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7 z:8
+ ├── lax-key: (2,3,6-8)
+ ├── fd: (3)~~>(1,2), (6,7)~~>(8), (1)==(6), (6)==(1)
+ ├── prune: (2,3,7,8)
+ ├── interesting orderings: (+1,+2) (+3) (+8) (+6,+7)
  ├── scan abc
- │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    ├── columns: a:1 b:2 c:3
+ │    ├── lax-key: (1-3)
  │    ├── fd: (3)~~>(1,2)
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+1,+2) (+3)
+ │    ├── interesting orderings: (+1,+2) (+3)
+ │    └── unfiltered-cols: (1-5)
  ├── scan xyz
- │    ├── columns: x:5(int) y:6(int) z:7(int)
- │    ├── fd: (5,6)~~>(7)
- │    ├── prune: (5-7)
- │    └── interesting orderings: (+7) (+5,+6)
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    ├── columns: x:6 y:7 z:8
+ │    ├── lax-key: (6-8)
+ │    ├── fd: (6,7)~~>(8)
+ │    ├── prune: (6-8)
+ │    ├── interesting orderings: (+8) (+6,+7)
+ │    └── unfiltered-cols: (6-10)
+ └── filters
+      └── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]

@@ -1,0 +1,37 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+@require '~src/components/core/index'
+
+.Chip
+  padding 4px 17px
+  color $colors--neutral-6
+  font-family SourceSansPro-Regular
+  font-size 12px
+  border-radius 20px
+  min-height 25px
+  min-width 85px
+  text-align center
+  display inline-block
+  line-height 1.67
+  letter-spacing 0.3px
+  &--green
+    background $chip-green
+  &--lightgreen
+    background $chip-lightgreen
+  &--grey
+    background $chip-grey
+  &--lightblue
+    background $chip-lightblue
+  &--blue
+    background $chip-blue
+  &--yellow
+    background $chip-yellow

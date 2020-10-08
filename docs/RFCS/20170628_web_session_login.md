@@ -365,7 +365,7 @@ for incoming requests, but instead would simply need to verify the signature
 on the token.
 
 The major issue with JWT is that it does not provide a way to revoke login
-sessions; to do this, we would need to store a blacklist of revoked session IDs,
+sessions; to do this, we would need to store a blocklist of revoked session IDs,
 which removes much of the advantage of not having the sessions table in the
 first place.
 

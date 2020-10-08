@@ -1,20 +1,17 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sessiondata
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -41,18 +38,6 @@ func NewSequenceState() *SequenceState {
 	ss := SequenceState{}
 	ss.mu.latestValues = make(map[uint32]int64)
 	return &ss
-}
-
-// copy performs a deep copy of SequenceState.
-func (ss *SequenceState) copy() *SequenceState {
-	cp := NewSequenceState()
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	for k, v := range ss.mu.latestValues {
-		cp.mu.latestValues[k] = v
-	}
-	cp.mu.lastSequenceIncremented = ss.mu.lastSequenceIncremented
-	return ss
 }
 
 // NextVal ever called returns true if a sequence has ever been incremented on
@@ -84,8 +69,8 @@ func (ss *SequenceState) GetLastValue() (int64, error) {
 	defer ss.mu.Unlock()
 
 	if !ss.nextValEverCalledLocked() {
-		return 0, pgerror.NewError(
-			pgerror.CodeObjectNotInPrerequisiteStateError, "lastval is not yet defined in this session")
+		return 0, pgerror.New(
+			pgcode.ObjectNotInPrerequisiteState, "lastval is not yet defined in this session")
 	}
 
 	return ss.mu.latestValues[ss.mu.lastSequenceIncremented], nil

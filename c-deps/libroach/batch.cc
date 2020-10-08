@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #include "batch.h"
 #include "comparator.h"
@@ -86,6 +82,11 @@ DBStatus ProcessDeltaKey(Getter* base, rocksdb::WBWIIterator* delta, rocksdb::Sl
       }
       break;
     }
+    case rocksdb::kSingleDeleteRecord:
+      // Treating a SingleDelete operation as a standard Delete doesn't
+      // quite mirror SingleDelete's expected implementation, but it
+      // doesn't violate the operation's contract:
+      // https://github.com/facebook/rocksdb/wiki/Single-Delete.
     case rocksdb::kDeleteRecord:
       if (value->data != NULL) {
         free(value->data);
@@ -417,20 +418,38 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
  public:
   DBBatchInserter(rocksdb::WriteBatchBase* batch) : batch_(batch) {}
 
-  virtual void Put(const rocksdb::Slice& key, const rocksdb::Slice& value) {
-    batch_->Put(key, value);
+  virtual rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
+                                const rocksdb::Slice& value) {
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
+    }
+    return batch_->Put(key, value);
   }
-  virtual void Delete(const rocksdb::Slice& key) { batch_->Delete(key); }
-  virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) {
-    batch_->Merge(key, value);
+  virtual rocksdb::Status DeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) {
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
+    }
+    return batch_->Delete(key);
+  }
+  virtual rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) {
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
+    }
+    return batch_->SingleDelete(key);
+  }
+  virtual rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
+                                  const rocksdb::Slice& value) {
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
+    }
+    return batch_->Merge(key, value);
   }
   virtual rocksdb::Status DeleteRangeCF(uint32_t column_family_id, const rocksdb::Slice& begin_key,
                                         const rocksdb::Slice& end_key) {
-    if (column_family_id == 0) {
-      batch_->DeleteRange(begin_key, end_key);
-      return rocksdb::Status::OK();
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
     }
-    return rocksdb::Status::InvalidArgument("DeleteRangeCF not implemented");
+    return batch_->DeleteRange(begin_key, end_key);
   }
   virtual void LogData(const rocksdb::Slice& blob) { batch_->PutLogData(blob); }
 
@@ -476,6 +495,12 @@ DBStatus DBBatch::Get(DBKey key, DBString* value) {
 DBStatus DBBatch::Delete(DBKey key) {
   ++updates;
   batch.Delete(EncodeKey(key));
+  return kSuccess;
+}
+
+DBStatus DBBatch::SingleDelete(DBKey key) {
+  ++updates;
+  batch.SingleDelete(EncodeKey(key));
   return kSuccess;
 }
 
@@ -528,13 +553,21 @@ DBIterator* DBBatch::NewIter(DBIterOptions iter_options) {
 
 DBStatus DBBatch::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported"); }
 
+DBStatus DBBatch::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) {
+  return FmtStatus("unsupported");
+}
+
 DBString DBBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBBatch::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
 
+DBStatus DBBatch::GetEncryptionRegistries(DBEncryptionRegistries* result) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBBatch::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
 
-DBStatus DBBatch::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
+DBStatus DBBatch::EnvOpenFile(DBSlice path, uint64_t bytes_per_sync, rocksdb::WritableFile** file) {
   return FmtStatus("unsupported");
 }
 
@@ -554,6 +587,28 @@ DBStatus DBBatch::EnvDeleteDirAndFiles(DBSlice dir) { return FmtStatus("unsuppor
 
 DBStatus DBBatch::EnvLinkFile(DBSlice oldname, DBSlice newname) { return FmtStatus("unsupported"); }
 
+DBStatus DBBatch::EnvOpenReadableFile(DBSlice path, rocksdb::RandomAccessFile** file) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBBatch::EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset,
+                                int* n) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBBatch::EnvCloseReadableFile(rocksdb::RandomAccessFile* file) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBBatch::EnvOpenDirectory(DBSlice path, rocksdb::Directory** file) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBBatch::EnvSyncDirectory(rocksdb::Directory* file) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvCloseDirectory(rocksdb::Directory* file) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvRenameFile(DBSlice oldname, DBSlice newname) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBBatch::EnvCreateDir(DBSlice name) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvDeleteDir(DBSlice name) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvListDir(DBSlice name, std::vector<std::string>* result) { return FmtStatus("unsupported"); }
+  
 DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db) : DBEngine(db->rep, db->iters), updates(0) {}
 
 DBWriteOnlyBatch::~DBWriteOnlyBatch() {}
@@ -575,6 +630,12 @@ DBStatus DBWriteOnlyBatch::Get(DBKey key, DBString* value) { return FmtStatus("u
 DBStatus DBWriteOnlyBatch::Delete(DBKey key) {
   ++updates;
   batch.Delete(EncodeKey(key));
+  return kSuccess;
+}
+
+DBStatus DBWriteOnlyBatch::SingleDelete(DBKey key) {
+  ++updates;
+  batch.SingleDelete(EncodeKey(key));
   return kSuccess;
 }
 
@@ -611,21 +672,27 @@ DBStatus DBWriteOnlyBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
 
 DBSlice DBWriteOnlyBatch::BatchRepr() { return ToDBSlice(batch.GetWriteBatch()->Data()); }
 
-DBIterator* DBWriteOnlyBatch::NewIter(DBIterOptions) {
-  return NULL;
-}
+DBIterator* DBWriteOnlyBatch::NewIter(DBIterOptions) { return NULL; }
 
 DBStatus DBWriteOnlyBatch::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported"); }
+
+DBStatus DBWriteOnlyBatch::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) {
+  return FmtStatus("unsupported");
+}
 
 DBString DBWriteOnlyBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBWriteOnlyBatch::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
 
+DBStatus DBWriteOnlyBatch::GetEncryptionRegistries(DBEncryptionRegistries* result) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBWriteOnlyBatch::EnvWriteFile(DBSlice path, DBSlice contents) {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBWriteOnlyBatch::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
+DBStatus DBWriteOnlyBatch::EnvOpenFile(DBSlice path, uint64_t bytes_per_sync, rocksdb::WritableFile** file) {
   return FmtStatus("unsupported");
 }
 
@@ -649,7 +716,37 @@ DBStatus DBWriteOnlyBatch::EnvDeleteFile(DBSlice path) { return FmtStatus("unsup
 
 DBStatus DBWriteOnlyBatch::EnvDeleteDirAndFiles(DBSlice dir) { return FmtStatus("unsupported"); }
 
-DBStatus DBWriteOnlyBatch::EnvLinkFile(DBSlice oldname, DBSlice newname) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvLinkFile(DBSlice oldname, DBSlice newname) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBWriteOnlyBatch::EnvOpenReadableFile(DBSlice path, rocksdb::RandomAccessFile** file) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBWriteOnlyBatch::EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer,
+                                         int64_t offset, int* n) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBWriteOnlyBatch::EnvCloseReadableFile(rocksdb::RandomAccessFile* file) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBWriteOnlyBatch::EnvOpenDirectory(DBSlice path, rocksdb::Directory** file) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBWriteOnlyBatch::EnvSyncDirectory(rocksdb::Directory* file) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBWriteOnlyBatch::EnvCloseDirectory(rocksdb::Directory* file) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBWriteOnlyBatch::EnvRenameFile(DBSlice oldname, DBSlice newname) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBWriteOnlyBatch::EnvCreateDir(DBSlice name) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvDeleteDir(DBSlice name) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvListDir(DBSlice name, std::vector<std::string>* result) {
+  return FmtStatus("unsupported");
+}
 
 rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch) {
   return new DBBatchInserter(batch);

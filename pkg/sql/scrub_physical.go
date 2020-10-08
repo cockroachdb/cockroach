@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -18,12 +14,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/errors"
 )
 
 var _ checkOperation = &physicalCheckOperation{}
@@ -31,12 +28,12 @@ var _ checkOperation = &physicalCheckOperation{}
 // physicalCheckOperation is a check on an indexes physical data.
 type physicalCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *sqlbase.TableDescriptor
-	indexDesc *sqlbase.IndexDescriptor
+	tableDesc *tabledesc.Immutable
+	indexDesc *descpb.IndexDescriptor
 
 	// columns is a list of the columns returned in the query result
 	// tree.Datums.
-	columns []*sqlbase.ColumnDescriptor
+	columns []*descpb.ColumnDescriptor
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
@@ -48,12 +45,12 @@ type physicalCheckOperation struct {
 // physicalCheckOperation during local execution.
 type physicalCheckRun struct {
 	started  bool
-	rows     *sqlbase.RowContainer
+	rows     *rowcontainer.RowContainer
 	rowIndex int
 }
 
 func newPhysicalCheckOperation(
-	tableName *tree.TableName, tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+	tableName *tree.TableName, tableDesc *tabledesc.Immutable, indexDesc *descpb.IndexDescriptor,
 ) *physicalCheckOperation {
 	return &physicalCheckOperation{
 		tableName: tableName,
@@ -69,8 +66,8 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 	// Collect all of the columns, their types, and their IDs.
 	var columnIDs []tree.ColumnID
-	colIDToIdx := make(map[sqlbase.ColumnID]int, len(o.tableDesc.Columns))
-	columns := make([]*sqlbase.ColumnDescriptor, len(columnIDs))
+	colIDToIdx := make(map[descpb.ColumnID]int, len(o.tableDesc.Columns))
+	columns := make([]*descpb.ColumnDescriptor, len(columnIDs))
 	for i := range o.tableDesc.Columns {
 		colIDToIdx[o.tableDesc.Columns[i].ID] = i
 	}
@@ -93,7 +90,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 
 	for i := range columnIDs {
-		idx := colIDToIdx[sqlbase.ColumnID(columnIDs[i])]
+		idx := colIDToIdx[descpb.ColumnID(columnIDs[i])]
 		columns = append(columns, &o.tableDesc.Columns[idx])
 	}
 
@@ -103,40 +100,31 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	indexHints := &tree.IndexHints{
+	indexFlags := &tree.IndexFlags{
 		IndexID:     tree.IndexID(o.indexDesc.ID),
 		NoIndexJoin: true,
 	}
 	scan := params.p.Scan()
-	scan.run.isCheck = true
+	scan.isCheck = true
 	colCfg := scanColumnsConfig{wantedColumns: columnIDs, addUnwantedAsHidden: true}
-	if err := scan.initTable(ctx, params.p, o.tableDesc, indexHints, colCfg); err != nil {
+	if err := scan.initTable(ctx, params.p, o.tableDesc, indexFlags, colCfg); err != nil {
 		return err
 	}
-	plan := planNode(scan)
-
-	neededColumns := make([]bool, len(o.tableDesc.Columns))
-	for _, id := range columnIDs {
-		neededColumns[colIDToIdx[sqlbase.ColumnID(id)]] = true
-	}
-
-	// Optimize the plan. This is required in order to populate scanNode
-	// spans.
-	plan, err = params.p.optimizePlan(ctx, plan, neededColumns)
+	scan.index = scan.specifiedIndex
+	sb := span.MakeBuilder(params.ExecCfg().Codec, o.tableDesc, o.indexDesc)
+	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
-		plan.Close(ctx)
 		return err
 	}
-	defer plan.Close(ctx)
+	scan.isFull = true
 
-	scan = plan.(*scanNode)
-
-	span := o.tableDesc.IndexSpan(o.indexDesc.ID)
-	spans := []roachpb.Span{span}
-
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p, params.p.txn, true /* distribute */)
+	// Since physicalCheckOperation might be only one of many check operations
+	// that scrubNode needs to perform, we need to make sure that scrubNode
+	// is not closed when this physical check operation is being cleaned up.
+	planCtx.ignoreClose = true
 	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(
-		&planCtx, scan, *o.tableDesc, *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
+		planCtx, scan, *o.tableDesc.TableDesc(), *o.indexDesc, params.p.ExecCfg().Clock.Now())
 	if err != nil {
 		return err
 	}
@@ -144,7 +132,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	o.primaryColIdxs = primaryColIdxs
 	o.columns = columns
 	o.run.started = true
-	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, &physPlan, distsqlrun.ScrubTypes)
+	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, &physPlan, rowexec.ScrubTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err
@@ -158,8 +146,11 @@ func (o *physicalCheckOperation) Next(params runParams) (tree.Datums, error) {
 	row := o.run.rows.At(o.run.rowIndex)
 	o.run.rowIndex++
 
-	timestamp := tree.MakeDTimestamp(
+	timestamp, err := tree.MakeDTimestamp(
 		params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond)
+	if err != nil {
+		return nil, err
+	}
 
 	details, ok := row[2].(*tree.DJSON)
 	if !ok {

@@ -1,0 +1,80 @@
+# --------------------------------------------------
+# GenerateConstrainedScans + Partitioning
+# --------------------------------------------------
+
+# Create a truly distributed table. Partitioned appropriately.
+exec-ddl
+CREATE TABLE partitioned (
+    planet STRING, region STRING, subregion STRING, val INT8,
+    PRIMARY KEY (planet, region, subregion, val)
+)
+    PARTITION BY LIST (planet, region, subregion)
+        (
+            PARTITION westcoast VALUES IN (('earth', 'us', 'seattle'), ('earth', 'us', 'cali')),
+            PARTITION eu VALUES IN (('earth', 'eu', DEFAULT)),
+            PARTITION us VALUES IN (('earth', 'us', DEFAULT)),
+            PARTITION earth VALUES IN (('earth', DEFAULT)),
+            PARTITION mars VALUES IN (('mars', DEFAULT)),
+            PARTITION titan VALUES IN (('jupiter', 'titan', DEFAULT)),
+            PARTITION red_spot VALUES IN (('jupiter', 'titan', 'red spot')),
+            PARTITION jupiter VALUES IN (('jupiter', DEFAULT)),
+            PARTITION default VALUES IN (DEFAULT)
+        )
+----
+
+# Use partition values to constrain the scan.
+opt
+EXPLAIN (OPT, VERBOSE)
+  SELECT
+  *
+  FROM
+  partitioned
+  WHERE
+  val = 1
+----
+explain
+ ├── columns: text:6
+ ├── mode: opt, verbose
+ └── select
+      ├── columns: planet:1!null region:2!null subregion:3!null val:4!null
+      ├── key: (1-3)
+      ├── fd: ()-->(4)
+      ├── scan partitioned
+      │    ├── columns: planet:1!null region:2!null subregion:3!null val:4!null
+      │    ├── constraint: /1/2/3/4
+      │    │    ├── [ - /'earth'/'us'/'cali')
+      │    │    ├── [/'earth'/'us'/'cali'/1 - /'earth'/'us'/'cali'/1]
+      │    │    ├── [/'earth'/'us'/e'cali\x00'/1 - /'earth'/'us'/'seattle')
+      │    │    ├── [/'earth'/'us'/'seattle'/1 - /'earth'/'us'/'seattle'/1]
+      │    │    ├── [/'earth'/'us'/e'seattle\x00'/1 - /'jupiter'/'titan'/'red spot')
+      │    │    ├── [/'jupiter'/'titan'/'red spot'/1 - /'jupiter'/'titan'/'red spot'/1]
+      │    │    └── [/'jupiter'/'titan'/e'red spot\x00'/1 - ]
+      │    └── key: (1-4)
+      └── filters
+           └── val:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+
+# Regression test for #42147.
+exec-ddl
+CREATE TABLE tab42147 (
+  id INT8 NOT NULL,
+  locality STRING,
+  CONSTRAINT pk PRIMARY KEY (locality ASC, id ASC),
+  CONSTRAINT id UNIQUE (id ASC)
+)
+  PARTITION BY LIST (locality)
+    (
+      PARTITION uswest VALUES IN ('us-west'),
+      PARTITION uscentral VALUES IN ('us-central'),
+      PARTITION asiasoutheast VALUES IN ('asia-southeast')
+    )
+----
+
+opt
+SELECT id FROM tab42147 WHERE id = 1
+----
+scan tab42147@id
+ ├── columns: id:1!null
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1)

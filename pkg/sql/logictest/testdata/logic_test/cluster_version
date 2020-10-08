@@ -12,7 +12,7 @@ SELECT crdb_internal.node_executable_version()
 
 user testuser
 
-statement error only superusers are allowed to SET CLUSTER SETTING
+statement error only users with the admin role are allowed to set cluster setting 'version'
 SET CLUSTER SETTING version = '2.0'
 
 user root
@@ -29,10 +29,10 @@ SET CLUSTER SETTING version = '1.0-0.0'
 statement error cannot upgrade to 2.0: node running 1.1
 SET CLUSTER SETTING version = '2.0'
 
-statement error cannot upgrade directly from 1.0 to 2.1
+statement error cannot upgrade to 2.1: node running 1.1
 SET CLUSTER SETTING version = '2.1'
 
-statement error cannot downgrade from 1.0 to 0.9
+statement error node at 1\.1 cannot run 0\.9 \(minimum version is 1\.0\)
 SET CLUSTER SETTING version = '0.9'
 
 statement ok
@@ -52,13 +52,13 @@ SHOW CLUSTER SETTING version
 ----
 1.0-500
 
-statement error cannot upgrade directly from 1.0-500 to 1.2
+statement error cannot upgrade to 1.2: node running 1.1
 SET CLUSTER SETTING version = '1.2'
 
 statement ok
 SET CLUSTER SETTING version = crdb_internal.node_executable_version()
 
-statement error cannot downgrade from 1.1 to 1.0-2
+statement error versions cannot be downgraded \(attempting to downgrade from 1.1 to 1.0-2\)
 SET CLUSTER SETTING version = '1.0-2'
 
 query T
@@ -71,3 +71,6 @@ SET CLUSTER SETTING version = '1.1'
 
 statement error cannot upgrade to 1.1-999: node running 1.1
 SET CLUSTER SETTING version = '1.1-999'
+
+statement error cannot RESET this cluster setting
+RESET CLUSTER SETTING version

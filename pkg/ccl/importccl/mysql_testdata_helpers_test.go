@@ -11,19 +11,18 @@ package importccl
 import (
 	"bufio"
 	gosql "database/sql"
-	"fmt"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"testing"
+	"time"
 	"unicode/utf8"
-
-	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 // This can be toggled to re-write the `testdata`. Requires local mysql
@@ -57,14 +56,14 @@ var simpleTestRows = func() []simpleTestRow {
 	badChars := []rune{'a', ';', '\n', ',', '"', '\\', '\r', '<', '\t', '✅', 'π', rune(0), rune(10), rune(2425), rune(5183), utf8.RuneError}
 	r := rand.New(rand.NewSource(1))
 	testRows := []simpleTestRow{
-		{i: 0, s: `str`},
-		{i: 1, s: ``},
-		{i: 2, s: ` `},
-		{i: 3, s: `,`},
-		{i: 4, s: "\n"},
-		{i: 5, s: `\n`},
-		{i: 6, s: "\r\n"},
-		{i: 7, s: "\r"},
+		{i: 1, s: `str`},
+		{i: 2, s: ``},
+		{i: 3, s: ` `},
+		{i: 4, s: `,`},
+		{i: 5, s: "\n"},
+		{i: 6, s: `\n`},
+		{i: 7, s: "\r\n"},
+		{i: 8, s: "\r"},
 		{i: 9, s: `"`},
 
 		{i: 10, s: injectNull},
@@ -77,54 +76,68 @@ var simpleTestRows = func() []simpleTestRow {
 		{i: 15, s: `✅`},
 		{i: 16, s: `","\n,™¢`},
 		{i: 17, s: string([]rune{rune(0)})},
-		{i: 19, s: `✅¢©ƒƒƒƒåß∂√œ∫∑∆πœ∑˚¬≤µµç∫ø∆œ∑∆¬œ∫œ∑´´†¥¨ˆˆπ‘“æ…¬…¬˚ß∆å˚˙ƒ∆©˙©∂˙≥≤Ω˜˜µ√∫∫Ω¥∑`},
-		{i: 20, s: `a quote " or two quotes "" and a quote-comma ", , and then a quote and newline "` + "\n"},
-		{i: 21, s: `"a slash \, a double slash \\, a slash+quote \",  \` + "\n"},
+		{i: 18, s: `✅¢©ƒƒƒƒåß∂√œ∫∑∆πœ∑˚¬≤µµç∫ø∆œ∑∆¬œ∫œ∑´´†¥¨ˆˆπ‘“æ…¬…¬˚ß∆å˚˙ƒ∆©˙©∂˙≥≤Ω˜˜µ√∫∫Ω¥∑`},
+		{i: 19, s: `a quote " or two quotes "" and a quote-comma ", , and then a quote and newline "` + "\n"},
+		{i: 20, s: `"a slash \, a double slash \\, a slash+quote \",  \` + "\n"},
 	}
 
 	for i := 0; i < 10; i++ {
 		buf := make([]byte, 200)
 		r.Seed(int64(i))
 		r.Read(buf)
-		testRows = append(testRows, simpleTestRow{i: i + 100, s: randStr(r, badChars, 1000), b: buf})
+		testRows = append(testRows, simpleTestRow{i: len(testRows) + 1, s: randStr(r, badChars, 1000), b: buf})
 	}
 	return testRows
 }()
 
-func getSimpleMysqlDumpTestdata(t *testing.T) ([]simpleTestRow, string) {
-	dest := filepath.Join(`testdata`, `mysqldump`, `simple.sql`)
-	if rewriteMysqlTestData {
-		genSimpleMysqlTestdata(t, func() { mysqldump(t, dest, "simple") })
-	}
-	return simpleTestRows, dest
+type everythingTestRow struct {
+	i   int
+	e   string
+	c   string
+	bin []byte
+	dt  time.Time
+	iz  int
+	iw  int
+	fl  float64
+	d53 string
+	j   string
 }
 
-func getSecondMysqlDumpTestdata(t *testing.T) (int, string) {
-	dest := filepath.Join(`testdata`, `mysqldump`, `second.sql`)
-	if rewriteMysqlTestData {
-		genSecondMysqlTestdata(t, func() { mysqldump(t, dest, "second") })
+var everythingTestRows = func() []everythingTestRow {
+	return []everythingTestRow{
+		{1, "Small", "c", []byte("bin"), timeutil.Unix(946684800, 0), 1, -2, -1.5, "-12.345", `{"a": "b", "c": {"d": ["e", 11, null]}}`},
+		{2, "Large", "c2", []byte("bin2"), timeutil.Unix(946684800, 0), 3525343334, 3, 1.2, "12.345", `{}`},
 	}
-	return secondTableRows, dest
+}()
+
+type testFiles struct {
+	simple, second, everything, wholeDB string
 }
 
-func getEverythingMysqlDumpTestdata(t *testing.T) string {
-	dest := filepath.Join(`testdata`, `mysqldump`, `everything.sql`)
-	if rewriteMysqlTestData {
-		genEverythingMysqlTestdata(t, func() { mysqldump(t, dest, "everything") })
-	}
-	return dest
-}
+func getMysqldumpTestdata(t *testing.T) testFiles {
+	var files testFiles
 
-func getMultiTableMysqlDumpTestdata(t *testing.T) string {
-	dest := filepath.Join(`testdata`, `mysqldump`, `db.sql`)
+	files.simple = filepath.Join(`testdata`, `mysqldump`, `simple.sql`)
+	files.second = filepath.Join(`testdata`, `mysqldump`, `second.sql`)
+	files.everything = filepath.Join(`testdata`, `mysqldump`, `everything.sql`)
+	files.wholeDB = filepath.Join(`testdata`, `mysqldump`, `db.sql`)
+
 	if rewriteMysqlTestData {
-		genEverythingMysqlTestdata(t, func() {
-			genSecondMysqlTestdata(t, func() {
-				genSimpleMysqlTestdata(t, func() { mysqldump(t, dest, "") })
-			})
+		genMysqlTestdata(t, func() {
+			mysqldump(t, files.simple, "simple")
+			mysqldump(t, files.second, "second")
+			mysqldump(t, files.everything, "everything")
+			mysqldump(t, files.wholeDB, "")
 		})
+
+		_ = os.Remove(files.wholeDB + ".bz2")
+		out, err := exec.Command("bzip2", "-k", files.wholeDB).CombinedOutput()
+		if err != nil {
+			t.Fatal(err, string(out))
+		}
+		gzipFile(t, files.wholeDB)
 	}
-	return dest
+	return files
 }
 
 type outfileDumpCfg struct {
@@ -177,7 +190,7 @@ func getMysqlOutfileTestdata(t *testing.T) ([]simpleTestRow, []outfileDumpCfg) {
 	}
 
 	if rewriteMysqlTestData {
-		genSimpleMysqlTestdata(t, func() {
+		genMysqlTestdata(t, func() {
 			if err := os.RemoveAll(filepath.Join(`testdata`, `mysqlout`)); err != nil {
 				t.Fatal(err)
 			}
@@ -216,94 +229,52 @@ func getMysqlOutfileTestdata(t *testing.T) ([]simpleTestRow, []outfileDumpCfg) {
 	return simpleTestRows, configs
 }
 
-// genMysqlTestdata connects to the a local mysql, creates the passwd table and
-// calls the passed `load` func to populate it and returns a cleanup func.
-func genMysqlTestdata(t *testing.T, name, schema string, load func(*gosql.DB)) func() {
+const secondTableRows = 7
+
+// genMysqlTestdata connects to the a local mysql, creates tables and testdata,
+// calls the dump() func and then cleans up.
+func genMysqlTestdata(t *testing.T, dump func()) {
 	db, err := gosql.Open("mysql", "root@/"+mysqlTestDB)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
-	if _, err := db.Exec(
-		fmt.Sprintf(`DROP TABLE IF EXISTS %s`, name),
-	); err != nil {
+	dropTables := `DROP TABLE IF EXISTS everything, third, second, simple CASCADE`
+	if _, err := db.Exec(dropTables); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(
-		fmt.Sprintf(`CREATE TABLE %s (%s)`, name, schema),
-	); err != nil {
-		t.Fatal(err)
-	}
-	load(db)
-	return func() {
-		db, err := gosql.Open("mysql", "root@/"+mysqlTestDB)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
-		if _, err := db.Exec(
-			fmt.Sprintf(`DROP TABLE IF EXISTS %s`, name),
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
 
-func genSimpleMysqlTestdata(t *testing.T, dump func()) {
-	defer genMysqlTestdata(t,
-		"simple",
-		`i INT PRIMARY KEY, s text, b binary(200)`,
-		func(db *gosql.DB) {
-			for _, tc := range simpleTestRows {
-				s := &tc.s
-				if *s == injectNull {
-					s = nil
-				}
-				if _, err := db.Exec(
-					`INSERT INTO simple VALUES (?, ?, ?)`, tc.i, s, tc.b,
-				); err != nil {
-					t.Fatal(err)
-				}
-			}
-		},
-	)()
-	dump()
-}
+	for _, schema := range []string{
+		`CREATE TABLE simple (i INT PRIMARY KEY AUTO_INCREMENT, s text, b binary(200))`,
+		`CREATE TABLE SECOND (
+			i INT PRIMARY KEY,
+			k INT,
+			FOREIGN KEY (k) REFERENCES simple (i) ON UPDATE CASCADE,
+			UNIQUE KEY ik (i, k),
+			KEY ki (k, i)
+		)`,
+		`CREATE TABLE third (
+			i INT PRIMARY KEY AUTO_INCREMENT,
+			a INT, b INT, C INT,
+			FOREIGN KEY (a, b) REFERENCES second (i, k) ON DELETE RESTRICT ON UPDATE RESTRICT,
+			FOREIGN KEY (c) REFERENCES third (i) ON UPDATE CASCADE
+		)`,
+		`CREATE TABLE everything (
+				i INT PRIMARY KEY,
 
-const secondTableRows = 7
-
-func genSecondMysqlTestdata(t *testing.T, dump func()) {
-	defer genMysqlTestdata(t, `second`, `
-				i       INT PRIMARY KEY,
-				s       VARCHAR(100)
-		`,
-		func(db *gosql.DB) {
-			for i := 0; i < secondTableRows; i++ {
-				if _, err := db.Exec(`INSERT INTO second VALUES (?, ?)`, i, strconv.Itoa(i)); err != nil {
-					t.Fatal(err)
-				}
-			}
-		},
-	)()
-	dump()
-}
-
-func genEverythingMysqlTestdata(t *testing.T, dump func()) {
-	defer genMysqlTestdata(t, `everything`, `
-				i       INT PRIMARY KEY,
-
-				c       CHAR(10),
-				s       VARCHAR(100),
+				c       CHAR(10) NOT NULL,
+				s       VARCHAR(100) DEFAULT 'this is s\'s default value',
 				tx      TEXT,
+				e       ENUM('Small', 'Medium', 'Large'),
 
-				bin     BINARY(100),
+				bin     BINARY(100) NOT NULL,
 				vbin    VARBINARY(100),
 				bl      BLOB,
 
-				dt      DATETIME,
+				dt      DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
 				d       DATE,
-				ts      TIMESTAMP,
+				ts      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 				t       TIME,
 				-- TODO(dt): fix parser: for YEAR's length option
 				-- y       YEAR,
@@ -312,24 +283,61 @@ func genEverythingMysqlTestdata(t *testing.T, dump func()) {
 				nu      NUMERIC,
 				d53     DECIMAL(5,3),
 
-				iw      INT(5),
+				iw      INT(5) NOT NULL,
 				iz      INT ZEROFILL,
-				ti      TINYINT,
+				ti      TINYINT DEFAULT 5,
 				si      SMALLINT,
 				mi      MEDIUMINT,
 				bi      BIGINT,
 
-				fl      FLOAT,
+				fl      FLOAT NOT NULL,
 				rl      REAL,
 				db      DOUBLE,
 
 				f17     FLOAT(17),
 				f47     FLOAT(47),
-				f75     FLOAT(7, 5)
-		`,
-		func(_ *gosql.DB) {},
-	)()
+				f75     FLOAT(7, 5),
+				j       JSON
+		)`,
+	} {
+		if _, err := db.Exec(schema); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, tc := range simpleTestRows {
+		s := &tc.s
+		if *s == injectNull {
+			s = nil
+		}
+		if _, err := db.Exec(
+			`INSERT INTO simple (s, b) VALUES (?, ?)`, s, tc.b,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 1; i <= secondTableRows; i++ {
+		if _, err := db.Exec(`INSERT INTO second VALUES (?, ?)`, -i, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, r := range everythingTestRows {
+		if _, err := db.Exec(
+			`INSERT INTO everything (
+			i, e, c, bin, dt, iz, iw, fl, d53, j
+		) VALUES (
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		)`, r.i, r.e, r.c, r.bin, r.dt, r.iz, r.iw, r.fl, r.d53, r.j); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	dump()
+
+	if _, err := db.Exec(dropTables); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func mysqldump(t *testing.T, dest string, table string) {

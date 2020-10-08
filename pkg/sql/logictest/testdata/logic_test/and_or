@@ -1,0 +1,42 @@
+statement ok
+DROP TABLE IF EXISTS t; CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT)
+
+statement ok
+INSERT INTO t VALUES (1, NULL, NULL), (2, NULL, 1), (3, 1, NULL), (4, 2, 0), (5, 3, 3)
+
+# Test AND short-circuiting projection logic (check that the right side is not
+# evaluated when the left side is false).
+query B
+SELECT a <> 2 AND 3 / b = 1 FROM t ORDER BY k
+----
+NULL
+false
+NULL
+false
+true
+
+# Test AND short-circuiting selection logic (check that the right side is not
+# evaluated when the left side is false).
+query I
+SELECT a FROM t WHERE a <> 2 AND 3 / b = 1 ORDER BY k
+----
+3
+
+# Test OR short-circuiting projection logic (check that the right side is not
+# evaluated when the left side is true).
+query B
+SELECT a = 2 OR 3 / b = 1 FROM t ORDER BY k
+----
+NULL
+NULL
+NULL
+true
+true
+
+# Test OR short-circuiting selection logic (check that the right side is not
+# evaluated when the left side is true).
+query I
+SELECT a FROM t WHERE a = 2 OR 3 / b = 1 ORDER BY k
+----
+2
+3

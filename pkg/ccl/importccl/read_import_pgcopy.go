@@ -18,10 +18,13 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // defaultScanBuffer is the default max row size of the PGCOPY and PGDUMP
@@ -29,24 +32,30 @@ import (
 const defaultScanBuffer = 1024 * 1024 * 4
 
 type pgCopyReader struct {
-	conv rowConverter
-	opts roachpb.PgCopyOptions
+	importCtx *parallelImportContext
+	opts      roachpb.PgCopyOptions
 }
 
 var _ inputConverter = &pgCopyReader{}
 
 func newPgCopyReader(
-	kvCh chan kvBatch,
 	opts roachpb.PgCopyOptions,
-	tableDesc *sqlbase.TableDescriptor,
+	kvCh chan row.KVBatch,
+	walltime int64,
+	parallelism int,
+	tableDesc *tabledesc.Immutable,
+	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) (*pgCopyReader, error) {
-	conv, err := newRowConverter(tableDesc, evalCtx, kvCh)
-	if err != nil {
-		return nil, err
-	}
 	return &pgCopyReader{
-		conv: *conv,
+		importCtx: &parallelImportContext{
+			walltime:   walltime,
+			numWorkers: parallelism,
+			evalCtx:    evalCtx,
+			tableDesc:  tableDesc,
+			targetCols: targetCols,
+			kvCh:       kvCh,
+		},
 		opts: opts,
 	}, nil
 }
@@ -54,8 +63,15 @@ func newPgCopyReader(
 func (d *pgCopyReader) start(ctx ctxgroup.Group) {
 }
 
-func (d *pgCopyReader) inputFinished(ctx context.Context) {
-	close(d.conv.kvCh)
+func (d *pgCopyReader) readFiles(
+	ctx context.Context,
+	dataFiles map[int32]string,
+	resumePos map[int32]int64,
+	format roachpb.IOFileFormat,
+	makeExternalStorage cloud.ExternalStorageFactory,
+	user string,
+) error {
+	return readInputFiles(ctx, dataFiles, resumePos, format, d.readFile, makeExternalStorage, user)
 }
 
 type postgreStreamCopy struct {
@@ -156,8 +172,10 @@ func (p *postgreStreamCopy) Next() (copyData, error) {
 	// Attempt to read an entire line.
 	scanned := p.s.Scan()
 	if err := p.s.Err(); err != nil {
-		if err == bufio.ErrTooLong {
-			err = errors.New("line too long")
+		if errors.Is(err, bufio.ErrTooLong) {
+			err = wrapWithLineTooLongHint(
+				errors.New("line too long"),
+			)
 		}
 		return nil, err
 	}
@@ -244,8 +262,85 @@ func (c copyData) String() string {
 	return buf.String()
 }
 
+type pgCopyProducer struct {
+	importCtx  *parallelImportContext
+	opts       *roachpb.PgCopyOptions
+	input      *fileReader
+	copyStream *postgreStreamCopy
+	row        copyData
+	err        error
+}
+
+var _ importRowProducer = &pgCopyProducer{}
+
+// Scan implements importRowProducer
+func (p *pgCopyProducer) Scan() bool {
+	p.row, p.err = p.copyStream.Next()
+	if p.err == io.EOF {
+		p.err = nil
+		return false
+	}
+
+	return p.err == nil
+}
+
+// Err implements importRowProducer
+func (p *pgCopyProducer) Err() error {
+	return p.err
+}
+
+// Skip implements importRowProducer
+func (p *pgCopyProducer) Skip() error {
+	return nil // no-op
+}
+
+// Row implements importRowProducer
+func (p *pgCopyProducer) Row() (interface{}, error) {
+	return p.row, p.err
+}
+
+// Progress implements importRowProducer
+func (p *pgCopyProducer) Progress() float32 {
+	return p.input.ReadFraction()
+}
+
+type pgCopyConsumer struct {
+	opts *roachpb.PgCopyOptions
+}
+
+var _ importRowConsumer = &pgCopyConsumer{}
+
+// FillDatums implements importRowConsumer
+func (p *pgCopyConsumer) FillDatums(
+	row interface{}, rowNum int64, conv *row.DatumRowConverter,
+) error {
+	data := row.(copyData)
+	var err error
+
+	if len(data) != len(conv.VisibleColTypes) {
+		return newImportRowError(fmt.Errorf(
+			"unexpected number of columns, expected %d values, got %d",
+			len(conv.VisibleColTypes), len(data)), data.String(), rowNum)
+	}
+
+	for i, s := range data {
+		if s == nil {
+			conv.Datums[i] = tree.DNull
+		} else {
+			conv.Datums[i], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
+			if err != nil {
+				col := conv.VisibleCols[i]
+				return newImportRowError(fmt.Errorf(
+					"encountered error %s when attempting to parse %q as %s",
+					err.Error(), col.Name, col.Type.SQLString()), data.String(), rowNum)
+			}
+		}
+	}
+	return nil
+}
+
 func (d *pgCopyReader) readFile(
-	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
 	s := bufio.NewScanner(input)
 	s.Split(bufio.ScanLines)
@@ -256,33 +351,22 @@ func (d *pgCopyReader) readFile(
 		d.opts.Null,
 	)
 
-	for count := int64(1); ; count++ {
-		row, err := c.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return makeRowErr(inputName, count, "%s", err)
-		}
-		if len(row) != len(d.conv.visibleColTypes) {
-			return makeRowErr(inputName, count, "expected %d values, got %d", len(d.conv.visibleColTypes), len(row))
-		}
-		for i, s := range row {
-			if s == nil {
-				d.conv.datums[i] = tree.DNull
-			} else {
-				d.conv.datums[i], err = tree.ParseDatumStringAs(d.conv.visibleColTypes[i], *s, d.conv.evalCtx)
-				if err != nil {
-					col := d.conv.visibleCols[i]
-					return makeRowErr(inputName, count, "parse %q as %s: %s:", col.Name, col.Type.SQLString(), err)
-				}
-			}
-		}
-
-		if err := d.conv.row(ctx, inputIdx, count); err != nil {
-			return makeRowErr(inputName, count, "%s", err)
-		}
+	producer := &pgCopyProducer{
+		importCtx:  d.importCtx,
+		opts:       &d.opts,
+		input:      input,
+		copyStream: c,
 	}
 
-	return d.conv.sendBatch(ctx)
+	consumer := &pgCopyConsumer{
+		opts: &d.opts,
+	}
+
+	fileCtx := &importFileContext{
+		source:   inputIdx,
+		skip:     resumePos,
+		rejected: rejected,
+	}
+
+	return runParallelImport(ctx, d.importCtx, fileCtx, producer, consumer)
 }

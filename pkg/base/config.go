@@ -1,35 +1,26 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package base
 
 import (
 	"context"
-	"crypto/tls"
-	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // Base config defaults.
@@ -41,6 +32,9 @@ const (
 
 	// From IANA Service Name and Transport Protocol Port Number Registry. See
 	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=cockroachdb
+	//
+	// This is used for both RPC and SQL connections unless --sql-addr
+	// is used on the command line and/or SQLAddr is set in the Config object.
 	DefaultPort = "26257"
 
 	// The default port for HTTP-for-humans.
@@ -48,6 +42,7 @@ const (
 
 	// NB: net.JoinHostPort is not a constant.
 	defaultAddr     = ":" + DefaultPort
+	defaultSQLAddr  = ":" + DefaultPort
 	defaultHTTPAddr = ":" + DefaultHTTPPort
 
 	// NetworkTimeout is the timeout used for network operations.
@@ -63,6 +58,19 @@ const (
 	// leader lease active duration should be of the raft election timeout.
 	defaultRangeLeaseRaftElectionTimeoutMultiplier = 3
 
+	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
+	// See https://github.com/cockroachdb/cockroach/issues/20310.
+	DefaultMetricsSampleInterval = 10 * time.Second
+
+	// defaultRaftHeartbeatIntervalTicks is the default value for
+	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
+	// each heartbeat.
+	defaultRaftHeartbeatIntervalTicks = 5
+
+	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatInterval
+	// used by the rpc context.
+	defaultRPCHeartbeatInterval = 3 * time.Second
+
 	// rangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
 	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
@@ -75,44 +83,84 @@ const (
 	// liveness record would be eagerly renewed after 2 seconds.
 	livenessRenewalFraction = 0.5
 
-	// DefaultTableDescriptorLeaseDuration is the default mean duration a
+	// DefaultDescriptorLeaseDuration is the default mean duration a
 	// lease will be acquired for. The actual duration is jittered using
 	// the jitter fraction. Jittering is done to prevent multiple leases
 	// from being renewed simultaneously if they were all acquired
 	// simultaneously.
-	DefaultTableDescriptorLeaseDuration = 5 * time.Minute
+	DefaultDescriptorLeaseDuration = 5 * time.Minute
 
-	// DefaultTableDescriptorLeaseJitterFraction is the default factor
+	// DefaultDescriptorLeaseJitterFraction is the default factor
 	// that we use to randomly jitter the lease duration when acquiring a
 	// new lease and the lease renewal timeout.
-	DefaultTableDescriptorLeaseJitterFraction = 0.25
+	DefaultDescriptorLeaseJitterFraction = 0.05
 
-	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
+	// DefaultDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
-	DefaultTableDescriptorLeaseRenewalTimeout = time.Minute
+	DefaultDescriptorLeaseRenewalTimeout = time.Minute
 )
 
-var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
-	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+// DefaultHistogramWindowInterval returns the default rotation window for
+// histograms.
+func DefaultHistogramWindowInterval() time.Duration {
+	const defHWI = 6 * DefaultMetricsSampleInterval
 
-type lazyHTTPClient struct {
-	once       sync.Once
-	httpClient http.Client
-	err        error
+	// Rudimentary overflow detection; this can result if
+	// DefaultMetricsSampleInterval is set to an extremely large number, likely
+	// in the context of a test or an intentional attempt to disable metrics
+	// collection. Just return the default in this case.
+	if defHWI < DefaultMetricsSampleInterval {
+		return DefaultMetricsSampleInterval
+	}
+	return defHWI
 }
 
-type lazyCertificateManager struct {
-	once sync.Once
-	cm   *security.CertificateManager
-	err  error
-}
+var (
+	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
+	// invocations that must pass between elections.
+	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+
+	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
+	// Range's Raft log can grow to before log truncations are triggered while at
+	// least one follower is missing. If all followers are active, the quota pool
+	// is responsible for ensuring the raft log doesn't grow without bound by
+	// making sure the leader doesn't get too far ahead.
+	defaultRaftLogTruncationThreshold = envutil.EnvOrDefaultInt64(
+		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 8<<20 /* 8 MB */)
+
+	// defaultRaftMaxSizePerMsg specifies the maximum aggregate byte size of Raft
+	// log entries that a leader will send to followers in a single MsgApp.
+	defaultRaftMaxSizePerMsg = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_SIZE_PER_MSG", 32<<10 /* 32 KB */)
+
+	// defaultRaftMaxSizeCommittedSizePerReady specifies the maximum aggregate
+	// byte size of the committed log entries which a node will receive in a
+	// single Ready.
+	defaultRaftMaxCommittedSizePerReady = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_COMMITTED_SIZE_PER_READY", 64<<20 /* 64 MB */)
+
+	// defaultRaftMaxInflightMsgs specifies how many "inflight" MsgApps a leader
+	// will send to a given follower without hearing a response.
+	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 128)
+)
 
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().
 type Config struct {
-	// Insecure specifies whether to use SSL or not.
+	// Insecure specifies whether to disable security checks throughout
+	// the code base.
 	// This is really not recommended.
+	// See: https://github.com/cockroachdb/cockroach/issues/53404
 	Insecure bool
+
+	// AcceptSQLWithoutTLS, when set, makes it possible for SQL
+	// clients to authenticate without TLS on a secure cluster.
+	//
+	// Authentication is, as usual, subject to the HBA configuration: in
+	// the default case, password authentication is still mandatory.
+	AcceptSQLWithoutTLS bool
 
 	// SSLCAKey is used to sign new certs.
 	SSLCAKey string
@@ -131,29 +179,76 @@ type Config struct {
 	// route to an interface that Addr is listening on.
 	AdvertiseAddr string
 
-	// HTTPAddr is server's public HTTP address.
-	//
-	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
-	// performance problems are addressed upstream.
-	//
-	// See https://github.com/grpc/grpc-go/issues/586.
+	// ClusterName is the name used as a sanity check when a node joins
+	// an uninitialized cluster, or when an uninitialized node joins an
+	// initialized cluster. The initial RPC handshake verifies that the
+	// name matches on both sides. Once the cluster ID has been
+	// negotiated on both sides, the cluster name is not used any more.
+	ClusterName string
+
+	// DisableClusterNameVerification, when set, alters the cluster name
+	// verification to only verify that a non-empty cluster name on
+	// both sides match. This is meant for use while rolling an
+	// existing cluster into using a new cluster name.
+	DisableClusterNameVerification bool
+
+	// SplitListenSQL indicates whether to listen for SQL
+	// clients on a separate address from RPC requests.
+	SplitListenSQL bool
+
+	// SQLAddr is the configured SQL listen address.
+	// This is used if SplitListenSQL is set to true.
+	SQLAddr string
+
+	// SQLAdvertiseAddr is the advertised SQL address.
+	// This is computed from SQLAddr if specified otherwise Addr.
+	SQLAdvertiseAddr string
+
+	// HTTPAddr is the configured HTTP listen address.
 	HTTPAddr string
 
-	// The certificate manager. Must be accessed through GetCertificateManager.
-	certificateManager lazyCertificateManager
+	// DisableTLSForHTTP, if set, disables TLS for the HTTP listener.
+	DisableTLSForHTTP bool
 
-	// httpClient uses the client TLS config. It is initialized lazily.
-	httpClient lazyHTTPClient
+	// HTTPAdvertiseAddr is the advertised HTTP address.
+	// This is computed from HTTPAddr if specified otherwise Addr.
+	HTTPAdvertiseAddr string
 
-	// HistogramWindowInterval is used to determine the approximate length of time
-	// that individual samples are retained in in-memory histograms. Currently,
-	// it is set to the arbitrary length of six times the Metrics sample interval.
-	// See the comment in server.Config for more details.
-	HistogramWindowInterval time.Duration
+	// RPCHeartbeatInterval controls how often a Ping request is sent on peer
+	// connections to determine connection health and update the local view
+	// of remote clocks.
+	RPCHeartbeatInterval time.Duration
+
+	// Enables the use of an PTP hardware clock user space API for HLC current time.
+	// This contains the path to the device to be used (i.e. /dev/ptp0)
+	ClockDevicePath string
+
+	// AutoInitializeCluster, if set, causes the server to bootstrap the
+	// cluster. Note that if two nodes are started with this flag set
+	// and also configured to join each other, each node will bootstrap
+	// its own unique cluster and the join will fail.
+	//
+	// The flag exists mostly for the benefit of tests, and for
+	// `cockroach start-single-node`.
+	AutoInitializeCluster bool
 }
 
-func didYouMeanInsecureError(err error) error {
-	return errors.Wrap(err, "problem using security settings, did you mean to use --insecure?")
+// HistogramWindowInterval is used to determine the approximate length of time
+// that individual samples are retained in in-memory histograms. Currently,
+// it is set to the arbitrary length of six times the Metrics sample interval.
+//
+// The length of the window must be longer than the sampling interval due to
+// issue #12998, which was causing histograms to return zero values when sampled
+// because all samples had been evicted.
+//
+// Note that this is only intended to be a temporary fix for the above issue,
+// as our current handling of metric histograms have numerous additional
+// problems. These are tracked in github issue #7896, which has been given
+// a relatively high priority in light of recent confusion around histogram
+// metrics. For more information on the issues underlying our histogram system
+// and the proposed fixes, please see issue #7896.
+func (*Config) HistogramWindowInterval() time.Duration {
+	return DefaultHistogramWindowInterval()
 }
 
 // InitDefaults sets up the default values for a config.
@@ -164,13 +259,23 @@ func (cfg *Config) InitDefaults() {
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr
+	cfg.DisableTLSForHTTP = false
+	cfg.HTTPAdvertiseAddr = ""
+	cfg.SplitListenSQL = false
+	cfg.SQLAddr = defaultSQLAddr
+	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SSLCertsDir = DefaultCertsDirectory
-	cfg.certificateManager = lazyCertificateManager{}
+	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
+	cfg.ClusterName = ""
+	cfg.DisableClusterNameVerification = false
+	cfg.ClockDevicePath = ""
+	cfg.AcceptSQLWithoutTLS = false
 }
 
-// HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
+// HTTPRequestScheme returns "http" or "https" based on the value of
+// Insecure and DisableTLSForHTTP.
 func (cfg *Config) HTTPRequestScheme() string {
-	if cfg.Insecure {
+	if cfg.Insecure || cfg.DisableTLSForHTTP {
 		return httpScheme
 	}
 	return httpsScheme
@@ -180,158 +285,8 @@ func (cfg *Config) HTTPRequestScheme() string {
 func (cfg *Config) AdminURL() *url.URL {
 	return &url.URL{
 		Scheme: cfg.HTTPRequestScheme(),
-		Host:   cfg.HTTPAddr,
+		Host:   cfg.HTTPAdvertiseAddr,
 	}
-}
-
-// GetClientCertPaths returns the paths to the client cert and key.
-func (cfg *Config) GetClientCertPaths(user string) (string, string, error) {
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return "", "", err
-	}
-	return cm.GetClientCertPaths(user)
-}
-
-// GetCACertPath returns the path to the CA certificate.
-func (cfg *Config) GetCACertPath() (string, error) {
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return "", err
-	}
-	return cm.GetCACertPath()
-}
-
-// LoadSecurityOptions extends a url.Values with SSL settings suitable for
-// the given server config. It returns true if and only if the URL
-// already contained SSL config options.
-func (cfg *Config) LoadSecurityOptions(options url.Values, username string) error {
-	if cfg.Insecure {
-		options.Add("sslmode", "disable")
-	} else {
-		// Fetch CA cert. This is required.
-		caCertPath, err := cfg.GetCACertPath()
-		if err != nil {
-			return didYouMeanInsecureError(err)
-		}
-		options.Add("sslmode", "verify-full")
-		options.Add("sslrootcert", caCertPath)
-
-		// Fetch certs, but don't fail, we may be using a password.
-		certPath, keyPath, err := cfg.GetClientCertPaths(username)
-		if err == nil {
-			options.Add("sslcert", certPath)
-			options.Add("sslkey", keyPath)
-		}
-	}
-	return nil
-}
-
-// PGURL constructs a URL for the postgres endpoint, given a server
-// config. There is no default database set.
-func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
-	options := url.Values{}
-	if err := cfg.LoadSecurityOptions(options, user.Username()); err != nil {
-		return nil, err
-	}
-	return &url.URL{
-		Scheme:   "postgresql",
-		User:     user,
-		Host:     cfg.AdvertiseAddr,
-		RawQuery: options.Encode(),
-	}, nil
-}
-
-// GetCertificateManager returns the certificate manager, initializing it
-// on the first call.
-func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error) {
-	cfg.certificateManager.once.Do(func() {
-		cfg.certificateManager.cm, cfg.certificateManager.err =
-			security.NewCertificateManager(cfg.SSLCertsDir)
-	})
-	return cfg.certificateManager.cm, cfg.certificateManager.err
-}
-
-// InitializeNodeTLSConfigs tries to load client and server-side TLS configs.
-// It also enables the reload-on-SIGHUP functionality on the certificate manager.
-// This should be called early in the life of the server to make sure there are no
-// issues with TLS configs.
-// Returns the certificate manager if successfully created and in secure mode.
-func (cfg *Config) InitializeNodeTLSConfigs(
-	stopper *stop.Stopper,
-) (*security.CertificateManager, error) {
-	if cfg.Insecure {
-		return nil, nil
-	}
-
-	if _, err := cfg.GetServerTLSConfig(); err != nil {
-		return nil, err
-	}
-	if _, err := cfg.GetClientTLSConfig(); err != nil {
-		return nil, err
-	}
-
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return nil, err
-	}
-	cm.RegisterSignalHandler(stopper)
-	return cm, nil
-}
-
-// GetClientTLSConfig returns the client TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a TLS config using certs for the config.User.
-func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
-	// Early out.
-	if cfg.Insecure {
-		return nil, nil
-	}
-
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return nil, didYouMeanInsecureError(err)
-	}
-
-	tlsCfg, err := cm.GetClientTLSConfig(cfg.User)
-	if err != nil {
-		return nil, didYouMeanInsecureError(err)
-	}
-	return tlsCfg, nil
-}
-
-// GetServerTLSConfig returns the server TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a server TLS config.
-func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
-	// Early out.
-	if cfg.Insecure {
-		return nil, nil
-	}
-
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return nil, didYouMeanInsecureError(err)
-	}
-
-	tlsCfg, err := cm.GetServerTLSConfig()
-	if err != nil {
-		return nil, didYouMeanInsecureError(err)
-	}
-	return tlsCfg, nil
-}
-
-// GetHTTPClient returns the http client, initializing it
-// if needed. It uses the client TLS config.
-func (cfg *Config) GetHTTPClient() (http.Client, error) {
-	cfg.httpClient.once.Do(func() {
-		cfg.httpClient.httpClient.Timeout = 10 * time.Second
-		var transport http.Transport
-		cfg.httpClient.httpClient.Transport = &transport
-		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetClientTLSConfig()
-	})
-
-	return cfg.httpClient.httpClient, cfg.httpClient.err
 }
 
 // RaftConfig holds raft tuning parameters.
@@ -344,9 +299,63 @@ type RaftConfig struct {
 	// unless overridden.
 	RaftElectionTimeoutTicks int
 
+	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
+	RaftHeartbeatIntervalTicks int
+
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	RangeLeaseRaftElectionTimeoutMultiplier float64
+
+	// RaftLogTruncationThreshold controls how large a single Range's Raft log
+	// can grow. When a Range's Raft log grows above this size, the Range will
+	// begin performing log truncations.
+	RaftLogTruncationThreshold int64
+
+	// RaftProposalQuota controls the maximum aggregate size of Raft commands
+	// that a leader is allowed to propose concurrently.
+	//
+	// By default, the quota is set to a fraction of the Raft log truncation
+	// threshold. In doing so, we ensure all replicas have sufficiently up to
+	// date logs so that when the log gets truncated, the followers do not need
+	// non-preemptive snapshots. Changing this deserves care. Too low and
+	// everything comes to a grinding halt, too high and we're not really
+	// throttling anything (we'll still generate snapshots).
+	RaftProposalQuota int64
+
+	// RaftMaxUncommittedEntriesSize controls how large the uncommitted tail of
+	// the Raft log can grow. The limit is meant to provide protection against
+	// unbounded Raft log growth when quorum is lost and entries stop being
+	// committed but continue to be proposed.
+	RaftMaxUncommittedEntriesSize uint64
+
+	// RaftMaxSizePerMsg controls the maximum aggregate byte size of Raft log
+	// entries the leader will send to followers in a single MsgApp. Smaller
+	// value lowers the raft recovery cost (during initial probing and after
+	// message loss during normal operation). On the other hand, it limits the
+	// throughput during normal replication.
+	RaftMaxSizePerMsg uint64
+
+	// RaftMaxCommittedSizePerReady controls the maximum aggregate byte size of
+	// committed Raft log entries a replica will receive in a single Ready.
+	RaftMaxCommittedSizePerReady uint64
+
+	// RaftMaxInflightMsgs controls how many "inflight" MsgApps Raft will send
+	// to a follower without hearing a response. The total number of Raft log
+	// entries is a combination of this setting and RaftMaxSizePerMsg. The
+	// current default settings provide for up to 4 MB of raft log to be sent
+	// without acknowledgement. With an average entry size of 1 KB that
+	// translates to ~4096 commands that might be executed in the handling of a
+	// single raft.Ready operation.
+	RaftMaxInflightMsgs int
+
+	// Splitting a range which has a replica needing a snapshot results in two
+	// ranges in that state. The delay configured here slows down splits when in
+	// that situation (limiting to those splits not run through the split
+	// queue). The most important target here are the splits performed by
+	// backup/restore.
+	//
+	// -1 to disable.
+	RaftDelaySplitToSuppressSnapshotTicks int
 }
 
 // SetDefaults initializes unset fields.
@@ -357,8 +366,55 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
 	}
+	if cfg.RaftHeartbeatIntervalTicks == 0 {
+		cfg.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
+	}
 	if cfg.RangeLeaseRaftElectionTimeoutMultiplier == 0 {
 		cfg.RangeLeaseRaftElectionTimeoutMultiplier = defaultRangeLeaseRaftElectionTimeoutMultiplier
+	}
+	if cfg.RaftLogTruncationThreshold == 0 {
+		cfg.RaftLogTruncationThreshold = defaultRaftLogTruncationThreshold
+	}
+	if cfg.RaftProposalQuota == 0 {
+		// By default, set this to a fraction of RaftLogMaxSize. See the comment
+		// on the field for the tradeoffs of setting this higher or lower.
+		cfg.RaftProposalQuota = cfg.RaftLogTruncationThreshold / 2
+	}
+	if cfg.RaftMaxUncommittedEntriesSize == 0 {
+		// By default, set this to twice the RaftProposalQuota. The logic here
+		// is that the quotaPool should be responsible for throttling proposals
+		// in all cases except for unbounded Raft re-proposals because it queues
+		// efficiently instead of dropping proposals on the floor indiscriminately.
+		cfg.RaftMaxUncommittedEntriesSize = uint64(2 * cfg.RaftProposalQuota)
+	}
+	if cfg.RaftMaxSizePerMsg == 0 {
+		cfg.RaftMaxSizePerMsg = uint64(defaultRaftMaxSizePerMsg)
+	}
+	if cfg.RaftMaxCommittedSizePerReady == 0 {
+		cfg.RaftMaxCommittedSizePerReady = uint64(defaultRaftMaxCommittedSizePerReady)
+	}
+	if cfg.RaftMaxInflightMsgs == 0 {
+		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
+	}
+	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
+		// The Raft Ticks interval defaults to 200ms, and an election is 15
+		// ticks. Add a generous amount of ticks to make sure even a backed up
+		// Raft snapshot queue is going to make progress when a (not overly
+		// concurrent) amount of splits happens.
+		// The generous amount should result in a delay sufficient to
+		// transmit at least one snapshot with the slow delay, which
+		// with default settings is max 64MB at 2MB/s, ie 32 seconds.
+		//
+		// The resulting delay configured here is about 50s.
+		cfg.RaftDelaySplitToSuppressSnapshotTicks = 3*cfg.RaftElectionTimeoutTicks + 200
+	}
+
+	// Minor validation to ensure sane tuning.
+	if cfg.RaftProposalQuota > int64(cfg.RaftMaxUncommittedEntriesSize) {
+		panic("raft proposal quota should not be above max uncommitted entries size")
+	}
+	if cfg.RaftProposalQuota < int64(cfg.RaftMaxSizePerMsg)*int64(cfg.RaftMaxInflightMsgs) {
+		panic("raft proposal quota should not be below per-replica replication window size")
 	}
 }
 
@@ -401,6 +457,16 @@ func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal t
 	return
 }
 
+// SentinelGossipTTL is time-to-live for the gossip sentinel. The sentinel
+// informs a node whether or not it's connected to the primary gossip network
+// and not just a partition. As such it must expire fairly quickly and be
+// continually re-gossiped as a connected gossip network is necessary to
+// propagate liveness. The replica which is the lease holder of the first range
+// gossips it.
+func (cfg RaftConfig) SentinelGossipTTL() time.Duration {
+	return cfg.RangeLeaseActiveDuration() / 2
+}
+
 // DefaultRetryOptions should be used for retrying most
 // network-dependent operations.
 func DefaultRetryOptions() retry.Options {
@@ -412,6 +478,29 @@ func DefaultRetryOptions() retry.Options {
 		MaxBackoff:     1 * time.Second,
 		Multiplier:     2,
 	}
+}
+
+// StorageConfig contains storage configs for all storage engine.
+type StorageConfig struct {
+	Attrs roachpb.Attributes
+	// Dir is the data directory for the Pebble instance.
+	Dir string
+	// If true, creating the instance fails if the target directory does not hold
+	// an initialized instance.
+	//
+	// Makes no sense for in-memory instances.
+	MustExist bool
+	// MaxSize is used for calculating free space and making rebalancing
+	// decisions. Zero indicates that there is no maximum size.
+	MaxSize int64
+	// Settings instance for cluster-wide knobs.
+	Settings *cluster.Settings
+	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
+	// This may force the store version to versionFileRegistry if currently lower.
+	UseFileRegistry bool
+	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
+	// to C CCL code.
+	ExtraOptions []byte
 }
 
 const (
@@ -438,8 +527,24 @@ type TempStorageConfig struct {
 	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
 	// has to be a disk monitor.
 	Mon *mon.BytesMonitor
-	// StoreIdx stores the index of the StoreSpec this TempStorageConfig will use.
-	SpecIdx int
+	// Spec stores the StoreSpec this TempStorageConfig will use.
+	Spec StoreSpec
+}
+
+// ExternalIODirConfig describes various configuration options pertaining
+// to external storage implementations.
+// TODO(adityamaru): Rename ExternalIODirConfig to ExternalIOConfig because it
+// is now used to configure both ExternalStorage and KMS.
+type ExternalIODirConfig struct {
+	// Disables the use of external HTTP endpoints.
+	// This turns off http:// external storage as well as any custom
+	// endpoints cloud storage implementations.
+	DisableHTTP bool
+	// Disables the use of implicit credentials when accessing external services.
+	// Implicit credentials are obtained from the system environment.
+	// This turns off implicit credentials, and requires the user to provide
+	// necessary access keys.
+	DisableImplicitCredentials bool
 }
 
 // TempStorageConfigFromEnv creates a TempStorageConfig.
@@ -448,65 +553,55 @@ type TempStorageConfig struct {
 func TempStorageConfigFromEnv(
 	ctx context.Context,
 	st *cluster.Settings,
-	firstStore StoreSpec,
+	useStore StoreSpec,
 	parentDir string,
 	maxSizeBytes int64,
-	specIdx int,
 ) TempStorageConfig {
-	inMem := parentDir == "" && firstStore.InMemory
-	var monitor mon.BytesMonitor
+	inMem := parentDir == "" && useStore.InMemory
+	var monitorName string
 	if inMem {
-		monitor = mon.MakeMonitor(
-			"in-mem temp storage",
-			mon.MemoryResource,
-			nil,             /* curCount */
-			nil,             /* maxHist */
-			1024*1024,       /* increment */
-			maxSizeBytes/10, /* noteworthy */
-			st,
-		)
-		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+		monitorName = "in-mem temp storage"
 	} else {
-		monitor = mon.MakeMonitor(
-			"temp disk storage",
-			mon.DiskResource,
-			nil,             /* curCount */
-			nil,             /* maxHist */
-			1024*1024,       /* increment */
-			maxSizeBytes/10, /* noteworthy */
-			st,
-		)
-		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+		monitorName = "temp disk storage"
 	}
-
+	monitor := mon.NewMonitor(
+		monitorName,
+		mon.DiskResource,
+		nil,             /* curCount */
+		nil,             /* maxHist */
+		1024*1024,       /* increment */
+		maxSizeBytes/10, /* noteworthy */
+		st,
+	)
+	monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: inMem,
-		Mon:      &monitor,
-		SpecIdx:  specIdx,
+		Mon:      monitor,
+		Spec:     useStore,
 	}
 }
 
-// LeaseManagerConfig holds table lease manager parameters.
+// LeaseManagerConfig holds lease manager parameters.
 type LeaseManagerConfig struct {
-	// TableDescriptorLeaseDuration is the mean duration a lease will be
+	// DescriptorLeaseDuration is the mean duration a lease will be
 	// acquired for.
-	TableDescriptorLeaseDuration time.Duration
+	DescriptorLeaseDuration time.Duration
 
-	// TableDescriptorLeaseJitterFraction is the factor that we use to
+	// DescriptorLeaseJitterFraction is the factor that we use to
 	// randomly jitter the lease duration when acquiring a new lease and
 	// the lease renewal timeout.
-	TableDescriptorLeaseJitterFraction float64
+	DescriptorLeaseJitterFraction float64
 
-	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
+	// DefaultDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
-	TableDescriptorLeaseRenewalTimeout time.Duration
+	DescriptorLeaseRenewalTimeout time.Duration
 }
 
 // NewLeaseManagerConfig initializes a LeaseManagerConfig with default values.
 func NewLeaseManagerConfig() *LeaseManagerConfig {
 	return &LeaseManagerConfig{
-		TableDescriptorLeaseDuration:       DefaultTableDescriptorLeaseDuration,
-		TableDescriptorLeaseJitterFraction: DefaultTableDescriptorLeaseJitterFraction,
-		TableDescriptorLeaseRenewalTimeout: DefaultTableDescriptorLeaseRenewalTimeout,
+		DescriptorLeaseDuration:       DefaultDescriptorLeaseDuration,
+		DescriptorLeaseJitterFraction: DefaultDescriptorLeaseJitterFraction,
+		DescriptorLeaseRenewalTimeout: DefaultDescriptorLeaseRenewalTimeout,
 	}
 }

@@ -23,3 +23,15 @@
 [submodule "pkg/ui/yarn-vendor"]
 	path = pkg/ui/yarn-vendor
 	url = https://github.com/cockroachdb/yarn-vendored
+[submodule "c-deps/krb5"]
+	path = c-deps/krb5
+	url = https://github.com/cockroachdb/krb5.git
+[submodule "c-deps/libedit"]
+	path = c-deps/libedit
+	url = https://github.com/cockroachdb/libedit.git
+[submodule "c-deps/geos"]
+	path = c-deps/geos
+	url = https://github.com/cockroachdb/geos.git
+[submodule "c-deps/proj"]
+	path = c-deps/proj
+	url = https://github.com/cockroachdb/PROJ.git

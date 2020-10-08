@@ -1,0 +1,246 @@
+# This file contains telemetry tests for sql.plan.* counters.
+
+exec
+CREATE TABLE x (a INT PRIMARY KEY)
+----
+
+# Tests for EXPLAIN counters.
+
+feature-allowlist
+sql.plan.explain
+sql.plan.explain-analyze
+sql.plan.explain-opt
+sql.plan.explain-opt-verbose
+sql.plan.explain-distsql
+----
+
+feature-usage
+EXPLAIN SELECT * FROM x
+----
+sql.plan.explain
+
+feature-usage
+EXPLAIN (DISTSQL) SELECT * FROM x
+----
+sql.plan.explain-distsql
+
+feature-usage
+EXPLAIN ANALYZE SELECT * FROM x
+----
+sql.plan.explain-analyze
+
+feature-usage
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM x
+----
+
+feature-usage
+EXPLAIN (OPT) SELECT * FROM x
+----
+sql.plan.explain-opt
+
+feature-usage
+EXPLAIN (OPT, VERBOSE) SELECT * FROM x
+----
+sql.plan.explain-opt-verbose
+
+# Tests for hints.
+
+feature-allowlist
+sql.plan.hints.*
+----
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS a(x) INNER HASH JOIN (VALUES (1)) AS b(y) ON x = y
+----
+sql.plan.hints.hash-join
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS a(x) INNER MERGE JOIN (VALUES (1)) AS b(y) ON x = y
+----
+sql.plan.hints.merge-join
+
+feature-usage
+SELECT a FROM (VALUES (1)) AS b(y) INNER LOOKUP JOIN x ON y = a
+----
+sql.plan.hints.lookup-join
+
+feature-usage
+SELECT * FROM x@primary
+----
+sql.plan.hints.index
+sql.plan.hints.index.select
+
+feature-usage
+UPDATE x@primary SET a=1 WHERE a>1
+----
+sql.plan.hints.index
+sql.plan.hints.index.update
+
+feature-usage
+DELETE FROM x@primary WHERE a>1
+----
+sql.plan.hints.index
+sql.plan.hints.index.delete
+
+# Tests for tracking important setting changes.
+
+feature-allowlist
+sql.plan.reorder-joins.*
+sql.plan.automatic-stats.*
+----
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 0
+----
+sql.plan.reorder-joins.set-limit-0
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 3
+----
+sql.plan.reorder-joins.set-limit-3
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 6
+----
+sql.plan.reorder-joins.set-limit-6
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 20
+----
+sql.plan.reorder-joins.set-limit-more
+
+feature-usage
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = on
+----
+sql.plan.automatic-stats.enabled
+
+feature-usage
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off
+----
+sql.plan.automatic-stats.disabled
+
+feature-usage
+RESET CLUSTER SETTING sql.stats.automatic_collection.enabled
+----
+sql.plan.automatic-stats.enabled
+
+# Test telemetry for manual statistics creation.
+feature-allowlist
+sql.plan.stats.created
+----
+
+feature-usage
+CREATE STATISTICS stats FROM x
+----
+sql.plan.stats.created
+
+# Test various planning counters.
+feature-allowlist
+sql.plan.cte.*
+----
+
+feature-usage
+WITH a AS (SELECT 1) SELECT * FROM a
+----
+sql.plan.cte
+
+feature-usage
+WITH RECURSIVE a AS (SELECT 1 UNION ALL SELECT * FROM a WHERE false) SELECT * FROM a
+----
+sql.plan.cte
+sql.plan.cte.recursive
+
+feature-allowlist
+sql.plan.lateral-join
+sql.plan.subquery.*
+----
+
+feature-usage
+SELECT * FROM (VALUES (1), (2)) AS a(x), LATERAL (SELECT a.x+1)
+----
+sql.plan.lateral-join
+
+feature-usage
+SELECT * FROM (VALUES (1), (2)) AS a(x) JOIN LATERAL (SELECT a.x+1 AS x) AS b ON a.x < b.x
+----
+sql.plan.lateral-join
+
+feature-usage
+SELECT 1 = (SELECT a FROM x LIMIT 1)
+----
+sql.plan.subquery
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)
+----
+sql.plan.subquery.correlated
+
+# Test some sql.plan.ops counters, using some esoteric operators unlikely to be
+# executed in background activity).
+feature-allowlist
+sql.plan.ops.cast.string::inet
+sql.plan.ops.bin.jsonb - string
+sql.plan.ops.array.*
+----
+
+feature-usage
+SELECT '1.2.3.4'::STRING::INET
+----
+sql.plan.ops.cast.string::inet
+
+feature-usage
+SELECT '{"a":"b","c":123}'::JSON - 'a'
+----
+sql.plan.ops.bin.jsonb - string
+
+feature-usage
+SELECT ARRAY (SELECT 1)[1]
+----
+sql.plan.ops.array.flatten
+sql.plan.ops.array.ind
+
+feature-usage
+INSERT INTO x SELECT unnest(ARRAY[9, 10, 11, 12])
+----
+sql.plan.ops.array.cons
+
+# Test a few sql.plan.opt.node counters.
+feature-allowlist
+sql.plan.opt.node.project-set
+sql.plan.opt.node.join.*
+----
+
+feature-usage
+SELECT EXISTS(SELECT * FROM generate_series(1,2))
+----
+sql.plan.opt.node.project-set
+
+feature-usage
+SELECT *
+FROM (SELECT * FROM x WHERE a < 0) AS x1
+NATURAL INNER MERGE JOIN (SELECT * FROM x WHERE a > 0) AS x2
+----
+sql.plan.opt.node.join.algo.merge
+sql.plan.opt.node.join.type.inner
+
+# Tests for partial index counters.
+
+feature-allowlist
+sql.plan.opt.partial-index.scan
+sql.plan.opt.partial-index.lookup-join
+----
+
+exec
+CREATE INDEX i ON x (a) WHERE a > 0
+----
+
+feature-usage
+SELECT a FROM x@i WHERE a > 0
+----
+sql.plan.opt.partial-index.scan
+
+feature-usage
+SELECT x1.a FROM x x1 INNER LOOKUP JOIN x x2 ON x1.a = x2.a WHERE x2.a > 0
+----
+sql.plan.opt.partial-index.lookup-join
+sql.plan.opt.partial-index.scan

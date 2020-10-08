@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package ts
 
@@ -25,18 +21,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
-	"github.com/pkg/errors"
-
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
+	"github.com/kr/pretty"
 )
 
 // testModelRunner is a model-based testing structure used to verify that time
@@ -85,7 +79,7 @@ type testModelRunner struct {
 // be called before using it.
 func newTestModelRunner(t *testing.T) testModelRunner {
 	st := cluster.MakeTestingClusterSettings()
-	workerMonitor := mon.MakeUnlimitedMonitor(
+	workerMonitor := mon.NewUnlimitedMonitor(
 		context.Background(),
 		"timeseries-test-worker",
 		mon.MemoryResource,
@@ -94,7 +88,7 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 		math.MaxInt64,
 		st,
 	)
-	resultMonitor := mon.MakeUnlimitedMonitor(
+	resultMonitor := mon.NewUnlimitedMonitor(
 		context.Background(),
 		"timeseries-test-result",
 		mon.MemoryResource,
@@ -107,8 +101,8 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 		t:                      t,
 		model:                  testmodel.NewModelDB(),
 		LocalTestCluster:       &localtestcluster.LocalTestCluster{},
-		workerMemMonitor:       &workerMonitor,
-		resultMemMonitor:       &resultMonitor,
+		workerMemMonitor:       workerMonitor,
+		resultMemMonitor:       resultMonitor,
 		queryMemoryBudget:      math.MaxInt64,
 		firstColumnarTimestamp: make(map[string]int64),
 	}
@@ -118,7 +112,7 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 // time series DB.
 func (tm *testModelRunner) Start() {
 	tm.LocalTestCluster.Start(tm.t, testutils.NewNodeTestBaseContext(),
-		kv.InitFactoryForLocalTestCluster)
+		kvcoord.InitFactoryForLocalTestCluster)
 	tm.DB = NewDB(tm.LocalTestCluster.DB, tm.Cfg.Settings)
 }
 
@@ -128,13 +122,13 @@ func (tm *testModelRunner) getActualData() map[string]roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keys.TimeseriesPrefix
 	endKey := startKey.PrefixEnd()
-	keyValues, _, _, err := engine.MVCCScan(context.Background(), tm.Eng, startKey, endKey, math.MaxInt64, tm.Clock.Now(), true, nil)
+	res, err := storage.MVCCScan(context.Background(), tm.Eng, startKey, endKey, tm.Clock.Now(), storage.MVCCScanOptions{})
 	if err != nil {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err)
 	}
 
 	kvMap := make(map[string]roachpb.Value)
-	for _, kv := range keyValues {
+	for _, kv := range res.KVs {
 		kvMap[string(kv.Key)] = kv.Value
 	}
 
@@ -286,11 +280,11 @@ func (tm *testModelRunner) storeTimeSeriesData(r Resolution, data []tspb.TimeSer
 		for _, d := range data {
 			rdata = append(rdata, computeRollupsFromData(d, r.SampleDuration()))
 		}
-		if err := tm.DB.storeRollup(context.TODO(), r, rdata); err != nil {
+		if err := tm.DB.storeRollup(context.Background(), r, rdata); err != nil {
 			tm.t.Fatalf("error storing time series rollups: %s", err)
 		}
 	} else {
-		if err := tm.DB.StoreData(context.TODO(), r, data); err != nil {
+		if err := tm.DB.StoreData(context.Background(), r, data); err != nil {
 			tm.t.Fatalf("error storing time series data: %s", err)
 		}
 	}
@@ -309,7 +303,7 @@ func (tm *testModelRunner) storeTimeSeriesData(r Resolution, data []tspb.TimeSer
 func (tm *testModelRunner) prune(nowNanos int64, timeSeries ...timeSeriesResolutionInfo) {
 	// Prune time series from the system under test.
 	if err := tm.DB.pruneTimeSeries(
-		context.TODO(),
+		context.Background(),
 		tm.LocalTestCluster.DB,
 		timeSeries,
 		hlc.Timestamp{
@@ -358,7 +352,7 @@ func (tm *testModelRunner) rollupWithMemoryContext(
 	qmc QueryMemoryContext, nowNanos int64, timeSeries ...timeSeriesResolutionInfo,
 ) {
 	if err := tm.DB.rollupTimeSeries(
-		context.TODO(),
+		context.Background(),
 		timeSeries,
 		hlc.Timestamp{
 			WallTime: nowNanos,
@@ -414,7 +408,7 @@ func (tm *testModelRunner) maintain(nowNanos int64) {
 	snap := tm.Store.Engine().NewSnapshot()
 	defer snap.Close()
 	if err := tm.DB.MaintainTimeSeries(
-		context.TODO(),
+		context.Background(),
 		snap,
 		roachpb.RKey(keys.TimeseriesPrefix),
 		roachpb.RKey(keys.TimeseriesKeyMax),
@@ -555,9 +549,9 @@ func (mq *modelQuery) queryDB() ([]tspb.TimeSeriesDatapoint, []string, error) {
 	memContext := MakeQueryMemoryContext(
 		mq.workerMemMonitor, mq.resultMemMonitor, mq.QueryMemoryOptions,
 	)
-	defer memContext.Close(context.TODO())
+	defer memContext.Close(context.Background())
 	return mq.modelRunner.DB.Query(
-		context.TODO(), mq.Query, mq.diskResolution, mq.QueryTimespan, memContext,
+		context.Background(), mq.Query, mq.diskResolution, mq.QueryTimespan, memContext,
 	)
 }
 
@@ -860,7 +854,7 @@ func TestPruneThreshold(t *testing.T) {
 		if db.WriteRollups() {
 			expected = resolution10sDefaultRollupThreshold.Nanoseconds()
 		} else {
-			expected = resolution10sDefaultPruneThreshold.Nanoseconds()
+			expected = deprecatedResolution10sDefaultPruneThreshold.Nanoseconds()
 		}
 		result := db.PruneThreshold(Resolution10s)
 		if expected != result {

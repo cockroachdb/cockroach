@@ -1,7 +1,246 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
-# Note that the odd '0000-01-01 hh:mi:ss +0000 UTC' result format is an
+# Note that the odd '0000-01-01 hh:mi:ss +0000 +0000' result format is an
 # artifact of how pq displays TIMETZs.
+#
+# We sometimes cast timetz to strings here to avoid confusion with lib/pq
+# printing out timetz values with dates.
+
+statement ok
+CREATE TABLE timetz_test (a TIMETZ PRIMARY KEY, b TIMETZ, c INT)
+
+statement ok
+INSERT INTO timetz_test VALUES
+  ('11:00:00+0', '12:00:00+1', 1),
+  ('12:00:00+1', '10:00:00-1', 2),
+  ('13:00:00+2', '15:00:00-6', 3),
+  ('14:00:00+3', '24:00:00-1559', 4),
+  ('15:00:00+3', '15:00:00+3', 5)
+
+# NOTE: lib/pq parses '24:00:00-1559' incorrectly, but the data
+# structure underneath should still be correct.
+query B
+SELECT '24:00:00-1559'::timetz > '23:59:59-1559'::timetz;
+----
+true
+
+query T
+select
+  extract('hour' from '11:12+03:01'::timetz)::string || ':' ||
+  extract('minute' from '11:12+03:01'::timetz)::string || 'Z' ||
+  extract('timezone_hour' from '11:12+03:01'::timetz)::string || ':' ||
+  extract('timezone_minute' from '11:12+03:01'::timetz)::string
+----
+11:12Z3:1
+
+query T
+select
+  extract('hour' from '11:12-03:01'::timetz)::string || ':' ||
+  extract('minute' from '11:12-03:01'::timetz)::string || 'Z' ||
+  extract('timezone_hour' from '11:12-03:01'::timetz)::string || ':' ||
+  extract('timezone_minute' from '11:12-03:01'::timetz)::string
+----
+11:12Z-3:-1
+
+query TTI
+SELECT a::string, b::string, c FROM timetz_test ORDER BY a, c ASC
+----
+11:00:00+00:00:00  12:00:00+01:00:00  1
+12:00:00+01:00:00  10:00:00-01:00:00  2
+13:00:00+02:00:00  15:00:00-06:00:00  3
+14:00:00+03:00:00  24:00:00-15:59:00  4
+15:00:00+03:00:00  15:00:00+03:00:00  5
+
+query TTI
+SELECT a::string, b::string, c FROM timetz_test ORDER BY a DESC, c ASC
+----
+15:00:00+03:00:00  15:00:00+03:00:00  5
+14:00:00+03:00:00  24:00:00-15:59:00  4
+13:00:00+02:00:00  15:00:00-06:00:00  3
+12:00:00+01:00:00  10:00:00-01:00:00  2
+11:00:00+00:00:00  12:00:00+01:00:00  1
+
+query TTI
+SELECT a::string, b::string, c FROM timetz_test WHERE a > b ORDER BY c
+----
+11:00:00+00:00:00  12:00:00+01:00:00  1
+
+query TTI
+SELECT a::string, b::string, c FROM timetz_test WHERE a = b ORDER BY c
+----
+15:00:00+03:00:00  15:00:00+03:00:00  5
+
+# Test various casts involving different timezones.
+subtest cast_tests
+
+statement ok
+SET TIME ZONE -5
+
+query T
+SELECT '11:00+03:00'::timetz::time
+----
+0000-01-01 11:00:00 +0000 UTC
+
+# This should take the timezone in the background.
+query T
+SELECT '11:00'::time::timetz
+----
+0000-01-01 11:00:00 -0500 -0500
+
+# This should observe the time and zone from the timestamp.
+query T
+SELECT '2001-01-01 11:00+04:00'::timestamptz::timetz
+----
+0000-01-01 02:00:00 -0500 -0500
+
+statement ok
+SET TIME ZONE UTC
+
+subtest current_time_tests
+
+# current_time cannot be subtracted, but can as a timestamp.
+query B
+select
+  ('1970-01-01 ' || current_time(3)::string)::timestamp -
+  ('1970-01-01 ' || current_time::string)::timestamp
+<= '1ms'::interval
+----
+true
+
+statement ok
+CREATE TABLE current_time_test (
+  id INTEGER PRIMARY KEY,
+  a TIMETZ(3) DEFAULT CURRENT_TIME,
+  b TIMETZ DEFAULT CURRENT_TIME
+)
+
+statement ok
+INSERT INTO current_time_test (id) VALUES (1)
+
+statement ok
+INSERT INTO current_time_test (id, a, b) VALUES
+  (2, current_time, current_time),
+  (3, current_time, current_time(3))
+
+query I
+SELECT id FROM current_time_test WHERE
+  ('1970-01-01 ' || b::string)::timestamp -
+  ('1970-01-01 ' || a::string)::timestamp
+> '1ms'::interval ORDER BY id ASC
+----
+
+# switching timezones should make current_time() change timezones too.
+statement ok
+set time zone +4
+
+query B
+select current_time() + current_timestamp()::date = current_timestamp()
+----
+true
+
+statement ok
+set time zone UTC
+
+subtest precision_tests
+
+query error precision 7 out of range
+select '1:00:00.001':::TIMETZ(7)
+
+statement ok
+CREATE TABLE timetz_precision_test (
+  id integer PRIMARY KEY,
+  t TIMETZ(5)
+)
+
+statement ok
+INSERT INTO timetz_precision_test VALUES
+  (1,'12:00:00.123456+03:00'),
+  (2,'12:00:00.12345+03:00'),
+  (3,'12:00:00.1234+03:00'),
+  (4,'12:00:00.123+03:00'),
+  (5,'12:00:00.12+03:00'),
+  (6,'12:00:00.1+03:00'),
+  (7,'12:00:00+03:00')
+
+query IT
+SELECT * FROM timetz_precision_test ORDER BY id ASC
+----
+1  0000-01-01 12:00:00.12346 +0300 +0300
+2  0000-01-01 12:00:00.12345 +0300 +0300
+3  0000-01-01 12:00:00.1234 +0300 +0300
+4  0000-01-01 12:00:00.123 +0300 +0300
+5  0000-01-01 12:00:00.12 +0300 +0300
+6  0000-01-01 12:00:00.1 +0300 +0300
+7  0000-01-01 12:00:00 +0300 +0300
+
+query TT
+select column_name, data_type FROM [SHOW COLUMNS FROM timetz_precision_test] ORDER BY column_name
+----
+id  INT8
+t   TIMETZ(5)
+
+statement ok
+ALTER TABLE timetz_precision_test ALTER COLUMN t TYPE timetz(6)
+
+statement ok
+INSERT INTO timetz_precision_test VALUES
+  (100,'12:00:00.123456+03:00')
+
+query IT
+SELECT * FROM timetz_precision_test ORDER BY id ASC
+----
+1    0000-01-01 12:00:00.12346 +0300 +0300
+2    0000-01-01 12:00:00.12345 +0300 +0300
+3    0000-01-01 12:00:00.1234 +0300 +0300
+4    0000-01-01 12:00:00.123 +0300 +0300
+5    0000-01-01 12:00:00.12 +0300 +0300
+6    0000-01-01 12:00:00.1 +0300 +0300
+7    0000-01-01 12:00:00 +0300 +0300
+100  0000-01-01 12:00:00.123456 +0300 +0300
+
+query TT
+select column_name, data_type FROM [SHOW COLUMNS FROM timetz_precision_test] ORDER BY column_name
+----
+id  INT8
+t   TIMETZ(6)
+
+subtest regression_42749
+
+# cast to string to prove it is 24:00
+query T
+SELECT '0000-01-01 24:00:00'::timetz::string
+----
+24:00:00+00:00:00
+
+query T
+SELECT '2001-01-01 01:24:00+3'::timetz
+----
+0000-01-01 01:24:00 +0300 +0300
+
+# Test various evals using different timezones.
+subtest eval_test
+
+statement ok
+SET TIME ZONE -3
+
+query B
+SELECT '11:00+5'::timetz = '11:00+5'::timetz
+----
+true
+
+query B
+SELECT '11:00-3'::timetz = '11:00'::time
+----
+true
+
+query B
+SELECT '11:00-2'::timetz < '11:00'::time
+----
+true
+
+statement ok
+SET TIME ZONE UTC
+
+# These are the old tests that were in the old iteration. Included for completeness.
+subtest windchan7_tests
 
 query T
 SELECT '12:00:00':::TIMETZ;
@@ -26,42 +265,44 @@ SELECT '12:00:00.456789+00':::TIMETZ;
 query T
 SELECT '12:00:00.456789-07':::TIMETZ;
 ----
-0000-01-01 19:00:00.456789 +0000 UTC
+0000-01-01 12:00:00.456789 -0700 -0700
 
 query T
 SELECT '23:59:59.999999-10':::TIMETZ;
 ----
-0000-01-01 09:59:59.999999 +0000 UTC
+0000-01-01 23:59:59.999999 -1000 -1000
 
-statement error could not parse
+query T
 SELECT '24:00:00':::TIMETZ;
+----
+0000-01-02 00:00:00 +0000 UTC
 
 query T
 SELECT TIMETZ '12:00:00-07';
 ----
-0000-01-01 19:00:00 +0000 UTC
+0000-01-01 12:00:00 -0700 -0700
 
 # Casting
 
 query T
 SELECT '12:00:00-07'::TIMETZ;
 ----
-0000-01-01 19:00:00 +0000 UTC
+0000-01-01 12:00:00 -0700 -0700
 
 query T
 select '12:00:00-07':::STRING::TIMETZ;
 ----
-0000-01-01 19:00:00 +0000 UTC
+0000-01-01 12:00:00 -0700 -0700
 
 query T
 select '22:00:00-07':::STRING::TIMETZ;
 ----
-0000-01-01 05:00:00 +0000 UTC
+0000-01-01 22:00:00 -0700 -0700
 
 query T
 SELECT '09:00:00.456-07' COLLATE de::TIMETZ;
 ----
-0000-01-01 16:00:00.456 +0000 UTC
+0000-01-01 09:00:00.456 -0700 -0700
 
 query T
 SELECT '2017-01-01 12:00:00-07':::TIMESTAMPTZ::TIMETZ;
@@ -76,7 +317,7 @@ SELECT '12:00:00-07':::TIME::TIMETZ;
 query T
 select '12:00:00-07:00'::TIMETZ::STRING;
 ----
-12:00:00-07:00
+12:00:00-07:00:00
 
 query T
 select '11:00:00-07:00'::TIMETZ::TIME;
@@ -86,7 +327,7 @@ select '11:00:00-07:00'::TIMETZ::TIME;
 query T
 select '11:00:00-07:00'::TIMETZ::TIMETZ;
 ----
-0000-01-01 18:00:00 +0000 UTC
+0000-01-01 11:00:00 -0700 -0700
 
 # Comparison
 
@@ -158,14 +399,14 @@ false
 query B
 SELECT '12:00:00-05':::TIMETZ IN ('11:00:00-06');
 ----
-true
+false
 
 # Arithmetic
 
 query T
 SELECT '12:00:00-01':::TIMETZ + '1s':::INTERVAL
 ----
-0000-01-01 13:00:01 +0000 UTC
+0000-01-01 12:00:01 -0100 -0100
 
 query T
 SELECT '23:59:59+00':::TIMETZ + '1s':::INTERVAL
@@ -180,62 +421,37 @@ SELECT '23:59:59+00':::TIMETZ + '4m':::INTERVAL
 query T
 SELECT '12:00:00-07':::TIMETZ + '1d':::INTERVAL
 ----
-0000-01-01 19:00:00 +0000 UTC
+0000-01-01 12:00:00 -0700 -0700
 
 query T
 SELECT '1s':::INTERVAL + '12:00:00+03':::TIMETZ
 ----
-0000-01-01 09:00:01 +0000 UTC
+0000-01-01 12:00:01 +0300 +0300
 
 query T
 SELECT '12:00:00-07':::TIMETZ - '1s':::INTERVAL
 ----
-0000-01-01 18:59:59 +0000 UTC
+0000-01-01 11:59:59 -0700 -0700
 
 query T
 SELECT '12:00:00-07':::TIMETZ - '1d':::INTERVAL
 ----
-0000-01-01 19:00:00 +0000 UTC
+0000-01-01 12:00:00 -0700 -0700
 
 query T
 SELECT '01:00:00-07':::TIMETZ - '9h':::INTERVAL
 ----
-0000-01-01 23:00:00 +0000 UTC
-
-query T
-SELECT '12:00:00-07':::TIMETZ - '11:59:59':::TIME
-----
-0000-01-01 07:00:01 +0000 UTC
-
-query T
-SELECT '11:59:59+00':::TIMETZ - '12:00:00':::TIME
-----
-0000-01-01 23:59:59 +0000 UTC
-
-query T
-SELECT '11:59:59-04':::TIMETZ - '4:59:59':::TIME
-----
-0000-01-01 11:00:00 +0000 UTC
-
-query T
-SELECT '00:00:59+07':::TIMETZ + '12:00:00':::TIME
-----
-0000-01-01 05:00:59 +0000 UTC
-
-query T
-SELECT '03:00:00':::TIME + '08:00:59+07':::TIMETZ
-----
-0000-01-01 04:00:59 +0000 UTC
+0000-01-01 16:00:00 -0700 -0700
 
 query T
 SELECT '2017-01-01':::DATE + '12:00:00-03':::TIMETZ
 ----
-2017-01-01 15:00:00 +0000 +0000
+2017-01-01 15:00:00 +0000 UTC
 
 query T
 SELECT '12:00:00+03':::TIMETZ + '2017-01-01':::DATE
 ----
-2017-01-01 09:00:00 +0000 +0000
+2017-01-01 09:00:00 +0000 UTC
 
 # Storage
 
@@ -254,11 +470,11 @@ INSERT INTO timetzs VALUES
 query T
 SELECT * FROM timetzs ORDER BY t
 ----
-0000-01-01 01:59:59.999999 +0000 UTC
-0000-01-01 07:00:00 +0000 UTC
-0000-01-01 17:00:00 +0000 UTC
-0000-01-01 17:00:00.000001 +0000 UTC
-0000-01-01 18:00:00.000001 +0000 UTC
+0000-01-01 00:00:00.000001 +0600 +0600
+0000-01-01 11:59:59.999999 +1000 +1000
+0000-01-01 00:00:00 -0700 -0700
+0000-01-01 12:00:00 -0500 -0500
+0000-01-01 12:00:00.000001 -0500 -0500
 0000-01-01 23:59:59.999999 +0000 UTC
 
 statement ok
@@ -275,38 +491,182 @@ query T rowsort
 SELECT * FROM tzarrays
 ----
 {}
-{07:00:00+00:00}
-{07:00:00+00:00,19:00:00.000001+00:00}
-{20:00:00+00:00}
+{00:00:00-07:00:00}
+{00:00:00-07:00:00,12:00:00.000001-07:00:00}
+{13:00:00-07:00:00}
 
 # Built-ins
 
-query I
+query R
 SELECT extract(hour from timetz '12:01:02.345678-07')
 ----
 12
 
-query I
+query R
 SELECT extract(minute from timetz '12:01:02.345678+03')
 ----
 1
 
-query I
+query R
 SELECT extract(second from timetz '12:01:02.345678-06')
 ----
-2
+2.345678
 
-query I
+query R
 SELECT extract(millisecond from timetz '12:01:02.345678+00')
 ----
-345
+2345.678
 
-query I
+query R
 SELECT extract(microsecond from timetz '12:01:02.345678-05')
 ----
-345678
+2.345678e+06
 
-query I
+query R
 SELECT extract(epoch from timetz '12:00:00+04')
 ----
-43200
+28800
+
+# Adapted from `src/test/regress/expected/timetz.out` in postgres
+subtest regress_postgres
+
+statement ok
+CREATE TABLE TIMETZ_TBL (id serial primary key, f1 time(2) with time zone)
+
+# Changed PDT/PST/EDT -> zone offsets, as pgdate does not support abbreviations.
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('00:01-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('01:00-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('02:03-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('07:07-05')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('08:08-04')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('11:59-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('12:00-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('12:01-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('23:59-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('11:59:59.99 PM-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('2003-03-07 15:36:39 America/New_York')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('2003-07-07 15:36:39 America/New_York')
+
+# pgdate supports this, but postgres does not.
+# INSERT INTO TIMETZ_TBL (f1) VALUES ('15:36:39 America/New_York')
+
+# this should fail (timezone not specified without a date)
+query error could not parse "1970-01-01 15:36:39 m2" as TimeTZ
+INSERT INTO TIMETZ_TBL (f1) VALUES ('15:36:39 m2')
+
+# this should fail (dynamic timezone abbreviation without a date)
+query error could not parse "1970-01-01 15:36:39 MSK m2" as TimeTZ
+INSERT INTO TIMETZ_TBL (f1) VALUES ('15:36:39 MSK m2')
+
+query T
+SELECT f1::string AS "Time TZ" FROM TIMETZ_TBL ORDER BY id
+----
+00:01:00-07:00:00
+01:00:00-07:00:00
+02:03:00-07:00:00
+07:07:00-05:00:00
+08:08:00-04:00:00
+11:59:00-07:00:00
+12:00:00-07:00:00
+12:01:00-07:00:00
+23:59:00-07:00:00
+23:59:59.99-07:00:00
+15:36:39-05:00:00
+15:36:39-04:00:00
+
+query T
+SELECT f1::string AS "Three" FROM TIMETZ_TBL WHERE f1 < '05:06:07-07' ORDER BY id
+----
+00:01:00-07:00:00
+01:00:00-07:00:00
+02:03:00-07:00:00
+
+query T
+SELECT f1::string AS "Seven" FROM TIMETZ_TBL WHERE f1 > '05:06:07-07' ORDER BY id
+----
+07:07:00-05:00:00
+08:08:00-04:00:00
+11:59:00-07:00:00
+12:00:00-07:00:00
+12:01:00-07:00:00
+23:59:00-07:00:00
+23:59:59.99-07:00:00
+15:36:39-05:00:00
+15:36:39-04:00:00
+
+query T
+SELECT f1::string AS "None" FROM TIMETZ_TBL WHERE f1 < '00:00-07' ORDER BY id
+----
+
+query T
+SELECT f1::string AS "Ten" FROM TIMETZ_TBL WHERE f1 >= '00:00-07' ORDER BY id
+----
+00:01:00-07:00:00
+01:00:00-07:00:00
+02:03:00-07:00:00
+07:07:00-05:00:00
+08:08:00-04:00:00
+11:59:00-07:00:00
+12:00:00-07:00:00
+12:01:00-07:00:00
+23:59:00-07:00:00
+23:59:59.99-07:00:00
+15:36:39-05:00:00
+15:36:39-04:00:00
+
+query error pq: unsupported binary operator: <timetz\(2\)> \+ <timetz>
+SELECT f1 + time with time zone '00:01' AS "Illegal" FROM TIMETZ_TBL ORDER BY id
+
+# check default types and expressions get truncated on insert / update.
+subtest regression_44774
+
+statement ok
+CREATE TABLE regression_44774 (
+  a timetz(3) DEFAULT '12:13:14.123456'
+)
+
+statement ok
+INSERT INTO regression_44774 VALUES (default), ('19:21:57.261286')
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+0000-01-01 12:13:14.123 +0000 UTC
+0000-01-01 19:21:57.261 +0000 UTC
+
+statement ok
+UPDATE regression_44774
+SET a = '13:14:15.123456'::timetz + '1 sec'::interval
+WHERE 1 = 1
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+0000-01-01 13:14:16.123 +0000 UTC
+0000-01-01 13:14:16.123 +0000 UTC
+
+statement ok
+DROP TABLE regression_44774

@@ -1,0 +1,12 @@
+run ok
+with k=k
+ put  v=v ts=0,1
+ get  ts=0,1
+ get  ts=0,2
+ get  ts=1
+----
+get: "k" -> /BYTES/v @0,1
+get: "k" -> /BYTES/v @0,1
+get: "k" -> /BYTES/v @0,1
+>> at end:
+data: "k"/0,1 -> /BYTES/v

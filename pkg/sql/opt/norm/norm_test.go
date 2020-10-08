@@ -1,31 +1,24 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package norm_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+	"github.com/cockroachdb/datadriven"
 )
 
 // TestNormRules tests the various Optgen normalization rules found in the rules
@@ -42,58 +35,16 @@ import (
 //   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
 //   ...
 func TestNormRules(t *testing.T) {
-	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps |
-		opt.ExprFmtHideQualifications | opt.ExprFmtHideScalars
+	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
 	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
 		catalog := testcat.New()
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			tester := testutils.NewOptTester(catalog, d.Input)
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			tester := opttester.New(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
 			return tester.RunCommand(t, d)
 		})
 	})
-}
-
-// TestRuleProps tests the rule properties that power some of the normalization
-// rules. The tests are data-driven cases of the form:
-//   <command>
-//   <SQL statement>
-//   ----
-//   <expected results>
-//
-// See OptTester.Handle for supported commands.
-func TestRuleProps(t *testing.T) {
-	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideQualifications |
-		opt.ExprFmtHideScalars
-	datadriven.Walk(t, "testdata/props", func(t *testing.T, path string) {
-		catalog := testcat.New()
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			tester := testutils.NewOptTester(catalog, d.Input)
-			tester.Flags.ExprFormat = fmtFlags
-			return tester.RunCommand(t, d)
-		})
-	})
-}
-
-// Test the FoldNullInEmpty rule. Can't create empty tuple on right side of
-// IN/NOT IN in SQL, so do it here.
-func TestRuleFoldNullInEmpty(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := norm.NewFactory(&evalCtx)
-
-	null := f.ConstructNull(f.InternType(types.Unknown))
-	empty := f.ConstructTuple(memo.EmptyList, f.InternType(memo.EmptyTupleType))
-	in := f.ConstructIn(null, empty)
-	ev := memo.MakeNormExprView(f.Memo(), in)
-	if ev.Operator() != opt.FalseOp {
-		t.Errorf("expected NULL IN () to fold to False")
-	}
-
-	notIn := f.ConstructNotIn(null, empty)
-	ev = memo.MakeNormExprView(f.Memo(), notIn)
-	if ev.Operator() != opt.TrueOp {
-		t.Errorf("expected NULL NOT IN () to fold to True")
-	}
 }
 
 // Ensure that every binary commutative operator overload can have its operands
@@ -101,7 +52,7 @@ func TestRuleFoldNullInEmpty(t *testing.T) {
 func TestRuleBinaryAssumption(t *testing.T) {
 	fn := func(op opt.Operator) {
 		for _, overload := range tree.BinOps[opt.BinaryOpReverseMap[op]] {
-			binOp := overload.(tree.BinOp)
+			binOp := overload.(*tree.BinOp)
 			if !memo.BinaryOverloadExists(op, binOp.RightType, binOp.LeftType) {
 				t.Errorf("could not find inverse for overload: %+v", op)
 			}

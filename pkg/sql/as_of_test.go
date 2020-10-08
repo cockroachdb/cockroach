@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql_test
 
@@ -20,28 +16,28 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: asyncSchemaChangerDisabled,
-	}
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }}
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const val1 = 1
 	const val2 = 2
@@ -176,10 +172,10 @@ func TestAsOfTime(t *testing.T) {
 		}
 	}
 
-	// Old queries shouldn't work.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '1969-12-31'").Scan(&i); err == nil {
+	// Queries before the Unix epoch definitely shouldn't work.
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '1969-12-30'").Scan(&i); err == nil {
 		t.Fatal("expected error")
-	} else if !testutils.IsError(err, "pq: batch timestamp -86400.000000000,0 must be after GC threshold 0.000000000,0") {
+	} else if !testutils.IsError(err, "AS OF SYSTEM TIME: timestamp before 1970-01-01T00:00:00Z is invalid") {
 		t.Fatal(err)
 	}
 
@@ -193,11 +189,29 @@ func TestAsOfTime(t *testing.T) {
 	// Subqueries do work of the timestamps are consistent.
 	_, err = db.Query(
 		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME '1980-01-01'", tsVal1))
-	if !testutils.IsError(err, "pq: cannot specify AS OF SYSTEM TIME with different timestamps") {
+	if !testutils.IsError(err, "cannot specify AS OF SYSTEM TIME with different timestamps") {
 		t.Fatalf("expected inconsistent statements, got: %v", err)
 	}
 	if err := db.QueryRow(
 		fmt.Sprintf("SELECT (SELECT 1 FROM d.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME %s", tsVal1, tsVal1)).Scan(&i); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lightly test AS OF SYSTEM TIME with SET TRANSACTION, more complete testing
+	// for this functionality lives in the logic_tests.
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(fmt.Sprintf("SET TRANSACTION AS OF SYSTEM TIME %s", tsVal1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow("SELECT a FROM d.t WHERE a > $1", 0).Scan(&i); err != nil {
+		t.Fatal(err)
+	} else if i != val1 {
+		t.Fatalf("expected %v, got %v", val1, i)
+	}
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -211,11 +225,23 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatalf("expected %v, got %v", val1, i)
 	}
 
-	// Can't use in a transaction.
+	// Can use in a transaction by using the SET TRANSACTION syntax
+	if err := db.QueryRow(fmt.Sprintf(`
+			BEGIN;
+			SET TRANSACTION AS OF SYSTEM TIME %s;
+			SELECT a FROM d.t;
+			COMMIT;
+	`, tsVal1)).Scan(&i); err != nil {
+		t.Fatal(err)
+	} else if i != val1 {
+		t.Fatalf("expected %v, got %v", val1, i)
+	}
+
+	// Can't use in a transaction without SET TRANSACTION AS OF SYSTEM TIME syntax
 	_, err = db.Query(
 		fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
-	if !testutils.IsError(err, "cannot be used inside a transaction") {
-		t.Fatalf("expected not supported, got: %v", err)
+	if !testutils.IsError(err, "try SET TRANSACTION AS OF SYSTEM TIME") {
+		t.Fatalf("expected try SET TRANSACTION AS OF SYSTEM TIME, got: %v", err)
 	}
 }
 
@@ -224,10 +250,11 @@ func TestAsOfTime(t *testing.T) {
 // a failure will occur.
 func TestAsOfRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, cmdFilters := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const val1 = 1
 	const val2 = 2
@@ -268,13 +295,13 @@ func TestAsOfRetry(t *testing.T) {
 		name: 5,
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args storagebase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *roachpb.Error {
 			magicVals.Lock()
 			defer magicVals.Unlock()
 
 			switch req := args.Req.(type) {
 			case *roachpb.ScanRequest:
-				if client.TestingIsRangeLookupRequest(req) {
+				if kv.TestingIsRangeLookupRequest(req) {
 					return nil
 				}
 				for key, count := range magicVals.restartCounts {
@@ -283,12 +310,13 @@ func TestAsOfRetry(t *testing.T) {
 					}
 					if count > 0 && bytes.Contains(req.Key, []byte(key)) {
 						magicVals.restartCounts[key]--
-						err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
+						err := roachpb.NewTransactionRetryError(
+							roachpb.RETRY_REASON_UNKNOWN, "filter err")
 						magicVals.failedValues[string(req.Key)] =
 							failureRecord{err, args.Hdr.Txn}
 						txn := args.Hdr.Txn.Clone()
-						txn.Timestamp = txn.Timestamp.Add(0, 1)
-						return roachpb.NewErrorWithTxn(err, &txn)
+						txn.WriteTimestamp = txn.WriteTimestamp.Add(0, 1)
+						return roachpb.NewErrorWithTxn(err, txn)
 					}
 				}
 			}
@@ -321,9 +349,10 @@ func TestAsOfRetry(t *testing.T) {
 // Test that tracing works with SELECT ... AS OF SYSTEM TIME.
 func TestShowTraceAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	const val1 = 456
 	const val2 = 789

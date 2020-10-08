@@ -1,3 +1,1 @@
 alter_rename_table_stmt ::=
-	'ALTER' 'TABLE' table_name 'RENAME' 'COLUMN' column_current_name 'TO' column_name
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'RENAME' 'COLUMN' column_current_name 'TO' column_name

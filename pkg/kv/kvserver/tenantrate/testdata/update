@@ -1,0 +1,74 @@
+# Test updating the configuration of the rate limiter.
+
+init
+readrequests:  { rate: 1, burst: 2 }
+writerequests: { rate: 1, burst: 2 }
+readbytes:     { rate: 1024, burst: 2048 }
+writebytes:    { rate: 10, burst: 20 }
+----
+00:00:00.000
+
+get_tenants
+- 2
+----
+[2#1]
+
+# Launch a request that puts the limiter in debt by 10.
+
+launch
+- { id: g1, tenant: 2, iswrite: true, writebytes: 30 }
+----
+[g1@2]
+
+await
+- g1
+----
+[]
+
+# Launch a request that will require 20, it will need to block for 3s to deal
+# with the current debt.
+
+launch
+- { id: g1, tenant: 2, iswrite: true, writebytes: 20 }
+----
+[g1@2]
+
+# Observe that the request will need to wait 3s.
+
+timers
+----
+00:00:03.000
+
+# Advance time by a second, at this point the limiter should have zero
+# writebytes available.
+
+advance
+1s
+----
+00:00:01.000
+
+# Update the settings to double the writebytes rate.
+
+update_settings
+writebytes: { rate: 20, burst: 10 }
+----
+00:00:01.000
+
+# Observe that the timer has been updated to reflect the rate change.
+
+timers
+----
+00:00:01.500
+
+# Advance to the timer and observe that the request is unblocked.
+
+advance
+500ms
+----
+00:00:01.500
+
+await
+- g1
+----
+[]
+

@@ -1,0 +1,21 @@
+# String concatenation.
+
+eval
+'a' || 'b'
+----
+'ab'
+
+eval
+'a' || (1 + 2)::char
+----
+'a3'
+
+eval
+b'hello' || 'world'
+----
+'\x68656c6c6f776f726c64'
+
+eval
+array['foo'] || '{a,b}'
+----
+ARRAY['foo','a','b']

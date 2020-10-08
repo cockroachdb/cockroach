@@ -1,62 +1,62 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 type dropDatabaseNode struct {
 	n      *tree.DropDatabase
-	dbDesc *sqlbase.DatabaseDescriptor
-	td     []toDelete
+	dbDesc *dbdesc.Mutable
+	d      *dropCascadeState
 }
 
 // DropDatabase drops a database.
 // Privileges: DROP on database and DROP on all tables in the database.
 //   Notes: postgres allows only the database owner to DROP a database.
 //          mysql requires the DROP privileges on the database.
-// TODO(XisiHuang): our DROP DATABASE is like the postgres DROP SCHEMA
-// (cockroach database == postgres schema). the postgres default of not
-// dropping the schema if there are dependent objects is more sensible
-// (see the RESTRICT and CASCADE options).
 func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
 
 	if string(n.Name) == p.SessionData().Database && p.SessionData().SafeUpdates {
-		return nil, pgerror.NewDangerousStatementErrorf("DROP DATABASE on current database")
+		return nil, pgerror.DangerousStatementf("DROP DATABASE on current database")
 	}
 
 	// Check that the database exists.
-	var dbDesc *DatabaseDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		dbDesc, err = ResolveDatabase(ctx, p, string(n.Name), !n.IfExists)
-	})
+	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), !n.IfExists)
 	if err != nil {
 		return nil, err
 	}
@@ -69,97 +69,153 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	tbNames, err := GetObjectNames(ctx, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
 	if err != nil {
 		return nil, err
 	}
 
-	if len(tbNames) > 0 {
+	d := newDropCascadeState()
+
+	for _, schema := range schemas {
+		found, res, err := p.ResolveMutableSchemaDescriptor(ctx, dbDesc.ID, schema, true /* required */)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			log.Warningf(ctx, "could not find schema %s under database %d", schema, dbDesc.ID)
+			continue
+		}
+		if err := d.collectObjectsInSchema(ctx, p, dbDesc, &res); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(d.objectNamesToDelete) > 0 {
 		switch n.DropBehavior {
 		case tree.DropRestrict:
-			return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
+			return nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"database %q is not empty and RESTRICT was specified",
-				tree.ErrNameString(&dbDesc.Name))
+				tree.ErrNameString(dbDesc.GetName()))
 		case tree.DropDefault:
 			// The default is CASCADE, however be cautious if CASCADE was
 			// not specified explicitly.
 			if p.SessionData().SafeUpdates {
-				return nil, pgerror.NewDangerousStatementErrorf(
+				return nil, pgerror.DangerousStatementf(
 					"DROP DATABASE on non-empty database without explicit CASCADE")
 			}
 		}
 	}
 
-	td := make([]toDelete, len(tbNames))
-	for i := range tbNames {
-		tbDesc, err := p.prepareDrop(ctx, &tbNames[i], true /*required*/, anyDescType)
-		if err != nil {
-			return nil, err
-		}
-		if tbDesc == nil {
-			// Database claims to have this table, but it does not exist.
-			return nil, errors.Errorf("table %q was described by database %q, but does not exist",
-				tree.ErrString(&tbNames[i]), n.Name)
-		}
-		// Recursively check permissions on all dependent views, since some may
-		// be in different databases.
-		for _, ref := range tbDesc.DependedOnBy {
-			if err := p.canRemoveDependentView(ctx, tbDesc, ref, tree.DropCascade); err != nil {
-				return nil, err
-			}
-		}
-		td[i] = toDelete{&tbNames[i], tbDesc}
-	}
-
-	td, err = p.filterCascadedTables(ctx, td)
-	if err != nil {
+	if err := d.resolveCollectedObjects(ctx, p, dbDesc); err != nil {
 		return nil, err
 	}
 
-	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td}, nil
+	return &dropDatabaseNode{
+		n:      n,
+		dbDesc: dbDesc,
+		d:      d,
+	}, nil
 }
 
 func (n *dropDatabaseNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("database"))
+
 	ctx := params.ctx
 	p := params.p
-	tbNameStrings := make([]string, 0, len(n.td))
-	for _, toDel := range n.td {
-		tbDesc := toDel.desc
-		if tbDesc.IsView() {
-			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, tree.DropCascade)
-			if err != nil {
+
+	var schemasIDsToDelete []descpb.ID
+	for _, schemaToDelete := range n.d.schemasToDelete {
+		switch schemaToDelete.Kind {
+		case catalog.SchemaTemporary, catalog.SchemaPublic:
+			// The public schema and temporary schemas are cleaned up by just removing
+			// the existing namespace entries.
+			if err := catalogkv.RemoveSchemaNamespaceEntry(
+				ctx,
+				p.txn,
+				p.ExecCfg().Codec,
+				n.dbDesc.GetID(),
+				schemaToDelete.Name,
+			); err != nil {
 				return err
 			}
-			// TODO(knz): dependent dropped views should be qualified here.
-			tbNameStrings = append(tbNameStrings, cascadedViews...)
-		} else {
-			cascadedViews, err := p.dropTableImpl(params, tbDesc)
-			if err != nil {
+		case catalog.SchemaUserDefined:
+			// For user defined schemas, we have to do a bit more work.
+			mutDesc, ok := schemaToDelete.Desc.(*schemadesc.Mutable)
+			if !ok {
+				return errors.AssertionFailedf("expected Mutable, found %T", schemaToDelete.Desc)
+			}
+			if err := params.p.dropSchemaImpl(ctx, n.dbDesc, mutDesc); err != nil {
 				return err
 			}
-			// TODO(knz): dependent dropped table names should be qualified here.
-			tbNameStrings = append(tbNameStrings, cascadedViews...)
+			schemasIDsToDelete = append(schemasIDsToDelete, schemaToDelete.ID)
 		}
-		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 
-	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
-
-	b := &client.Batch{}
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "Del %s", descKey)
-		log.VEventf(ctx, 2, "Del %s", nameKey)
-		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+	if err := p.createDropDatabaseJob(
+		ctx,
+		n.dbDesc.GetID(),
+		schemasIDsToDelete,
+		n.d.getDroppedTableDetails(),
+		n.d.typesToDelete,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
 	}
-	b.Del(descKey)
-	b.Del(nameKey)
-	// Delete the zone config entry for this database.
-	b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 
-	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, dbDropped)
+	// Drop all of the collected objects.
+	if err := n.d.dropAllCollectedObjects(ctx, p); err != nil {
+		return err
+	}
+
+	b := &kv.Batch{}
+	if p.Descriptors().DatabaseLeasingUnsupported() {
+		// Remove the namespace entry from system.namespace.
+		err := catalogkv.RemoveDatabaseNamespaceEntry(
+			ctx, p.txn, p.ExecCfg().Codec, n.dbDesc.GetName(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		)
+		if err != nil {
+			return err
+		}
+
+		// Delete the database from the system.descriptor table.
+		descKey := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
+		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+			log.VEventf(ctx, 2, "Del %s", descKey)
+		}
+		b.Del(descKey)
+
+		// No job was created because no tables were dropped, so zone config can be
+		// immediately removed, if applicable.
+		if len(n.d.allTableObjectsToDelete) == 0 && params.ExecCfg().Codec.ForSystemTenant() {
+			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(n.dbDesc.GetID()))
+			if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+				log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+			}
+			// Delete the zone config entry for this database.
+			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+		}
+
+		p.Descriptors().AddUncommittedDatabaseDeprecated(n.dbDesc.GetName(), n.dbDesc.GetID(), descs.DBDropped)
+
+	} else {
+		n.dbDesc.AddDrainingName(descpb.NameInfo{
+			ParentID:       keys.RootNamespaceID,
+			ParentSchemaID: keys.RootNamespaceID,
+			Name:           n.dbDesc.Name,
+		})
+		n.dbDesc.State = descpb.DescriptorState_DROP
+
+		// Note that a job was already queued above.
+		if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
+			return err
+		}
+	}
 
 	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	if err := p.removeDbComment(ctx, n.dbDesc.GetID()); err != nil {
 		return err
 	}
 
@@ -169,14 +225,14 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		ctx,
 		p.txn,
 		EventLogDropDatabase,
-		int32(n.dbDesc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(n.dbDesc.GetID()),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			DatabaseName         string
 			Statement            string
 			User                 string
 			DroppedSchemaObjects []string
-		}{n.n.Name.String(), n.n.String(), p.SessionData().User, tbNameStrings},
+		}{n.n.Name.String(), n.n.String(), p.SessionData().User, n.d.droppedNames},
 	)
 }
 
@@ -184,41 +240,113 @@ func (*dropDatabaseNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropDatabaseNode) Close(context.Context)        {}
 func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 
-// filterCascadedTables takes a list of table descriptors and removes any
-// descriptors from the list that are dependent on other descriptors in the
-// list (e.g. if view v1 depends on table t1, then v1 will be filtered from
-// the list).
-func (p *planner) filterCascadedTables(ctx context.Context, tables []toDelete) ([]toDelete, error) {
-	// Accumulate the set of all tables/views that will be deleted by cascade
-	// behavior so that we can filter them out of the list.
-	cascadedTables := make(map[sqlbase.ID]bool)
+// filterImplicitlyDeletedObjects takes a list of table descriptors and removes
+// any descriptor that will be implicitly deleted.
+func filterImplicitlyDeletedObjects(
+	tables []toDelete, implicitDeleteObjects map[descpb.ID]*tabledesc.Mutable,
+) []toDelete {
+	filteredDeleteList := make([]toDelete, 0, len(tables))
 	for _, toDel := range tables {
-		desc := toDel.desc
-		if err := p.accumulateDependentTables(ctx, cascadedTables, desc); err != nil {
-			return nil, err
+		if _, found := implicitDeleteObjects[toDel.desc.ID]; !found {
+			filteredDeleteList = append(filteredDeleteList, toDel)
 		}
 	}
-	filteredTableList := make([]toDelete, 0, len(tables))
-	for _, toDel := range tables {
-		if !cascadedTables[toDel.desc.ID] {
-			filteredTableList = append(filteredTableList, toDel)
-		}
-	}
-	return filteredTableList, nil
+	return filteredDeleteList
 }
 
-func (p *planner) accumulateDependentTables(
-	ctx context.Context, dependentTables map[sqlbase.ID]bool, desc *sqlbase.TableDescriptor,
+// accumulateAllObjectsToDelete constructs a list of all the descriptors that
+// will be deleted as a side effect of deleting the given objects. Additional
+// objects may be deleted because of cascading views or sequence ownership. We
+// also return a map of objects that will be "implicitly" deleted so we can
+// filter on it later.
+func (p *planner) accumulateAllObjectsToDelete(
+	ctx context.Context, objects []toDelete,
+) ([]*tabledesc.Mutable, map[descpb.ID]*tabledesc.Mutable, error) {
+	implicitDeleteObjects := make(map[descpb.ID]*tabledesc.Mutable)
+	for _, toDel := range objects {
+		err := p.accumulateCascadingViews(ctx, implicitDeleteObjects, toDel.desc)
+		if err != nil {
+			return nil, nil, err
+		}
+		// Sequences owned by the table will also be implicitly deleted.
+		if toDel.desc.IsTable() {
+			err := p.accumulateOwnedSequences(ctx, implicitDeleteObjects, toDel.desc)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	allObjectsToDelete := make([]*tabledesc.Mutable, 0,
+		len(objects)+len(implicitDeleteObjects))
+	for _, desc := range implicitDeleteObjects {
+		allObjectsToDelete = append(allObjectsToDelete, desc)
+	}
+	for _, toDel := range objects {
+		if _, found := implicitDeleteObjects[toDel.desc.ID]; !found {
+			allObjectsToDelete = append(allObjectsToDelete, toDel.desc)
+		}
+	}
+	return allObjectsToDelete, implicitDeleteObjects, nil
+}
+
+// accumulateOwnedSequences finds all sequences that will be dropped as a result
+// of the table referenced by desc being dropped, and adds them to the
+// dependentObjects map.
+func (p *planner) accumulateOwnedSequences(
+	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
+) error {
+	for colID := range desc.GetColumns() {
+		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
+			ownedSeqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, seqID, p.txn)
+			if err != nil {
+				// Special case error swallowing for #50711 and #50781, which can
+				// cause columns to own sequences that have been dropped/do not
+				// exist.
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					log.Infof(ctx,
+						"swallowing error for owned sequence that was not found %s", err.Error())
+					continue
+				}
+				return err
+			}
+			dependentObjects[seqID] = ownedSeqDesc
+		}
+	}
+	return nil
+}
+
+// accumulateCascadingViews finds all views that are to be deleted as part
+// of a drop database cascade. This is important as CRDB allows cross-database
+// references, which means this list can't be constructed by simply scanning
+// the namespace table.
+func (p *planner) accumulateCascadingViews(
+	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
-		dependentTables[ref.ID] = true
-		dependentDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.ID)
+		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
 		if err != nil {
 			return err
 		}
-		if err := p.accumulateDependentTables(ctx, dependentTables, dependentDesc); err != nil {
+		if !dependentDesc.IsView() {
+			continue
+		}
+		dependentObjects[ref.ID] = dependentDesc
+		if err := p.accumulateCascadingViews(ctx, dependentObjects, dependentDesc); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"delete-db-comment",
+		p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		keys.DatabaseCommentType,
+		dbID)
+
+	return err
 }

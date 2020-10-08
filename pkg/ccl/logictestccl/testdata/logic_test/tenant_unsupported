@@ -1,0 +1,107 @@
+# This file documents operations that are unsupported when running a SQL tenant
+# server.
+# LogicTest: 3node-tenant
+
+query I
+SELECT crdb_internal.node_id()
+----
+NULL
+
+statement ok
+CREATE TABLE kv (k STRING PRIMARY KEY, v STRING)
+
+statement ok
+INSERT INTO kv VALUES ('foo', 'bar')
+
+# This isn't actually using DistSQL since it fails during planning (node liveness
+# and friends are missing). The work to do here for Phase 2 is to not even try
+# DistSQL on tenant SQL servers.
+query I
+SET distsql = on; SELECT count(*) FROM kv
+----
+1
+
+# This works, but jobs itself will need work as it relies on node liveness and
+# having a NodeID.
+query I
+SELECT job_id FROM [ SHOW JOBS ] WHERE job_id = 0
+----
+
+# Temp tables work, but the TemporaryObjectCleaner needs some work as it
+# relies on the status server.
+statement ok
+SET experimental_enable_temp_tables = true
+
+statement ok
+CREATE TEMP TABLE users (id UUID, city STRING, CONSTRAINT "primary" PRIMARY KEY (id ASC, city ASC))
+
+# Missing status server
+
+statement error operation is unsupported in multi-tenancy mode
+SHOW SESSIONS
+
+statement error operation is unsupported in multi-tenancy mode
+SHOW QUERIES
+
+statement error operation is unsupported in multi-tenancy mode
+CANCEL QUERY ''
+
+statement error operation is unsupported in multi-tenancy mode
+CANCEL SESSION ''
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.node_transactions
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.node_sessions
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.node_queries
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.cluster_sessions
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.cluster_queries
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.kv_store_status
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT * FROM crdb_internal.kv_node_status
+
+# Cannot manipulate zone configurations
+
+# Selecting from crdb_internal.zones is allowed but no data is returned.
+query IITTTTTTTTTTT
+SELECT * FROM crdb_internal.zones
+----
+
+statement error operation is unsupported in multi-tenancy mode
+SHOW ZONE CONFIGURATION FOR TABLE kv
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv CONFIGURE ZONE USING num_replicas = 123
+
+# Cannot perform operations that issue Admin requests.
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv SPLIT AT VALUES ('foo')
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv UNSPLIT AT VALUES ('foo')
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv UNSPLIT ALL
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv SCATTER
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'k')
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'k')
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT crdb_internal.check_consistency(true, '', '')

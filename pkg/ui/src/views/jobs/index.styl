@@ -1,0 +1,152 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+
+.jobs-page
+  display flex
+  flex-flow column
+  height 100%
+
+.no-results
+  display flex
+  align-items center
+  justify-content center
+  height 100%
+
+
+.jobs-table
+  h3
+    color $headings-color
+
+  &__row
+    &--paused .rc-progress-line-path
+      stroke $tooltip-color
+
+    &--failed
+      & + &  // Match two adjacent failed rows.
+        border-top 1px solid $table-border-color
+
+  &__progress-bar
+    padding-right .7em
+    width 120px
+
+  &__duration
+    font-family SourceSansPro-Regular
+    font-size 12px
+    line-height 1.67
+    letter-spacing 0.3px
+    color $colors--neutral-8
+    &--right
+      margin-left 48px
+
+  &__status, &__running-status
+    text-transform capitalize
+  &__progress
+    display flex
+    align-items center
+    justify-content flex-start
+  &__status
+    margin-bottom 8px
+    font-family $font-family--semi-bold 
+    font-size 12px
+    font-weight 500
+    line-height 1.17
+    letter-spacing 1.5px
+    color $colors--neutral-8
+    text-transform uppercase
+    padding 5px 8px
+    border-radius 3px
+    text-align center
+    &--percentage
+      font-family SourceSansPro-Regular
+      font-size 12px
+      margin 0 6px 0 0
+      line-height 1.67
+      letter-spacing 0.3px
+      width 40px
+      text-align right
+  .job-detail
+    white-space pre-wrap
+    padding 5px
+    margin-top 5px
+    margin-bottom 10px
+    border 1px solid $button-border-color
+    border-radius 4px
+    background-color white
+    color $headings-color
+
+  &__cell--description
+    overflow hidden
+    text-overflow ellipsis
+    white-space nowrap
+    max-width 500px
+    word-wrap break-word
+
+  &__status-icon
+    display inline-block
+    margin-right 7px
+
+.job-details
+  .summary--card__counting
+    margin-bottom 15px
+    &--value
+      margin-bottom 5px
+  .summary--card__status
+    &--title
+      font-family: SourceSansPro-Regular
+      font-size 16pt
+      line-height 1.5
+      color $colors--neutral-7
+      margin-bottom 15px
+  .page--header__title
+    margin-bottom 30px
+  .job-status__line, .jobs-table__status
+    display flex
+    align-items: baseline
+    line-height 1.6
+    letter-spacing -0.2px
+    margin-right 8px
+  .job-status__line
+    font-size 14px
+    display flex
+    align-items center
+    .ant-divider
+      height 20px
+  .jobs-table__status
+    width fit-content
+    font-size 12px
+    margin-bottom 0
+  .job-status__line
+    color $colors--neutral-7
+    span
+      &:last-child
+        margin-left 8px
+  .job-status__line--percentage
+    display flex
+    align-items center
+    .ant-divider
+      height 20px
+    span
+      font-family SourceSansPro-Regular
+      font-size 14pt
+      line-height 1.57
+      letter-spacing 0.1px
+      color $colors--neutral-7
+      margin 0
+  .ant-divider
+    margin-left 15px
+    margin-right 15px
+  .jobs-table__progress-bar
+    width 100%
+  .jobs-table__duration
+    font-size 14px
+    line-height 22px
+    color $colors--neutral-7

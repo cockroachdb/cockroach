@@ -1,0 +1,27 @@
+## A simple txn writing at an older timestamp.
+## This is expected to fail in error "Write too old".
+
+# Prepare a newer write.
+
+run ok
+with t=A
+  txn_begin ts=44
+  put  k=a v=abc resolve
+  txn_remove
+----
+>> at end:
+data: "a"/0.000000044,0 -> /BYTES/abc
+
+# Try an old write, expect an error.
+
+run error
+with t=A
+  txn_begin  ts=33
+  del   k=a
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000033,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000044,1 min=0,0 seq=0} ts=0.000000044,1 del=true klen=12 vlen=0
+data: "a"/0.000000044,1 -> /<empty>
+data: "a"/0.000000044,0 -> /BYTES/abc
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000033,0 too old; wrote at 0.000000044,1

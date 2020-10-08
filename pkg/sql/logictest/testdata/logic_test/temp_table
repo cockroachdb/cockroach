@@ -1,0 +1,287 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
+statement error temporary tables are only supported experimentally\nHINT:.*46260.*\n.*\n.*SET experimental_enable_temp_tables = 'on'
+CREATE TEMP TABLE a_temp(a INT PRIMARY KEY)
+
+statement ok
+SET experimental_enable_temp_tables=true
+
+subtest show_tables
+
+statement ok
+CREATE TEMP TABLE tbl (a int)
+
+query TT rowsort
+SELECT table_name, type FROM [SHOW TABLES]
+----
+tbl  table
+
+statement ok
+DROP TABLE tbl
+
+subtest test_meta_tables
+
+statement ok
+CREATE TEMP TABLE temp_table_test (a timetz PRIMARY KEY) ON COMMIT PRESERVE ROWS
+
+statement ok
+CREATE TEMP TABLE temp_table_ref (a timetz PRIMARY KEY)
+
+statement ok
+ALTER TABLE temp_table_ref ADD CONSTRAINT fk_temp FOREIGN KEY (a) REFERENCES temp_table_test(a)
+
+query TT
+SELECT table_name, table_type FROM information_schema.tables WHERE table_name = 'temp_table_test' AND table_schema LIKE 'pg_temp_%'
+----
+temp_table_test  LOCAL TEMPORARY
+
+# query changes names, so we can only grab a count to be sure.
+query I
+SELECT count(1) FROM pg_namespace WHERE nspname LIKE 'pg_temp_%'
+----
+1
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+temp_table_test
+temp_table_ref
+
+statement ok
+DROP TABLE temp_table_ref CASCADE; DROP TABLE temp_table_test CASCADE
+
+# Tests foreign key errors with tables resolve to the correct name.
+subtest foreign_key_errors
+
+statement ok
+CREATE TEMP TABLE a (a int)
+
+statement error cannot add a SET NULL cascading action on column "test\.pg_temp.*\.b\.c" which has a NOT NULL constraint
+CREATE TEMP TABLE b (c int NOT NULL PRIMARY KEY, FOREIGN KEY (c) REFERENCES a ON UPDATE SET NULL)
+
+statement error cannot add a SET DEFAULT cascading action on column "test\.pg_temp_.*\.b\.c" which has a NOT NULL constraint and a NULL default expression
+CREATE TEMP TABLE b (c int DEFAULT NULL PRIMARY KEY, FOREIGN KEY (c) REFERENCES a ON UPDATE SET DEFAULT)
+
+statement ok
+DROP TABLE a
+
+# Test uncommitted temp tables do not clash with existing tables
+subtest test_uncommitted_tables
+
+statement ok
+BEGIN;
+CREATE TABLE table_a (a int); CREATE TEMP TABLE table_a (a int);
+INSERT INTO table_a VALUES (1); INSERT INTO pg_temp.table_a VALUES (2); INSERT INTO public.table_a VALUES (3);
+COMMIT
+
+query I
+SELECT * FROM pg_temp.table_a ORDER BY a
+----
+1
+2
+
+query I
+SELECT * FROM public.table_a ORDER BY a
+----
+3
+
+statement ok
+DROP TABLE pg_temp.table_a; DROP TABLE public.table_a
+
+# Test operations on a database with temp tables inside them.
+subtest test_database_operations
+
+statement ok
+CREATE DATABASE bob; USE bob; CREATE TEMP TABLE a(a int); USE defaultdb
+
+statement ok
+SET sql_safe_updates = true
+
+statement error DROP DATABASE on non-empty database without explicit CASCADE
+DROP DATABASE bob
+
+statement ok
+CREATE TEMP VIEW a_view AS SELECT a FROM bob.pg_temp.a
+
+statement error cannot rename database because relation "defaultdb.pg_temp_.*.a_view" depends on relation "bob.pg_temp_.*.a"
+ALTER DATABASE bob RENAME TO alice
+
+statement ok
+DROP VIEW a_view; ALTER DATABASE bob RENAME TO alice
+
+statement ok
+DROP DATABASE alice CASCADE
+
+# Test for temporary views.
+subtest temporary_views
+
+statement ok
+CREATE TABLE permanent_table(a int); CREATE TEMP TABLE temp_table(a int)
+
+statement ok
+INSERT INTO permanent_table VALUES (1); INSERT INTO temp_table VALUES (2)
+
+statement ok
+CREATE TEMP VIEW view_on_permanent AS SELECT a FROM permanent_table
+
+query I
+SELECT * from pg_temp.view_on_permanent
+----
+1
+
+statement ok
+CREATE TEMP VIEW view_on_temp AS SELECT a FROM temp_table
+
+query I
+SELECT * from pg_temp.view_on_temp
+----
+2
+
+# A "permanent" view on a temporary table gets upgraded to temporary.
+query T noticetrace
+CREATE VIEW upgrade_temp_view AS SELECT a FROM temp_table
+----
+NOTICE: view "upgrade_temp_view" will be a temporary view
+
+query I
+SELECT * from pg_temp.upgrade_temp_view
+----
+2
+
+statement ok
+DROP VIEW view_on_temp; DROP VIEW view_on_permanent; DROP VIEW upgrade_temp_view
+
+statement ok
+DROP TABLE permanent_table; DROP TABLE temp_table
+
+# Tests for temporary sequences working as expected.
+subtest temp_sequences
+
+statement ok
+CREATE TEMP SEQUENCE temp_seq; CREATE TABLE a (a int DEFAULT nextval('temp_seq'))
+
+statement ok
+INSERT INTO a VALUES (default), (default), (100)
+
+query I
+SELECT * FROM a ORDER BY a
+----
+1
+2
+100
+
+# Permanent tables can reference temporary schemas.
+statement ok
+CREATE TABLE perm_table(a int DEFAULT nextval('pg_temp.temp_seq'))
+
+statement ok
+INSERT INTO perm_table VALUES (default), (default), (101)
+
+query I
+SELECT * FROM perm_table ORDER BY a
+----
+3
+4
+101
+
+statement ok
+ALTER TABLE a ALTER COLUMN a DROP DEFAULT
+
+statement error cannot drop sequence temp_seq because other objects depend on it
+DROP SEQUENCE pg_temp.temp_seq
+
+# Allow temporary tables to use serial for temporary schemas.
+statement ok
+SET serial_normalization='sql_sequence'
+
+statement ok
+CREATE TEMP TABLE ref_temp_table (a SERIAL)
+
+query I
+SELECT nextval('pg_temp.ref_temp_table_a_seq')
+----
+1
+
+statement ok
+DROP TABLE perm_table; DROP TABLE ref_temp_table
+
+statement ok
+DROP SEQUENCE pg_temp.temp_seq; DROP SEQUENCE pg_temp.ref_temp_table_a_seq; DROP TABLE a
+
+statement ok
+SET serial_normalization='rowid'
+
+subtest table_with_on_commit
+
+statement error ON COMMIT can only be used on temporary tables
+CREATE TABLE a (a int) ON COMMIT PRESERVE ROWS
+
+subtest regression_47030
+
+statement ok
+CREATE TEMP TABLE regression_47030(c0 INT); INSERT INTO regression_47030 VALUES (1);
+
+query I
+SELECT * FROM regression_47030
+----
+1
+
+statement ok
+TRUNCATE regression_47030; INSERT INTO regression_47030 VALUES (2)
+
+query I
+SELECT * FROM regression_47030
+----
+2
+
+# Renaming a temp table should not move it to the public schema.
+subtest regression_48233
+
+statement ok
+CREATE TEMP TABLE regression_48233(a int)
+
+statement ok
+ALTER TABLE regression_48233 RENAME TO reg_48233
+
+query IITI rowsort
+SELECT * FROM system.namespace WHERE name LIKE '%48233'
+----
+50  65  reg_48233  78
+
+statement error pq: cannot change schema of table with RENAME
+ALTER TABLE reg_48233 RENAME TO public.reg_48233
+
+statement ok
+CREATE TABLE persistent_48233(a int)
+
+statement error pq: cannot change schema of table with RENAME
+ALTER TABLE persistent_48233 RENAME TO pg_temp.pers_48233
+
+# Ensure that temporary schemas don't appear as user defined in the
+# information_schema.schemata vtable.
+query T
+SELECT schema_name FROM information_schema.schemata WHERE crdb_is_user_defined = 'YES'
+----
+
+subtest test_53163
+statement ok
+CREATE DATABASE second_db
+
+statement ok
+USE second_db
+
+statement ok
+CREATE TEMP TABLE a(a INT)
+
+statement ok
+USE test
+
+statement ok
+CREATE TEMP VIEW a_view AS SELECT a FROM second_db.pg_temp.a
+
+statement ok
+grant testuser to root
+
+statement ok
+ALTER TABLE second_db.pg_temp.a OWNER TO testuser

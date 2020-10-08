@@ -2,15 +2,11 @@
 # comp.opt contains normalization rules for comparison operators.
 # =============================================================================
 
-
 # CommuteVarInequality is similar to CommuteVar (in scalar.opt), except it
 # handles inequality comparison operators that need special handling to commute
 # operands.
 [CommuteVarInequality, Normalize]
-(Le | Lt | Ge | Gt
-    $left:^(Variable)
-    $right:(Variable)
-)
+(Le | Lt | Ge | Gt $left:^(Variable) $right:(Variable))
 =>
 (CommuteInequality (OpName) $left $right)
 
@@ -18,10 +14,7 @@
 # that it handles inequality comparison operators that need special handling to
 # commute operands.
 [CommuteConstInequality, Normalize]
-(Le | Lt | Ge | Gt
-    $left:* & (OnlyConstants $left)
-    $right:* & ^(OnlyConstants $right)
-)
+(Le | Lt | Ge | Gt $left:(ConstValue) $right:^(ConstValue))
 =>
 (CommuteInequality (OpName) $left $right)
 
@@ -42,17 +35,12 @@
 #       normalize.go either. We can add once we've proved it's OK to do so.
 [NormalizeCmpPlusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Plus
-        $leftLeft:* & ^(OnlyConstants $leftLeft)
-        $leftRight:* & (OnlyConstants $leftRight)
-    )
-    $right:* & (OnlyConstants $right) & (CanConstructBinary Minus $right $leftRight)
+    (Plus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
+    $right:(ConstValue) &
+        (CanConstructBinary Minus $right $leftRight)
 )
 =>
-((OpName)
-    $leftLeft
-    (Minus $right $leftRight)
-)
+((OpName) $leftLeft (Minus $right $leftRight))
 
 # NormalizeCmpMinusConst builds up constant expression trees on one side of the
 # comparison, in cases like this:
@@ -66,17 +54,12 @@
 # tree. Other patterns will fold new constant expressions further.
 [NormalizeCmpMinusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Minus
-        $leftLeft:* & ^(OnlyConstants $leftLeft)
-        $leftRight:* & (OnlyConstants $leftRight)
-    )
-    $right:* & (OnlyConstants $right) & (CanConstructBinary Plus $right $leftRight)
+    (Minus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
+    $right:(ConstValue) &
+        (CanConstructBinary Plus $right $leftRight)
 )
 =>
-((OpName)
-    $leftLeft
-    (Plus $right $leftRight)
-)
+((OpName) $leftLeft (Plus $right $leftRight))
 
 # NormalizeCmpConstMinus builds up constant expression trees on one side of the
 # comparison, in cases like this:
@@ -91,17 +74,12 @@
 # constant expression if possible.
 [NormalizeCmpConstMinus, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Minus
-        $leftLeft:* & (OnlyConstants $leftLeft)
-        $leftRight:* & ^(OnlyConstants $leftRight)
-    )
-    $right:* & (OnlyConstants $right) & (CanConstructBinary Minus $leftLeft $right)
+    (Minus $leftLeft:(ConstValue) $leftRight:^(ConstValue))
+    $right:(ConstValue) &
+        (CanConstructBinary Minus $leftLeft $right)
 )
 =>
-((OpName)
-    (Minus $leftLeft $right)
-    $leftRight
-)
+((OpName) (Minus $leftLeft $right) $leftRight)
 
 # NormalizeTupleEquality breaks up expressions like:
 #   (a, b, c) = (x, y, z)
@@ -118,9 +96,10 @@
 # FoldNullComparisonLeft replaces the comparison operator with null if its
 # left input is null.
 [FoldNullComparisonLeft, Normalize]
-(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
-    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
-    Contains | JsonExists | JsonSomeExists | JsonAllExists
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike
+        | SimilarTo | NotSimilarTo | RegMatch | NotRegMatch
+        | RegIMatch | NotRegIMatch | Contains | Overlaps
+        | JsonExists | JsonSomeExists | JsonAllExists
     $left:(Null)
     *
 )
@@ -130,9 +109,10 @@
 # FoldNullComparisonRight replaces the comparison operator with null if its
 # right input is null.
 [FoldNullComparisonRight, Normalize]
-(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
-    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
-    Contains | JsonExists | JsonSomeExists | JsonAllExists
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike
+        | SimilarTo | NotSimilarTo | RegMatch | NotRegMatch
+        | RegIMatch | NotRegIMatch | Contains | Overlaps
+        | JsonExists | JsonSomeExists | JsonAllExists
     *
     $right:(Null)
 )
@@ -141,35 +121,177 @@
 
 # FoldIsNull replaces NULL IS NULL with True.
 [FoldIsNull, Normalize]
-(Is (Null) (Null)) => (True)
+(Is (Null) (Null))
+=>
+(True)
 
 # FoldNonNullIsNull replaces x IS NULL with False where x is a non-Null constant.
 [FoldNonNullIsNull, Normalize]
-(Is
-  (ConstValue) & ^(Null)
-  (Null)
-)
+(Is $left:^(Null) & (IsConstValueOrTuple $left) (Null))
+=>
+(False)
+
+# FoldNullTupleIsTupleNull replaces x IS NULL with True if x is a tuple with
+# only constant, null elements.
+[FoldNullTupleIsTupleNull, Normalize]
+(IsTupleNull $input:(Tuple) & (HasAllNullElements $input))
+=>
+(True)
+
+# FoldNonNullTupleIsTupleNull replaces x IS NULL with False if x is a tuple
+# with at least one constant, non-null element.
+[FoldNonNullTupleIsTupleNull, Normalize]
+(IsTupleNull $input:(Tuple) & (HasNonNullElement $input))
 =>
 (False)
 
 # FoldIsNotNull replaces NULL IS NOT NULL with False.
 [FoldIsNotNull, Normalize]
-(IsNot (Null) (Null)) => (False)
+(IsNot (Null) (Null))
+=>
+(False)
 
 # FoldNonNullIsNotNull replaces x IS NOT NULL with True where x is a non-Null constant.
 [FoldNonNullIsNotNull, Normalize]
-(IsNot
-  (ConstValue) & ^(Null)
-  (Null)
-)
+(IsNot $left:^(Null) & (IsConstValueOrTuple $left) (Null))
 =>
 (True)
 
+# FoldNonNullTupleIsTupleNotNull replaces x IS NOT NULL with True if x is a
+# tuple with only constant, non-null elements.
+[FoldNonNullTupleIsTupleNotNull, Normalize]
+(IsTupleNotNull $input:(Tuple) & (HasAllNonNullElements $input))
+=>
+(True)
+
+# FoldNullTupleIsTupleNotNull replaces x IS NOT NULL with False if x is a tuple
+# with at least one constant, null element.
+[FoldNullTupleIsTupleNotNull, Normalize]
+(IsTupleNotNull $input:(Tuple) & (HasNullElement $input))
+=>
+(False)
+
 # CommuteNullIs moves a NULL onto the right side of an IS/IS NOT comparison.
 [CommuteNullIs, Normalize]
-(Is | IsNot
-  $left:(Null)
-  $right:^(Null)
-)
+(Is | IsNot $left:(Null) $right:^(Null))
 =>
 ((OpName) $right $left)
+
+# NormalizeCmpTimeZoneFunction normalizes timezone functions within
+# comparison operators. It only matches expressions when:
+#
+#   1. The left side of the comparison is a timezone() function.
+#   2. The second argument to timezone() is a variable of type TIMESTAMP.
+#   3. The right side of the comparison is a constant value TIMESTAMPTZ.
+#
+# Here's an example:
+#
+#   timezone('America/Denver', ts) = '2020-06-01 12:35:55-07'
+#   =>
+#   ts = timezone('America/Denver', '2020-06-01 12:35:55-07')
+#
+# This normalization is valid because the overloaded function timezone(zone,
+# TIMESTAMP) is the inverse of timezone(zone, TIMESTAMPTZ).
+[NormalizeCmpTimeZoneFunction, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "timezone"))
+    $right:(ConstValue) &
+        (IsTimestampTZ $right) &
+        (IsTimestamp $ts:(SecondScalarListExpr $args)) &
+        ^(IsConstValueOrTuple $ts)
+)
+=>
+((OpName)
+    $ts
+    (MakeTimeZoneFunction (FirstScalarListExpr $args) $right)
+)
+
+# NormalizeCmpTimeZoneFunctionTZ normalizes timezone functions within
+# comparison operators. It only matches expressions when:
+#
+#   1. The left side of the comparison is a timezone() function.
+#   2. The second argument to timezone() is a variable of type TIMESTAMPTZ.
+#   3. The right side of the comparison is a constant value TIMESTAMP.
+#
+# Here's an example:
+#
+#   timezone('America/Denver', tz) = '2020-06-01 12:35:55'
+#   =>
+#   tz = timezone('America/Denver', '2020-06-01 12:35:55')
+#
+# This normalization is possible because the overloaded function timezone(zone,
+# TIMESTAMPTZ) is the inverse of timezone(zone, TIMESTAMP).
+[NormalizeCmpTimeZoneFunctionTZ, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "timezone"))
+    $right:(ConstValue) &
+        (IsTimestamp $right) &
+        (IsTimestampTZ $tz:(SecondScalarListExpr $args)) &
+        ^(IsConstValueOrTuple $tz)
+)
+=>
+((OpName)
+    $tz
+    (MakeTimeZoneFunction (FirstScalarListExpr $args) $right)
+)
+
+# FoldEqZeroSTDistance matches an expression of the form: 'ST_Distance(a,b) = 0'
+# and replaces it with 'ST_Intersects(a,b)'. This replacement allows for
+# early-exit behavior, and may allow an inverted index scan to be generated.
+[FoldEqZeroSTDistance, Normalize]
+(Eq
+    (Function $args:* $private:(FunctionPrivate "st_distance"))
+    $right:(Const
+        $value:* & (IsFloatDatum $value) & (DatumsEqual $value 0)
+    )
+)
+=>
+(MakeIntersectionFunction $args)
+
+# FoldCmpSTDistanceLeft replaces an expression of the form:
+# 'ST_Distance(...) <= x' with a call to ST_DWithin or ST_DWithinExclusive. This
+# replacement allows early-exit behavior, and may enable use of an inverted
+# index scan. See the MakeSTDWithin method for the specific variation on
+# ST_DWithin that is used to replace expressions with different comparison
+# operators (e.g. '<' vs '<=').
+[FoldCmpSTDistanceLeft, Normalize]
+(Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "st_distance"))
+    $right:*
+)
+=>
+(MakeSTDWithinLeft (OpName) $args $right)
+
+# FoldCmpSTDistanceRight mirrors FoldCmpSTDistanceLeft.
+[FoldCmpSTDistanceRight, Normalize]
+(Ge | Gt | Le | Lt
+    $left:*
+    (Function $args:* $private:(FunctionPrivate "st_distance"))
+)
+=>
+(MakeSTDWithinRight (OpName) $args $left)
+
+# FoldCmpSTMaxDistanceLeft is a variant of FoldCmpSTDistanceLeft that matches
+# ST_MaxDistance instead of ST_Distance.
+[FoldCmpSTMaxDistanceLeft, Normalize]
+(Ge | Gt | Le | Lt
+    (Function
+        $args:*
+        $private:(FunctionPrivate "st_maxdistance")
+    )
+    $right:*
+)
+=>
+(MakeSTDFullyWithinLeft (OpName) $args $right)
+
+# FoldCmpSTMaxDistanceRight mirrors FoldCmpSTMaxDistanceLeft.
+[FoldCmpSTMaxDistanceRight, Normalize]
+(Ge | Gt | Le | Lt
+    $left:*
+    (Function
+        $args:*
+        $private:(FunctionPrivate "st_maxdistance")
+    )
+)
+=>
+(MakeSTDFullyWithinRight (OpName) $args $left)

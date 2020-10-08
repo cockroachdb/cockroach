@@ -1,3 +1,5 @@
 alter_user_stmt ::=
-	'ALTER' name 'WITH' password
-	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' password
+	'ALTER' 'USER' name opt_with role_options
+	| 'ALTER' 'USER' name 
+	| 'ALTER' 'USER' 'IF' 'EXISTS' name opt_with role_options
+	| 'ALTER' 'USER' 'IF' 'EXISTS' name 

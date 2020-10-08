@@ -21,21 +21,22 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func TestMaxImportBatchSize(t *testing.T) {
@@ -54,7 +55,7 @@ func TestMaxImportBatchSize(t *testing.T) {
 	for i, testCase := range testCases {
 		st := cluster.MakeTestingClusterSettings()
 		importBatchSize.Override(&st.SV, testCase.importBatchSize)
-		storage.MaxCommandSize.Override(&st.SV, testCase.maxCommandSize)
+		kvserver.MaxCommandSize.Override(&st.SV, testCase.maxCommandSize)
 		if e, a := MaxImportBatchSize(st), testCase.expected; e != a {
 			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
 		}
@@ -63,16 +64,16 @@ func TestMaxImportBatchSize(t *testing.T) {
 
 func slurpSSTablesLatestKey(
 	t *testing.T, dir string, paths []string, kr prefixRewriter,
-) []engine.MVCCKeyValue {
-	start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}
+) []storage.MVCCKeyValue {
+	start, end := storage.MVCCKey{Key: keys.MinKey}, storage.MVCCKey{Key: keys.MaxKey}
 
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := storage.NewDefaultInMem()
 	defer e.Close()
 	batch := e.NewBatch()
 	defer batch.Close()
 
 	for _, path := range paths {
-		sst := engine.MakeRocksDBSstFileReader()
+		sst := storage.MakeRocksDBSstFileReader()
 		defer sst.Close()
 
 		fileContents, err := ioutil.ReadFile(filepath.Join(dir, path))
@@ -82,7 +83,7 @@ func slurpSSTablesLatestKey(
 		if err := sst.IngestExternalFile(fileContents); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+		if err := sst.Iterate(start.Key, end.Key, func(kv storage.MVCCKeyValue) (bool, error) {
 			var ok bool
 			kv.Key.Key, ok = kr.rewriteKey(kv.Key.Key)
 			if !ok {
@@ -100,31 +101,31 @@ func slurpSSTablesLatestKey(
 		}
 	}
 
-	var kvs []engine.MVCCKeyValue
-	it := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+	var kvs []storage.MVCCKeyValue
+	it := batch.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
-	for it.Seek(start); ; it.NextKey() {
+	for it.SeekGE(start); ; it.NextKey() {
 		if ok, err := it.Valid(); err != nil {
 			t.Fatal(err)
 		} else if !ok || !it.UnsafeKey().Less(end) {
 			break
 		}
-		kvs = append(kvs, engine.MVCCKeyValue{Key: it.Key(), Value: it.Value()})
+		kvs = append(kvs, storage.MVCCKeyValue{Key: it.Key(), Value: it.Value()})
 	}
 	return kvs
 }
 
-func clientKVsToEngineKVs(kvs []client.KeyValue) []engine.MVCCKeyValue {
-	var ret []engine.MVCCKeyValue
+func clientKVsToEngineKVs(kvs []kv.KeyValue) []storage.MVCCKeyValue {
+	var ret []storage.MVCCKeyValue
 	for _, kv := range kvs {
 		if kv.Value == nil {
 			continue
 		}
-		k := engine.MVCCKey{
+		k := storage.MVCCKey{
 			Key:       kv.Key,
 			Timestamp: kv.Value.Timestamp,
 		}
-		ret = append(ret, engine.MVCCKeyValue{Key: k, Value: kv.Value.RawBytes})
+		ret = append(ret, storage.MVCCKeyValue{Key: k, Value: kv.Value.RawBytes})
 	}
 	return ret
 }
@@ -170,10 +171,8 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	writeSST := func(t *testing.T, offsets []int) string {
 		path := strconv.FormatInt(hlc.UnixNano(), 10)
 
-		sst, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
+		sstFile := &storage.MemFile{}
+		sst := storage.MakeBackupSSTWriter(sstFile)
 		defer sst.Close()
 		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 		value := roachpb.MakeValueFromString("bar")
@@ -181,16 +180,14 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			key := keys[idx]
 			value.ClearChecksum()
 			value.InitChecksum(key)
-			kv := engine.MVCCKeyValue{Key: engine.MVCCKey{Key: key, Timestamp: ts}, Value: value.RawBytes}
-			if err := sst.Add(kv); err != nil {
+			if err := sst.Put(storage.MVCCKey{Key: key, Timestamp: ts}, value.RawBytes); err != nil {
 				t.Fatalf("%+v", err)
 			}
 		}
-		sstContents, err := sst.Finish()
-		if err != nil {
+		if err := sst.Finish(); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := ioutil.WriteFile(filepath.Join(dir, "foo", path), sstContents, 0644); err != nil {
+		if err := ioutil.WriteFile(filepath.Join(dir, "foo", path), sstFile.Data(), 0644); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		return path
@@ -200,9 +197,9 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	// AmbiguousResultError. Import should be resilient to this.
 	const initialAmbiguousSubReqs = 3
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
-	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-		EvalKnobs: batcheval.TestingKnobs{
-			TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	knobs := base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+			TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 				switch filterArgs.Req.(type) {
 				case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:
 				// No-op.
@@ -229,7 +226,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	defer s.Stopper().Stop(ctx)
 	init(s.ClusterSettings())
 
-	storage, err := ExportStorageConfFromURI("nodelocal:///foo")
+	storage, err := cloudimpl.ExternalStorageConfFromURI("nodelocal://0/foo", security.RootUser)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -282,7 +279,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 		{{0, 3}, {4}},
 	} {
 		t.Run(fmt.Sprintf("%d-%v", i, testCase), func(t *testing.T) {
-			newID := sqlbase.ID(100 + i)
+			newID := descpb.ID(100 + i)
 			kr := prefixRewriter{{
 				OldPrefix: srcPrefix,
 				NewPrefix: makeKeyRewriterPrefixIgnoringInterleaved(newID, indexID),
@@ -290,9 +287,9 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			rekeys := []roachpb.ImportRequest_TableRekey{
 				{
 					OldID: oldID,
-					NewDesc: mustMarshalDesc(t, &sqlbase.TableDescriptor{
+					NewDesc: mustMarshalDesc(t, &descpb.TableDescriptor{
 						ID: newID,
-						PrimaryIndex: sqlbase.IndexDescriptor{
+						PrimaryIndex: descpb.IndexDescriptor{
 							ID: indexID,
 						},
 					}),
@@ -319,10 +316,10 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 				t.Fatalf("failed to rewrite key: %s", reqMidKey2)
 			}
 
-			if err := kvDB.AdminSplit(ctx, reqMidKey1, reqMidKey1); err != nil {
+			if err := kvDB.AdminSplit(ctx, reqMidKey1, hlc.MaxTimestamp /* expirationTime */); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.AdminSplit(ctx, reqMidKey2, reqMidKey2); err != nil {
+			if err := kvDB.AdminSplit(ctx, reqMidKey2, hlc.MaxTimestamp /* expirationTime */); err != nil {
 				t.Fatal(err)
 			}
 
@@ -345,7 +342,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			// Import may be retried by DistSender if it takes too long to return, so
 			// make sure it's idempotent.
 			for j := 0; j < 2; j++ {
-				b := &client.Batch{}
+				b := &kv.Batch{}
 				b.AddRawRequest(req)
 				if err := kvDB.Run(ctx, b); err != nil {
 					t.Fatalf("%+v", err)

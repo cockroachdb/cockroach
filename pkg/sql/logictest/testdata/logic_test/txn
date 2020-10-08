@@ -1,13 +1,11 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 # Transaction involving schema changes.
 statement ok
 BEGIN TRANSACTION
 
 statement ok
 CREATE TABLE kv (
-  k CHAR PRIMARY KEY,
-  v CHAR
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR
 )
 
 statement ok
@@ -93,7 +91,7 @@ a c
 statement ok
 BEGIN
 
-query error syntax error at or near ","
+query error at or near ",": syntax error
 SELECT count(*, 1) FROM kv
 
 statement error pgcode 25P02 current transaction is aborted, commands ignored until end of transaction block
@@ -255,7 +253,7 @@ COMMIT
 
 # We can't set isolation level to an unsupported one.
 
-statement error unsupported isolation level "read committed"
+statement error invalid value for parameter "transaction_isolation": "read committed"
 SET transaction_isolation = 'read committed'
 
 # We can explicitly start a transaction with isolation level
@@ -280,7 +278,7 @@ serializable
 statement ok
 COMMIT
 
-# user priority
+# User priority.
 
 statement error there is no transaction in progress
 SET TRANSACTION PRIORITY LOW
@@ -370,6 +368,151 @@ normal
 
 statement ok
 COMMIT
+
+# Transaction priority can be assigned a default value.
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+normal
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+normal
+
+statement ok
+SET DEFAULT_TRANSACTION_PRIORITY TO 'LOW'
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+low
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+SET DEFAULT_TRANSACTION_PRIORITY TO 'NORMAL'
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+normal
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+normal
+
+statement ok
+SET DEFAULT_TRANSACTION_PRIORITY TO 'HIGH'
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+high
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION PRIORITY LOW
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+low
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION PRIORITY NORMAL
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+normal
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+normal
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION PRIORITY HIGH
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+high
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+# Without the priority specified, BEGIN should use the default
+
+statement ok
+BEGIN
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+statement ok
+COMMIT
+
+# With the priority specified, BEGIN PRIORITY overrides the default
+
+statement ok
+BEGIN TRANSACTION PRIORITY LOW
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+COMMIT
+
+# Even after starting a transaction, the default priority can be overridden
+
+statement ok
+BEGIN
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+statement ok
+SET TRANSACTION PRIORITY LOW
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+COMMIT
+
+statement ok
+RESET DEFAULT_TRANSACTION_PRIORITY
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+normal
 
 # We can specify both isolation level and user priority.
 
@@ -466,7 +609,7 @@ serializable
 statement ok
 COMMIT
 
-# setting user priority without isolation level should not change isolation level.
+# Setting user priority without isolation level should not change isolation level
 
 statement ok
 BEGIN TRANSACTION
@@ -490,9 +633,13 @@ serializable
 statement ok
 COMMIT
 
-# restore default
 statement ok
-SET DEFAULT_TRANSACTION_ISOLATION TO 'SERIALIZABLE'
+RESET DEFAULT_TRANSACTION_ISOLATION
+
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+serializable
 
 # SHOW TRANSACTION STATUS
 
@@ -551,19 +698,19 @@ CommitWait
 statement ok
 COMMIT
 
-# RestartWait state
+# Aborted state
 # The SELECT 1 is necessary to move the txn out of the AutoRetry state,
 # otherwise the next statement is automatically retried on the server.
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
-query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT crdb_internal.force_retry('1s':::INTERVAL)
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 query T
 SHOW TRANSACTION STATUS
 ----
-RestartWait
+Aborted
 
 statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
@@ -578,31 +725,60 @@ COMMIT
 
 
 # Automatic retries for the first batch.
+# We use a sequence to avoid busy-looping the test.
 statement ok
-BEGIN TRANSACTION; SELECT crdb_internal.force_retry('100ms':::INTERVAL)
+CREATE SEQUENCE s;
+  BEGIN TRANSACTION;
+  SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
+
+# Demonstrate that the txn was indeed retried.
+query I
+SELECT currval('s')
+----
+3
 
 statement ok
-ROLLBACK
+ROLLBACK;
+  DROP SEQUENCE s
 
 # Automatic retries for the first batch even when that first batch comes after
 # the BEGIN.
 statement ok
-BEGIN TRANSACTION;
+CREATE SEQUENCE s;
+  BEGIN TRANSACTION;
 
 statement ok
-SELECT 1; SELECT crdb_internal.force_retry('100ms':::INTERVAL)
+SELECT 1;
+  SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
+
+# Demonstrate that the txn was indeed retried.
+query I
+SELECT currval('s')
+----
+3
 
 statement ok
-ROLLBACK
+ROLLBACK;
+  DROP SEQUENCE s
 
 # Automatic retries for the first batch even when that first batch comes after
 # the BEGIN and the BEGIN also has special statements that don't move the txn
 # state out of the "AutoRetry" state.
 statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY HIGH; SET TRANSACTION ISOLATION LEVEL SNAPSHOT;
+CREATE SEQUENCE s;
+  BEGIN TRANSACTION;
+  SAVEPOINT cockroach_restart;
+  SET TRANSACTION PRIORITY HIGH;
+  SET TRANSACTION ISOLATION LEVEL SNAPSHOT;
 
 statement ok
-SELECT crdb_internal.force_retry('100ms':::INTERVAL)
+SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
+
+# Demonstrate that the txn was indeed retried.
+query I
+SELECT currval('s')
+----
+3
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
@@ -615,27 +791,39 @@ SHOW TRANSACTION PRIORITY
 high
 
 statement ok
-ROLLBACK
+ROLLBACK;
+  DROP SEQUENCE s
 
 # Like above, but the SAVEPOINT is its own batch.
 statement ok
-BEGIN TRANSACTION
+CREATE SEQUENCE s;
+  BEGIN TRANSACTION
 
 statement ok
 SAVEPOINT cockroach_restart;
 
 statement ok
-SELECT crdb_internal.force_retry('100ms':::INTERVAL)
+SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
+
+# Demonstrate that the txn was indeed retried.
+query I
+SELECT currval('s')
+----
+3
 
 statement ok
-ROLLBACK
+ROLLBACK;
+  DROP SEQUENCE s
 
 
 # Automatic retries for the first batch after an explicit restart.
 statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
+CREATE SEQUENCE s;
+  BEGIN TRANSACTION;
+  SAVEPOINT cockroach_restart;
+  SELECT 1;
 
-query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -643,148 +831,17 @@ ROLLBACK TO SAVEPOINT COCKROACH_RESTART;
 
 # This is the automatic retry we care about.
 statement ok
-SELECT crdb_internal.force_retry('50ms':::INTERVAL)
+SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
 
-statement ok
-ROLLBACK
-
-
-# Wrong savepoint name moves the txn state from RestartWait to Aborted.
-statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
-
-query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT crdb_internal.force_retry('1s':::INTERVAL)
-
-query T
-SHOW TRANSACTION STATUS
-----
-RestartWait
-
-statement error SAVEPOINT not supported except for COCKROACH_RESTART
-ROLLBACK TO SAVEPOINT bogus_name
-
-query T
-SHOW TRANSACTION STATUS
-----
-Aborted
-
-statement ok
-ROLLBACK
-
-# General savepoints
-statement ok
-BEGIN TRANSACTION
-
-statement error SAVEPOINT not supported except for COCKROACH_RESTART
-SAVEPOINT other
-
-statement ok
-ROLLBACK
-
-statement ok
-BEGIN TRANSACTION
-
-statement error SAVEPOINT not supported except for COCKROACH_RESTART
-RELEASE SAVEPOINT other
-
-statement ok
-ROLLBACK
-
-statement ok
-BEGIN TRANSACTION
-
-statement error SAVEPOINT not supported except for COCKROACH_RESTART
-ROLLBACK TO SAVEPOINT other
-
-statement ok
-ROLLBACK
-
-# Savepoint must be first statement in a transaction.
-statement ok
-BEGIN TRANSACTION; UPSERT INTO kv VALUES('savepoint', 'true')
-
-statement error SAVEPOINT COCKROACH_RESTART needs to be the first statement in a transaction
-SAVEPOINT cockroach_restart
-
-statement ok
-ROLLBACK
-
-# Can rollback to a savepoint if no statements have been executed.
-statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart
-
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-# Can do it twice in a row.
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-# Can rollback after a transactional write, even from a non-error state.
-statement ok
-UPSERT INTO kv VALUES('savepoint', 'true')
-
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-statement ok
-COMMIT
-
-# Because we rolled back, the 'savepoint' insert will not have been committed.
+# Demonstrate that the txn was indeed retried.
 query I
-SELECT count(*) FROM kv WHERE k = 'savepoint'
+SELECT currval('s')
 ----
-0
-
-
-# Can ROLLBACK TO SAVEPOINT even from a non-retryable error.
-statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart
-
-statement error pq: relation "bogus_name" does not exist
-SELECT * from bogus_name
-
-query T
-SHOW TRANSACTION STATUS
-----
-Aborted
+3
 
 statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-query T
-SHOW TRANSACTION STATUS
-----
-Open
-
-statement ok
-ROLLBACK
-
-
-# ROLLBACK TO SAVEPOINT in a txn without a SAVEPOINT.
-statement ok
-BEGIN
-
-statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-statement ok
-ROLLBACK
-
-
-# ROLLBACK TO SAVEPOINT in an aborted txn without a SAVEPOINT.
-statement ok
-BEGIN
-
-statement error pq: relation "bogus_name" does not exist
-SELECT * from bogus_name
-
-statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-statement ok
-ROLLBACK
+ROLLBACK;
+  DROP SEQUENCE s
 
 
 # Test READ ONLY/WRITE syntax.
@@ -920,7 +977,7 @@ off
 statement ok
 COMMIT
 
-# BEGIN READ WRITE overwrites READ ONLY default
+# BEGIN READ WRITE overrides READ ONLY default
 statement ok
 BEGIN READ WRITE
 
@@ -931,19 +988,19 @@ statement ok
 COMMIT
 
 statement error cannot execute CREATE TABLE in a read-only transaction
-CREATE TABLE a (a int)
+CREATE TABLE tab (a int)
 
 statement error cannot execute INSERT in a read-only transaction
-INSERT INTO a VALUES(1)
+INSERT INTO kv VALUES('foo')
 
 statement error cannot execute UPDATE in a read-only transaction
-UPDATE a SET a = 1
+UPDATE kv SET v = 'foo'
 
-statement error cannot execute INSERT in a read-only transaction
-UPSERT INTO a VALUES(2)
+statement error cannot execute UPSERT in a read-only transaction
+UPSERT INTO kv VALUES('foo')
 
 statement error cannot execute DELETE in a read-only transaction
-DELETE FROM a
+DELETE FROM kv
 
 statement error cannot execute nextval\(\) in a read-only transaction
 SELECT nextval('a')
@@ -972,16 +1029,8 @@ BEGIN ISOLATION LEVEL SERIALIZABLE, ISOLATION LEVEL SERIALIZABLE
 statement ok
 BEGIN; SELECT 1
 
-query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT crdb_internal.force_retry('1s':::INTERVAL)
-
-statement ok
-ROLLBACK
-
-# Check that we don't crash when doing a release that wasn't preceded by a
-# savepoint.
-statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
-BEGIN; RELEASE SAVEPOINT cockroach_restart
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
 ROLLBACK

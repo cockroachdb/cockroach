@@ -1,0 +1,80 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index'
+
+.multiple-filter__selection
+  position absolute
+  top 50px
+  background-color white
+  box-shadow 0px 0px 7px 1px rgba(0,0,0,0.10)
+  padding 20px
+  border-radius 2px
+  display flex
+  flex-direction column
+  align-items flex-start
+  cursor default
+  min-width 285px
+  z-index 99
+
+.select__container
+  width 100%
+  .ant-select
+    margin-bottom 18px
+  .ant-select-selection--single
+    height 40px
+    display flex
+    justify-content flex-start
+    align-items center
+  .ant-select-selection--single .ant-select-selection__rendered
+    width 100%
+  .ant-select-selection__placeholder
+    font-family SourceSansPro-Regular
+    font-size 14px
+    line-height 1.57
+    letter-spacing 0.1px
+    color $colors--neutral-6
+  .ant-select-arrow
+    color #475872
+  .ant-select-selection
+    &:hover
+      border-color $colors--primary-blue-3
+    &:focus, &:active
+      border-color $colors--primary-blue-3
+
+.filter--label
+  font-family SourceSansPro-SemiBold
+  font-size 12px
+  line-height 1.67
+  letter-spacing 0.3px
+  color $colors--neutral-6
+  margin-bottom 7.5px
+
+.select-selection__deselect
+  padding 15px 16px 7.5px
+  a
+    font-family SourceSansPro-Regular
+    font-size 14px
+    line-height 1.57
+    letter-spacing 0.1px
+    color $colors--primary-blue-3
+
+.filter__checkbox
+  padding 7.5px 15px
+  display flex
+  &--label
+    font-family SourceSansPro-Regular
+    font-size 14px
+    line-height 1.57
+    letter-spacing 0.1px
+    color #7e89a9
+    margin-left 14px
+    &__active
+      color $colors--primary-blue-3

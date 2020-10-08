@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #include <vector>
 #include "file_registry.h"
@@ -40,11 +36,12 @@ TEST(FileRegistry, TransformPath) {
       {"/mnt/otherdevice/myfile", "/mnt/otherdevice/myfile", ""},
   };
 
+  std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
   int test_num = 0;
   for (auto t : test_cases) {
     SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
 
-    FileRegistry reg(nullptr, t.db_dir, false /* read-only */);
+    FileRegistry reg(env.get(), t.db_dir, false /* read-only */);
     auto out = reg.TransformPath(t.input);
     EXPECT_EQ(t.output, out);
   }

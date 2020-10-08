@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #include "mvcc.h"
 #include "comparator.h"
@@ -74,7 +70,7 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
   iter_rep->Seek(EncodeKey(start));
   const std::string end_key = EncodeKey(end);
 
-  cockroach::storage::engine::enginepb::MVCCMetadata meta;
+  cockroach::storage::enginepb::MVCCMetadata meta;
   std::string prev_key;
   bool first = false;
   // NB: making this uninitialized triggers compiler warnings
@@ -143,6 +139,22 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
       if (isSys) {
         stats.sys_bytes += total_bytes;
         stats.sys_count++;
+        if (decoded_key.starts_with(kLocalRangeIDPrefix)) {
+          // RangeID-local key.
+          int64_t range_id = 0;
+          rocksdb::Slice infix, suffix, detail;
+          if (!DecodeRangeIDKey(decoded_key, &range_id, &infix, &suffix, &detail)) {
+            stats.status = FmtStatus("unable to decode rangeID key");
+            return stats;
+          }
+          if (infix.compare(kLocalRangeIDReplicatedInfix) == 0) {
+            // Replicated RangeID-local key.
+            if (suffix.compare(kLocalAbortSpanSuffix) == 0) {
+              // Abort span key.
+              stats.abort_span_bytes += total_bytes;
+            }
+          }
+        }
       } else {
         if (!meta.deleted()) {
           stats.live_bytes += total_bytes;
@@ -217,21 +229,19 @@ MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64
 
 bool MVCCIsValidSplitKey(DBSlice key) { return IsValidSplitKey(ToSlice(key)); }
 
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
-                          int64_t target_size, DBString* split_key) {
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split, int64_t target_size,
+                          DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
-  const std::string end_key = EncodeKey(end);
   const rocksdb::Slice min_split_key = ToSlice(min_split.key);
 
   int64_t size_so_far = 0;
   std::string best_split_key = start_key;
   int64_t best_split_diff = std::numeric_limits<int64_t>::max();
   std::string prev_key;
-  int n = 0;
 
-  for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0; iter_rep->Next()) {
+  for (; iter_rep->Valid(); iter_rep->Next()) {
     const rocksdb::Slice key = iter_rep->key();
     rocksdb::Slice decoded_key;
     int64_t wall_time = 0;
@@ -240,9 +250,7 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
       return FmtStatus("unable to decode key");
     }
 
-    ++n;
-    const bool valid =
-        n > 1 && IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) >= 0;
+    const bool valid = IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) >= 0;
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;
@@ -277,31 +285,28 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
 }
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool consistent, bool tombstones) {
-  // Get is implemented as a scan where we retrieve a single key. Note
-  // that the semantics of max_keys is that we retrieve one more key
-  // than is specified in order to maintain the existing semantics of
-  // resume span. See storage/engine/mvcc.go:MVCCScan.
-  //
-  // We specify an empty key for the end key which will ensure we
-  // don't retrieve a key different than the start key. This is a bit
-  // of a hack.
+                      bool inconsistent, bool tombstones, bool fail_on_more_recent) {
+  // Get is implemented as a scan where we retrieve a single key. We specify an
+  // empty key for the end key which will ensure we don't retrieve a key
+  // different than the start key. This is a bit of a hack.
   const DBSlice end = {0, 0};
   ScopedStats scoped_iter(iter);
-  mvccForwardScanner scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent,
-                             tombstones);
+  mvccForwardScanner scanner(iter, key, end, timestamp, 1 /* max_keys */, 0 /* target_bytes */, txn,
+                             inconsistent, tombstones, fail_on_more_recent);
   return scanner.get();
 }
 
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
-                       int64_t max_keys, DBTxn txn, bool consistent, bool reverse,
-                       bool tombstones) {
+                       int64_t max_keys, int64_t target_bytes, DBTxn txn, bool inconsistent,
+                       bool reverse, bool tombstones, bool fail_on_more_recent) {
   ScopedStats scoped_iter(iter);
   if (reverse) {
-    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, consistent, tombstones);
+    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, target_bytes, txn,
+                               inconsistent, tombstones, fail_on_more_recent);
     return scanner.scan();
   } else {
-    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, consistent, tombstones);
+    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, target_bytes, txn, inconsistent, tombstones,
+                               fail_on_more_recent);
     return scanner.scan();
   }
 }

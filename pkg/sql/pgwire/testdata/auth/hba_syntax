@@ -1,0 +1,54 @@
+set_hba
+local
+----
+ERROR: line 1: end-of-line before database specification (SQLSTATE F0000)
+
+set_hba
+#empty
+----
+ERROR: no entries
+HINT: To use the default configuration, assign the empty string ('').
+
+set_hba
+host all all 1.1.1/0 cert
+----
+ERROR: line 1: invalid CIDR address: 1.1.1/0 (SQLSTATE F0000)
+
+set_hba
+host all all 0.0.0.0/0 invalid
+----
+ERROR: unimplemented: unknown auth method "invalid" (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
+--
+Supported methods: cert, cert-password, password, reject, trust
+
+
+# CockroachDB does not (yet?) support per-db HBA rules.
+set_hba
+host db all 0.0.0.0/0 cert
+----
+ERROR: unimplemented: per-database HBA rules are not supported (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
+--
+Use the special value 'all' (without quotes) to match all databases.
+
+
+# quoted "all" isn't ok since it strips the special meaning.
+set_hba
+host "all" all 0.0.0.0/0 cert
+----
+ERROR: unimplemented: per-database HBA rules are not supported (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
+--
+Use the special value 'all' (without quotes) to match all databases.
+
+
+# CockroachDB does not (yet?) support hostname-based HBA rules.
+set_hba
+host all all hostname cert
+----
+ERROR: unimplemented: hostname-based HBA rules are not supported (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
+--
+List the numeric CIDR notation instead, for example: 127.0.0.1/8.
+Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.

@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -32,13 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster/tc"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
@@ -174,7 +170,7 @@ func (a *allocSim) runWithConfig(config Configuration) {
 func (a *allocSim) setup() {
 	db := a.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS allocsim"); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	blocks := `
@@ -186,7 +182,7 @@ CREATE TABLE IF NOT EXISTS blocks (
 )
 `
 	if _, err := db.Exec(blocks); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 }
 
@@ -194,7 +190,7 @@ func (a *allocSim) maybeLogError(err error) {
 	if localcluster.IsUnavailableError(err) {
 		return
 	}
-	log.Error(context.Background(), err)
+	log.Errorf(context.Background(), "%v", err)
 	atomic.AddUint64(&a.stats.errors, 1)
 }
 
@@ -255,11 +251,11 @@ func (a *allocSim) rangeInfo() allocStats {
 				NodeId: fmt.Sprintf("local"),
 			})
 			if err != nil {
-				log.Fatal(context.Background(), err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			var metrics map[string]interface{}
 			if err := json.Unmarshal(resp.Data, &metrics); err != nil {
-				log.Fatal(context.Background(), err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			stores := metrics["stores"].(map[string]interface{})
 			for _, v := range stores {
@@ -406,7 +402,7 @@ func handleStart() bool {
 	// in the few minutes after allocsim starts up causes it to take a long time
 	// for leases to settle onto other nodes even when requests are skewed heavily
 	// onto them.
-	storage.MinLeaseTransferStatsDuration = 10 * time.Second
+	kvserver.MinLeaseTransferStatsDuration = 10 * time.Second
 
 	cli.Main()
 	return true
@@ -424,7 +420,7 @@ func main() {
 		var err error
 		config, err = loadConfig(*configFile)
 		if err != nil {
-			log.Fatal(context.Background(), err)
+			log.Fatalf(context.Background(), "%v", err)
 		}
 	}
 
@@ -483,11 +479,11 @@ func main() {
 			// set up tc rules on the loopback device.
 			tcController = tc.NewController("lo")
 			if err := tcController.Init(); err != nil {
-				log.Fatal(context.Background(), err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			defer func() {
 				if err := tcController.CleanUp(); err != nil {
-					log.Error(context.Background(), err)
+					log.Errorf(context.Background(), "%v", err)
 				}
 			}()
 		}
@@ -499,7 +495,7 @@ func main() {
 							if err := tcController.AddLatency(
 								perNodeCfg[srcNodeIdx].Addr, perNodeCfg[dstNodeIdx].Addr, time.Duration(outgoing.Latency/2),
 							); err != nil {
-								log.Fatal(context.Background(), err)
+								log.Fatalf(context.Background(), "%v", err)
 							}
 						}
 					}
@@ -544,9 +540,9 @@ func main() {
 	c.Start(context.Background())
 	defer c.Close()
 	c.UpdateZoneConfig(1, 1<<20)
-	_, err := c.Nodes[0].DB().Exec("SET CLUSTER SETTING kv.raft_log.synchronize = false;")
+	_, err := c.Nodes[0].DB().Exec("SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = true")
 	if err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	if len(config.Localities) != 0 {
 		a.runWithConfig(config)

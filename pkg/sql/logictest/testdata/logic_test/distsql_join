@@ -1,7 +1,5 @@
-# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata
-
 # Test that the distSQL MergeJoiner follows SQL NULL semantics for ON predicate
-# equivilance. The use of sorts here force the planning of merge join.
+# equivalence. The use of sorts here force the planning of merge join.
 
 statement ok
 CREATE TABLE distsql_mj_test (k INT, v INT)

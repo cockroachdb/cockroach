@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata fakedist-disk
-
 # The join condition logic is tricky to get right with NULL
 # values. Simple implementations can deal well with NULLs on the first
 # or last row but fail to handle them in the middle. So the test table
@@ -445,7 +443,7 @@ SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS 
 query error pgcode 42703 column "y" specified in USING clause does not exist
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
 
-query error pgcode 42701 column "x" appears more than once in USING clause
+query error pgcode 42701 column name "x" appears more than once in USING clause
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
 
 statement ok
@@ -553,8 +551,6 @@ SELECT     NULL::text  AS pktable_cat,
   AND      con.oid = dep.objid
   AND      pkic.oid = dep.refobjid
   AND      pkic.relkind = 'i'
-  AND      dep.classid = 'pg_constraint'::regclass::oid
-  AND      dep.refclassid = 'pg_class'::regclass::oid
   AND      fkn.nspname = 'public'
   AND      fkc.relname = 'orders'
   ORDER BY pkn.nspname,
@@ -926,36 +922,36 @@ NULL  NULL  NULL  2  2  2
 # Regression test for #20858.
 
 statement ok
-CREATE TABLE l (a INT PRIMARY KEY)
+CREATE TABLE l (a INT PRIMARY KEY, b1 INT)
 
 statement ok
-CREATE TABLE r (a INT PRIMARY KEY)
+CREATE TABLE r (a INT PRIMARY KEY, b2 INT)
 
 statement ok
-INSERT INTO l VALUES (1), (2), (3)
+INSERT INTO l VALUES (1, 1), (2, 1), (3, 1)
 
 statement ok
-INSERT INTO r VALUES (2), (3), (4)
+INSERT INTO r VALUES (2, 1), (3, 1), (4, 1)
 
-query I
+query III
 SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 1
 ----
-1
+1  1  NULL
 
-query I
+query III
 SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
 ----
-2
+2  1  1
 
-query I
+query III
 SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3
 ----
-3
+3  1  1
 
-query I
+query III
 SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 4
 ----
-4
+4  NULL  1
 
 
 # Regression tests for mixed-type equality columns (#22514).
@@ -1071,3 +1067,48 @@ FROM
 ----
 1     2
 NULL  NULL
+
+# Regression test for #28817. Do not allow special functions in ON clause.
+query error generator functions are not allowed in ON
+SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
+
+query error aggregate functions are not allowed in JOIN conditions
+SELECT * FROM foo JOIN bar ON max(foo.c) < 2
+
+# Regression test for #44029 (outer join on two single-row clauses, with two
+# results).
+query IIII
+SELECT * FROM (VALUES (1, 2)) a(a1,a2) FULL JOIN (VALUES (3, 4)) b(b1,b2) ON a1=b1 ORDER BY a2
+----
+NULL  NULL  3     4
+1     2     NULL  NULL
+
+# Regression test for #44746 (internal error for particular condition).
+statement ok
+CREATE TABLE t44746_0(c0 INT)
+
+statement ok
+CREATE TABLE t44746_1(c1 INT)
+
+# Note: an "error parsing regexp" would also be acceptable here.
+statement ok
+SELECT * FROM t44746_0 FULL JOIN t44746_1 ON (SUBSTRING('', ')') = '') = (c1 > 0)
+
+# Regression test for #49630.
+statement ok
+DROP TABLE empty;
+CREATE TABLE xy (x INT PRIMARY KEY, y INT);
+CREATE TABLE fk_ref (r INT NOT NULL REFERENCES xy (x));
+CREATE TABLE empty (v INT);
+INSERT INTO xy (VALUES (1, 1));
+INSERT INTO fk_ref (VALUES (1));
+
+query IIII
+SELECT * FROM fk_ref LEFT JOIN (SELECT * FROM xy INNER JOIN empty ON True) ON r = x
+----
+1  NULL  NULL  NULL
+
+statement ok
+DROP TABLE empty;
+DROP TABLE fk_ref;
+DROP TABLE xy;

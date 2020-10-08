@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
@@ -42,7 +40,7 @@ c d
 g h
 
 # parse error runs nothing
-statement error syntax error at or near "k"
+statement error at or near "k": syntax error
 INSERT INTO kv (k,v) VALUES ('i', 'j'); INSERT INTO VALUES ('k', 'l')
 
 query TT rowsort

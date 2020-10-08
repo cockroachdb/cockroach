@@ -7,4 +7,6 @@
 # important when decorrelating subqueries, as it interferes with ApplyJoin
 # pushdown when it's present.
 [EliminateMax1Row, Normalize]
-(Max1Row $input:* & (HasZeroOrOneRow $input)) => $input
+(Max1Row $input:* & (HasZeroOrOneRow $input))
+=>
+$input

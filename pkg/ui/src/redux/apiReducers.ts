@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import _ from "lodash";
 import { combineReducers } from "redux";
 import moment from "moment";
@@ -208,18 +218,6 @@ const rangeLogReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshRangeLog = rangeLogReducerObj.refresh;
 
-export const commandQueueRequestKey = (req: api.CommandQueueRequestMessage): string =>
-  _.isNil(req.range_id) ? "none" : req.range_id.toString();
-
-const commandQueueReducerObj = new KeyedCachedDataReducer(
-  api.getCommandQueue,
-  "commandQueue",
-  commandQueueRequestKey,
-  moment.duration(0),
-  moment.duration(1, "m"),
-);
-export const refreshCommandQueue = commandQueueReducerObj.refresh;
-
 export const settingsReducerObj = new CachedDataReducer(
   api.getSettings,
   "settings",
@@ -227,6 +225,16 @@ export const settingsReducerObj = new CachedDataReducer(
   moment.duration(1, "m"),
 );
 export const refreshSettings = settingsReducerObj.refresh;
+
+export const sessionsReducerObj = new CachedDataReducer(
+  api.getSessions,
+  "sessions",
+  // The sessions page is a real time view, so need a fairly quick update pace.
+  moment.duration(10, "s"),
+  moment.duration(1, "m"),
+);
+export const invalidateSessions = sessionsReducerObj.invalidateData;
+export const refreshSessions = sessionsReducerObj.refresh;
 
 export const storesRequestKey = (req: api.StoresRequestMessage): string =>
   _.isEmpty(req.node_id) ? "none" : req.node_id;
@@ -248,12 +256,24 @@ const queriesReducerObj = new CachedDataReducer(
 );
 export const refreshStatements = queriesReducerObj.refresh;
 
+const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
+  api.getStatementDiagnosticsReports,
+  "statementDiagnosticsReports",
+  moment.duration(5, "m"),
+  moment.duration(1, "m"),
+);
+export const refreshStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.refresh;
+export const invalidateStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.invalidateData;
+
 const dataDistributionReducerObj = new CachedDataReducer(
   api.getDataDistribution,
   "dataDistribution",
   moment.duration(1, "m"),
 );
 export const refreshDataDistribution = dataDistributionReducerObj.refresh;
+
+const metricMetadataReducerObj = new CachedDataReducer(api.getAllMetricMetadata, "metricMetadata");
+export const refreshMetricMetadata = metricMetadataReducerObj.refresh;
 
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
@@ -277,11 +297,13 @@ export interface APIReducersState {
   range: KeyedCachedDataReducerState<api.RangeResponseMessage>;
   allocatorRange: KeyedCachedDataReducerState<api.AllocatorRangeResponseMessage>;
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
-  commandQueue: KeyedCachedDataReducerState<api.CommandQueueResponseMessage>;
+  sessions: CachedDataReducerState<api.SessionsResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
+  metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
+  statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -306,11 +328,13 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [rangeReducerObj.actionNamespace]: rangeReducerObj.reducer,
   [allocatorRangeReducerObj.actionNamespace]: allocatorRangeReducerObj.reducer,
   [rangeLogReducerObj.actionNamespace]: rangeLogReducerObj.reducer,
-  [commandQueueReducerObj.actionNamespace]: commandQueueReducerObj.reducer,
   [settingsReducerObj.actionNamespace]: settingsReducerObj.reducer,
+  [sessionsReducerObj.actionNamespace]: sessionsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]: dataDistributionReducerObj.reducer,
+  [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
+  [statementDiagnosticsReportsReducerObj.actionNamespace]: statementDiagnosticsReportsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

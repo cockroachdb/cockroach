@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -24,13 +20,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/golang-commonmark/markdown"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/errors"
+	"github.com/golang-commonmark/markdown"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -56,6 +50,11 @@ func init() {
 			}
 			if err := ioutil.WriteFile(
 				filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.AllAggregateBuiltinNames, false), 0644,
+			); err != nil {
+				return err
+			}
+			if err := ioutil.WriteFile(
+				filepath.Join(outDir, "window_functions.md"), generateFunctions(builtins.AllWindowBuiltinNames, false), 0644,
 			); err != nil {
 				return err
 			}
@@ -105,7 +104,7 @@ func generateOperators() []byte {
 	for optyp, overloads := range tree.UnaryOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(tree.UnaryOp)
+			v := untyped.(*tree.UnaryOp)
 			ops[op] = append(ops[op], operation{
 				left: v.Typ.String(),
 				ret:  v.ReturnType.String(),
@@ -116,7 +115,7 @@ func generateOperators() []byte {
 	for optyp, overloads := range tree.BinOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(tree.BinOp)
+			v := untyped.(*tree.BinOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -130,7 +129,7 @@ func generateOperators() []byte {
 	for optyp, overloads := range tree.CmpOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(tree.CmpOp)
+			v := untyped.(*tree.CmpOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -183,25 +182,21 @@ func generateFunctions(from []string, categorize bool) []byte {
 		}
 		seen[name] = struct{}{}
 		props, fns := builtins.GetBuiltinProperties(name)
-		if props.Private {
+		if !props.ShouldDocument() {
 			continue
 		}
 		for _, fn := range fns {
 			if fn.Info == notUsableInfo {
 				continue
 			}
-			if categorize && fn.WindowFunc != nil {
+			// We generate docs for both aggregates and window functions in separate
+			// files, so we want to omit them when processing all builtins.
+			if categorize && (props.Class == tree.AggregateClass || props.Class == tree.WindowClass) {
 				continue
 			}
 			args := fn.Types.String()
 
 			retType := fn.FixedReturnType()
-			if t, ok := retType.(types.TTuple); ok &&
-				props.Class == tree.GeneratorClass && len(t.Types) == 1 {
-				// Set-generating functions with just one tuple element are
-				// simplified to return just a scalar.
-				retType = t.Types[0]
-			}
 			ret := retType.String()
 
 			cat := props.Category
@@ -220,7 +215,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 				info := md.RenderToString([]byte(fn.Info))
 				extra = fmt.Sprintf("<span class=\"funcdesc\">%s</span>", info)
 			}
-			s := fmt.Sprintf("<tr><td><code>%s(%s) &rarr; %s</code></td><td>%s</td></tr>", name, linkArguments(args), linkArguments(ret), extra)
+			s := fmt.Sprintf("<tr><td><a name=\"%s\"></a><code>%s(%s) &rarr; %s</code></td><td>%s</td></tr>", name, name, linkArguments(args), linkArguments(ret), extra)
 			functions[cat] = append(functions[cat], s)
 		}
 	}
@@ -268,12 +263,14 @@ func linkArguments(t string) string {
 
 func linkTypeName(s string) string {
 	s = strings.TrimSuffix(s, "{}")
+	s = strings.TrimSuffix(s, "{*}")
 	name := s
 	switch s {
 	case "timestamptz":
 		s = "timestamp"
 	}
 	s = strings.TrimSuffix(s, "[]")
+	s = strings.TrimSuffix(s, "*")
 	switch s {
 	case "int", "decimal", "float", "bool", "date", "timestamp", "interval", "string", "bytes",
 		"inet", "uuid", "collatedstring", "time":

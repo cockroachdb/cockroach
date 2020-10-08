@@ -1,0 +1,48 @@
+# The cluster secret is used for hashing application names.
+exec
+SET CLUSTER SETTING cluster.secret = 'secret'
+----
+
+# Application names that begin with '$ ' are not hashed.
+exec
+SET application_name = '$ some app' 
+----
+
+# Verify values and identifiers from queries are scrubbed.
+sql-stats
+CREATE DATABASE foo;
+CREATE TABLE foo.a (a INT, CONSTRAINT a CHECK (a > 1));
+INSERT INTO foo.a SELECT unnest(ARRAY[1,2,3,4,5]);
+SET CLUSTER SETTING cluster.organization = 'ACME';
+SELECT (1, 20, 30, 40) = (SELECT a, 1, 2, 3 FROM foo.a LIMIT 1);
+----
+error: pq: failed to satisfy CHECK constraint (a > 1:::INT8)
+sql-stats
+ └── $ some app
+      ├── [nodist] CREATE DATABASE _
+      ├── [nodist] CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))
+      └── [failed,nodist] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more3__])
+
+# Verify statements are correctly separated by app.
+sql-stats
+CREATE TABLE foo.t (x INT, y INT);
+SET application_name = '$ some other app';
+CREATE DATABASE bar;
+CREATE TABLE bar.t (x INT, y INT);
+SET application_name = 'hashed app name';
+CREATE DATABASE baz;
+CREATE TABLE baz.t (x INT, y INT);
+INSERT INTO baz.t VALUES (1, 1), (2, 2);
+----
+sql-stats
+ ├── $ some app
+ │    ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
+ │    └── [nodist] SET application_name = _
+ ├── $ some other app
+ │    ├── [nodist] CREATE DATABASE _
+ │    ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
+ │    └── [nodist] SET application_name = _
+ └── b16e4363
+      ├── [nodist] CREATE DATABASE _
+      ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
+      └── [nodist] INSERT INTO _ VALUES (_, _), (__more1__)

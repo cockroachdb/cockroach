@@ -1,0 +1,574 @@
+
+# Perform some writes at various sequence numbers.
+
+run ok
+with t=A
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  put       k=k/10 v=10
+  txn_step  seq=20
+  put       k=k  v=b
+  put       k=k/20 v=20
+  txn_step  seq=30
+  put       k=k  v=c
+  put       k=k/30 v=30
+  txn_step  seq=40
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "k"/0.000000011,0 -> /BYTES/c
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+
+# Mask a single write.
+# The third write should be hidden now.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(25-35)
+  scan k=k end=-k
+  get  k=k
+  txn_ignore_seqs seqs=(30-31)
+  get  k=k
+  txn_ignore_seqs seqs=(29-30)
+  get  k=k
+----
+scan: "k" -> /BYTES/b @0.000000011,0
+scan: "k/10" -> /BYTES/10 @0.000000011,0
+scan: "k/20" -> /BYTES/20 @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+
+# Mask a write in the middle.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(15-25)
+  txn_step seq=40
+  scan k=k end=-k
+  get  k=k
+----
+scan: "k" -> /BYTES/c @0.000000011,0
+scan: "k/10" -> /BYTES/10 @0.000000011,0
+scan: "k/30" -> /BYTES/30 @0.000000011,0
+get: "k" -> /BYTES/c @0.000000011,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+
+# Mask all the writes.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(1-35)
+  txn_step seq=40
+  scan k=k end=-k
+  get  k=k
+----
+scan: "k"-"l" -> <no data>
+get: "k" -> <no data>
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+
+# Disjoint masks.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(1-15,25-35)
+  txn_step seq=40
+  scan k=k end=-k
+  get  k=k
+----
+scan: "k" -> /BYTES/b @0.000000011,0
+scan: "k/20" -> /BYTES/20 @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=2
+
+# A historical read before the ignored range should retrieve the
+# historical value visible at that point.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(15-25)
+  txn_step    seq=12
+  scan        k=k end=-k
+  get         k=k
+----
+scan: "k" -> /BYTES/a @0.000000011,0
+scan: "k/10" -> /BYTES/10 @0.000000011,0
+get: "k" -> /BYTES/a @0.000000011,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=12} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+
+# A historical read with an ignored range before it should hide
+# the historical value hidden at that point.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(5-15)
+  txn_step    seq=22
+  scan        k=k end=-k
+  get         k=k
+----
+scan: "k" -> /BYTES/b @0.000000011,0
+scan: "k/20" -> /BYTES/20 @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=22} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+
+# A historical read with an ignored range that overlaps should hide
+# the historical value hidden at that point.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(25-35)
+  txn_step    seq=32
+  scan        k=k end=-k
+  get         k=k
+----
+scan: "k" -> /BYTES/b @0.000000011,0
+scan: "k/10" -> /BYTES/10 @0.000000011,0
+scan: "k/20" -> /BYTES/20 @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=32} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+
+# Do an intent push by advancing the transaction timestamp, while also having
+# a range of ignored seqnums. This should permanently delete the value at seqnum
+# 30. This tests the pushed && intentUpdated case in mvccResolveWriteIntents.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(25-35)
+  txn_step        seq=32
+  check_intent    k=k
+  get             k=k
+  txn_advance     ts=14
+  get             k=k
+  resolve_intent  k=k status=PENDING
+  check_intent    k=k
+  get             k=k
+----
+meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "k" -> /BYTES/b @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
+meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+get: "k" -> /BYTES/b @0.000000014,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=32} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+
+# Ensure that the deleted value doens't surface. Instead, if we ignore the
+# now-newest seq, we get the write before it.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(15-25)
+  txn_step        seq=40
+  scan            k=k end=-k
+  get             k=k
+----
+scan: "k" -> /BYTES/a @0.000000014,0
+scan: "k/10" -> /BYTES/10 @0.000000011,0
+scan: "k/30" -> /BYTES/30 @0.000000011,0
+get: "k" -> /BYTES/a @0.000000014,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(26-27)
+  txn_step        seq=35
+  scan            k=k end=-k
+  get             k=k
+  txn_step        seq=25
+  scan            k=k end=-k
+  get             k=k
+----
+scan: "k" -> /BYTES/b @0.000000014,0
+scan: "k/10" -> /BYTES/10 @0.000000011,0
+scan: "k/20" -> /BYTES/20 @0.000000011,0
+scan: "k/30" -> /BYTES/30 @0.000000011,0
+get: "k" -> /BYTES/b @0.000000014,0
+scan: "k" -> /BYTES/b @0.000000014,0
+scan: "k/10" -> /BYTES/10 @0.000000011,0
+scan: "k/20" -> /BYTES/20 @0.000000011,0
+get: "k" -> /BYTES/b @0.000000014,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=25} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+
+# Call mvccResolveWriteIntent with status=COMMITTED. This should fold the
+# intent while leaving the value unmodified.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(25-35)
+  check_intent    k=k
+  resolve_intent  k=k status=COMMITTED
+with t=B
+  txn_begin  ts=20
+  get        k=k
+----
+meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+get: "k" -> /BYTES/b @0.000000014,0
+>> at end:
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000020,0 wto=false max=0,0
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+
+
+# Put a couple values at different sequence numbers in this new txn.
+
+run ok
+with t=B
+  txn_step     seq=10
+  put          k=l v=a
+  txn_step     seq=20
+  put          k=l v=b
+  txn_step     seq=30
+  put          k=l v=c
+  check_intent k=l
+  get          k=l
+----
+meta: "l" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=30} ts=0.000000020,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "l" -> /BYTES/c @0.000000020,0
+>> at end:
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000020,0 wto=false max=0,0
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=30} ts=0.000000020,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "l"/0.000000020,0 -> /BYTES/c
+
+
+# Blow up the entire intent history, then do a commit. No value or intent should
+# remain.
+
+run error
+with t=B
+  txn_step        seq=35
+  txn_ignore_seqs seqs=(5-35)
+  check_intent    k=l
+  get             k=l
+  resolve_intent  k=l status=COMMITTED
+  check_intent    k=l
+----
+meta: "l" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=30} ts=0.000000020,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "l" -> <no data>
+>> at end:
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=35} lock=true stat=PENDING rts=0.000000020,0 wto=false max=0,0 isn=1
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+error: (*withstack.withStack:) meta: "l" -> expected intent, found none
+
+
+run ok
+with t=C
+  txn_begin      ts=30
+  get            k=l
+----
+get: "l" -> <no data>
+>> at end:
+txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000030,0 wto=false max=0,0
+
+
+# Put some values, then ignore all except the first, then do a commit. The
+# first value put should be committed.
+
+run ok
+with t=C
+  txn_step     seq=10
+  put          k=m v=a
+  txn_step     seq=20
+  put          k=m v=b
+  txn_step     seq=30
+  put          k=m v=c
+  check_intent k=m
+  get          k=m
+----
+meta: "m" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} ts=0.000000030,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "m" -> /BYTES/c @0.000000030,0
+>> at end:
+txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000030,0 wto=false max=0,0
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+meta: "m"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} ts=0.000000030,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "m"/0.000000030,0 -> /BYTES/c
+
+
+run ok
+with t=C
+  txn_ignore_seqs seqs=(15-35)
+  check_intent    k=m
+  get             k=m
+  resolve_intent  k=m status=COMMITTED
+----
+meta: "m" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} ts=0.000000030,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "m" -> /BYTES/a @0.000000030,0
+>> at end:
+txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000030,0 wto=false max=0,0 isn=1
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+data: "m"/0.000000030,0 -> /BYTES/a
+
+
+run ok
+with t=D
+  txn_begin    ts=40
+  get          k=m
+  txn_step     seq=10
+  put          k=n v=a
+  txn_step     seq=20
+  put          k=n v=b
+  txn_step     seq=30
+  put          k=n v=c
+  check_intent k=n
+  get          k=n
+----
+get: "m" -> /BYTES/a @0.000000030,0
+meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000040,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "n" -> /BYTES/c @0.000000040,0
+>> at end:
+txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000040,0 wto=false max=0,0
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+data: "m"/0.000000030,0 -> /BYTES/a
+meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000040,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "n"/0.000000040,0 -> /BYTES/c
+
+
+# Do a push. The intent should remain, unmodified, save for the timestamp.
+run ok
+with t=D
+  check_intent   k=n
+  get            k=n
+  txn_advance    ts=45
+  resolve_intent k=n status=PENDING
+  check_intent   k=n
+  get            k=n
+----
+meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000040,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "n" -> /BYTES/c @0.000000040,0
+meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "n" -> /BYTES/c @0.000000045,0
+>> at end:
+txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000040,0 wto=false max=0,0
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+data: "m"/0.000000030,0 -> /BYTES/a
+meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "n"/0.000000045,0 -> /BYTES/c
+
+# Ignore sequence numbers other than the current one, then commit. The value
+# shouldn't change.
+run ok
+with t=D
+  txn_ignore_seqs seqs=(5-25)
+  check_intent    k=n
+  get             k=n
+  resolve_intent  k=n status=COMMITTED
+with t=E
+  txn_begin      ts=50
+  get            k=n
+----
+meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+get: "n" -> /BYTES/c @0.000000045,0
+get: "n" -> /BYTES/c @0.000000045,0
+>> at end:
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+data: "m"/0.000000030,0 -> /BYTES/a
+data: "n"/0.000000045,0 -> /BYTES/c
+
+# Write a couple values at different sequence numbers on this key, then ignore
+# them all, then do a resolve_intent while the txn is pending. The intent should
+# disappear. Also do the same on a new key.
+
+run ok
+with t=E
+  get            k=n
+  get            k=o
+  txn_step       seq=10
+  put            k=n v=a
+  put            k=o v=a
+  txn_step       seq=20
+  put            k=n v=b
+  put            k=o v=b
+  txn_step       seq=30
+  put            k=n v=c
+  put            k=o v=c
+----
+get: "n" -> /BYTES/c @0.000000045,0
+get: "o" -> <no data>
+>> at end:
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+data: "m"/0.000000030,0 -> /BYTES/a
+meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} ts=0.000000050,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "n"/0.000000050,0 -> /BYTES/c
+data: "n"/0.000000045,0 -> /BYTES/c
+meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} ts=0.000000050,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "o"/0.000000050,0 -> /BYTES/c
+
+
+run ok
+with t=E
+  txn_ignore_seqs seqs=(5-35)
+  get             k=n
+  get             k=o
+  resolve_intent  k=n status=PENDING
+  resolve_intent  k=o status=PENDING
+----
+get: "n" -> /BYTES/c @0.000000045,0
+get: "o" -> <no data>
+>> at end:
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+data: "m"/0.000000030,0 -> /BYTES/a
+data: "n"/0.000000045,0 -> /BYTES/c
+
+run ok
+with t=E
+  get k=n
+  get k=o
+----
+get: "n" -> /BYTES/c @0.000000045,0
+get: "o" -> <no data>
+
+# No intent should exist on either value
+
+run error
+with t=E
+  check_intent k=n
+----
+error: (*withstack.withStack:) meta: "n" -> expected intent, found none
+
+run error
+with t=E
+  check_intent k=o
+----
+error: (*withstack.withStack:) meta: "o" -> expected intent, found none
+
+# Push a transaction forward, while all writes for a key are ignored. The
+# ignored value and the intent should be deleted.
+run ok
+with t=E
+  txn_ignore_seqs seqs=(5-6)
+  txn_step        seq=10
+  put             k=o v=a
+  txn_step        seq=20
+  put             k=o v=b
+  txn_step        seq=30
+  put             k=o v=c
+  check_intent    k=o
+----
+meta: "o" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} ts=0.000000050,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+>> at end:
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+data: "m"/0.000000030,0 -> /BYTES/a
+data: "n"/0.000000045,0 -> /BYTES/c
+meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} ts=0.000000050,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "o"/0.000000050,0 -> /BYTES/c
+
+
+run ok
+with t=E
+  txn_advance     ts=55
+  txn_ignore_seqs seqs=(5-35)
+  resolve_intent  k=o status=PENDING
+  get             k=o
+----
+get: "o" -> <no data>
+>> at end:
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000055,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
+data: "k"/0.000000014,0 -> /BYTES/b
+meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+data: "m"/0.000000030,0 -> /BYTES/a
+data: "n"/0.000000045,0 -> /BYTES/c
+
+
+run error
+with t=E
+  check_intent k=o
+----
+error: (*withstack.withStack:) meta: "o" -> expected intent, found none

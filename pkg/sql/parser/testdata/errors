@@ -1,0 +1,727 @@
+error
+SELECT2 1
+----
+at or near "select2": syntax error
+DETAIL: source SQL:
+SELECT2 1
+^
+
+error
+SELECT 1 FROM (t)
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+SELECT 1 FROM (t)
+                ^
+HINT: try \h <SOURCE>
+
+error
+SET TIME ZONE INTERVAL 'foobar'
+----
+at or near "EOF": syntax error: could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar"
+DETAIL: source SQL:
+SET TIME ZONE INTERVAL 'foobar'
+                               ^
+
+error
+SELECT INTERVAL 'foo'
+----
+at or near "EOF": syntax error: could not parse "foo" as type interval: interval: missing unit at position 0: "foo"
+DETAIL: source SQL:
+SELECT INTERVAL 'foo'
+                     ^
+
+error
+SELECT 1 /* hello
+----
+lexical error: unterminated comment
+DETAIL: source SQL:
+SELECT 1 /* hello
+         ^
+
+error
+SELECT '1
+----
+lexical error: unterminated string
+DETAIL: source SQL:
+SELECT '1
+       ^
+HINT: try \h SELECT
+
+error
+SELECT * FROM t WHERE k=
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SELECT * FROM t WHERE k=
+                        ^
+HINT: try \h SELECT
+
+error
+CREATE TABLE test (
+  CONSTRAINT foo INDEX (bar)
+)
+----
+at or near "index": syntax error
+DETAIL: source SQL:
+CREATE TABLE test (
+  CONSTRAINT foo INDEX (bar)
+                 ^
+HINT: try \h CREATE TABLE
+
+error
+CREATE TABLE test (
+  foo BIT(0)
+)
+----
+at or near ")": syntax error: length for type bit must be at least 1
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo BIT(0)
+           ^
+
+error
+CREATE TABLE test (
+  foo INT8 DEFAULT 1 DEFAULT 2
+)
+----
+at or near ")": syntax error: multiple default values specified for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 DEFAULT 1 DEFAULT 2
+)
+^
+
+error
+CREATE TABLE test (
+  foo INT8 REFERENCES t1 REFERENCES t2
+)
+----
+at or near ")": syntax error: multiple foreign key constraints specified for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 REFERENCES t1 REFERENCES t2
+)
+^
+
+error
+CREATE TABLE test (
+  foo INT8 FAMILY a FAMILY b
+)
+----
+at or near ")": syntax error: multiple column families specified for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 FAMILY a FAMILY b
+)
+^
+
+error
+SELECT family FROM test
+----
+at or near "from": syntax error
+DETAIL: source SQL:
+SELECT family FROM test
+              ^
+HINT: try \h SELECT
+
+error
+CREATE TABLE test (
+  foo INT8 NOT NULL NULL
+)
+----
+at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 NOT NULL NULL
+)
+^
+
+error
+CREATE TABLE test (
+  foo INT8 NULL NOT NULL
+)
+----
+at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 NULL NOT NULL
+)
+^
+
+error
+CREATE DATABASE a b
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+CREATE DATABASE a b
+                  ^
+
+error
+CREATE DATABASE a b c
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+CREATE DATABASE a b c
+                  ^
+
+error
+CREATE INDEX ON a (b) STORING ()
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+CREATE INDEX ON a (b) STORING ()
+                               ^
+HINT: try \h CREATE INDEX
+
+error
+CREATE VIEW a
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CREATE VIEW a
+             ^
+HINT: try \h CREATE VIEW
+
+error
+CREATE VIEW a () AS select * FROM b
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+CREATE VIEW a () AS select * FROM b
+               ^
+HINT: try \h CREATE VIEW
+
+error
+SELECT FROM t
+----
+at or near "from": syntax error
+DETAIL: source SQL:
+SELECT FROM t
+       ^
+HINT: try \h SELECT
+
+error
+SELECT 1e-\n-1
+----
+lexical error: invalid floating point literal
+DETAIL: source SQL:
+SELECT 1e-\n-1
+       ^
+HINT: try \h SELECT
+
+error
+SELECT 0x FROM t
+----
+lexical error: invalid hexadecimal numeric literal
+DETAIL: source SQL:
+SELECT 0x FROM t
+       ^
+HINT: try \h SELECT
+
+error
+SELECT x'fail' FROM t
+----
+lexical error: invalid hexadecimal bytes literal
+DETAIL: source SQL:
+SELECT x'fail' FROM t
+       ^
+HINT: try \h SELECT
+
+error
+SELECT x'AAB' FROM t
+----
+lexical error: invalid hexadecimal bytes literal
+DETAIL: source SQL:
+SELECT x'AAB' FROM t
+       ^
+HINT: try \h SELECT
+
+error
+SELECT POSITION('high', 'a')
+----
+at or near ",": syntax error
+DETAIL: source SQL:
+SELECT POSITION('high', 'a')
+                      ^
+HINT: try \h SELECT
+
+error
+SELECT a FROM foo@{FORCE_INDEX}
+----
+at or near "}": syntax error
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX}
+                              ^
+HINT: try \h <SOURCE>
+
+error
+SELECT a FROM foo@{FORCE_INDEX=}
+----
+at or near "}": syntax error
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=}
+                               ^
+HINT: try \h <SOURCE>
+
+error
+SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
+----
+at or near "baz": syntax error: FORCE_INDEX specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
+                                               ^
+
+error
+SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
+----
+at or near "}": syntax error: FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
+                                                ^
+
+error
+SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
+----
+at or near "no_index_join": syntax error: NO_INDEX_JOIN specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
+                                 ^
+
+error
+SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
+----
+at or near "ignore_foreign_keys": syntax error: IGNORE_FOREIGN_KEYS specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
+                                       ^
+
+error
+SELECT a FROM foo@{ASC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT a FROM foo@{ASC}
+                      ^
+
+error
+SELECT a FROM foo@{DESC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT a FROM foo@{DESC}
+                       ^
+
+error
+INSERT INTO a@b VALUES (1, 2)
+----
+at or near "@": syntax error
+DETAIL: source SQL:
+INSERT INTO a@b VALUES (1, 2)
+             ^
+HINT: try \h INSERT
+
+error
+ALTER TABLE t RENAME COLUMN x TO family
+----
+at or near "family": syntax error
+DETAIL: source SQL:
+ALTER TABLE t RENAME COLUMN x TO family
+                                 ^
+HINT: try \h ALTER TABLE
+
+error
+CREATE USER foo WITH PASSWORD
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CREATE USER foo WITH PASSWORD
+                             ^
+HINT: try \h CREATE ROLE
+
+error
+ALTER TABLE t RENAME TO t[TRUE]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+ALTER TABLE t RENAME TO t[TRUE]
+                         ^
+
+error
+TABLE abc[TRUE]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+TABLE abc[TRUE]
+         ^
+
+error
+UPDATE kv SET k[0] = 9
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+UPDATE kv SET k[0] = 9
+               ^
+HINT: try \h UPDATE
+
+error
+SELECT (0) FROM y[array[]]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+SELECT (0) FROM y[array[]]
+                 ^
+
+error
+INSERT INTO kv (k[0]) VALUES ('hello')
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+INSERT INTO kv (k[0]) VALUES ('hello')
+                 ^
+HINT: try \h <SELECTCLAUSE>
+
+error
+SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
+                                                                 ^
+
+error
+SELECT EXISTS(SELECT 1)[1]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+SELECT EXISTS(SELECT 1)[1]
+                       ^
+
+error
+SELECT 1 + ANY ARRAY[1, 2, 3]
+----
+at or near "EOF": syntax error: + ANY <array> is invalid because "+" is not a boolean operator
+DETAIL: source SQL:
+SELECT 1 + ANY ARRAY[1, 2, 3]
+                             ^
+
+# Ensure that the support for ON ROLE <namelist> doesn't leak
+# where it should not be recognized.
+error
+GRANT SELECT ON ROLE foo, bar TO blix
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+GRANT SELECT ON ROLE foo, bar TO blix
+                     ^
+HINT: try \h GRANT
+
+error
+REVOKE SELECT ON ROLE foo, bar FROM blix
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+REVOKE SELECT ON ROLE foo, bar FROM blix
+                      ^
+HINT: try \h REVOKE
+
+error
+BACKUP ROLE foo, bar TO 'baz'
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+BACKUP ROLE foo, bar TO 'baz'
+            ^
+HINT: try \h BACKUP
+
+error
+RESTORE ROLE foo, bar FROM 'baz'
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+RESTORE ROLE foo, bar FROM 'baz'
+             ^
+HINT: try \h RESTORE
+
+error
+SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t
+----
+at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t
+                                   ^
+
+error
+SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t
+----
+at or near "following": syntax error: frame starting from following row cannot end with current row
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t
+                           ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
+----
+at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
+                                                                   ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t
+----
+at or near "preceding": syntax error: frame end cannot be UNBOUNDED PRECEDING
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t
+                                                                   ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t
+----
+at or near "preceding": syntax error: frame starting from current row cannot have preceding rows
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t
+                                                   ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
+----
+at or near "preceding": syntax error: frame starting from following row cannot have preceding rows
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
+                                                   ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
+----
+at or near "row": syntax error: frame starting from following row cannot have preceding rows
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
+                                                         ^
+
+error
+CREATE TABLE foo(a CHAR(0))
+----
+at or near ")": syntax error: length for type CHAR must be at least 1
+DETAIL: source SQL:
+CREATE TABLE foo(a CHAR(0))
+                         ^
+
+error
+e'\xad'::string
+----
+lexical error: invalid UTF-8 byte sequence
+DETAIL: source SQL:
+e'\xad'::string
+^
+
+error
+EXPLAIN EXECUTE a
+----
+at or near "execute": syntax error
+DETAIL: source SQL:
+EXPLAIN EXECUTE a
+        ^
+HINT: try \h EXPLAIN
+
+error
+EXPLAIN ANALYZE (PLAN) SELECT 1
+----
+at or near "EOF": syntax error: EXPLAIN ANALYZE cannot be used with PLAN
+DETAIL: source SQL:
+EXPLAIN ANALYZE (PLAN) SELECT 1
+                               ^
+
+error
+EXPLAIN (ANALYZE, PLAN) SELECT 1
+----
+at or near "analyze": syntax error
+DETAIL: source SQL:
+EXPLAIN (ANALYZE, PLAN) SELECT 1
+         ^
+HINT: try \h <SELECTCLAUSE>
+
+error
+EXPLAIN ANALYZE (OPT) SELECT 1
+----
+at or near "EOF": syntax error: EXPLAIN ANALYZE cannot be used with OPT
+DETAIL: source SQL:
+EXPLAIN ANALYZE (OPT) SELECT 1
+                              ^
+
+error
+EXPLAIN ANALYZE (VEC) SELECT 1
+----
+at or near "EOF": syntax error: EXPLAIN ANALYZE cannot be used with VEC
+DETAIL: source SQL:
+EXPLAIN ANALYZE (VEC) SELECT 1
+                              ^
+
+error
+EXPLAIN (DEBUG) SELECT 1
+----
+at or near "EOF": syntax error: DEBUG flag can only be used with EXPLAIN ANALYZE
+DETAIL: source SQL:
+EXPLAIN (DEBUG) SELECT 1
+                        ^
+
+error
+EXPLAIN (PLAN, DEBUG) SELECT 1
+----
+at or near "EOF": syntax error: DEBUG flag can only be used with EXPLAIN ANALYZE
+DETAIL: source SQL:
+EXPLAIN (PLAN, DEBUG) SELECT 1
+                              ^
+
+error
+SELECT $0
+----
+lexical error: placeholder index must be between 1 and 65536
+DETAIL: source SQL:
+SELECT $0
+       ^
+HINT: try \h SELECT
+
+error
+SELECT $-1
+----
+at or near "$": syntax error
+DETAIL: source SQL:
+SELECT $-1
+       ^
+HINT: try \h SELECT
+
+error
+SELECT $123456789
+----
+lexical error: placeholder index must be between 1 and 65536
+DETAIL: source SQL:
+SELECT $123456789
+       ^
+HINT: try \h SELECT
+
+error
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0
+----
+at or near "2.0": syntax error: THROTTLING fraction must be between 0 and 1
+DETAIL: source SQL:
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0
+                                                           ^
+
+error
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
+----
+at or near "0.5": syntax error: THROTTLING specified multiple times
+DETAIL: source SQL:
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
+                                                                          ^
+
+error
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
+----
+at or near "EOF": syntax error: AS OF specified multiple times
+DETAIL: source SQL:
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
+                                                                                                              ^
+
+error
+ANALYZE
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+ANALYZE
+       ^
+HINT: try \h ANALYZE
+
+error
+ANALYSE
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+ANALYSE
+       ^
+HINT: try \h ANALYZE
+
+error
+ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
+----
+at or near "idx": syntax error: index name should not be specified in ALTER PARTITION ... OF TABLE
+DETAIL: source SQL:
+ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
+                               ^
+HINT: try ALTER PARTITION ... OF INDEX
+
+error
+ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1
+----
+at or near "configure": syntax error: index wildcard unsupported in ALTER PARTITION ... OF TABLE
+DETAIL: source SQL:
+ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1
+                                 ^
+HINT: try ALTER PARTITION <partition> OF INDEX <tablename>@*
+
+error
+SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x;
+----
+at or near ")": syntax error: multiple ORDER BY clauses are not supported in this function
+DETAIL: source SQL:
+SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x
+                                                        ^
+
+error
+BACKUP foo TO 'bar' WITH key1, key2 = 'value'
+----
+at or near "key1": syntax error
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH key1, key2 = 'value'
+                         ^
+HINT: try \h BACKUP
+
+error
+BACKUP foo TO 'bar' WITH revision_history, revision_history
+----
+at or near "revision_history": syntax error: revision_history option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH revision_history, revision_history
+                                           ^
+
+error
+BACKUP foo TO 'bar' WITH detached, revision_history, detached
+----
+at or near "detached": syntax error: detached option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH detached, revision_history, detached
+                                                     ^
+
+error
+RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
+----
+at or near "key1": syntax error
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
+                            ^
+HINT: try \h RESTORE
+
+error
+RESTORE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_foreign_keys
+----
+at or near "skip_missing_foreign_keys": syntax error: skip_missing_foreign_keys specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_foreign_keys
+                                                       ^
+
+error
+RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
+----
+at or near "skip_missing_sequences": syntax error: skip_missing_sequences specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
+                                                                        ^
+
+error
+RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
+----
+at or near "detached": syntax error: detached option specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
+                                                          ^

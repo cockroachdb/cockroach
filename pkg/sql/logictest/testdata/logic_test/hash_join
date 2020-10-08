@@ -1,0 +1,218 @@
+statement ok
+CREATE TABLE  t1 (k INT PRIMARY KEY, v INT)
+
+statement ok
+INSERT INTO t1 VALUES (0, 4), (2, 1), (5, 4), (3, 4), (-1, -1)
+
+statement ok
+CREATE TABLE t2 (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO t2 VALUES (1, 3), (4, 6), (0, 5), (3, 2)
+
+statement ok
+CREATE TABLE a (k INT, v INT)
+
+statement ok
+INSERT INTO a VALUES (0, 1), (1, 2), (2, 0)
+
+statement ok
+CREATE TABLE b (a INT, b INT, c STRING)
+
+statement ok
+INSERT INTO b VALUES (0, 1, 'a'), (2, 1, 'b'), (0, 2, 'c'), (0, 1, 'd')
+
+statement ok
+CREATE TABLE c (a INT, b STRING)
+
+statement ok
+INSERT INTO c VALUES (1, 'a'), (1, 'b'), (2, 'c')
+
+query IIII
+SELECT * FROM t1 INNER HASH JOIN t2 ON t1.k = t2.x ORDER BY 1
+----
+0  4  0  5
+3  4  3  2
+
+query IIII
+SELECT * FROM a AS a1 JOIN a AS a2 ON a1.k = a2.v ORDER BY 1
+----
+0  1  2  0
+1  2  0  1
+2  0  1  2
+
+query IIII
+SELECT * FROM a AS a2 JOIN a AS a1 ON a1.k = a2.v ORDER BY 1
+----
+0  1  1  2
+1  2  2  0
+2  0  0  1
+
+query II
+SELECT t2.y, t1.v FROM t1 INNER HASH JOIN t2 ON t1.k = t2.x ORDER BY 1 DESC
+----
+5  4
+2  4
+
+query IIII
+SELECT * FROM t1 JOIN t2 ON t1.v = t2.x ORDER BY 1
+----
+0  4  4  6
+2  1  1  3
+3  4  4  6
+5  4  4  6
+
+query IIII
+SELECT * FROM t1 LEFT JOIN t2 ON t1.v = t2.x ORDER BY 1
+----
+-1  -1  NULL  NULL
+0   4   4     6
+2   1   1     3
+3   4   4     6
+5   4   4     6
+
+query IIII rowsort
+SELECT * FROM t1 RIGHT JOIN t2 ON t1.v = t2.x
+----
+0     4     4  6
+2     1     1  3
+3     4     4  6
+5     4     4  6
+NULL  NULL  0  5
+NULL  NULL  3  2
+
+query IIII rowsort
+SELECT * FROM t1 FULL JOIN t2 ON t1.v = t2.x
+----
+-1    -1    NULL  NULL
+0     4     4     6
+2     1     1     3
+3     4     4     6
+5     4     4     6
+NULL  NULL  3     2
+NULL  NULL  0     5
+
+query IIT
+SELECT b.a, b.b, b.c FROM b JOIN a ON b.a = a.k AND a.v = b.b ORDER BY 3
+----
+0  1  a
+0  1  d
+
+query ITI
+SELECT b.a, b.c, c.a FROM b JOIN c ON b.b = c.a AND b.c = c.b ORDER BY 2
+----
+0  a  1
+2  b  1
+0  c  2
+
+# Test hash join with an empty build table.
+statement ok
+CREATE TABLE empty (x INT)
+
+statement ok
+CREATE TABLE onecolumn (x INT); INSERT INTO onecolumn(x) VALUES (44), (NULL), (42)
+
+query II colnames
+SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
+----
+x     y
+NULL  NULL
+NULL  42
+NULL  44
+
+# Regression test for #41407.
+statement ok
+CREATE TABLE t41407 AS
+	SELECT
+		g AS _float8,
+		g % 0 = 0 AS _bool,
+		g AS _decimal,
+		g AS _string,
+		g AS _bytes
+	FROM
+		generate_series(NULL, NULL) AS g;
+
+query TRTTRRBR
+SELECT
+  tab_1688._bytes,
+  tab_1688._float8,
+  tab_1689._string,
+  tab_1689._string,
+  tab_1688._float8,
+  tab_1688._float8,
+  tab_1689._bool,
+  tab_1690._decimal
+FROM
+  t41407 AS tab_1688
+  JOIN t41407 AS tab_1689
+    JOIN t41407 AS tab_1690 ON
+        tab_1689._bool = tab_1690._bool ON
+      tab_1688._float8 = tab_1690._float8
+      AND tab_1688._bool = tab_1689._bool;
+----
+
+# Regression test for empty equality columns with one of the tables having only
+# UNIQUE columns.
+statement ok
+CREATE TABLE t44207_0(c0 INT UNIQUE); CREATE TABLE t44207_1(c0 INT)
+
+statement ok
+INSERT INTO t44207_0(c0) VALUES (NULL), (NULL); INSERT INTO t44207_1(c0) VALUES (0)
+
+query II
+SELECT * FROM t44207_0, t44207_1 WHERE t44207_0.c0 IS NULL
+----
+NULL 0
+NULL 0
+
+# Regression test for the inputs that have comparable but different types (see
+# issues #44547 and #44797).
+statement ok
+CREATE TABLE t44547_0(c0 INT4); CREATE TABLE t44547_1(c0 INT8)
+
+statement ok
+INSERT INTO t44547_0(c0) VALUES(0); INSERT INTO t44547_1(c0) VALUES(0)
+
+# Note that integers of different width are still considered equal.
+query I
+SELECT * FROM t44547_0 NATURAL JOIN t44547_1
+----
+0
+
+statement ok
+CREATE TABLE t44797_0(a FLOAT, b DECIMAL); CREATE TABLE t44797_1(c INT2, d INT4)
+
+statement ok
+INSERT INTO t44797_0 VALUES (1.0, 1.0), (2.0, 2.0); INSERT INTO t44797_1 VALUES (1, 1), (2, 2)
+
+# Note that mixed-type comparisons - of what appears to be "same" values - do
+# not consider those values equal.
+query RRII rowsort
+SELECT * FROM t44797_0 NATURAL JOIN t44797_1
+----
+1  1.0  2  2
+1  1.0  1  1
+2  2.0  2  2
+2  2.0  1  1
+
+statement ok
+CREATE TABLE t44797_2(a FLOAT); CREATE TABLE t44797_3(b DECIMAL)
+
+statement ok
+INSERT INTO t44797_2 VALUES (1.0), (2.0); INSERT INTO t44797_3 VALUES (1.0), (2.0)
+
+query RR rowsort
+SELECT * FROM t44797_2 NATURAL JOIN t44797_3
+----
+1  2.0
+1  1.0
+2  2.0
+2  1.0
+
+# Check that non-inner join with mixed-type equality considers the "same"
+# values of different types as equal.
+query R rowsort
+SELECT * FROM t44797_2 WHERE EXISTS (SELECT * FROM t44797_2 AS l, t44797_3 AS r WHERE l.a = r.b)
+----
+1
+2

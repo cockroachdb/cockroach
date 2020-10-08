@@ -1,0 +1,10 @@
+I181130 22:14:34.828612 740 storage/store_rebalancer.go:277  [n1,s1,store-rebalancer] load-based lease transfers successfully brought s1 down to 37128.65 qps (mean=29834.62, upperThreshold=37293.27)
+I181130 22:14:37.516378 441 server/status/runtime.go:465  [n1] runtime stats: 900 MiB RSS, 1509 goroutines, 421 MiB/144 MiB/777 MiB GO alloc/idle/total, 96 MiB/144 MiB CGO alloc/total, 154632.4 CGO/sec, 2206.9/216.0 %(u/s)time, 0.4 %gc (43x), 182 MiB/204 MiB (r/w)net
+I181130 22:14:47.400515 437 gossip/gossip.go:555  [n1] gossip status (ok, 3 nodes)
+gossip client (0/3 cur/max conns)
+gossip server (2/3 cur/max conns, infos 4077/2242 sent/received, bytes 1275332B/555352B sent/received)
+  2: ajwerner-test-0002:26257 (8m0s)
+  3: ajwerner-test-0003:26257 (8m0s)
+I181130 22:14:47.519324 441 server/status/runtime.go:465  [n1] runtime stats: 957 MiB RSS, 1690 goroutines, 420 MiB/173 MiB/777 MiB GO alloc/idle/total, 124 MiB/174 MiB CGO alloc/total, 143837.6 CGO/sec, 2245.9/218.3 %(u/s)time, 0.5 %gc (47x), 199 MiB/210 MiB (r/w)net
+I181130 22:14:57.522236 441 server/status/runtime.go:465  [n1] runtime stats: 986 MiB RSS, 1332 goroutines, 438 MiB/140 MiB/777 MiB GO alloc/idle/total, 151 MiB/203 MiB CGO alloc/total, 137663.6 CGO/sec, 2168.3/222.8 %(u/s)time, 0.4 %gc (45x), 192 MiB/203 MiB (r/w)net
+I181130 22:15:07.525316 441 server/status/runtime.go:465  [n1] runtime stats: 952 MiB RSS, 1422 goroutines, 397 MiB/165 MiB/777 MiB GO alloc/idle/total, 112 MiB/164 MiB CGO alloc/total, 133359.9 CGO/sec, 2137.8/225.1 %(u/s)time, 0.4 %gc (43x), 187 MiB/198 MiB (r/w)net

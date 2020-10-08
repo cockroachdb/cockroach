@@ -11,27 +11,6 @@ CREATE TABLE a
     INVERTED INDEX inv_idx_j (j)
 )
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX s_idx
- │    ├── s string
- │    ├── k int not null
- │    ├── i int (storing)
- │    └── f float (storing)
- ├── INDEX si_idx
- │    ├── s string desc
- │    ├── i int desc
- │    ├── k int not null
- │    └── j jsonb (storing)
- └── INVERTED INDEX inv_idx_j
-      ├── j jsonb
-      └── k int not null
 
 # --------------------------------------------------
 # GenerateIndexScans
@@ -43,28 +22,30 @@ opt
 SELECT k,f FROM a ORDER BY f DESC, k ASC LIMIT 10
 ----
 limit
- ├── columns: k:1(int!null) f:3(float)
+ ├── columns: k:1!null f:3
+ ├── internal-ordering: -3,+1
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(3)
  ├── ordering: -3,+1
  ├── sort
- │    ├── columns: k:1(int!null) f:3(float)
+ │    ├── columns: k:1!null f:3
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
  │    ├── ordering: -3,+1
+ │    ├── limit hint: 10.00
  │    └── scan a@s_idx
- │         ├── columns: k:1(int!null) f:3(float)
+ │         ├── columns: k:1!null f:3
  │         ├── key: (1)
  │         └── fd: (1)-->(3)
- └── const: 10 [type=int]
+ └── 10
 
 opt
 SELECT k,f from a ORDER BY k DESC LIMIT 10
 ----
 scan a,rev
- ├── columns: k:1(int!null) f:3(float)
- ├── limit: 10
+ ├── columns: k:1!null f:3
+ ├── limit: 10(rev)
  ├── key: (1)
  ├── fd: (1)-->(3)
  └── ordering: -1
@@ -72,57 +53,29 @@ scan a,rev
 memo
 SELECT k,f FROM a ORDER BY k DESC LIMIT 10
 ----
-memo (optimized)
- ├── G1: (limit G2 G7 ordering=-1) (scan a,rev,cols=(1,3),lim=10) (index-join G3 a,cols=(1,3)) (index-join G4 a,cols=(1,3))
- │    ├── "[presentation: k:1,f:3] [ordering: -1]"
- │    │    ├── best: (scan a,rev,cols=(1,3),lim=10)
- │    │    └── cost: 11.40
- │    └── ""
- │         ├── best: (scan a,rev,cols=(1,3),lim=10)
- │         └── cost: 11.40
- ├── G2: (scan a,cols=(1,3)) (scan a,rev,cols=(1,3)) (scan a@s_idx,cols=(1,3)) (scan a@s_idx,rev,cols=(1,3)) (index-join G5 a,cols=(1,3)) (index-join G6 a,cols=(1,3))
- │    ├── ""
- │    │    ├── best: (scan a@s_idx,cols=(1,3))
- │    │    └── cost: 1060.00
- │    └── "[ordering: -1]"
- │         ├── best: (scan a,rev,cols=(1,3))
- │         └── cost: 1140.00
- ├── G3: (limit G5 G7 ordering=-1)
- │    ├── ""
- │    │    ├── best: (limit G5="[ordering: -1]" G7 ordering=-1)
- │    │    └── cost: 1149.66
- │    └── "[ordering: -1]"
- │         ├── best: (limit G5="[ordering: -1]" G7 ordering=-1)
- │         └── cost: 1149.66
- ├── G4: (limit G6 G7 ordering=-1)
- │    ├── ""
- │    │    ├── best: (limit G6="[ordering: -1]" G7 ordering=-1)
- │    │    └── cost: 1199.66
- │    └── "[ordering: -1]"
- │         ├── best: (limit G6="[ordering: -1]" G7 ordering=-1)
- │         └── cost: 1199.66
- ├── G5: (scan a@si_idx,cols=(1))
- │    ├── ""
- │    │    ├── best: (scan a@si_idx,cols=(1))
- │    │    └── cost: 1050.00
- │    └── "[ordering: -1]"
- │         ├── best: (sort G5)
- │         └── cost: 1149.66
- ├── G6: (scan a@si_idx,rev,cols=(1))
- │    ├── ""
- │    │    ├── best: (scan a@si_idx,rev,cols=(1))
- │    │    └── cost: 1100.00
- │    └── "[ordering: -1]"
- │         ├── best: (sort G6)
- │         └── cost: 1199.66
- └── G7: (const 10)
+memo (optimized, ~3KB, required=[presentation: k:1,f:3] [ordering: -1])
+ ├── G1: (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev))
+ │    ├── [presentation: k:1,f:3] [ordering: -1]
+ │    │    ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
+ │    │    └── cost: 15.04
+ │    └── []
+ │         ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
+ │         └── cost: 15.04
+ ├── G2: (scan a,cols=(1,3)) (scan a@s_idx,cols=(1,3))
+ │    ├── [ordering: -1] [limit hint: 10.00]
+ │    │    ├── best: (scan a,rev,cols=(1,3))
+ │    │    └── cost: 26.28
+ │    └── []
+ │         ├── best: (scan a@s_idx,cols=(1,3))
+ │         └── cost: 1064.02
+ └── G3: (const 10)
 
 
 opt
 SELECT s FROM a ORDER BY k DESC
 ----
 scan a,rev
- ├── columns: s:4(string)
+ ├── columns: s:4  [hidden: k:1!null]
  ├── key: (1)
  ├── fd: (1)-->(4)
  └── ordering: -1
@@ -131,7 +84,7 @@ opt
 SELECT k FROM a ORDER BY k ASC
 ----
 scan a
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── ordering: +1
 
@@ -139,7 +92,7 @@ opt
 SELECT k FROM a ORDER BY k DESC
 ----
 scan a,rev
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── ordering: -1
 
@@ -147,7 +100,7 @@ opt
 SELECT s,i,k,j FROM a ORDER BY s DESC, i DESC, k ASC
 ----
 scan a@si_idx
- ├── columns: s:4(string) i:2(int) k:1(int!null) j:5(jsonb)
+ ├── columns: s:4 i:2 k:1!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2,4,5)
  └── ordering: -4,-2,+1
@@ -157,36 +110,38 @@ scan a@si_idx
 opt
 SELECT s,i,k,j FROM a ORDER BY s DESC, i DESC, k DESC
 ----
-sort
- ├── columns: s:4(string) i:2(int) k:1(int!null) j:5(jsonb)
+sort (segmented)
+ ├── columns: s:4 i:2 k:1!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2,4,5)
  ├── ordering: -4,-2,-1
  └── scan a@si_idx
-      ├── columns: k:1(int!null) i:2(int) s:4(string) j:5(jsonb)
+      ├── columns: k:1!null i:2 s:4 j:5
       ├── key: (1)
-      └── fd: (1)-->(2,4,5)
+      ├── fd: (1)-->(2,4,5)
+      └── ordering: -4,-2
 
 # Revscan node won't be used because ordering is
 # only partial (reverse) match with existing indices
 opt
 SELECT s,i,k,j FROM a ORDER BY s DESC, i ASC, k DESC
 ----
-sort
- ├── columns: s:4(string) i:2(int) k:1(int!null) j:5(jsonb)
+sort (segmented)
+ ├── columns: s:4 i:2 k:1!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2,4,5)
  ├── ordering: -4,+2,-1
  └── scan a@si_idx
-      ├── columns: k:1(int!null) i:2(int) s:4(string) j:5(jsonb)
+      ├── columns: k:1!null i:2 s:4 j:5
       ├── key: (1)
-      └── fd: (1)-->(2,4,5)
+      ├── fd: (1)-->(2,4,5)
+      └── ordering: -4
 
 opt
 SELECT s,i,k,j FROM a ORDER BY s ASC, i ASC, k DESC
 ----
 scan a@si_idx,rev
- ├── columns: s:4(string) i:2(int) k:1(int!null) j:5(jsonb)
+ ├── columns: s:4 i:2 k:1!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2,4,5)
  └── ordering: +4,+2,-1
@@ -194,21 +149,21 @@ scan a@si_idx,rev
 memo
 SELECT k FROM a ORDER BY k ASC
 ----
-memo (optimized)
- └── G1: (scan a,cols=(1)) (scan a,rev,cols=(1)) (scan a@s_idx,cols=(1)) (scan a@s_idx,rev,cols=(1)) (scan a@si_idx,cols=(1)) (scan a@si_idx,rev,cols=(1))
-      ├── "[presentation: k:1] [ordering: +1]"
+memo (optimized, ~2KB, required=[presentation: k:1] [ordering: +1])
+ └── G1: (scan a,cols=(1)) (scan a@s_idx,cols=(1)) (scan a@si_idx,cols=(1))
+      ├── [presentation: k:1] [ordering: +1]
       │    ├── best: (scan a,cols=(1))
-      │    └── cost: 1060.00
-      └── ""
+      │    └── cost: 1064.02
+      └── []
            ├── best: (scan a@s_idx,cols=(1))
-           └── cost: 1050.00
+           └── cost: 1054.02
 
 # Scan of secondary index is lowest cost.
 opt
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
 scan a@s_idx
- ├── columns: s:4(string) i:2(int) f:3(float)
+ ├── columns: s:4 i:2 f:3  [hidden: k:1!null]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: +4,+1
@@ -216,29 +171,16 @@ scan a@s_idx
 memo
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
-memo (optimized)
- ├── G1: (scan a,cols=(1-4)) (scan a,rev,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (scan a@s_idx,rev,cols=(1-4)) (index-join G2 a,cols=(1-4)) (index-join G3 a,cols=(1-4))
- │    ├── "[presentation: s:4,i:2,f:3] [ordering: +4,+1]"
- │    │    ├── best: (scan a@s_idx,cols=(1-4))
- │    │    └── cost: 1080.00
- │    └── ""
- │         ├── best: (scan a@s_idx,cols=(1-4))
- │         └── cost: 1080.00
- ├── G2: (scan a@si_idx,cols=(1,2,4))
- │    ├── ""
- │    │    ├── best: (scan a@si_idx,cols=(1,2,4))
- │    │    └── cost: 1070.00
- │    └── "[ordering: +4,+1]"
- │         ├── best: (sort G2)
- │         └── cost: 1169.66
- └── G3: (scan a@si_idx,rev,cols=(1,2,4))
-      ├── ""
-      │    ├── best: (scan a@si_idx,rev,cols=(1,2,4))
-      │    └── cost: 1140.00
-      └── "[ordering: +4,+1]"
-           ├── best: (sort G3)
-           └── cost: 1239.66
+memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +4,+1])
+ └── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4))
+      ├── [presentation: s:4,i:2,f:3] [ordering: +4,+1]
+      │    ├── best: (scan a@s_idx,cols=(1-4))
+      │    └── cost: 1084.02
+      └── []
+           ├── best: (scan a@s_idx,cols=(1-4))
+           └── cost: 1084.02
 
+# No index-join should be generated for a@si_idx, since it is not constrained.
 exploretrace rule=GenerateIndexScans
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
@@ -248,121 +190,160 @@ GenerateIndexScans
 ================================================================================
 Source expression:
   sort
-   ├── columns: s:4(string) i:2(int) f:3(float)
+   ├── columns: s:4 i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
    ├── fd: (1)-->(2-4)
    ├── ordering: +4,+1
    └── scan a
-        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+        ├── columns: k:1!null i:2 f:3 s:4
         ├── key: (1)
         └── fd: (1)-->(2-4)
 
-New expression 1 of 5:
-  sort
-   ├── columns: s:4(string) i:2(int) f:3(float)
-   ├── key: (1)
-   ├── fd: (1)-->(2-4)
-   ├── ordering: +4,+1
-   └── scan a,rev
-        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
-        ├── key: (1)
-        └── fd: (1)-->(2-4)
-
-New expression 2 of 5:
+New expression 1 of 1:
   scan a@s_idx
-   ├── columns: s:4(string) i:2(int) f:3(float)
+   ├── columns: s:4 i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
    ├── fd: (1)-->(2-4)
    └── ordering: +4,+1
+----
+----
 
-New expression 3 of 5:
-  sort
-   ├── columns: s:4(string) i:2(int) f:3(float)
-   ├── key: (1)
-   ├── fd: (1)-->(2-4)
-   ├── ordering: +4,+1
-   └── scan a@s_idx,rev
-        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
-        ├── key: (1)
-        └── fd: (1)-->(2-4)
+# Scans over partial indexes should be generated when the partial index
+# predicates always evaluate to true.
 
-New expression 4 of 5:
-  sort
-   ├── columns: s:4(string) i:2(int) f:3(float)
+exec-ddl
+CREATE TABLE p (i INT, INDEX (i) WHERE 1 = 1)
+----
+
+opt
+SELECT i FROM p ORDER BY i
+----
+scan p@secondary,partial
+ ├── columns: i:1
+ └── ordering: +1
+
+# --------------------------------------------------
+# GenerateConstrainedScans
+# --------------------------------------------------
+
+# Constrain the a@si_idx so that an index join is generated.
+exploretrace rule=GenerateConstrainedScans
+SELECT s, i, f FROM a WHERE s='foo' ORDER BY s, k, i
+----
+----
+================================================================================
+GenerateConstrainedScans
+================================================================================
+Source expression:
+  select
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
-   ├── fd: (1)-->(2-4)
-   ├── ordering: +4,+1
+   ├── fd: ()-->(4), (1)-->(2,3)
+   ├── ordering: +1 opt(4) [actual: +1]
+   ├── scan a@s_idx
+   │    ├── columns: k:1!null i:2 f:3 s:4
+   │    ├── key: (1)
+   │    ├── fd: (1)-->(2-4)
+   │    └── ordering: +1 opt(4) [actual: +4,+1]
+   └── filters
+        └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+New expression 1 of 2:
+  scan a@s_idx
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
+   ├── constraint: /4/1: [/'foo' - /'foo']
+   ├── key: (1)
+   ├── fd: ()-->(4), (1)-->(2,3)
+   └── ordering: +1 opt(4) [actual: +1]
+
+New expression 2 of 2:
+  sort
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
+   ├── key: (1)
+   ├── fd: ()-->(4), (1)-->(2,3)
+   ├── ordering: +1 opt(4) [actual: +1]
    └── index-join a
-        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+        ├── columns: k:1!null i:2 f:3 s:4!null
         ├── key: (1)
-        ├── fd: (1)-->(2-4)
+        ├── fd: ()-->(4), (1)-->(2,3)
         └── scan a@si_idx
-             ├── columns: k:1(int!null) i:2(int) s:4(string)
+             ├── columns: k:1!null i:2 s:4!null
+             ├── constraint: /-4/-2/1: [/'foo' - /'foo']
              ├── key: (1)
-             └── fd: (1)-->(2,4)
-
-New expression 5 of 5:
-  sort
-   ├── columns: s:4(string) i:2(int) f:3(float)
-   ├── key: (1)
-   ├── fd: (1)-->(2-4)
-   ├── ordering: +4,+1
-   └── index-join a
-        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
-        ├── key: (1)
-        ├── fd: (1)-->(2-4)
-        └── scan a@si_idx,rev
-             ├── columns: k:1(int!null) i:2(int) s:4(string)
-             ├── key: (1)
-             └── fd: (1)-->(2,4)
+             └── fd: ()-->(4), (1)-->(2)
 ----
 ----
 
 memo
 SELECT s, i, f FROM a ORDER BY f
 ----
-memo (optimized)
- ├── G1: (scan a,cols=(2-4)) (scan a,rev,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (scan a@s_idx,rev,cols=(2-4)) (index-join G2 a,cols=(2-4)) (index-join G3 a,cols=(2-4))
- │    ├── "[presentation: s:4,i:2,f:3] [ordering: +3]"
- │    │    ├── best: (sort G1)
- │    │    └── cost: 1169.66
- │    └── ""
- │         ├── best: (scan a@s_idx,cols=(2-4))
- │         └── cost: 1070.00
- ├── G2: (scan a@si_idx,cols=(1,2,4))
- │    └── ""
- │         ├── best: (scan a@si_idx,cols=(1,2,4))
- │         └── cost: 1070.00
- └── G3: (scan a@si_idx,rev,cols=(1,2,4))
-      └── ""
-           ├── best: (scan a@si_idx,rev,cols=(1,2,4))
-           └── cost: 1140.00
+memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +3])
+ └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
+      ├── [presentation: s:4,i:2,f:3] [ordering: +3]
+      │    ├── best: (sort G1)
+      │    └── cost: 1293.35
+      └── []
+           ├── best: (scan a@s_idx,cols=(2-4))
+           └── cost: 1074.02
 
 memo
 SELECT s, i, f FROM a ORDER BY s DESC, i
 ----
-memo (optimized)
- ├── G1: (scan a,cols=(2-4)) (scan a,rev,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (scan a@s_idx,rev,cols=(2-4)) (index-join G2 a,cols=(2-4)) (index-join G3 a,cols=(2-4))
- │    ├── "[presentation: s:4,i:2,f:3] [ordering: -4,+2]"
+memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: -4,+2])
+ └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
+      ├── [presentation: s:4,i:2,f:3] [ordering: -4,+2]
+      │    ├── best: (sort G1="[ordering: -4]")
+      │    └── cost: 1260.33
+      ├── [ordering: -4]
+      │    ├── best: (scan a@s_idx,rev,cols=(2-4))
+      │    └── cost: 1173.68
+      └── []
+           ├── best: (scan a@s_idx,cols=(2-4))
+           └── cost: 1074.02
+
+memo
+SELECT s, i, f FROM a WHERE s='foo' ORDER BY s DESC, i
+----
+memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
+ ├── G1: (select G2 G3) (scan a@s_idx,cols=(2-4),constrained) (index-join G4 a,cols=(2-4))
+ │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1169.66
- │    └── ""
+ │    │    └── cost: 15.58
+ │    └── []
+ │         ├── best: (scan a@s_idx,cols=(2-4),constrained)
+ │         └── cost: 14.71
+ ├── G2: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
+ │    ├── [ordering: +2 opt(4)]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1293.35
+ │    └── []
  │         ├── best: (scan a@s_idx,cols=(2-4))
- │         └── cost: 1070.00
- ├── G2: (scan a@si_idx,cols=(1,2,4))
- │    ├── ""
- │    │    ├── best: (scan a@si_idx,cols=(1,2,4))
- │    │    └── cost: 1070.00
- │    └── "[ordering: -4,+2]"
- │         ├── best: (sort G2)
- │         └── cost: 1169.66
- └── G3: (scan a@si_idx,rev,cols=(1,2,4))
-      ├── ""
-      │    ├── best: (scan a@si_idx,rev,cols=(1,2,4))
-      │    └── cost: 1140.00
-      └── "[ordering: -4,+2]"
-           ├── best: (sort G3)
-           └── cost: 1239.66
+ │         └── cost: 1074.02
+ ├── G3: (filters G5)
+ ├── G4: (scan a@si_idx,cols=(1,2,4),constrained)
+ │    ├── [ordering: +2 opt(4)]
+ │    │    ├── best: (scan a@si_idx,rev,cols=(1,2,4),constrained)
+ │    │    └── cost: 15.04
+ │    └── []
+ │         ├── best: (scan a@si_idx,cols=(1,2,4),constrained)
+ │         └── cost: 14.71
+ ├── G5: (eq G6 G7)
+ ├── G6: (variable s)
+ └── G7: (const 'foo')
+
+# Force an index in order to ensure that an index join is created.
+opt
+SELECT * FROM a@si_idx
+----
+index-join a
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── scan a@si_idx
+      ├── columns: k:1!null i:2 s:4 j:5
+      ├── flags: force-index=si_idx
+      ├── key: (1)
+      └── fd: (1)-->(2,4,5)
 
 exec-ddl
 CREATE TABLE abc (
@@ -377,111 +358,59 @@ CREATE TABLE abc (
   FAMILY (d)
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b int not null
- ├── c int not null
- ├── d string
- ├── INDEX primary
- │    ├── a int not null
- │    ├── b int not null
- │    └── c int not null
- ├── INDEX bc
- │    ├── b int not null
- │    ├── c int not null
- │    └── a int not null (storing)
- └── INDEX ba
-      ├── b int not null
-      ├── a int not null
-      └── c int not null
 
 memo
 SELECT d FROM abc ORDER BY lower(d)
 ----
-memo (optimized)
- ├── G1: (project G2 G3)
- │    ├── "[presentation: d:4] [ordering: +5]"
+memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +6])
+ ├── G1: (project G2 G3 d)
+ │    ├── [presentation: d:4] [ordering: +6]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1149.66
- │    └── ""
- │         ├── best: (project G2 G3)
- │         └── cost: 1050.00
- ├── G2: (scan abc,cols=(4)) (scan abc,rev,cols=(4)) (index-join G4 abc,cols=(4)) (index-join G5 abc,cols=(4)) (index-join G6 abc,cols=(4)) (index-join G7 abc,cols=(4))
- │    └── ""
+ │    │    └── cost: 1293.36
+ │    └── []
+ │         ├── best: (project G2 G3 d)
+ │         └── cost: 1074.03
+ ├── G2: (scan abc,cols=(4))
+ │    └── []
  │         ├── best: (scan abc,cols=(4))
- │         └── cost: 1050.00
- ├── G3: (projections G8 abc.d)
- ├── G4: (scan abc@bc,cols=(1-3))
- │    └── ""
- │         ├── best: (scan abc@bc,cols=(1-3))
- │         └── cost: 1060.00
- ├── G5: (scan abc@bc,rev,cols=(1-3))
- │    └── ""
- │         ├── best: (scan abc@bc,rev,cols=(1-3))
- │         └── cost: 1120.00
- ├── G6: (scan abc@ba,cols=(1-3))
- │    └── ""
- │         ├── best: (scan abc@ba,cols=(1-3))
- │         └── cost: 1060.00
- ├── G7: (scan abc@ba,rev,cols=(1-3))
- │    └── ""
- │         ├── best: (scan abc@ba,rev,cols=(1-3))
- │         └── cost: 1120.00
- ├── G8: (function G9 lower)
- └── G9: (variable abc.d)
+ │         └── cost: 1054.02
+ ├── G3: (projections G4)
+ ├── G4: (function G5 lower)
+ ├── G5: (scalar-list G6)
+ └── G6: (variable d)
 
 memo
 SELECT j FROM a WHERE s = 'foo'
 ----
-memo (optimized)
- ├── G1: (project G2 G3)
- │    └── "[presentation: j:5]"
- │         ├── best: (project G2 G3)
- │         └── cost: 1.51
- ├── G2: (select G4 G11) (scan a@si_idx,cols=(4,5),constrained) (scan a@si_idx,rev,cols=(4,5),constrained) (index-join G5 a,cols=(4,5)) (index-join G6 a,cols=(4,5)) (index-join G7 a,cols=(4,5)) (index-join G8 a,cols=(4,5))
- │    └── ""
+memo (optimized, ~7KB, required=[presentation: j:5])
+ ├── G1: (project G2 G3 j)
+ │    └── [presentation: j:5]
+ │         ├── best: (project G2 G3 j)
+ │         └── cost: 14.72
+ ├── G2: (select G4 G5) (index-join G6 a,cols=(4,5)) (scan a@si_idx,cols=(4,5),constrained)
+ │    └── []
  │         ├── best: (scan a@si_idx,cols=(4,5),constrained)
- │         └── cost: 1.51
- ├── G3: (projections a.j)
- ├── G4: (scan a,cols=(4,5)) (scan a,rev,cols=(4,5)) (index-join G9 a,cols=(4,5)) (index-join G10 a,cols=(4,5)) (scan a@si_idx,cols=(4,5)) (scan a@si_idx,rev,cols=(4,5))
- │    └── ""
+ │         └── cost: 14.61
+ ├── G3: (projections)
+ ├── G4: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+ │    └── []
  │         ├── best: (scan a@si_idx,cols=(4,5))
- │         └── cost: 1060.00
- ├── G5: (select G9 G11) (scan a@s_idx,cols=(1,4),constrained)
- │    └── ""
+ │         └── cost: 1064.02
+ ├── G5: (filters G7)
+ ├── G6: (scan a@s_idx,cols=(1,4),constrained)
+ │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,4),constrained)
- │         └── cost: 1.51
- ├── G6: (select G10 G11) (scan a@s_idx,rev,cols=(1,4),constrained)
- │    └── ""
- │         ├── best: (scan a@s_idx,rev,cols=(1,4),constrained)
- │         └── cost: 1.60
- ├── G7: (scan a@s_idx,cols=(1,4),constrained)
- │    └── ""
- │         ├── best: (scan a@s_idx,cols=(1,4),constrained)
- │         └── cost: 1.51
- ├── G8: (scan a@s_idx,rev,cols=(1,4),constrained)
- │    └── ""
- │         ├── best: (scan a@s_idx,rev,cols=(1,4),constrained)
- │         └── cost: 1.60
- ├── G9: (scan a@s_idx,cols=(1,4))
- │    └── ""
- │         ├── best: (scan a@s_idx,cols=(1,4))
- │         └── cost: 1060.00
- ├── G10: (scan a@s_idx,rev,cols=(1,4))
- │    └── ""
- │         ├── best: (scan a@s_idx,rev,cols=(1,4))
- │         └── cost: 1120.00
- ├── G11: (filters G12)
- ├── G12: (eq G13 G14)
- ├── G13: (variable a.s)
- └── G14: (const 'foo')
+ │         └── cost: 14.61
+ ├── G7: (eq G8 G9)
+ ├── G8: (variable s)
+ └── G9: (const 'foo')
 
 # Scan of primary index is lowest cost.
 opt
 SELECT s, i, f FROM a ORDER BY k, i, s
 ----
 scan a
- ├── columns: s:4(string) i:2(int) f:3(float)
+ ├── columns: s:4 i:2 f:3  [hidden: k:1!null]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: +1
@@ -489,107 +418,333 @@ scan a
 memo
 SELECT s, i, f FROM a ORDER BY k, i, s
 ----
-memo (optimized)
- ├── G1: (scan a,cols=(1-4)) (scan a,rev,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (scan a@s_idx,rev,cols=(1-4)) (index-join G2 a,cols=(1-4)) (index-join G3 a,cols=(1-4))
- │    ├── "[presentation: s:4,i:2,f:3] [ordering: +1]"
- │    │    ├── best: (scan a,cols=(1-4))
- │    │    └── cost: 1090.00
- │    └── ""
- │         ├── best: (scan a@s_idx,cols=(1-4))
- │         └── cost: 1080.00
- ├── G2: (scan a@si_idx,cols=(1,2,4))
- │    ├── ""
- │    │    ├── best: (scan a@si_idx,cols=(1,2,4))
- │    │    └── cost: 1070.00
- │    └── "[ordering: +1]"
- │         ├── best: (sort G2)
- │         └── cost: 1169.66
- └── G3: (scan a@si_idx,rev,cols=(1,2,4))
-      ├── ""
-      │    ├── best: (scan a@si_idx,rev,cols=(1,2,4))
-      │    └── cost: 1140.00
-      └── "[ordering: +1]"
-           ├── best: (sort G3)
-           └── cost: 1239.66
+memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +1])
+ └── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4))
+      ├── [presentation: s:4,i:2,f:3] [ordering: +1]
+      │    ├── best: (scan a,cols=(1-4))
+      │    └── cost: 1094.02
+      └── []
+           ├── best: (scan a@s_idx,cols=(1-4))
+           └── cost: 1084.02
 
 # Secondary index has right order
 opt
 SELECT s, j FROM a ORDER BY s
 ----
 scan a@si_idx,rev
- ├── columns: s:4(string) j:5(jsonb)
+ ├── columns: s:4 j:5
  └── ordering: +4
 
 memo
 SELECT s, j FROM a ORDER BY s
 ----
-memo (optimized)
- ├── G1: (scan a,cols=(4,5)) (scan a,rev,cols=(4,5)) (index-join G2 a,cols=(4,5)) (index-join G3 a,cols=(4,5)) (scan a@si_idx,cols=(4,5)) (scan a@si_idx,rev,cols=(4,5))
- │    ├── "[presentation: s:4,j:5] [ordering: +4]"
- │    │    ├── best: (scan a@si_idx,rev,cols=(4,5))
- │    │    └── cost: 1120.00
- │    └── ""
- │         ├── best: (scan a@si_idx,cols=(4,5))
- │         └── cost: 1060.00
- ├── G2: (scan a@s_idx,cols=(1,4))
- │    ├── ""
- │    │    ├── best: (scan a@s_idx,cols=(1,4))
- │    │    └── cost: 1060.00
- │    └── "[ordering: +4]"
- │         ├── best: (scan a@s_idx,cols=(1,4))
- │         └── cost: 1060.00
- └── G3: (scan a@s_idx,rev,cols=(1,4))
-      ├── ""
-      │    ├── best: (scan a@s_idx,rev,cols=(1,4))
-      │    └── cost: 1120.00
-      └── "[ordering: +4]"
-           ├── best: (sort G3)
-           └── cost: 1219.66
+memo (optimized, ~2KB, required=[presentation: s:4,j:5] [ordering: +4])
+ └── G1: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+      ├── [presentation: s:4,j:5] [ordering: +4]
+      │    ├── best: (scan a@si_idx,rev,cols=(4,5))
+      │    └── cost: 1163.68
+      └── []
+           ├── best: (scan a@si_idx,cols=(4,5))
+           └── cost: 1064.02
 
 # Consider three different indexes, and pick index with multiple keys.
 opt
 SELECT i, k FROM a ORDER BY s DESC, i, k
 ----
-sort
- ├── columns: i:2(int) k:1(int!null)
+sort (segmented)
+ ├── columns: i:2 k:1!null  [hidden: s:4]
  ├── key: (1)
  ├── fd: (1)-->(2,4)
  ├── ordering: -4,+2,+1
- └── scan a@s_idx
-      ├── columns: k:1(int!null) i:2(int) s:4(string)
+ └── scan a@si_idx
+      ├── columns: k:1!null i:2 s:4
       ├── key: (1)
-      └── fd: (1)-->(2,4)
+      ├── fd: (1)-->(2,4)
+      └── ordering: -4
 
 memo
 SELECT i, k FROM a ORDER BY s DESC, i, k
 ----
-memo (optimized)
- └── G1: (scan a,cols=(1,2,4)) (scan a,rev,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@s_idx,rev,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4)) (scan a@si_idx,rev,cols=(1,2,4))
-      ├── "[presentation: i:2,k:1] [ordering: -4,+2,+1]"
-      │    ├── best: (sort G1)
-      │    └── cost: 1169.66
-      └── ""
+memo (optimized, ~2KB, required=[presentation: i:2,k:1] [ordering: -4,+2,+1])
+ └── G1: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
+      ├── [presentation: i:2,k:1] [ordering: -4,+2,+1]
+      │    ├── best: (sort G1="[ordering: -4]")
+      │    └── cost: 1165.00
+      ├── [ordering: -4]
+      │    ├── best: (scan a@si_idx,cols=(1,2,4))
+      │    └── cost: 1074.02
+      └── []
            ├── best: (scan a@s_idx,cols=(1,2,4))
-           └── cost: 1070.00
+           └── cost: 1074.02
 
 memo
 SELECT i, k FROM a WHERE s >= 'foo'
 ----
-memo (optimized)
- ├── G1: (project G2 G3)
- │    └── "[presentation: i:2,k:1]"
- │         ├── best: (project G2 G3)
- │         └── cost: 356.67
- ├── G2: (select G4 G5) (scan a@s_idx,cols=(1,2,4),constrained) (scan a@s_idx,rev,cols=(1,2,4),constrained) (scan a@si_idx,cols=(1,2,4),constrained) (scan a@si_idx,rev,cols=(1,2,4),constrained)
- │    └── ""
+memo (optimized, ~6KB, required=[presentation: i:2,k:1])
+ ├── G1: (project G2 G3 k i)
+ │    └── [presentation: i:2,k:1]
+ │         ├── best: (project G2 G3 k i)
+ │         └── cost: 364.02
+ ├── G2: (select G4 G5) (scan a@s_idx,cols=(1,2,4),constrained) (scan a@si_idx,cols=(1,2,4),constrained)
+ │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,2,4),constrained)
- │         └── cost: 356.67
- ├── G3: (projections a.k a.i)
- ├── G4: (scan a,cols=(1,2,4)) (scan a,rev,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@s_idx,rev,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4)) (scan a@si_idx,rev,cols=(1,2,4))
- │    └── ""
+ │         └── cost: 360.68
+ ├── G3: (projections)
+ ├── G4: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
+ │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,2,4))
- │         └── cost: 1070.00
+ │         └── cost: 1074.02
  ├── G5: (filters G6)
  ├── G6: (ge G7 G8)
- ├── G7: (variable a.s)
+ ├── G7: (variable s)
  └── G8: (const 'foo')
+
+# GenerateIndexScans propagates row-level locking information.
+opt
+SELECT s, i, f FROM a ORDER BY s FOR UPDATE
+----
+scan a@s_idx
+ ├── columns: s:4 i:2 f:3
+ ├── locking: for-update
+ ├── volatile
+ └── ordering: +4
+
+# Collated strings are treated properly.
+exec-ddl
+CREATE TABLE x (s STRING COLLATE en_u_ks_level1 PRIMARY KEY)
+----
+
+opt
+SELECT s FROM x WHERE s < 'hello' COLLATE en_u_ks_level1
+----
+scan x
+ ├── columns: s:1!null
+ ├── constraint: /1: [ - /'hello' COLLATE en_u_ks_level1)
+ └── key: (1)
+
+opt
+SELECT s FROM x WHERE s = 'hello' COLLATE en_u_ks_level1
+----
+scan x
+ ├── columns: s:1!null
+ ├── constraint: /1: [/'hello' COLLATE en_u_ks_level1 - /'hello' COLLATE en_u_ks_level1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Can't generate spans for other collations.
+opt
+SELECT s FROM x WHERE s COLLATE en = 'hello' COLLATE en
+----
+select
+ ├── columns: s:1!null
+ ├── key: (1)
+ ├── scan x
+ │    ├── columns: s:1!null
+ │    └── key: (1)
+ └── filters
+      └── s:1 COLLATE en = 'hello' COLLATE en [outer=(1)]
+
+# Realistic example where using constraints as filters help.
+# An even more realistic example would have a creation timestamp instead of a
+# seq_num integer, but that makes the plans much more cluttered.
+exec-ddl
+CREATE TABLE "orders" (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  total DECIMAL NOT NULL,
+  seq_num INT NOT NULL,
+  PRIMARY KEY (region, id),
+  UNIQUE INDEX orders_by_seq_num (region, seq_num, id) STORING (total),
+  CHECK (region IN ('us-east1', 'us-west1', 'europe-west2'))
+)
+----
+
+exec-ddl
+ALTER TABLE "orders" INJECT STATISTICS '[
+  {
+    "columns": ["region"],
+    "distinct_count": 3,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["id"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["total"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["seq_num"],
+    "distinct_count": 50,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]'
+----
+
+opt
+SELECT sum(total) FROM orders WHERE seq_num >= 10 AND seq_num < 20
+----
+scalar-group-by
+ ├── columns: sum:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan orders@orders_by_seq_num
+ │    ├── columns: total:3!null seq_num:4!null
+ │    └── constraint: /1/4/2
+ │         ├── [/'europe-west2'/10 - /'europe-west2'/19]
+ │         ├── [/'us-east1'/10 - /'us-east1'/19]
+ │         └── [/'us-west1'/10 - /'us-west1'/19]
+ └── aggregations
+      └── sum [as=sum:6, outer=(3)]
+           └── total:3
+
+exec-ddl
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT NOT NULL,
+  z STRING NOT NULL,
+  CHECK (x < 10 AND x > 1),
+  CHECK (y < 10 AND y > 1),
+  CHECK (z in ('first', 'second')),
+  INDEX secondary (y, x),
+  INDEX tertiary (z, y, x))
+----
+
+opt
+SELECT x, y  FROM xyz WHERE x > 5
+----
+select
+ ├── columns: x:1!null y:2!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan xyz@tertiary
+ │    ├── columns: x:1!null y:2!null
+ │    ├── constraint: /3/2/1
+ │    │    ├── [/'first'/2/6 - /'first'/9/9]
+ │    │    └── [/'second'/2/6 - /'second'/9/9]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
+#  would be used here. But it isn't the plan being picked. Curious.
+opt
+SELECT * FROM xyz WHERE x > 5
+----
+select
+ ├── columns: x:1!null y:2!null z:3!null
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan xyz@tertiary
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── constraint: /3/2/1
+ │    │    ├── [/'first'/2/6 - /'first'/9/9]
+ │    │    └── [/'second'/2/6 - /'second'/9/9]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# Check constraint used only for the non nullable column. Constraints on x are ignored.
+exec-ddl
+CREATE TABLE xy (
+  x INT,
+  y INT NOT NULL,
+  CHECK (x < 10 AND x > 1),
+  CHECK (y < 10 AND y > 1),
+  INDEX secondary (y, x))
+----
+
+opt
+SELECT x, y FROM xy WHERE x > 5
+----
+select
+ ├── columns: x:1!null y:2!null
+ ├── scan xy@secondary
+ │    ├── columns: x:1 y:2!null
+ │    └── constraint: /2/1/3: [/2/6 - /9]
+ └── filters
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# Check constraints that can evaluate to NULL are ignored.
+exec-ddl
+CREATE TABLE null_constraint (
+  y INT NOT NULL,
+  CHECK (y IN (1, 2, NULL)),
+  INDEX index_1 (y))
+----
+
+opt
+SELECT y FROM null_constraint WHERE y > 0
+----
+scan null_constraint@index_1
+ ├── columns: y:1!null
+ └── constraint: /1/2: [/1 - ]
+
+exec-ddl
+CREATE TABLE null_constraint_2 (
+  y INT NOT NULL,
+  CHECK ((y IN (1, 2, NULL)) AND (y > 10)),
+  CHECK (y < 15),
+  INDEX index_1 (y))
+----
+
+opt
+SELECT y FROM null_constraint_2 WHERE y > 0
+----
+scan null_constraint_2@index_1
+ ├── columns: y:1!null
+ └── constraint: /1/2: [/1 - /14]
+
+# Unvalidated constraints are ignored.
+exec-ddl
+CREATE TABLE check_constraint_validity (
+ a int NOT NULL,
+ INDEX secondary (a),
+ CONSTRAINT "check:unvalidated" CHECK (a < 10),
+ CONSTRAINT "check:validated" CHECK (a < 20))
+----
+
+opt
+SELECT * FROM check_constraint_validity WHERE a > 6
+----
+scan check_constraint_validity@secondary
+ ├── columns: a:1!null
+ └── constraint: /1/2: [/7 - /19]
+
+# Test that we can constrain indexes using the results of now().
+exec-ddl
+CREATE TABLE with_time_index (k INT PRIMARY KEY, time TIMESTAMP, INDEX(time))
+----
+
+opt
+SELECT * FROM with_time_index WHERE time > now() - INTERVAL '1 hour'
+----
+scan with_time_index@secondary
+ ├── columns: k:1!null time:2!null
+ ├── constraint: /2/1: [/'2017-05-10 12:00:00.000001' - ]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM with_time_index WHERE time >= 'today'
+----
+scan with_time_index@secondary
+ ├── columns: k:1!null time:2!null
+ ├── constraint: /2/1: [/'2017-05-10 00:00:00' - ]
+ ├── key: (1)
+ └── fd: (1)-->(2)

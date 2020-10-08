@@ -1,0 +1,88 @@
+sql
+CREATE DATABASE d;
+USE d;
+
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+
+CREATE TABLE sc1.t (x int);
+INSERT INTO sc1.t VALUES (1);
+
+CREATE TABLE sc2.t (x int);
+INSERT INTO sc2.t VALUES (2)
+----
+INSERT 1
+
+dump d
+----
+----
+CREATE SCHEMA sc1;
+
+CREATE SCHEMA sc2;
+
+CREATE TABLE sc1.t (
+	x INT8 NULL,
+	FAMILY "primary" (x, rowid)
+);
+
+CREATE TABLE sc2.t (
+	x INT8 NULL,
+	FAMILY "primary" (x, rowid)
+);
+
+INSERT INTO sc1.t (x) VALUES
+	(1);
+
+INSERT INTO sc2.t (x) VALUES
+	(2);
+----
+----
+
+# Test just dumping a table. We shouldn't output the schema create statement.
+dump d sc1.t
+noroundtrip
+----
+----
+CREATE TABLE sc1.t (
+	x INT8 NULL,
+	FAMILY "primary" (x, rowid)
+);
+
+INSERT INTO sc1.t (x) VALUES
+	(1);
+----
+----
+
+dump d sc1.t --dump-mode=data
+noroundtrip
+----
+----
+
+INSERT INTO sc1.t (x) VALUES
+	(1);
+----
+----
+
+dump d sc2.t
+noroundtrip
+----
+----
+CREATE TABLE sc2.t (
+	x INT8 NULL,
+	FAMILY "primary" (x, rowid)
+);
+
+INSERT INTO sc2.t (x) VALUES
+	(2);
+----
+----
+
+dump d sc2.t --dump-mode=data
+noroundtrip
+----
+----
+
+INSERT INTO sc2.t (x) VALUES
+	(2);
+----
+----

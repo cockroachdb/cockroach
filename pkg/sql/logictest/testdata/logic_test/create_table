@@ -1,0 +1,318 @@
+subtest regression_42858
+
+statement ok
+CREATE TABLE TEST2 (COL1 SERIAL PRIMARY KEY, COL2 INT8)
+
+statement error pq: duplicate constraint name: "duplicate_name"
+CREATE TABLE TEST1 (COL1 SERIAL PRIMARY KEY, COL2 INT8, COL3 INT8, CONSTRAINT duplicate_name FOREIGN KEY (col2) REFERENCES TEST2(COL1), CONSTRAINT duplicate_name FOREIGN KEY (col3) REFERENCES TEST2(COL1))
+
+statement ok
+DROP TABLE TEST2
+
+# Regression for #43894
+subtest regression_43894
+statement ok
+CREATE TABLE IF NOT EXISTS t43894 (PRIMARY KEY (a), a UUID NOT NULL, b JSONB NOT NULL DEFAULT '5')
+
+subtest telemetry_tests
+
+statement ok
+CREATE TABLE new_table (a timetz(3))
+
+statement ok
+ALTER TABLE new_table ADD COLUMN c timetz(4)
+
+# Cannot really get more exact than this (i.e. looking at usage_count), as it increments on each run.
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name IN ('sql.schema.new_column_type.timetz_3_', 'sql.schema.new_column_type.timetz_4_') AND usage_count > 0 ORDER BY feature_name
+----
+sql.schema.new_column_type.timetz_3_
+sql.schema.new_column_type.timetz_4_
+
+statement ok
+CREATE TABLE sec_col_fam(x INT, y INT, z INT, FAMILY (x), FAMILY (y), FAMILY (z), INDEX (x) STORING (y, z));
+CREATE INDEX ON sec_col_fam (x) STORING (y, z)
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.secondary_index_column_families' AND usage_count >= 2
+----
+sql.schema.secondary_index_column_families
+
+statement ok
+set require_explicit_primary_keys=true
+
+statement error pq: no primary key specified for table t \(require_explicit_primary_keys = true\)
+CREATE TABLE t (x INT, y INT)
+
+# Regression for #45496.
+statement ok
+reset require_explicit_primary_keys;
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (rowid INT, rowid_1 INT, FAMILY (rowid, rowid_1))
+
+query T rowsort
+SELECT column_name FROM [SHOW COLUMNS FROM t]
+----
+rowid
+rowid_1
+rowid_2
+
+query TT
+SELECT index_name, column_name FROM [SHOW INDEXES FROM t]
+----
+primary rowid_2
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+   rowid INT8 NULL,
+   rowid_1 INT8 NULL,
+   FAMILY fam_0_rowid_rowid_1_rowid_2 (rowid, rowid_1, rowid_2)
+)
+
+subtest regression_qualification_feature_counts
+
+statement ok
+CREATE TABLE telemetry_test (a int DEFAULT 1, b int UNIQUE CHECK(b > 1), c int AS (a + b) STORED)
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.new_column.qualification.computed',
+  'sql.schema.new_column.qualification.default_expr',
+  'sql.schema.new_column.qualification.unique'
+)
+----
+sql.schema.new_column.qualification.unique
+sql.schema.new_column.qualification.computed
+sql.schema.new_column.qualification.default_expr
+
+statement ok
+DROP TABLE telemetry_test
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true;
+CREATE TABLE telemetry (
+  x INT PRIMARY KEY,
+  y INT,
+  z JSONB,
+  INVERTED INDEX (z),
+  INDEX (y) USING HASH WITH BUCKET_COUNT = 4
+)
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.inverted_index',
+  'sql.schema.hash_sharded_index'
+)
+----
+sql.schema.inverted_index
+sql.schema.hash_sharded_index
+
+subtest like_table
+
+# Test the CREATE TABLE LIKE functionality.
+
+statement ok
+CREATE TABLE like_table (
+  a INT CHECK (a > 3),
+  b STRING DEFAULT 'foo' NOT NULL,
+  c DECIMAL AS (a+3) STORED,
+  h INT,
+  j JSON,
+  PRIMARY KEY (a, b),
+  UNIQUE INDEX foo (b DESC, c),
+  INDEX (c) STORING (j),
+  INVERTED INDEX (j)
+)
+
+statement ok
+CREATE TABLE like_none (LIKE like_table)
+
+query TT
+SHOW CREATE TABLE like_none
+----
+like_none  CREATE TABLE public.like_none (
+           a INT8 NOT NULL,
+           b STRING NOT NULL,
+           c DECIMAL NULL,
+           h INT8 NULL,
+           j JSONB NULL,
+           FAMILY "primary" (a, b, c, h, j, rowid)
+)
+
+statement ok
+CREATE TABLE like_constraints (LIKE like_table INCLUDING CONSTRAINTS)
+
+query TT
+SHOW CREATE TABLE like_constraints
+----
+like_constraints  CREATE TABLE public.like_constraints (
+                  a INT8 NOT NULL,
+                  b STRING NOT NULL,
+                  c DECIMAL NULL,
+                  h INT8 NULL,
+                  j JSONB NULL,
+                  FAMILY "primary" (a, b, c, h, j, rowid),
+                  CONSTRAINT check_a CHECK (a > 3:::INT8)
+)
+
+statement ok
+CREATE TABLE like_indexes (LIKE like_table INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE like_indexes
+----
+like_indexes  CREATE TABLE public.like_indexes (
+              a INT8 NOT NULL,
+              b STRING NOT NULL,
+              c DECIMAL NULL,
+              h INT8 NULL,
+              j JSONB NULL,
+              CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+              UNIQUE INDEX foo (b DESC, c ASC),
+              INDEX like_table_c_idx (c ASC) STORING (j),
+              INVERTED INDEX like_table_j_idx (j),
+              FAMILY "primary" (a, b, c, h, j)
+)
+
+# INCLUDING GENERATED adds "generated columns", aka stored columns.
+statement ok
+CREATE TABLE like_generated (LIKE like_table INCLUDING GENERATED)
+
+query TT
+SHOW CREATE TABLE like_generated
+----
+like_generated  CREATE TABLE public.like_generated (
+                a INT8 NOT NULL,
+                b STRING NOT NULL,
+                c DECIMAL NULL AS (a + 3:::DECIMAL) STORED,
+                h INT8 NULL,
+                j JSONB NULL,
+                FAMILY "primary" (a, b, c, h, j, rowid)
+)
+
+statement ok
+CREATE TABLE like_defaults (LIKE like_table INCLUDING DEFAULTS)
+
+query TT
+SHOW CREATE TABLE like_defaults
+----
+like_defaults  CREATE TABLE public.like_defaults (
+               a INT8 NOT NULL,
+               b STRING NOT NULL DEFAULT 'foo':::STRING,
+               c DECIMAL NULL,
+               h INT8 NULL,
+               j JSONB NULL,
+               FAMILY "primary" (a, b, c, h, j, rowid)
+)
+
+statement ok
+CREATE TABLE like_all (LIKE like_table INCLUDING ALL)
+
+query TT
+SHOW CREATE TABLE like_all
+----
+like_all  CREATE TABLE public.like_all (
+          a INT8 NOT NULL,
+          b STRING NOT NULL DEFAULT 'foo':::STRING,
+          c DECIMAL NULL AS (a + 3:::DECIMAL) STORED,
+          h INT8 NULL,
+          j JSONB NULL,
+          CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+          UNIQUE INDEX foo (b DESC, c ASC),
+          INDEX like_table_c_idx (c ASC) STORING (j),
+          INVERTED INDEX like_table_j_idx (j),
+          FAMILY "primary" (a, b, c, h, j),
+          CONSTRAINT check_a CHECK (a > 3:::INT8)
+)
+
+statement ok
+CREATE TABLE like_mixed (LIKE like_table INCLUDING ALL EXCLUDING GENERATED EXCLUDING CONSTRAINTS INCLUDING GENERATED)
+
+# We expect that this table will be missing the check constraint from the first
+# table, but will include everything else.
+query TT
+SHOW CREATE TABLE like_mixed
+----
+like_mixed  CREATE TABLE public.like_mixed (
+            a INT8 NOT NULL,
+            b STRING NOT NULL DEFAULT 'foo':::STRING,
+            c DECIMAL NULL AS (a + 3:::DECIMAL) STORED,
+            h INT8 NULL,
+            j JSONB NULL,
+            CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+            UNIQUE INDEX foo (b DESC, c ASC),
+            INDEX like_table_c_idx (c ASC) STORING (j),
+            INVERTED INDEX like_table_j_idx (j),
+            FAMILY "primary" (a, b, c, h, j)
+)
+
+statement ok
+CREATE TABLE like_no_pk_table (
+  a INT, b INT
+)
+
+statement ok
+CREATE TABLE like_no_pk_rowid_hidden (LIKE like_no_pk_table INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE like_no_pk_rowid_hidden
+----
+like_no_pk_rowid_hidden  CREATE TABLE public.like_no_pk_rowid_hidden (
+                         a INT8 NULL,
+                         b INT8 NULL,
+                         FAMILY "primary" (a, b, rowid)
+)
+
+statement error duplicate column name
+CREATE TABLE duplicate_column (LIKE like_table, c DECIMAL)
+
+statement ok
+CREATE TABLE other_table (blah INT)
+
+# Test that mixing normal specifiers and LIKE specifiers works as expected. We
+# expect that the column ordering depends on the order of the LIKE specifiers.
+statement ok
+CREATE TABLE like_more_specifiers (LIKE like_table, z DECIMAL, INDEX(a,blah,z), LIKE other_table)
+
+query TT
+SHOW CREATE TABLE like_more_specifiers
+----
+like_more_specifiers  CREATE TABLE public.like_more_specifiers (
+                      a INT8 NOT NULL,
+                      b STRING NOT NULL,
+                      c DECIMAL NULL,
+                      h INT8 NULL,
+                      j JSONB NULL,
+                      z DECIMAL NULL,
+                      blah INT8 NULL,
+                      INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC),
+                      FAMILY "primary" (a, b, c, h, j, z, blah, rowid)
+)
+
+statement ok
+CREATE TABLE like_hash_base (a INT, INDEX (a) USING HASH WITH BUCKET_COUNT=4)
+
+statement ok
+CREATE TABLE like_hash (LIKE like_hash_base INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE like_hash
+----
+like_hash  CREATE TABLE public.like_hash (
+           a INT8 NULL,
+           INDEX like_hash_base_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
+           FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
+)
+
+statement error unimplemented
+CREATE TABLE error (LIKE like_hash_base INCLUDING COMMENTS)
+
+statement error unimplemented
+CREATE TABLE error (LIKE like_hash_base INCLUDING STATISTICS)
+
+statement error unimplemented
+CREATE TABLE error (LIKE like_hash_base INCLUDING STORAGE)

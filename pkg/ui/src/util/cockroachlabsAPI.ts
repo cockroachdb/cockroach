@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 /**
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
@@ -5,7 +15,7 @@
 import moment from "moment";
 
 import {
-  VersionList, VersionCheckRequest, RegistrationRequest, UnregistrationRequest,
+  VersionList, VersionCheckRequest,
 } from "src/interfaces/cockroachlabs";
 import { withTimeout } from "./api";
 
@@ -42,12 +52,4 @@ function timeoutFetch<T extends BodyInit, R>(url: string, req?: T, config: Fetch
 
 export function versionCheck(request: VersionCheckRequest, timeout?: moment.Duration): Promise<VersionList> {
   return timeoutFetch(`${COCKROACHLABS_ADDR}/api/clusters/updates?uuid=${request.clusterID}&version=${request.buildtag}`, null, { timeout });
-}
-
-export function registerCluster(request: RegistrationRequest, timeout?: moment.Duration): Promise<{}> {
-  return timeoutFetch(`${COCKROACHLABS_ADDR}/api/clusters/register?uuid=${request.clusterID}`, JSON.stringify(request), { timeout });
-}
-
-export function unregisterCluster(request: UnregistrationRequest, timeout?: moment.Duration): Promise<{}> {
-  return timeoutFetch(`${COCKROACHLABS_ADDR}/api/clusters/unregister?uuid=${request.clusterID}`, null, { method: "DELETE", timeout });
 }

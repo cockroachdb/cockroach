@@ -149,12 +149,12 @@ spec:
       # In addition to the node certificate and key, the init-certs entrypoint will symlink
       # the cluster CA to the certs directory.
       - name: init-certs
-        image: cockroachdb/cockroach-k8s-request-cert:0.3
+        image: cockroachdb/cockroach-k8s-request-cert:0.4
         imagePullPolicy: IfNotPresent
         command:
         - "/bin/ash"
         - "-ecx"
-        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname -f),$(hostname -f|cut -f 1-2 -d '.'),cockroachdb-public,cockroachdb-public.$(hostname -f|cut -f 3- -d '.') -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname -f),$(hostname -f|cut -f 1-2 -d '.'),cockroachdb-public,cockroachdb-public.$(hostname -f|cut -f 3- -d '.'),cockroachdb-public.$(hostname -f|cut -f 3-4 -d '.'),cockroachdb-public.$(hostname -f|cut -f 3 -d '.') -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -177,7 +177,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v2.0.4
+        image: cockroachdb/cockroach:v20.1.6
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 26257
@@ -198,7 +198,7 @@ spec:
           # The use of qualified `hostname -f` is crucial:
           # Other nodes aren't able to look up the unqualified hostname.
           # Once 2.0 is out, we should be able to switch from --host to --advertise-host to make port-forwarding work to the main port.
-          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --host $(hostname -f) --http-host 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
+          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --host $(hostname -f) --http-addr 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
       # needed for graceful shutdown of a node.
       terminationGracePeriodSeconds: 60
@@ -218,4 +218,4 @@ spec:
         - "ReadWriteOnce"
       resources:
         requests:
-          storage: 1Gi
+          storage: 100Gi

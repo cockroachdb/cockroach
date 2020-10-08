@@ -1,16 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // Cannot be proto3 because we depend on absent-vs-empty distinction.
 syntax = "proto2";
@@ -56,6 +52,8 @@ import "gogoproto/gogo.proto";
 // from the "last" column. Eliding those columns represents a significant memory
 // and on-disk savings for our highest resolution data.
 message InternalTimeSeriesData {
+  option (gogoproto.populate) = true;
+
   // Holds a wall time, expressed as a unix epoch time in nanoseconds. This
   // represents the earliest possible timestamp for a sample within the
   // collection.
@@ -118,6 +116,8 @@ message InternalTimeSeriesData {
 // If the count of measurements is 1, then max and min fields may be omitted
 // and assumed equal to the sum field.
 message InternalTimeSeriesSample {
+  option (gogoproto.populate) = true;
+
   // Temporal offset from the "start_timestamp" of the InternalTimeSeriesData
   // collection this data point is part in. The units of this value are
   // determined by the value of the "sample_duration_milliseconds" field of

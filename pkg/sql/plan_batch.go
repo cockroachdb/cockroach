@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -32,13 +28,6 @@ import (
 // - batchedPlanNode *replaces* planNode for the purpose of local
 //   execution.
 type batchedPlanNode interface {
-	// batchedPlanNode is currently intended for use by data-modifying
-	// statements. These are all sensitive to the auto commit bit, so
-	// ensure the autoCommitNode interface is implemented. This
-	// simplifies the definition of this interface by serializeNode and
-	// rowCountNode below.
-	autoCommitNode
-
 	// batchedPlanNode specializes planNode for the purpose of the recursions
 	// on planNode trees performed during logical planning, so it should "inherit"
 	// planNode. However this interface inheritance does not imply that
@@ -143,9 +132,6 @@ func (s *serializeNode) FastPathResults() (int, bool) {
 // requireSpool implements the planNodeRequireSpool interface.
 func (s *serializeNode) requireSpool() {}
 
-// enableAutocommit implements the autoCommitNode interface.
-func (s *serializeNode) enableAutoCommit() { s.source.enableAutoCommit() }
-
 // rowCountNode serializes the results of a batchedPlanNode into a
 // plain planNode interface that has guaranteed FastPathResults
 // behavior and no result columns (i.e. just the count of rows
@@ -185,6 +171,3 @@ func (r *rowCountNode) Close(ctx context.Context)           { r.source.Close(ctx
 
 // FastPathResults implements the planNodeFastPath interface.
 func (r *rowCountNode) FastPathResults() (int, bool) { return r.rowCount, true }
-
-// enableAutocommit implements the autoCommitNode interface.
-func (r *rowCountNode) enableAutoCommit() { r.source.enableAutoCommit() }

@@ -1,11 +1,20 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import { assert } from "chai";
 import _ from "lodash";
 import Long from "long";
 import { expectSaga, testSaga } from "redux-saga-test-plan";
 import * as matchers from "redux-saga-test-plan/matchers";
 
-import { delay } from "redux-saga";
-import { call, put } from "redux-saga/effects";
+import { call, put, delay } from "redux-saga/effects";
 import { queryTimeSeries, TimeSeriesQueryRequestMessage } from "src/util/api";
 import * as protos from "src/js/protos";
 
@@ -226,11 +235,11 @@ describe("metrics reducer", function() {
             assert.deepEqual(
               effects.call,
               [
-                call(delay, 0),
+                delay(0),
                 call(metrics.batchAndSendRequests, [requestAction.payload, requestAction.payload, requestAction.payload]),
-                call(delay, 0),
+                delay(0),
                 call(metrics.batchAndSendRequests, [requestAction.payload]),
-                call(delay, 0),
+                delay(0),
                 call(metrics.batchAndSendRequests, [requestAction.payload, requestAction.payload]),
               ],
             );

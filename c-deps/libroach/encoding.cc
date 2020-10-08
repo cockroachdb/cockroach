@@ -1,16 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #include "encoding.h"
 #include <rocksdb/slice.h>
@@ -158,9 +154,7 @@ std::string EncodeTimestamp(DBTimestamp ts) {
   return s;
 }
 
-bool EmptyTimestamp(DBTimestamp ts) {
-  return ts.wall_time == 0 && ts.logical == 0;
-}
+bool EmptyTimestamp(DBTimestamp ts) { return ts.wall_time == 0 && ts.logical == 0; }
 
 // MVCC keys are encoded as <key>\x00[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
@@ -184,20 +178,6 @@ std::string EncodeKey(const rocksdb::Slice& key, int64_t wall_time, int32_t logi
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k) { return EncodeKey(ToSlice(k.key), k.wall_time, k.logical); }
-
-WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
-                                 rocksdb::Slice* timestamp) {
-  if (buf.empty()) {
-    return false;
-  }
-  const char ts_size = buf[buf.size() - 1];
-  if (ts_size >= buf.size()) {
-    return false;
-  }
-  *key = rocksdb::Slice(buf.data(), buf.size() - ts_size - 1);
-  *timestamp = rocksdb::Slice(key->data() + key->size(), ts_size);
-  return true;
-}
 
 WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice* timestamp, int64_t* wall_time,
                                         int32_t* logical) {
@@ -288,4 +268,34 @@ rocksdb::Slice KeyPrefix(const rocksdb::Slice& src) {
   return rocksdb::Slice(key.data(), key.size() + 1);
 }
 
+WARN_UNUSED_RESULT bool IsInt(rocksdb::Slice* buf) {
+  if (buf->size() > 0) {
+    return uint8_t((*buf)[0]) >= kIntMin && uint8_t((*buf)[0]) <= kIntMax;
+  }
+
+  return false;
+}
+
+WARN_UNUSED_RESULT bool StripTenantPrefix(rocksdb::Slice* buf) {
+  if (buf->size() == 0) {
+    return true;
+  }
+  // kTenantPrefix is guaranteed to be a single byte.
+  if ((*buf)[0] != kTenantPrefix[0]) {
+    return true;
+  }
+  buf->remove_prefix(1);
+  uint64_t tid;
+  return DecodeUvarint64(buf, &tid);
+}
+
+WARN_UNUSED_RESULT bool DecodeTenantAndTablePrefix(rocksdb::Slice* buf, uint64_t* tbl) {
+  if (!StripTenantPrefix(buf)) {
+    return false;
+  }
+  if (!IsInt(buf) || !DecodeUvarint64(buf, tbl)) {
+    return false;
+  }
+  return true;
+}
 }  // namespace cockroach

@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -114,7 +110,7 @@ func (z *zeroSum) run(workers, monkeys int) {
 func (z *zeroSum) setup() uint32 {
 	db := z.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS zerosum"); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	accounts := `
@@ -124,7 +120,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 )
 `
 	if _, err := db.Exec(accounts); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	tableIDQuery := `
@@ -134,7 +130,7 @@ SELECT tables.id FROM system.namespace tables
 `
 	var tableID uint32
 	if err := db.QueryRow(tableIDQuery, "zerosum", "accounts").Scan(&tableID); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	return tableID
 }
@@ -154,7 +150,7 @@ func (z *zeroSum) maybeLogError(err error) {
 	if localcluster.IsUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
 		return
 	}
-	log.Error(context.Background(), err)
+	log.Errorf(context.Background(), "%v", err)
 	atomic.AddUint64(&z.stats.errors, 1)
 }
 
@@ -185,7 +181,7 @@ func (z *zeroSum) worker() {
 				var id uint64
 				var balance int64
 				if err = rows.Scan(&id, &balance); err != nil {
-					log.Fatal(context.Background(), err)
+					log.Fatalf(context.Background(), "%v", err)
 				}
 				switch id {
 				case from:
@@ -220,7 +216,7 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 	for {
 		time.Sleep(time.Duration(rand.Float64() * float64(d)))
 
-		key := keys.MakeTablePrefix(tableID)
+		key := keys.SystemSQLCodec.TablePrefix(tableID)
 		key = encoding.EncodeVarintAscending(key, int64(zipf.Uint64()))
 
 		switch r.Intn(2) {

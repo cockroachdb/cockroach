@@ -1,5 +1,15 @@
 {
   "devDependencies": {
-    "webpack-dashboard": "^1.0.1"
+    "@cypress/webpack-preprocessor": "^5.1.2",
+    "@types/cypress-image-snapshot": "^3.1.2",
+    "cypress": "^4.7.0",
+    "cypress-image-snapshot": "^3.1.1",
+    "webpack-dashboard": "^3.2.0"
+  },
+  "resolutions": {
+    "**/lodash": "^4.17.19",
+    "yargs-parser": "~13.1.2",
+    "handlebars": "~4.5.3"
   }
+
 }

@@ -1,0 +1,92 @@
+# LogicTest: 5node
+
+# Regression test for #39317.
+
+statement ok
+CREATE TABLE l (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+statement ok
+CREATE TABLE r (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+statement ok
+INSERT INTO l VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+INSERT INTO r VALUES (2, 200), (3, 300), (4, 400)
+
+statement ok
+ALTER TABLE l SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE r SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE l EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
+
+statement ok
+ALTER TABLE r EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2), (ARRAY[2], 3), (ARRAY[3], 1)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE l] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         /3       {2}       2
+/3         NULL     {3}       3
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE r] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+/2         /3       {1}       1
+/3         NULL     {2}       2
+NULL       /2       {3}       3
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk9FvmzAQxt_3V1i3l2ZzBXbYi6VKTBvdqFLogGqTKh7ccEuQKGa2kRZF-d8noFIGS7NU07Y3bN_vu_u-E1sw3yoQkAaL4F1GWl2RyyS-JnfBl5vF2zAiZ-_DNEs_LWbkseTVUFCRRXCZkas4jIgmt2kYfSBnckY-fwySgEhyQXgOFGpVYCQf0IC4AwYUOOQUGq2WaIzS3fW2LwqL7yBcCmXdtLa7zikslUYQW7ClrRAEZPK-wgRlgdrptAq0sqx6ae03unyQegMU0kbWRhCHnzvceQn5joJq7aPsXu1-Q9bSrMc6PoN8l1MwVq4QBN_RJ8bb67S10gVqLEZKeUf-ruSAx2vUK7xSZY3amY9nyzYNiiH2-DYLkj58oFDhV3vms9ezC12u1sMnUIhbK4jPqM-p701S2Duc_4HDA-NH6lw1jjeN4mBrb9Sanb57d5xL9Xd2z54c71_snv_X3R8YLkHTqNrgSat1O3tYrHCIy6hWL_FGq2XfZjjGPdcnW6Cxw6s3HMK6f-p_v9NhdhxmU9j9GeYjmE1hfhR-M4LdKTx_hudfOh-H2XHYe5bnfPfiRwAAAP__WUL0nA==
+
+# Test that we can handle merge joins with equality columns of integers with
+# different widths.
+statement ok
+CREATE TABLE numbers (_int2 INT2, _int4 INT4, _int8 INT8, _float FLOAT, _decimal DECIMAL);
+INSERT INTO numbers VALUES (1, 1, 1, 1, 1)
+
+# Place the single range on node 1 for determinism.
+statement ok
+ALTER TABLE numbers EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1)
+
+query T
+EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int2 = t2._int4
+----
+│
+└ Node 1
+  └ *colexec.mergeJoinInnerOp
+    ├ *colexec.castInt16Int32Op
+    │ └ *colexec.sortOp
+    │   └ *colfetcher.ColBatchScan
+    └ *colexec.sortOp
+      └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int8 = t2._int2
+----
+│
+└ Node 1
+  └ *colexec.mergeJoinInnerOp
+    ├ *colexec.sortOp
+    │ └ *colfetcher.ColBatchScan
+    └ *colexec.castInt16Int64Op
+      └ *colexec.sortOp
+        └ *colfetcher.ColBatchScan
+
+# Also check that we cannot plan a merge join with other numeric types.
+statement error could not produce a query plan conforming to the MERGE JOIN hint
+EXPLAIN SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int8 = t2._float
+
+statement error could not produce a query plan conforming to the MERGE JOIN hint
+EXPLAIN SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int8 = t2._decimal
+
+statement error could not produce a query plan conforming to the MERGE JOIN hint
+EXPLAIN SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._float = t2._decimal

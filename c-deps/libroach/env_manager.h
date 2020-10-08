@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #pragma once
 
@@ -25,9 +21,14 @@ class EnvStatsHandler {
  public:
   virtual ~EnvStatsHandler() {}
 
+  // Get serialized encryption stats.
   virtual rocksdb::Status GetEncryptionStats(std::string* stats) = 0;
+  // Get a serialized encryption registry (scrubbed of key contents).
+  virtual rocksdb::Status GetEncryptionRegistry(std::string* registry) = 0;
   // Get the ID of the active data key, or "plain" if none.
   virtual std::string GetActiveDataKeyID() = 0;
+  // Get the enum value of the encryption type.
+  virtual int32_t GetActiveStoreKeyType() = 0;
   // Get the key ID in use by this file, or "plain" if none.
   virtual rocksdb::Status GetFileEntryKeyID(const enginepb::FileEntry* entry, std::string* id) = 0;
 };

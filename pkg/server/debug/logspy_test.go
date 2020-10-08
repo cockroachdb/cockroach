@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package debug
 
@@ -31,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func TestDebugLogSpyOptions(t *testing.T) {
@@ -46,14 +42,28 @@ func TestDebugLogSpyOptions(t *testing.T) {
 			// Example where everything is specified (and parsed).
 			vals: map[string][]string{
 				"NonexistentOptionIsIgnored": {"banana"},
-				"Count":    {"123"},
-				"Duration": {"9s"},
-				"Grep":     {`^foo$`},
+				"Count":                      {"123"},
+				"Duration":                   {"9s"},
+				"Grep":                       {`^foo$`},
 			},
 			expOpts: logSpyOptions{
 				Count:    123,
 				Duration: durationAsString(9 * time.Second),
-				Grep:     regexpAsString{regexp.MustCompile(`^foo$`)},
+				Grep:     regexpAsString{re: regexp.MustCompile(`^foo$`)},
+			},
+		},
+		{
+			// Example where everything is specified (and parsed) and where grep is an integer.
+			vals: map[string][]string{
+				"NonexistentOptionIsIgnored": {"banana"},
+				"Count":                      {"123"},
+				"Duration":                   {"9s"},
+				"Grep":                       {`123`},
+			},
+			expOpts: logSpyOptions{
+				Count:    123,
+				Duration: durationAsString(9 * time.Second),
+				Grep:     regexpAsString{re: regexp.MustCompile(`123`), i: 123},
 			},
 		},
 		{
@@ -62,13 +72,6 @@ func TestDebugLogSpyOptions(t *testing.T) {
 				Count:    logSpyDefaultCount,
 				Duration: logSpyDefaultDuration,
 			},
-		},
-		{
-			// Can't stream out too much at once.
-			vals: map[string][]string{
-				"Count": {strconv.Itoa(2 * logSpyMaxCount)},
-			},
-			expErr: (`count .* is too large .limit is .*.`),
 		},
 		// Various parse errors.
 		{

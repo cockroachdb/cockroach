@@ -1,26 +1,54 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package settings
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 )
 
-// A TransformerFn encapsulates the logic of a StateMachineSetting.
-type TransformerFn func(sv *Values, old []byte, update *string) (finalV []byte, finalObj interface{}, _ error)
+// StateMachineSettingImpl provides the setting-specific parts of a
+// StateMachineSetting. The StateMachineSetting is in charge of interacting with
+// the Values (loading and saving state) and StateMachineSettingImpl is in
+// charge to converting to/from strings and performing validations.
+type StateMachineSettingImpl interface {
+	// Decode takes in an encoded value and returns it as the native type of the
+	// setting in question. For the Version setting, this is a ClusterVersion
+	// proto.
+	Decode(val []byte) (interface{}, error)
+
+	// DecodeToString takes in an encoded value and returns its string
+	// representation.
+	DecodeToString(val []byte) (string, error)
+
+	// ValidateLogical checks whether an update is permitted. It takes in the old
+	// (encoded) value and the proposed new value (as a string to be parsed).
+	// This is called by SET CLUSTER SETTING.
+	ValidateLogical(ctx context.Context, sv *Values, old []byte, newV string) ([]byte, error)
+
+	// ValidateGossipUpdate performs fewer validations than ValidateLogical.
+	// For the cluster version setting, it only checks that the current binary
+	// supports the proposed version. This is called when the version is being
+	// communicated to us by a different node.
+	ValidateGossipUpdate(ctx context.Context, sv *Values, val []byte) error
+
+	// SettingsListDefault returns the value that should be presented by
+	// `./cockroach gen settings-list`
+	SettingsListDefault() string
+
+	// BeforeChange is called before an updated value for this setting is about to
+	// be set on the values container.
+	BeforeChange(ctx context.Context, encodedVal []byte, sv *Values)
+}
 
 // A StateMachineSetting is a setting that keeps a state machine driven by user
 // input.
@@ -33,50 +61,36 @@ type TransformerFn func(sv *Values, old []byte, update *string) (finalV []byte, 
 // version upgrades.
 //
 // The state machine as well as its encoding are represented by the
-// TransformerFn backing this StateMachineSetting. It is a method that takes
-//
-// - the Values instance
-// - the known previous encoded value, if any (i.e. the current state)
-// - the update the user wants to make to the encoded struct (i.e. the desired
-//   transition)
-//
-// and returns
-//
-// - the new encoded value (i.e. the new state)
-// - an interface backed by a "user-friendly" representation of the new state
-//   (i.e. something that can be printed)
-// - an error if the input was illegal.
-//
-// Furthermore,
-//
-// - with a `nil` input byte slice, the default value (hidden in the
-//   transformer) is used internally
-// - with a `nil` update, the previous (or default) value is returned
-// - with both non-nil, a transition from the old state using the given update
-//   is carried out, and the new state and representation (or an error)
-//   returned.
-//
-// The opaque member of Values can be used to associate a higher-level object to
-// the Values instance (making it accessible to the function).
-//
-// Updates to the setting via an Updater validate the new state syntactically,
-// but not semantically. Users must call Validate with the authoritative
-// previous state, the suggested state transition, and then overwrite the state
-// machine with the result.
+// StateMachineSettingImpl backing this StateMachineSetting; it is in charge to
+// converting to/from strings and performing validations.
 type StateMachineSetting struct {
-	transformer TransformerFn
+	impl StateMachineSettingImpl
 	common
 }
 
 var _ Setting = &StateMachineSetting{}
 
+// MakeStateMachineSetting creates a StateMachineSetting.
+func MakeStateMachineSetting(impl StateMachineSettingImpl) StateMachineSetting {
+	return StateMachineSetting{impl: impl}
+}
+
+// Decode takes in an encoded value and returns it as the native type of the
+// setting in question. For the Version setting, this is a ClusterVersion proto.
+func (s *StateMachineSetting) Decode(val []byte) (interface{}, error) {
+	return s.impl.Decode(val)
+}
+
 func (s *StateMachineSetting) String(sv *Values) string {
 	encV := []byte(s.Get(sv))
-	_, iface, err := s.transformer(sv, encV, nil)
+	if encV == nil {
+		panic("unexpected nil value")
+	}
+	str, err := s.impl.DecodeToString(encV)
 	if err != nil {
 		panic(err)
 	}
-	return fmt.Sprintf("%v", iface)
+	return str
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
@@ -84,55 +98,85 @@ func (*StateMachineSetting) Typ() string {
 	return "m"
 }
 
-// Get retrieves the (encoded) value in the setting (or the encoded default).
+// Get retrieves the (encoded) value in the setting. Get panics if set( ) has
+// not been previously called.
 func (s *StateMachineSetting) Get(sv *Values) string {
 	encV := sv.getGeneric(s.slotIdx)
 	if encV == nil {
-		defV, _, err := s.transformer(sv, nil, nil)
-		if err != nil {
-			panic(err)
-		}
-		return string(defV)
+		panic(fmt.Sprintf("missing value for state machine in slot %d", s.slotIdx))
 	}
 	return string(encV.([]byte))
 }
 
-// Validate that the state machine accepts the user input. Returns new encoded
-// state, unencoded state, or an error. If no update is given, round trips
-// current state.
-func (s *StateMachineSetting) Validate(
-	sv *Values, old []byte, update *string,
-) ([]byte, interface{}, error) {
-	return s.transformer(sv, old, update)
+// GetInternal returns the setting's current value.
+func (s *StateMachineSetting) GetInternal(sv *Values) interface{} {
+	return sv.getGeneric(s.slotIdx)
 }
 
-func (s *StateMachineSetting) set(sv *Values, finalEncodedV []byte) error {
-	if _, _, err := s.transformer(sv, finalEncodedV, nil); err != nil {
+// SetInternal updates the setting's value in the sv container.
+func (s *StateMachineSetting) SetInternal(sv *Values, newVal interface{}) {
+	sv.setGeneric(s.getSlotIdx(), newVal)
+}
+
+// SettingsListDefault returns the value that should be presented by
+// `./cockroach gen settings-list`
+func (s *StateMachineSetting) SettingsListDefault() string {
+	return s.impl.SettingsListDefault()
+}
+
+// Encoded is part of the Setting interface.
+func (s *StateMachineSetting) Encoded(sv *Values) string {
+	return s.Get(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (s *StateMachineSetting) EncodedDefault() string {
+	return "unsupported"
+}
+
+// Validate that the state machine accepts the user input. Returns new encoded
+// state.
+func (s *StateMachineSetting) Validate(
+	ctx context.Context, sv *Values, old []byte, update string,
+) ([]byte, error) {
+	return s.impl.ValidateLogical(ctx, sv, old, update)
+}
+
+// set is part of the Setting interface.
+func (s *StateMachineSetting) set(sv *Values, encodedVal []byte) error {
+	if err := s.impl.ValidateGossipUpdate(context.TODO(), sv, encodedVal); err != nil {
 		return err
 	}
-	if bytes.Equal([]byte(s.Get(sv)), finalEncodedV) {
-		return nil
+	curVal := sv.getGeneric(s.slotIdx)
+	if curVal != nil {
+		if bytes.Equal(curVal.([]byte), encodedVal) {
+			// Nothing to do.
+			return nil
+		}
 	}
-	sv.setGeneric(s.slotIdx, finalEncodedV)
+	s.impl.BeforeChange(context.TODO(), encodedVal, sv)
+	sv.setGeneric(s.slotIdx, encodedVal)
 	return nil
 }
 
-func (s *StateMachineSetting) setToDefault(sv *Values) {
-	defV, _, err := s.transformer(sv, nil, nil)
-	if err != nil {
-		panic(err)
-	}
-	if err := s.set(sv, defV); err != nil {
-		panic(err)
-	}
-}
+// setToDefault is part of the Setting interface.
+//
+// This is a no-op for StateMachineSettings. They don't have defaults that they
+// can go back to at any time.
+func (s *StateMachineSetting) setToDefault(_ *Values) {}
 
 // RegisterStateMachineSetting registers a StateMachineSetting. See the comment
 // for StateMachineSetting for details.
-func RegisterStateMachineSetting(key, desc string, transformer TransformerFn) *StateMachineSetting {
-	setting := &StateMachineSetting{
-		transformer: transformer,
-	}
+func RegisterStateMachineSetting(key, desc string, setting *StateMachineSetting) {
 	register(key, desc, setting)
-	return setting
+}
+
+// RegisterStateMachineSettingImpl is like RegisterStateMachineSetting,
+// but it takes a StateMachineSettingImpl.
+func RegisterStateMachineSettingImpl(
+	key, desc string, impl StateMachineSettingImpl,
+) *StateMachineSetting {
+	setting := MakeStateMachineSetting(impl)
+	register(key, desc, &setting)
+	return &setting
 }

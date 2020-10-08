@@ -1,9 +1,9 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
-statement error unknown variable: "foo"
+statement error unrecognized configuration parameter "foo"
 SET foo = bar
 
-statement error unknown variable: "foo"
+statement error unrecognized configuration parameter "foo"
 SHOW foo
 
 statement error database "foo" does not exist
@@ -25,10 +25,10 @@ statement ok
 CREATE TABLE bar (k INT PRIMARY KEY)
 
 # Verify that the table is indeed in "foo".
-query T
+query TTTTI
 SHOW TABLES FROM foo
 ----
-bar
+public  bar  table  root  0
 
 # Verify set to empty string.
 statement ok
@@ -40,14 +40,14 @@ SHOW database
 database
 ·
 
-statement error no database specified
+statement error no database or schema specified
 SHOW TABLES
 
 # Verify SHOW TABLES FROM works when there is no current database.
-query T
+query TTTTI
 SHOW TABLES FROM foo
 ----
-bar
+public  bar  table  root  0
 
 # SET statement succeeds, CREATE TABLE fails.
 statement error pgcode 42P07 relation \"bar\" already exists
@@ -60,10 +60,10 @@ database
 foo
 
 # SET succeeds
-query T
+query TTTTI
 SHOW TABLES from foo
 ----
-bar
+public  bar  table  root  0
 
 statement error invalid variable name: ""
 SET ROW (1, TRUE, NULL)
@@ -109,36 +109,48 @@ statement ok
 SET application_name = 'hello'
 
 statement ok
-SET extra_float_digits = 3
+SET extra_float_digits = 0
+
+statement error 123 is outside the valid range for parameter "extra_float_digits"
+SET extra_float_digits = 123
 
 statement ok
-SET client_min_messages = 'debug'
+SET client_min_messages = 'debug1'
 
 statement ok
 SET standard_conforming_strings = 'on'
 
-statement error set standard_conforming_strings: "off" not supported
+statement error invalid value for parameter "standard_conforming_strings": "off"
 SET standard_conforming_strings = 'off'
 
 statement ok
 SET client_encoding = 'UTF8'
 
 statement ok
+SET client_encoding = 'UT! '' @#!$%%F------!@!!!8 ''   '
+
+statement ok
 SET client_encoding = 'unicode'
 
-statement error non-UTF8 encoding other not supported
+statement error unimplemented client encoding: "other"
 SET client_encoding = 'other'
+
+statement error parameter "server_encoding" cannot be changed
+SET server_encoding = 'UTF8'
+
+statement error parameter "server_encoding" cannot be changed
+SET server_encoding = 'other'
 
 statement ok
 SET datestyle = 'ISO'
 
-statement error non-ISO date style other not supported
+statement error invalid value for parameter "DateStyle": "other"
 SET datestyle = 'other'
 
 statement ok
 SET intervalstyle = 'postgres'
 
-statement error non-postgres interval style other not supported
+statement error invalid value for parameter "IntervalStyle": "other"
 SET intervalstyle = 'other'
 
 statement ok
@@ -153,20 +165,35 @@ SET distsql = on
 statement ok
 SET distsql = off
 
-statement error not supported
+statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
 
 statement ok
-SET experimental_opt = on
+SET vectorize = '201auto'
 
 statement ok
-SET experimental_opt = local
+SET vectorize = on
 
 statement ok
-SET experimental_opt = off
+SET vectorize = experimental_always
 
-statement error not supported
-SET experimental_opt = bogus
+statement ok
+SET vectorize = off
+
+statement error invalid value for parameter "vectorize": "bogus"
+SET vectorize = bogus
+
+statement ok
+SET optimizer = on
+
+statement error invalid value for parameter "optimizer": "local"
+SET optimizer = local
+
+statement error invalid value for parameter "optimizer": "off"
+SET optimizer = off
+
+statement error invalid value for parameter "optimizer": "bogus"
+SET optimizer = bogus
 
 statement ok
 SET bytea_output = escape
@@ -174,8 +201,14 @@ SET bytea_output = escape
 statement ok
 SET bytea_output = hex
 
-statement error not supported
+statement error invalid value for parameter "bytea_output": "bogus"
 SET bytea_output = bogus
+
+statement ok
+SET default_tablespace = ''
+
+statement error invalid value for parameter "default_tablespace": "bleepis"
+SET default_tablespace = 'bleepis'
 
 query T colnames
 SHOW server_version
@@ -190,10 +223,10 @@ server_version_num
 90500
 
 # Test read-only variables
-statement error variable "max_index_keys" cannot be changed
+statement error parameter "max_index_keys" cannot be changed
 SET max_index_keys = 32
 
-statement error variable "node_id" cannot be changed
+statement error parameter "node_id" cannot be changed
 SET node_id = 123
 
 query TT
@@ -247,11 +280,147 @@ SELECT * FROM generate_series(1,1000000)
 statement ok
 SET statement_timeout = '0ms'
 
+# Test that statement_timeout can be set with an interval string, defaulting to
+# milliseconds as a unit.
+statement ok
+SET statement_timeout = '100'
+
+query T
+SHOW statement_timeout
+----
+100
+
+# Set the statement timeout to something absurdly small, so that no query would
+# presumably be able to go through. It should still be possible to get out of
+# this "bad state" by resetting the statement timeout.
+subtest impossible_statement_timeout_recovery
+
+statement ok
+SET statement_timeout = '1us'
+
+statement error query execution canceled due to statement timeout
+SHOW statement_timeout
+
+statement ok
+SET statement_timeout = 0
+
+query T
+SHOW statement_timeout
+----
+0
+
 # Test that composite variable names get rejected properly, especially
 # when "tracing" is used as prefix.
 
-statement error unknown variable: "blah.blah"
+statement error unrecognized configuration parameter "blah.blah"
 SET blah.blah = 123
 
-statement error unknown variable: "tracing.blah"
+statement error unrecognized configuration parameter "tracing.blah"
 SET tracing.blah = 123
+
+statement error invalid value for parameter "ssl_renegotiation_limit"
+SET ssl_renegotiation_limit = 123
+
+statement ok
+SET SESSION tracing=false
+
+statement error pgcode 42601 expected string or boolean for set tracing argument
+SET SESSION tracing=1
+
+subtest regression_35109_flowable
+
+statement ok
+SET DATESTYLE = ISO;
+  SET INTERVALSTYLE = POSTGRES;
+  SET extra_float_digits TO 3;
+  SET synchronize_seqscans TO off;
+  SET statement_timeout = 0;
+  SET lock_timeout = 0;
+  SET idle_in_transaction_session_timeout = 0;
+  SET row_security = off;
+
+subtest regression_41567_subqueries
+
+statement error subqueries are not allowed in SET
+SET SESSION SCHEMA EXISTS ( TABLE ( ( ( ( ( ( ( ( TABLE error ) ) ) ) ) ) ) ) ORDER BY INDEX FAMILY . IS . MAXVALUE @ OF DESC , INDEX FAMILY . FOR . ident @ ident ASC )
+
+statement error subqueries are not allowed in SET
+USE EXISTS ( TABLE error ) IS NULL
+
+statement error subqueries are not allowed in SET
+PREPARE a AS USE EXISTS ( TABLE error ) IS NULL
+
+subtest bools
+# Ensure that we can set variables to on/off and yes/no.
+statement ok
+SET enable_zigzag_join = 'on';
+SET enable_zigzag_join = 'off';
+SET enable_zigzag_join = 'true';
+SET enable_zigzag_join = 'false';
+SET enable_zigzag_join = 'yes';
+SET enable_zigzag_join = 'no';
+SET enable_zigzag_join = on;
+SET enable_zigzag_join = off;
+SET enable_zigzag_join = true;
+SET enable_zigzag_join = false;
+SET enable_zigzag_join = yes;
+SET enable_zigzag_join = no
+
+# Check error code.
+statement error pgcode 22023 parameter "enable_zigzag_join" requires a Boolean value
+SET enable_zigzag_join = nonsense
+
+statement ok
+SET experimental_distsql_planning = always;
+SET experimental_distsql_planning = on;
+SET experimental_distsql_planning = off
+
+subtest dummy_session_vars
+
+query T noticetrace
+SET synchronous_commit = off; SET enable_seqscan = false
+----
+WARNING: setting session var "synchronous_commit" is a no-op
+WARNING: setting session var "enable_seqscan" is a no-op
+
+query T colnames
+SHOW synchronous_commit
+----
+synchronous_commit
+off
+
+query T colnames
+SHOW enable_seqscan
+----
+enable_seqscan
+off
+
+query T noticetrace
+SET synchronous_commit = on; SET enable_seqscan = true
+----
+WARNING: setting session var "synchronous_commit" is a no-op
+WARNING: setting session var "enable_seqscan" is a no-op
+
+query T colnames
+SHOW synchronous_commit
+----
+synchronous_commit
+on
+
+query T colnames
+SHOW enable_seqscan
+----
+enable_seqscan
+on
+
+statement ok
+BEGIN
+
+statement ok
+SET TRANSACTION NOT DEFERRABLE
+
+statement error pq: unimplemented: DEFERRABLE transactions
+SET TRANSACTION DEFERRABLE
+
+statement ok
+rollback

@@ -1,43 +1,53 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 @require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
+
+$event-message-line-height = 22px
 
 .events
-  font-family Lato-Regular
+  font-family $font-family--base
   table
     width 100%
     border-collapse collapse
     tr
-      height 39px
       border-bottom 1px solid $table-border-color
       &:last-child
         border 0
-    td
-      padding-left 0
-      text-overflow ellipsis
-      overflow hidden
+      td
+        padding 10px 0 8px
+    tr:first-child > td
+      padding 0 0 8px
 
-      div
-        text-overflow ellipsis
-        overflow hidden
 
 .events__message
-  font-size 14
-  color $body-color
+  font-size $font-size--medium
+  color $colors--neutral-8
   text-overflow ellipsis
   display block
-  white-space nowrap
   overflow hidden
-  width 180px
+  line-height $event-message-line-height
+  width 240px
+  max-height $event-message-line-height * 2
 
 .events__timestamp
-  font-size 12
-  color $tooltip-color
-  margin-left 20px
-  text-align right
+  font-size $font-size--small
+  color $colors--neutral-6
+  letter-spacing 0.3px
+  line-height $line-height--small
 
 .events__more-link
   text-align center
   color $link-color
-  font-family Lato-Bold
+  font-family $font-family--bold
   text-transform uppercase
   font-size 12px
   letter-spacing 2px

@@ -1,0 +1,9 @@
+import_stmt ::=
+	'IMPORT' 'TABLE' table_name 'CREATE' 'USING' file_location 'CSV' 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 'WITH' kv_option_list
+	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' file_location 'CSV' 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 
+	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' 'CSV' 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 'WITH' kv_option_list
+	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' 'CSV' 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 
+	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' 'CSV' 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 'WITH' kv_option_list
+	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' 'CSV' 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 
+	| 'IMPORT' 'INTO' table_name 'CSV' 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 'WITH' kv_option_list
+	| 'IMPORT' 'INTO' table_name 'CSV' 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 

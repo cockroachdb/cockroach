@@ -1,39 +1,37 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package pgerror
+package pgerror_test
 
 import (
 	"fmt"
 	"regexp"
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 func TestPGError(t *testing.T) {
 	const msg = "err"
-	const code = "abc"
+	var code = pgcode.MakeCode("abc")
 
-	checkErr := func(pErr *Error, errMsg string) {
-		if pErr.Code != code {
+	checkErr := func(pErr *pgerror.Error, errMsg string) {
+		if pgcode.MakeCode(pErr.Code) != code {
 			t.Fatalf("got: %q\nwant: %q", pErr.Code, code)
 		}
 		if pErr.Message != errMsg {
 			t.Fatalf("got: %q\nwant: %q", pErr.Message, errMsg)
 		}
-		const want = `.*sql/pgwire/pgerror.*`
+		const want = `errors_test.go`
 		match, err := regexp.MatchString(want, pErr.Source.File)
 		if err != nil {
 			t.Fatal(err)
@@ -44,25 +42,22 @@ func TestPGError(t *testing.T) {
 	}
 
 	// Test NewError.
-	pErr := NewError(code, msg)
+	pErr := pgerror.Flatten(pgerror.New(code, msg))
 	checkErr(pErr, msg)
 
-	pErr = NewError(code, "bad%format")
+	pErr = pgerror.Flatten(pgerror.New(code, "bad%format"))
 	checkErr(pErr, "bad%format")
 
 	// Test NewErrorf.
 	const prefix = "prefix"
-	pErr = NewErrorf(code, "%s: %s", prefix, msg)
+	pErr = pgerror.Flatten(pgerror.Newf(code, "%s: %s", prefix, msg))
 	expected := fmt.Sprintf("%s: %s", prefix, msg)
 	checkErr(pErr, expected)
+}
 
-	// Test GetPGCause.
-	err := errors.Wrap(pErr, "wrap")
-	err = errors.Wrap(err, "wrap")
-	var ok bool
-	pErr, ok = GetPGCause(err)
-	if !ok {
-		t.Fatal("cannot find pgerror")
+func TestIsSQLRetryableError(t *testing.T) {
+	errAmbiguous := &roachpb.AmbiguousResultError{}
+	if !pgerror.IsSQLRetryableError(roachpb.NewError(errAmbiguous).GoError()) {
+		t.Fatalf("%s should be a SQLRetryableError", errAmbiguous)
 	}
-	checkErr(pErr, expected)
 }

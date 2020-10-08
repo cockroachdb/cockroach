@@ -1,34 +1,34 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package security_test
 
 import (
+	"crypto/tls"
 	"crypto/x509"
-	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	config, err := security.LoadServerTLSConfig(
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey))
+	cm, err := security.NewCertificateManager(security.EmbeddedCertsDir, security.CommandTLSSettings{})
+	require.NoError(t, err)
+	config, err := cm.GetServerTLSConfig()
+	require.NoError(t, err)
+	require.NotNil(t, config.GetConfigForClient)
+	config, err = config.GetConfigForClient(&tls.ClientHelloInfo{})
+	require.NoError(t, err)
 	if err != nil {
 		t.Fatalf("Failed to load TLS config: %v", err)
 	}

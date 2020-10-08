@@ -1,16 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package roachpb
 
@@ -20,7 +16,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPercentilesFromData(t *testing.T) {
@@ -66,18 +65,40 @@ func TestPercentilesFromData(t *testing.T) {
 
 func TestRangeDescriptorFindReplica(t *testing.T) {
 	desc := RangeDescriptor{
-		Replicas: []ReplicaDescriptor{
+		InternalReplicas: []ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
 			{NodeID: 3, StoreID: 3},
 		},
 	}
-	for i, e := range desc.Replicas {
+	for i, e := range desc.InternalReplicas {
 		if a, ok := desc.GetReplicaDescriptor(e.StoreID); !ok {
 			t.Errorf("%d: expected to find %+v in %+v for store %d", i, e, desc, e.StoreID)
 		} else if a != e {
 			t.Errorf("%d: expected to find %+v in %+v for store %d; got %+v", i, e, desc, e.StoreID, a)
 		}
+	}
+}
+
+func TestRangeDescriptorSafeMessage(t *testing.T) {
+	desc := RangeDescriptor{
+		RangeID:  1,
+		StartKey: RKey("c"),
+		EndKey:   RKey("g"),
+		InternalReplicas: []ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 2},
+			{NodeID: 3, StoreID: 3},
+		},
+	}
+
+	const expStr = `r1:‹{c-g}› [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`
+
+	if str := redact.Sprint(desc); str != expStr {
+		t.Errorf(
+			"expected meta: %s\n"+
+				"got:          %s",
+			expStr, str)
 	}
 }
 
@@ -89,6 +110,53 @@ func TestRangeDescriptorMissingReplica(t *testing.T) {
 	}
 	if (r != ReplicaDescriptor{}) {
 		t.Fatalf("unexpectedly got nontrivial return: %s", r)
+	}
+}
+
+func TestNodeDescriptorAddressForLocality(t *testing.T) {
+	addr := func(name string) util.UnresolvedAddr {
+		return util.UnresolvedAddr{NetworkField: name}
+	}
+	desc := NodeDescriptor{
+		Address: addr("1"),
+		LocalityAddress: []LocalityAddress{
+			{Address: addr("2"), LocalityTier: Tier{Key: "region", Value: "east"}},
+			{Address: addr("3"), LocalityTier: Tier{Key: "zone", Value: "a"}},
+		},
+	}
+	for _, tc := range []struct {
+		locality Locality
+		expected util.UnresolvedAddr
+	}{
+		{
+			locality: Locality{},
+			expected: addr("1"),
+		},
+		{
+			locality: Locality{Tiers: []Tier{
+				{Key: "region", Value: "west"},
+				{Key: "zone", Value: "b"},
+			}},
+			expected: addr("1"),
+		},
+		{
+			locality: Locality{Tiers: []Tier{
+				{Key: "region", Value: "east"},
+				{Key: "zone", Value: "b"},
+			}},
+			expected: addr("2"),
+		},
+		{
+			locality: Locality{Tiers: []Tier{
+				{Key: "region", Value: "west"},
+				{Key: "zone", Value: "a"},
+			}},
+			expected: addr("3"),
+		},
+	} {
+		t.Run(tc.locality.String(), func(t *testing.T) {
+			require.Equal(t, tc.expected, *desc.AddressForLocality(tc.locality))
+		})
 	}
 }
 
@@ -199,4 +267,16 @@ func TestDiversityScore(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAddTier(t *testing.T) {
+	l1 := Locality{}
+	l2 := Locality{
+		Tiers: []Tier{{Key: "foo", Value: "bar"}},
+	}
+	l3 := Locality{
+		Tiers: []Tier{{Key: "foo", Value: "bar"}, {Key: "bar", Value: "foo"}},
+	}
+	require.Equal(t, l2, l1.AddTier(Tier{Key: "foo", Value: "bar"}))
+	require.Equal(t, l3, l2.AddTier(Tier{Key: "bar", Value: "foo"}))
 }

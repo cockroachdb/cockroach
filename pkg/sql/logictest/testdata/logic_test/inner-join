@@ -1,0 +1,75 @@
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b));
+INSERT INTO abc VALUES (1, 1, 2), (2, 1, 1), (2, 2, NULL)
+
+statement ok
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (d, e));
+INSERT INTO def VALUES (1, 1, 2), (2, 1, 0), (1, 2, NULL)
+
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d)
+----
+1  1  2
+2  1  1
+2  2  NULL
+
+# Test lookup inner joins created from semi-joins.
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
+----
+2  1  1
+2  2  NULL
+
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d AND c=e)
+----
+1  1  2
+2  1  1
+
+# A semi-join emits exactly one row for every matching row in the LHS.
+# The following test ensures that the SemiJoin doesn't commute into an
+# InnerJoin as that guarantee would be lost.
+statement ok
+TRUNCATE TABLE abc; TRUNCATE TABLE def;
+
+statement ok
+INSERT INTO abc VALUES (1, 1, 1)
+
+statement ok
+INSERT INTO def VALUES (1, 1, 1), (2, 1, 1)
+
+query III rowsort
+SELECT a, b, c FROM abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR a=e)
+----
+1  1  1
+
+# Given that we know the reason the above query would fail if an InnerJoin
+# was used - multiple rows emitted for each matching row in the LHS - we
+# might think that adding a DistinctOn over the InnerJoin would help.
+# This test shows why that wouldn't work. There are two reasons:
+#
+#  - The columns of the LHS that are emitted aren't guaranteed to be a key.
+#    This means that only unique rows are returned when that is not what the
+#    SemiJoin should return (notice the (1, 1, 1) row is emitted twice)
+#  - We can't handle general filters because of composite datums (values that
+#    are equal but not identical). For example the decimals 1, 1.0 and 1.00
+#    are equal but have different string representations.
+#    The DistinctOn on the RHS would omit important rows in that case.
+#
+# This tests that the InnerJoin commute rule for semi joins behaves sanely in
+# these cases.
+statement ok
+CREATE TABLE abc_decimal (a DECIMAL, b DECIMAL, c DECIMAL);
+INSERT INTO abc_decimal VALUES (1, 1, 1), (1, 1, 1), (1.0, 1.0, 1.0), (1.00, 1.00, 1.00)
+
+statement ok
+CREATE TABLE def_decimal (d DECIMAL, e DECIMAL, f DECIMAL);
+INSERT INTO def_decimal VALUES (1, 1, 1), (1.0, 1.0, 1.0), (1.00, 1.00, 1.00)
+
+query RRR rowsort
+SELECT a, b, c FROM abc_decimal WHERE EXISTS (SELECT * FROM def_decimal WHERE a::string=d::string)
+----
+1     1     1
+1     1     1
+1.0   1.0   1.0
+1.00  1.00  1.00

@@ -1,0 +1,30 @@
+# LogicTest: local
+
+statement error precision 123 out of range
+SELECT 'a'::INTERVAL(123)
+
+query T colnames
+SELECT feature_name
+  FROM crdb_internal.feature_usage
+ WHERE feature_name LIKE '%errorcodes.42601%'
+----
+feature_name
+errorcodes.42601
+
+statement ok
+SET CLUSTER SETTING server.auth_log.sql_connections.enabled = true;
+SET CLUSTER SETTING server.auth_log.sql_connections.enabled = false;
+  SET CLUSTER SETTING server.auth_log.sql_sessions.enabled = true;
+  SET CLUSTER SETTING server.auth_log.sql_sessions.enabled = false
+
+query IT colnames
+SELECT usage_count, feature_name
+  FROM crdb_internal.feature_usage
+ WHERE feature_name LIKE 'auditing.%abled'
+ORDER BY 2,1
+----
+usage_count  feature_name
+1            auditing.authentication.disabled
+1            auditing.authentication.enabled
+1            auditing.connection.disabled
+1            auditing.connection.enabled

@@ -1,0 +1,80 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE bx (
+  b INT PRIMARY KEY,
+  x INT
+)
+
+statement ok
+CREATE TABLE cy (
+  c INT PRIMARY KEY,
+  y INT
+)
+
+statement ok
+CREATE TABLE dz (
+  d INT PRIMARY KEY,
+  z INT
+)
+
+statement ok
+CREATE TABLE abc (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  FAMILY (a, b, c, d)
+)
+
+statement ok
+SET reorder_joins_limit = 0
+
+statement error cannot set sql.defaults.reorder_joins_limit to a value less than 0 or greater than 63
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = -1
+
+statement error cannot set sql.defaults.reorder_joins_limit to a value less than 0 or greater than 63
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 65
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
+----
+·                         distribution           local              ·                         ·
+·                         vectorized             true               ·                         ·
+lookup join (inner)       ·                      ·                  (a, b, c, d, b, x, c, y)  ·
+ │                        estimated row count    1 (missing stats)  ·                         ·
+ │                        table                  cy@primary         ·                         ·
+ │                        equality               (c) = (c)          ·                         ·
+ │                        equality cols are key  ·                  ·                         ·
+ └── lookup join (inner)  ·                      ·                  (a, b, c, d, b, x)        ·
+      │                   estimated row count    1 (missing stats)  ·                         ·
+      │                   table                  bx@primary         ·                         ·
+      │                   equality               (b) = (b)          ·                         ·
+      │                   equality cols are key  ·                  ·                         ·
+      └── scan            ·                      ·                  (a, b, c, d)              ·
+·                         estimated row count    1 (missing stats)  ·                         ·
+·                         table                  abc@primary        ·                         ·
+·                         spans                  /1-/1/#            ·                         ·
+
+statement ok
+SET reorder_joins_limit = 3
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
+----
+·                         distribution           local              ·                         ·
+·                         vectorized             true               ·                         ·
+lookup join (inner)       ·                      ·                  (a, b, c, d, b, x, c, y)  ·
+ │                        estimated row count    1 (missing stats)  ·                         ·
+ │                        table                  cy@primary         ·                         ·
+ │                        equality               (c) = (c)          ·                         ·
+ │                        equality cols are key  ·                  ·                         ·
+ └── lookup join (inner)  ·                      ·                  (a, b, c, d, b, x)        ·
+      │                   estimated row count    1 (missing stats)  ·                         ·
+      │                   table                  bx@primary         ·                         ·
+      │                   equality               (b) = (b)          ·                         ·
+      │                   equality cols are key  ·                  ·                         ·
+      └── scan            ·                      ·                  (a, b, c, d)              ·
+·                         estimated row count    1 (missing stats)  ·                         ·
+·                         table                  abc@primary        ·                         ·
+·                         spans                  /1-/1/#            ·                         ·

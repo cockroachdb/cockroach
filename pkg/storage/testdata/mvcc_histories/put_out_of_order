@@ -1,0 +1,55 @@
+# Tests a scenario where a put operation of an older timestamp comes
+# after a put operation of a newer timestamp. The timestamp of the
+# resulting intent remains equal to the higher timestamp - it does not
+# regress.
+
+run ok
+with t=A
+  txn_begin   ts=1
+  txn_advance ts=2,1
+  put         ts=1 k=k v=v
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,1 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,1 min=0,0 seq=0} ts=0.000000002,1 del=false klen=12 vlen=6
+data: "k"/0.000000002,1 -> /BYTES/v
+
+# Put operation with earlier wall time. Will NOT be ignored.
+run ok
+with t=A
+  txn_step
+  txn_advance ts=1
+  put         ts=1 k=k v=v2
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,1 min=0,0 seq=1} ts=0.000000002,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}}
+data: "k"/0.000000002,1 -> /BYTES/v2
+
+# We're expecting v2 here.
+
+run ok
+with t=A
+  get ts=3 k=k
+----
+get: "k" -> /BYTES/v2 @0.000000002,1
+
+# Another put operation with earlier logical time. Will NOT be ignored.
+
+run ok
+with t=A
+  txn_step
+  put ts=1 k=k v=v2
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=2} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,1 min=0,0 seq=2} ts=0.000000002,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}{1 /BYTES/v2}}
+data: "k"/0.000000002,1 -> /BYTES/v2
+
+# We're expecting v2 here.
+
+run ok
+with t=A
+  get ts=3 k=k
+----
+get: "k" -> /BYTES/v2 @0.000000002,1

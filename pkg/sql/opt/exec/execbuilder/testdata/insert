@@ -1,9 +1,9 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv (
-  k CHAR PRIMARY KEY,
-  v CHAR,
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR,
   UNIQUE INDEX a (v),
   FAMILY (k),
   FAMILY (v)
@@ -27,56 +27,58 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
 fetched: /kv/primary/'a' -> NULL
 fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv/primary/'c' -> NULL
 fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv/primary/'e' -> NULL
 fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv/primary/'g' -> NULL
 fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
 fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
 fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
 fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
 fetched: /kv/primary/'nil4' -> NULL
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
 output row: ['nil4' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
 fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
 fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
 fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
 fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
 fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
 fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv/a/'f' -> /'e'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
 output row: ['e' 'f']
 
 statement error pgcode 23505 duplicate key value \(v\)=\('f'\) violates unique constraint "a"
@@ -86,56 +88,58 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
 fetched: /kv/primary/'a' -> NULL
 fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv/primary/'c' -> NULL
 fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv/primary/'e' -> NULL
 fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv/primary/'g' -> NULL
 fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
 fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
 fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
 fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
 fetched: /kv/primary/'nil4' -> NULL
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
 output row: ['nil4' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
 fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
 fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
 fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
 fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
 fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
 fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv/a/'f' -> /'e'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
 output row: ['e' 'f']
 
 statement ok
@@ -145,61 +149,63 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
 fetched: /kv/primary/'a' -> NULL
 fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv/primary/'c' -> NULL
 fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv/primary/'e' -> NULL
 fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv/primary/'f' -> NULL
 fetched: /kv/primary/'f'/v -> 'g'
-output row: ['f' 'g']
 fetched: /kv/primary/'g' -> NULL
 fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
 fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
 fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
 fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
 fetched: /kv/primary/'nil4' -> NULL
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
 output row: ['nil4' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
 fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
 fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
 fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
 fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
 fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
 fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv/a/'f' -> /'e'
-output row: ['e' 'f']
 fetched: /kv/a/'g' -> /'f'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
 output row: ['f' 'g']
 
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
@@ -209,61 +215,63 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
 fetched: /kv/primary/'a' -> NULL
 fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv/primary/'c' -> NULL
 fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv/primary/'e' -> NULL
 fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv/primary/'f' -> NULL
 fetched: /kv/primary/'f'/v -> 'g'
-output row: ['f' 'g']
 fetched: /kv/primary/'g' -> NULL
 fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
 fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
 fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
 fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
 fetched: /kv/primary/'nil4' -> NULL
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
 output row: ['nil4' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
 fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
 fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
 fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
 fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
 fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
 fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv/a/'f' -> /'e'
-output row: ['e' 'f']
 fetched: /kv/a/'g' -> /'f'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
 output row: ['f' 'g']
 
 statement ok
@@ -280,8 +288,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv5@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv5/a/NULL/'a' -> NULL
 output row: ['a' NULL]
@@ -295,23 +304,30 @@ CREATE TABLE select_t (x INT, v INT)
 # Check that INSERT supports ORDER BY (MySQL extension)
 query TTT
 SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
+EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
 ]
 ----
-count                     ·          ·
- └── insert               ·          ·
-      │                   into       insert_t(x, v, rowid)
-      │                   default 0  NULL
-      │                   default 1  NULL
-      │                   default 2  unique_rowid()
-      └── sort            ·          ·
-           │              order      -v
-           └── render     ·          ·
-                │         render 0   test.public.select_t.x
-                │         render 1   test.public.select_t.v
-                └── scan  ·          ·
-·                         table      select_t@primary
-·                         spans      ALL
+·                         distribution         local
+·                         vectorized           false
+insert                    ·                    ·
+ │                        estimated row count  0 (missing stats)
+ │                        into                 insert_t(x, v, rowid)
+ │                        auto commit          ·
+ └── render               ·                    ·
+      │                   estimated row count  10 (missing stats)
+      │                   render 0             unique_rowid()
+      │                   render 1             x
+      │                   render 2             v
+      └── limit           ·                    ·
+           │              estimated row count  10 (missing stats)
+           │              count                10
+           └── sort       ·                    ·
+                │         estimated row count  1000 (missing stats)
+                │         order                -v
+                └── scan  ·                    ·
+·                         estimated row count  1000 (missing stats)
+·                         table                select_t@primary
+·                         spans                FULL SCAN
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query TTT
@@ -319,68 +335,226 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ]
 ----
-count                     ·          ·
- └── insert               ·          ·
-      │                   into       insert_t(x, v, rowid)
-      │                   default 0  NULL
-      │                   default 1  NULL
-      │                   default 2  unique_rowid()
-      └── limit           ·          ·
-           │              count      1
-           └── render     ·          ·
-                │         render 0   test.public.select_t.x
-                │         render 1   test.public.select_t.v
-                └── scan  ·          ·
-·                         table      select_t@primary
-·                         spans      ALL
-·                         limit      1
+·               distribution         local
+·               vectorized           false
+insert          ·                    ·
+ │              estimated row count  0 (missing stats)
+ │              into                 insert_t(x, v, rowid)
+ │              auto commit          ·
+ └── render     ·                    ·
+      │         estimated row count  1 (missing stats)
+      │         render 0             unique_rowid()
+      │         render 1             x
+      │         render 2             v
+      └── scan  ·                    ·
+·               estimated row count  1 (missing stats)
+·               table                select_t@primary
+·               spans                LIMITED SCAN
+·               limit                1
 
 # Check the grouping of LIMIT and ORDER BY
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
-count                  ·     ·
- └── insert            ·     ·
-      │                into  insert_t(x, v, rowid)
-      └── limit        ·     ·
-           └── values  ·     ·
-·                      size  2 columns, 2 rows
+·                      distribution  local
+·                      vectorized    false
+insert                 ·             ·
+ │                     into          insert_t(x, v, rowid)
+ │                     auto commit   ·
+ └── render            ·             ·
+      └── limit        ·             ·
+           │           count         1
+           └── values  ·             ·
+·                      size          2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+·                           distribution  local
+·                           vectorized    false
+insert                      ·             ·
+ │                          into          insert_t(x, v, rowid)
+ │                          auto commit   ·
+ └── render                 ·             ·
+      └── limit             ·             ·
+           │                count         1
+           └── sort         ·             ·
+                │           order         +column2
+                └── values  ·             ·
+·                           size          2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+·                           distribution  local
+·                           vectorized    false
+insert                      ·             ·
+ │                          into          insert_t(x, v, rowid)
+ │                          auto commit   ·
+ └── render                 ·             ·
+      └── limit             ·             ·
+           │                count         1
+           └── sort         ·             ·
+                │           order         +column2
+                └── values  ·             ·
+·                           size          2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+·                           distribution  local
+·                           vectorized    false
+insert                      ·             ·
+ │                          into          insert_t(x, v, rowid)
+ │                          auto commit   ·
+ └── render                 ·             ·
+      └── limit             ·             ·
+           │                count         1
+           └── sort         ·             ·
+                │           order         +column2
+                └── values  ·             ·
+·                           size          2 columns, 2 rows
+
+# ORDER BY expression that's not inserted into table.
+query TTTTT
+EXPLAIN (VERBOSE)
+INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
+----
+·                                   distribution         local                   ·                               ·
+·                                   vectorized           false                   ·                               ·
+render                              ·                    ·                       ("?column?")                    ·
+ │                                  estimated row count  10 (missing stats)      ·                               ·
+ │                                  render 0             x + v                   ·                               ·
+ └── insert                         ·                    ·                       (x, v, rowid)                   ·
+      │                             estimated row count  10 (missing stats)      ·                               ·
+      │                             into                 insert_t(x, v, rowid)   ·                               ·
+      └── render                    ·                    ·                       (length, "?column?", column13)  ·
+           │                        estimated row count  10 (missing stats)      ·                               ·
+           │                        render 0             unique_rowid()          ·                               ·
+           │                        render 1             length                  ·                               ·
+           │                        render 2             "?column?"              ·                               ·
+           └── limit                ·                    ·                       (length, "?column?", column12)  ·
+                │                   estimated row count  10 (missing stats)      ·                               ·
+                │                   count                10                      ·                               ·
+                └── sort            ·                    ·                       (length, "?column?", column12)  +column12
+                     │              estimated row count  1000 (missing stats)    ·                               ·
+                     │              order                +column12               ·                               ·
+                     └── render     ·                    ·                       (length, "?column?", column12)  ·
+                          │         estimated row count  1000 (missing stats)    ·                               ·
+                          │         render 0             length(k)               ·                               ·
+                          │         render 1             2                       ·                               ·
+                          │         render 2             k::STRING || v::STRING  ·                               ·
+                          └── scan  ·                    ·                       (k, v)                          ·
+·                                   estimated row count  1000 (missing stats)    ·                               ·
+·                                   table                kv@primary              ·                               ·
+·                                   spans                FULL SCAN               ·                               ·
+
+# ------------------------------------------------------------------------------
+# Insert rows into table during schema changes.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)); INSERT INTO mutation VALUES (1, 1)
+
+statement ok
+BEGIN; ALTER TABLE mutation DROP COLUMN y
+
+# Ensure that default value is still inserted into y, since y is write-only.
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
+----
+·                      distribution         local                  ·           ·
+·                      vectorized           false                  ·           ·
+project                ·                    ·                      (x)         ·
+ │                     estimated row count  1                      ·           ·
+ └── insert fast path  ·                    ·                      (x, rowid)  ·
+·                      estimated row count  1                      ·           ·
+·                      into                 mutation(x, rowid, y)  ·           ·
+·                      size                 3 columns, 1 row       ·           ·
+·                      row 0, expr 0        2                      ·           ·
+·                      row 0, expr 1        unique_rowid()         ·           ·
+·                      row 0, expr 2        10                     ·           ·
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN; ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
+
+# Ensure that value is *not* inserted into z, since z is delete-only.
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
+----
+·                 distribution         local                  ·   ·
+·                 vectorized           false                  ·   ·
+insert fast path  ·                    ·                      ()  ·
+·                 estimated row count  0 (missing stats)      ·   ·
+·                 into                 mutation(x, y, rowid)  ·   ·
+·                 size                 3 columns, 1 row       ·   ·
+·                 row 0, expr 0        2                      ·   ·
+·                 row 0, expr 1        2                      ·   ·
+·                 row 0, expr 2        unique_rowid()         ·   ·
+
+statement ok
+ROLLBACK
+
+# Regression test for #35564: make sure we use the Insert's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
+----
+·                                   distribution         local                                                ·                    ·
+·                                   vectorized           false                                                ·                    ·
+root                                ·                    ·                                                    (z)                  ·
+ ├── sort                           ·                    ·                                                    (z)                  +z
+ │    │                             estimated row count  1000 (missing stats)                                 ·                    ·
+ │    │                             order                +z                                                   ·                    ·
+ │    └── scan buffer               ·                    ·                                                    (z)                  ·
+ │                                  estimated row count  1000 (missing stats)                                 ·                    ·
+ │                                  label                buffer 1                                             ·                    ·
+ └── subquery                       ·                    ·                                                    ·                    ·
+      │                             id                   @S1                                                  ·                    ·
+      │                             original sql         INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                    ·
+      │                             exec mode            all rows                                             ·                    ·
+      └── buffer                    ·                    ·                                                    (z)                  ·
+           │                        label                buffer 1                                             ·                    ·
+           └── project              ·                    ·                                                    (z)                  ·
+                │                   estimated row count  1000 (missing stats)                                 ·                    ·
+                └── insert          ·                    ·                                                    (z, rowid)           ·
+                     │              estimated row count  1000 (missing stats)                                 ·                    ·
+                     │              into                 xyz(x, y, z, rowid)                                  ·                    ·
+                     └── render     ·                    ·                                                    (a, b, c, column13)  ·
+                          │         estimated row count  1000 (missing stats)                                 ·                    ·
+                          │         render 0             unique_rowid()                                       ·                    ·
+                          │         render 1             a                                                    ·                    ·
+                          │         render 2             b                                                    ·                    ·
+                          │         render 3             c                                                    ·                    ·
+                          └── scan  ·                    ·                                                    (a, b, c)            ·
+·                                   estimated row count  1000 (missing stats)                                 ·                    ·
+·                                   table                abc@primary                                          ·                    ·
+·                                   spans                FULL SCAN                                            ·                    ·
+
+# ------------------------------------------------------------------------------
+# Regression for #35364. This tests behavior that is different between the CBO
+# and the HP. The CBO will (deliberately) round any input columns *before*
+# evaluating any computed columns, as well as rounding the output.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t35364(
+    x DECIMAL(10,0) CHECK(round(x) = x) PRIMARY KEY,
+    y DECIMAL(10,0) DEFAULT (1.5),
+    z DECIMAL(10,0) AS (x+y+2.5) STORED CHECK(z >= 7)
+)
+
+query TTT
+INSERT INTO t35364 (x) VALUES (1.5) RETURNING *
+----
+2  2  7

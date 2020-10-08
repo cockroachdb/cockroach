@@ -1,0 +1,90 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.blobs;
+option go_package = "blobspb";
+
+import "gogoproto/gogo.proto";
+
+// GetRequest is used to read a file from a remote node.
+// It's path is specified by `filename`, which can either
+// be a relative path from the base of external IO dir, or
+// an absolute path, which must be contained in external IO dir.
+message GetRequest {
+  string filename = 1;
+}
+
+// GetResponse returns contents of the file requested by GetRequest.
+message GetResponse {
+  bytes payload = 1;
+}
+
+// PutRequest is used to write a payload to a remote node.
+// It's path is specified by `filename`, as described in GetRequest.
+message PutRequest {
+  string filename = 1;
+  bytes payload = 2;
+}
+
+// PutResponse is returned once a file has successfully been written by a PutRequest.
+message PutResponse {
+}
+
+// GlobRequest is used to list all files that match the glob pattern on a given node.
+message GlobRequest {
+  string pattern = 1;
+}
+
+// GlobResponse responds with the list of files that matched the given pattern.
+message GlobResponse {
+  repeated string files = 1;
+}
+
+// DeleteRequest is used to delete a file or empty directory on a remote node.
+// It's path is specified by `filename`, as described in GetRequest.
+message DeleteRequest {
+  string filename = 1;
+}
+
+// DeleteResponse is returned once a file has been successfully deleted by DeleteRequest.
+message DeleteResponse {
+}
+
+// StatRequest is used to get the file size of a file.
+// It's path is specified by `filename`, as described in GetRequest.
+message StatRequest {
+  string filename = 1;
+}
+
+// BlobStat returns the file size of the file requested in StatRequest.
+message BlobStat {
+  int64 filesize = 1;
+}
+
+// StreamChunk contains a chunk of the payload we are streaming
+message StreamChunk {
+  bytes payload = 1;
+}
+
+// StreamResponse is used to acknowledge a stream ending.
+message StreamResponse {
+}
+
+// Blob service allows for inter node file sharing.
+// It is used by ExternalStorage when interacting with
+// files that are stored on a node's local file system.
+service Blob {
+  rpc List(GlobRequest) returns (GlobResponse) {}
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+  rpc Stat(StatRequest) returns (BlobStat) {}
+  rpc GetStream(GetRequest) returns (stream StreamChunk) {}
+  rpc PutStream(stream StreamChunk) returns (StreamResponse) {}
+}

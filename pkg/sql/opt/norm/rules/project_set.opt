@@ -1,0 +1,27 @@
+# =============================================================================
+# project_set.opt contains normalization rules for the ProjectSet operator.
+# =============================================================================
+
+# ConvertZipArraysToValues applies the unnest, json_array_elements and
+# jsonb_array_elements zip functions to array inputs, converting them into a
+# Values operator within an InnerJoinApply. This allows Values and decorrelation
+# rules to fire. It is especially useful in cases where the contents are passed
+# as a PREPARE parameter, such as:
+#
+#   SELECT * FROM xy WHERE y IN unnest($1)
+# or:
+#   SELECT json_array_elements($1)
+#
+# The replace pattern is equivalent to the match pattern because the
+# InnerJoinApply outputs every value in the array for every row in the input,
+# and outputs nulls to pad shorter arrays. It also supports correlation between
+# the array arguments and the input expression.
+[ConvertZipArraysToValues, Normalize]
+(ProjectSet $input:* $zip:* & (CanConstructValuesFromZips $zip))
+=>
+(InnerJoinApply
+    $input
+    (ConstructValuesFromZips $zip)
+    []
+    (EmptyJoinPrivate)
+)

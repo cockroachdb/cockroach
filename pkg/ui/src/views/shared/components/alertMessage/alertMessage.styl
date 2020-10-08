@@ -1,0 +1,51 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.alert-massage
+  max-width 470px
+  min-height 50px
+  font-size $font-size--small
+  // it is !important because Ant sets margin to 0
+  // when closing animation happens and Alert panel
+  // jumps to the left side.
+  margin 0 0 0 auto!important
+  padding-left 48px
+  border-radius 3px
+  box-shadow 0 0 10px 0 rgba(71, 88, 114, 0.47)
+  background-color $colors--white
+  border-color $colors--white
+  display: flex;
+  flex-direction column
+  justify-content center
+
+  .alert-massage__icon
+    font-size 20px
+    left 16px
+    top 15px
+  .ant-alert-close-icon
+    margin unset
+    right 0
+    top 0
+    padding-right 16px
+  .ant-alert-message
+    @extends $text--body-strong
+    color $colors--neutral-8
+
+  &__close-text
+    color $colors--neutral-7
+    margin $spacing-smaller 0
+    font-size $font-size--large
+    line-height $spacing-smaller
+    font-weight $font-weight--extra-bold
+
+.ant-alert-success .alert-massage__icon
+  color $colors--primary-green-3

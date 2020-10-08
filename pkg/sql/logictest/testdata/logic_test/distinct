@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata fakedist-disk
-
 statement ok
 CREATE TABLE xyz (
   x INT PRIMARY KEY,
@@ -154,3 +152,75 @@ SELECT DISTINCT v FROM kv@idx WHERE v > 0
 1
 2
 5
+
+# Regression test for #44296.
+statement ok
+CREATE TABLE t0(c0 INT UNIQUE);
+
+statement ok
+CREATE VIEW v0(c0) AS SELECT DISTINCT t0.c0 FROM t0;
+
+statement ok
+INSERT INTO t0 (c0) VALUES (NULL), (NULL);
+
+query I
+SELECT * FROM v0 WHERE v0.c0 IS NULL
+----
+NULL
+
+# Regression test for #44079.
+statement ok
+CREATE TABLE t44079 (x INT[]);
+INSERT INTO t44079 VALUES (NULL), (ARRAY[NULL])
+
+query T rowsort
+SELECT DISTINCT * FROM t44079
+----
+NULL
+{NULL}
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x JSONB);
+INSERT INTO t VALUES
+  ('{"foo" : "bar"}'),
+  ('{"foo" : "bar"}'),
+  ('[1, 2]'),
+  ('[2, 1]'),
+  ('[1, 2]'),
+  ('{"foo": {"bar" : "baz"}}')
+
+query T rowsort
+SELECT DISTINCT (x) FROM t
+----
+[2, 1]
+[1, 2]
+{"foo": {"bar": "baz"}}
+{"foo": "bar"}
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x DECIMAL);
+INSERT INTO t VALUES (1.0), (1.00), (1.000)
+
+# We want to ensure that this only returns 1 element. We don't
+# check the element directly because it returns 1.0, 1.00, or
+# 1.000 non-deterministically in a distributed setting.
+query I
+SELECT COUNT (*) FROM (SELECT DISTINCT (array[x]) FROM t)
+----
+1
+
+# Regression for #46709.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (i INT, x INT, y INT, z STRING);
+INSERT INTO t VALUES
+  (1, 1, 2, 'hello'),
+  (2, 1, 2, 'hello'),
+  (3, 1, 2, 'hello there')
+
+query IT
+SELECT x, jsonb_agg(DISTINCT jsonb_build_object('y', y, 'z', z)) FROM (SELECT * FROM t ORDER BY i) GROUP BY x
+----
+1 [{"y": 2, "z": "hello"}, {"y": 2, "z": "hello there"}]

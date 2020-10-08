@@ -1,48 +1,118 @@
 # =============================================================================
 # groupby.opt contains exploration rules for the groupby operators
 # =============================================================================
-# ReplaceMinWithLimit replaces a min with a limit 1. This rule may result in a lower cost plan
-# if the column min(x) is applied to is indexed.
+
+# ReplaceScalarMinMaxWithLimit replaces a min or max group by aggregation with a
+# limit 1 on an ordered set. This rule may result in a lower cost plan if the
+# aggregated column (e.g. the "x" in min(x)) is indexed.
+[ReplaceScalarMinMaxWithLimit, Explore]
+(ScalarGroupBy
+    $input:*
+    [
+        (AggregationsItem
+            $agg:(Min | Max $variable:(Variable $col:*))
+            $aggPrivate:*
+        )
+    ]
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(ScalarGroupBy
+    (Limit
+        (Select
+            $input
+            [ (FiltersItem (IsNot $variable (Null (AnyType)))) ]
+        )
+        (IntConst 1)
+        (MakeOrderingChoiceFromColumn (OpName $agg) $col)
+    )
+    [ (AggregationsItem (ConstAgg $variable) $aggPrivate) ]
+    $groupingPrivate
+)
+
+# ReplaceMinWithLimit replaces a Min group-by expression with a limit 1, in the
+# case where the group-by returns zero or one groups (i.e. the grouping columns
+# are constant). In this situation, the group-by can be entirely replaced by a
+# project, similar to this:
+#
+#   SELECT w, min(k) FROM kw WHERE w = 5 GROUP BY w
+#   =>
+#   SELECT w, k FROM kw@wk WHERE w = 5 LIMIT 1
+#
+# This rule may result in a lower cost plan if the column min(k) is applied to
+# is indexed.
+#
+# NOTE: This rule is not fully symmetric with ReplaceMaxWithLimit. This is
+# because NULL values sort first in CRDB. This can interfere with the
+# calculation of the Min function, because NULL values need to be ignored unless
+# the group contains only NULL values (in which case the function returns NULL).
+# Therefore, this rule only works when the MIN column is NOT NULL, as only in
+# that case is one input row always sufficient to calculate MIN.
 [ReplaceMinWithLimit, Explore]
 (GroupBy
     $input:*
-    (Aggregations [(Min $variable:(Variable $col:*))] $cols:*)
-    $def:* & (IsScalarGroupBy $def)
+    $aggregations:[
+            ...
+            $item:(AggregationsItem
+                (Min $variable:(Variable $col:*))
+            )
+            ...
+        ] &
+        (IsColNotNull $col $input) &
+        (OtherAggsAreConst $aggregations $item)
+    $groupingPrivate:* &
+        (IsCanonicalGroupBy $groupingPrivate) &
+        (ColsAreConst (GroupingCols $groupingPrivate) $input)
 )
 =>
-(GroupBy
+(MakeProjectFromPassthroughAggs
     (Limit
-        (Select
-            $input
-            (Filters [(IsNot $variable (Null (AnyType)))])
-        )
-        (MakeOne)
+        $input
+        (IntConst 1)
         (MakeOrderingChoiceFromColumn Min $col)
     )
-    (Aggregations [(AnyNotNull $variable)] $cols)
-    $def
+    $aggregations
 )
 
-# ReplaceMaxWithLimit is analogous to the ReplaceMinWithLimit rule.
-# Due to limitations with OpName in exploration rules, the rule
-# had to be duplicated with minor modifications (we replace occurrences
-# of Min with Max)
+# ReplaceMaxWithLimit is analogous to the ReplaceMinWithLimit rule, except that
+# it works when the Max function's operand can be NULL. See the header comment
+# for ReplaceMinWithLimit for more details.
 [ReplaceMaxWithLimit, Explore]
 (GroupBy
     $input:*
-    (Aggregations [(Max $variable:(Variable $col:*))] $cols:*)
-    $def:* & (IsScalarGroupBy $def)
+    $aggregations:[
+            ...
+            $item:(AggregationsItem
+                (Max $variable:(Variable $col:*))
+            )
+            ...
+        ] &
+        (OtherAggsAreConst $aggregations $item)
+    $groupingPrivate:* &
+        (IsCanonicalGroupBy $groupingPrivate) &
+        (ColsAreConst (GroupingCols $groupingPrivate) $input)
 )
 =>
-(GroupBy
+(MakeProjectFromPassthroughAggs
     (Limit
-        (Select
-            $input
-            (Filters [(IsNot $variable (Null (AnyType)))])
-        )
-        (MakeOne)
+        $input
+        (IntConst 1)
         (MakeOrderingChoiceFromColumn Max $col)
     )
-    (Aggregations [(AnyNotNull $variable)] $cols)
-    $def
+    $aggregations
 )
+
+# GenerateStreamingGroupBy creates variants of a GroupBy, DistinctOn, or
+# UpsertDistinctOn which require more specific orderings on the grouping
+# columns, using the interesting orderings property. When we have orderings on
+# grouping columns, we can execute aggregations in a streaming fashion which is
+# more efficient.
+[GenerateStreamingGroupBy, Explore]
+(GroupBy | DistinctOn | EnsureDistinctOn | UpsertDistinctOn
+        | EnsureUpsertDistinctOn
+    $input:*
+    $aggs:*
+    $private:* & (IsCanonicalGroupBy $private)
+)
+=>
+(GenerateStreamingGroupBy (OpName) $input $aggs $private)

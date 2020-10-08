@@ -1,0 +1,56 @@
+# Test that a write with a higher epoch is permitted even when the sequence
+# number has decreased compared to an existing intent. This is because, on
+# transaction restart, the sequence number should not be compared with intents
+# from the old epoch.
+
+# Additionally the intent history is blown away when a transaction restarts.
+
+# Populate a txn and make the intent have an intent history by using
+# two puts.
+
+run ok
+with t=A
+  txn_begin ts=1
+  txn_step  n=4
+  put  k=k v=v
+  txn_step
+  put  k=k v=v2
+  get  k=k ts=3
+----
+get: "k" -> /BYTES/v2 @0.000000001,0
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=5} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=5} ts=0.000000001,0 del=false klen=12 vlen=7 ih={{4 /BYTES/v}}
+data: "k"/0.000000001,0 -> /BYTES/v2
+
+run ok
+with t=A
+  txn_restart
+  txn_step n=4
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0,0 seq=4} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+
+
+# We're operating at a higher epoch but a lower seqnum.
+
+# The following will blow the intent history because the epoch is now
+# higher. However the intent is preserved.
+
+run ok
+with t=A k=k
+  put v=v3
+  check_intent exists
+----
+meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0,0 seq=4} ts=0.000000001,0 del=false klen=12 vlen=7
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0,0 seq=4} ts=0.000000001,0 del=false klen=12 vlen=7
+data: "k"/0.000000001,0 -> /BYTES/v3
+
+# We're expecting v3 here.
+
+run ok
+with t=A
+  get k=k
+----
+get: "k" -> /BYTES/v3 @0.000000001,0

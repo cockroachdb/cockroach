@@ -1,0 +1,3 @@
+show_sequences_stmt ::=
+	'SHOW' 'SEQUENCES' 'FROM' name
+	| 'SHOW' 'SEQUENCES'

@@ -1,0 +1,142 @@
+# Need two interval ops to verify the return type matches the return struct type.
+# The optimizer tries to no-op this if both are 0s, and will return the wrong
+# timezone. This is okay in "eval", as long as it shows correctly in pgwire.
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamptz - '1s'::interval - '0s'::interval
+----
+'2010-09-28 15:59:59.1+00:00'
+
+eval
+'12h2m1s23ms'::interval + '1h'::interval
+----
+'13:02:01.023'
+
+eval
+'12 hours 2 minutes 1 second'::interval + '1h'::interval
+----
+'13:02:01'
+
+eval
+'PT12H2M1S'::interval + '1h'::interval
+----
+'13:02:01'
+
+eval
+'12:02:01'::interval + '1h'::interval
+----
+'13:02:01'
+
+eval
+'12h2m1s23ms'::interval - '1h'::interval
+----
+'11:02:01.023'
+
+eval
+'12 hours 2 minutes 1 second'::interval - '1h'::interval
+----
+'11:02:01'
+
+eval
+'PT12H2M1S'::interval - '1h'::interval
+----
+'11:02:01'
+
+eval
+'1h'::interval - '12h2m1s23ms'::interval
+----
+'-11:02:01.023'
+
+eval
+'PT1H'::interval - '12h2m1s23ms'::interval
+----
+'-11:02:01.023'
+
+eval
+'1 hour'::interval - '12h2m1s23ms'::interval
+----
+'-11:02:01.023'
+
+eval
+3 * '1h2m'::interval * 3
+----
+'09:18:00'
+
+eval
+3 * '1 hour 2 minutes'::interval * 3
+----
+'09:18:00'
+
+eval
+3 * 'PT1H2M'::interval * 3
+----
+'09:18:00'
+
+eval
+'3h'::interval / 2
+----
+'01:30:00'
+
+eval
+'PT3H'::interval / 2
+----
+'01:30:00'
+
+eval
+'3:00'::interval / 2
+----
+'01:30:00'
+
+eval
+'3 hours'::interval / 2
+----
+'01:30:00'
+
+eval
+'3 hours'::interval * 2.5
+----
+'07:30:00'
+
+eval
+'3 hours'::interval / 2.5
+----
+'01:12:00'
+
+eval
+'1h2m'::interval * 4.5
+----
+'04:39:00'
+
+eval
+4.5 * '1h2m'::interval
+----
+'04:39:00'
+
+eval
+5.0 * '1h2m'::interval
+----
+'05:10:00'
+
+eval
+'1h2m'::interval * 5.0
+----
+'05:10:00'
+
+eval
+'1h2m'::interval * 0.0
+----
+'00:00:00'
+
+eval
+00.0 * '1h2m'::interval
+----
+'00:00:00'
+
+eval
+'.1s'::interval
+----
+'00:00:00.1'
+
+eval
+'.1ms'::interval
+----
+'00:00:00.0001'

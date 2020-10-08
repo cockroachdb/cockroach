@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package gossip
 
@@ -41,7 +37,6 @@ func TestNodeIDFromKey(t *testing.T) {
 		{MakePrefixPattern(KeyNodeIDPrefix), 0, false},
 		{MakeNodeLivenessKey(1), 0, false},
 		{MakeStoreKey(1), 0, false},
-		{MakeDeadReplicasKey(1), 0, false},
 	}
 
 	for _, tc := range testCases {
@@ -55,6 +50,40 @@ func TestNodeIDFromKey(t *testing.T) {
 				t.Errorf("expected failure, got nodeID %d", nodeID)
 			} else if nodeID != tc.nodeID {
 				t.Errorf("expected NodeID=%d, got %d", tc.nodeID, nodeID)
+			}
+		})
+	}
+}
+
+func TestStoreIDFromKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		key     string
+		storeID roachpb.StoreID
+		success bool
+	}{
+		{MakeStoreKey(0), 0, true},
+		{MakeStoreKey(1), 1, true},
+		{MakeStoreKey(123), 123, true},
+		{MakeStoreKey(123) + "foo", 0, false},
+		{"foo" + MakeStoreKey(123), 0, false},
+		{KeyStorePrefix, 0, false},
+		{"123", 0, false},
+		{MakePrefixPattern(KeyStorePrefix), 0, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.key, func(t *testing.T) {
+			storeID, err := StoreIDFromKey(tc.key)
+			if err != nil {
+				if tc.success {
+					t.Errorf("expected success, got error: %s", err)
+				}
+			} else if !tc.success {
+				t.Errorf("expected failure, got storeID %d", storeID)
+			} else if storeID != tc.storeID {
+				t.Errorf("expected StoreID=%d, got %d", tc.storeID, storeID)
 			}
 		})
 	}

@@ -1,0 +1,87 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.status.statuspb;
+option go_package = "statuspb";
+
+import "roachpb/metadata.proto";
+import "build/info.proto";
+import "gogoproto/gogo.proto";
+
+// StoreStatus records the most recent values of metrics for a store.
+message StoreStatus {
+  roachpb.StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
+  map<string, double> metrics = 2;
+}
+
+// NodeStatus records the most recent values of metrics for a node.
+message NodeStatus {
+  roachpb.NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  build.Info build_info = 2 [(gogoproto.nullable) = false];
+  int64 started_at = 3;
+  int64 updated_at = 4;
+  map<string, double> metrics = 5;
+  repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
+  repeated string args = 7;
+  repeated string env = 8;
+  // latencies is a map of nodeIDs to nanoseconds which is the latency
+  // between this node and the other node.
+  //
+  // NOTE: this is deprecated and is only set if the min supported
+  //       cluster version is >= VersionRPCNetworkStats.
+  map<int32, int64> latencies = 9 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  message NetworkActivity {
+    int64 incoming = 1; // in bytes
+    int64 outgoing = 2; // in bytes
+    int64 latency = 3;  // in nanoseconds
+  }
+  // activity is a map of nodeIDs to network statistics from this node
+  // to other nodes.
+  map<int32, NetworkActivity> activity = 10 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // total_system_memory is the total RAM available to the system
+  // (or, if possible, the memory available to the cgroup this process is in)
+  // in bytes.
+  int64 total_system_memory = 11;
+  // num_cpus is the number of logical CPUs on this machine.
+  int32 num_cpus = 12;
+}
+
+// A HealthAlert is an undesired condition detected by a server which should be
+// exposed to the operators.
+message HealthAlert {
+  // store_id is zero for alerts not specific to a store (i.e. apply at the node level).
+  int32 store_id = 1 [
+    // NB: trying to make this nullable does not work with the custom type. You need a
+    // pointer type as the custom type, but that breaks protoc-gen-gogoroach.
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID",
+    (gogoproto.customname) = "StoreID"
+  ];
+  enum Category {
+    METRICS = 0;
+    NETWORK = 1;
+  }
+  Category category = 2;
+  string description = 3;
+  double value = 4;
+}
+
+// HealthCheckResult holds a number of HealthAlerts.
+message HealthCheckResult{
+  repeated HealthAlert alerts = 1 [(gogoproto.nullable) = false];
+}

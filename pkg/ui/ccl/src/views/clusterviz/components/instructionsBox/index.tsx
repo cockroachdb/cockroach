@@ -1,6 +1,15 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
 import React from "react";
-import { connect, Dispatch } from "react-redux";
-import { Link } from "react-router";
+import { Dispatch, Action } from "redux";
+import { connect } from "react-redux";
+import { Link } from "react-router-dom";
 import classNames from "classnames";
 
 import { allNodesHaveLocality } from "src/util/localities";
@@ -35,6 +44,7 @@ class InstructionsBox extends React.Component<InstructionsBoxProps> {
             </span>{" "}
             <a
               href={docsURL.enableNodeMap}
+              target="_blank"
               className="instructions-box-top-bar__setup_link"
             >
               Follow our configuration guide
@@ -99,7 +109,7 @@ function mapStateToProps(state: AdminUIState) {
   };
 }
 
-function mapDispatchToProps(dispatch: Dispatch<AdminUIState>) {
+function mapDispatchToProps(dispatch: Dispatch<Action, AdminUIState>) {
   return {
     expand: () => dispatch(setInstructionsBoxCollapsed(false)),
     collapse: () => dispatch(setInstructionsBoxCollapsed(true)),

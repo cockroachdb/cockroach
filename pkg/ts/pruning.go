@@ -1,26 +1,22 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package ts
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -44,32 +40,32 @@ type timeSeriesResolutionInfo struct {
 // intended to be called by a storage queue which can inspect the local data for
 // a single range without the need for expensive network calls.
 func (tsdb *DB) findTimeSeries(
-	snapshot engine.Reader, startKey, endKey roachpb.RKey, now hlc.Timestamp,
+	snapshot storage.Reader, startKey, endKey roachpb.RKey, now hlc.Timestamp,
 ) ([]timeSeriesResolutionInfo, error) {
 	var results []timeSeriesResolutionInfo
 
 	// Set start boundary for the search, which is the lesser of the range start
 	// key and the beginning of time series data.
-	start := engine.MakeMVCCMetadataKey(startKey.AsRawKey())
-	next := engine.MakeMVCCMetadataKey(keys.TimeseriesPrefix)
+	start := storage.MakeMVCCMetadataKey(startKey.AsRawKey())
+	next := storage.MakeMVCCMetadataKey(keys.TimeseriesPrefix)
 	if next.Less(start) {
 		next = start
 	}
 
 	// Set end boundary for the search, which is the lesser of the range end key
 	// and the end of time series data.
-	end := engine.MakeMVCCMetadataKey(endKey.AsRawKey())
-	lastTS := engine.MakeMVCCMetadataKey(keys.TimeseriesPrefix.PrefixEnd())
+	end := storage.MakeMVCCMetadataKey(endKey.AsRawKey())
+	lastTS := storage.MakeMVCCMetadataKey(keys.TimeseriesPrefix.PrefixEnd())
 	if lastTS.Less(end) {
 		end = lastTS
 	}
 
 	thresholds := tsdb.computeThresholds(now.WallTime)
 
-	iter := snapshot.NewIterator(engine.IterOptions{UpperBound: endKey.AsRawKey()})
+	iter := snapshot.NewIterator(storage.IterOptions{UpperBound: endKey.AsRawKey()})
 	defer iter.Close()
 
-	for iter.Seek(next); ; iter.Seek(next) {
+	for iter.SeekGE(next); ; iter.SeekGE(next) {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, err
 		} else if !ok || !iter.UnsafeKey().Less(end) {
@@ -94,7 +90,7 @@ func (tsdb *DB) findTimeSeries(
 
 		// Set 'next' is initialized to the next possible time series key
 		// which could belong to a previously undiscovered time series.
-		next = engine.MakeMVCCMetadataKey(makeDataKeySeriesPrefix(name, res).PrefixEnd())
+		next = storage.MakeMVCCMetadataKey(makeDataKeySeriesPrefix(name, res).PrefixEnd())
 	}
 
 	return results, nil
@@ -115,11 +111,11 @@ func (tsdb *DB) findTimeSeries(
 // As range deletion of inline data is an idempotent operation, it is safe to
 // run this operation concurrently on multiple nodes at the same time.
 func (tsdb *DB) pruneTimeSeries(
-	ctx context.Context, db *client.DB, timeSeriesList []timeSeriesResolutionInfo, now hlc.Timestamp,
+	ctx context.Context, db *kv.DB, timeSeriesList []timeSeriesResolutionInfo, now hlc.Timestamp,
 ) error {
 	thresholds := tsdb.computeThresholds(now.WallTime)
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	for _, timeSeries := range timeSeriesList {
 		// Time series data for a specific resolution falls in a contiguous key
 		// range, and can be deleted with a DelRange command.

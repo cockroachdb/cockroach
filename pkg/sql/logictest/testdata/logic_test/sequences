@@ -1,9 +1,10 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata local-parallel-stmts
-
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
 # USING THE `lastval` FUNCTION
 # (at the top because it requires a session in which `lastval` has never been called)
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
 
 statement ok
 SET DATABASE = test
@@ -84,11 +85,8 @@ statement ok
 CREATE SEQUENCE high_minvalue_test MINVALUE 5
 
 # Test unimplemented syntax.
-statement error pq: unimplemented at or near "EOF"
+statement error at or near "EOF": syntax error: unimplemented
 CREATE SEQUENCE err_test AS INT2
-
-statement error pq: unimplemented at or near "EOF"
-CREATE SEQUENCE err_test OWNED BY someuser
 
 # Verify validation of START vs MINVALUE/MAXVALUE.
 
@@ -118,17 +116,17 @@ CREATE SEQUENCE ignored_options_test CACHE 1 NO CYCLE
 statement ok
 CREATE SEQUENCE show_create_test
 
-query ITTITTTTTTT colnames
+query ITTITTTTTTTB colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                              state   create_nofks                                                                                  alter_statements  validate_statements
-52           test           public       66             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                     state   create_nofks                                                                                         alter_statements  validate_statements  has_partitions
+52           test           public       66             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
 ----
 table_name        create_statement
-show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
 # DML ERRORS
 
@@ -147,6 +145,34 @@ TRUNCATE foo
 # Drop table on sequences doesn't work; you have to use DROP SEQUENCE.
 statement error pgcode 42809 "foo" is not a table
 DROP TABLE foo
+
+# Create a sequence on another schema
+statement ok
+CREATE SCHEMA other_schema
+
+statement ok
+CREATE SEQUENCE other_schema.seq
+
+# List sequences with SHOW
+
+query TT rowsort
+SHOW SEQUENCES
+----
+public        foo
+public        high_minvalue_test
+public        ignored_options_test
+public        lastval_test
+public        lastval_test_2
+other_schema  seq
+public        show_create_test
+
+statement ok
+CREATE DATABASE seqdb; USE seqdb; CREATE SEQUENCE otherseq; USE test
+
+query TT rowsort
+SHOW SEQUENCES FROM seqdb
+----
+public  otherseq
 
 # You can select from a sequence to get its value.
 
@@ -282,7 +308,7 @@ statement error pgcode 42809 "kv" is not a sequence
 SELECT nextval('kv')
 
 # Parse errors in the argument to nextval are handled.
-statement error pq: nextval\(\): syntax error at or near "@"
+statement error pq: nextval\(\): at or near "@": syntax error
 SELECT nextval('@#%@!324234')
 
 # You can create and find sequences from other databases.
@@ -543,7 +569,7 @@ SELECT id FROM blog_posts ORDER BY id
 1
 2
 
-# USE WITH PARALLEL STATEMENTS
+# USE WITH (DEPRECATED) PARALLEL STATEMENTS
 
 # Both accesses to the sequence value in the KV layer and the sequenceState struct in
 # the Session are serialized, so after the last parallel statement you'll get the last value.
@@ -829,3 +855,426 @@ SELECT last_value FROM priv_test
 5
 
 user root
+
+subtest virtual_sequences
+
+statement ok
+CREATE SEQUENCE sv VIRTUAL
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE sv]
+----
+CREATE SEQUENCE public.sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+
+statement ok
+CREATE TABLE svals(x INT)
+
+statement ok
+BEGIN;
+  INSERT INTO svals VALUES(nextval('sv'));
+  INSERT INTO svals VALUES(lastval());
+  INSERT INTO svals VALUES(currval('sv'));
+END
+
+# Check that lastval returns the last auto-generated virtual value.
+query I
+SELECT count(DISTINCT x) FROM svals
+----
+1
+
+# Check that the KV trace is empty.
+statement ok
+BEGIN;
+  SELECT nextval('sv'); -- acquire the lease, so that doesn't go to the KV trace
+  SET tracing = on; SELECT nextval('sv'); SET tracing = off;
+  COMMIT
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+----
+rows affected: 1
+
+statement ok
+DROP SEQUENCE sv
+
+# Check that generators can be interrupted by statement timeouts.
+subtest generator_timeout
+
+statement ok
+SET statement_timeout = 10
+
+statement error pq: query execution canceled due to statement timeout
+select * from generate_series(1,10000000) where generate_series = 0;
+
+# Clean up
+statement ok
+SET statement_timeout = 0
+
+# Test that multiple columns associated with the same sequence follow correct
+# dependency behavior. Regression test for #40852
+
+statement ok
+SET sql_safe_updates = false
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE TABLE abc(a INT DEFAULT nextval('seq'), b INT default nextval('seq'), c int)
+
+statement error pq: cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+ALTER TABLE abc DROP COLUMN b;
+
+statement error pq: cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+ALTER TABLE abc DROP COLUMN a;
+
+statement ok
+DROP SEQUENCE seq;
+
+# Sequence Ownership tests
+
+# Sequence can be owned be owned by a table column
+
+statement ok
+CREATE TABLE owner(owner_col INT)
+
+statement ok
+CREATE SEQUENCE owned_seq OWNED BY owner.owner_col
+
+query TTT
+SELECT seqclass.relname AS sequence_name,
+       depclass.relname AS table_name,
+       attrib.attname   as column_name
+FROM   pg_class AS seqclass
+       JOIN pg_depend AS dep
+         ON seqclass.oid = dep.objid
+       JOIN pg_class AS depclass
+         ON dep.refobjid = depclass.oid
+       JOIN pg_attribute AS attrib
+         ON attrib.attnum = dep.refobjsubid
+              AND attrib.attrelid = dep.refobjid
+WHERE seqclass.relkind = 'S';
+----
+owned_seq owner owner_col
+
+# Sequence owner can be removed
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY NONE
+
+statement count 0
+SELECT seqclass.relname AS sequence_name,
+       depclass.relname AS table_name,
+       attrib.attname   as column_name
+FROM   pg_class AS seqclass
+       JOIN pg_depend AS dep
+         ON seqclass.oid = dep.objid
+       JOIN pg_class AS depclass
+         ON dep.refobjid = depclass.oid
+       JOIN pg_attribute AS attrib
+         ON attrib.attnum = dep.refobjsubid
+              AND attrib.attrelid = dep.refobjid
+WHERE seqclass.relkind = 'S';
+
+# cleanup
+statement ok
+DROP TABLE owner
+
+statement ok
+DROP SEQUENCE owned_seq
+
+
+# Sequence is dropped when its owner is dropped
+statement ok
+CREATE SEQUENCE owned_seq;
+
+statement ok
+CREATE TABLE a(a INT DEFAULT nextval('owned_seq'));
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY a.a;
+
+statement ok
+DROP TABLE a;
+
+statement error relation "owned_seq" does not exist
+DROP SEQUENCE owned_seq;
+
+
+# DROP TABLE and ALTER TABLE ... DROP COLUMN work correctly with multiple sequence dependencies
+# and Ownership scenarios
+
+statement ok
+CREATE SEQUENCE owned_seq;
+
+statement ok
+CREATE TABLE ab(a INT DEFAULT nextval('owned_seq'), b INT DEFAULT nextval('owned_seq'));
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY ab.a;
+
+statement error cannot drop table ab because other objects depend on it
+ALTER TABLE ab DROP COLUMN a;
+
+statement ok
+DROP TABLE ab
+
+statement error relation "owned_seq" does not exist
+DROP SEQUENCE owned_seq;
+
+
+# Test changing owners works correctly by ensuring sequence is not dropped
+# when previous owners are dropped.
+statement ok
+CREATE TABLE a(a INT);
+
+statement ok
+CREATE TABLE b(b INT);
+
+statement ok
+CREATE SEQUENCE seq OWNED BY a.a;
+
+statement ok
+ALTER SEQUENCE seq OWNED BY a.a;
+
+statement ok
+ALTER SEQUENCE seq OWNED BY b.b;
+
+statement ok
+DROP TABLE a;
+
+statement ok
+ALTER SEQUENCE seq OWNED BY NONE;
+
+statement ok
+DROP TABLE b;
+
+statement ok
+DROP SEQUENCE seq;
+
+
+# Test a table/column can not be dropped if it owns a Sequence that is used
+# by another table.
+
+statement ok
+CREATE TABLE a(a INT);
+
+statement ok
+CREATE SEQUENCE seq OWNED BY a.a;
+
+statement ok
+CREATE TABLE b(b INT DEFAULT nextval('seq'));
+
+statement error cannot drop table a because other objects depend on it
+DROP TABLE a
+
+statement error cannot drop table a because other objects depend on it
+ALTER TABLE a DROP COLUMN a;
+
+statement ok
+DROP TABLE b;
+
+statement ok
+DROP TABLE a;
+
+# A dependency on a sequence should be added if the sequence is used in a
+# currval call. (Regression #50033)
+
+statement ok
+CREATE SEQUENCE currval_dep_test;
+CREATE TABLE c(a INT DEFAULT(currval('currval_dep_test')))
+
+statement error pq: cannot drop sequence currval_dep_test because other objects depend on it
+DROP SEQUENCE currval_dep_test
+
+subtest regression_50649
+
+statement ok
+CREATE TABLE t_50649(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50649 OWNED BY t_50649.a
+
+statement ok
+DROP SEQUENCE seq_50649
+
+statement ok
+DROP TABLE t_50649
+
+subtest regression_50712
+
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY db_50712.t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+# Same test like above, except the table is lexicographically less than the
+# sequence, which results in drop database dropping the table before the
+# sequence.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.a_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY db_50712.a_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+# Same test like above, except the db is switched as the current db
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+SET DATABASE = db_50712
+
+statement ok
+CREATE TABLE a_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50712 OWNED BY a_50712.a
+
+statement ok
+DROP DATABASE db_50712
+
+statement ok
+SET DATABASE = test
+
+# Tests db drop.
+# Sequence: outside db.
+# Owner: inside db.
+# The sequence should be automatically dropped.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50712 OWNED BY db_50712.t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+query I
+SELECT count(*) FROM system.namespace WHERE name LIKE 'seq_50712'
+----
+0
+
+# Tests db drop.
+# Sequence: inside db
+# Owner: outside db
+# It should be possible to drop the table later.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+statement ok
+DROP TABLE t_50712
+
+# previously, changing ownership of a sequence between columns of the same table
+# was causing the sequenceID to appear in multiple column's ownedSequences list.
+# This makes it impossible to drop the affected columns/table once the sequence
+# has been dropped. This tests for these scenarios and ensures the table/columns
+# remain drop-able.
+subtest regression_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+DROP TABLE t_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN a
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN b
+
+# Verify that we don't allow OWNED BY to refer to other databases (depending on
+# the cluster setting).
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = FALSE
+
+statement ok
+CREATE DATABASE db1
+
+statement ok
+CREATE DATABASE db2
+
+statement ok
+CREATE TABLE db1.t (a INT)
+
+statement ok
+CREATE SEQUENCE db1.seq OWNED BY db1.t.a
+
+statement error OWNED BY cannot refer to other databases
+CREATE SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+CREATE TABLE db2.t (a INT)
+
+statement ok
+CREATE SEQUENCE db2.seq OWNED BY db2.t.a
+
+statement error OWNED BY cannot refer to other databases
+ALTER SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
+
+statement ok
+ALTER SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a

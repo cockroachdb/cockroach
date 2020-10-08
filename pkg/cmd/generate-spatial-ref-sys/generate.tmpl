@@ -1,0 +1,45 @@
+// Copyright {{.Year}} The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+// This file was generated from `./pkg/cmd/generate-spatial-ref-sys`.
+
+package {{ .Package }}
+
+import (
+  "github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
+  "github.com/cockroachdb/cockroach/pkg/geo/geopb"
+)
+
+var (
+  {{ range .Spheroids }}
+  {{ .VarName }} = geographiclib.NewSpheroid({{.MajorAxis}}, {{.Flattening}}){{ end }}
+)
+
+// Projections is a mapping of SRID to projections.
+// Use the `Projection` function to obtain one.
+// This file is not spell checked.
+var Projections = map[geopb.SRID]ProjInfo{
+  {{ range .Projections }}{{ .SRID }}: {
+    SRID: {{ .SRID }},
+    AuthName: "{{ .AuthName }}",
+    AuthSRID: {{ .AuthSRID }},
+    SRText: `{{ .SRText }}`,
+    Proj4Text: MakeProj4Text(`{{ .Proj4Text }}`),
+    IsLatLng: {{ .IsLatLng }},
+    Spheroid: {{ .SpheroidVarName }},
+    Bounds: Bounds{
+      MinX: {{ .Bounds.MinX }},
+      MaxX: {{ .Bounds.MaxX }},
+      MinY: {{ .Bounds.MinY }},
+      MaxY: {{ .Bounds.MaxY }},
+    },
+  },
+  {{ end }}
+}

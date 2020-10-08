@@ -1,0 +1,52 @@
+# This test verifies the differing behavior
+# of conditional puts when writing with an older timestamp than the
+# existing write. If there's no transaction, the conditional put
+# should use the latest value. When there's a transaction, then it
+# should use the value at the specified timestamp.
+
+run ok
+put ts=10 k=k v=v1
+----
+>> at end:
+data: "k"/0.000000010,0 -> /BYTES/v1
+
+# Try a non-transactional put @t=1 with expectation of nil; should fail.
+run error
+cput ts=1 k=k v=v2
+----
+>> at end:
+data: "k"/0.000000010,0 -> /BYTES/v1
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v1" timestamp:<wall_time:10 > 
+
+# Now do a non-transactional put @t=1 with expectation of value1; will "succeed" @t=10,1 with WriteTooOld.
+run error
+cput ts=1 k=k v=v2 cond=v1
+----
+>> at end:
+data: "k"/0.000000010,1 -> /BYTES/v2
+data: "k"/0.000000010,0 -> /BYTES/v1
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000001,0 too old; wrote at 0.000000010,1
+
+# Try a transactional put @t=1 with expectation of value2; should fail.
+run error
+with t=a
+  txn_begin ts=1
+  cput k=k v=v2 cond=v1
+----
+>> at end:
+txn: "a" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+data: "k"/0.000000010,1 -> /BYTES/v2
+data: "k"/0.000000010,0 -> /BYTES/v1
+error: (*roachpb.ConditionFailedError:) unexpected value: <nil>
+
+# Now do a transactional put @t=1 with expectation of nil; will "succeed" @t=10,2 with WriteTooOld.
+run error
+with t=a
+  cput k=k v=v3
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000010,2 min=0,0 seq=0} ts=0.000000010,2 del=false klen=12 vlen=7
+data: "k"/0.000000010,2 -> /BYTES/v3
+data: "k"/0.000000010,1 -> /BYTES/v2
+data: "k"/0.000000010,0 -> /BYTES/v1
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000001,0 too old; wrote at 0.000000010,2

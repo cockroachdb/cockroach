@@ -1,6 +1,3 @@
-# LogicTest: fakedist fakedist-opt fakedist-metadata
-
-
 # Test that sequence functions work in DistSQL queries.
 
 statement ok
@@ -31,8 +28,7 @@ SELECT c, lastval() FROM t
 ----
 1 10
 
-# Restore this query when #24130 is fixed:
-# query II
-# SELECT c, currval('distsql_test') FROM t
-# ----
-# 1, 1
+query II
+SELECT c, currval('distsql_test') FROM t
+----
+1 10

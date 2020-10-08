@@ -1,0 +1,29 @@
+# JSONB with no version number.
+send
+Parse {"Query": "SELECT $1::JSONB"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [[]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# JSONB version 2 followed by two double quotes (ASCII 34). This is a
+# valid JSON string, but the version is invalid and thus should produce
+# an error.
+send
+Bind {"ParameterFormatCodes": [1], "Parameters": [[2, 34, 34]]}
+Sync
+----
+
+until mapError=(XX000, 08P01)
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

@@ -1,0 +1,15 @@
+run ok
+with t=A k=k
+  txn_begin ts=0,1
+  put  v=v
+  get  ts=0,1
+  get  ts=0,2
+  get  ts=1
+----
+get: "k" -> /BYTES/v @0,1
+get: "k" -> /BYTES/v @0,1
+get: "k" -> /BYTES/v @0,1
+>> at end:
+txn: "A" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=6
+data: "k"/0,1 -> /BYTES/v

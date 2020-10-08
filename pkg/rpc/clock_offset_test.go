@@ -1,16 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package rpc
 
@@ -47,7 +43,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 20,
 		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
-	monitor.UpdateOffset(context.TODO(), key, offset1, latency)
+	monitor.UpdateOffset(context.Background(), key, offset1, latency)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -62,7 +58,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 20,
 		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
-	monitor.UpdateOffset(context.TODO(), key, offset2, latency)
+	monitor.UpdateOffset(context.Background(), key, offset2, latency)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -77,7 +73,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 10,
 		MeasuredAt:  offset2.MeasuredAt + 1,
 	}
-	monitor.UpdateOffset(context.TODO(), key, offset3, latency)
+	monitor.UpdateOffset(context.Background(), key, offset3, latency)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -87,7 +83,7 @@ func TestUpdateOffset(t *testing.T) {
 	monitor.mu.Unlock()
 
 	// Larger error and offset3 is not stale, so no update.
-	monitor.UpdateOffset(context.TODO(), key, offset2, latency)
+	monitor.UpdateOffset(context.Background(), key, offset2, latency)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -120,11 +116,11 @@ func TestVerifyClockOffset(t *testing.T) {
 		}
 
 		if tc.expectedError {
-			if err := monitor.VerifyClockOffset(context.TODO()); !testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
+			if err := monitor.VerifyClockOffset(context.Background()); !testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
 				t.Errorf("%d: unexpected error %v", idx, err)
 			}
 		} else {
-			if err := monitor.VerifyClockOffset(context.TODO()); err != nil {
+			if err := monitor.VerifyClockOffset(context.Background()); err != nil {
 				t.Errorf("%d: unexpected error %s", idx, err)
 			}
 		}
@@ -148,7 +144,7 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 		{RemoteOffset{Offset: 15, Uncertainty: 4}, false},
 		{RemoteOffset{Offset: math.MaxInt64, Uncertainty: 0}, false},
 	} {
-		if isHealthy := tc.offset.isHealthy(context.TODO(), maxOffset); tc.expectedHealthy {
+		if isHealthy := tc.offset.isHealthy(context.Background(), maxOffset); tc.expectedHealthy {
 			if !isHealthy {
 				t.Errorf("%d: expected remote offset %s for maximum offset %s to be healthy", i, tc.offset, maxOffset)
 			}
@@ -163,7 +159,7 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 func TestClockOffsetMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 20*time.Nanosecond)
 	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
@@ -175,7 +171,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 		},
 	}
 
-	if err := monitor.VerifyClockOffset(context.TODO()); err != nil {
+	if err := monitor.VerifyClockOffset(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 

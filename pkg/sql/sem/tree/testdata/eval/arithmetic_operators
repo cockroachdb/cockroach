@@ -1,0 +1,319 @@
+eval
+1 + 1
+----
+2
+
+eval
+1 + -1
+----
+0
+
+eval
+-1 + 1
+----
+0
+
+eval
+-1 + -1
+----
+-2
+
+eval
+1 - 2
+----
+-1
+
+eval
+1 - -2
+----
+3
+
+eval
+-1 - 2
+----
+-3
+
+eval
+-1 - -2
+----
+1
+
+eval
+3 * 4
+----
+12
+
+eval
+3 * -4
+----
+-12
+
+eval
+-3 * 4
+----
+-12
+
+eval
+-3 * -4
+----
+12
+
+eval
+9 // 2
+----
+4
+
+eval
+9 // -2
+----
+-4
+
+eval
+-9 // 2
+----
+-4
+
+eval
+-9 // -2
+----
+4
+
+eval
+-5 // 3
+----
+-1
+
+eval
+4.5 // 2
+----
+2
+
+eval
+1 // 0
+----
+division by zero
+
+eval
+-4.5 // 1.2
+----
+-3
+
+eval
+1.0 // 0.0
+----
+division by zero
+
+eval
+1.0 // 0
+----
+division by zero
+
+eval
+1 // 0.0
+----
+division by zero
+
+eval
+3.1 % 2.0
+----
+1.1
+
+eval
+3.1 % -2.0
+----
+1.1
+
+eval
+-3.1 % 2.0
+----
+-1.1
+
+eval
+-3.1 % -2.0
+----
+-1.1
+
+eval
+5 % 3
+----
+2
+
+eval
+1 % 0
+----
+division by zero
+
+eval
+1 + NULL
+----
+NULL
+
+eval
+1.1 + 2.4
+----
+3.5
+
+eval
+1.1 - 2.4
+----
+-1.3
+
+eval
+1.1 * 2.4
+----
+2.64
+
+eval
+1.1 % 2.4
+----
+1.1
+
+eval
+4.1 // 2.4
+----
+1
+
+eval
+1.0 % 0.0
+----
+division by zero
+
+eval
+1.0 % 0
+----
+division by zero
+
+eval
+1 % 0.0
+----
+division by zero
+
+eval
+-4.5:::float // 1.2:::float
+----
+-3.0
+
+eval
+1:::float // 0:::float
+----
+division by zero
+
+eval
+1:::float % 0:::float
+----
+division by zero
+
+eval
+2 ^ 3
+----
+8
+
+eval
+2:::float ^ 3:::float
+----
+8.0
+
+eval
+2:::float ^ -3:::float
+----
+0.125
+
+eval
+-2:::float ^ 3:::float
+----
+-8.0
+
+eval
+-2:::float ^ -3:::float
+----
+-0.125
+
+eval
+3:::float ^ 2:::float
+----
+9.0
+
+eval
+3:::float ^ -2:::float
+----
+0.1111111111111111
+
+eval
+-3:::float ^ 2:::float
+----
+9.0
+
+eval
+-3:::float ^ -2:::float
+----
+0.1111111111111111
+
+eval
+2:::decimal ^ 3:::decimal
+----
+8
+
+eval
+2:::decimal ^ -3:::decimal
+----
+0.125
+
+eval
+-2:::decimal ^ 3:::decimal
+----
+-8
+
+eval
+-2:::decimal ^ -3:::decimal
+----
+-0.125
+
+eval
+3:::decimal ^ 2:::decimal
+----
+9
+
+eval
+3:::decimal ^ -2:::decimal
+----
+0.11111111111111111111
+
+eval
+-3:::decimal ^ 2:::decimal
+----
+9
+
+eval
+-3:::decimal ^ -2:::decimal
+----
+0.11111111111111111111
+
+eval
+2:::int ^ 62:::int
+----
+4611686018427387904
+
+eval
+'12:00:00+01'::timetz + '1s'::interval
+----
+'12:00:01+01:00:00'
+
+eval
+'12:00:00+01'::timetz - '1s'::interval
+----
+'11:59:59+01:00:00'
+
+eval
+'1s'::interval + '12:00:00+01'::timetz
+----
+'12:00:01+01:00:00'
+
+eval
+'12:00:01+01'::timetz + '2001-01-01'::date
+----
+'2001-01-01 11:00:01+00:00'
+
+eval
+'2001-01-01'::date + '12:00:01+01'::timetz
+----
+'2001-01-01 11:00:01+00:00'

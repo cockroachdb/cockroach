@@ -1,22 +1,20 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
 import (
 	"fmt"
 	"io"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
@@ -47,6 +45,7 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 		g.genValueFunc(define)
 		g.genVisitFunc(define)
 		g.genSourceFunc(define)
+		g.genInferredType(define)
 		g.genStringFunc(define)
 		g.genFormatFunc(define)
 	}
@@ -72,6 +71,9 @@ func (g *exprsGen) genExprType(define *lang.DefineExpr) {
 
 		if hasSourceField(define) {
 			fmt.Fprintf(g.w, "  Src *SourceLoc\n")
+		}
+		if define.Tags.Contains("HasType") {
+			fmt.Fprintf(g.w, "  Typ DataType")
 		}
 		fmt.Fprintf(g.w, "}\n\n")
 	}
@@ -271,6 +273,23 @@ func (g *exprsGen) genSourceFunc(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
+// func (e *SomeExpr) InferredType() DataType {
+//   return e.Typ
+// }
+func (g *exprsGen) genInferredType(define *lang.DefineExpr) {
+	exprType := fmt.Sprintf("%sExpr", define.Name)
+
+	fmt.Fprintf(g.w, "func (e *%s) InferredType() DataType {\n", exprType)
+	if define.Tags.Contains("HasType") {
+		fmt.Fprintf(g.w, "  return e.Typ\n")
+	} else if isValueType(define) {
+		fmt.Fprintf(g.w, "  return %sDataType\n", title(g.translateType(valueType(define))))
+	} else {
+		fmt.Fprintf(g.w, "  return AnyDataType\n")
+	}
+	fmt.Fprintf(g.w, "}\n\n")
+}
+
 // func (e *SomeExpr) String() string {
 //   var buf bytes.Buffer
 //   e.Format(&buf, 0)
@@ -303,6 +322,9 @@ func (g *exprsGen) translateType(typ string) string {
 		return typ
 
 	case "string":
+		return typ
+
+	case "int64":
 		return typ
 	}
 
@@ -361,5 +383,11 @@ func sliceElementType(d *lang.DefineExpr) string {
 // hasSourceField returns true if the defined expression has a Src field that
 // stores the original source information (file, line, pos).
 func hasSourceField(d *lang.DefineExpr) bool {
-	return !isValueType(d) && !isSliceType(d) && len(d.Fields) > 0
+	return !isValueType(d) && !isSliceType(d)
+}
+
+// title returns the given string with its first letter capitalized.
+func title(name string) string {
+	rune, size := utf8.DecodeRuneInString(name)
+	return fmt.Sprintf("%c%s", unicode.ToUpper(rune), name[size:])
 }

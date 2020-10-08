@@ -1,0 +1,158 @@
+# Test cases for using invertedFilterer on an inverted geospatial index.
+
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'POINT(1.0 1.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (3, 'POINT(3.0 3.0)'),
+  (4, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (5, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (6, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom) ORDER BY k
+----
+3
+6
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(4.5 4.5)'::geometry, geom) ORDER BY k
+----
+4
+6
+
+query I
+SELECT k FROM geo_table WHERE ST_CoveredBy('POINT(4.0 4.5)'::geometry, geom) ORDER BY k
+----
+6
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(2.5 2.5)'::geometry, geom) ORDER BY k
+----
+6
+
+query I
+SELECT k FROM geo_table WHERE ST_DWithin('POINT(2.5 2.5)'::geometry, geom, 1) ORDER BY k
+----
+2
+3
+6
+
+# Bounding box operations.
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
+
+query I
+SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry && geom ORDER BY k
+----
+3
+6
+
+query I
+SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom ORDER BY k
+----
+3
+6
+
+query I
+SELECT k FROM geo_table WHERE ST_Covers('LINESTRING(1.0 1.0, 5.0 5.0)'::geometry, geom) ORDER BY k
+----
+1
+2
+3
+4
+
+# Note that the result of the `~` bounding box operation includes an extra
+# result not present in the previous result of ST_Covers.
+query I
+SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom ORDER BY k
+----
+1
+2
+3
+4
+6
+
+query I
+SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d ~ geom ORDER BY k
+----
+1
+2
+3
+4
+6
+
+query I
+SELECT k FROM geo_table WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ORDER BY k
+----
+6
+
+query I
+SELECT k FROM geo_table WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d ORDER BY k
+----
+6
+
+statement ok
+CREATE TABLE geo_table2(
+  k int,
+  geom geometry,
+  k_plus_one int,
+  PRIMARY KEY (k, k_plus_one),
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table2 VALUES
+  (1, 'LINESTRING(1.0 1.0, 2.0 2.0)', 2),
+  (2, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))', 3)
+
+query I
+SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+2
+
+query II
+SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+2  3
+
+query IIT
+SELECT k, k_plus_one, geom FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+2  3  01030000000100000005000000000000000000F03F000000000000F03F0000000000001440000000000000F03F00000000000014400000000000001440000000000000F03F0000000000001440000000000000F03F000000000000F03F
+
+# Regression test for #54773.
+statement ok
+CREATE TABLE relatedapp_location (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    "point" GEOMETRY(POINT,4326) NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    INVERTED INDEX relatedapp_location_point_id ("point"),
+    FAMILY "primary" (id, "point")
+)
+
+statement ok
+CREATE TABLE relatedapp_city (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    name VARCHAR(50) NOT NULL,
+    state VARCHAR(2) NOT NULL,
+    location_id INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    CONSTRAINT relatedapp_city_location_id_ac4f6573_fk_relatedapp_location_id FOREIGN KEY (location_id) REFERENCES relatedapp_location(id),
+    FAMILY "primary" (id, name, state, location_id)
+)
+
+query ITTI
+SELECT "relatedapp_city"."id", "relatedapp_city"."name", "relatedapp_city"."state", "relatedapp_city"."location_id"
+FROM "relatedapp_city" INNER JOIN "relatedapp_location"
+ON ("relatedapp_city"."location_id" = "relatedapp_location"."id")
+WHERE (ST_Within("relatedapp_location"."point", ST_GeomFromEWKB('\x0103000020e6100000010000002100000060200890a15a58c087a3ab7477874040e7ee440bc15a58c05dff0b2ff8844040431645471e5b58c0654d8a7a918240400cb7ccaeb55b58c0f79094f65a804040ed065a70815c58c0d5a382686a7e40407efd62b7795d58c0130468e5d27c4040b5db5df9945e58c082c25816a47b4040b1b49e53c85f58c0c873589ee97a4040c6866ef6076158c0bad6dea7aa7a4040db583e99476258c0c873589ee97a4040d7317ff37a6358c082c25816a47b40400e107a35966458c0130468e5d27c40409f06837c8e6558c0d5a382686a7e40408056103e5a6658c0f79094f65a80404049f797a5f16658c0654d8a7a91824040a51e98e14e6758c05dff0b2ff88440402cedd45c6e6758c087a3ab7477874040a51e98e14e6758c0b1474bbaf689404049f797a5f16658c0a9f9cc6e5d8c40408056103e5a6658c017b6c2f2938e40409f06837c8e6558c038a3d480849040400e107a35966458c0fb42ef031c924040d7317ff37a6358c08c84fed24a934040db583e99476258c046d3fe4a05944040c6866ef6076158c05470784144944040b1b49e53c85f58c046d3fe4a05944040b5db5df9945e58c08c84fed24a9340407efd62b7795d58c0fb42ef031c924040ed065a70815c58c039a3d480849040400cb7ccaeb55b58c017b6c2f2938e4040431645471e5b58c0a9f9cc6e5d8c4040e7ee440bc15a58c0b1474bbaf689404060200890a15a58c087a3ab7477874040'::bytea))
+  OR ST_Within("relatedapp_location"."point", ST_GeomFromEWKB('\x0103000020e610000001000000210000008a230f4416d753c0f2cd3637a617444011f24bbf35d753c0c82997f1261544406d194cfb92d753c0d077153dc012444036bad3622ad853c062bb1fb989104440170a6124f6d853c040ce0d2b990e4440a8006a6beed953c07e2ef3a7010d4440dfde64ad09db53c0edece3d8d20b4440dbb7a5073ddc53c0339ee360180b4440f08975aa7cdd53c025016a6ad90a4440055c454dbcde53c0339ee360180b4440013586a7efdf53c0edece3d8d20b4440381381e90ae153c07e2ef3a7010d4440c9098a3003e253c040ce0d2b990e4440aa5917f2cee253c062bb1fb98910444073fa9e5966e353c0d077153dc0124440cf219f95c3e353c0c82997f12615444056f0db10e3e353c0f2cd3637a6174440cf219f95c3e353c01c72d67c251a444073fa9e5966e353c0142458318c1c4440aa5917f2cee253c082e04db5c21e4440c9098a3003e253c0a3cd5f43b3204440381381e90ae153c0666d7ac64a224440013586a7efdf53c0f7ae899579234440055c454dbcde53c0b1fd890d34244440f08975aa7cdd53c0bf9a030473244440dbb7a5073ddc53c0b1fd890d34244440dfde64ad09db53c0f7ae899579234440a8006a6beed953c0666d7ac64a224440170a6124f6d853c0a4cd5f43b320444036bad3622ad853c082e04db5c21e44406d194cfb92d753c0142458318c1c444011f24bbf35d753c01c72d67c251a44408a230f4416d753c0f2cd3637a6174440'::bytea)))
+----

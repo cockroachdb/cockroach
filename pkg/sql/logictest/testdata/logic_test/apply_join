@@ -1,0 +1,381 @@
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, str STRING);
+CREATE TABLE u (l INT PRIMARY KEY, str2 STRING);
+CREATE TABLE v (m INT PRIMARY KEY, str3 STRING);
+INSERT INTO t SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+INSERT INTO u SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+INSERT INTO v SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+# InnerJoinApply tests.
+
+statement ok
+PREPARE a AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Var "k") (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE a
+----
+1  one    1  one
+2  two    2  two
+3  three  3  three
+4  four   4  four
+5  five   5  five
+
+# LeftJoinApply tests.
+
+statement ok
+PREPARE b AS OPT PLAN '
+(Root
+  (LeftJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE b
+----
+1  one      2  two
+2  two      3  three
+3  three    4  four
+4  four     5  five
+5  five     NULL NULL
+
+# SemiJoinApply tests.
+
+statement ok
+PREPARE c AS OPT PLAN '
+(Root
+  (SemiJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE c
+----
+1  one
+2  two
+3  three
+4  four
+
+# AntiJoinApply tests.
+
+statement ok
+PREPARE d AS OPT PLAN '
+(Root
+  (AntiJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE d
+----
+5  five
+
+# Nested Apply, with outer columns of the outer apply on the left and right of
+# the inner apply.
+
+statement ok
+PREPARE e AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (InnerJoinApply
+      (Select
+        (Scan [(Table "u") (Cols "l,str2") ])
+        [ (Eq (Var "k") (Var "l") )]
+      )
+      (Select
+        (Scan [(Table "v") (Cols "m,str3") ])
+        [ (Eq (Var "k") (Var "m") )]
+      )
+      [ (Eq (Var "k") (Var "l")) ]
+      []
+    )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2,m,str3")
+  (NoOrdering)
+)'
+
+query ITITIT rowsort
+EXECUTE e
+----
+1  one    1  one    1  one
+2  two    2  two    2  two
+3  three  3  three  3  three
+4  four   4  four   4  four
+5  five   5  five   5  five
+
+# Test subqueries within an apply join.
+
+statement ok
+PREPARE f AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k")
+                  (Subquery (Values [(Tuple [(Const 1 "int")] "tuple{int}") ]
+                                    [(Cols [(NewColumn "z" "int")] )])
+                            []))
+            (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE f
+----
+1  one    2  two
+2  two    3  three
+3  three  4  four
+4  four   5  five
+
+# Another test of subqueries within an apply join.
+
+query I
+SELECT
+	(SELECT * FROM (VALUES ((SELECT x FROM (VALUES (1)) AS s (x)) + y)))
+FROM
+	(VALUES (1), (2), (3)) AS t (y)
+----
+2
+3
+4
+
+
+# Regression test for #36197: 0-col applyjoin RHS doesn't panic
+
+statement ok
+CREATE TABLE table9 (
+    _bool BOOL,
+    _bytes BYTES,
+    _date DATE,
+    _decimal DECIMAL,
+    _float4 FLOAT4,
+    _float8 FLOAT8,
+    _inet INET,
+    _int4 INT4,
+    _int8 INT8,
+    _interval INTERVAL,
+    _jsonb JSONB,
+    _string STRING,
+    _time TIME,
+    _timestamp TIMESTAMP,
+    _timestamptz TIMESTAMPTZ,
+    _uuid UUID
+); INSERT INTO table9 DEFAULT VALUES;
+
+query B
+SELECT
+  true
+FROM
+    table9 AS tab_27927
+WHERE
+    EXISTS(
+        SELECT
+            tab_27929._string AS col_85223
+        FROM
+            table9 AS tab_27928,
+            table9 AS tab_27929,
+            table9 AS tab_27930
+            RIGHT JOIN table9 AS tab_27931
+            ON
+                NOT
+                    (
+                        tab_27927._float8
+                        IN (
+                                CASE
+                                WHEN NULL
+                                THEN div(
+                                    tab_27927._float4::FLOAT8,
+                                    tab_27927._float4::FLOAT8
+                                )::FLOAT8
+                                ELSE tab_27927._float4
+                                END,
+                                tab_27927._float4,
+                                tab_27927._float8::FLOAT8
+                                + NULL::FLOAT8,
+                                tab_27927._float4
+                            )
+                    )
+        WHERE
+            EXISTS(
+                SELECT
+                    2470039497:::OID AS col_85224
+                FROM
+                    table9 AS tab_27932
+                ORDER BY
+                    tab_27932._string ASC,
+                    tab_27932._interval DESC,
+                    tab_27932._uuid DESC
+                LIMIT
+                    37:::INT8
+            )
+        LIMIT
+            11:::INT8
+    )
+LIMIT
+    89:::INT8;
+----
+true
+
+# Regression test for #37454: untyped null produced at top level.
+
+statement ok
+CREATE TABLE x (a INT8); CREATE TABLE y (b INT8); INSERT INTO x VALUES (1); INSERT INTO y VALUES (2);
+
+query II
+SELECT a, (SELECT a FROM y) FROM x
+----
+1  1
+
+# Regression test for #40589.
+statement ok
+CREATE TABLE IF NOT EXISTS t40589 AS
+	SELECT
+		'2001-01-01'::TIMESTAMPTZ + g * '1 day',
+		g * '1 day'::INTERVAL AS _interval,
+		g % 0 = 0 AS _bool,
+		g AS _decimal,
+		g,
+		g AS _bytes,
+		substring(NULL, NULL, NULL)::UUID AS _uuid,
+		'0.0.0.0'::INET + g AS _inet,
+		g AS _jsonb
+	FROM
+		generate_series(NULL, NULL) AS g;
+
+query T
+SELECT
+	(
+		SELECT
+			NULL
+		FROM
+			t40589,
+			t40589 AS t0,
+			t40589 AS t1
+			INNER JOIN t40589 AS t2 ON true
+			JOIN t40589 AS t3
+				RIGHT JOIN t40589 AS t4
+					LEFT JOIN t40589 AS t5 ON
+							t._bool ON false ON
+					t1._uuid = t3._uuid
+			JOIN t40589 AS t6
+				JOIN t40589 AS t7
+					LEFT JOIN t40589 AS t8 ON true
+					JOIN t40589 AS t9
+						JOIN t40589 AS t10 ON true ON
+							true ON true ON true
+		WHERE
+			7.835752314020045477E+27
+			NOT IN (SELECT t6._decimal::DECIMAL)
+			AND true
+	)
+FROM
+	t40589 AS t, t40589;
+----
+
+# Test that a reasonable error is generated for the unsupported case of an
+# apply join that references a top-level WITH clause.
+
+statement ok
+CREATE TABLE IF NOT EXISTS cpk (
+  key VARCHAR(255) NOT NULL,
+  value INTEGER NOT NULL,
+  extra INTEGER NOT NULL,
+  PRIMARY KEY (key, value)
+)
+
+statement ok
+INSERT INTO cpk VALUES ('k1', 1, 1), ('k2', 2, 2), ('k3', 3, 3)
+
+# Inner join with correlated values prevents decorrelation. This ensures the
+# final plan contains a correlated InnerJoin operator with a reference to the
+# With clause.
+query error references to WITH expressions from correlated subqueries are unsupported
+WITH new_values (k, v, x) AS (
+  VALUES ('k1', 1, 10), ('k3', 3, 30))
+UPDATE cpk SET extra = (
+    SELECT y
+    FROM new_values
+    INNER JOIN (VALUES (cpk.value)) v(y)
+    ON TRUE
+    WHERE k='k1'
+)
+WHERE ((cpk.key, cpk.value) IN (SELECT new_values.k, new_values.v FROM new_values))
+
+# Regression test for not closing the subqueries in the apply join if they hit
+# an error (#54166).
+query error pgcode XX000 invalid index .*
+SELECT
+  (
+    SELECT
+      tab_4.col_4
+    FROM
+      (VALUES (1)) AS tab_1 (col_1)
+      JOIN (
+          VALUES
+            (
+              (
+                SELECT
+                  1
+                FROM
+                  (SELECT 1)
+                WHERE
+                  EXISTS(SELECT 1)
+              )
+            )
+        )
+          AS tab_6 (col_6) ON (tab_1.col_1) = (tab_6.col_6)
+  )
+FROM
+  (VALUES (NULL)) AS tab_4 (col_4),
+  (VALUES (NULL), (NULL)) AS tab_5 (col_5)

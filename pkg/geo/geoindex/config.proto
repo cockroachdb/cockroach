@@ -1,0 +1,65 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.geo.geoindex;
+option go_package = "geoindex";
+
+import "gogoproto/gogo.proto";
+
+// Config is the information used to tune one instance of a geospatial index.
+// Each SQL index will have its own config.
+//
+// At the moment, only one major indexing strategy is implemented (S2 cells).
+message Config {
+  option (gogoproto.equal) = true;
+  option (gogoproto.onlyone) = true;
+  S2GeographyConfig s2_geography = 1;
+  S2GeometryConfig s2_geometry = 2;
+}
+
+// S2Config is the required information to tune one instance of an S2 cell
+// backed geospatial index. For advanced users only -- the defaults should be
+// good enough.
+//
+// TODO(sumeer): Based on experiments, reduce the knobs below by making the
+// covering self-tuning.
+message S2Config {
+  option (gogoproto.equal) = true;
+  // MinLevel is the minimum cell level stored in the index. If left unset, it
+  // defaults to 0.
+  int32 min_level = 1;
+  // MaxLevel is the maximum cell level stored in the index. If left unset, it
+  // defaults to 30.
+  int32 max_level = 2;
+  // `MaxLevel-MinLevel` must be an exact multiple of LevelMod. If left unset,
+  // it defaults to 1.
+  int32 level_mod = 3;
+  // MaxCells is a soft hint for the maximum number of entries used to store a
+  // single geospatial object. If left unset, it defaults to 4.
+  int32 max_cells = 4;
+}
+
+message S2GeographyConfig {
+  option (gogoproto.equal) = true;
+  S2Config s2_config = 1;
+}
+
+message S2GeometryConfig {
+  option (gogoproto.equal) = true;
+  // The rectangle bounds of the plane that will be efficiently indexed. Shapes
+  // should rarely exceed these bounds.
+  double min_x = 1;
+  double max_x = 2;
+  double min_y = 3;
+  double max_y = 4;
+
+  S2Config s2_config = 5;
+}

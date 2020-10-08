@@ -1,0 +1,22 @@
+run ok
+with k=k
+  put ts=0,1 v=v
+  get ts=1
+  put ts=2 v=v2
+----
+get: "k" -> /BYTES/v @0,1
+>> at end:
+data: "k"/0.000000002,0 -> /BYTES/v2
+data: "k"/0,1 -> /BYTES/v
+
+# Read the latest version.
+run ok
+get k=k ts=3
+----
+get: "k" -> /BYTES/v2 @0.000000002,0
+
+# Read the old version.
+run ok
+get k=k ts=1
+----
+get: "k" -> /BYTES/v @0,1

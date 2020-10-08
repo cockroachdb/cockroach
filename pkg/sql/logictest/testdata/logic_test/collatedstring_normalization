@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE t (
   a STRING COLLATE fr PRIMARY KEY

@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package server
 
@@ -19,26 +15,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
-
-// UpgradeTestingKnobs is a part of the context used to control whether cluster
-// version upgrade should happen automatically or not.
-type UpgradeTestingKnobs struct {
-	DisableUpgrade int32 // accessed atomically
-}
-
-// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*UpgradeTestingKnobs) ModuleTestingKnobs() {}
 
 // startAttemptUpgrade attempts to upgrade cluster version.
 func (s *Server) startAttemptUpgrade(ctx context.Context) {
-	if err := s.stopper.RunAsyncTask(s.stopper.WithCancel(ctx), "auto-upgrade", func(ctx context.Context) {
+	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+	if err := s.stopper.RunAsyncTask(ctx, "auto-upgrade", func(ctx context.Context) {
+		defer cancel()
 		retryOpts := retry.Options{
 			InitialBackoff: time.Second,
 			MaxBackoff:     30 * time.Second,
@@ -48,9 +38,9 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			// Check if auto upgrade is disabled for test purposes.
-			if k := s.cfg.TestingKnobs.Upgrade; k != nil {
-				upgradeTestingKnobs := k.(*UpgradeTestingKnobs)
-				if disable := atomic.LoadInt32(&upgradeTestingKnobs.DisableUpgrade); disable == 1 {
+			if k := s.cfg.TestingKnobs.Server; k != nil {
+				upgradeTestingKnobs := k.(*TestingKnobs)
+				if disable := atomic.LoadInt32(&upgradeTestingKnobs.DisableAutomaticVersionUpgrade); disable == 1 {
 					log.Infof(ctx, "auto upgrade disabled by testing")
 					continue
 				}
@@ -77,8 +67,10 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			// `cluster.preserve_downgrade_option` statement in a transaction until
 			// success.
 			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
-				if _, err := s.internalExecutor.Exec(
-					ctx, "set-version", nil /* txn */, "SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
+				if _, err := s.sqlServer.internalExecutor.ExecEx(
+					ctx, "set-version", nil, /* txn */
+					sessiondata.InternalExecutorOverride{User: security.RootUser},
+					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
 				); err != nil {
 					log.Infof(ctx, "error when finalizing cluster version upgrade: %s", err)
 				} else {
@@ -88,6 +80,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			}
 		}
 	}); err != nil {
+		cancel()
 		log.Infof(ctx, "failed attempt to upgrade cluster version, error: %s", err)
 	}
 }
@@ -104,25 +97,35 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	nodesWithLiveness, err := s.status.NodesWithLiveness(ctx)
+	nodesWithLiveness, err := s.status.nodesStatusWithLiveness(ctx)
 	if err != nil {
 		return false, err
 	}
 
 	var newVersion string
+	var notRunningErr error
 	for nodeID, st := range nodesWithLiveness {
-		if st.LivenessStatus != storage.NodeLivenessStatus_LIVE &&
-			st.LivenessStatus != storage.NodeLivenessStatus_DECOMMISSIONING {
-			return false, errors.Errorf("node %d not running (%s), cannot determine version",
-				nodeID, st.LivenessStatus)
+		if st.livenessStatus != kvserverpb.NodeLivenessStatus_LIVE &&
+			st.livenessStatus != kvserverpb.NodeLivenessStatus_DECOMMISSIONING {
+			// We definitely won't be able to upgrade, but defer this error as
+			// we may find out that we are already at the latest version (the
+			// cluster may be up to date, but a node is down).
+			if notRunningErr == nil {
+				notRunningErr = errors.Errorf("node %d not running (%s), cannot determine version", nodeID, st.livenessStatus)
+			}
+			continue
 		}
 
-		version := st.Desc.ServerVersion.String()
+		version := st.NodeStatus.Desc.ServerVersion.String()
 		if newVersion == "" {
 			newVersion = version
 		} else if version != newVersion {
-			return false, errors.New("not all nodes are running the latest version yet")
+			return false, errors.Newf("not all nodes are running the latest version yet (saw %s and %s)", newVersion, version)
 		}
+	}
+
+	if newVersion == "" {
+		return false, errors.Errorf("no live nodes found")
 	}
 
 	// Check if we really need to upgrade cluster version.
@@ -130,9 +133,16 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	// Check if auto upgrade is enabled at current version.
-	datums, _, err := s.internalExecutor.Query(
+	if notRunningErr != nil {
+		return false, notRunningErr
+	}
+
+	// Check if auto upgrade is enabled at current version. This is read from
+	// the KV store so that it's in effect on all nodes immediately following a
+	// SET CLUSTER SETTING.
+	datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "read-downgrade", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
 	)
 	if err != nil {
@@ -155,8 +165,9 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 // (which returns the version from the KV store as opposed to the possibly
 // lagging settings subsystem).
 func (s *Server) clusterVersion(ctx context.Context) (string, error) {
-	datums, _, err := s.internalExecutor.Query(
+	datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "show-version", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		"SHOW CLUSTER SETTING version;",
 	)
 	if err != nil {

@@ -1,16 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package metric
 
@@ -73,6 +69,15 @@ func TestGaugeFloat64(t *testing.T) {
 		t.Fatalf("unexpected value: %f", v)
 	}
 	testMarshal(t, g, "10.4")
+}
+
+func TestRate(t *testing.T) {
+	r := NewRate(emptyMetadata, time.Minute)
+	r.Add(0)
+	if v := r.Value(); v != 0 {
+		t.Fatalf("unexpected value: %f", v)
+	}
+	testMarshal(t, r, "0")
 }
 
 func TestCounter(t *testing.T) {
@@ -164,7 +169,7 @@ func TestRateRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
 	const interval = 10 * time.Second
-	r := NewRate(interval)
+	r := NewRate(emptyMetadata, interval)
 
 	// Skip the warmup phase of the wrapped EWMA for this test.
 	for i := 0; i < 100; i++ {

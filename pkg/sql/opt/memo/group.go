@@ -1,161 +1,63 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
 import (
-	"fmt"
-	"math"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-// GroupID identifies a memo group. Groups have numbers greater than 0; a
-// GroupID of 0 indicates an invalid group.
-type GroupID uint32
-
-// bestOrdinal is the ordinal position of a BestExpr within its memo group.
-// Once optimized, each group manages one or more bestExprs that track the
-// lowest cost expression for a particular set of required physical properties.
-type bestOrdinal uint16
-
-const (
-	// normBestOrdinal is a special reserved ordinal that is used by ExprView
-	// to indicate that the normalized tree should be traversed rather than the
-	// lowest cost expression tree.
-	normBestOrdinal bestOrdinal = math.MaxUint16
-)
-
-// group stores a set of logically equivalent expressions. See the comments
-// on Expr for the definition of logical equivalency. In addition, for each
-// required set of physical properties, the group stores the expression that
-// provides those properties at the lowest known cost in the bestExprs fields.
-type group struct {
-	// id is the index of this group within the memo.
-	id GroupID
-
-	// logical is the set of logical properties that all memo expressions in
-	// the group share.
-	logical props.Logical
-
-	// normExpr holds the first expression in the group, which is always the
-	// group's normalized expression. otherExprs holds any expressions beyond
-	// the first. These are separated in order to optimize for the common case
-	// of a group with only one expression (often true for scalar expressions).
-	normExpr   Expr
-	otherExprs []Expr
-
-	// firstBestExpr remembers the lowest cost expression in the group that
-	// provides a particular set of physical properties. If the group has been
-	// optimized with respect to more than the one set of properties, then
-	// otherBestExprs remembers the lowest cost expressions for the others.
-	// These fields are separated in order to optimize for the common case of a
-	// group that has been optimized for only one set of properties.
-	firstBestExpr  BestExpr
-	otherBestExprs []BestExpr
-}
-
-// makeMemoGroup constructs a new memo group with the given id and its
-// normalized expression.
-func makeMemoGroup(id GroupID, norm Expr) group {
-	return group{id: id, normExpr: norm}
-}
-
-// isScalarGroup returns true if this group contains scalar expressions and not
-// relational expressions.
-func (g *group) isScalarGroup() bool {
-	return isScalarLookup[g.normExpr.op]
-}
-
-// exprCount returns the number of logically-equivalent expressions in the
-// group.
-func (g *group) exprCount() int {
-	// Group always contains at least the normalized expression, plus whatever
-	// other expressions have been added.
-	return 1 + len(g.otherExprs)
-}
-
-// expr returns the nth expression in the group. This method is used in concert
-// with exprCount to iterate over the expressions in the group:
-//   for i := 0; i < g.exprCount(); i++ {
-//     e := g.expr(i)
-//   }
+// exprGroup represents a group of relational query plans that are logically
+// equivalent to on another. The group points to the first member of the group,
+// and subsequent members can be accessed via calls to RelExpr.NextExpr. The
+// group maintains the logical properties shared by members of the group, as
+// well as the physical properties and cost of the best expression in the group
+// once optimization is complete.
 //
-// NOTE: The returned Expr reference is only valid until the next call to
-//       addExpr, which may cause a resize of the exprs slice.
-func (g *group) expr(nth ExprOrdinal) *Expr {
-	if nth == normExprOrdinal {
-		return &g.normExpr
-	}
-	return &g.otherExprs[nth-1]
+// See comments for Memo, RelExpr, Relational, and Physical for more details.
+type exprGroup interface {
+	// memo is the memo which contains the group.
+	memo() *Memo
+
+	// firstExpr points to the first member expression in the group. Other members
+	// of the group can be accessed via calls to RelExpr.NextExpr.
+	firstExpr() RelExpr
+
+	// relational are the relational properties shared by members of the group.
+	relational() *props.Relational
+
+	// bestProps returns a per-group instance of bestProps. This is the zero
+	// value until optimization is complete.
+	bestProps() *bestProps
 }
 
-// addExpr adds a new logically equivalent expression to the memo group. This
-// is an alternate, denormalized expression that may have a lower cost.
-func (g *group) addExpr(denorm Expr) {
-	g.otherExprs = append(g.otherExprs, denorm)
-}
-
-// bestExprCount returns the number of bestExprs in the group.
-func (g *group) bestExprCount() int {
-	if !g.firstBestExpr.initialized() {
-		return 0
-	}
-	return 1 + len(g.otherBestExprs)
-}
-
-// bestExpr returns the nth BestExpr in the group. This method is used in
-// concert with bestExprCount to iterate over the expressions in the group:
-//   for i := 0; i < g.bestExprCount(); i++ {
-//     e := g.BestExpr(i)
-//   }
+// bestProps contains the properties of the "best" expression in group. The best
+// expression is the expression which is part of the lowest-cost tree for the
+// overall query. It is well-defined because the lowest-cost tree does not
+// contain multiple expressions from the same group.
 //
-// NOTE: The returned BestExpr reference is only valid until the next call to
-//       ensureBestExpr, which may cause a resize of the bestExprs slice.
-func (g *group) bestExpr(nth bestOrdinal) *BestExpr {
-	if nth == 0 {
-		return &g.firstBestExpr
-	}
-	return &g.otherBestExprs[nth-1]
-}
+// These are not properties of the group per se but they are stored within each
+// group for efficiency.
+type bestProps struct {
+	// Required properties with respect to which the best expression was
+	// optimized.
+	required *physical.Required
 
-// ensureBestExpr returns the id of the BestExpr that has the lowest cost for
-// the given required properties. If no BestExpr exists yet, then
-// ensureBestExpr creates a new empty BestExpr and returns its id.
-func (g *group) ensureBestExpr(required PhysicalPropsID) BestExprID {
-	// Handle case where firstBestExpr is not yet in use.
-	if !g.firstBestExpr.initialized() {
-		g.firstBestExpr.required = required
-		g.firstBestExpr.cost = MaxCost
-		return BestExprID{group: g.id, ordinal: 0}
-	}
+	// Provided properties, which must be compatible with the required properties.
+	//
+	// We store these properties in-place because the structure is very small; if
+	// that changes we will want to intern them, similar to the required
+	// properties.
+	provided physical.Provided
 
-	// Fall back to otherBestExprs.
-	for i := range g.otherBestExprs {
-		be := &g.otherBestExprs[i]
-		if be.required == required {
-			// Bias the ordinal to skip firstBestExpr.
-			return BestExprID{group: g.id, ordinal: bestOrdinal(i + 1)}
-		}
-	}
-
-	// Panic if we ever reach 65535 best expressions - something's wrong.
-	ordinal := len(g.otherBestExprs) + 1
-	if ordinal >= int(normBestOrdinal) {
-		panic(fmt.Sprintf("exceeded max number of expressions in group: %+v", g))
-	}
-
-	g.otherBestExprs = append(g.otherBestExprs, BestExpr{required: required, cost: MaxCost})
-	return BestExprID{group: g.id, ordinal: bestOrdinal(ordinal)}
+	// Cost of the best expression.
+	cost Cost
 }

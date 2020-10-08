@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package json
 
@@ -21,8 +17,8 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 type jsonEncoded struct {
@@ -118,7 +114,7 @@ func jsonTypeFromRootBuffer(v []byte) ([]byte, Type, error) {
 			return v[containerHeaderLen+jEntryLen:], StringJSONType, nil
 		}
 	}
-	return nil, 0, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %d", typeTag)
+	return nil, 0, errors.AssertionFailedf("unknown json type %d", errors.Safe(typeTag))
 }
 
 func newEncoded(e jEntry, v []byte) (JSON, error) {
@@ -159,7 +155,8 @@ func newEncoded(e jEntry, v []byte) (JSON, error) {
 
 func getUint32At(v []byte, idx int) (uint32, error) {
 	if idx+4 > len(v) {
-		return 0, pgerror.NewError(pgerror.CodeInternalError, "insufficient bytes to decode uint32 int value")
+		return 0, errors.AssertionFailedf(
+			"insufficient bytes to decode uint32 int value: %+v", v)
 	}
 
 	return uint32(v[idx])<<24 |
@@ -220,7 +217,13 @@ type encodedObjectIterator struct {
 	data        []byte
 }
 
-func (e *encodedObjectIterator) nextEncoded() (nextKey []byte, nextJEntry jEntry, nextVal []byte, ok bool, err error) {
+func (e *encodedObjectIterator) nextEncoded() (
+	nextKey []byte,
+	nextJEntry jEntry,
+	nextVal []byte,
+	ok bool,
+	err error,
+) {
 	if e.idx >= e.len {
 		return nil, jEntry{}, nil, false, nil
 	}
@@ -499,14 +502,14 @@ func (j *jsonEncoded) shallowDecode() (JSON, error) {
 		}
 		return result, nil
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %v", j.typ)
+		return nil, errors.AssertionFailedf("unknown json type: %v", errors.Safe(j.typ))
 	}
 }
 
 func (j *jsonEncoded) mustDecode() JSON {
 	decoded, err := j.shallowDecode()
 	if err != nil {
-		panic(fmt.Sprintf("invalid JSON data: %s, %v", err.Error(), j.value))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "invalid JSON data: %v", j.value))
 	}
 	return decoded
 }
@@ -600,8 +603,13 @@ func (j *jsonEncoded) Exists(key string) (bool, error) {
 				return true, nil
 			}
 		}
+	default:
+		s, err := j.decode()
+		if err != nil {
+			return false, err
+		}
+		return s.Exists(key)
 	}
-	return false, nil
 }
 
 func (j *jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
@@ -614,7 +622,7 @@ func (j *jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
 			// We shouldn't return this error because it means we couldn't parse the
 			// number, meaning it was a string and that just means we can't find the
 			// value in an array.
-			return nil, nil
+			return nil, nil //nolint:returnerrcheck
 		}
 		return j.FetchValIdx(idx)
 	}
@@ -704,6 +712,18 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		return nil, err
 	}
 	return decoded.encodeInvertedIndexKeys(b)
+}
+
+// numInvertedIndexEntries implements the JSON interface.
+func (j *jsonEncoded) numInvertedIndexEntries() (int, error) {
+	if j.isScalar() || j.containerLen == 0 {
+		return 1, nil
+	}
+	decoded, err := j.decode()
+	if err != nil {
+		return 0, err
+	}
+	return decoded.numInvertedIndexEntries()
 }
 
 func (j *jsonEncoded) allPaths() ([]JSON, error) {

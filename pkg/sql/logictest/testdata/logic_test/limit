@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 query I
 SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series LIMIT 5;
 ----
@@ -121,13 +119,15 @@ SELECT k, v FROM t ORDER BY k LIMIT length(pg_typeof(123))
 1  1
 2  -4
 3  9
+4  -16
+5  25
+6  -36
 
 query II
 SELECT k, v FROM t ORDER BY k LIMIT length(pg_typeof(123)) OFFSET length(pg_typeof(123))-2
 ----
-2  -4
-3  9
-4  -16
+5  25
+6  -36
 
 query II
 SELECT k, v FROM t ORDER BY k OFFSET (SELECT count(*)-3 FROM t)
@@ -142,3 +142,37 @@ SELECT k, v FROM t ORDER BY k LIMIT (SELECT count(*)-3 FROM t) OFFSET (SELECT co
 2  -4
 3  9
 4  -16
+
+# Test sort node with both filter and limit. (https://github.com/cockroachdb/cockroach/issues/31163)
+statement ok
+SET TRACING = ON; SELECT 1; SET TRACING = OFF
+
+query I
+SELECT SPAN FROM [SHOW TRACE FOR SESSION] WHERE span = 1 LIMIT 1
+----
+1
+
+# Regression test for #38659: offset on top of limit was broken.
+
+query I
+SELECT * FROM (select * from generate_series(1,10) a LIMIT 5) OFFSET 3
+----
+4
+5
+
+query I
+SELECT * FROM (select * from generate_series(1,10) a LIMIT 5) OFFSET 6
+----
+
+# Regression test for #47283: scan with both hard limit and soft limit.
+statement ok
+CREATE TABLE t_47283(k INT PRIMARY KEY, a INT)
+
+statement ok
+INSERT INTO t_47283 VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)
+
+# This should return no results; if it does, we incorrectly removed the hard
+# limit in the scan.
+query II
+SELECT * FROM (SELECT * FROM t_47283 ORDER BY k LIMIT 4) WHERE a > 5 LIMIT 1
+----

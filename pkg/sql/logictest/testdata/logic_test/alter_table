@@ -1,4 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
 statement ok
 CREATE TABLE other (b INT PRIMARY KEY)
@@ -12,19 +11,19 @@ CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f
 statement ok
 INSERT INTO t VALUES (1, 9)
 
-statement error syntax error at or near "*"
+statement error at or near "\*": syntax error
 ALTER TABLE t RENAME TO t.*
 
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","t_f_idx"}
-f            INT        true         NULL            ·                      {"t_f_idx"}
-b            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices            is_hidden
+a            INT8       false        NULL            ·                      {primary,t_f_idx}  false
+f            INT8       true         NULL            ·                      {t_f_idx}          false
+b            INT8       true         NULL            ·                      {}                 false
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -32,6 +31,7 @@ ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 query TTTTRT
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
+WHERE job_type = 'SCHEMA CHANGE'
 ORDER BY created DESC
 LIMIT 1
 ----
@@ -40,7 +40,7 @@ SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  su
 statement error duplicate constraint name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
-statement error multiple primary keys for table "t" are not allowed
+statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
 query TTBITTBB colnames
@@ -64,18 +64,19 @@ ALTER TABLE t ADD c INT
 statement ok
 INSERT INTO t VALUES (2, 9, 1, 1), (3, 9, 2, 1)
 
-statement error duplicate key value \(c\)=\(1\) violates unique constraint "bar"
+statement error pgcode 23505 violates unique constraint "bar"
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
 # Test that rollback was successful
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed::decimal(10,2), error
+query TTTTTR
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2)
 FROM crdb_internal.jobs
+WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE  ROLL BACK ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  succeeded  1.00  ·
-SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)            root  failed     0.00  duplicate key value (c)=(1) violates unique constraint "bar"
+SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running   NULL  0.00
+SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed    NULL  0.00
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -88,11 +89,11 @@ a f b    c
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
-table_name  constraint_name  constraint_type  details                               validated
-t           check_a          CHECK            CHECK (a > 0)                         true
-t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other (b)  true
-t           foo              UNIQUE           UNIQUE (b ASC)                        true
-t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                   true
+table_name  constraint_name  constraint_type  details                              validated
+t           check_a          CHECK            CHECK ((a > 0))                      true
+t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
+t           foo              UNIQUE           UNIQUE (b ASC)                       true
+t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                  true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -103,6 +104,12 @@ ALTER TABLE t DROP CONSTRAINT check_a
 statement ok
 INSERT INTO t (a, f) VALUES (-2, 9)
 
+statement error validation of CHECK "a > 0:::INT8" failed on row: a=-2, f=9, b=NULL, c=NULL
+ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
+
+statement ok
+DELETE FROM t WHERE a = -2
+
 statement ok
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
@@ -112,13 +119,16 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK (a > 0)                         false
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                        true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
+t  check_a         CHECK        CHECK ((a > 0))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
+
+statement error duplicate constraint name
+ALTER TABLE t ADD CONSTRAINT fk_f_ref_other FOREIGN KEY (a) REFERENCES other (b)
 
 # added constraints with generated names avoid name collisions.
 statement ok
@@ -127,20 +137,21 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK (a > 0)                         false
-t  check_a1        CHECK        CHECK (a > 0)                         false
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                        true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
+t  check_a         CHECK        CHECK ((a > 0))                      true
+t  check_a1        CHECK        CHECK ((a > 0))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error constraint "typo" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
 
-statement error validation of CHECK "a > 0" failed on row: a=-2, f=9, b=NULL, c=NULL
-ALTER TABLE t VALIDATE CONSTRAINT check_a
+# TODO(erik): re-enable test when unvalidated checks can be added
+#statement error validation of CHECK "a > 0" failed on row: a=-2, f=9, b=NULL, c=NULL
+#ALTER TABLE t VALIDATE CONSTRAINT check_a
 
-statement ok
-DELETE FROM t WHERE a = -2
+#statement ok
+#DELETE FROM t WHERE a = -2
 
 statement ok
 ALTER TABLE t VALIDATE CONSTRAINT check_a
@@ -148,11 +159,11 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK (a > 0)                         true
-t  check_a1        CHECK        CHECK (a > 0)                         false
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                        true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
+t  check_a         CHECK        CHECK ((a > 0))                      true
+t  check_a1        CHECK        CHECK ((a > 0))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -172,19 +183,21 @@ ALTER TABLE t DROP CONSTRAINT bar
 statement ok
 ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
 
-statement error UNIQUE constraint depends on index "foo", use DROP INDEX with CASCADE if you really want to drop it
+statement error cannot drop UNIQUE constraint \"foo\" using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead
 ALTER TABLE t DROP CONSTRAINT foo
 
 statement ok
 DROP INDEX foo CASCADE
 
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed, error
+query TTTTTRT
+SELECT job_type, description, user_name, status, running_status, fraction_completed, error
 FROM crdb_internal.jobs
+WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
-LIMIT 1
+LIMIT 2
 ----
-SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE root  succeeded  1  ·
+SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    NULL  0  ·
+SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  NULL  1  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -246,9 +259,6 @@ INSERT INTO t (a, d) VALUES (23, 24)
 statement error foreign key
 INSERT INTO t VALUES (31, 7, 32)
 
-statement error in use as a foreign key constraint
-DROP INDEX t@t_f_idx
-
 statement ok
 ALTER TABLE t DROP CONSTRAINT fk_f_ref_other
 
@@ -261,13 +271,15 @@ INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECI
 statement ok
 DROP INDEX t@t_f_idx
 
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed, error
+query TTTTTRT
+SELECT job_type, description, user_name, status, running_status, fraction_completed, error
 FROM crdb_internal.jobs
+WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
-LIMIT 1
+LIMIT 2
 ----
-SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx  root  succeeded  1  ·
+SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx   root  running    NULL  0  ·
+SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx          root  succeeded  NULL  1  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f
@@ -305,14 +317,6 @@ ALTER TABLE t DROP COLUMN y
 statement error cannot drop column "e" because view "v" depends on it
 ALTER TABLE t DROP COLUMN e
 
-# TODO(knz): this statement should succeed after #17269 is fixed.
-statement error cannot drop column "d" because view "v" depends on it
-ALTER TABLE t DROP COLUMN d
-
-# TODO(knz): remove the following once the test above succeeds.
-statement ok
-ALTER TABLE t DROP COLUMN d CASCADE
-
 statement ok
 ALTER TABLE t DROP COLUMN e CASCADE
 
@@ -335,7 +339,7 @@ statement ok
 ALTER TABLE t ADD COLUMN g INT UNIQUE
 
 statement ok
-CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX ii (i) STORING(h))
+CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX oi (i), INDEX oh (h), INDEX oih (i) STORING (h))
 
 statement error "t_g_key" is referenced by foreign key from table "o"
 ALTER TABLE t DROP COLUMN g
@@ -343,45 +347,88 @@ ALTER TABLE t DROP COLUMN g
 statement ok
 ALTER TABLE t DROP COLUMN g CASCADE
 
-statement error column "h" is referenced by existing index "ii"
+# Dropping columns that are indexed or stored in indexes drops those indexes
+# too.
+statement ok
 ALTER TABLE o DROP COLUMN h
 
-statement ok
-ALTER TABLE o DROP COLUMN h CASCADE
-
-statement error adding a CHECK constraint via ALTER not supported
-ALTER TABLE t ADD f INT CHECK (f>1)
-
-statement error adding a REFERENCES constraint via ALTER not supported
-ALTER TABLE t ADD f INT UNIQUE REFERENCES other
-
-# Test that more than one column with constraints can be added in the same
-# statement. The constraints added here are on columns that are new and both
-# columns and constraints run through the schema change process together.
-statement ok
-ALTER TABLE t ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT
-
-query ITTTIII colnames,rowsort
-SELECT * FROM t
+query TTBITTBB colnames
+SHOW INDEXES FROM o
 ----
-a   x     y     z     d     e     f
-1   NULL  1.3   1.4   NULL  NULL  NULL
-2   NULL  1.3   1.4   NULL  NULL  NULL
-3   NULL  1.3   1.4   NULL  NULL  NULL
-4   NULL  1.3   1.4   NULL  NULL  NULL
-11  1.0   1.3   1.4   NULL  NULL  NULL
-13  NULL  1.3   1.4   NULL  NULL  NULL
-21  NULL  1.0   1.4   NULL  NULL  NULL
-23  NULL  1.3   1.4   NULL  NULL  NULL
-31  NULL  1.3   1.4   NULL  NULL  NULL
-33  2.0   2.1   2.2   NULL  NULL  NULL
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+o           primary     false       1             rowid        ASC        false    false
+o           oi          true        1             i            ASC        false    false
+o           oi          true        2             rowid        ASC        false    true
+
+statement ok
+ALTER TABLE t ADD f INT CHECK (f > 1)
+
+statement ok
+ALTER TABLE t ADD g INT DEFAULT 1 CHECK (g > 0)
+
+statement ok
+ALTER TABLE t ADD h INT CHECK (h > 0) CHECK (h < 10) UNIQUE
+
+statement error pq: validation of CHECK "i < 0:::INT8" failed on row:.* i=1
+ALTER TABLE t ADD i INT DEFAULT 1 CHECK (i < 0)
+
+statement error pq: validation of CHECK "i < g" failed on row:.* g=1.* i=1
+ALTER TABLE t ADD i INT DEFAULT 1 CHECK (i < g)
+
+statement error pq: validation of CHECK "i > 0:::INT8" failed on row:.* g=1.* i=0
+ALTER TABLE t ADD i INT AS (g - 1) STORED CHECK (i > 0)
 
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  primary  PRIMARY KEY  PRIMARY KEY (a ASC)  true
-t  t_d_key  UNIQUE       UNIQUE (d ASC)       true
-t  t_e_key  UNIQUE       UNIQUE (e ASC)       true
+t  check_f   CHECK        CHECK ((f > 1))      true
+t  check_g   CHECK        CHECK ((g > 0))      true
+t  check_h   CHECK        CHECK ((h > 0))      true
+t  check_h1  CHECK        CHECK ((h < 10))     true
+t  primary   PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  t_h_key   UNIQUE       UNIQUE (h ASC)       true
+
+statement ok
+DROP TABLE t
+
+# Test that more than one column with constraints can be added in the same
+# statement. The constraints added here are on columns that are new and both
+# columns and constraints run through the schema change process together.
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+# Check references column added in same statement
+statement ok
+ALTER TABLE t ADD b INT DEFAULT 1, ADD c INT DEFAULT 2 CHECK (c > b)
+
+statement ok
+ALTER TABLE t ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT
+
+# Check references column added in same statement
+statement error pq: validation of CHECK "g = h" failed on row:.* g=3.* h=2
+ALTER TABLE t ADD g INT DEFAULT 3, ADD h INT DEFAULT 2 CHECK (g = h)
+
+# Multiple unique columns can be added, followed by other commands (#35011)
+statement ok
+ALTER TABLE t ADD COLUMN u INT UNIQUE, ADD COLUMN v INT UNIQUE, ADD CONSTRAINT ck CHECK (a > 0);
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+t  check_c_b  CHECK        CHECK ((c > b))      true
+t  ck         CHECK        CHECK ((a > 0))      true
+t  primary    PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  t_d_key    UNIQUE       UNIQUE (d ASC)       true
+t  t_e_key    UNIQUE       UNIQUE (e ASC)       true
+t  t_u_key    UNIQUE       UNIQUE (u ASC)       true
+t  t_v_key    UNIQUE       UNIQUE (v ASC)       true
+
+statement ok
+DROP TABLE t
 
 # Subsequent operations succeed because the table is empty
 statement ok
@@ -401,15 +448,15 @@ ALTER TABLE tt ADD COLUMN s DECIMAL UNIQUE NOT NULL
 statement ok
 ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM tt
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","tt_s_key","tt_t_key"}
-q            DECIMAL    false        NULL            ·                      {}
-r            DECIMAL    true         NULL            ·                      {}
-s            DECIMAL    false        NULL            ·                      {"tt_s_key"}
-t            DECIMAL    true         4.0:::DECIMAL   ·                      {"tt_t_key"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
+a            INT8       false        NULL            ·                      {primary,tt_s_key,tt_t_key}  false
+q            DECIMAL    false        NULL            ·                      {}                           false
+r            DECIMAL    true         NULL            ·                      {}                           false
+s            DECIMAL    false        NULL            ·                      {tt_s_key}                   false
+t            DECIMAL    true         4.0:::DECIMAL   ·                      {tt_t_key}                   false
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -420,6 +467,11 @@ INSERT INTO add_default (a) VALUES (1)
 
 statement ok
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 42
+
+# query TTBTTTB colnames
+# SHOW COLUMNS FROM add_default
+# ----
+# column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
 
 statement ok
 INSERT INTO add_default (a) VALUES (2)
@@ -432,9 +484,6 @@ INSERT INTO add_default (a) VALUES (3)
 
 statement error could not parse "foo" as type int
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 'foo'
-
-statement error variable sub-expressions are not allowed in DEFAULT
-ALTER TABLE add_default ALTER COLUMN b SET DEFAULT $1
 
 statement error variable sub-expressions are not allowed in DEFAULT
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT c
@@ -518,7 +567,7 @@ SELECT a,b,f FROM add_default
 
 # Adding a unique column to an existing table with data with a default value
 # is illegal
-statement error duplicate key value .* violates unique constraint \"add_default_g_key\"
+statement error pgcode 23505 violates unique constraint \"add_default_g_key\"
 ALTER TABLE add_default ADD g INT UNIQUE DEFAULT 1
 
 # various default evaluation errors
@@ -526,10 +575,10 @@ ALTER TABLE add_default ADD g INT UNIQUE DEFAULT 1
 statement ok
 CREATE SEQUENCE initial_seq
 
-statement error cannot backfill such sequence operation
+statement error pgcode 0A000 cannot evaluate scalar expressions containing sequence operations in this context
 ALTER TABLE add_default ADD g INT DEFAULT nextval('initial_seq')
 
-statement error cannot backfill such evaluated expression
+statement error pgcode 22C01 cannot evaluate scalar expressions using table lookups in this context
 ALTER TABLE add_default ADD g OID DEFAULT 'foo'::regclass::oid
 
 statement error cannot access virtual schema in anonymous database
@@ -546,8 +595,13 @@ ALTER TABLE add_default ADD fee FLOAT NOT NULL DEFAULT 2.99
 statement ok
 ALTER TABLE add_default ALTER COLUMN fee DROP DEFAULT
 
-statement error null value in column "fee" violates not-null constraint
+statement error pgcode XXA00 null value in column "fee" violates not-null constraint
 COMMIT
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.change_in_explicit_txn'
+----
+sql.schema.change_in_explicit_txn
 
 statement error pgcode 42703 column "fee" does not exist
 ALTER TABLE add_default DROP fee
@@ -587,20 +641,20 @@ SHOW DATABASE
 ----
 test
 
-statement error user testuser does not have CREATE privilege on relation privs
+statement error pq: must be owner of table privs or have CREATE privilege on table privs
 ALTER TABLE privs ADD c INT
 
-statement error user testuser does not have CREATE privilege on relation privs
+statement error pq: must be owner of table privs or have CREATE privilege on table privs
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary"}
-b            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
+a            INT8       false        NULL            ·                      {primary}  false
+b            INT8       true         NULL            ·                      {}         false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -613,19 +667,31 @@ ALTER TABLE privs ADD c INT
 statement ok
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","foo"}
-b            INT        true         NULL            ·                      {"foo"}
-c            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices        is_hidden
+a            INT8       false        NULL            ·                      {primary,foo}  false
+b            INT8       true         NULL            ·                      {foo}          false
+c            INT8       true         NULL            ·                      {}             false
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER INDEX nonexistent@noindex SPLIT AT VALUES (42)
+
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER TABLE nonexistent UNSPLIT AT VALUES (42)
+
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER INDEX nonexistent@noindex UNSPLIT AT VALUES (42)
+
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER TABLE nonexistent UNSPLIT ALL
+
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER INDEX nonexistent@noindex UNSPLIT ALL
 
 user root
 
@@ -637,6 +703,12 @@ ALTER TABLE privsview ADD d INT
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview SPLIT AT VALUES (42)
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview UNSPLIT AT VALUES (42)
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview UNSPLIT ALL
 
 # Verify that impure defaults are evaluated separately on each row
 # (#14352)
@@ -653,7 +725,8 @@ SELECT count(distinct a) FROM impure
 
 # No orphaned schema change jobs.
 query I
-SELECT count(*) FROM crdb_internal.jobs WHERE status = 'pending' OR status = 'started'
+SELECT count(*) FROM crdb_internal.jobs
+WHERE job_type = 'SCHEMA CHANGE' AND status = 'pending' OR status = 'started'
 ----
 0
 
@@ -678,7 +751,7 @@ foo
 
 # Create a table with a computed column that we'll de-compute
 statement ok
-CREATE TABLE decomputed_column (a INT PRIMARY KEY, b INT AS ( a + 1 ) STORED)
+CREATE TABLE decomputed_column (a INT PRIMARY KEY, b INT AS ( a + 1 ) STORED, FAMILY "primary" (a, b))
 
 statement ok
 INSERT INTO decomputed_column VALUES (1), (2)
@@ -687,6 +760,12 @@ statement error cannot write directly to computed column
 INSERT INTO decomputed_column VALUES (3, NULL), (4, 99)
 
 statement ok
+ALTER TABLE decomputed_column ALTER COLUMN b DROP STORED
+
+statement error pq: column "a" is not a computed column
+ALTER TABLE decomputed_column ALTER COLUMN a DROP STORED
+
+statement error pq: column "b" is not a computed column
 ALTER TABLE decomputed_column ALTER COLUMN b DROP STORED
 
 # Verify that the computation is dropped and that we can mutate the column
@@ -704,9 +783,9 @@ select a, b from decomputed_column order by a
 query TT
 show create table decomputed_column
 ----
-decomputed_column  CREATE TABLE decomputed_column (
-                   a INT NOT NULL,
-                   b INT NULL,
+decomputed_column  CREATE TABLE public.decomputed_column (
+                   a INT8 NOT NULL,
+                   b INT8 NULL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC),
                    FAMILY "primary" (a, b)
 )
@@ -716,29 +795,15 @@ decomputed_column  CREATE TABLE decomputed_column (
 statement ok
 CREATE TABLE b26483()
 
-statement error unimplemented: column c is of type ARRAY and thus is not indexable
-ALTER TABLE b26483 ADD COLUMN c INT[] UNIQUE
-
-# As above, but performed in a transaction
-statement ok
-BEGIN
-
-statement ok
-CREATE TABLE b26483_tx()
-
-statement ok
-ALTER TABLE b26483_tx ADD COLUMN c INT[]
-
-statement error unimplemented: column c is of type ARRAY and thus is not indexable
-CREATE INDEX on b26483_tx (c)
-
-statement ok
-ROLLBACK
-
 # Verify that auditing can be enabled by root, and cannot be disabled by non-root.
 
 statement ok
 CREATE TABLE audit(x INT); ALTER TABLE audit EXPERIMENTAL_AUDIT SET READ WRITE;
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.set_audit_mode.read_write'
+----
+sql.schema.set_audit_mode.read_write
 
 # The user must be able to issue ALTER for this test to be meaningful.
 statement ok
@@ -752,4 +817,587 @@ ALTER TABLE audit ADD COLUMN y INT
 
 # But not the audit settings.
 statement error change auditing settings on a table
-ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF;
+ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
+
+user root
+
+statement ok
+ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.set_audit_mode.off'
+----
+sql.schema.set_audit_mode.off
+
+# Check column backfill in the presence of fks
+subtest 27402
+
+statement ok
+CREATE TABLE users (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    name STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC)
+)
+
+statement ok
+CREATE TABLE vehicles (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    type STRING NULL,
+    owner_id INT NULL,
+    mycol STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC)
+)
+
+statement ok
+CREATE TABLE rides (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    vehicle_city STRING NULL,
+    rider_id INT NULL,
+    vehicle_id INT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
+    INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
+    CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
+)
+
+statement ok
+ALTER TABLE vehicles ADD CONSTRAINT fk_city_ref_users FOREIGN KEY (city, owner_id) REFERENCES users (city, id)
+
+statement ok
+ALTER TABLE rides ADD CONSTRAINT fk_city_ref_users FOREIGN KEY (city, rider_id) REFERENCES users (city, id)
+
+statement ok
+ALTER TABLE rides ADD CONSTRAINT fk_vehicle_city_ref_vehicles FOREIGN KEY (vehicle_city, vehicle_id) REFERENCES vehicles (city, id)
+
+
+statement ok
+INSERT INTO users VALUES (10, 'lagos', 'chimamanda')
+
+statement ok
+INSERT INTO vehicles VALUES (100, 'lagos', 'toyota', 10, 'mycol')
+
+statement ok
+INSERT INTO rides VALUES (567, 'lagos', 'lagos', 10, 100)
+
+statement ok
+ALTER TABLE vehicles DROP COLUMN mycol;
+
+# check that adding a reference on a column still being backfilled fails.
+# fix through #32917
+
+statement ok
+CREATE TABLE t32917 (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t32917 VALUES (1), (2), (3)
+
+statement ok
+CREATE TABLE t32917_2 (b INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t32917_2 VALUES (1), (2), (3)
+
+# Test SET NOT NULL
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1), (NULL)
+
+statement error validation of NOT NULL constraint failed: validation of CHECK "a IS NOT NULL" failed
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement ok
+DELETE FROM t WHERE a IS NULL
+
+statement ok
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement error null value in column "a" violates not-null constraint
+INSERT INTO t VALUES (NULL)
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+
+statement ok
+ALTER TABLE t ALTER COLUMN a DROP NOT NULL
+
+statement ok
+INSERT INTO t VALUES (NULL)
+
+statement ok
+DROP TABLE t
+
+# Test interaction of SET NOT NULL with other constraints
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+# Check for name collisions with the auto-generated NOT NULL check constraint name
+statement ok
+ALTER TABLE t ADD CONSTRAINT a_auto_not_null CHECK (a IS NOT NULL)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT a_auto_not_null1 CHECK (a IS NOT NULL), ALTER COLUMN a SET NOT NULL
+
+statement error null value in column "a" violates not-null constraint
+INSERT INTO t VALUES (NULL)
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+t  a_auto_not_null   CHECK  CHECK ((a IS NOT NULL))  true
+t  a_auto_not_null1  CHECK  CHECK ((a IS NOT NULL))  true
+
+statement ok
+DROP TABLE t
+
+# Check for adding constraints NOT VALID
+statement ok
+CREATE TABLE t (a int);
+
+statement ok
+INSERT INTO t VALUES (10), (15), (17)
+
+statement error pq: validation of CHECK "a < 16:::INT8" failed on row: a=17
+ALTER TABLE t ADD CHECK (a < 16)
+
+statement ok
+ALTER TABLE t ADD CHECK (a < 100)
+
+statement ok
+ALTER TABLE t ADD CHECK (a < 16) NOT VALID
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+t  check_a   CHECK  CHECK ((a < 100))  true
+t  check_a1  CHECK  CHECK ((a < 16))   false
+
+query error pq: failed to satisfy CHECK constraint \(a < 16:::INT8\)
+INSERT INTO t VALUES (20)
+
+statement error pq: validation of CHECK "a < 16:::INT8" failed on row: a=17
+ALTER TABLE t VALIDATE CONSTRAINT check_a1
+
+statement ok
+DELETE FROM t WHERE a = 17
+
+statement ok
+ALTER TABLE t VALIDATE CONSTRAINT check_a1
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+t  check_a   CHECK  CHECK ((a < 100))  true
+t  check_a1  CHECK  CHECK ((a < 16))   true
+
+subtest regression_42858
+
+statement ok
+CREATE TABLE TEST2 (COL1 SERIAL PRIMARY KEY, COL2 INT8)
+
+statement ok
+CREATE TABLE TEST1 (COL1 SERIAL PRIMARY KEY, COL2 INT8, COL3 INT8)
+
+statement ok
+ALTER TABLE TEST1 ADD CONSTRAINT duplicate_name FOREIGN KEY (COL2) REFERENCES TEST2 (COL1)
+
+statement error pq: duplicate constraint name: "duplicate_name"
+ALTER TABLE TEST1 ADD CONSTRAINT duplicate_name FOREIGN KEY (COL3) REFERENCES TEST2 (COL1)
+
+statement ok
+DROP TABLE test1; DROP TABLE test2
+
+subtest multiple_set_drop_not_null_inside_txn
+
+statement ok
+CREATE TABLE t1(x INT, y INT);
+
+statement ok
+BEGIN;
+ALTER TABLE t1 ALTER COLUMN x SET NOT NULL;
+ALTER TABLE t1 ALTER COLUMN y SET NOT NULL;
+COMMIT
+
+statement ok
+BEGIN;
+ALTER TABLE t1 ALTER COLUMN x DROP NOT NULL;
+ALTER TABLE t1 ALTER COLUMN y DROP NOT NULL;
+COMMIT
+
+statement ok
+DROP TABLE t1
+
+subtest regression_43092
+
+statement ok
+CREATE TABLE t43092(x INT PRIMARY KEY)
+
+statement error pgcode 42P16 column "x" is in a primary index
+ALTER TABLE t43092 ALTER COLUMN x DROP NOT NULL
+
+statement ok
+DROP TABLE t43092
+
+subtest regression_qualification_feature_counts
+
+statement ok
+CREATE TABLE telemetry_test (d int);
+ALTER TABLE telemetry_test
+  ADD COLUMN a int DEFAULT 1,
+  ADD COLUMN b int UNIQUE CHECK(b > 1),
+  ADD COLUMN c int AS (a + b) STORED
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.new_column.qualification.computed',
+  'sql.schema.new_column.qualification.default_expr',
+  'sql.schema.new_column.qualification.unique'
+)
+----
+sql.schema.new_column.qualification.unique
+sql.schema.new_column.qualification.computed
+sql.schema.new_column.qualification.default_expr
+
+statement ok
+DROP TABLE telemetry_test
+
+# Disable stats injection in explicit transactions.
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE inject_stats (k CHAR PRIMARY KEY, v TIMESTAMPTZ)
+
+statement error pq: cannot inject statistics in an explicit transaction
+ALTER TABLE inject_stats INJECT STATISTICS '[]'
+
+statement ok
+ROLLBACK
+
+subtest regression_47141
+
+statement ok
+CREATE TABLE regression_47141(a time(3), b bytea)
+
+# Regression for #26045.
+statement ok
+CREATE TABLE t25045 (x INT, y INT AS (x+1) STORED)
+
+statement error pq: column \"x\" is referenced by computed column \"y\"
+ALTER TABLE t25045 DROP COLUMN x
+
+subtest add_col_references
+
+statement ok
+DROP TABLE IF EXISTS t1, t2;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+CREATE TABLE t2 (y INT)
+
+statement ok
+ALTER TABLE t2 ADD COLUMN x INT REFERENCES t1 (x)
+
+statement ok
+INSERT INTO t1 VALUES (1)
+
+statement error pq: insert on table "t2" violates foreign key constraint "fk_x_ref_t1"
+INSERT INTO t2 VALUES (2, 2)
+
+statement ok
+INSERT INTO t2 VALUES (1, 1)
+
+# Check that the foreign key was indeed added.
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+    y INT8 NULL,
+    x INT8 NULL,
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    FAMILY "primary" (y, rowid, x)
+)
+
+# Test that only one index gets created when adding a column
+# with references and unique.
+statement ok
+CREATE TABLE t3 (y INT)
+
+statement ok
+ALTER TABLE t3 ADD COLUMN x INT UNIQUE REFERENCES t1 (x)
+
+query TT
+SHOW CREATE t3
+----
+t3  CREATE TABLE public.t3 (
+    y INT8 NULL,
+    x INT8 NULL,
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    UNIQUE INDEX t3_x_key (x ASC),
+    FAMILY "primary" (y, rowid, x)
+)
+
+# We allowed the foreign key validation code to look into the mutations
+# list to validate what columns / indexes can be used for foreign keys.
+# Ensure that we still have the correct restrictions.
+statement ok
+DROP TABLE t1, t2 CASCADE;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+CREATE TABLE t2 (x INT, y INT, INDEX i (x))
+
+statement error pq: column \"x\" does not exist
+BEGIN;
+ALTER TABLE t2 DROP COLUMN x;
+ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1(x);
+
+statement ok
+ROLLBACK
+
+statement ok
+INSERT INTO t2 VALUES (1, 2)
+
+# Test using ADD COL REFERENCES in a self referencing constraint.
+statement ok
+DROP TABLE t1 CASCADE;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+ALTER TABLE t1 ADD COLUMN x2 INT REFERENCES t1 (x)
+
+query TT
+SHOW CREATE t1
+----
+t1  CREATE TABLE public.t1 (
+    x INT8 NOT NULL,
+    x2 INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC),
+    CONSTRAINT fk_x2_ref_t1 FOREIGN KEY (x2) REFERENCES public.t1(x),
+    FAMILY "primary" (x, x2)
+)
+
+statement error pq: insert on table "t1" violates foreign key constraint "fk_x2_ref_t1"
+INSERT INTO t1 VALUES (1, 2)
+
+# Test ADD COL REFERENCES on a new table in the same txn.
+statement ok
+DROP TABLE t1, t2 CASCADE
+
+statement ok
+BEGIN;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+CREATE TABLE t2 (y INT);
+ALTER TABLE t2 ADD COLUMN x INT REFERENCES t1 (x);
+COMMIT
+
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+    y INT8 NULL,
+    x INT8 NULL,
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    FAMILY "primary" (y, rowid, x)
+)
+
+# Test that we can also add a column and then an FK in the same txn.
+statement ok
+DROP TABLE t1, t2 CASCADE
+
+statement ok
+BEGIN;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+CREATE TABLE t2 (y INT);
+ALTER TABLE t2 ADD COLUMN x INT;
+ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
+COMMIT
+
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+    y INT8 NULL,
+    x INT8 NULL,
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    FAMILY "primary" (y, rowid, x)
+)
+
+# Test that we can add a column and an index to an FK in the same txn.
+statement ok
+DROP TABLE t1, t2 CASCADE
+
+statement ok
+BEGIN;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+INSERT INTO t1 VALUES (1);
+CREATE TABLE t2 (y INT);
+INSERT INTO t2 VALUES (2);
+ALTER TABLE t2 ADD COLUMN x INT;
+CREATE INDEX ON t2 (x);
+ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
+COMMIT
+
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+    y INT8 NULL,
+    x INT8 NULL,
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    INDEX t2_x_idx (x ASC),
+    FAMILY "primary" (y, rowid, x)
+)
+
+# Test the above on a table not created in the same txn.
+statement ok
+DROP TABLE t1, t2 CASCADE;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+CREATE TABLE t2 (y INT)
+
+statement ok
+BEGIN;
+ALTER TABLE t2 ADD COLUMN x INT;
+CREATE INDEX ON t2 (x);
+ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
+COMMIT
+
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+    y INT8 NULL,
+    x INT8 NULL,
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    INDEX t2_x_idx (x ASC),
+    FAMILY "primary" (y, rowid, x)
+)
+
+# Test that an FK can use a newly created index.
+statement ok
+DROP TABLE t1, t2 CASCADE;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+CREATE TABLE t2 (x INT)
+
+statement ok
+BEGIN;
+CREATE INDEX ON t2 (x);
+ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
+COMMIT
+
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+    x INT8 NULL,
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    INDEX t2_x_idx (x ASC),
+    FAMILY "primary" (x, rowid)
+)
+
+# Test when default column value leads to an FK violation.
+statement ok
+DROP TABLE t1, t2 CASCADE
+
+statement ok
+CREATE TABLE t1 (x INT PRIMARY KEY);
+INSERT INTO t1 VALUES (1);
+CREATE TABLE t2 (y INT);
+INSERT INTO t2 VALUES (2)
+
+statement error pq: foreign key violation
+ALTER TABLE t2 ADD COLUMN x INT DEFAULT 2 UNIQUE REFERENCES t1 (x)
+
+# Test that it works with an appropriate default.
+statement ok
+ALTER TABLE t2 ADD COLUMN x INT DEFAULT 1 UNIQUE REFERENCES t1 (x)
+
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+    y INT8 NULL,
+    x INT8 NULL DEFAULT 1:::INT8,
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    UNIQUE INDEX t2_x_key (x ASC),
+    FAMILY "primary" (y, rowid, x)
+)
+
+# Regression 50069, computed exprs must only refer to columns inside the
+# current table.
+statement ok
+CREATE TABLE t50069_a (x INT);
+CREATE TABLE t50069_b (x INT);
+
+statement error pq: no data source matches prefix: t50069_b in this context
+ALTER TABLE t50069_a ADD COLUMN y INT AS (t50069_b.x + 1) STORED
+
+statement ok
+CREATE DATABASE d;
+CREATE TABLE d.public.t50069_a (x INT);
+
+statement error pq: no data source matches prefix: d.public.t50069_a in this context
+ALTER TABLE t50069_a ADD COLUMN y INT AS (d.public.t50069_a.x + 1) STORED
+
+# Dropping a column with a foreign key should delete the column and the FK.
+statement ok
+DROP TABLE IF EXISTS parent, child;
+CREATE TABLE parent (p INT PRIMARY KEY);
+CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p), FAMILY (c, p));
+ALTER TABLE child DROP COLUMN p
+
+query TT
+SHOW CREATE child
+----
+child  CREATE TABLE public.child (
+       c INT8 NOT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (c ASC),
+       FAMILY fam_0_c_p (c)
+)
+
+# Regression test for #52816.
+statement ok
+CREATE TABLE t52816 (x INT, y INT);
+ALTER TABLE t52816 RENAME COLUMN x TO x2, RENAME COLUMN y TO y;
+SELECT x2, y FROM t52816
+
+# Regression test for #54196.
+statement ok
+CREATE TABLE IF NOT EXISTS regression_54196 (
+	col1 int,
+	col2 int,
+	col3 int,
+	INDEX (col1, col2),
+	INDEX (col1, col3),
+	INDEX (col2, col3)
+); ALTER TABLE regression_54196 DROP COLUMN col1
+
+query TT
+SELECT index_name, column_name FROM [SHOW INDEXES FROM regression_54196]
+ORDER BY index_name, column_name ASC
+----
+primary                         rowid
+regression_54196_col2_col3_idx  col2
+regression_54196_col2_col3_idx  col3
+regression_54196_col2_col3_idx  rowid
+
+# Test to ensure that renaming a constraint on top of an existing index
+# fails with the correct error.
+
+statement ok
+CREATE TABLE t_cannot_rename_constraint_over_index (
+    k INT PRIMARY KEY,
+    v INT,
+    CONSTRAINT v_unique UNIQUE (v),
+    INDEX idx_v (v)
+);
+
+statement error relation idx_v already exists
+ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT v_unique TO idx_v;
+
+statement error relation idx_v already exists
+ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT "primary" TO idx_v;

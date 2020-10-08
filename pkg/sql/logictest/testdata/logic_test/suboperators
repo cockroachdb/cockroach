@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE abc (a INT, b INT, C INT)
 
@@ -110,6 +108,12 @@ query error unsupported comparison operator: 1 = ANY ARRAY\['foo', 'bar'\]
 SELECT 1 = ANY(ARRAY['foo', 'bar'])
 
 query error unsupported comparison operator: <int> = ANY <string\[\]>
+SELECT 1 = ANY(ARRAY['foo'] || 'bar'::string)
+
+# Note that this relatively poor error message is caused by the fact that
+# strings are constant castable to string arrays. Postgres also makes this
+# same minor mistake in error generation.
+query error unsupported binary operator: <string\[\]> || <string> (desired <int\[\]>)
 SELECT 1 = ANY(ARRAY['foo'] || 'bar')
 
 # ANY/SOME with subqueries.
@@ -140,12 +144,17 @@ SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
 true
 
 query B
-SELECT 1 < ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
 ----
 true
 
 query B
-SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0001, 2]))
+SELECT 1.0 < ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+----
+true
+
+query B
+SELECT 1.0 = ANY(SELECT * FROM unnest(ARRAY[1.0001, 2]))
 ----
 false
 
@@ -289,7 +298,7 @@ query error unsupported comparison operator: 1 = ALL ARRAY\['foo', 'bar'\]
 SELECT 1 = ALL(ARRAY['foo', 'bar'])
 
 query error unsupported comparison operator: <int> = ALL <string\[\]>
-SELECT 1 = ALL(ARRAY['foo'] || 'bar')
+SELECT 1 = ALL(ARRAY['foo'] || 'bar'::text)
 
 # ALL with subqueries.
 
@@ -362,6 +371,9 @@ SELECT 1 = ANY (1, 2, 3)
 ----
 true
 
+query error pq: could not parse "foo" as type int
+SELECT 1 = ANY (1, 2, 3.3, 'foo')
+
 query B
 SELECT 1 = ANY (((1, 2, 3)))
 ----
@@ -377,19 +389,25 @@ SELECT 1 = ANY (((2, 3, 4)))
 ----
 false
 
-query error incompatible tuple element type: decimal
+query B
 SELECT 1 = ANY (1, 1.1)
+----
+true
 
 query B
 SELECT 1::decimal = ANY (1, 1.1)
 ----
 true
 
-query error incompatible tuple element type: decimal
+query B
 SELECT 1 = ANY (1.0, 1.1)
+----
+true
 
-query error incompatible tuple element type: decimal
+query B
 SELECT 1 = ANY (((1.0, 1.1)))
+----
+true
 
 query B
 SELECT 1::decimal = ANY (1.0, 1.1)
@@ -401,8 +419,10 @@ SELECT 1::decimal = ANY (((1.0, 1.1)))
 ----
 true
 
-query error could not parse \"hello\" as type int
+query error pq: could not parse "hello" as type int
 SELECT 1 = ANY (1, 'hello', 3)
 
-query error unsupported comparison operator: <int> = ANY <tuple{}>
+query B
 SELECT 1 = ANY ROW()
+----
+false

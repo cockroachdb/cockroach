@@ -1,0 +1,59 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
+  
+.controls-content
+  display flex
+  align-items center
+  margin-left 12px
+  .btn__now.active, .btn__now button
+    width 60px
+    height 40px
+    border 1px solid $colors--neutral-4
+    background-color transparent
+    margin-left 8px
+    color $colors--neutral-7
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    font-weight 600
+    line-height 1.71
+    letter-spacing 0.1px
+    border-radius 4px
+    &:hover
+      background-color $colors--white
+  .btn__now.disabled button
+    color rgba($colors--neutral-7, 0.5)
+  .disabled
+    img
+      opacity .4
+  .ant-btn-group
+    display flex
+    ._action, ._action > button
+      margin-right 0px
+      border-color $colors--neutral-4
+      background-color transparent
+      width 40px
+      height 40px
+      font-size 21px
+      padding 0
+      display flex
+      justify-content center
+      align-items center
+      &:first-child
+        margin-left 0px
+      &:hover
+        background-color $colors--white
+      .anticon
+          color $colors--neutral-5
+      &.active
+        .anticon
+          color $colors--primary-blue-3

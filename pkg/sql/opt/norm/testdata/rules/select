@@ -1,979 +1,1257 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
-TABLE uv
- ├── u int not null
- ├── v int
- └── INDEX primary
-      └── u int not null
+
+exec-ddl
+CREATE TABLE c (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
+----
+
+exec-ddl
+CREATE TABLE e
+(
+    k INT PRIMARY KEY,
+    i INT,
+    t TIMESTAMP,
+    tz TIMESTAMPTZ,
+    d DATE
+)
+----
 
 # --------------------------------------------------
-# EnsureSelectFiltersAnd
+# SimplifyFilters
 # --------------------------------------------------
-opt
-SELECT * FROM a WHERE i=5 AND s<'foo'
+norm expect=SimplifySelectFilters
+SELECT * FROM a WHERE Null
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+norm expect=SimplifyJoinFilters
+SELECT * FROM a INNER JOIN xy ON x=1 OR NULL
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: ()-->(7,8), (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── select
+ │    ├── columns: x:7!null y:8
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7,8)
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── x:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ └── filters (true)
+
+norm expect-not=SimplifyJoinFilters
+SELECT * FROM a INNER JOIN xy ON x=1 OR k=1
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      └── (x:7 = 1) OR (k:1 = 1) [outer=(1,7)]
+
+norm expect=SimplifySelectFilters
+SELECT * FROM a WHERE i=1 AND Null
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+norm expect=SimplifySelectFilters
+SELECT * FROM a WHERE k=1 AND (i=2 AND (f=3.5 AND s='foo')) AND true
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      ├── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+      ├── f:3 = 3.5 [outer=(3), constraints=(/3: [/3.5 - /3.5]; tight), fd=()-->(3)]
+      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+norm expect=SimplifySelectFilters
+SELECT * FROM a WHERE k=1 OR NULL
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm expect-not=SimplifySelectFilters
+SELECT * FROM a WHERE k=1 OR i=2
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (k:1 = 1) OR (i:2 = 2) [outer=(1,2)]
+
+norm expect=SimplifyJoinFilters
+SELECT * FROM a INNER JOIN xy ON (k=x AND i=y) AND true AND (f=3.5 AND s='foo')
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5 x:7!null y:8!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (7)
+ ├── fd: ()-->(3,4), (1)-->(2,5), (7)-->(8), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
+ ├── select
+ │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3,4), (1)-->(2,5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         ├── f:3 = 3.5 [outer=(3), constraints=(/3: [/3.5 - /3.5]; tight), fd=()-->(3)]
+ │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── i:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+# --------------------------------------------------
+# ConsolidateSelectFilters
+# --------------------------------------------------
+
+norm expect=ConsolidateSelectFilters
+SELECT * FROM a WHERE i >= 5 AND i < 10 AND i IN (0, 2, 4, 6, 8, 10, 12)
+----
+select
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── ((i:2 >= 5) AND (i:2 < 10)) AND (i:2 IN (0, 2, 4, 6, 8, 10, 12)) [outer=(2), constraints=(/2: [/6 - /6] [/8 - /8]; tight)]
+
+norm expect-not=ConsolidateSelectFilters
+SELECT * FROM a WHERE k >= 5 AND i < 10
+----
+select
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      ├── k:1 >= 5 [outer=(1), constraints=(/1: [/5 - ]; tight)]
+      └── i:2 < 10 [outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+
+norm expect=ConsolidateSelectFilters
+SELECT * FROM c WHERE a AND a=true AND b AND b=c
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null d:4 e:5
+ ├── fd: ()-->(1-3), (2)==(3), (3)==(2)
+ ├── scan c
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
+ └── filters
+      ├── a:1 AND (a:1 = true) [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      ├── b:2 [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      └── b:2 = c:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+
+norm expect=ConsolidateSelectFilters disable=InlineConstVar
+SELECT * FROM a WHERE i IS NOT NULL AND i = 3
+AND f > 5 AND f < 15 AND s >= 'bar' AND s <= 'foo'
+----
+select
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,4), constraints=(/2: [/5 - /5]; /4: (/NULL - /'foo'); tight), fd=()-->(2)]
-      ├── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
-      └── a.s < 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo'); tight)]
+ └── filters
+      ├── (i:2 IS NOT NULL) AND (i:2 = 3) [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+      ├── (f:3 > 5.0) AND (f:3 < 15.0) [outer=(3), constraints=(/3: [/5.000000000000001 - /14.999999999999998]; tight)]
+      └── (s:4 >= 'bar') AND (s:4 <= 'foo') [outer=(4), constraints=(/4: [/'bar' - /'foo']; tight)]
 
-# --------------------------------------------------
-# EnsureSelectFilters
-# --------------------------------------------------
-opt
-SELECT * FROM a WHERE i<5
+norm expect=ConsolidateSelectFilters
+SELECT * FROM a WHERE i IS NULL AND i IS DISTINCT FROM 5
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: ()-->(2), (1)-->(3-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+ └── filters
+      └── (i:2 IS NULL) AND (i:2 IS DISTINCT FROM 5) [outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
 
-opt
-SELECT * FROM a WHERE i<5 OR s='foo'
+norm expect=ConsolidateSelectFilters disable=InlineConstVar
+SELECT * FROM a WHERE s LIKE 'a%' AND s SIMILAR TO 'a_' AND s = 'aa'
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,4)]
-      └── (a.i < 5) OR (a.s = 'foo') [type=bool, outer=(2,4)]
+ └── filters
+      ├── (s:4 LIKE 'a%') AND (s:4 = 'aa') [outer=(4), constraints=(/4: [/'aa' - /'aa']; tight), fd=()-->(4)]
+      └── s:4 SIMILAR TO 'a_' [outer=(4), constraints=(/4: [/'a' - /'b'))]
 
-# Don't use Filters for True or False condition.
-opt
-SELECT * FROM a WHERE True
+# One of the constraints is not tight, so it should not be consolidated.
+norm expect-not=ConsolidateSelectFilters
+SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w1s'::INTERVAL
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+project
+ ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
- └── fd: (1)-->(2-5)
+ └── select
+      ├── columns: k:1!null d:5!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── scan e
+      │    ├── columns: k:1!null d:5
+      │    ├── key: (1)
+      │    └── fd: (1)-->(5)
+      └── filters
+           ├── d:5 > '2018-07-01' [outer=(5), constraints=(/5: [/'2018-07-02' - ]; tight)]
+           └── d:5 < '2018-07-08 00:00:01' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
-opt
-SELECT * FROM a WHERE False
+# Ranges can be merged with other filters to create new ranges.
+norm expect=ConsolidateSelectFilters disable=InlineConstVar
+SELECT * FROM (SELECT * FROM a WHERE k = 5) AS a, e WHERE a.k = e.k AND a.k > 1 AND e.k < 10
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
- ├── key: (1)
- └── fd: (1)-->(2-5)
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 k:7!null i:8 t:9 tz:10 d:11
+ ├── cardinality: [0 - 1]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: ()
+ ├── fd: ()-->(1-5,7-11)
+ ├── select
+ │    ├── columns: a.k:1!null a.i:2 f:3 s:4 j:5
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-5)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1!null a.i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── ((a.k:1 = 5) AND (a.k:1 > 1)) AND (a.k:1 < 10) [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ ├── select
+ │    ├── columns: e.k:7!null e.i:8 t:9 tz:10 d:11
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-11)
+ │    ├── scan e
+ │    │    ├── columns: e.k:7!null e.i:8 t:9 tz:10 d:11
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8-11)
+ │    └── filters
+ │         └── (e.k:7 < 10) AND (e.k:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
+ └── filters
+      └── a.k:1 = e.k:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# The duplicate filter i >= 5 should be eliminated.
+norm expect=ConsolidateSelectFilters
+SELECT * FROM (SELECT * FROM a WHERE i >= 5 AND i < 10) AS a, xy WHERE i >= 5
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── (i:2 >= 5) AND (i:2 < 10) [outer=(2), constraints=(/2: [/5 - /9]; tight)]
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters (true)
+
+norm expect=ConsolidateSelectFilters
+SELECT * FROM (SELECT * FROM a WHERE i < 10 AND i >= 5) AS a, xy WHERE i >= 5
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── (i:2 < 10) AND (i:2 >= 5) [outer=(2), constraints=(/2: [/5 - /9]; tight)]
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters (true)
+
+norm expect=ConsolidateSelectFilters
+SELECT * FROM (SELECT * FROM a WHERE i < 10 AND i >= 5 AND i IN (0, 2, 4, 6, 8, 10, 12)) AS a, xy
+WHERE i >= 5 AND i < 10
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── ((i:2 < 10) AND (i:2 >= 5)) AND (i:2 IN (0, 2, 4, 6, 8, 10, 12)) [outer=(2), constraints=(/2: [/6 - /6] [/8 - /8]; tight)]
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters (true)
 
 # --------------------------------------------------
 # EliminateSelect
 # --------------------------------------------------
-opt
+norm expect=EliminateSelect
 SELECT * FROM a WHERE True
 ----
 scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  └── fd: (1)-->(2-5)
+
+exec-ddl
+CREATE INDEX partial_idx ON a (s) WHERE true
+----
+
+# Building the partial index predicate should trigger the rule.
+norm expect=EliminateSelect
+SELECT * FROM a
+----
+scan a
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── partial index predicates
+ │    └── partial_idx: filters (true)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+exec-ddl
+DROP INDEX partial_idx
+----
 
 # --------------------------------------------------
 # MergeSelects
 # --------------------------------------------------
-opt
-SELECT * FROM (SELECT * FROM a WHERE False) WHERE s='foo'
+norm expect=MergeSelects
+SELECT * FROM (SELECT * FROM a WHERE k=3) WHERE s='foo'
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
- ├── key: (1)
- └── fd: (1)-->(2-5)
+select
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      ├── k:1 = 3 [outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
+      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
-opt
+norm expect=MergeSelects
 SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
- ├── key: (1)
- └── fd: (1)-->(2-5)
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
 
-opt
-SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
-----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
- ├── key: (1)
- └── fd: (1)-->(2-5)
-
-opt
+norm expect=MergeSelects
 SELECT * FROM (SELECT * FROM a WHERE i<5) WHERE s='foo'
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3 s:4!null j:5
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - /4]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-      ├── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ └── filters
+      ├── i:2 < 5 [outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
-opt
+norm expect=MergeSelects
 SELECT * FROM (SELECT * FROM a WHERE i>1 AND i<10) WHERE s='foo' OR k=5
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,2,4), constraints=(/2: [/2 - /9])]
-      ├── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
-      ├── a.i < 10 [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
-      └── (a.s = 'foo') OR (a.k = 5) [type=bool, outer=(1,4)]
+ └── filters
+      ├── (i:2 > 1) AND (i:2 < 10) [outer=(2), constraints=(/2: [/2 - /9]; tight)]
+      └── (s:4 = 'foo') OR (k:1 = 5) [outer=(1,4)]
 
 # --------------------------------------------------
 # PushSelectIntoProject
 # --------------------------------------------------
-opt
+norm expect=PushSelectIntoProject
 SELECT * FROM (SELECT i, i+1 AS r, f FROM a) a WHERE f=10.0
 ----
 project
- ├── columns: i:2(int) r:6(int) f:3(float!null)
- ├── fd: ()-->(3), (2)-->(6)
+ ├── columns: i:2 r:7 f:3!null
+ ├── immutable
+ ├── fd: ()-->(3), (2)-->(7)
  ├── select
- │    ├── columns: i:2(int) f:3(float!null)
+ │    ├── columns: i:2 f:3!null
  │    ├── fd: ()-->(3)
  │    ├── scan a
- │    │    └── columns: i:2(int) f:3(float)
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
- │         └── a.f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
- └── projections [outer=(2,3)]
-      └── a.i + 1 [type=int, outer=(2)]
+ │    │    └── columns: i:2 f:3
+ │    └── filters
+ │         └── f:3 = 10.0 [outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
+ └── projections
+      └── i:2 + 1 [as=r:7, outer=(2), immutable]
 
 # Don't push down select if it depends on computed column that can't be inlined.
-opt
+norm expect-not=PushSelectIntoProject
 SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
 ----
 select
- ├── columns: i:2(int) div:6(decimal!null) f:3(float)
- ├── fd: ()-->(6)
+ ├── columns: i:2 div:7!null f:3
+ ├── immutable
+ ├── fd: ()-->(7)
  ├── project
- │    ├── columns: div:6(decimal) i:2(int) f:3(float)
- │    ├── fd: (2)-->(6)
+ │    ├── columns: div:7 i:2 f:3
+ │    ├── fd: (2)-->(7)
  │    ├── scan a
- │    │    └── columns: i:2(int) f:3(float)
- │    └── projections [outer=(2,3)]
- │         └── a.i / 2 [type=decimal, outer=(2)]
- └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
-      └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
+ │    │    └── columns: i:2 f:3
+ │    └── projections
+ │         └── i:2 / 2 [as=div:7, outer=(2)]
+ └── filters
+      └── div:7 = 2 [outer=(7), immutable, constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
 
 # Push down some conjuncts, but not others.
-opt
+norm expect=PushSelectIntoProject
 SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
 ----
 select
- ├── columns: i:2(int!null) div:6(decimal!null) f:3(float!null)
- ├── fd: ()-->(2,3,6)
+ ├── columns: i:2!null div:7!null f:3!null
+ ├── immutable
+ ├── fd: ()-->(2,3,7)
  ├── project
- │    ├── columns: div:6(decimal) i:2(int!null) f:3(float!null)
- │    ├── fd: ()-->(2,3,6)
+ │    ├── columns: div:7!null i:2!null f:3!null
+ │    ├── fd: ()-->(2,3,7)
  │    ├── select
- │    │    ├── columns: i:2(int!null) f:3(float!null)
+ │    │    ├── columns: i:2!null f:3!null
  │    │    ├── fd: ()-->(2,3)
  │    │    ├── scan a
- │    │    │    └── columns: i:2(int) f:3(float)
- │    │    └── filters [type=bool, outer=(2,3), constraints=(/2: [/1 - /1]; /3: [/10.0 - /10.0]; tight), fd=()-->(2,3)]
- │    │         ├── a.f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
- │    │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
- │    └── projections [outer=(2,3)]
- │         └── a.i / 2 [type=decimal, outer=(2)]
- └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
-      └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
+ │    │    │    └── columns: i:2 f:3
+ │    │    └── filters
+ │    │         ├── f:3 = 10.0 [outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
+ │    │         └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │    └── projections
+ │         └── i:2 / 2 [as=div:7, outer=(2)]
+ └── filters
+      └── div:7 = 2 [outer=(7), immutable, constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
 
 # Detect PushSelectIntoProject and FilterUnusedSelectCols dependency cycle.
-opt
+norm
 SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) a
 ----
 project
- ├── columns: f:3(float) r:7(float)
- ├── fd: (3)-->(7)
+ ├── columns: f:3 r:8
+ ├── immutable
+ ├── fd: (3)-->(8)
  ├── select
- │    ├── columns: i:2(int) f:3(float) column6:6(float!null)
+ │    ├── columns: i:2 f:3 sum:7!null
  │    ├── key: (2,3)
- │    ├── fd: ()-->(6)
+ │    ├── fd: ()-->(7)
  │    ├── group-by
- │    │    ├── columns: i:2(int) f:3(float) column6:6(float)
- │    │    ├── grouping columns: i:2(int) f:3(float)
+ │    │    ├── columns: i:2 f:3 sum:7
+ │    │    ├── grouping columns: i:2 f:3
  │    │    ├── key: (2,3)
- │    │    ├── fd: (2,3)-->(6)
+ │    │    ├── fd: (2,3)-->(7)
  │    │    ├── scan a
- │    │    │    └── columns: i:2(int) f:3(float)
- │    │    └── aggregations [outer=(3)]
- │    │         └── sum [type=float, outer=(3)]
- │    │              └── variable: a.f [type=float, outer=(3)]
- │    └── filters [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight), fd=()-->(6)]
- │         └── column6 = 10.0 [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
- └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
+ │    │    │    └── columns: i:2 f:3
+ │    │    └── aggregations
+ │    │         └── sum [as=sum:7, outer=(3)]
+ │    │              └── f:3
+ │    └── filters
+ │         └── sum:7 = 10.0 [outer=(7), constraints=(/7: [/10.0 - /10.0]; tight), fd=()-->(7)]
+ └── projections
+      └── f:3 + 1.1 [as=r:8, outer=(3), immutable]
 
-# --------------------------------------------------
+# --------------------------------------
 # PushSelectCondLeftIntoJoinLeftAndRight
-#   + PushSelectCondRightIntoJoinLeftAndRight
-# --------------------------------------------------
+# --------------------------------------
 
 # Only the filters bound by the left side are mapped and pushed down.
-opt
+norm expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.k > 5 AND (xy.x = 6 OR xy.x IS NULL)
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── left-join (merge)
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── constraint: /1: [/6 - ]
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,7,8), (7)-->(8)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5,7,8), (7)-->(8)
+ │    ├── select
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
- │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── constraint: /6: [/6 - ]
- │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
- │    │    └── ordering: +6
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
- │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(6)]
-      └── (xy.x = 6) OR (xy.x IS NULL) [type=bool, outer=(6)]
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2-5)
+ │    │    └── filters
+ │    │         └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+ │    ├── select
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(8)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:7!null y:8
+ │    │    │    ├── key: (7)
+ │    │    │    └── fd: (7)-->(8)
+ │    │    └── filters
+ │    │         └── x:7 > 5 [outer=(7), constraints=(/7: [/6 - ]; tight)]
+ │    └── filters
+ │         └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ └── filters
+      └── (x:7 = 6) OR (x:7 IS NULL) [outer=(7), constraints=(/7: [/NULL - /NULL] [/6 - /6]; tight)]
 
-opt
+norm expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a WHERE EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
 ----
-semi-join (merge)
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── constraint: /1: [/6 - ]
+ ├── select
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── constraint: /6: [/6 - ]
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+ ├── select
+ │    ├── columns: x:7!null
+ │    ├── key: (7)
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null
+ │    │    └── key: (7)
+ │    └── filters
+ │         └── x:7 > 5 [outer=(7), constraints=(/7: [/6 - ]; tight)]
+ └── filters
+      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
-opt
+norm expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a WHERE NOT EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
 ----
-anti-join (merge)
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+anti-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── constraint: /1: [/6 - ]
+ ├── select
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── constraint: /6: [/6 - ]
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
-# Only the filters bound by the right side are mapped and pushed down.
-opt
-SELECT * FROM a RIGHT JOIN xy ON a.k=xy.x AND a.i=xy.y
-WHERE xy.x + xy.y > 5 AND (xy.x + a.i = 6 OR xy.x IS NULL) AND (xy.y % 2 = 0) AND xy.x >= 10
-----
-select
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── left-join (lookup a)
- │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- │    ├── key columns: [6] = [1]
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
- │    ├── select
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
- │    │    ├── scan xy
- │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    ├── constraint: /6: [/10 - ]
- │    │    │    ├── key: (6)
- │    │    │    └── fd: (6)-->(7)
- │    │    └── filters [type=bool, outer=(6,7)]
- │    │         ├── (xy.x + xy.y) > 5 [type=bool, outer=(6,7)]
- │    │         └── (xy.y % 2) = 0 [type=bool, outer=(7)]
- │    └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: [/10 - ]; /2: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(6), (6)==(1), (2)==(7), (7)==(2)]
- │         ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │         ├── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- │         ├── (a.k + a.i) > 5 [type=bool, outer=(1,2)]
- │         ├── (a.i % 2) = 0 [type=bool, outer=(2)]
- │         └── a.k >= 10 [type=bool, outer=(1), constraints=(/1: [/10 - ]; tight)]
- └── filters [type=bool, outer=(2,6)]
-      └── ((xy.x + a.i) = 6) OR (xy.x IS NULL) [type=bool, outer=(2,6)]
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+ ├── select
+ │    ├── columns: x:7!null
+ │    ├── key: (7)
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null
+ │    │    └── key: (7)
+ │    └── filters
+ │         └── x:7 > 5 [outer=(7), constraints=(/7: [/6 - ]; tight)]
+ └── filters
+      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinLeft
 # --------------------------------------------------
-opt
-SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1
+norm expect=PushSelectIntoJoinLeft
+SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.f=1.1
 ----
-inner-join (lookup xy)
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key columns: [1] = [6]
- ├── key: (6)
- ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7), (1)==(6), (6)==(1)
+left-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:7 y:8
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5,7,8), (7)-->(8)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2,4,5)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
- │         └── a.f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    └── filters
+ │         └── f:3 = 1.1 [outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
-opt
+norm expect=PushSelectIntoJoinLeft
 SELECT * FROM a LEFT JOIN xy ON a.k=xy.x
 WHERE a.f=1.1 AND (a.i<xy.y OR xy.y IS NULL) AND (a.s='foo' OR a.s='bar')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- ├── key: (1,6)
- ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
- ├── left-join (lookup xy)
- │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- │    ├── key columns: [1] = [6]
- │    ├── key: (1,6)
- │    ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
+ ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:7 y:8
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5,7,8), (7)-->(8)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:7 y:8
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2,4,5,7,8), (7)-->(8)
  │    ├── select
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(3), (1)-->(2,4,5)
  │    │    ├── scan a
- │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2-5)
- │    │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/1.1 - /1.1]), fd=()-->(3)]
- │    │         ├── a.f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
- │    │         └── (a.s = 'foo') OR (a.s = 'bar') [type=bool, outer=(4)]
- │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(2,7)]
-      └── (a.i < xy.y) OR (xy.y IS NULL) [type=bool, outer=(2,7)]
+ │    │    └── filters
+ │    │         ├── f:3 = 1.1 [outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
+ │    │         └── (s:4 = 'foo') OR (s:4 = 'bar') [outer=(4), constraints=(/4: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ └── filters
+      └── (i:2 < y:8) OR (y:8 IS NULL) [outer=(2,8)]
 
 # Pushdown constant condition.
-opt
-SELECT * FROM a INNER JOIN xy ON True WHERE a.i=100 AND $1>'2000-01-01T1:00:00'
+norm expect=PushSelectIntoJoinLeft
+SELECT * FROM a LEFT JOIN xy ON True WHERE a.i=100 AND $1>'2000-01-01T1:00:00'
 ----
-inner-join
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (1,6)
- ├── fd: ()-->(2), (1)-->(3-5), (6)-->(7)
+left-join (cross)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7 y:8
+ ├── has-placeholder
+ ├── key: (1,7)
+ ├── fd: ()-->(2), (1)-->(3-5), (7)-->(8)
  ├── select
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── filters [type=bool]
- │         └── $1 > '2000-01-01T1:00:00' [type=bool]
- ├── select
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3-5)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]), fd=()-->(2)]
- │         ├── $1 > '2000-01-01T1:00:00' [type=bool]
- │         └── a.i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
- └── true [type=bool]
+ │    └── filters
+ │         ├── $1 > '2000-01-01T1:00:00'
+ │         └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
+ ├── select
+ │    ├── columns: x:7!null y:8
+ │    ├── has-placeholder
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8)
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── $1 > '2000-01-01T1:00:00'
+ └── filters (true)
 
 # Don't push down conditions in case of RIGHT JOIN.
-opt
+norm
 SELECT * FROM a RIGHT JOIN xy ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── right-join (merge)
- │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ ├── columns: k:1 i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── key: (7)
+ ├── fd: (7)-->(1-5,8), (1)-->(2-5)
+ ├── left-join (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:7!null y:8
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(1-5,8), (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
- │    │    └── ordering: +6
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
- │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(2)]
-      └── (a.i = 100) OR (a.i IS NULL) [type=bool, outer=(2)]
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ └── filters
+      └── (i:2 = 100) OR (i:2 IS NULL) [outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # Don't push down conditions in case of FULL JOIN.
-opt
+norm
 SELECT * FROM a FULL JOIN xy ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── full-join (merge)
- │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 x:7 y:8
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── full-join (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:7 y:8
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    ├── key: (1,7)
+ │    ├── fd: (1)-->(2-5), (7)-->(8)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
- │    │    └── ordering: +6
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
- │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(2)]
-      └── (a.i = 100) OR (a.i IS NULL) [type=bool, outer=(2)]
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ └── filters
+      └── (i:2 = 100) OR (i:2 IS NULL) [outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # Push into semi-join.
-opt
+norm expect=PushSelectIntoJoinLeft
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
 ----
-semi-join (merge)
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+semi-join (hash)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3-5)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3-5)
- │    ├── ordering: +1 opt(2)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(2)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
- │         └── a.i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── i:2 = 0 [outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    ├── columns: x:7!null
+ │    └── key: (7)
+ └── filters
+      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # Push into anti-join.
-opt
+norm expect=PushSelectIntoJoinLeft
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
 ----
-anti-join (merge)
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+anti-join (hash)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3-5)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3-5)
- │    ├── ordering: +1 opt(2)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(2)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
- │         └── a.i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── i:2 = 0 [outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
-# --------------------------------------------------
-# PushSelectIntoJoinRight
-# --------------------------------------------------
-opt
-SELECT * FROM xy INNER JOIN a ON xy.x=a.k WHERE a.f=1.1
-----
-inner-join (lookup xy)
- ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
- ├── key columns: [3] = [1]
- ├── key: (3)
- ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7), (1)==(3), (3)==(1)
- ├── select
- │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
- │    ├── key: (3)
- │    ├── fd: ()-->(5), (3)-->(4,6,7)
- │    ├── scan a
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- │    │    ├── key: (3)
- │    │    └── fd: (3)-->(4-7)
- │    └── filters [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
- │         └── a.f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
- └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-
-opt
-SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k
-WHERE a.f=1.1 AND (a.i<xy.y OR xy.y IS NULL) AND (a.s='foo' OR a.s='bar')
-----
-select
- ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
- ├── key: (1,3)
- ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
- ├── left-join (lookup xy)
- │    ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
- │    ├── key columns: [3] = [1]
- │    ├── key: (1,3)
- │    ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
- │    ├── select
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
- │    │    ├── key: (3)
- │    │    ├── fd: ()-->(5), (3)-->(4,6,7)
- │    │    ├── scan a
- │    │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- │    │    │    ├── key: (3)
- │    │    │    └── fd: (3)-->(4-7)
- │    │    └── filters [type=bool, outer=(5,6), constraints=(/5: [/1.1 - /1.1]), fd=()-->(5)]
- │    │         ├── a.f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
- │    │         └── (a.s = 'foo') OR (a.s = 'bar') [type=bool, outer=(6)]
- │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │         └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- └── filters [type=bool, outer=(2,4)]
-      └── (a.i < xy.y) OR (xy.y IS NULL) [type=bool, outer=(2,4)]
+ │    ├── columns: x:7!null
+ │    └── key: (7)
+ └── filters
+      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # Don't push down conditions in case of LEFT JOIN.
-opt
+norm
 SELECT * FROM xy LEFT JOIN a ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4-7)
- ├── left-join (merge)
- │    ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- │    ├── key: (1,3)
- │    ├── fd: (1)-->(2), (3)-->(4-7)
+ ├── columns: x:1!null y:2 k:4 i:5 f:6 s:7 j:8
+ ├── key: (1)
+ ├── fd: (1)-->(2,4-8), (4)-->(5-8)
+ ├── left-join (hash)
+ │    ├── columns: x:1!null y:2 k:4 i:5 f:6 s:7 j:8
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,4-8), (4)-->(5-8)
  │    ├── scan xy
- │    │    ├── columns: x:1(int!null) y:2(int)
+ │    │    ├── columns: x:1!null y:2
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2)
- │    │    └── ordering: +1
+ │    │    └── fd: (1)-->(2)
  │    ├── scan a
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- │    │    ├── key: (3)
- │    │    ├── fd: (3)-->(4-7)
- │    │    └── ordering: +3
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +3
- │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- └── filters [type=bool, outer=(4)]
-      └── (a.i = 100) OR (a.i IS NULL) [type=bool, outer=(4)]
+ │    │    ├── columns: k:4!null i:5 f:6 s:7 j:8
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5-8)
+ │    └── filters
+ │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── filters
+      └── (i:5 = 100) OR (i:5 IS NULL) [outer=(5), constraints=(/5: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # Don't push down conditions in case of FULL JOIN.
-opt
+norm
 SELECT * FROM xy FULL JOIN a ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: x:1(int) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4-7)
- ├── full-join (merge)
- │    ├── columns: x:1(int) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- │    ├── key: (1,3)
- │    ├── fd: (1)-->(2), (3)-->(4-7)
+ ├── columns: x:1 y:2 k:4 i:5 f:6 s:7 j:8
+ ├── key: (1,4)
+ ├── fd: (1)-->(2), (4)-->(5-8)
+ ├── full-join (hash)
+ │    ├── columns: x:1 y:2 k:4 i:5 f:6 s:7 j:8
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    ├── key: (1,4)
+ │    ├── fd: (1)-->(2), (4)-->(5-8)
  │    ├── scan xy
- │    │    ├── columns: x:1(int!null) y:2(int)
+ │    │    ├── columns: x:1!null y:2
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2)
- │    │    └── ordering: +1
+ │    │    └── fd: (1)-->(2)
  │    ├── scan a
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- │    │    ├── key: (3)
- │    │    ├── fd: (3)-->(4-7)
- │    │    └── ordering: +3
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +3
- │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- └── filters [type=bool, outer=(4)]
-      └── (a.i = 100) OR (a.i IS NULL) [type=bool, outer=(4)]
+ │    │    ├── columns: k:4!null i:5 f:6 s:7 j:8
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5-8)
+ │    └── filters
+ │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── filters
+      └── (i:5 = 100) OR (i:5 IS NULL) [outer=(5), constraints=(/5: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # --------------------------------------------------
 # MergeSelectInnerJoin
 # --------------------------------------------------
-opt
+norm expect=MergeSelectInnerJoin
 SELECT * FROM a, xy WHERE a.k=xy.x AND (a.s='foo' OR xy.y<100)
 ----
-inner-join (merge)
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (6)
- ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (7)
+ ├── fd: (1)-->(2-5), (7)-->(8), (1)==(7), (7)==(1)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,4,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── (a.s = 'foo') OR (xy.y < 100) [type=bool, outer=(4,7)]
-
-opt
-SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE (a.s='foo' OR xy.y<100)
-----
-inner-join (merge)
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (6)
- ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,4,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── (a.s = 'foo') OR (xy.y < 100) [type=bool, outer=(4,7)]
-
-opt
-SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE False
-----
-inner-join
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(7)
- └── false [type=bool]
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── (s:4 = 'foo') OR (y:8 < 100) [outer=(4,8)]
+
+norm expect=MergeSelectInnerJoin
+SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE (a.s='foo' OR xy.y<100)
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (7)
+ ├── fd: (1)-->(2-5), (7)-->(8), (1)==(7), (7)==(1)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── (s:4 = 'foo') OR (y:8 < 100) [outer=(4,8)]
+
+norm expect=MergeSelectInnerJoin
+SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE False
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:7!null y:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5,7,8)
 
 # Don't merge with LEFT JOIN.
-opt
+norm expect-not=MergeSelectInnerJoin
 SELECT * FROM a LEFT JOIN xy ON True WHERE a.k=xy.x OR xy.x IS NULL
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── left-join
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── left-join (cross)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+ │    ├── key: (1,7)
+ │    ├── fd: (1)-->(2-5), (7)-->(8)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(1,6)]
-      └── (a.k = xy.x) OR (xy.x IS NULL) [type=bool, outer=(1,6)]
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters (true)
+ └── filters
+      └── (k:1 = x:7) OR (x:7 IS NULL) [outer=(1,7)]
 
 # Don't merge with RIGHT JOIN.
-opt
+norm expect-not=MergeSelectInnerJoin
 SELECT * FROM a RIGHT JOIN xy ON True WHERE a.k=xy.x OR a.k IS NULL
 ----
 select
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── right-join
- │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── key: (1,7)
+ ├── fd: (7)-->(8), (1)-->(2-5)
+ ├── left-join (cross)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:7!null y:8
+ │    ├── key: (1,7)
+ │    ├── fd: (7)-->(8), (1)-->(2-5)
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(1,6)]
-      └── (a.k = xy.x) OR (a.k IS NULL) [type=bool, outer=(1,6)]
+ │    └── filters (true)
+ └── filters
+      └── (k:1 = x:7) OR (k:1 IS NULL) [outer=(1,7)]
 
 # Don't merge with FULL JOIN.
-opt
+norm expect-not=MergeSelectInnerJoin
 SELECT * FROM a FULL JOIN xy ON True WHERE a.k=xy.x OR a.k IS NULL OR xy.x IS NULL
 ----
 select
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── full-join
- │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 x:7 y:8
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── full-join (cross)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:7 y:8
+ │    ├── key: (1,7)
+ │    ├── fd: (1)-->(2-5), (7)-->(8)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(1,6)]
-      └── ((a.k = xy.x) OR (a.k IS NULL)) OR (xy.x IS NULL) [type=bool, outer=(1,6)]
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters (true)
+ └── filters
+      └── ((k:1 = x:7) OR (k:1 IS NULL)) OR (x:7 IS NULL) [outer=(1,7)]
 
 # --------------------------------------------------
-# PushSelectIntoJoinLeft + PushSelectIntoJoinRight + MergeSelectInnerJoin
+# PushSelectIntoJoinLeft + MergeSelectInnerJoin
 # --------------------------------------------------
-opt
+norm
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1 AND s='foo' AND xy.y=10 AND a.i<xy.y
 ----
-inner-join (lookup a)
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb) x:6(int!null) y:7(int!null)
- ├── key columns: [6] = [1]
- ├── key: (6)
- ├── fd: ()-->(3,4,7), (1)-->(2,5), (1)==(6), (6)==(1)
+inner-join (hash)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5 x:7!null y:8!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (7)
+ ├── fd: ()-->(3,4,8), (1)-->(2,5), (1)==(7), (7)==(1)
  ├── select
- │    ├── columns: x:6(int!null) y:7(int!null)
- │    ├── key: (6)
- │    ├── fd: ()-->(7)
+ │    ├── columns: k:1!null i:2!null f:3!null s:4!null j:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3,4), (1)-->(2,5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         ├── f:3 = 1.1 [outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
+ │         ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         └── i:2 < 10 [outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+ ├── select
+ │    ├── columns: x:7!null y:8!null
+ │    ├── key: (7)
+ │    ├── fd: ()-->(8)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
- │         └── xy.y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
- └── filters [type=bool, outer=(1-4,6,7), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: [/1.1 - /1.1]; /4: [/'foo' - /'foo']; /6: (/NULL - ]; /7: (/NULL - ]), fd=()-->(3,4), (1)==(6), (6)==(1)]
-      ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      ├── a.i < xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-      ├── a.f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── y:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
+ └── filters
+      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
-opt
+norm
 SELECT * FROM a, xy WHERE a.i=100 AND $1>'2000-01-01T1:00:00' AND xy.x=a.k
 ----
-inner-join (lookup xy)
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key columns: [1] = [6]
- ├── key: (6)
- ├── fd: ()-->(2), (1)-->(3-5), (6)-->(7), (1)==(6), (6)==(1)
+inner-join (hash)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── has-placeholder
+ ├── key: (7)
+ ├── fd: ()-->(2), (1)-->(3-5), (7)-->(8), (1)==(7), (7)==(1)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3-5)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]), fd=()-->(2)]
- │         ├── $1 > '2000-01-01T1:00:00' [type=bool]
- │         └── a.i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      ├── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      └── $1 > '2000-01-01T1:00:00' [type=bool]
+ │    └── filters
+ │         ├── $1 > '2000-01-01T1:00:00'
+ │         └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
+ ├── select
+ │    ├── columns: x:7!null y:8
+ │    ├── has-placeholder
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8)
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── $1 > '2000-01-01T1:00:00'
+ └── filters
+      └── x:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # --------------------------------------------------
 # PushSelectIntoGroupBy
 # --------------------------------------------------
 
 # Push down into GroupBy with aggregations.
-opt
+norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT i, count(*) FROM a GROUP BY i) a WHERE i=1
 ----
 group-by
- ├── columns: i:2(int!null) count:6(int)
- ├── grouping columns: i:2(int!null)
+ ├── columns: i:2!null count:7!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(2,6)
+ ├── fd: ()-->(2,7)
  ├── select
- │    ├── columns: i:2(int!null)
+ │    ├── columns: i:2!null
  │    ├── fd: ()-->(2)
  │    ├── scan a
- │    │    └── columns: i:2(int)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
- │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │    │    └── columns: i:2
+ │    └── filters
+ │         └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  └── aggregations
-      └── count-rows [type=int]
+      ├── count-rows [as=count_rows:7]
+      └── const-agg [as=i:2, outer=(2)]
+           └── i:2
 
 # Push down into GroupBy with no aggregations.
-opt
+norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT i FROM a GROUP BY i) a WHERE i=1
 ----
-group-by
- ├── columns: i:2(int!null)
- ├── grouping columns: i:2(int!null)
+limit
+ ├── columns: i:2!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2)
- └── select
-      ├── columns: i:2(int!null)
-      ├── fd: ()-->(2)
-      ├── scan a
-      │    └── columns: i:2(int)
-      └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-           └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ ├── select
+ │    ├── columns: i:2!null
+ │    ├── fd: ()-->(2)
+ │    ├── limit hint: 1.00
+ │    ├── scan a
+ │    │    ├── columns: i:2
+ │    │    └── limit hint: 100.00
+ │    └── filters
+ │         └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ └── 1
 
 # Push down only conditions that do not depend on aggregations.
-opt
+norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT k, i, max(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='foo'
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) m:6(string!null)
+ ├── columns: k:1!null i:2!null m:7!null
  ├── key: (1)
- ├── fd: ()-->(6), (1)==(2), (2)==(1), (2)-->(1)
+ ├── fd: ()-->(7), (1)==(2), (2)==(1), (1)-->(2)
  ├── group-by
- │    ├── columns: k:1(int!null) i:2(int!null) m:6(string)
- │    ├── grouping columns: k:1(int!null) i:2(int!null)
+ │    ├── columns: k:1!null i:2!null max:7
+ │    ├── grouping columns: k:1!null
  │    ├── key: (1)
- │    ├── fd: (1)==(2), (2)==(1), (1)-->(6), (2)-->(1,6)
+ │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,7)
  │    ├── select
- │    │    ├── columns: k:1(int!null) i:2(int!null) s:4(string)
+ │    │    ├── columns: k:1!null i:2!null s:4
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(4), (1)==(2), (2)==(1)
  │    │    ├── scan a
- │    │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+ │    │    │    ├── columns: k:1!null i:2 s:4
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2,4)
- │    │    └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
- │    │         └── a.i = a.k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
- │    └── aggregations [outer=(4)]
- │         └── max [type=string, outer=(4)]
- │              └── variable: a.s [type=string, outer=(4)]
- └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
-      └── m = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
+ │    │    └── filters
+ │    │         └── i:2 = k:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │    └── aggregations
+ │         ├── max [as=max:7, outer=(4)]
+ │         │    └── s:4
+ │         └── const-agg [as=i:2, outer=(2)]
+ │              └── i:2
+ └── filters
+      └── max:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# DistinctOn case.
+norm expect=PushSelectIntoGroupBy
+SELECT * FROM (SELECT DISTINCT ON (i, f) i, s, f FROM a) WHERE i>f
+----
+distinct-on
+ ├── columns: i:2!null s:4 f:3!null
+ ├── grouping columns: i:2!null f:3!null
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(4)
+ ├── select
+ │    ├── columns: i:2!null f:3!null s:4
+ │    ├── scan a
+ │    │    └── columns: i:2 f:3 s:4
+ │    └── filters
+ │         └── i:2 > f:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+ └── aggregations
+      └── first-agg [as=s:4, outer=(4)]
+           └── s:4
+
+# DistinctOn case with a ConstAgg.
+norm expect=PushSelectIntoGroupBy
+SELECT * FROM (SELECT DISTINCT ON (k, f, s) k, i, f, x FROM a JOIN xy ON i=y) WHERE k > f
+----
+distinct-on
+ ├── columns: k:1!null i:2!null f:3!null x:7!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2,3,7), (7)-->(2)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2!null f:3!null x:7!null y:8!null
+ │    ├── key: (1,7)
+ │    ├── fd: (1)-->(2,3), (7)-->(8), (2)==(8), (8)==(2)
+ │    ├── select
+ │    │    ├── columns: k:1!null i:2 f:3!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2 f:3
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2,3)
+ │    │    └── filters
+ │    │         └── k:1 > f:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── i:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ └── aggregations
+      ├── first-agg [as=i:2, outer=(2)]
+      │    └── i:2
+      ├── first-agg [as=x:7, outer=(7)]
+      │    └── x:7
+      └── const-agg [as=f:3, outer=(3)]
+           └── f:3
 
 # Do *not* push down into scalar GroupBy.
-opt
+norm expect-not=PushSelectIntoGroupBy
 SELECT * FROM (SELECT count(*) c FROM a) a WHERE $1<'2000-01-01T10:00:00' AND c=0
 ----
 select
- ├── columns: c:6(int!null)
+ ├── columns: c:7!null
  ├── cardinality: [0 - 1]
+ ├── has-placeholder
  ├── key: ()
- ├── fd: ()-->(6)
- ├── group-by
- │    ├── columns: c:6(int)
+ ├── fd: ()-->(7)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:7!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(6)
+ │    ├── fd: ()-->(7)
  │    ├── scan a
  │    └── aggregations
- │         └── count-rows [type=int]
- └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0]), fd=()-->(6)]
-      ├── $1 < '2000-01-01T10:00:00' [type=bool]
-      └── c = 0 [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]
+ │         └── count-rows [as=count_rows:7]
+ └── filters
+      ├── $1 < '2000-01-01T10:00:00'
+      └── count_rows:7 = 0 [outer=(7), constraints=(/7: [/0 - /0]; tight), fd=()-->(7)]
 
 # --------------------------------------------------
 # RemoveNotNullCondition
@@ -981,97 +1259,681 @@ select
 exec-ddl
 CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
 ----
-TABLE b
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string not null
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
-opt
+norm expect=RemoveNotNullCondition
 SELECT k FROM b WHERE k IS NOT NULL AND k > 4
 ----
-scan b
- ├── columns: k:1(int!null)
- ├── constraint: /1: [/5 - ]
- └── key: (1)
+select
+ ├── columns: k:1!null
+ ├── key: (1)
+ ├── scan b
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 > 4 [outer=(1), constraints=(/1: [/5 - ]; tight)]
 
-opt
+norm
 SELECT k FROM b WHERE k IS NULL
 ----
-scan b
- ├── columns: k:1(int!null)
- ├── constraint: /1: contradiction
+select
+ ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- └── fd: ()-->(1)
+ ├── fd: ()-->(1)
+ ├── scan b
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IS NULL [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
 
-opt
+norm expect=RemoveNotNullCondition
 SELECT k,i FROM b WHERE k IS NOT NULL AND k > 4 AND i < 100 AND i IS NOT NULL
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null)
+ ├── columns: k:1!null i:2!null
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan b
- │    ├── columns: k:1(int!null) i:2(int)
- │    ├── constraint: /1: [/5 - ]
+ │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
-      ├── b.i < 100 [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
-      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ └── filters
+      ├── (i:2 < 100) AND (i:2 IS NOT NULL) [outer=(2), constraints=(/2: (/NULL - /99]; tight)]
+      └── k:1 > 4 [outer=(1), constraints=(/1: [/5 - ]; tight)]
 
-opt
+norm expect=RemoveNotNullCondition
 SELECT k,s FROM b WHERE k IS NOT NULL AND s IS NOT NULL
 ----
 scan b
- ├── columns: k:1(int!null) s:4(string!null)
+ ├── columns: k:1!null s:4!null
  ├── key: (1)
  └── fd: (1)-->(4)
 
 # RemoveNotNullCondition partially applied
-opt
+norm expect=RemoveNotNullCondition
 SELECT k,s,i FROM b WHERE k IS NOT NULL AND s IS NOT NULL AND i IS NOT NULL
 ----
 select
- ├── columns: k:1(int!null) s:4(string!null) i:2(int!null)
+ ├── columns: k:1!null s:4!null i:2!null
  ├── key: (1)
  ├── fd: (1)-->(2,4)
  ├── scan b
- │    ├── columns: k:1(int!null) i:2(int) s:4(string!null)
+ │    ├── columns: k:1!null i:2 s:4!null
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
- └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
-      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ └── filters
+      └── i:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
 
 # RemoveNotNullCondition rule is not applied
-opt
+norm expect-not=RemoveNotNullCondition
 SELECT i FROM b WHERE i IS NOT NULL
 ----
 select
- ├── columns: i:2(int!null)
+ ├── columns: i:2!null
  ├── scan b
- │    └── columns: i:2(int)
- └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
-      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │    └── columns: i:2
+ └── filters
+      └── i:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
 
 # RemoveNotNullCondition rule is not applied
-opt
+norm expect-not=RemoveNotNullCondition
 SELECT k FROM b WHERE i+k IS NOT NULL
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
+ ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1(int!null) i:2(int)
+      ├── columns: k:1!null i:2
+      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan b
-      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── columns: k:1!null i:2
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      └── filters [type=bool, outer=(1,2)]
-           └── (b.i + b.k) IS NOT NULL [type=bool, outer=(1,2)]
+      └── filters
+           └── (i:2 + k:1) IS NOT NULL [outer=(1,2), immutable]
+
+exec-ddl
+CREATE INDEX partial_idx ON b (f) WHERE s IS NOT NULL
+----
+
+# Building the partial index predicate should trigger the rule.
+norm expect=RemoveNotNullCondition
+SELECT * FROM b
+----
+scan b
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── partial index predicates
+ │    └── partial_idx: filters (true)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+exec-ddl
+DROP INDEX partial_idx
+----
+
+# --------------------------------------------------
+# PushSelectIntoProjectSet
+# --------------------------------------------------
+norm expect=PushSelectIntoProjectSet
+SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE k = 1
+----
+project-set
+ ├── columns: k:1!null g:7
+ ├── immutable
+ ├── fd: ()-->(1)
+ ├── select
+ │    ├── columns: k:1!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ └── zip
+      └── generate_series(0, k:1, 10) [outer=(1), immutable]
+
+# Make sure that filters aren't pushed down when not bound by the input, so PushSelectIntoProjectSet is not triggered.
+norm expect-not=PushSelectIntoProjectSet
+SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE g > 1
+----
+select
+ ├── columns: k:1!null g:7!null
+ ├── immutable
+ ├── project-set
+ │    ├── columns: k:1!null generate_series:7
+ │    ├── immutable
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    └── zip
+ │         └── generate_series(0, k:1, 10) [outer=(1), immutable]
+ └── filters
+      └── generate_series:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+
+# Expect that only the applicable filters are pushed down into the project-set.
+norm expect=PushSelectIntoProjectSet
+SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE g > 1 AND k = 1
+----
+select
+ ├── columns: k:1!null g:7!null
+ ├── immutable
+ ├── fd: ()-->(1)
+ ├── project-set
+ │    ├── columns: k:1!null generate_series:7
+ │    ├── immutable
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── columns: k:1!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null
+ │    │    │    └── key: (1)
+ │    │    └── filters
+ │    │         └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    └── zip
+ │         └── generate_series(0, k:1, 10) [outer=(1), immutable]
+ └── filters
+      └── generate_series:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+
+
+# --------------------------------------------------
+# PushFilterIntoSetOp
+# --------------------------------------------------
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+  ((SELECT k FROM b)
+  UNION ALL
+  (SELECT k FROM b))
+WHERE k < 10
+----
+union-all
+ ├── columns: k:13!null
+ ├── left columns: b.k:1
+ ├── right columns: b.k:7
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── b.k:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+ └── select
+      ├── columns: b.k:7!null
+      ├── key: (7)
+      ├── scan b
+      │    ├── columns: b.k:7!null
+      │    └── key: (7)
+      └── filters
+           └── b.k:7 < 10 [outer=(7), constraints=(/7: (/NULL - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  UNION
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+union
+ ├── columns: k:13!null
+ ├── left columns: b.k:1
+ ├── right columns: a.i:8
+ ├── key: (13)
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:8!null
+      ├── scan a
+      │    └── columns: a.i:8
+      └── filters
+           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  EXCEPT
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+except
+ ├── columns: k:1!null
+ ├── left columns: b.k:1!null
+ ├── right columns: a.i:8
+ ├── cardinality: [0 - 8]
+ ├── key: (1)
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:8!null
+      ├── scan a
+      │    └── columns: a.i:8
+      └── filters
+           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  EXCEPT ALL
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+except-all
+ ├── columns: k:1!null
+ ├── left columns: b.k:1!null
+ ├── right columns: a.i:8
+ ├── cardinality: [0 - 8]
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:8!null
+      ├── scan a
+      │    └── columns: a.i:8
+      └── filters
+           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  INTERSECT
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+intersect
+ ├── columns: k:1!null
+ ├── left columns: b.k:1!null
+ ├── right columns: a.i:8
+ ├── cardinality: [0 - 8]
+ ├── key: (1)
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:8!null
+      ├── scan a
+      │    └── columns: a.i:8
+      └── filters
+           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  INTERSECT ALL
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1
+----
+intersect-all
+ ├── columns: k:1!null
+ ├── left columns: b.k:1!null
+ ├── right columns: a.i:8
+ ├── cardinality: [0 - 8]
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ └── select
+      ├── columns: a.i:8!null
+      ├── scan a
+      │    └── columns: a.i:8
+      └── filters
+           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+
+norm expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  UNION
+  (SELECT i FROM a))
+WHERE k < 10 AND k > 1 AND random() < 0.5
+----
+union
+ ├── columns: k:13!null
+ ├── left columns: b.k:1
+ ├── right columns: a.i:8
+ ├── volatile
+ ├── key: (13)
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         ├── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
+ │         └── random() < 0.5 [volatile]
+ └── select
+      ├── columns: a.i:8!null
+      ├── volatile
+      ├── scan a
+      │    └── columns: a.i:8
+      └── filters
+           ├── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+           └── random() < 0.5 [volatile]
+
+norm expect=PushFilterIntoSetOp
+SELECT * FROM
+  (SELECT k FROM b
+    UNION ALL
+  SELECT k FROM b) t1
+  WHERE EXISTS(
+  SELECT * FROM a WHERE k=1)
+----
+union-all
+ ├── columns: k:13!null
+ ├── left columns: b.k:1
+ ├── right columns: b.k:7
+ ├── select
+ │    ├── columns: b.k:1!null
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── exists [subquery]
+ │              └── select
+ │                   ├── columns: a.k:14!null a.i:15 a.f:16 a.s:17 a.j:18
+ │                   ├── cardinality: [0 - 1]
+ │                   ├── key: ()
+ │                   ├── fd: ()-->(14-18)
+ │                   ├── scan a
+ │                   │    ├── columns: a.k:14!null a.i:15 a.f:16 a.s:17 a.j:18
+ │                   │    ├── key: (14)
+ │                   │    └── fd: (14)-->(15-18)
+ │                   └── filters
+ │                        └── a.k:14 = 1 [outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
+ └── select
+      ├── columns: b.k:7!null
+      ├── key: (7)
+      ├── scan b
+      │    ├── columns: b.k:7!null
+      │    └── key: (7)
+      └── filters
+           └── exists [subquery]
+                └── select
+                     ├── columns: a.k:14!null a.i:15 a.f:16 a.s:17 a.j:18
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(14-18)
+                     ├── scan a
+                     │    ├── columns: a.k:14!null a.i:15 a.f:16 a.s:17 a.j:18
+                     │    ├── key: (14)
+                     │    └── fd: (14)-->(15-18)
+                     └── filters
+                          └── a.k:14 = 1 [outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
+
+norm expect=PushFilterIntoSetOp
+SELECT * FROM
+(SELECT k FROM (SELECT k FROM b UNION ALL SELECT k FROM b)
+  UNION ALL
+  SELECT k FROM (SELECT k FROM b UNION ALL SELECT k FROM b)) t1
+WHERE EXISTS(
+  SELECT * FROM a WHERE k=1) AND random() < 0.5
+----
+union-all
+ ├── columns: k:27!null
+ ├── left columns: k:13
+ ├── right columns: k:26
+ ├── volatile
+ ├── union-all
+ │    ├── columns: k:13!null
+ │    ├── left columns: b.k:1
+ │    ├── right columns: b.k:7
+ │    ├── volatile
+ │    ├── select
+ │    │    ├── columns: b.k:1!null
+ │    │    ├── volatile
+ │    │    ├── key: (1)
+ │    │    ├── scan b
+ │    │    │    ├── columns: b.k:1!null
+ │    │    │    └── key: (1)
+ │    │    └── filters
+ │    │         ├── exists [subquery]
+ │    │         │    └── select
+ │    │         │         ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+ │    │         │         ├── cardinality: [0 - 1]
+ │    │         │         ├── key: ()
+ │    │         │         ├── fd: ()-->(28-32)
+ │    │         │         ├── scan a
+ │    │         │         │    ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+ │    │         │         │    ├── key: (28)
+ │    │         │         │    └── fd: (28)-->(29-32)
+ │    │         │         └── filters
+ │    │         │              └── a.k:28 = 1 [outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+ │    │         └── random() < 0.5 [volatile]
+ │    └── select
+ │         ├── columns: b.k:7!null
+ │         ├── volatile
+ │         ├── key: (7)
+ │         ├── scan b
+ │         │    ├── columns: b.k:7!null
+ │         │    └── key: (7)
+ │         └── filters
+ │              ├── exists [subquery]
+ │              │    └── select
+ │              │         ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+ │              │         ├── cardinality: [0 - 1]
+ │              │         ├── key: ()
+ │              │         ├── fd: ()-->(28-32)
+ │              │         ├── scan a
+ │              │         │    ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+ │              │         │    ├── key: (28)
+ │              │         │    └── fd: (28)-->(29-32)
+ │              │         └── filters
+ │              │              └── a.k:28 = 1 [outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+ │              └── random() < 0.5 [volatile]
+ └── union-all
+      ├── columns: k:26!null
+      ├── left columns: b.k:14
+      ├── right columns: b.k:20
+      ├── volatile
+      ├── select
+      │    ├── columns: b.k:14!null
+      │    ├── volatile
+      │    ├── key: (14)
+      │    ├── scan b
+      │    │    ├── columns: b.k:14!null
+      │    │    └── key: (14)
+      │    └── filters
+      │         ├── exists [subquery]
+      │         │    └── select
+      │         │         ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+      │         │         ├── cardinality: [0 - 1]
+      │         │         ├── key: ()
+      │         │         ├── fd: ()-->(28-32)
+      │         │         ├── scan a
+      │         │         │    ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+      │         │         │    ├── key: (28)
+      │         │         │    └── fd: (28)-->(29-32)
+      │         │         └── filters
+      │         │              └── a.k:28 = 1 [outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+      │         └── random() < 0.5 [volatile]
+      └── select
+           ├── columns: b.k:20!null
+           ├── volatile
+           ├── key: (20)
+           ├── scan b
+           │    ├── columns: b.k:20!null
+           │    └── key: (20)
+           └── filters
+                ├── exists [subquery]
+                │    └── select
+                │         ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+                │         ├── cardinality: [0 - 1]
+                │         ├── key: ()
+                │         ├── fd: ()-->(28-32)
+                │         ├── scan a
+                │         │    ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+                │         │    ├── key: (28)
+                │         │    └── fd: (28)-->(29-32)
+                │         └── filters
+                │              └── a.k:28 = 1 [outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+                └── random() < 0.5 [volatile]
+
+# No-op case because the filter references outer columns.
+norm expect-not=PushFilterIntoSetOp
+SELECT
+  (
+    SELECT k
+    FROM ((SELECT k FROM b) UNION ALL (SELECT k FROM b))
+    WHERE k < i
+  )
+FROM a
+----
+project
+ ├── columns: k:20
+ ├── ensure-distinct-on
+ │    ├── columns: a.k:1!null k:19
+ │    ├── grouping columns: a.k:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(19)
+ │    ├── left-join (cross)
+ │    │    ├── columns: a.k:1!null a.i:2 k:19
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1!null a.i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── union-all
+ │    │    │    ├── columns: k:19!null
+ │    │    │    ├── left columns: b.k:7
+ │    │    │    ├── right columns: b.k:13
+ │    │    │    ├── scan b
+ │    │    │    │    ├── columns: b.k:7!null
+ │    │    │    │    └── key: (7)
+ │    │    │    └── scan b
+ │    │    │         ├── columns: b.k:13!null
+ │    │    │         └── key: (13)
+ │    │    └── filters
+ │    │         └── k:19 < a.i:2 [outer=(2,19), constraints=(/2: (/NULL - ]; /19: (/NULL - ])]
+ │    └── aggregations
+ │         └── const-agg [as=k:19, outer=(19)]
+ │              └── k:19
+ └── projections
+      └── k:19 [as=k:20, outer=(19)]
+
+norm
+SELECT * FROM ((values (1,2))
+  EXCEPT (values (0,1)))
+WHERE 1 / column1 > 0
+----
+except
+ ├── columns: column1:1!null column2:2!null
+ ├── left columns: column1:1!null column2:2!null
+ ├── right columns: column1:3 column2:4
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: (1,2)
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── (1, 2)
+ └── select
+      ├── columns: column1:3!null column2:4!null
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(3,4)
+      ├── values
+      │    ├── columns: column1:3!null column2:4!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(3,4)
+      │    └── (0, 1)
+      └── filters
+           └── (1 / 0) > 0 [immutable]
+
+# The filter is composite-sensitive.
+norm expect-not=PushFilterIntoSetOp
+SELECT * FROM ((VALUES (1.0::DECIMAL)) EXCEPT (VALUES (1.00::DECIMAL))) WHERE column1::STRING != '1.00';
+----
+select
+ ├── columns: column1:1!null
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: (1)
+ ├── except
+ │    ├── columns: column1:1!null
+ │    ├── left columns: column1:1!null
+ │    ├── right columns: column1:2
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: (1)
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1.0,)
+ │    └── values
+ │         ├── columns: column1:2!null
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(2)
+ │         └── (1.00,)
+ └── filters
+      └── column1:1::STRING != '1.00' [outer=(1), immutable]
+
+# The filter is not composite-sensitive (even if it involves decimals) and can be pushed down.
+norm expect=PushFilterIntoSetOp
+SELECT * FROM ((VALUES (1.0::DECIMAL)) EXCEPT (VALUES (1.00::DECIMAL))) WHERE column1 > 0;
+----
+except
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
+ ├── cardinality: [0 - 1]
+ ├── key: (1)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1.0,)
+ └── values
+      ├── columns: column1:2!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      └── (1.00,)

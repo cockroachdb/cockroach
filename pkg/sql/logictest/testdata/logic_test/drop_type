@@ -1,0 +1,340 @@
+statement ok
+SET sql_safe_updates = false;
+SET enable_experimental_alter_column_type_general = true;
+
+# Basic test -- create and drop a type.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+DROP TYPE t
+
+statement error type \"t\" does not exist
+SELECT 'hello'::t
+
+# The array type should be deleted as well.
+statement error type \"_t\" does not exist
+SELECT ARRAY['hello']::_t
+
+# Try dropping a type within a transaction.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+BEGIN;
+DROP TYPE t;
+
+statement error pq: type \"t\" does not exist
+DROP TYPE t
+
+statement ok
+ROLLBACK
+
+# We should be able to drop a type multiple times in the same statement.
+statement ok
+DROP TYPE t, t
+
+# Try IF EXISTS.
+statement ok
+DROP TYPE IF EXISTS t
+
+# Try explicitly dropping an array type, which should fail.
+statement ok
+CREATE TYPE t AS ENUM ('hello')
+
+statement error pq: \"_t\" is an implicit array type and cannot be modified
+DROP TYPE _t
+
+# The dropped type name should be draining in the dropping transaction.
+statement ok
+BEGIN;
+DROP TYPE t
+
+statement error pq: type \"t\" already exists
+CREATE TYPE t AS ENUM ()
+
+statement ok
+ROLLBACK
+
+# Now check all of the fun cases around object dependencies.
+# Test a simple column dependency.
+statement ok
+CREATE TABLE t1 (x t)
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+# Now add a column with the using the type.
+statement ok
+ALTER TABLE t1 ADD COLUMN y t
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+# If we drop the original column x, t1 should still depend on t.
+statement ok
+ALTER TABLE t1 DROP COLUMN x
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+# Now remove the other column.
+statement ok
+ALTER TABLE t1 DROP COLUMN y
+
+statement ok
+DROP TYPE t
+
+# Ensure that references to the array type are tracked.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+ALTER TABLE t1 ADD COLUMN x t[]
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+statement ok
+ALTER TABLE t1 DROP COLUMN x;
+DROP TYPE t
+
+# Altering a column's type to a UDT should pick up the reference.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+ALTER TABLE t1 ADD COLUMN x STRING;
+ALTER TABLE t1 ALTER COLUMN x SET DATA TYPE t
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+statement ok
+DROP TABLE t1
+
+# Dropping a table should remove the dependency on the type.
+statement ok
+DROP TYPE t
+
+# Ensure that views track their type dependencies.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+CREATE VIEW v AS SELECT 'hello':::t
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.v\]\) still depend on it
+DROP TYPE t
+
+statement ok
+DROP VIEW v
+
+statement ok
+DROP TYPE t
+
+# Ensure that we catch references to types living in expressions -- checks,
+# default, computed and partial index predicates.
+statement ok
+CREATE TYPE t1 AS ENUM ('hello');
+CREATE TYPE t2 AS ENUM ('howdy');
+CREATE TYPE t3 AS ENUM ('hi');
+CREATE TYPE t4 AS ENUM ('cheers')
+
+# First, add all of those expressions in the CREATE statement.
+statement ok
+CREATE TABLE expr (
+  x BOOL DEFAULT ('hello'::t1 = 'hello'::t1),
+  y STRING AS ('howdy'::t2::STRING) STORED,
+  CHECK ('hi'::t3::string = 'hi'),
+  INDEX i(y) WHERE ('cheers'::t4 = 'cheers'::t4)
+)
+
+statement error pq: cannot drop type "t1" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t1
+
+statement error pq: cannot drop type "t2" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t2
+
+statement error pq: cannot drop type "t3" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t3
+
+statement error pq: cannot drop type "t4" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t4
+
+# Now remove the schema elements and drop the types.
+statement ok
+DROP INDEX expr@i;
+DROP TYPE t4
+
+statement ok
+ALTER TABLE expr DROP CONSTRAINT "check";
+DROP TYPE t3
+
+statement ok
+ALTER TABLE expr DROP COLUMN y;
+DROP TYPE t2
+
+statement ok
+ALTER TABLE expr DROP COLUMN x;
+DROP TYPE t1
+
+statement ok
+DROP TABLE expr
+
+# Now add all of these schema elements via ALTER commands.
+statement ok
+CREATE TABLE expr ();
+CREATE TYPE t1 AS ENUM ('hello');
+CREATE TYPE t2 AS ENUM ('howdy');
+CREATE TYPE t3 AS ENUM ('hi');
+CREATE TYPE t4 AS ENUM ('cheers')
+
+# First try adding all of the schema elements in transactions and ensure that
+# the dependencies are picked up.
+
+statement ok
+BEGIN;
+ALTER TABLE expr ADD COLUMN x BOOL DEFAULT ('hello'::t1 = 'hello'::t1)
+
+statement error pq: cannot drop type "t1" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t1
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+ALTER TABLE expr ADD COLUMN y STRING AS ('howdy'::t2::STRING) STORED
+
+statement error pq: cannot drop type "t2" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t2
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+ALTER TABLE expr ADD CONSTRAINT "check" CHECK ('hi'::t3::string = 'hi')
+
+statement error pq: cannot drop type "t3" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t3
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+CREATE INDEX i ON expr (rowid) WHERE ('cheers'::t4 = 'cheers'::t4)
+
+statement error pq: cannot drop type "t4" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t4
+
+statement ok
+ROLLBACK
+
+# Now add all of the schema elements.
+statement ok
+ALTER TABLE expr ADD COLUMN x BOOL DEFAULT ('hello'::t1 = 'hello'::t1);
+ALTER TABLE expr ADD COLUMN y STRING AS ('howdy'::t2::STRING) STORED;
+ALTER TABLE expr ADD CONSTRAINT "check" CHECK ('hi'::t3::string = 'hi');
+CREATE INDEX i ON expr (y) WHERE ('cheers'::t4 = 'cheers'::t4)
+
+statement error pq: cannot drop type "t1" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t1
+
+statement error pq: cannot drop type "t2" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t2
+
+statement error pq: cannot drop type "t3" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t3
+
+statement error pq: cannot drop type "t4" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t4
+
+# Now remove the schema elements and drop the types.
+statement ok
+DROP INDEX expr@i;
+DROP TYPE t4
+
+statement ok
+ALTER TABLE expr DROP CONSTRAINT "check";
+DROP TYPE t3
+
+statement ok
+ALTER TABLE expr DROP COLUMN y;
+DROP TYPE t2
+
+statement ok
+ALTER TABLE expr DROP COLUMN x;
+DROP TYPE t1
+
+# Check that truncated tables maintain their backreference.
+statement ok
+CREATE TYPE ty AS ENUM ('hello');
+CREATE TABLE tab (x ty);
+INSERT INTO tab VALUES ('hello');
+TRUNCATE TABLE tab
+
+statement error pq: cannot drop type "ty" because other objects \(\[test.public.tab\]\) still depend on it
+DROP TYPE ty
+
+# Ensure that we can drop a table then a type in the same txn.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+CREATE TABLE tt (x t)
+
+statement ok
+BEGIN;
+DROP TABLE tt;
+DROP TYPE t;
+COMMIT
+
+# Tests for dropping a database that contains types.
+statement ok
+CREATE DATABASE d;
+CREATE TYPE d.d_t AS ENUM ()
+
+statement error pq: database \"d\" is not empty and RESTRICT was specified
+DROP DATABASE d RESTRICT
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'd_t'
+
+# Default is CASCADE.
+statement ok
+DROP DATABASE d
+
+# Ensure that the namespace entries are deleted.
+query I
+SELECT id FROM system.namespace WHERE name = 'd_t' or name = '_d_t'
+
+# Ensure that the system.descriptor entries are deleted too.
+query IT
+SELECT * FROM system.descriptor WHERE id = $t_id OR id = $t_id + 1
+
+# Test when some objects in the database use the types.
+statement ok
+CREATE DATABASE d;
+CREATE TYPE d.d_t AS ENUM ('hello');
+CREATE TABLE d.t1 (x d.d_t);
+CREATE TABLE d.t2 (y d.d_t[])
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'd_t'
+
+statement ok
+DROP DATABASE d
+
+# Ensure that the namespace entries are deleted.
+query I
+SELECT id FROM system.namespace WHERE name = 'd_t' or name = '_d_t'
+
+# Ensure that the system.descriptor entries are deleted too.
+query IT
+SELECT * FROM system.descriptor WHERE id = $t_id OR id = $t_id + 1
+
+# Create a database with a large number of types.
+statement ok
+CREATE DATABASE d;
+CREATE TYPE d.d_t_1 AS ENUM ('hello');
+CREATE TYPE d.d_t_2 AS ENUM ('hello');
+CREATE TYPE d.d_t_3 AS ENUM ('hello');
+CREATE TYPE d.d_t_4 AS ENUM ('hello');
+CREATE TYPE d.d_t_5 AS ENUM ('hello')
+
+statement ok
+DROP DATABASE d
+
+query I
+SELECT id FROM system.namespace WHERE name LIKE 'd_t%'

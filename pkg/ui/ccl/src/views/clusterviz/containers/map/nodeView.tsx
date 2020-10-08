@@ -1,14 +1,14 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Cockroach Community Licence (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
 import moment from "moment";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 import { INodeStatus } from "src/util/proto";
 import { nodeCapacityStats, livenessNomenclature } from "src/redux/nodes";
@@ -23,8 +23,8 @@ import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/spark
 import { LongToMoment } from "src/util/convert";
 import { cockroach } from "src/js/protos";
 
-import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
-type ILiveness = cockroach.storage.ILiveness;
+import NodeLivenessStatus = cockroach.kv.kvserver.storagepb.NodeLivenessStatus;
+type ILiveness = cockroach.kv.kvserver.storagepb.ILiveness;
 
 interface NodeViewProps {
   node: INodeStatus;
@@ -39,9 +39,9 @@ const TRANSLATE_Y = -100 * SCALE_FACTOR;
 export class NodeView extends React.Component<NodeViewProps> {
   getLivenessIcon(livenessStatus: NodeLivenessStatus) {
     switch (livenessStatus) {
-      case NodeLivenessStatus.LIVE:
+      case NodeLivenessStatus.NODE_STATUS_LIVE:
         return liveIcon;
-      case NodeLivenessStatus.DEAD:
+      case NodeLivenessStatus.NODE_STATUS_DEAD:
         return deadIcon;
       default:
         return suspectIcon;
@@ -52,7 +52,7 @@ export class NodeView extends React.Component<NodeViewProps> {
     const { node, livenessStatus, liveness } = this.props;
 
     switch (livenessStatus) {
-      case NodeLivenessStatus.DEAD: {
+      case NodeLivenessStatus.NODE_STATUS_DEAD: {
         if (!liveness) {
           return "dead";
         }
@@ -61,7 +61,7 @@ export class NodeView extends React.Component<NodeViewProps> {
         const deadMoment = LongToMoment(deadTime);
         return `dead for ${moment.duration(deadMoment.diff(moment())).humanize()}`;
       }
-      case NodeLivenessStatus.LIVE: {
+      case NodeLivenessStatus.NODE_STATUS_LIVE: {
         const startTime = LongToMoment(node.started_at);
         return `up for ${moment.duration(startTime.diff(moment())).humanize()}`;
       }
@@ -94,6 +94,7 @@ export class NodeView extends React.Component<NodeViewProps> {
           <CapacityArc
             usableCapacity={usable}
             usedCapacity={used}
+            nodeLabel={`Node ${node.desc.node_id}`}
           />
           <Sparklines nodes={[`${node.desc.node_id}`]} />
         </g>

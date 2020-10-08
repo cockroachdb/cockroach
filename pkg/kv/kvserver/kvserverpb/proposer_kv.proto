@@ -1,0 +1,287 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.storagepb;
+option go_package = "kvserverpb";
+
+import "roachpb/api.proto";
+import "roachpb/data.proto";
+import "roachpb/metadata.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/mvcc3.proto";
+import "kv/kvserver/kvserverpb/state.proto";
+import "util/hlc/timestamp.proto";
+
+import "gogoproto/gogo.proto";
+
+// Split is emitted when a Replica commits a split trigger. It signals that the
+// Replica has prepared the on-disk state for both the left and right hand
+// sides of the split, and that the left hand side Replica should be updated as
+// well as the right hand side created.
+message Split {
+  option (gogoproto.equal) = true;
+
+  roachpb.SplitTrigger trigger = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // RHSDelta holds the statistics for what was written to what is now the
+  // right-hand side of the split during the batch which executed it.
+  // The on-disk state of the right-hand side is already correct, but the
+  // Store must learn about this delta to update its counters appropriately.
+  storage.enginepb.MVCCStats rhs_delta = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "RHSDelta"];
+}
+
+// Merge is emitted by a Replica which commits a transaction with
+// a MergeTrigger (i.e. absorbs its right neighbor).
+message Merge {
+  option (gogoproto.equal) = true;
+
+  roachpb.MergeTrigger trigger = 1 [(gogoproto.nullable) = false,
+    (gogoproto.embed) = true];
+}
+
+// ChangeReplicas is emitted by a Replica which commits a transaction with
+// a ChangeReplicasTrigger.
+message ChangeReplicas {
+  option (gogoproto.equal) = true;
+
+  option (gogoproto.goproto_stringer) = false;
+
+  roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
+    (gogoproto.embed) = true];
+}
+
+// ComputeChecksum is emitted when a ComputeChecksum request is evaluated. It
+// instructs the replica to compute a checksum at the time the command is
+// applied.
+message ComputeChecksum {
+  option (gogoproto.equal) = true;
+
+  // ChecksumID is a handle by which the checksum can be retrieved in a later
+  // CollectChecksum request.
+  bytes checksum_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ChecksumID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // The version used to pick the checksum method. Only when the version matches
+  // that hardcoded in the binary will a computation be carried out.
+  uint32 version = 5;
+
+  // SaveSnapshot indicates that the snapshot used to compute the checksum
+  // should be saved so that a diff of divergent replicas can later be computed.
+  bool save_snapshot = 2;
+  roachpb.ChecksumMode mode = 3;
+  // If set, a checkpoint (i.e. cheap backup) of the engine will be taken. This
+  // is expected to be set only if we already know that there is an
+  // inconsistency and we want to preserve as much state as possible.
+  bool checkpoint = 4;
+  // Replicas processing this command which find themselves in this slice will
+  // terminate. See `CheckConsistencyRequest.Terminate`.
+  repeated roachpb.ReplicaDescriptor terminate = 6 [(gogoproto.nullable) = false];
+}
+
+// Compaction holds core details about a suggested compaction.
+message Compaction {
+  option (gogoproto.equal) = true;
+
+  // bytes indicates the expected space reclamation from compaction.
+  int64 bytes = 1;
+  // suggested_at is nanoseconds since the epoch.
+  int64 suggested_at_nanos = 2;
+}
+
+// SuggestedCompaction holds start and end keys in conjunction with
+// the compaction details.
+message SuggestedCompaction {
+  option (gogoproto.equal) = true;
+
+  bytes start_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  bytes end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  Compaction compaction = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// ReplicatedEvalResult is the structured information which together with
+// a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
+// KV. For the majority of proposals, we expect ReplicatedEvalResult to be
+// trivial; only changes to the metadata state (splits, merges, rebalances,
+// leases, log truncation, ...) of the Replica or certain special commands must
+// sideline information here based on which all Replicas must take action.
+message ReplicatedEvalResult {
+  option (gogoproto.equal) = true;
+
+  // Updates to the Replica's ReplicaState. By convention and as outlined on
+  // the comment on the ReplicaState message, this field is sparsely populated
+  // and any field set overwrites the corresponding field in the state, perhaps
+  // with additional side effects (for instance on a descriptor update).
+  kv.kvserver.storagepb.ReplicaState state = 2;
+  Split split = 3;
+  Merge merge = 4;
+  ComputeChecksum compute_checksum = 21;
+  bool is_lease_request = 6;
+  // Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
+  // to verify the validity of the command (for lease coverage and GC
+  // threshold).
+  util.hlc.Timestamp timestamp = 8 [(gogoproto.nullable) = false];
+  // The stats delta corresponding to the data in this WriteBatch. On
+  // a split, contains only the contributions to the left-hand side.
+  storage.enginepb.MVCCStats deprecated_delta = 10; // See #18828
+  storage.enginepb.MVCCStatsDelta delta = 18 [(gogoproto.nullable) = false];
+  ChangeReplicas change_replicas = 12;
+  int64 raft_log_delta = 13;
+
+  // AddSSTable is a side effect that must execute before the Raft application
+  // is committed. It must be idempotent to account for an ill-timed crash after
+  // applying the side effect, but before committing the batch.
+  //
+  // TODO(tschottdorf): additionally, after the crash, the node must not serve
+  // traffic until the persisted committed log has fully applied. Otherwise, we
+  // risk exposing data created through such a side effect whose corresponding
+  // Raft command hasn't committed yet. This isn't so much an issue with AddSSTable
+  // since these Ranges are not user-visible, but it is a general concern assuming
+  // other such side effects are added.
+  message AddSSTable {
+    option (gogoproto.equal) = true;
+
+    bytes data = 1;
+    uint32 crc32 = 2 [(gogoproto.customname) = "CRC32"];
+  }
+  AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
+
+  // suggested_compactions are sent to the engine's compactor to
+  // reclaim storage space after garbage collection or cleared /
+  // rebalanced ranges.
+  repeated SuggestedCompaction suggested_compactions = 19 [(gogoproto.nullable) = false];
+
+  // This is the proposal timestamp for the active lease while evaluating a lease request.
+  // It will be used to make sure we know if a lease was extended after we sent out the request
+  // but before we tried to apply it.
+  util.hlc.Timestamp prev_lease_proposal = 20;
+
+  reserved 1, 5, 7, 9, 14, 15, 16, 10001 to 10013;
+}
+
+// WriteBatch is the serialized representation of a RocksDB write
+// batch. A wrapper message is used so that the absence of the field
+// can be distinguished from a zero-length batch, and so structs
+// containing pointers to it can be compared with the == operator.
+message WriteBatch {
+  bytes data = 1;
+}
+
+// LogicalOpLog is a log of logical MVCC operations. A wrapper message
+// is used so that the absence of the field can be distinguished from a
+// zero-length batch, and so structs containing pointers to it can be
+// compared with the == operator.
+message LogicalOpLog {
+  repeated storage.enginepb.MVCCLogicalOp ops = 1 [(gogoproto.nullable) = false];
+}
+
+// RaftCommand is the message written to the raft log. It contains
+// some metadata about the proposal itself, then either a BatchRequest
+// (legacy mode) or a ReplicatedEvalResult + WriteBatch
+// (proposer-evaluated KV mode).
+message RaftCommand {
+  // Metadata about the proposal itself. These fields exist at
+  // top-level instead of being grouped in a sub-message for
+  // backwards-compatibility.
+
+  // proposer_lease_seq is provided to verify at raft command apply-time
+  // that the lease under which the command was proposed remains in effect.
+  //
+  // To see why lease verification downstream of Raft is required, consider the
+  // following example:
+  // - replica 1 receives a client request for a write
+  // - replica 1 checks the lease; the write is permitted
+  // - replica 1 proposes the command
+  // - time passes, replica 2 commits a new lease
+  // - the command applies on replica 1
+  // - replica 2 serves anomalous reads which don't see the write
+  // - the command applies on replica 2
+  int64 proposer_lease_sequence = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
+
+  // deprecated_proposer_lease served the same purpose as proposer_lease_seq.
+  // As of VersionLeaseSequence, it is no longer in use.
+  //
+  // However, unless we add a check that all existing Raft logs on all nodes
+  // in the cluster contain only "new" leases, we won't be able to remove the
+  // legacy code.
+  roachpb.Lease deprecated_proposer_lease = 5;
+
+  // When the command is applied, its result is an error if the lease log
+  // counter has already reached (or exceeded) max_lease_index.
+  //
+  // The lease index is a reorder protection mechanism - we don't want Raft
+  // commands (proposed by a single node, the one with proposer_lease) executing
+  // in a different order than the one in which the corresponding KV requests
+  // were evaluated and the commands were proposed. This is important because
+  // latching does not fully serialize commands - mostly when it comes to
+  // updates to the internal state of the range (this should be re-evaluated
+  // once proposer-evaluated KV is completed - see #10413).
+  // Similar to the Raft applied index, it is strictly increasing, but may have
+  // gaps. A command will only apply successfully if its max_lease_index has not
+  // been surpassed by the Range's applied lease index (in which case the
+  // command may need to be retried, that is, regenerated with a higher
+  // max_lease_index). When the command applies, the new lease index will
+  // increase to max_lease_index (so a potential later replay will fail).
+  //
+  // This mechanism was introduced as a simpler alternative to using the Raft
+  // applied index, which is fraught with complexity due to the need to predict
+  // exactly the log position at which a command will apply, even when the Raft
+  // leader is not colocated with the lease holder (which usually proposes all
+  // commands).
+  //
+  // Pinning the lease-index to the assigned slot (as opposed to allowing gaps
+  // as we do now) is an interesting venue to explore from the standpoint of
+  // parallelization: One could hope to enforce command ordering in that way
+  // (without recourse to a higher-level locking primitive such as the command
+  // queue). This is a hard problem: First of all, managing the pending
+  // commands gets more involved; a command must not be removed if others have
+  // been added after it, and on removal, the assignment counters must be
+  // updated accordingly. Managing retry of proposals becomes trickier as
+  // well as that uproots whatever ordering was originally envisioned.
+  uint64 max_lease_index = 4;
+
+  reserved 3;
+
+  // Proposer-evaluated KV mode.
+
+  // replicated_eval_result is a set of structured information that instructs
+  // replicated state changes to the part of a Range's replicated state machine
+  // that exists outside of RocksDB.
+  ReplicatedEvalResult replicated_eval_result = 13 [(gogoproto.nullable) = false];
+  // write_batch is a RocksDB WriteBatch that will be applied to RockDB during
+  // the application of the Raft command. The batch can be thought of as a
+  // series of replicated instructions that inform a RocksDB engine on how to
+  // change.
+  WriteBatch write_batch = 14;
+  // logical_op_log contains a series of logical MVCC operations that correspond
+  // to the physical operations being made in the write_batch.
+  LogicalOpLog logical_op_log = 15;
+
+  // trace_data, if not empty, contains details of proposer's trace as returned by
+  // Tracer.Inject(opentracing.TextMap). Used to create span for command
+  // application on all the replicas that "follow from" the proposer.
+  map<string, string> trace_data = 16;
+
+  reserved 1, 2, 10001 to 10014;
+}
+
+// RaftCommandFooter contains a subset of the fields in RaftCommand. It is used
+// to optimize a pattern where most of the fields in RaftCommand are marshaled
+// outside of a heavily contended critical section, except for the fields in the
+// footer, which are assigned and marhsaled inside of the critical section and
+// appended to the marshaled byte buffer. This minimizes the memory allocation
+// and marshaling work performed under lock.
+message RaftCommandFooter {
+  uint64 max_lease_index = 4;
+}

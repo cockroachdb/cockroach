@@ -40,7 +40,8 @@ send "begin;\r"
 eexpect BEGIN
 
 send "select 3+;\r"
-eexpect "pq: syntax error"
+eexpect "ERROR: at or near"
+eexpect "syntax error"
 eexpect root@
 
 send "select 1;\r"
@@ -74,6 +75,19 @@ eexpect "COMMIT"
 eexpect ":/# "
 send "echo \$?\r"
 eexpect "0\r\n:/# "
+end_test
+
+start_test "Check that --debug-sql-cli sets suitable simplified client-side options."
+send "$argv sql --debug-sql-cli\r"
+eexpect "Welcome"
+eexpect "root@"
+send "\\set display_format csv\r\\set\r"
+eexpect "check_syntax,false"
+eexpect "echo,true"
+eexpect "prompt1,%n@%M>"
+eexpect "root@"
+send "\\q\r"
+eexpect ":/# "
 end_test
 
 send "exit 0\r"

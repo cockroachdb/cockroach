@@ -1,45 +1,36 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 type alterSequenceNode struct {
 	n       *tree.AlterSequence
-	seqDesc *sqlbase.TableDescriptor
+	seqDesc *tabledesc.Mutable
 }
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
-	tn, err := n.Name.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	var seqDesc *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		seqDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireSequenceDesc)
-	})
+	seqDesc, err := p.ResolveMutableTableDescriptorEx(
+		ctx, n.Name, !n.IfExists, tree.ResolveRequireSequenceDesc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -54,15 +45,25 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 	return &alterSequenceNode{n: n, seqDesc: seqDesc}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because ALTER SEQUENCE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *alterSequenceNode) ReadingOwnWrites() {}
+
 func (n *alterSequenceNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("sequence"))
 	desc := n.seqDesc
 
-	err := assignSequenceOptions(desc.SequenceOpts, n.n.Options, false /* setDefaults */)
+	err := assignSequenceOptions(
+		desc.SequenceOpts, n.n.Options, false /* setDefaults */, &params, desc.GetID(), desc.ParentID,
+	)
 	if err != nil {
 		return err
 	}
 
-	if err := params.p.writeSchemaChange(params.ctx, n.seqDesc, sqlbase.InvalidMutationID); err != nil {
+	if err := params.p.writeSchemaChange(
+		params.ctx, n.seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
 		return err
 	}
 
@@ -74,12 +75,12 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogAlterSequence,
 		int32(n.seqDesc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.n.Name.TableName().FQString(), n.n.String(), params.SessionData().User},
+		}{params.p.ResolvedName(n.n.Name).FQString(), n.n.String(), params.SessionData().User},
 	)
 }
 

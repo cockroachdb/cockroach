@@ -1,14 +1,14 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Cockroach Community Licence (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import _ from "lodash";
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 import { CircleLayout } from "./circleLayout";
 import { renderAsMap } from "./layout";
@@ -24,7 +24,7 @@ import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
 import InstructionsBox, { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
 
-type Liveness = cockroach.storage.Liveness;
+type Liveness = cockroach.kv.kvserver.storagepb.ILiveness;
 
 const BACK_BUTTON_OFFSET = 26;
 
@@ -41,7 +41,7 @@ interface NodeCanvasState {
 }
 
 export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState> {
-  graphEl: SVGElement;
+  graphEl: React.RefObject<SVGSVGElement> = React.createRef();
   debouncedOnResize: () => void;
 
   constructor(props: any) {
@@ -52,7 +52,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
   }
 
   updateViewport = () => {
-    const rect = this.graphEl.getBoundingClientRect();
+    const rect = this.graphEl.current.getBoundingClientRect();
     this.setState({
       viewportSize: [rect.width, rect.height],
     });
@@ -154,7 +154,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
               position: "absolute",
             }}
             className="cluster-viz"
-            ref={svg => this.graphEl = svg}
+            ref={this.graphEl}
           >
             { this.renderContent(showMap) }
           </svg>

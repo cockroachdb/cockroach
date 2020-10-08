@@ -1,3 +1,14 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+@require '~styl/base/palette.styl'
+
 .matrix
   background-color white
   border-collapse collapse
@@ -41,3 +52,25 @@
 
   &__cell-value
     text-align right
+
+  &__dropped-schema-object
+    color $alert-color
+    margin-left 5px
+
+.table-label
+  &--dropped
+    color grey
+    font-style italic
+    text-decoration line-through
+
+.replica-matrix-key
+  width 400px
+  margin-top 10px
+  font-style italic
+  table-border-width 10px
+
+  td
+    vertical-align top
+
+  &__definition
+    padding-left 5px

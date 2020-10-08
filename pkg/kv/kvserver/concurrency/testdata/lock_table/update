@@ -1,0 +1,427 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-txn txn=txn2 ts=12,1 epoch=0
+----
+
+new-txn txn=txn3 ts=14,1 epoch=0
+----
+
+# -------------------------------------------------------------
+# Acquire a lock on key a at timestamp 10,1
+# -------------------------------------------------------------
+
+new-request r=req1 txn=txn1 ts=10,1 spans=w@a
+----
+
+scan r=req1
+----
+start-waiting: false
+
+guard-state r=req1
+----
+new: state=doneWaiting
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+dequeue r=req1
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Wait on this lock as:
+# 1. transactional read-only request
+# 2. transactional read-write request
+# 3. non-transactional read-only request
+# 4. non-transactional read-write request
+# -------------------------------------------------------------
+
+new-request r=req2 txn=txn2 ts=12,1 spans=r@a
+----
+
+new-request r=req3 txn=txn3 ts=14,1 spans=w@a
+----
+
+new-request r=req4 txn=none ts=16,1 spans=r@a
+----
+
+new-request r=req5 txn=none ts=18,1 spans=w@a
+----
+
+scan r=req2
+----
+start-waiting: true
+
+guard-state r=req2
+----
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
+
+scan r=req3
+----
+start-waiting: true
+
+guard-state r=req3
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+
+scan r=req4
+----
+start-waiting: true
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-access=read
+
+scan r=req5
+----
+start-waiting: true
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+
+print
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 4, txn: none
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 2
+local: num=0
+
+# -------------------------------------------------------------
+# Update lock timestamp to 11,1 - nothing moves
+# -------------------------------------------------------------
+
+update txn=txn1 ts=11,1 epoch=0 span=a
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000011,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 4, txn: none
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 2
+local: num=0
+
+# -------------------------------------------------------------
+# Update lock timestamp to 13,1 - the transactional read at
+# at timestamp 12,1 is allowed to proceed without acquire a
+# reservation
+# -------------------------------------------------------------
+
+update txn=txn1 ts=13,1 epoch=0 span=a
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000013,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 4, txn: none
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 4
+local: num=0
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+scan r=req2
+----
+start-waiting: false
+
+dequeue r=req2
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000013,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 4, txn: none
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 4
+local: num=0
+
+# -------------------------------------------------------------
+# Update lock timestamp to 10,1 - noop since lock is already at
+# 13,1
+# -------------------------------------------------------------
+
+update txn=txn1 ts=10,1 epoch=0 span=a
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000013,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 4, txn: none
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 4
+local: num=0
+
+# -------------------------------------------------------------
+# Update lock timestamp to 15,1 - nothing moves
+# -------------------------------------------------------------
+
+update txn=txn1 ts=15,1 epoch=0 span=a
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000015,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 4, txn: none
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 4
+local: num=0
+
+# -------------------------------------------------------------
+# Update lock timestamp to 17,1 - the transactional read at
+# at timestamp 16,1 is allowed to proceed without acquire a
+# reservation
+# -------------------------------------------------------------
+
+update txn=txn1 ts=17,1 epoch=0 span=a
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000017,1, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 3
+local: num=0
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+scan r=req4
+----
+start-waiting: false
+
+dequeue r=req4
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000017,1, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 3
+local: num=0
+
+# -------------------------------------------------------------
+# Update lock timestamp to 19,1 - nothing moves
+# -------------------------------------------------------------
+
+update txn=txn1 ts=19,1 epoch=0 span=a
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000019,1, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, txn: none
+   distinguished req: 3
+local: num=0
+
+# -------------------------------------------------------------
+# Update lock epoch to 1 - the lock is dropped and the transactional
+# write at timestamp 14,1 is allowed to acquire a reservation. Once
+# it finishes, the non-transactional write is allowed to proceed
+# without grabbing a reservation
+# -------------------------------------------------------------
+
+update txn=txn1 ts=19,1 epoch=1 span=a
+----
+global: num=1
+ lock: "a"
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000014,1, seq: 0
+   queued writers:
+    active: true req: 5, txn: none
+   distinguished req: 5
+local: num=0
+
+guard-state r=req3
+----
+new: state=doneWaiting
+
+scan r=req3
+----
+start-waiting: false
+
+guard-state r=req5
+----
+new: state=waitForDistinguished txn=txn3 key="a" held=false guard-access=write
+
+dequeue r=req3
+----
+global: num=0
+local: num=0
+
+guard-state r=req5
+----
+new: state=doneWaiting
+
+scan r=req5
+----
+start-waiting: false
+
+dequeue r=req5
+----
+global: num=0
+local: num=0
+
+# -------------------------------------------------------------
+# Lock is held at multiple seqnums and then updated to ignore
+# either a seqnum that is not in the held list or one that is
+# in the list. When all the seqnums are ignored, the lock is
+# released. Additionally, tests the effect of updates with older
+# epochs -- they don't affect seqnums, but can advance ts.
+# -------------------------------------------------------------
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=1 seq=1
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1]
+local: num=0
+
+new-txn txn=txn1 ts=10 epoch=1 seq=5
+----
+
+new-request r=req2 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req2 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5]
+local: num=0
+
+new-txn txn=txn1 ts=10 epoch=1 seq=7
+----
+
+new-request r=req3 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req3 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5, 7]
+local: num=0
+
+new-txn txn=txn1 ts=10 epoch=1 seq=10
+----
+
+new-request r=req4 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req4 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
+local: num=0
+
+# No seqnum change since lock is not held at seqnum 3, 8, 9.
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-9
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
+local: num=0
+
+# No change since update is using older epoch.
+
+update txn=txn1 ts=10 epoch=0 span=a ignored-seqs=3,5-7
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 5, 7, 10]
+local: num=0
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,5-7
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1, 10]
+local: num=0
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=9-11
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [1]
+local: num=0
+
+# No seqnum change since update is using older epoch. But since the update is using
+# a higher timestamp, the ts is advanced.
+
+update txn=txn1 ts=15 epoch=0 span=a ignored-seqs=1
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000015,0, info: unrepl epoch: 1, seqs: [1]
+local: num=0
+
+# No change, since seqnum 3 is not held. Note that the ts is not updated.
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000015,0, info: unrepl epoch: 1, seqs: [1]
+local: num=0
+
+# Timestamp is updated again.
+update txn=txn1 ts=16 epoch=1 span=a
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000016,0, info: unrepl epoch: 1, seqs: [1]
+local: num=0
+
+# Seqnum 1 is also ignored, so the lock is released. Note that it does not
+# matter that the update is using an older timestamp.
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=1
+----
+global: num=0
+local: num=0

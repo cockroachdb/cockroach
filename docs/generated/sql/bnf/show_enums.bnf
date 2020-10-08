@@ -1,0 +1,2 @@
+show_enums_stmt ::=
+	'SHOW' 'ENUMS'

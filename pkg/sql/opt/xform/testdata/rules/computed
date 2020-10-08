@@ -1,0 +1,193 @@
+# --------------------------------------------------
+# GenerateConstrainedScans + Computed Cols
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE t_int (
+    k_int INT,
+    c_int INT AS (k_int % 4) STORED,
+    c_int_2 INT AS (k_int % 4) STORED,
+    INDEX c_int_index (c_int, k_int)
+)
+----
+
+exec-ddl
+CREATE TABLE t_float (
+    k_float FLOAT,
+    c_float FLOAT AS (k_float + 1) STORED,
+    INDEX c_float_index (c_float, k_float)
+)
+----
+
+exec-ddl
+CREATE TABLE t_now (
+    k_interval INTERVAL,
+    c_ts TIMESTAMP AS (now() + k_interval) STORED,
+    INDEX c_ts_index (c_ts, k_interval)
+)
+----
+
+exec-ddl
+CREATE TABLE t_rand (
+    k_int INT,
+    c_int INT AS ((random()*100)::INT + k_int) STORED,
+    INDEX c_int_index (c_int, k_int)
+)
+----
+
+exec-ddl
+CREATE TABLE t_mult (
+    k_int INT,
+    k_int_2 INT,
+    c_int INT AS (k_int % 4) STORED,
+    c_mult INT AS (c_mult_2 * c_int * k_int * k_int_2) STORED,
+    c_mult_2 INT AS (k_int + 1) STORED,
+    INDEX c_mult_index (c_mult, c_mult_2, c_int, k_int, k_int_2)
+)
+----
+
+exec-ddl
+CREATE TABLE hashed (
+    k STRING,
+    hash INT AS (fnv32(k) % 4) STORED CHECK (hash IN (0, 1, 2, 3)),
+    INDEX (hash, k)
+)
+----
+
+# Constrain the index using computed column. Ensure that another computed column
+# depending on the same base column isn't included as a filter (c_int_2).
+opt
+SELECT k_int FROM t_int WHERE k_int = 5
+----
+scan t_int@c_int_index
+ ├── columns: k_int:1!null
+ ├── constraint: /2/1/4: [/1/5 - /1/5]
+ └── fd: ()-->(1)
+
+# Use index with multiple computed columns, based on multiple input columns in
+# acyclic graph.
+opt
+SELECT k_int, k_int_2, c_mult, c_mult_2, c_int FROM t_mult WHERE k_int = 5 AND k_int_2 = 10
+----
+scan t_mult@c_mult_index
+ ├── columns: k_int:1!null k_int_2:2!null c_mult:4 c_mult_2:5 c_int:3
+ ├── constraint: /4/5/3/1/2/6: [/300/6/1/5/10 - /300/6/1/5/10]
+ └── fd: ()-->(1,2)
+
+# Test computed + check columns in same table.
+opt
+SELECT * FROM hashed WHERE k = 'andy'
+----
+scan hashed@secondary
+ ├── columns: k:1!null hash:2
+ ├── constraint: /2/1/3: [/1/'andy' - /1/'andy']
+ └── fd: ()-->(1)
+
+# Don't constrain when filter has multiple columns.
+opt
+SELECT k_int FROM t_mult WHERE (k_int, k_int_2) > (1, 2)
+----
+project
+ ├── columns: k_int:1!null
+ ├── immutable
+ └── select
+      ├── columns: k_int:1!null k_int_2:2
+      ├── immutable
+      ├── scan t_mult
+      │    ├── columns: k_int:1 k_int_2:2
+      │    └── computed column expressions
+      │         ├── c_int:3
+      │         │    └── k_int:1 % 4
+      │         ├── c_mult:4
+      │         │    └── k_int_2:2 * (k_int:1 * (c_mult_2:5 * c_int:3))
+      │         └── c_mult_2:5
+      │              └── k_int:1 + 1
+      └── filters
+           └── (k_int:1, k_int_2:2) > (1, 2) [outer=(1,2), immutable, constraints=(/1/2: [/1/3 - ]; tight)]
+
+# Don't constrain when filter has multiple spans.
+opt
+SELECT k_int FROM t_mult WHERE k_int = 2 OR k_int = 3
+----
+select
+ ├── columns: k_int:1!null
+ ├── scan t_mult
+ │    ├── columns: k_int:1
+ │    └── computed column expressions
+ │         ├── c_int:3
+ │         │    └── k_int:1 % 4
+ │         ├── c_mult:4
+ │         │    └── k_int_2:2 * (k_int:1 * (c_mult_2:5 * c_int:3))
+ │         └── c_mult_2:5
+ │              └── k_int:1 + 1
+ └── filters
+      └── (k_int:1 = 2) OR (k_int:1 = 3) [outer=(1), constraints=(/1: [/2 - /2] [/3 - /3]; tight)]
+
+# Don't constrain the index for a NULL value.
+opt
+SELECT k_int FROM t_int WHERE k_int IS NULL
+----
+select
+ ├── columns: k_int:1
+ ├── fd: ()-->(1)
+ ├── scan t_int@c_int_index
+ │    └── columns: k_int:1
+ └── filters
+      └── k_int:1 IS NULL [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+
+# Don't constrain the index for a FLOAT column, since the FLOAT data type uses
+# a composite key encoding.
+opt
+SELECT k_float FROM t_float WHERE k_float = 5.0
+----
+select
+ ├── columns: k_float:1!null
+ ├── fd: ()-->(1)
+ ├── scan t_float
+ │    ├── columns: k_float:1
+ │    └── computed column expressions
+ │         └── c_float:2
+ │              └── k_float:1 + 1.0
+ └── filters
+      └── k_float:1 = 5.0 [outer=(1), constraints=(/1: [/5.0 - /5.0]; tight), fd=()-->(1)]
+
+# Don't constrain the index when the computed column has a stable function.
+opt
+SELECT k_interval FROM t_now WHERE k_interval = '3 hours'
+----
+select
+ ├── columns: k_interval:1!null
+ ├── fd: ()-->(1)
+ ├── scan t_now
+ │    └── columns: k_interval:1
+ └── filters
+      └── k_interval:1 = '03:00:00' [outer=(1), constraints=(/1: [/'03:00:00' - /'03:00:00']; tight), fd=()-->(1)]
+
+# Don't constrain the index when the computed column has a volatile function.
+opt
+SELECT k_int FROM t_rand WHERE k_int = 5.0
+----
+select
+ ├── columns: k_int:1!null
+ ├── fd: ()-->(1)
+ ├── scan t_rand
+ │    └── columns: k_int:1
+ └── filters
+      └── k_int:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+
+# Verify that a stored NULL value is handled correctly (#44132).
+exec-ddl
+CREATE TABLE null_col (
+    a INT,
+    b INT AS (NULL) STORED,
+    INDEX ab (a, b)
+)
+----
+
+opt
+SELECT a, b FROM null_col WHERE a = 1
+----
+scan null_col@ab
+ ├── columns: a:1!null b:2
+ ├── constraint: /1/2/3: [/1/NULL - /1/NULL]
+ └── fd: ()-->(1)

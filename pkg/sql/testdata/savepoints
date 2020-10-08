@@ -1,0 +1,767 @@
+# This test exercises the savepoint state in the conn executor.
+
+subtest implicit_release_at_end
+
+# It's OK to leave savepoints open when the txn commits.
+# This releases everything.
+sql
+BEGIN
+SAVEPOINT foo
+SAVEPOINT bar
+SAVEPOINT baz
+COMMIT
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: SAVEPOINT bar -- 0 rows
+-- Open        -> Open        ###..  foo>bar
+4: SAVEPOINT baz -- 0 rows
+-- Open        -> Open        ####.  foo>bar>baz
+5: COMMIT -- 0 rows
+-- Open        -> NoTxn       #####  (none)
+
+# Ditto rollbacks.
+sql
+BEGIN
+SAVEPOINT foo
+SAVEPOINT bar
+SAVEPOINT baz
+ROLLBACK
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: SAVEPOINT bar -- 0 rows
+-- Open        -> Open        ###..  foo>bar
+4: SAVEPOINT baz -- 0 rows
+-- Open        -> Open        ####.  foo>bar>baz
+5: ROLLBACK -- 0 rows
+-- Open        -> NoTxn       #....  (none)
+
+subtest end
+
+subtest savepoint_stack
+
+sql
+BEGIN
+SAVEPOINT foo
+SAVEPOINT foo
+SAVEPOINT bar
+SAVEPOINT baz
+ROLLBACK TO SAVEPOINT foo
+SAVEPOINT baz
+RELEASE SAVEPOINT foo
+SAVEPOINT bar
+RELEASE SAVEPOINT foo
+COMMIT
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #..........  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##.........  foo
+3: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ###........  foo>foo
+4: SAVEPOINT bar -- 0 rows
+-- Open        -> Open        ####.......  foo>foo>bar
+5: SAVEPOINT baz -- 0 rows
+-- Open        -> Open        #####......  foo>foo>bar>baz
+6: ROLLBACK TO SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ###........  foo>foo
+7: SAVEPOINT baz -- 0 rows
+-- Open        -> Open        ###...#....  foo>foo>baz
+8: RELEASE SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ###...##...  foo
+9: SAVEPOINT bar -- 0 rows
+-- Open        -> Open        ###...###..  foo>bar
+10: RELEASE SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ###...####.  (none)
+11: COMMIT -- 0 rows
+-- Open        -> NoTxn       ###...#####  (none)
+
+
+subtest end
+
+subtest savepoint_release_vs_rollback
+
+# A rollback keeps the savepoint active.
+sql
+BEGIN
+SAVEPOINT foo
+ROLLBACK TO SAVEPOINT foo
+ROLLBACK TO SAVEPOINT foo
+COMMIT
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: ROLLBACK TO SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+4: ROLLBACK TO SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+5: COMMIT -- 0 rows
+-- Open        -> NoTxn       ##..#  (none)
+
+# A release does not.
+sql
+BEGIN
+SAVEPOINT foo
+RELEASE SAVEPOINT foo
+RELEASE SAVEPOINT foo
+COMMIT
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: RELEASE SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ###..  (none)
+4: RELEASE SAVEPOINT foo -- pq: savepoint "foo" does not exist
+-- Open        -> Aborted     XXXXX  (none)
+5: COMMIT -- 0 rows
+-- Aborted     -> NoTxn       #....  (none)
+
+subtest end
+
+
+subtest rollback_after_sql_error
+
+sql
+BEGIN
+SAVEPOINT foo
+SELECT nonexistent
+ROLLBACK TO SAVEPOINT foo
+SELECT 123
+COMMIT
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #.....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##....  foo
+3: SELECT nonexistent -- pq: column "nonexistent" does not exist
+-- Open        -> Aborted     XXXXXX  foo
+4: ROLLBACK TO SAVEPOINT foo -- 0 rows
+-- Aborted     -> Open        ##....  foo
+5: SELECT 123 -- 1 row
+-- Open        -> Open        ##..#.  foo
+6: COMMIT -- 0 rows
+-- Open        -> NoTxn       ##..##  (none)
+
+subtest end
+
+subtest rollback_after_dup_error
+
+sql
+CREATE TABLE t(x INT UNIQUE)
+INSERT INTO t(x) VALUES (1)
+BEGIN
+SAVEPOINT foo
+INSERT INTO t(x) VALUES (1)
+ROLLBACK TO SAVEPOINT foo
+INSERT INTO t(x) VALUES (2)
+COMMIT
+----
+1: CREATE TABLE t(x INT UNIQUE) -- 0 rows
+-- NoTxn       -> NoTxn       #.......  (none)
+2: INSERT INTO t(x) VALUES (1) -- 1 row
+-- NoTxn       -> NoTxn       ##......  (none)
+3: BEGIN -- 0 rows
+-- NoTxn       -> Open        ###.....  (none)
+4: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ####....  foo
+5: INSERT INTO t(x) VALUES (1) -- pq: duplicate key value (x)=(1) violates unique constraint "t_x_key"
+-- Open        -> Aborted     XXXXXXXX  foo
+6: ROLLBACK TO SAVEPOINT foo -- 0 rows
+-- Aborted     -> Open        ####....  foo
+7: INSERT INTO t(x) VALUES (2) -- 1 row
+-- Open        -> Open        ####..#.  foo
+8: COMMIT -- 0 rows
+-- Open        -> NoTxn       ####..##  (none)
+
+sql
+DROP TABLE t
+----
+1: DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+subtest rollback_after_ddl
+
+subtest rollback_after_ddl/release_normal_savepoint
+
+# DDL under savepoints is fine as long as there is no rollback.
+# Note: we do two DDL; the first one is there just to anchor
+# the txn on the config range. The second DDL is the one
+# exercised in the test.
+sql
+BEGIN; CREATE TABLE unused(x INT)
+SAVEPOINT foo
+CREATE TABLE t(x INT)
+RELEASE SAVEPOINT foo
+COMMIT
+----
+1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        ###..  foo
+4: RELEASE SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ####.  (none)
+5: COMMIT -- 0 rows
+-- Open        -> NoTxn       #####  (none)
+
+sql
+DROP TABLE unused; DROP TABLE t
+----
+1: DROP TABLE unused; DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+# Also fine at high priority.
+
+sql
+BEGIN TRANSACTION PRIORITY HIGH; CREATE TABLE unused(x INT)
+SAVEPOINT foo
+CREATE TABLE t(x INT)
+RELEASE SAVEPOINT foo
+COMMIT
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; CREATE TABLE unused(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        ###..  foo
+4: RELEASE SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ####.  (none)
+5: COMMIT -- 0 rows
+-- Open        -> NoTxn       #####  (none)
+
+sql
+DROP TABLE unused; DROP TABLE t
+----
+1: DROP TABLE unused; DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+subtest rollback_after_ddl/restart_savepoint
+
+# DDL under a cockroach_restart savepoint can
+# be rolled back.
+sql
+BEGIN; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+ROLLBACK TO SAVEPOINT cockroach_restart
+CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (3)
+COMMIT
+SELECT * FROM t
+----
+1: BEGIN; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #......  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##.....  cockroach_restart(r)
+3: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> Open        #......  cockroach_restart(r)
+4: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        #..#...  cockroach_restart(r)
+5: INSERT INTO t(x) VALUES (3) -- 1 row
+-- Open        -> Open        #..##..  cockroach_restart(r)
+6: COMMIT -- 0 rows
+-- Open        -> NoTxn       #..###.  (none)
+7: SELECT * FROM t -- 1 row
+-- NoTxn       -> NoTxn       #..####  (none)
+
+sql
+DROP TABLE t
+----
+1: DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+# DDL under a cockroach_restart savepoint cannot
+# be rolled back at high priority, because of #46414.
+sql
+BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+ROLLBACK TO SAVEPOINT cockroach_restart
+ABORT
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #...  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##..  cockroach_restart(r)
+3: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: unimplemented: cannot use ROLLBACK TO SAVEPOINT in a HIGH PRIORITY transaction containing DDL
+-- Open        -> Aborted     XXXX  cockroach_restart(r)
+4: ABORT -- 0 rows
+-- Aborted     -> NoTxn       #...  (none)
+
+# Same error in the aborted state.
+sql
+BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+SELECT undefined
+ROLLBACK TO SAVEPOINT cockroach_restart
+ABORT
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##...  cockroach_restart(r)
+3: SELECT undefined -- pq: column "undefined" does not exist
+-- Open        -> Aborted     XXXXX  cockroach_restart(r)
+4: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: unimplemented: cannot use ROLLBACK TO SAVEPOINT in a HIGH PRIORITY transaction containing DDL
+-- Aborted     -> Aborted     XXXXX  cockroach_restart(r)
+5: ABORT -- 0 rows
+-- Aborted     -> NoTxn       #....  (none)
+
+
+# However it's fine if there's just a release.
+
+sql
+BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+RELEASE SAVEPOINT cockroach_restart
+COMMIT
+SELECT * FROM t
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##...  cockroach_restart(r)
+3: RELEASE SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> CommitWait  XXXXX  (none)
+4: COMMIT -- 0 rows
+-- CommitWait  -> NoTxn       ###..  (none)
+5: SELECT * FROM t -- 2 rows
+-- NoTxn       -> NoTxn       ###.#  (none)
+
+sql
+DROP TABLE t
+----
+1: DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+subtest rollback_after_ddl/regular_savepoint
+
+# Rollback of regular savepoint is unsupported after DDL for now.
+# TODO(knz): Lift this limitation.
+
+sql
+BEGIN; CREATE TABLE unused(x INT)
+SAVEPOINT foo
+CREATE TABLE t(x INT)
+ROLLBACK TO SAVEPOINT foo
+----
+1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+-- NoTxn       -> Open        #...  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##..  foo
+3: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        ###.  foo
+4: ROLLBACK TO SAVEPOINT foo -- pq: unimplemented: ROLLBACK TO SAVEPOINT not yet supported after DDL statements
+-- Open        -> Aborted     XXXX  foo
+
+# Ditto in aborted state.
+sql
+BEGIN; CREATE TABLE unused(x INT)
+SAVEPOINT foo
+CREATE TABLE t(x INT)
+SELECT undefined
+ROLLBACK TO SAVEPOINT foo
+----
+1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        ###..  foo
+4: SELECT undefined -- pq: column "undefined" does not exist
+-- Open        -> Aborted     XXXXX  foo
+5: ROLLBACK TO SAVEPOINT foo -- pq: unimplemented: ROLLBACK TO SAVEPOINT not yet supported after DDL statements
+-- Aborted     -> Aborted     XXXXX  foo
+
+
+subtest end
+
+subtest end
+
+subtest invalid_uses
+
+sql
+SAVEPOINT foo
+ROLLBACK TO SAVEPOINT foo
+RELEASE SAVEPOINT foo
+----
+1: SAVEPOINT foo -- pq: there is no transaction in progress
+-- NoTxn       -> NoTxn       #..  (none)
+2: ROLLBACK TO SAVEPOINT foo -- pq: savepoint "foo" does not exist
+-- NoTxn       -> NoTxn       ##.  (none)
+3: RELEASE SAVEPOINT foo -- pq: there is no transaction in progress
+-- NoTxn       -> NoTxn       ###  (none)
+
+sql
+BEGIN
+SAVEPOINT foo
+RELEASE SAVEPOINT bar
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #..  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##.  foo
+3: RELEASE SAVEPOINT bar -- pq: savepoint "bar" does not exist
+-- Open        -> Aborted     XXX  foo
+
+sql
+BEGIN
+SAVEPOINT foo
+ROLLBACK TO SAVEPOINT bar
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #..  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##.  foo
+3: ROLLBACK TO SAVEPOINT bar -- pq: savepoint "bar" does not exist
+-- Open        -> Aborted     XXX  foo
+
+subtest end
+
+subtest rollback_after_error
+
+# check that we can rollback after an error
+sql
+BEGIN; SAVEPOINT foo
+SELECT * FROM bogus_name
+ROLLBACK TO SAVEPOINT foo
+ROLLBACK
+----
+1: BEGIN; SAVEPOINT foo -- 0 rows
+-- NoTxn       -> Open        #...  foo(r)
+2: SELECT * FROM bogus_name -- pq: relation "bogus_name" does not exist
+-- Open        -> Aborted     XXXX  foo(r)
+3: ROLLBACK TO SAVEPOINT foo -- 0 rows
+-- Aborted     -> Open        #...  foo(r)
+4: ROLLBACK -- 0 rows
+-- Open        -> NoTxn       #...  (none)
+
+# check that we can rollback after a retriable error to an initial savepoint
+sql
+CREATE TABLE t(x INT)
+BEGIN; SAVEPOINT init; INSERT INTO t(x) VALUES (1)
+SELECT crdb_internal.force_retry('1h')
+ROLLBACK TO SAVEPOINT init
+SELECT x from t
+ROLLBACK; DROP TABLE t
+----
+1: CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> NoTxn       #.....  (none)
+2: BEGIN; SAVEPOINT init; INSERT INTO t(x) VALUES (1) -- 1 row
+-- NoTxn       -> Open        ##....  init(r)
+3: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+-- Open        -> Aborted     XXXXXX  init(r)
+4: ROLLBACK TO SAVEPOINT init -- 0 rows
+-- Aborted     -> Open        ##....  init(r)
+5: SELECT x from t -- 0 rows
+-- Open        -> Open        ##..#.  init(r)
+6: ROLLBACK; DROP TABLE t -- 0 rows
+-- Open        -> NoTxn       ##....  (none)
+
+# Check that, after a retriable error, rolling back to anything other than an
+# initial savepoint fails with a retriable error.
+sql
+CREATE TABLE t(x INT)
+BEGIN; SAVEPOINT init; SELECT count(1) from t; SAVEPOINT inner_savepoint
+SELECT crdb_internal.force_retry('1h')
+ROLLBACK TO SAVEPOINT inner_savepoint
+ROLLBACK TO SAVEPOINT init
+ROLLBACK; DROP TABLE t
+----
+1: CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> NoTxn       #.....  (none)
+2: BEGIN; SAVEPOINT init; SELECT count(1) from t; SAVEPOINT inner_savepoint -- 0 rows
+-- NoTxn       -> Open        ##....  init(r)>inner_savepoint
+3: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+-- Open        -> Aborted     XXXXXX  init(r)>inner_savepoint
+4: ROLLBACK TO SAVEPOINT inner_savepoint -- pq: restart transaction: TransactionRetryWithProtoRefreshError: cannot rollback to savepoint after a transaction restart
+-- Aborted     -> Aborted     XXXXXX  init(r)>inner_savepoint
+5: ROLLBACK TO SAVEPOINT init -- 0 rows
+-- Aborted     -> Open        ##....  init(r)
+6: ROLLBACK; DROP TABLE t -- 0 rows
+-- Open        -> NoTxn       ##....  (none)
+
+subtest end
+
+
+subtest restart
+
+subtest restart/must_be_first_in_txn
+
+sql
+CREATE TABLE t(x INT)
+BEGIN
+INSERT INTO t(x) VALUES (1)
+SAVEPOINT cockroach_restart
+----
+1: CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> NoTxn       #...  (none)
+2: BEGIN -- 0 rows
+-- NoTxn       -> Open        ##..  (none)
+3: INSERT INTO t(x) VALUES (1) -- 1 row
+-- Open        -> Open        ###.  (none)
+4: SAVEPOINT cockroach_restart -- pq: SAVEPOINT "cockroach_restart" needs to be the first statement in a transaction
+-- Open        -> Aborted     XXXX  (none)
+
+sql
+DROP TABLE t
+----
+1: DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+subtest restart/release_without_savepoint
+
+sql
+BEGIN
+RELEASE SAVEPOINT cockroach_restart
+ROLLBACK
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #..  (none)
+2: RELEASE SAVEPOINT cockroach_restart -- pq: savepoint "cockroach_restart" does not exist
+-- Open        -> Aborted     XXX  (none)
+3: ROLLBACK -- 0 rows
+-- Aborted     -> NoTxn       #..  (none)
+
+subtest end
+
+subtest restart/rollback_without_savepoint
+
+# ROLLBACK TO SAVEPOINT in an open txn without a SAVEPOINT.
+sql
+BEGIN
+ROLLBACK TO SAVEPOINT cockroach_restart
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #.  (none)
+2: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: savepoint "cockroach_restart" does not exist
+-- Open        -> Aborted     XX  (none)
+
+# ROLLBACK TO SAVEPOINT in an aborted txn without a SAVEPOINT.
+sql
+BEGIN
+SELECT * FROM bogus_name
+ROLLBACK TO SAVEPOINT cockroach_restart
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #..  (none)
+2: SELECT * FROM bogus_name -- pq: relation "bogus_name" does not exist
+-- Open        -> Aborted     XXX  (none)
+3: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: savepoint "cockroach_restart" does not exist
+-- Aborted     -> Aborted     XXX  (none)
+
+subtest end
+
+subtest restart/rollbacks
+
+sql
+CREATE TABLE t(x INT);
+BEGIN; SAVEPOINT cockroach_restart
+ROLLBACK TO SAVEPOINT cockroach_restart
+ROLLBACK TO SAVEPOINT cockroach_restart
+INSERT INTO t(x) VALUES (1)
+ROLLBACK TO SAVEPOINT cockroach_restart
+COMMIT
+----
+1: CREATE TABLE t(x INT); -- 0 rows
+-- NoTxn       -> NoTxn       #......  (none)
+2: BEGIN; SAVEPOINT cockroach_restart -- 0 rows
+-- NoTxn       -> Open        ##.....  cockroach_restart(r)
+3: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> Open        ##.....  cockroach_restart(r)
+4: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> Open        ##.....  cockroach_restart(r)
+5: INSERT INTO t(x) VALUES (1) -- 1 row
+-- Open        -> Open        ##..#..  cockroach_restart(r)
+6: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> Open        ##.....  cockroach_restart(r)
+7: COMMIT -- 0 rows
+-- Open        -> NoTxn       ##....#  (none)
+
+sql
+DROP TABLE t
+----
+1: DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+
+subtest restart/savepoint_under_restart
+
+sql
+BEGIN; SAVEPOINT cockroach_restart
+SAVEPOINT foo
+SAVEPOINT bar
+ROLLBACK TO SAVEPOINT foo
+SELECT crdb_internal.force_retry('1h')
+ROLLBACK TO SAVEPOINT cockroach_restart
+SELECT 123
+COMMIT
+----
+1: BEGIN; SAVEPOINT cockroach_restart -- 0 rows
+-- NoTxn       -> Open        #.......  cockroach_restart(r)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##......  cockroach_restart(r)>foo
+3: SAVEPOINT bar -- 0 rows
+-- Open        -> Open        ###.....  cockroach_restart(r)>foo>bar
+4: ROLLBACK TO SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##......  cockroach_restart(r)>foo
+5: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+-- Open        -> Aborted     XXXXXXXX  cockroach_restart(r)>foo
+6: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
+-- Aborted     -> Open        #.......  cockroach_restart(r)
+7: SELECT 123 -- 1 row
+-- Open        -> Open        #.....#.  cockroach_restart(r)
+8: COMMIT -- 0 rows
+-- Open        -> NoTxn       #.....##  (none)
+
+subtest end
+
+subtest restart/all_savepoints_disabled
+
+# Under "force_savepoint_restart", every savepoint
+# is a restart savepoint.
+
+sql
+SET force_savepoint_restart = true
+BEGIN; SAVEPOINT foo
+SAVEPOINT bar
+----
+1: SET force_savepoint_restart = true -- 0 rows
+-- NoTxn       -> NoTxn       #..  (none)
+2: BEGIN; SAVEPOINT foo -- 0 rows
+-- NoTxn       -> Open        ##.  foo(r)
+3: SAVEPOINT bar -- pq: SAVEPOINT "cockroach_restart" cannot be nested
+-- Open        -> Aborted     XXX  foo(r)
+
+sql
+SET force_savepoint_restart = false
+----
+1: SET force_savepoint_restart = false -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+subtest restart/cockroach_restart_cant_be_nested
+
+sql
+BEGIN
+SAVEPOINT foo
+SAVEPOINT cockroach_restart
+ROLLBACK
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #...  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##..  foo
+3: SAVEPOINT cockroach_restart -- pq: SAVEPOINT "cockroach_restart" cannot be nested
+-- Open        -> Aborted     XXXX  foo
+4: ROLLBACK -- 0 rows
+-- Aborted     -> NoTxn       #...  (none)
+
+# Check the behavior of issuing "SAVEPOINT cockroach_restart". Multiple times.
+# That is allowed (to facilitate SAVEPOINT cr; ROLLBACK TO cr; SAVEPOINT cr),
+# but we're not actually creating multiple savepoints with the same name because
+# the special release semantics don't allow us.
+sql
+BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart
+RELEASE SAVEPOINT cockroach_restart
+ROLLBACK TO SAVEPOINT cockroach_restart
+----
+1: BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart -- 0 rows
+-- NoTxn       -> Open        #..  cockroach_restart(r)
+2: RELEASE SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> CommitWait  XXX  (none)
+3: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: current transaction is committed, commands ignored until end of transaction block
+-- CommitWait  -> CommitWait  XXX  (none)
+
+# Test that cockroach_restart doesn't nest in the same way that regular
+# savepoints do. We allow the savepoint cockroach_restart to be redeclared after
+# a rollback to cockroach_restart (or even immediately after declaring it the
+# first time), and this redeclaration doesn't introduce a new savepoint.
+sql
+BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart;
+ROLLBACK TO cockroach_restart; SAVEPOINT cockroach_restart;
+COMMIT;
+----
+1: BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart; -- 0 rows
+-- NoTxn       -> Open        #..  cockroach_restart(r)
+2: ROLLBACK TO cockroach_restart; SAVEPOINT cockroach_restart; -- 0 rows
+-- Open        -> Open        #..  cockroach_restart(r)
+3: COMMIT; -- 0 rows
+-- Open        -> NoTxn       #.#  (none)
+
+subtest end
+
+# Test that the rewinding we do when performing an automatic retry restores the
+# savepoint stack properly.
+subtest restart/rewind_on_automatic_restarts
+
+# We're going to generate a retriable error that will rewind us back to the
+# SELECT statement (not to the original SAVEPOINT statement since that one is
+# special and we advance the rewind position past it). The test checks that,
+# after every restart, the RELEASE works because the savepoint has be
+# re-instituted before we rewind.
+sql
+BEGIN; SAVEPOINT a; SELECT 42; RELEASE a; SELECT crdb_internal.force_retry('10ms'); COMMIT;
+----
+1: BEGIN; SAVEPOINT a; SELECT 42; RELEASE a; SELECT crdb_internal.force_retry('10ms'); COMMIT; -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+subtest restart/txn_done_after_release_restart
+
+sql
+BEGIN; SAVEPOINT cockroach_restart
+SELECT 1
+RELEASE SAVEPOINT cockroach_restart
+SELECT 2
+----
+1: BEGIN; SAVEPOINT cockroach_restart -- 0 rows
+-- NoTxn       -> Open        #...  cockroach_restart(r)
+2: SELECT 1 -- 1 row
+-- Open        -> Open        ##..  cockroach_restart(r)
+3: RELEASE SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> CommitWait  XXXX  (none)
+4: SELECT 2 -- pq: current transaction is committed, commands ignored until end of transaction block
+-- CommitWait  -> CommitWait  XXXX  (none)
+
+# In contrast, it's OK to continue work after a RELEASE of a
+# non-restart savepoint.
+sql
+BEGIN; SAVEPOINT some_other_restart
+SELECT 1
+RELEASE SAVEPOINT some_other_restart
+SELECT 2
+----
+1: BEGIN; SAVEPOINT some_other_restart -- 0 rows
+-- NoTxn       -> Open        #...  some_other_restart(r)
+2: SELECT 1 -- 1 row
+-- Open        -> Open        ##..  some_other_restart(r)
+3: RELEASE SAVEPOINT some_other_restart -- 0 rows
+-- Open        -> Open        ###.  (none)
+4: SELECT 2 -- 1 row
+-- Open        -> Open        ####  (none)
+
+
+subtest end
+
+subtest end

@@ -1,0 +1,55 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index'
+
+.custom--modal
+  border-radius 5px
+  box-shadow 0 0 1px 0 rgba(71, 88, 114, 0.47)
+  background-color $colors--white
+  padding 0
+  min-width 905px
+  .ant-modal-close-x
+    font-size 14px
+    color $colors--neutral-8
+  .ant-modal-footer
+    display flex
+    justify-content flex-end
+    border-top none
+    padding 0 24px 24px
+  .ant-modal-header
+    border-bottom none
+    padding 24px 24px 0
+  .ant-modal-body
+    padding 0 24px 11px
+  .ant-modal-title
+    font-family SourceSansPro-Regular
+    font-size 20px
+    line-height 1.6
+    letter-spacing -0.2px
+    color $colors--neutral-8
+  &__close--button
+    width 70px
+    height 40px
+    display flex
+    justify-content center
+    align-items center
+    border-radius 3px
+    background-color $colors--primary-blue-3
+    color $colors--white
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
+    text-transform none
+    margin 0
+    &:hover, &:focus
+      background-color $colors--primary-blue-3
+      color $colors--white

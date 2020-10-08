@@ -1,0 +1,4 @@
+alter_zone_table_stmt ::=
+	'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'DISCARD'

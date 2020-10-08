@@ -1,27 +1,36 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import _ from "lodash";
+import moment from "moment";
 import React from "react";
 import { Helmet } from "react-helmet";
-import { Link } from "react-router";
-import _ from "lodash";
+import { Link, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
-import moment from "moment";
-
-import "./events.styl";
-
 import * as protos from "src/js/protos";
-
-import { AdminUIState } from "src/redux/state";
 import { refreshEvents } from "src/redux/apiReducers";
 import { eventsSelector, eventsValidSelector } from "src/redux/events";
 import { LocalSetting } from "src/redux/localsettings";
+import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
 import { getEventDescription } from "src/util/events";
+import { DATE_FORMAT } from "src/util/format";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import "./events.styl";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
 
 // Number of events to show in the sidebar.
-const EVENT_BOX_NUM_EVENTS = 10;
+const EVENT_BOX_NUM_EVENTS = 5;
 
 const eventsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "events/sort_setting", (s) => s.localSettings,
@@ -42,7 +51,7 @@ export interface EventRowProps {
 
 export function getEventInfo(e: Event$Properties): SimplifiedEvent {
   return {
-    fromNowString: TimestampToMoment(e.timestamp).fromNow()
+    fromNowString: TimestampToMoment(e.timestamp).format(DATE_FORMAT)
       .replace("second", "sec")
       .replace("minute", "min"),
     content: <span>{ getEventDescription(e) }</span>,
@@ -55,8 +64,19 @@ export class EventRow extends React.Component<EventRowProps, {}> {
     const { event } = this.props;
     const e = getEventInfo(event);
     return <tr>
-      <td><div className="events__message">{e.content}</div></td>
-      <td><div className="events__timestamp">{e.fromNowString}</div></td>
+      <td>
+        <ToolTipWrapper
+          placement="left"
+          text={ e.content }
+        >
+          <div className="events__message">
+            {e.content}
+          </div>
+        </ToolTipWrapper>
+        <div className="events__timestamp">
+          {e.fromNowString}
+        </div>
+      </td>
     </tr>;
   }
 }
@@ -71,14 +91,14 @@ export interface EventBoxProps {
 
 export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh events when mounting.
     this.props.refreshEvents();
   }
 
-  componentWillReceiveProps(props: EventPageProps) {
+  componentDidUpdate() {
     // Refresh events when props change.
-    props.refreshEvents();
+    this.props.refreshEvents();
   }
 
   render() {
@@ -109,14 +129,14 @@ export interface EventPageProps {
 }
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
-  componentWillMount() {
+  componentDidMount() {
     // Refresh events when mounting.
     this.props.refreshEvents();
   }
 
-  componentWillReceiveProps(props: EventPageProps) {
+  componentDidUpdate() {
     // Refresh events when props change.
-    props.refreshEvents();
+    this.props.refreshEvents();
   }
 
   render() {
@@ -125,11 +145,9 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
     const simplifiedEvents = _.map(events, getEventInfo);
 
     return <div>
-      <Helmet>
-        <title>Events</title>
-      </Helmet>
+      <Helmet title="Events" />
       <section className="section section--heading">
-        <h1>Events</h1>
+        <h1 className="base-heading">Events</h1>
       </section>
       <section className="section l-columns">
         <div className="l-columns__left events-table">
@@ -156,7 +174,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
 }
 
 // Connect the EventsList class with our redux store.
-const eventBoxConnected = connect(
+const eventBoxConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       events: eventsSelector(state),
@@ -166,10 +184,10 @@ const eventBoxConnected = connect(
   {
     refreshEvents,
   },
-)(EventBoxUnconnected);
+)(EventBoxUnconnected));
 
 // Connect the EventsList class with our redux store.
-const eventPageConnected = connect(
+const eventPageConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       events: eventsSelector(state),
@@ -181,7 +199,7 @@ const eventPageConnected = connect(
     refreshEvents,
     setSort: eventsSortSetting.set,
   },
-)(EventPageUnconnected);
+)(EventPageUnconnected));
 
 export { eventBoxConnected as EventBox };
 export { eventPageConnected as EventPage };

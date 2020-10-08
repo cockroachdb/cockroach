@@ -1,20 +1,17 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #include "file_registry.h"
 #include "env_manager.h"
 #include "fmt.h"
+#include "options.h"
 #include "utils.h"
 
 using namespace cockroach;
@@ -25,7 +22,13 @@ FileRegistry::FileRegistry(rocksdb::Env* env, const std::string& db_dir, bool re
     : env_(env),
       db_dir_(db_dir),
       read_only_(read_only),
-      registry_path_(PathAppend(db_dir_, kFileRegistryFilename)) {}
+      registry_path_(PathAppend(db_dir_, kFileRegistryFilename)) {
+  auto status = env_->NewDirectory(db_dir_, &registry_dir_);
+  if (!status.ok()) {
+    std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(true /* use_primary_log */));
+    rocksdb::Fatal(logger, "unable to open directory %s to sync: %s", db_dir.c_str(), status.ToString().c_str());
+  }
+}
 
 rocksdb::Status FileRegistry::CheckNoRegistryFile() const {
   rocksdb::Status status = env_->FileExists(registry_path_);
@@ -254,7 +257,7 @@ rocksdb::Status FileRegistry::PersistRegistryLocked(std::unique_ptr<enginepb::Fi
     return rocksdb::Status::InvalidArgument("failed to serialize key registry");
   }
 
-  auto status = SafeWriteStringToFile(env_, registry_path_, contents);
+  auto status = SafeWriteStringToFile(env_, registry_dir_.get(), registry_path_, contents);
   if (!status.ok()) {
     return status;
   }

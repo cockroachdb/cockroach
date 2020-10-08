@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pretty
 
@@ -39,18 +35,24 @@ type docBestType int
 const (
 	textB docBestType = iota
 	lineB
+	hardlineB
 	spacesB
+	keywordB
 )
 
 // Pretty returns a pretty-printed string for the Doc d at line length
-// n and tab width t.
-func Pretty(d Doc, n int, useTabs bool, tabWidth int) string {
+// n and tab width t. Keyword Docs are filtered through keywordTransform
+// if not nil. keywordTransform must not change the visible length of its
+// argument. It can, for example, add invisible characters like control codes
+// (colors, etc.).
+func Pretty(d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(string) string) string {
 	var sb strings.Builder
 	b := beExec{
-		w:        int16(n),
-		tabWidth: int16(tabWidth),
-		memoBe:   make(map[beArgs]*docBest),
-		memoiDoc: make(map[iDoc]*iDoc),
+		w:                int16(n),
+		tabWidth:         int16(tabWidth),
+		memoBe:           make(map[beArgs]*docBest),
+		memoiDoc:         make(map[iDoc]*iDoc),
+		keywordTransform: keywordTransform,
 	}
 	ldoc := b.best(d)
 	b.layout(&sb, useTabs, ldoc)
@@ -98,6 +100,9 @@ type beExec struct {
 	// idocAlloc speeds up the allocations by (*beExec).iDoc() defined
 	// below.
 	idocAlloc []iDoc
+
+	// keywordTransform filters keywords if not nil.
+	keywordTransform func(string) string
 }
 
 func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
@@ -123,7 +128,7 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 	switch t := d.d.(type) {
 	case nilDoc:
 		res = b.be(k, z)
-	case concat:
+	case *concat:
 		res = b.be(k, b.iDoc(d.i, t.a, b.iDoc(d.i, t.b, z)))
 	case nests:
 		res = b.be(k, b.iDoc(docPos{d.i.tabs, d.i.spaces + t.n}, t.d, z))
@@ -135,13 +140,25 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 			s:   string(t),
 			d:   b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z),
 		})
+	case keyword:
+		res = b.newDocBest(docBest{
+			tag: keywordB,
+			s:   string(t),
+			d:   b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z),
+		})
 	case line, softbreak:
 		res = b.newDocBest(docBest{
 			tag: lineB,
 			i:   d.i,
 			d:   b.be(d.i, z),
 		})
-	case union:
+	case hardline:
+		res = b.newDocBest(docBest{
+			tag: hardlineB,
+			i:   d.i,
+			d:   b.be(d.i, z),
+		})
+	case *union:
 		res = b.better(k,
 			b.be(k, b.iDoc(d.i, t.x, z)),
 			// We eta-lift the second argument to avoid eager evaluation.
@@ -234,10 +251,12 @@ func fits(w int16, x *docBest) bool {
 		return true
 	}
 	switch x.tag {
-	case textB:
+	case textB, keywordB:
 		return fits(w-int16(len(x.s)), x.d)
 	case lineB:
 		return true
+	case hardlineB:
+		return false
 	case spacesB:
 		return fits(w-x.i.spaces, x.d)
 	default:
@@ -250,7 +269,13 @@ func (b *beExec) layout(sb *strings.Builder, useTabs bool, d *docBest) {
 		switch d.tag {
 		case textB:
 			sb.WriteString(d.s)
-		case lineB:
+		case keywordB:
+			if b.keywordTransform != nil {
+				sb.WriteString(b.keywordTransform(d.s))
+			} else {
+				sb.WriteString(d.s)
+			}
+		case lineB, hardlineB:
 			sb.WriteByte('\n')
 			// Fill the tabs first.
 			padTabs := d.i.tabs * b.tabWidth

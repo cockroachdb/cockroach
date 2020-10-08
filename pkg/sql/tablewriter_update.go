@@ -1,36 +1,38 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // tableUpdater handles writing kvs and forming table rows for updates.
 type tableUpdater struct {
 	tableWriterBase
-	ru sqlbase.RowUpdater
+	ru row.Updater
 }
 
+var _ tableWriter = &tableUpdater{}
+
+// desc is part of the tableWriter interface.
+func (*tableUpdater) desc() string { return "updater" }
+
 // init is part of the tableWriter interface.
-func (tu *tableUpdater) init(txn *client.Txn, _ *tree.EvalContext) error {
-	tu.tableWriterBase.init(txn)
+func (tu *tableUpdater) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContext) error {
+	tu.tableWriterBase.init(txn, tu.tableDesc())
 	return nil
 }
 
@@ -38,45 +40,27 @@ func (tu *tableUpdater) init(txn *client.Txn, _ *tree.EvalContext) error {
 // We don't implement this because tu.ru.UpdateRow wants two slices
 // and it would be a shame to split the incoming slice on every call.
 // Instead provide a separate rowForUpdate() below.
-func (tu *tableUpdater) row(context.Context, tree.Datums, bool) (tree.Datums, error) {
+func (tu *tableUpdater) row(
+	context.Context, tree.Datums, row.PartialIndexUpdateHelper, bool,
+) error {
 	panic("unimplemented")
 }
 
 // rowForUpdate extends row() from the tableWriter interface.
 func (tu *tableUpdater) rowForUpdate(
-	ctx context.Context, oldValues, updateValues tree.Datums, traceKV bool,
+	ctx context.Context,
+	oldValues, updateValues tree.Datums,
+	pm row.PartialIndexUpdateHelper,
+	traceKV bool,
 ) (tree.Datums, error) {
-	tu.batchSize++
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, sqlbase.CheckFKs, traceKV)
-}
-
-// atBatchEnd is part of the extendedTableWriter interface.
-func (tu *tableUpdater) atBatchEnd(_ context.Context, _ bool) error { return nil }
-
-// flushAndStartNewBatch is part of the extendedTableWriter interface.
-func (tu *tableUpdater) flushAndStartNewBatch(ctx context.Context) error {
-	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
-}
-
-// finalize is part of the tableWriter interface.
-func (tu *tableUpdater) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, _ bool,
-) (*sqlbase.RowContainer, error) {
-	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
+	tu.currentBatchSize++
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, pm, traceKV)
 }
 
 // tableDesc is part of the tableWriter interface.
-func (tu *tableUpdater) tableDesc() *sqlbase.TableDescriptor {
+func (tu *tableUpdater) tableDesc() catalog.TableDescriptor {
 	return tu.ru.Helper.TableDesc
 }
-
-// fkSpanCollector is part of the tableWriter interface.
-func (tu *tableUpdater) fkSpanCollector() sqlbase.FkSpanCollector {
-	return tu.ru.Fks
-}
-
-// close is part of the tableWriter interface.
-func (tu *tableUpdater) close(_ context.Context) {}
 
 // walkExprs is part of the tableWriter interface.
 func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}

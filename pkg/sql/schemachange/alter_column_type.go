@@ -1,24 +1,22 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package schemachange
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 //go:generate stringer -type=ColumnConversionKind -trimprefix ColumnConversion
@@ -60,85 +58,61 @@ const (
 // classifier returns a classifier function that simply returns the
 // target ColumnConversionKind.
 func (i ColumnConversionKind) classifier() classifier {
-	return func(_ *sqlbase.ColumnType, _ *sqlbase.ColumnType) ColumnConversionKind {
+	return func(_ *types.T, _ *types.T) ColumnConversionKind {
 		return i
 	}
 }
 
 // TODO(bob): Once we support non-trivial conversions, perhaps this should
 // also construct the conversion plan?
-type classifier func(oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType) ColumnConversionKind
+type classifier func(oldType *types.T, newType *types.T) ColumnConversionKind
 
 // classifiers contains the logic for looking up conversions which
 // don't require a fully-generalized approach.
-var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_SemanticType]classifier{
-	sqlbase.ColumnType_BYTES: {
-		sqlbase.ColumnType_BYTES:  classifierWidth,
-		sqlbase.ColumnType_STRING: ColumnConversionValidate.classifier(),
-		sqlbase.ColumnType_UUID:   ColumnConversionValidate.classifier(),
+var classifiers = map[types.Family]map[types.Family]classifier{
+	types.BytesFamily: {
+		types.BytesFamily:  classifierWidth,
+		types.StringFamily: ColumnConversionValidate.classifier(),
+		types.UuidFamily:   ColumnConversionValidate.classifier(),
 	},
-	sqlbase.ColumnType_DECIMAL: {
+	types.DecimalFamily: {
 		// Decimals are always encoded as an apd.Decimal
-		sqlbase.ColumnType_DECIMAL: classifierHardestOf(classifierPrecision, classifierWidth),
+		types.DecimalFamily: classifierHardestOf(classifierDecimalPrecision, classifierWidth),
 	},
-	sqlbase.ColumnType_FLOAT: {
+	types.FloatFamily: {
 		// Floats are always encoded as 64-bit values on disk and we don't
 		// actually care about scale or precision.
-		sqlbase.ColumnType_FLOAT: ColumnConversionTrivial.classifier(),
+		types.FloatFamily: ColumnConversionTrivial.classifier(),
 	},
-	sqlbase.ColumnType_INT: {
-		// Right now, our behavior with respect to handling BIT(n) doesn't
-		// match pgsql behavior.  Converting between INT(n) and BIT(n),
-		// especially regarding negative values, is somewhat dodgy.
-		// The safest thing to do at the moment is to deny this change,
-		// unless the user provides a USING expression.  We can revisit
-		// this once the following issue is worked out:
-		// https://github.com/cockroachdb/cockroach/issues/20991
-		sqlbase.ColumnType_INT: func(from *sqlbase.ColumnType, to *sqlbase.ColumnType) ColumnConversionKind {
-			fromBit := from.VisibleType == sqlbase.ColumnType_BIT
-			toBit := to.VisibleType == sqlbase.ColumnType_BIT
-
-			if fromBit == toBit {
-				return classifierWidth(from, to)
-			}
-			return ColumnConversionDangerous
+	types.IntFamily: {
+		types.IntFamily: func(from *types.T, to *types.T) ColumnConversionKind {
+			return classifierWidth(from, to)
 		},
 	},
-	sqlbase.ColumnType_STRING: {
-		// If we want to convert string -> bytes, we need to know that the
-		// bytes type has an unlimited width or that we have at least
-		// 4x the number of bytes as known-maximum characters.
-		sqlbase.ColumnType_BYTES: func(s *sqlbase.ColumnType, b *sqlbase.ColumnType) ColumnConversionKind {
-			switch {
-			case b.Width == 0:
-				return ColumnConversionTrivial
-			case s.Width == 0:
-				return ColumnConversionValidate
-			case b.Width >= s.Width*4:
-				return ColumnConversionTrivial
-			default:
-				return ColumnConversionValidate
-			}
+	types.BitFamily: {
+		types.BitFamily: func(from *types.T, to *types.T) ColumnConversionKind {
+			return classifierWidth(from, to)
 		},
-		sqlbase.ColumnType_STRING: classifierWidth,
 	},
-	// TODO(bob): It looks like TIMETZ is currently in flux and the
-	// implementation, encoding, and semantics may be changing.
-	// We'll disable this change for the moment until these
-	// issues settle:
-	// https://github.com/cockroachdb/cockroach/issues/25224
-	// https://github.com/cockroachdb/cockroach/issues/26097
-	sqlbase.ColumnType_TIME: {
-		sqlbase.ColumnType_TIMETZ: ColumnConversionDangerous.classifier(),
+	types.StringFamily: {
+		types.BytesFamily: func(s *types.T, b *types.T) ColumnConversionKind {
+			return ColumnConversionValidate
+		},
+		types.StringFamily: classifierWidth,
 	},
-	sqlbase.ColumnType_TIMETZ: {
-		sqlbase.ColumnType_TIME: ColumnConversionDangerous.classifier(),
+	types.TimestampFamily: {
+		types.TimestampTZFamily: classifierTimePrecision,
+		types.TimestampFamily:   classifierTimePrecision,
 	},
-	sqlbase.ColumnType_TIMESTAMP: {
-		sqlbase.ColumnType_TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
+	types.TimestampTZFamily: {
+		types.TimestampFamily:   classifierTimePrecision,
+		types.TimestampTZFamily: classifierTimePrecision,
 	},
-	sqlbase.ColumnType_TIMESTAMPTZ: {
-		sqlbase.ColumnType_TIMESTAMP: ColumnConversionTrivial.classifier(),
+	types.TimeFamily: {
+		types.TimeFamily: classifierTimePrecision,
+	},
+	types.TimeTZFamily: {
+		types.TimeTZFamily: classifierTimePrecision,
 	},
 }
 
@@ -146,7 +120,7 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 // hardest kind of the enclosed classifiers.  If any of the
 // classifiers report impossible, impossible will be returned.
 func classifierHardestOf(classifiers ...classifier) classifier {
-	return func(oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType) ColumnConversionKind {
+	return func(oldType *types.T, newType *types.T) ColumnConversionKind {
 		ret := ColumnConversionTrivial
 
 		for _, c := range classifiers {
@@ -163,18 +137,34 @@ func classifierHardestOf(classifiers ...classifier) classifier {
 	}
 }
 
-// classifierPrecision returns trivial only if the new type has a precision
+// classifierTimePrecision returns trivial only if the new type has a precision
+// greater than the existing precision.  If they are the same, it returns
+// no-op.  Otherwise, it returns ColumnConversionOverwrite.
+func classifierTimePrecision(oldType *types.T, newType *types.T) ColumnConversionKind {
+	oldPrecision := oldType.Precision()
+	newPrecision := newType.Precision()
+
+	switch {
+	case newPrecision >= oldPrecision:
+		return ColumnConversionTrivial
+	default:
+		return ColumnConversionGeneral
+	}
+}
+
+// classifierDecimalPrecision returns trivial only if the new type has a precision
 // greater than the existing precision.  If they are the same, it returns
 // no-op.  Otherwise, it returns validate.
-func classifierPrecision(
-	oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType,
-) ColumnConversionKind {
+func classifierDecimalPrecision(oldType *types.T, newType *types.T) ColumnConversionKind {
+	oldPrecision := oldType.Precision()
+	newPrecision := newType.Precision()
+
 	switch {
-	case oldType.Precision == newType.Precision:
+	case oldPrecision == newPrecision:
 		return ColumnConversionTrivial
-	case oldType.Precision == 0:
+	case oldPrecision == 0:
 		return ColumnConversionValidate
-	case newType.Precision == 0 || newType.Precision > oldType.Precision:
+	case newPrecision == 0 || newPrecision > oldPrecision:
 		return ColumnConversionTrivial
 	default:
 		return ColumnConversionValidate
@@ -184,15 +174,13 @@ func classifierPrecision(
 // classifierWidth returns trivial only if the new type has a width
 // greater than the existing width.  If they are the same, it returns
 // no-op.  Otherwise, it returns validate.
-func classifierWidth(
-	oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType,
-) ColumnConversionKind {
+func classifierWidth(oldType *types.T, newType *types.T) ColumnConversionKind {
 	switch {
-	case oldType.Width == newType.Width:
+	case oldType.Width() == newType.Width():
 		return ColumnConversionTrivial
-	case oldType.Width == 0:
+	case oldType.Width() == 0 && newType.Width() < 64:
 		return ColumnConversionValidate
-	case newType.Width == 0 || newType.Width > oldType.Width:
+	case newType.Width() == 0 || newType.Width() > oldType.Width():
 		return ColumnConversionTrivial
 	default:
 		return ColumnConversionValidate
@@ -203,15 +191,15 @@ func classifierWidth(
 // the conversion is.  Note that this function will return
 // ColumnConversionTrivial if the two types are equal.
 func ClassifyConversion(
-	oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType,
+	ctx context.Context, oldType *types.T, newType *types.T,
 ) (ColumnConversionKind, error) {
-	if oldType.Equal(newType) {
+	if oldType.Identical(newType) {
 		return ColumnConversionTrivial, nil
 	}
 
 	// Use custom logic for classifying a conversion.
-	if mid, ok := classifiers[oldType.SemanticType]; ok {
-		if fn, ok := mid[newType.SemanticType]; ok {
+	if mid, ok := classifiers[oldType.Family()]; ok {
+		if fn, ok := mid[newType.Family()]; ok {
 			ret := fn(oldType, newType)
 			if ret != ColumnConversionImpossible {
 				return ret, nil
@@ -220,23 +208,23 @@ func ClassifyConversion(
 	}
 
 	// See if there's existing cast logic.  If so, return general.
-	ctx := tree.MakeSemaContext(false)
+	semaCtx := tree.MakeSemaContext()
+	if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
+		return ColumnConversionImpossible, err
+	}
 
 	// Use a placeholder just to sub in the original type.
-	fromPlaceholder, err := (&tree.Placeholder{}).TypeCheck(&ctx, oldType.ToDatumType())
+	fromPlaceholder, err := (&tree.Placeholder{Idx: 0}).TypeCheck(ctx, &semaCtx, oldType)
 	if err != nil {
 		return ColumnConversionImpossible, err
 	}
 
 	// Cook up a cast expression using the placeholder.
-	if newColType, err := coltypes.DatumTypeToColumnType(newType.ToDatumType()); err == nil {
-		if cast, err := tree.NewTypedCastExpr(fromPlaceholder, newColType); err == nil {
-			if _, err := cast.TypeCheck(&ctx, nil); err == nil {
-				return ColumnConversionGeneral, nil
-			}
-		}
+	cast := tree.NewTypedCastExpr(fromPlaceholder, newType)
+	if _, err := cast.TypeCheck(ctx, &semaCtx, nil); err == nil {
+		return ColumnConversionGeneral, nil
 	}
 
 	return ColumnConversionImpossible,
-		pgerror.NewErrorf(pgerror.CodeCannotCoerceError, "cannot convert %s to %s", oldType.SQLString(), newType.SQLString())
+		pgerror.Newf(pgcode.CannotCoerce, "cannot convert %s to %s", oldType.SQLString(), newType.SQLString())
 }

@@ -1,5 +1,3 @@
-# LogicTest: fakedist-opt local-opt
-
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c));
 INSERT INTO abc VALUES (1, 1, 2), (2, 1, 1), (2, NULL, 2)
@@ -14,15 +12,13 @@ INSERT INTO gh VALUES (NULL, 1)
 
 # Set up the statistics as if the first table is much smaller than the second.
 # This will make lookup join into the second table be the best plan.
-# TODO(radu): we have to use very small row counts because of the poor row
-# count estimation for joins (left-rows * right-rows / 10).
 statement ok
 ALTER TABLE abc INJECT STATISTICS '[
   {
     "columns": ["a"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1,
-    "distinct_count": 1
+    "row_count": 100,
+    "distinct_count": 100
   }
 ]'
 
@@ -31,8 +27,8 @@ ALTER TABLE def INJECT STATISTICS '[
   {
     "columns": ["f"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10,
-    "distinct_count": 10
+    "row_count": 10000,
+    "distinct_count": 10000
   }
 ]'
 
@@ -41,8 +37,8 @@ ALTER TABLE gh INJECT STATISTICS '[
   {
     "columns": ["g"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10,
-    "distinct_count": 10
+    "row_count": 10000,
+    "distinct_count": 10000
   }
 ]'
 
@@ -53,6 +49,12 @@ SELECT * FROM abc JOIN def ON f = b
 2  1  1  2     1  1
 1  1  2  NULL  2  1
 2  1  1  NULL  2  1
+
+query IIIIII rowsort
+SELECT * FROM abc JOIN def ON f = b AND e = c
+----
+1  1  2  NULL  2  1
+2  1  1  2     1  1
 
 query IIIIII rowsort
 SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
@@ -111,9 +113,21 @@ INSERT INTO data SELECT a, b, c, d FROM
    generate_series(1, 10) AS c(c),
    generate_series(1, 10) AS d(d)
 
+statement ok
+ALTER TABLE data INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+
 # Ensure lookup join performs properly on input that has more than 100 rows.
 query I
-SELECT count(*) FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
+SELECT count(*)
+FROM (SELECT * FROM data WHERE c = 1) AS l
+NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
 1000
 
@@ -155,8 +169,8 @@ ALTER TABLE books INJECT STATISTICS '[
   {
     "columns": ["title"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1,
-    "distinct_count": 1
+    "row_count": 100,
+    "distinct_count": 100
   }
 ]'
 
@@ -165,8 +179,8 @@ ALTER TABLE books2 INJECT STATISTICS '[
   {
     "columns": ["title"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10,
-    "distinct_count": 10
+    "row_count": 10000,
+    "distinct_count": 1000
   }
 ]'
 
@@ -186,8 +200,8 @@ ALTER TABLE authors INJECT STATISTICS '[
   {
     "columns": ["name"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1,
-    "distinct_count": 1
+    "row_count": 100,
+    "distinct_count": 100
   }
 ]'
 
@@ -206,7 +220,7 @@ Ronald Rivest
 Clifford Stein
 
 # Ensure lookup join preserves ordering from the left side.
-query T rowsort
+query T
 SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
 Charles E Leiserson
@@ -226,134 +240,351 @@ Thomas H Cormen
 Thomas H Cormen
 Thomas H Cormen
 
-# TODO(radu): rework these tests once lookup join using non-covering index is
-# supported.
-#####################################
-##  LOOKUP JOIN ON SECONDARY INDEX  #
-#####################################
-#
-## Create a table with a secondary index which stores another column.
-#statement ok
-#CREATE TABLE multiples (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
-#
-## Split into ten parts.
-#statement ok
-#ALTER TABLE multiples SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
-#
-## Relocate the ten parts to the five nodes.
-#statement ok
-#ALTER TABLE multiples EXPERIMENTAL_RELOCATE
-#  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
-#
-## Generate 10 rows.
-#statement ok
-#INSERT INTO multiples SELECT x, 2*x, 3*x, 4*x FROM
-#  generate_series(1, 10) AS a(x)
-#
-## Lookup join on covering secondary index
-#query II rowsort
-#SELECT t1.a, t2.c FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
-#----
-#2   3
-#4   6
-#6   9
-#8   12
-#10  15
-#
-## Lookup join on non-covering secondary index
-## The index join should be subsumed by joinreader, which takes care of the
-## primary index lookups.
-#query II rowsort
-#SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
-#----
-#2   4
-#4   8
-#6   12
-#8   16
-#10  20
+####################################
+#  LOOKUP JOIN ON SECONDARY INDEX  #
+####################################
 
-# TODO(radu): enable these tests.
-#############################
-##  LEFT OUTER LOOKUP JOIN  #
-#############################
-## Left join against primary index
-#query II rowsort
-#SELECT t1.b, t2.a FROM multiples t1 LEFT JOIN multiples t2 ON t1.b = t2.a
-#----
-#2 2
-#4 4
-#6 6
-#8 8
-#10 10
-#12 NULL
-#14 NULL
-#16 NULL
-#18 NULL
-#20 NULL
-#
-## Left join against covering secondary index
-#query II rowsort
-#SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b
-#----
-#3   NULL
-#6   9
-#9   NULL
-#12  18
-#15  NULL
-#18  27
-#21  NULL
-#24  NULL
-#27  NULL
-#30  NULL
-#
-## Left join against non-covering secondary index
-#query II rowsort
-#SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b
-#----
-#3   NULL
-#6   12
-#9   NULL
-#12  24
-#15  NULL
-#18  36
-#21  NULL
-#24  NULL
-#27  NULL
-#30  NULL
-#
-## Left join with ON filter on covering index
-#query II rowsort
-#SELECT t1.c, t2.c FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.c < 20
-#----
-#3   NULL
-#6   9
-#9   NULL
-#12  18
-#15  NULL
-#18  NULL
-#21  NULL
-#24  NULL
-#27  NULL
-#30  NULL
-#
+statement ok
+CREATE TABLE small (a INT PRIMARY KEY, b INT, c INT, d INT)
+
+statement ok
+CREATE TABLE large (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
+
+# Generate 10 rows for both tables.
+statement ok
+INSERT INTO small SELECT x, 2*x, 3*x, 4*x FROM
+  generate_series(1, 10) AS a(x)
+
+statement ok
+INSERT INTO large SELECT x, 2*x, 3*x, 4*x FROM
+  generate_series(1, 10) AS a(x)
+
+statement ok
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE large INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+# Lookup join on covering secondary index
+query II rowsort
+SELECT small.a, large.c FROM small JOIN large ON small.a = large.b
+----
+2   3
+4   6
+6   9
+8   12
+10  15
+
+# Lookup join on non-covering secondary index
+query II rowsort
+SELECT small.a, large.d FROM small JOIN large ON small.a = large.b
+----
+2   4
+4   8
+6   12
+8   16
+10  20
+
+############################
+#  LEFT OUTER LOOKUP JOIN  #
+############################
+
+# Left join against primary index
+query II rowsort
+SELECT small.b, large.a FROM small LEFT JOIN large ON small.b = large.a
+----
+2 2
+4 4
+6 6
+8 8
+10 10
+12 NULL
+14 NULL
+16 NULL
+18 NULL
+20 NULL
+
+# Left join should preserve input order.
+query II
+SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
+----
+1   NULL
+2   NULL
+3   6
+4   NULL
+5   NULL
+6   12
+7   NULL
+8   NULL
+9   18
+10  NULL
+
+# Left join against covering secondary index
+query II rowsort
+SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b
+----
+3   NULL
+6   9
+9   NULL
+12  18
+15  NULL
+18  27
+21  NULL
+24  NULL
+27  NULL
+30  NULL
+
+# Left join against non-covering secondary index
+query II rowsort
+SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b
+----
+3   NULL
+6   12
+9   NULL
+12  24
+15  NULL
+18  36
+21  NULL
+24  NULL
+27  NULL
+30  NULL
+
+# Left join with ON filter on covering index
+query II rowsort
+SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND large.c < 20
+----
+3   NULL
+6   9
+9   NULL
+12  18
+15  NULL
+18  NULL
+21  NULL
+24  NULL
+27  NULL
+30  NULL
+
 ## Left join with ON filter on non-covering index
-#query II rowsort
-#SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b AND t2.d < 30
-#----
-#3   NULL
-#6   12
-#9   NULL
-#12  24
-#15  NULL
-#18  NULL
-#21  NULL
-#24  NULL
-#27  NULL
-#30  NULL
-#
-## Left join with ON filter and WHERE clause
-#query II rowsort
-#SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b WHERE t2.d < 30
-#----
-#6   12
-#12  24
+query II rowsort
+SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
+----
+3   NULL
+6   12
+9   NULL
+12  24
+15  NULL
+18  NULL
+21  NULL
+24  NULL
+27  NULL
+30  NULL
+
+# Lookup joins against interleaved tables. Regression test for #28981.
+# This is now tested more thoroughly by joinreader_test.go.
+
+statement ok
+CREATE TABLE parent (a INT, b INT, PRIMARY KEY(a, b))
+
+statement ok
+CREATE TABLE child (a INT, b INT, c INT, PRIMARY KEY(a, b, c)) INTERLEAVE IN PARENT parent(a, b)
+
+statement ok
+CREATE TABLE source (a INT)
+
+statement ok
+ALTER TABLE source INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE child INJECT STATISTICS '[
+  {
+    "columns": ["a", "b", "c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+statement ok
+INSERT INTO child VALUES(1, 2, 3)
+
+statement ok
+INSERT INTO source VALUES(1)
+
+query IIII
+SELECT * FROM source JOIN child ON source.a = child.a
+----
+1 1 2 3
+
+###########################################################
+#  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
+#  https://github.com/cockroachdb/cockroach/issues/31777  #
+###########################################################
+statement ok
+CREATE TABLE t (a INT, b INT, c INT, d INT, e INT)
+
+statement ok
+CREATE TABLE u (a INT, b INT, c INT, d INT, e INT, PRIMARY KEY (a DESC, b, c))
+
+statement ok
+INSERT INTO t VALUES
+  (1, 2, 3, 4, 5)
+
+statement ok
+INSERT INTO u VALUES
+  (1, 2, 3, 4, 5),
+  (2, 3, 4, 5, 6),
+  (3, 4, 5, 6, 7)
+
+# Test index with all primary key columns implicit.
+statement ok
+CREATE INDEX idx ON u (d)
+
+query I
+SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
+----
+1
+
+# Test unique version of same index. (Lookup join should not use column a.)
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE UNIQUE INDEX idx ON u (d)
+
+query I
+SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
+----
+1
+
+# Test index with first primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx CASCADE
+
+statement ok
+CREATE INDEX idx ON u (d, a)
+
+query I
+SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
+----
+1
+
+# Test index with middle primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE INDEX idx ON u (d, b)
+
+query I
+SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
+----
+1
+
+# Test index with last primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE INDEX idx ON u (d, c)
+
+query I
+SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
+----
+1
+
+query IIIIII colnames,partialsort(4)
+SELECT * FROM def JOIN abc ON a=f ORDER BY a
+----
+d     e  f  a  b     c
+2     1  1  1  1     2
+NULL  2  1  1  1     2
+1     1  2  2  NULL  2
+1     1  2  2  1     1
+
+# Test lookup semi and anti join.
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
+----
+1  1     2
+2  1     1
+2  NULL  2
+
+query III rowsort
+SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
+----
+
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+1  1  2
+2  1  1
+
+query III rowsort
+SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+2  NULL  2
+
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
+----
+1  1  2
+2  1  1
+
+query III rowsort
+SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
+----
+2  NULL  2
+
+query II
+SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
+----
+1   2
+2   4
+3   6
+4   8
+5   10
+6   12
+7   14
+8   16
+9   18
+10  20
+
+query II
+SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=data.a AND small.b+data.c>15) ORDER BY a
+----
+3  6
+4  8
+5  10
+6  12
+
+# Regression test for #50964.
+statement ok
+CREATE TABLE tab4 (
+  pk INT8 PRIMARY KEY, col0 INT8, col1 FLOAT8, col2 STRING, col3 INT8, col4 FLOAT8, col5 STRING,
+  UNIQUE (col3 DESC, col4 DESC)
+)
+
+query I
+SELECT pk FROM tab4 WHERE col0 IN (SELECT col3 FROM tab4 WHERE col4 = 495.6) AND (col3 IS NULL)
+----

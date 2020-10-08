@@ -104,6 +104,7 @@ optgen exprs invalid-source
 ----
 ERROR: invalid source
 
+
 #
 # Test invalid filename.
 #

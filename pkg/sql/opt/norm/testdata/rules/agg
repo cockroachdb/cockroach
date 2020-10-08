@@ -1,0 +1,150 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
+----
+
+# --------------------------------------------------
+# EliminateAggDistinct
+# --------------------------------------------------
+
+norm expect=EliminateAggDistinct
+SELECT min(DISTINCT i), max(DISTINCT i), bool_and(DISTINCT i>f), bool_or(DISTINCT i>f), corr(DISTINCT k, i) FROM a
+----
+scalar-group-by
+ ├── columns: min:8 max:9 bool_and:11 bool_or:12 corr:13
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8,9,11-13)
+ ├── project
+ │    ├── columns: column10:10 k:1!null i:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,10)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
+ │    └── projections
+ │         └── i:2 > f:3 [as=column10:10, outer=(2,3)]
+ └── aggregations
+      ├── min [as=min:8, outer=(2)]
+      │    └── i:2
+      ├── max [as=max:9, outer=(2)]
+      │    └── i:2
+      ├── bool-and [as=bool_and:11, outer=(10)]
+      │    └── column10:10
+      ├── bool-or [as=bool_or:12, outer=(10)]
+      │    └── column10:10
+      └── corr [as=corr:13, outer=(1,2)]
+           ├── k:1
+           └── i:2
+
+# The rule should still work when FILTER is present.
+norm expect=EliminateAggDistinct
+SELECT
+    min(DISTINCT i) FILTER (WHERE i > 5),
+    max(DISTINCT i) FILTER (WHERE i > 5),
+    bool_and(DISTINCT i>f) FILTER (WHERE f > 0.0),
+    bool_or(DISTINCT i>f) FILTER (WHERE f > 1.0),
+    corr(DISTINCT k, i) FILTER(WHERE k > 5 AND i > 5)
+FROM a
+----
+scalar-group-by
+ ├── columns: min:9 max:10 bool_and:13 bool_or:15 corr:17
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(9,10,13,15,17)
+ ├── project
+ │    ├── columns: column8:8 column11:11 column12:12 column14:14 column16:16 k:1!null i:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,8,11,12,14,16), (2)-->(8)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
+ │    └── projections
+ │         ├── i:2 > 5 [as=column8:8, outer=(2)]
+ │         ├── i:2 > f:3 [as=column11:11, outer=(2,3)]
+ │         ├── f:3 > 0.0 [as=column12:12, outer=(3)]
+ │         ├── f:3 > 1.0 [as=column14:14, outer=(3)]
+ │         └── (k:1 > 5) AND (i:2 > 5) [as=column16:16, outer=(1,2)]
+ └── aggregations
+      ├── agg-filter [as=min:9, outer=(2,8)]
+      │    ├── min
+      │    │    └── i:2
+      │    └── column8:8
+      ├── agg-filter [as=max:10, outer=(2,8)]
+      │    ├── max
+      │    │    └── i:2
+      │    └── column8:8
+      ├── agg-filter [as=bool_and:13, outer=(11,12)]
+      │    ├── bool-and
+      │    │    └── column11:11
+      │    └── column12:12
+      ├── agg-filter [as=bool_or:15, outer=(11,14)]
+      │    ├── bool-or
+      │    │    └── column11:11
+      │    └── column14:14
+      └── agg-filter [as=corr:17, outer=(1,2,16)]
+           ├── corr
+           │    ├── k:1
+           │    └── i:2
+           └── column16:16
+
+# The rule should not apply to these aggregations.
+norm expect-not=EliminateAggDistinct
+SELECT
+    count(DISTINCT i),
+    sum(DISTINCT i) FILTER (WHERE i > 5),
+    sum_int(DISTINCT i),
+    avg(DISTINCT i),
+    stddev(DISTINCT f),
+    variance(DISTINCT f),
+    xor_agg(DISTINCT s::BYTES),
+    array_agg(DISTINCT i),
+    json_agg(DISTINCT j)
+FROM a
+----
+scalar-group-by
+ ├── columns: count:8!null sum:10 sum_int:11 avg:12 stddev:13 variance:14 xor_agg:16 array_agg:17 json_agg:18
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(8,10-14,16-18)
+ ├── project
+ │    ├── columns: column9:9 column15:15 i:2 f:3 j:5
+ │    ├── immutable
+ │    ├── fd: (2)-->(9)
+ │    ├── scan a
+ │    │    └── columns: i:2 f:3 s:4 j:5
+ │    └── projections
+ │         ├── i:2 > 5 [as=column9:9, outer=(2)]
+ │         └── s:4::BYTES [as=column15:15, outer=(4), immutable]
+ └── aggregations
+      ├── agg-distinct [as=count:8, outer=(2)]
+      │    └── count
+      │         └── i:2
+      ├── agg-filter [as=sum:10, outer=(2,9)]
+      │    ├── agg-distinct
+      │    │    └── sum
+      │    │         └── i:2
+      │    └── column9:9
+      ├── agg-distinct [as=sum_int:11, outer=(2)]
+      │    └── sum-int
+      │         └── i:2
+      ├── agg-distinct [as=avg:12, outer=(2)]
+      │    └── avg
+      │         └── i:2
+      ├── agg-distinct [as=stddev:13, outer=(3)]
+      │    └── std-dev
+      │         └── f:3
+      ├── agg-distinct [as=variance:14, outer=(3)]
+      │    └── variance
+      │         └── f:3
+      ├── agg-distinct [as=xor_agg:16, outer=(15)]
+      │    └── xor-agg
+      │         └── column15:15
+      ├── agg-distinct [as=array_agg:17, outer=(2)]
+      │    └── array-agg
+      │         └── i:2
+      └── agg-distinct [as=json_agg:18, outer=(5)]
+           └── json-agg
+                └── j:5

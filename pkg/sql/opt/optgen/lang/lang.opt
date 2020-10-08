@@ -23,11 +23,10 @@
 #          type of slice elements. For example:
 #            [Slice] define Slice { Element Expr }
 
-
 # Root expression is always the top-most node in the AST.
 define Root {
     Defines DefineSet
-    Rules   RuleSet
+    Rules RuleSet
 }
 
 # type DefineSetExpr []*DefineExpr
@@ -44,9 +43,9 @@ define RuleSet {
 
 define Define {
     Comments Comments
-    Tags     Tags
-    Name     String
-    Fields   DefineFields
+    Tags Tags
+    Name String
+    Fields DefineFields
 }
 
 # type CommentsExpr []CommentExpr
@@ -80,18 +79,20 @@ define DefineFields {
 }
 
 define DefineField {
+    Comments Comments
     Name String
     Type String
 }
 
 define Rule {
     Comments Comments
-    Name     String
-    Tags     Tags
-    Match    Func
-    Replace  Expr
+    Name String
+    Tags Tags
+    Match Func
+    Replace Expr
 }
 
+[HasType]
 define Func {
     Name Expr
     Args Slice
@@ -109,15 +110,18 @@ define Name {
     Value string
 }
 
+[HasType]
 define And {
-    Left  Expr
+    Left Expr
     Right Expr
 }
 
+[HasType]
 define Not {
     Input Expr
 }
 
+[HasType]
 define List {
     Items Slice
 }
@@ -125,15 +129,18 @@ define List {
 define ListAny {
 }
 
+[HasType]
 define Bind {
-    Label  String
+    Label String
     Target Expr
 }
 
+[HasType]
 define Ref {
     Label String
 }
 
+[HasType]
 define Any {
 }
 
@@ -149,11 +156,18 @@ define String {
     Value string
 }
 
+# type NumberExpr int
+[Value]
+define Number {
+    Value int64
+}
+
 #
 # The below operators are never created by the parser, but are created by the
 # compiler, in order to make further processing of the tree easier.
 #
 
+[HasType]
 define CustomFunc {
     Name Name
     Args Slice

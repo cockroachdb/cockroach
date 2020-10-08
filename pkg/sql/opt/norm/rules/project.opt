@@ -2,27 +2,234 @@
 # project.opt contains normalization rules for the Project operator.
 # =============================================================================
 
+# EliminateJoinUnderProjectLeft replaces an InnerJoin or LeftJoin with its left
+# input when:
+# 1. The project doesn't use columns from the join's right input.
+# 2. The join does not duplicate any left rows.
+# 3. The join does not filter any left rows.
+#
+# Note: EliminateJoinUnderProjectLeft should stay above EliminateProject so that
+# it has a chance to fire before the Project can be removed.
+[EliminateJoinUnderProjectLeft, Normalize]
+(Project
+    $join:(InnerJoin | LeftJoin $left:* $right:*) &
+        (JoinDoesNotDuplicateLeftRows $join) &
+        (JoinPreservesLeftRows $join)
+    $projections:* &
+        ^(AreProjectionsCorrelated
+            $projections
+            $rightCols:(OutputCols $right)
+        )
+    $passthrough:* & ^(ColsIntersect $passthrough $rightCols)
+)
+=>
+(Project $left $projections $passthrough)
+
+# EliminateJoinUnderProjectRight mirrors EliminateJoinUnderProjectLeft, except
+# that it only matches InnerJoins.
+[EliminateJoinUnderProjectRight, Normalize]
+(Project
+    $join:(InnerJoin $left:* $right:*) &
+        (JoinDoesNotDuplicateRightRows $join) &
+        (JoinPreservesRightRows $join)
+    $projections:* &
+        ^(AreProjectionsCorrelated
+            $projections
+            $leftCols:(OutputCols $left)
+        )
+    $passthrough:* & ^(ColsIntersect $passthrough $leftCols)
+)
+=>
+(Project $right $projections $passthrough)
 
 # EliminateProject discards a Project operator which is not adding or removing
 # columns.
 [EliminateProject, Normalize]
 (Project
     $input:*
-    $projections:(Projections []) & (HasSameCols $input $projections)
+    $projections:[]
+    $passthrough:* &
+        (ColsAreEqual $passthrough (OutputCols $input))
 )
 =>
 $input
 
-# EliminateProjectProject discards a nested Project operator that is only
-# removing columns from its input (and not synthesizing new ones). That's
-# something the outer Project operator can do on its own.
-[EliminateProjectProject, Normalize]
+# MergeProjects merges an outer Project operator with an inner Project operator
+# if there are no references to the inner synthesized columns. This has the
+# side effect of pruning unused synthesized columns of the inner Project.
+[MergeProjects, Normalize]
 (Project
-    $input:(Project $innerInput:* (Projections []))
-    $projections:*
+    $input:(Project $innerInput:* $innerProjections:*)
+    $projections:* &
+        (CanMergeProjections $projections $innerProjections)
+    $passthrough:*
 )
 =>
 (Project
     $innerInput
-    $projections
+    (MergeProjections
+        $projections
+        $innerProjections
+        $passthrough
+    )
+    (DifferenceCols
+        $passthrough
+        (ProjectionCols $innerProjections)
+    )
+)
+
+# MergeProjectWithValues merges an outer Project operator with an inner Values
+# operator that has a single row, as long as:
+#
+#   1. The Values operator has a single row (since if not, the projections would
+#      need to replicated for each row, which is undesirable).
+#
+#   2. The projections do not reference Values columns, since combined Values
+#      columns cannot reference one another.
+#
+# This rule has the side effect of pruning unused columns of the Values
+# operator.
+[MergeProjectWithValues, Normalize]
+(Project
+    $input:(Values [ * ])
+    $projections:* &
+        ^(AreProjectionsCorrelated
+            $projections
+            (OutputCols $input)
+        )
+    $passthrough:*
+)
+=>
+(MergeProjectWithValues $projections $passthrough $input)
+
+# PushColumnRemappingIntoValues folds ProjectionsItems into the passthrough set
+# if they simply remap Values output columns that are not already in
+# passthrough. The Values output columns are replaced with the corresponding
+# columns projected by the folded ProjectionsItems.
+#
+# Example:
+#
+# project
+#  ├── columns: x:2!null
+#  ├── values
+#  │    ├── columns: column1:1!null
+#  │    ├── cardinality: [2 - 2]
+#  │    ├── (1,)
+#  │    └── (2,)
+#  └── projections
+#       └── column1:1 [as=x:2, outer=(1)]
+# =>
+# project
+#  ├── columns: x:2!null
+#  └── values
+#       ├── columns: x:2!null
+#       ├── cardinality: [2 - 2]
+#       ├── (1,)
+#       └── (2,)
+#
+# This allows other rules to fire. In the example above, the project would now
+# be removed by EliminateProject.
+[PushColumnRemappingIntoValues, Normalize]
+(Project
+    $input:(Values)
+    $projections:*
+    $passthrough:* &
+        (CanPushColumnRemappingIntoValues
+            $projections
+            $passthrough
+            $input
+        )
+)
+=>
+(PushColumnRemappingIntoValues $input $projections $passthrough)
+
+# FoldTupleAccessIntoValues replaces a Values that has a single tuple column and
+# at least one row with a new Values that has a column for each tuple index.
+# This works as long as the surrounding Project does not reference the original
+# tuple column itself, since then it would be invalid to eliminate that
+# reference. However, references to fields within the tuple are allowed, and are
+# translated to the new unnested Values columns.
+#
+# This rule simplifies access to the Values operator in hopes of allowing other
+# rules to fire.
+#
+# Example:
+#
+#   SELECT (tup).@1, (tup).@2 FROM (VALUES ((1,2)), ((3,4))) AS v(tup)
+#   =>
+#   SELECT tup_1, tup_2 FROM (VALUES (1, 2), (3, 4)) AS v(tup_1, tup_2)
+#
+[FoldTupleAccessIntoValues, Normalize]
+(Project
+    $input:(Values [ * ... ]) &
+        (ColsAreLenOne (OutputCols $input)) &
+        (CanUnnestTuplesFromValues $input)
+    $projections:* &
+        (HasNoDirectTupleReferences
+            $projections
+            $col:(SingleColFromSet (OutputCols $input))
+        )
+    $passthrough:* & (ColsAreEmpty $passthrough)
+)
+=>
+(Project
+    (UnnestTuplesFromValues
+        $input
+        $tupleCols:(MakeColsForUnnestTuples $col)
+    )
+    (FoldTupleColumnAccess $projections $tupleCols $col)
+    $passthrough
+)
+
+# FoldJSONAccessIntoValues replaces a Values operator that has a single JSON
+# column and at least one row with a new Values operator that has a column for
+# each JSON key. This works as long as the surrounding Project does not
+# reference the original JSON column itself, since then it would be invalid to
+# eliminate that reference. However, references to fields within the JSON are
+# allowed, and are translated to the new unnested Values columns. The rule only
+# fires if all referenced JSON keys exist the first row, and if all JSON keys
+# from the first row also exist in all other rows.
+#
+# FoldJSONAccessIntoValues has the side affect of pruning any keys that are not
+# present in the first Values row (since they are unreferenced).
+#
+# This rule simplifies access to the Values operator in hopes of allowing other
+# rules to fire.
+#
+# Example:
+#
+#   SELECT cust->'id' AS id, cust->'name' AS name
+#   FROM (VALUES
+#      ('{"id": 1, "name": 'Drew'}'::JSON),
+#      ('{"id": 2, "name": 'Radu'}'::JSON),
+#      ('{"id": 3, "name": 'Rebecca'}'::JSON)
+#   ) v(cust)
+#   =>
+#   SELECT id, name
+#   FROM (VALUES
+#      (1::JSON, 'Drew'::JSON),
+#      (2::JSON, 'Radu'::JSON),
+#      (3::JSON, 'Rebecca'::JSON)
+#   ) v(id, name)
+#
+[FoldJSONAccessIntoValues, Normalize]
+(Project
+    $input:(Values [ * ... ]) &
+        (ColsAreLenOne (OutputCols $input))
+    $projections:* &
+        (CanUnnestJSONFromValues
+            $input
+            $projections
+            $col:(SingleColFromSet (OutputCols $input))
+        )
+    $passthrough:* & (ColsAreEmpty $passthrough)
+)
+=>
+(Project
+    (UnnestJSONFromValues
+        $input
+        $jsonCols:(MakeColsForUnnestJSON $input $col)
+    )
+    (FoldJSONFieldAccess $projections $jsonCols $col $input)
+    $passthrough
 )

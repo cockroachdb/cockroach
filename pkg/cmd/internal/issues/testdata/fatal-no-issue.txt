@@ -1,0 +1,52 @@
+getLatestTag: result v3.3.0
+listMilestones owner=cockroachdb repo=cockroach: result [github.Milestone{Number:2, Title:"3.3"} github.Milestone{Number:1, Title:"3.2"}]
+listCommits owner=cockroachdb repo=cockroach github.CommitsListOptions{SHA:"", Path:"", Author:"bran", Since:time.Time{wall:, ext:}, Until:time.Time{wall:, ext:}, ListOptions:github.ListOptions{Page:0, PerPage:1}}
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestGossipHandlesReplacedNode failed" label:branch-release-0.1: []
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestGossipHandlesReplacedNode failed" -label:branch-release-0.1: []
+createIssue owner=cockroachdb repo=cockroach:
+github.IssueRequest{Labels:["O-robot" "C-test-failure" "branch-release-0.1" "release-blocker"], Assignee:"hodor", Milestone:2}
+
+storage: TestGossipHandlesReplacedNode failed
+
+[(storage).TestGossipHandlesReplacedNode failed](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=buildLog) on [release-0.1@abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
+
+Fatal error:
+```
+F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] something bad happened:
+foo
+bar
+
+```
+
+Stack:
+```
+goroutine 12 [running]:
+  doing something
+
+```
+
+<details><summary>Log preceding fatal error</summary><p>
+
+```
+logging something
+
+```
+
+</p></details>
+
+<details><summary>More</summary><p>
+Parameters:
+
+- TAGS=deadlock
+- GOFLAGS=race
+
+```
+make stressrace TESTS=TestGossipHandlesReplacedNode PKG=./pkg/storage TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1
+```
+
+
+[See this test on roachdash](https://roachdash.crdb.dev/?filter=status%3Aopen+t%3A.%2ATestGossipHandlesReplacedNode.%2A&sort=title&restgroup=false&display=lastcommented+project)
+<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
+
+
+Rendered: https://github.com/cockroachdb/cockroach/issues/new?body=%5B%28storage%29.TestGossipHandlesReplacedNode+failed%5D%28https%3A%2F%2Fteamcity.example.com%2FviewLog.html%3FbuildId%3D8008135%26tab%3DbuildLog%29+on+%5Brelease-0.1%40abcd123%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fcommits%2Fabcd123%29%3A%0A%0AFatal+error%3A%0A%60%60%60%0AF170517+07%3A33%3A43.763059+69575+storage%2Freplica.go%3A1360++%5Bn3%2Cs3%2Cr1%2F3%3A%2FM%7Bin-ax%7D%5D+something+bad+happened%3A%0Afoo%0Abar%0A%0A%60%60%60%0A%0AStack%3A%0A%60%60%60%0Agoroutine+12+%5Brunning%5D%3A%0A++doing+something%0A%0A%60%60%60%0A%0A%3Cdetails%3E%3Csummary%3ELog+preceding+fatal+error%3C%2Fsummary%3E%3Cp%3E%0A%0A%60%60%60%0Alogging+something%0A%0A%60%60%60%0A%0A%3C%2Fp%3E%3C%2Fdetails%3E%0A%0A%3Cdetails%3E%3Csummary%3EMore%3C%2Fsummary%3E%3Cp%3E%0AParameters%3A%0A%0A-+TAGS%3Ddeadlock%0A-+GOFLAGS%3Drace%0A%0A%60%60%60%0Amake+stressrace+TESTS%3DTestGossipHandlesReplacedNode+PKG%3D.%2Fpkg%2Fstorage+TESTTIMEOUT%3D5m+STRESSFLAGS%3D%27-timeout+5m%27+2%3E%261%0A%60%60%60%0A%0A%0A%5BSee+this+test+on+roachdash%5D%28https%3A%2F%2Froachdash.crdb.dev%2F%3Ffilter%3Dstatus%253Aopen%2Bt%253A.%252ATestGossipHandlesReplacedNode.%252A%26sort%3Dtitle%26restgroup%3Dfalse%26display%3Dlastcommented%2Bproject%29%0A%3Csub%3Epowered+by+%5Bpkg%2Fcmd%2Finternal%2Fissues%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Ftree%2Fmaster%2Fpkg%2Fcmd%2Finternal%2Fissues%29%3C%2Fsub%3E%3C%2Fp%3E%3C%2Fdetails%3E%0A&title=storage%3A+TestGossipHandlesReplacedNode+failed

@@ -1,0 +1,119 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+
+exec-ddl
+CREATE VIEW av AS SELECT k, i, s FROM a
+----
+
+build
+SELECT * FROM av
+----
+project
+ ├── columns: k:1!null i:2 s:4
+ └── scan a
+      └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+
+build
+SELECT av.i, s, t.public.av.s AS s2 FROM t.av
+----
+project
+ ├── columns: i:2 s:4 s2:4
+ └── project
+      ├── columns: k:1!null i:2 s:4
+      └── scan a
+           └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+
+# Self view join (multiple references to view).
+build
+SELECT av.k, av2.s FROM av, av AS av2 WHERE av.k=av2.k
+----
+project
+ ├── columns: k:1!null s:10
+ └── select
+      ├── columns: k:1!null i:2 s:4 k:7!null i:8 s:10
+      ├── inner-join (cross)
+      │    ├── columns: k:1!null i:2 s:4 k:7!null i:8 s:10
+      │    ├── project
+      │    │    ├── columns: k:1!null i:2 s:4
+      │    │    └── scan a
+      │    │         └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+      │    ├── project
+      │    │    ├── columns: k:7!null i:8 s:10
+      │    │    └── scan a
+      │    │         └── columns: k:7!null i:8 f:9 s:10 j:11 crdb_internal_mvcc_timestamp:12
+      │    └── filters (true)
+      └── filters
+           └── k:1 = k:7
+
+# View with aliased column names, filter, and ORDER BY.
+exec-ddl
+CREATE VIEW av2 (x, y) AS SELECT k, f FROM a WHERE i=10 ORDER BY s
+----
+
+# Result is not ordered.
+build
+SELECT * FROM av2
+----
+project
+ ├── columns: x:1!null y:3
+ └── project
+      ├── columns: k:1!null f:3 s:4
+      └── select
+           ├── columns: k:1!null i:2!null f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+           ├── scan a
+           │    └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+           └── filters
+                └── i:2 = 10
+
+# Sort used by group by because of presence of ARRAY_AGG.
+build
+SELECT array_agg(y) FROM av2
+----
+scalar-group-by
+ ├── columns: array_agg:7
+ ├── internal-ordering: +4
+ ├── sort
+ │    ├── columns: f:3 s:4
+ │    ├── ordering: +4
+ │    └── project
+ │         ├── columns: f:3 s:4
+ │         └── project
+ │              ├── columns: k:1!null f:3 s:4
+ │              └── select
+ │                   ├── columns: k:1!null i:2!null f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+ │                   ├── scan a
+ │                   │    └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+ │                   └── filters
+ │                        └── i:2 = 10
+ └── aggregations
+      └── array-agg [as=array_agg:7]
+           └── f:3
+
+# Verify that an outer table is visible from a subquery that uses
+# a view (#46180).
+exec-ddl
+CREATE VIEW v AS SELECT x FROM (VALUES (1), (2)) AS foo(x);
+----
+
+build
+SELECT (SELECT x FROM v WHERE x=t.a) FROM (VALUES (3), (4)) AS t(a);
+----
+project
+ ├── columns: x:3
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (3,)
+ │    └── (4,)
+ └── projections
+      └── subquery [as=x:3]
+           └── max1-row
+                ├── columns: column1:2!null
+                └── select
+                     ├── columns: column1:2!null
+                     ├── values
+                     │    ├── columns: column1:2!null
+                     │    ├── (1,)
+                     │    └── (2,)
+                     └── filters
+                          └── column1:2 = column1:1

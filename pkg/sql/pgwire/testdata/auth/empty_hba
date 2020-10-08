@@ -1,0 +1,157 @@
+# These tests exercise the code when the HBA configuration is empty.
+#
+# An empty config is equivalent to:
+#
+#     host   all root all cert-password
+#     host   all all  all cert-password
+#     local  all all      password
+#
+# The server is secure, so the test runner sets sslmode=verify-full
+# by default for all test directives below with all other SSL settings loaded.
+#
+# When this is the case, client certificates are verified by the
+# server, and password auth is not required if the client cert
+# is valid. If the cert is invalid, the password becomes required.
+
+config secure
+----
+
+# Set HBA to empty in case it wasn't done before.
+set_hba
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all  all cert-password # built-in CockroachDB default
+# local all all      password      # built-in CockroachDB default
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      all  all     cert-password
+local  all      all          password
+
+subtest root
+
+# Root can always connect over network regardless.
+connect user=root
+----
+ok defaultdb
+
+# However root cannot connect over the unix socket by default
+# because it does not have a password.
+connect_unix user=root
+----
+ERROR: password authentication failed for user root
+
+# When no client cert is presented, the server would otherwise require
+# password auth. However, root does not have a password.
+connect user=root password=foo sslmode=verify-ca sslcert=
+----
+ERROR: password authentication failed for user root
+
+subtest end root
+
+
+subtest normaluser_cert
+
+# User has no password, and we're presenting a client cert. All good.
+connect user=testuser
+----
+ok defaultdb
+
+# Empty/no password means deny password auth. Unix socket does not
+# present a cert so auth fails.
+connect_unix user=testuser
+----
+ERROR: password authentication failed for user testuser
+
+# Make the user need a password.
+sql
+ALTER USER testuser WITH PASSWORD 'pass';
+----
+ok
+
+# Password now needed, but as long as we're presenting a cert it's good.
+connect user=testuser
+----
+ok defaultdb
+
+# If we don't present the client certificate, the password is required.
+connect user=testuser password=invalid sslmode=verify-ca sslcert=
+----
+ERROR: password authentication failed for user testuser
+
+connect user=testuser password=pass sslmode=verify-ca sslcert=
+----
+ok defaultdb
+
+connect_unix user=testuser password=pass
+----
+ok defaultdb
+
+# Reset the test user to no password.
+sql
+DROP USER testuser; CREATE USER testuser
+----
+ok
+
+subtest end normaluser_cert
+
+subtest normaluser_nocert
+
+# This other test user has no default cert.
+sql
+CREATE USER testuser_nocert
+----
+ok
+
+# Since there is no cert, no cert is going to be presented by the client
+# and password auth becomes required.
+connect user=testuser_nocert
+----
+ERROR: password authentication failed for user testuser_nocert
+
+# Even though the user has no password, trying to present the
+# empty password fails. The user simply cannot log in.
+connect user=testuser_nocert password=
+----
+ERROR: password authentication failed for user testuser_nocert
+
+sql
+DROP USER testuser_nocert
+----
+ok
+
+subtest end normaluser_nocert
+
+subtest unicode_user_and_username_normalization
+
+sql
+CREATE USER ὀδυσσεύς WITH PASSWORD '蟑♫螂';
+----
+ok
+
+# Check that the user can log in.
+connect user=(ὀδυσσεύς) password=(蟑♫螂)
+----
+ok defaultdb
+
+# Verify auth fails without password.
+#
+# Also verify that the username gets normalized: the username
+# is created as 'ὀ' and we provide 'Ὀ'.
+#
+# (The parentheses are required so that the datadriven runner
+# accepts the unicode characters.)
+#
+connect user=(Ὀδυσσεύς) password=
+----
+ERROR: password authentication failed for user ὀδυσσεύς
+
+# The unicode password succeeds, with user normalization.
+connect user=(Ὀδυσσεύς) password=(蟑♫螂)
+----
+ok defaultdb
+
+subtest end

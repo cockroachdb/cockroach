@@ -1,3 +1,13 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 // Copyright 2013 Google Inc. All Rights Reserved.
 // Copyright 2015 Cockroach Labs.
 //
@@ -25,21 +35,21 @@
 //
 // Examples:
 //
-//	log.Info(ctx, "Prepare to repel boarders")
-//	log.Fatal(ctx, "Initialization failed", err)
+//	log.Info(ctx, "prepare to repel boarders")
+//	log.Fatal(ctx, "initialization failed", err)
 //	log.Infof(ctx, "client error: %s", err)
 //
 // V-Style
 //
 // The V functions can be used to selectively enable logging at a call
-// site. Invoking the binary with --verbosity=N will enable V functions
+// site. Invoking the binary with --vmodule=*=N will enable V functions
 // at level N or higher. Invoking the binary with --vmodule="glob=N" will
 // enable V functions at level N or higher with a filename matching glob.
 //
 // Examples:
 //
 //	if log.V(2) {
-//		log.Info(ctx, "Starting transaction...")
+//		log.Info(ctx, "starting transaction...")
 //	}
 //
 // Events
@@ -66,27 +76,19 @@
 //    Entries with severity below LEVEL are not written to stderr.
 //    "true" and "false" are also supported (everything / nothing).
 //  --log-dir="..."
-//    Log files will be written to this directory instead of the
-//    default target directory.
+//    Log files will be written to this directory by the main logger
+//    instead of the default target directory.
 //  --log-file-verbosity=LEVEL
 //    Entries with severity below LEVEL are not written to the log file.
 //    "true" and "false" are also supported (everything / nothing).
 //  --log-file-max-size=N
 //    Log files are rotated after reaching that size.
-//  --log-dir-max-size=N
-//    Log files are removed after log directory reaches that size.
+//  --log-group-max-size=N
+//    Log files are removed after the total size of all files generated
+//    by one logger reaches that size.
 //
 // Other flags provide aids to debugging.
 //
-//  --log-backtrace-at=""
-//    When set to a file and line number holding a logging statement,
-//    such as
-//      -log_backtrace_at=gopherflakes.go:234
-//    a stack trace will be written to the Info log whenever execution
-//    hits that statement. (Unlike with --vmodule, the ".go" must be
-//    present.)
-//  --verbosity=0
-//    Enable V-leveled logging at the specified level.
 //  --vmodule=""
 //    The syntax of the argument is a comma-separated list of pattern=N,
 //    where pattern is a literal file name (minus the ".go" suffix) or

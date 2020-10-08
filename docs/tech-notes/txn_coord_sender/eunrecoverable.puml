@@ -1,0 +1,16 @@
+@startuml
+participant "client.Txn" as Txn
+participant TxnCoordSender
+participant interceptors
+
+Txn -> TxnCoordSender : Send(BatchRequest)
+TxnCoordSender -> interceptors : Send(BatchRequest)
+...
+interceptors -[#red]-> TxnCoordSender : unrecoverable error!
+TxnCoordSender -> TxnCoordSender : "txnState = txnError"
+activate TxnCoordSender #red
+TxnCoordSender -> Txn : error
+...
+Txn -> TxnCoordSender : Send(BatchRequest)
+TxnCoordSender -> Txn : error (txn trashed)
+@enduml

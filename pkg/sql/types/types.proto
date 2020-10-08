@@ -1,0 +1,536 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+// Cannot be proto3 because we use nullable primitives.
+syntax = "proto2";
+package cockroach.sql.sem.types;
+option go_package = "types";
+
+import "gogoproto/gogo.proto";
+import "geo/geopb/geopb.proto";
+
+// See the comment header for the T.Family method for more details.
+enum Family {
+    option (gogoproto.goproto_enum_prefix) = false;
+
+    // BoolFamily is the family of boolean true/false types.
+    //
+    //   Canonical: types.Bool
+    //   Oid      : T_bool
+    //
+    // Examples:
+    //   BOOL
+    //
+    BoolFamily = 0;
+
+    // IntFamily is the family of signed integer types.
+    //
+    //   Canonical: types.Int
+    //   Oid      : T_int8, T_int4, T_int2
+    //   Width    : 64, 32, 16
+    //
+    // Examples:
+    //   INT
+    //   INT8
+    //   INT4
+    //
+    IntFamily = 1;
+
+    // FloatFamily is the family of base-2 floating-point types (IEEE 754).
+    //
+    //   Canonical: types.Float
+    //   Oid      : T_float8, T_float4
+    //   Width    : 64, 32
+    //
+    // Examples:
+    //   FLOAT8
+    //   FLOAT4
+    //
+    FloatFamily = 2;
+
+    // DecimalFamily is the family of base-10 floating and fixed point types.
+    //
+    //   Canonical    : types.Decimal
+    //   Oid          : T_numeric
+    //   Precision    : max # decimal digits (0 = no specified limit)
+    //   Width (Scale): # digits after decimal point (0 = no specified limit)
+    //
+    // Examples:
+    //   DECIMAL
+    //   DECIMAL(10)
+    //   DECIMAL(10,3)
+    //
+    DecimalFamily = 3;
+
+    // DateFamily is the family of date types that store only year/month/day with
+    // no time component.
+    //
+    //   Canonical: types.Date
+    //   Oid      : T_date
+    //
+    // Examples:
+    //   DATE
+    //
+    DateFamily = 4;
+
+    // TimestampFamily is the family of date types that store a year/month/day
+    // date component, as well as an hour/minute/second time component. There is
+    // no timezone component (see TIMESTAMPTZ). Seconds can have varying precision
+    // (defaults to microsecond precision). Currently, only microsecond precision
+    // is supported.
+    //
+    //   Canonical: types.Timestamp
+    //   Oid      : T_timestamp
+    //   Precision: fractional seconds (3 = ms, 0,6 = us, 9 = ns, etc.)
+    //
+    // Examples:
+    //   TIMESTAMP
+    //   TIMESTAMP(6)
+    //
+    TimestampFamily = 5;
+
+    // IntervalFamily is the family of types describing a duration of time.
+    // Currently, only microsecond precision is supported.
+    //
+    //   Canonical: types.Interval
+    //   Oid      : T_interval
+    //
+    // Examples:
+    //   INTERVAL
+    //
+    IntervalFamily = 6;
+
+    // StringFamily is the family of types containing Unicode textual strings.
+    // This family includes types constructed by STRING, VARCHAR, CHAR, and "char"
+    // column type definitions (CHAR and "char" are distinct PG types). Note
+    // that while STRING and VARCHAR have no default width limit, CHAR has a
+    // default width of 1.
+    // TODO(andyk): "char" should have default width of 1 as well, but doesn't.
+    //
+    //   Canonical: types.String
+    //   Oid      : T_text, T_varchar, T_bpchar, T_char
+    //   Width    : max # characters (0 = no specified limit)
+    //
+    // Examples:
+    //   STRING
+    //   TEXT
+    //   VARCHAR(10)
+    //   CHAR
+    //
+    StringFamily = 7;
+
+    // BytesFamily is the family of types containing a list of raw byte values.
+    //
+    //   Canonical: types.BYTES
+    //   Oid      : T_bytea
+    //
+    // Examples:
+    //   BYTES
+    //
+    BytesFamily = 8;
+
+    // TimestampTZFamily is the family of date types that store a year/month/day
+    // date component, as well as an hour/minute/second time component, along with
+    // a timezone. Seconds can have varying precision (defaults to microsecond
+    // precision). Currently, only microsecond precision is supported.
+    //
+    //   Canonical: types.TimestampTZ
+    //   Oid      : T_timestamptz
+    //   Precision: fractional seconds (3 = ms, 0,6 = us, 9 = ns, etc.)
+    //
+    // Examples:
+    //   TIMESTAMPTZ
+    //   TIMESTAMPTZ(6)
+    //
+    TimestampTZFamily = 9;
+
+    // CollatedStringFamily is the family of types containing Unicode textual
+    // strings with an associated COLLATE value that specifies the locale used
+    // for various character-based operations such as sorting, pattern matching,
+    // and builtin functions like lower and upper.
+    //
+    //   Oid      : T_text, T_varchar, T_bpchar, T_char
+    //   Width    : max # characters (0 = no specified limit)
+    //   Locale   : name of locale (e.g. EN or DE)
+    //
+    // Examples:
+    //   STRING COLLATE en
+    //   VARCHAR(10) COLLATE de
+    //
+    CollatedStringFamily = 10;
+
+    // NAME deprecated in 19.1, since it now uses Oid.
+    reserved 11;
+
+    // OidFamily is the family of types containing Postgres Object ID (Oid)
+    // values. Oids are integer values that identify some object in the database,
+    // like a type, relation, or procedure.
+    //
+    //   Canonical: types.Oid
+    //   Oid      : T_oid, T_regclass, T_regproc, T_regprocedure, T_regtype,
+    //              T_regnamespace
+    //
+    // Examples:
+    //   OID
+    //   REGCLASS
+    //   REGPROC
+    //
+    // TODO(andyk): Oids should be part of the IntFamily, since they are treated
+    //              as equivalent to ints by PG.
+    OidFamily = 12;
+
+    // UnknownFamily is a special type family that tags expressions that
+    // statically evaluate to NULL. An UnknownFamily expression *must* be NULL.
+    // But the inverse is not true, since other types allow NULL values as well.
+    // UnknownFamily types are not supported as a table column type, but can be
+    // transferred through DistSQL streams.
+    //
+    //   Canonical: types.Unknown
+    //   Oid      : T_unknown
+    //
+    UnknownFamily = 13;
+
+    // UuidFamily is the family of types containing universally unique
+    // identifiers. A UUID is a 128-bit quantity that is very unlikely to ever be
+    // generated again, and so can be relied on to be distinct from all other UUID
+    // values.
+    //
+    //   Canonical: types.Uuid
+    //   Oid      : T_uuid
+    //
+    // Examples:
+    //   UUID
+    //
+    UuidFamily = 14;
+
+    // ArrayFamily is a family of non-scalar types that contain an ordered list of
+    // elements. The elements of an array must all share the same type. Elements
+    // can have have any type, including ARRAY. However, while the types package
+    // supports nested arrays, other parts of CRDB do not currently support them.
+    // Also, the length of array dimension(s) are ignored by PG and CRDB (e.g.
+    // an array of length 11 could be inserted into a column declared as INT[11]).
+    //
+    // Array OID values are special. Rather than having a single T_array OID,
+    // Postgres defines a separate OID for each possible array element type.
+    // Here are some examples:
+    //
+    //   T__int8: array of int8 values
+    //   T__text: array of text values
+    //
+    // Notice that each array OID has double underscores to distinguish it from
+    // the OID of the scalar type it contains.
+    //
+    //   Oid          : T__int, T__text, T__numeric, etc.
+    //   ArrayContents: types.T of the array element type
+    //
+    // Examples:
+    //   INT[]
+    //   VARCHAR(10)[] COLLATE EN
+    //   DECIMAL(10,1)[]
+    //   TIMESTAMP[5]
+    //
+    ArrayFamily = 15;
+
+    // INetFamily is the family of types containing IPv4 or IPv6 network address
+    // identifiers (e.g. 192.168.100.128/25 or FE80:CD00:0:CDE:1257:0:211E:729C).
+    //
+    //   Canonical: types.INet
+    //   Oid      : T_inet
+    //
+    // Examples:
+    //   INET
+    //
+    INetFamily = 16;
+
+    // TimeFamily is the family of date types that store only hour/minute/second
+    // with no date component. There is no timezone component. Seconds can have
+    // varying precision (defaults to microsecond precision). Currently, only
+    // microsecond precision is supported.
+    //
+    //   Canonical: types.Time
+    //   Oid      : T_time
+    //   Precision: fractional seconds (3 = ms, 0,6 = us, 9 = ns, etc.)
+    //
+    // Examples:
+    //   TIME
+    //   TIME(6)
+    //
+    TimeFamily = 17;
+
+    // JsonFamily is the family of types containing JavaScript Object Notation
+    // (JSON) values. Currently, CRDB only supports JSONB values, which are stored
+    // in a decomposed binary format.
+    //
+    //   Canonical: types.Jsonb
+    //   Oid      : T_jsonb
+    //
+    // Examples:
+    //   JSON
+    //   JSONB
+    //
+    JsonFamily = 18;
+
+    // TimeTZFamily is the family of date types that store only hour/minute/second
+    // and timestamp components, with no date component. Seconds can have
+    // varying precision (defaults to microsecond precision). Currently, only
+    // microsecond precision is supported.
+    //
+    //   Canonical: types.TimeTZ
+    //   Oid      : T_timetz
+    //   Precision: fractional seconds (3 = ms, 0,6 = us, 9 = ns, etc.)
+    //
+    // Examples:
+    //   TIMETZ
+    //
+    TimeTZFamily = 19;
+
+    // TupleFamily is a family of non-scalar structural types that describes the
+    // fields of a row or record. The fields can be of any type, including nested
+    // tuple and array types. Fields can also have optional labels. Currently,
+    // CRDB does not support tuple types as column types, but it is possible to
+    // construct tuples using the ROW function or tuple construction syntax.
+    //
+    //   Oid          : T_record
+    //   TupleContents: []*types.T of each tuple field
+    //   TupleLabels  : []string of each tuple label
+    //
+    // Examples:
+    //   (1, 'foo')
+    //   ((1, 'foo') AS num, str)
+    //   ROW(1, 'foo')
+    //   (ROW(1, 'foo') AS num, str)
+    //
+    TupleFamily = 20;
+
+    // BitFamily is the family of types containing ordered lists of bit values
+    // (0 or 1). Note that while VARBIT has no default width limit, BIT has a
+    // default width limit of 1.
+    //
+    //   Canonical: types.VarBit
+    //   Oid      : T_varbit, T_bit
+    //   Width    : max # of bits (0 = no specified limit)
+    //
+    // Examples:
+    //   VARBIT
+    //   VARBIT(10)
+    //   BIT
+    //   BIT(10)
+    //
+    BitFamily = 21;
+
+    // GeometryFamily is a family that supports the Geometry geospatial type,
+    // which is compatible with PostGIS's Geometry implementation.
+    //
+    //   Canonical: types.Geometry
+    //   Oid      : oidext.T_geometry
+    //
+    // Examples:
+    //   GEOMETRY
+    //   GEOMETRY(LINESTRING)
+    //   GEOMETRY(LINESTRING, SRID)
+    GeometryFamily = 22;
+
+    // GeographyFamily is a family that supports the Geography geospatial type,
+    // which is compatible with PostGIS's Geography implementation.
+    //
+    //   Canonical: types.Geography
+    //   Oid      : oidext.T_geography
+    //
+    // Examples:
+    //   GEOGRAPHY
+    //   GEOGRAPHY(LINESTRING)
+    //   GEOGRAPHY(LINESTRING, SRID)
+    GeographyFamily = 23;
+
+    // EnumFamily is a family that represents all ENUM types. ENUM types
+    // have data about the ENUM defined in a TypeDescriptor. The ID of
+    // the TypeDescriptor that backs this ENUM is stored in the StableTypeID
+    // field. It does not have a canonical form.
+    EnumFamily = 24;
+
+    // Box2DFamily is a family representing the box2d type. This is compatible
+    // with PostGIS's box2d implementation.
+    //
+    //   Canonical: types.Box2D
+    //   Oid      : oidext.T_box2d
+    //
+    // Examples:
+    //   Box2D
+    Box2DFamily = 25;
+
+    // AnyFamily is a special type family used during static analysis as a
+    // wildcard type that matches any other type, including scalar, array, and
+    // tuple types. Execution-time values should never have this type. As an
+    // example of its use, many SQL builtin functions allow an input value to be
+    // of any type, and so use this type in their static definitions.
+    //
+    //   Canonical: types.Any
+    //   Oid      : T_anyelement
+    //
+    AnyFamily = 100;
+
+    // Int2VectorFamily deprecated in 19.1, since it now uses Oid.
+    reserved 200;
+
+    // OidVectorFamily deprecated in 19.1, since it now uses Oid.
+    reserved 201;
+}
+
+// IntervalDurationType represents a duration that can be used
+// when defining an Interval Duration Field.
+// See https://www.postgresql.org/docs/current/datatype-datetime.html.
+enum IntervalDurationType {
+  // UNSET defaults to SECOND during evaluation.
+  // This indicates no typmod.
+  UNSET = 0;
+
+  YEAR = 1;
+  MONTH = 2;
+  DAY = 3;
+  HOUR = 4;
+  MINUTE = 5;
+  // SECOND is the only unit where precision can be added.
+  SECOND = 6;
+
+  // MILLISECOND is not technically part of the SQL standard for intervals, but we
+  // provide it as a field to allow code to parse intervals with a default unit
+  // of milliseconds, which is useful for some internal use cases like
+  // statement_timeout.
+  MILLISECOND = 7;
+}
+
+// IntervalDurationField represents precisions in intervals which are
+// outside of the regular time precision syntax.
+// i.e. instead of INTERVAL(6), we can have INTERVAL SECOND(6), INTERVAL MONTH, etc.
+// This is represented as a bitmask on the first 4 bits of precision in postgres.
+message IntervalDurationField {
+  // DurationType is the unit of measurement in which durations
+  // should truncate themselves to.
+  // This (unlike precision) gets truncated downward.
+  optional IntervalDurationType duration_type = 1 [(gogoproto.nullable) = false];
+  // FromDurationType is the left side of the "duration field".
+  // i.e. in the `DurationType_1 TO DurationType_2` syntax, this represents `DurationType_1`.
+  // Note this is ignored, see https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net.
+  optional IntervalDurationType from_duration_type = 2 [(gogoproto.nullable) = false];
+}
+
+// GeoMetadata contains metadata associated with Geospatial data types.
+message GeoMetadata {
+  optional int32 srid = 1 [(gogoproto.nullable)=false,(gogoproto.customname)="SRID",(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/geo/geopb.SRID"];
+  optional geopb.ShapeType shape_type = 2 [(gogoproto.nullable)=false];
+}
+
+// PersistentUserDefinedTypeMetadata contains user defined type metadata
+// that will be serialized to disk, unlike other user defined type metadata
+// that is only stored in memory once a type is resolved.
+message PersistentUserDefinedTypeMetadata {
+  // ArrayTypeOID is the OID of the array type for this user defined type. It
+  // is only set for user defined types that aren't arrays.
+  optional uint32 array_type_oid = 2
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "ArrayTypeOID", (gogoproto.customtype) = "github.com/lib/pq/oid.Oid"];
+
+  reserved 1;
+}
+
+// T is a wrapper around InternalType.
+message T {
+    option (gogoproto.typedecl) = false;
+    option (gogoproto.marshaler) = false;
+    option (gogoproto.unmarshaler) = false;
+    option (gogoproto.sizer) = false;
+    option (gogoproto.goproto_getters) = false;
+    option (gogoproto.goproto_stringer) = false;
+    // InternalType should never be directly referenced outside this package. The
+    // only reason it is exported is because gogoproto panics when printing the
+    // string representation of an unexported field. This is a problem when this
+    // struct is embedded in a larger struct (like a ColumnDescriptor).
+    optional InternalType internal_type = 1 [(gogoproto.nullable) = false];
+}
+
+// InternalType is the protobuf encoding for SQL types. It is always wrapped by
+// a T struct, and should never be used directly by outside packages. See the
+// comment header for the T struct for more details.
+message InternalType {
+    // Family specifies a group of types that are compatible with one another.
+    // See the header for the T.Family method for more details.
+    optional sql.sem.types.Family family = 1 [(gogoproto.nullable) = false];
+
+    // Width is the size or scale of the type, such as number of bits or
+    // characters. See the T.Width method for more details.
+    optional int32 width = 2 [(gogoproto.nullable) = false];
+
+    // Precision is the accuracy of the data type. See the T.Precision method for
+    // more details. This field was also by FLOAT pre-2.1 (this was incorrect.)
+    optional int32 precision = 3 [(gogoproto.nullable) = false];
+
+    // ArrayDimensions is deprecated in 19.2, since it was never used. It
+    // previously contained the length of each dimension in the array. A
+    // dimension of -1 meant that no bound was specified for that dimension. If
+    // arrayDimensions was nil, then the array had one unbounded dimension.
+    repeated int32 array_dimensions = 4;
+
+    // Locale identifies a specific geographical, political, or cultural region that
+    // impacts various character-based operations such as sorting, pattern matching,
+    // and builtin functions like lower and upper. See the T.Locale method for
+    // more details.
+    optional string locale = 5;
+
+    // VisibleType is deprecated in 19.2, since it is now superseded by the Oid
+    // field. It previously contained an alias for any types where our internal
+    // representation is different than the user specification. Examples are INT4,
+    // FLOAT4, etc. Mostly for Postgres compatibility.
+    optional int32 visible_type = 6 [(gogoproto.nullable) = false];
+
+    // ArrayElemType is deprecated in 19.2, since it is now superseded by the
+    // ArrayContents field. It previously contained the type family of array
+    // elements. The other array fields (width/precision/locale/etc) were used
+    // to store the other attributes of the array's element type.
+    optional sql.sem.types.Family array_elem_type = 7;
+
+    // TupleContents returns a slice containing the type of each tuple field. This
+    // is nil for non-TUPLE types.
+    repeated T tuple_contents = 8;
+
+    // TupleLabels returns a slice containing the labels of each tuple field. This
+    // is nil for non-TUPLE types, or if the TUPLE type does not specify labels.
+    repeated string tuple_labels = 9;
+
+    // Oid returns the type's Postgres Object ID. See the header for the T.Oid
+    // method for more details. For user-defined types, the OID value is an
+    // offset (oidext.CockroachPredefinedOIDMax) away from the stable_type_id
+    // field. This makes it easy to retrieve a type descriptor by OID.
+    optional uint32 oid = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "Oid", (gogoproto.customtype) = "github.com/lib/pq/oid.Oid"];
+
+    // ArrayContents returns the type of array elements. This is nil for non-ARRAY
+    // types.
+    optional T array_contents = 11;
+
+    // TimePrecisionIsSet indicates whether the precision was explicitly set.
+    // It is currently in use for the TIME-related families and INTERVALs
+    // where a Precision of 0 indicated the default precision of 6
+    // in versions pre-20.1.
+    // The rules for Precision to use are as follows:
+    //   * If Precision is > 0, then that is the precision.
+    //   * If Precision is 0, it will default to 6 if TimePrecisionIsSet is false
+    //    (for compatibility reasons).
+    //   * Otherwise, Precision = 0 and TimePrecisionIsSet = true, so it is
+    //     actually 0.
+    optional bool time_precision_is_set = 12 [(gogoproto.nullable) = false];
+
+    // IntervalDurationField is populated for intervals, representing extra
+    // typmod or precision data that may be required.
+    optional IntervalDurationField interval_duration_field = 13;
+
+    // GeoMetadata is populated for geospatial types.
+    optional GeoMetadata geo_metadata = 14;
+
+    // UDTMetadata is populated for user defined types that are not arrays.
+    optional PersistentUserDefinedTypeMetadata udt_metadata = 15 [(gogoproto.customname) = "UDTMetadata"];
+}

@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // Package pretty prints documents based on a target line width.
 //
@@ -34,9 +30,7 @@
 //
 package pretty
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // Doc represents a document as described by the type "DOC" in the
 // referenced paper. This is the abstract representation constructed
@@ -48,14 +42,16 @@ type Doc interface {
 func (text) isDoc()      {}
 func (line) isDoc()      {}
 func (softbreak) isDoc() {}
+func (hardline) isDoc()  {}
 func (nilDoc) isDoc()    {}
-func (concat) isDoc()    {}
+func (*concat) isDoc()   {}
 func (nestt) isDoc()     {}
 func (nests) isDoc()     {}
-func (union) isDoc()     {}
+func (*union) isDoc()    {}
 func (*scolumn) isDoc()  {}
 func (*snesting) isDoc() {}
 func (pad) isDoc()       {}
+func (keyword) isDoc()   {}
 
 //
 // Implementations of Doc ("DOC" in paper).
@@ -78,7 +74,7 @@ func Text(s string) Doc {
 // line represents LINE :: DOC -- a "soft line" that can be flattened to a space.
 type line struct{}
 
-// Line is the LINE constructor.
+// Line is a newline and is flattened to a space.
 var Line Doc = line{}
 
 // softbreak represents SOFTBREAK :: DOC -- an invisible space between
@@ -95,8 +91,13 @@ var Line Doc = line{}
 // https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
 type softbreak struct{}
 
-// SoftBreak is the softbreak constructor.
+// SoftBreak is a newline and is flattened to an empty string.
 var SoftBreak Doc = softbreak{}
+
+type hardline struct{}
+
+// HardLine is a newline and cannot be flattened.
+var HardLine Doc = hardline{}
 
 // concat represents (DOC <> DOC) :: DOC -- the concatenation of two docs.
 type concat struct {
@@ -107,7 +108,7 @@ type concat struct {
 // This uses simplifyNil to avoid actually inserting NIL docs
 // in the abstract tree.
 func Concat(a, b Doc) Doc {
-	return simplifyNil(a, b, func(a, b Doc) Doc { return concat{a, b} })
+	return simplifyNil(a, b, func(a, b Doc) Doc { return &concat{a, b} })
 }
 
 // nests represents (NESTS Int DOC) :: DOC -- nesting a doc "under" another.
@@ -151,7 +152,7 @@ type union struct {
 
 // Group will format d on one line if possible.
 func Group(d Doc) Doc {
-	return union{flatten(d), d}
+	return &union{flatten(d), d}
 }
 
 var textSpace = Text(" ")
@@ -160,19 +161,19 @@ func flatten(d Doc) Doc {
 	switch t := d.(type) {
 	case nilDoc:
 		return Nil
-	case concat:
+	case *concat:
 		return Concat(flatten(t.a), flatten(t.b))
 	case nestt:
 		return NestT(flatten(t.d))
 	case nests:
 		return NestS(t.n, flatten(t.d))
-	case text:
+	case text, keyword, hardline:
 		return d
 	case line:
 		return textSpace
 	case softbreak:
 		return Nil
-	case union:
+	case *union:
 		return flatten(t.x)
 	case *scolumn:
 		return &scolumn{f: func(c int16) Doc { return flatten(t.f(c)) }}
@@ -246,4 +247,14 @@ func Align(d Doc) Doc {
 // described above.
 type pad struct {
 	n int16
+}
+
+type keyword string
+
+// Keyword is identical to Text except they are filtered by
+// keywordTransform. The computed width is always len(s), regardless of
+// the result of the result of the transform. This allows for things like
+// coloring and other control characters in the output.
+func Keyword(s string) Doc {
+	return keyword(s)
 }

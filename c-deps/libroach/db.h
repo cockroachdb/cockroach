@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #pragma once
 
@@ -28,9 +24,11 @@ namespace cockroach {
 
 struct EnvManager;
 
-// DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
-rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
-                           const DBOptions opts, EnvManager* env_ctx);
+typedef rocksdb::Status(DBOpenHook)(std::shared_ptr<rocksdb::Logger> info_log,
+                                    const std::string& db_dir, const DBOptions opts,
+                                    EnvManager* env_mgr);
+
+DBOpenHook DBOpenHookOSS;
 
 // ToDBSlice returns a DBSlice from a rocksdb::Slice
 inline DBSlice ToDBSlice(const rocksdb::Slice& s) {
@@ -64,8 +62,12 @@ inline std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
 inline std::string ToString(DBString s) { return std::string(s.data, s.len); }
 
 // ToSlice converts a DBSlice/DBString to a rocksdb::Slice.
-inline rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data, s.len); }
-inline rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data, s.len); }
+// Unfortunately, rocksdb::Slice represents empty slice with an
+// empty string (rocksdb::Slice("", 0)), as opposed to nullptr.
+// This is problematic since rocksdb has various
+// assertions checking for slice.data != nullptr.
+inline rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data == nullptr ? "" : s.data, s.len); }
+inline rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data == nullptr ? "" : s.data, s.len); }
 
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.

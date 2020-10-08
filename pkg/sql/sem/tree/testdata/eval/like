@@ -1,0 +1,1323 @@
+# LIKE and NOT LIKE
+
+eval
+'TEST' LIKE 'TEST'
+----
+true
+
+eval
+'TEST' LIKE 'test'
+----
+false
+
+eval
+'TEST' LIKE 'TESTER'
+----
+false
+
+eval
+'TEST' LIKE ''
+----
+false
+
+
+eval
+'' LIKE ''
+----
+true
+
+# Regex special characters.
+
+eval
+'[' LIKE '['
+----
+true
+
+eval
+'.' LIKE '.'
+----
+true
+
+eval
+'.A' LIKE '._'
+----
+true
+
+eval
+'AB' LIKE '._'
+----
+false
+
+eval
+'.*B' LIKE '.*B'
+----
+true
+
+eval
+'AB' LIKE '.*B'
+----
+false
+
+# Escaped character cases.
+
+eval
+'[' LIKE '\['
+----
+true
+
+eval
+'.' LIKE '\.'
+----
+true
+
+eval
+'\' LIKE '\\%'
+----
+true
+
+eval
+'\' LIKE '%\\'
+----
+true
+
+eval
+'\' LIKE '%\\%'
+----
+true
+
+eval
+'\%' LIKE '\\\%'
+----
+true
+
+eval
+'\.*' LIKE '\\.*'
+----
+true
+
+eval
+'\.*' LIKE '\\.\*'
+----
+true
+
+eval
+'\.*' LIKE '\\\.\*'
+----
+true
+
+eval
+'\\.' LIKE '\\.'
+----
+false
+
+eval
+'\\.' LIKE '\\\\.'
+----
+true
+
+eval
+'\\.' LIKE '\\\\\.'
+----
+true
+
+eval
+'\A' LIKE '\\A'
+----
+true
+
+eval
+'A' LIKE '\\A'
+----
+false
+
+eval
+'_' LIKE '\_'
+----
+true
+
+eval
+'\' LIKE '\\'
+----
+true
+
+eval
+'A\A' LIKE '_\\_'
+----
+true
+
+eval
+'__' LIKE '_\\_'
+----
+false
+
+eval
+'\_' LIKE '\\\_'
+----
+true
+
+eval
+'\\' LIKE '\\'
+----
+false
+
+eval
+'\\' LIKE '\\_'
+----
+true
+
+eval
+'\\' LIKE '_\\'
+----
+true
+
+eval
+'A\' LIKE '_\\'
+----
+true
+
+eval
+'%' LIKE '\%'
+----
+true
+
+eval
+'ABC' LIKE '\AB%'
+----
+true
+
+eval
+'ABC' LIKE '\AB_'
+----
+true
+
+eval
+'ABC' LIKE '%B\C'
+----
+true
+
+eval
+'ABC' LIKE '_B\C'
+----
+true
+
+eval
+'TEST' LIKE 'TE\ST'
+----
+true
+
+eval
+'_漢' LIKE '\__'
+----
+true
+
+eval
+'漢漢' LIKE '漢\漢'
+----
+true
+
+eval
+'_漢' LIKE '\_\漢'
+----
+true
+
+# LIKE with ESCAPE clause
+
+eval
+like_escape('A', '\A', '')
+----
+false
+
+eval
+like_escape('\', '\', '-')
+----
+true
+
+eval
+like_escape('\', '-\', '-')
+----
+true
+
+eval
+like_escape('\abc\', '-\___-\', '-')
+----
+true
+
+eval
+like_escape('\abc\', '\___\', '-')
+----
+true
+
+eval
+like_escape('\abc\', '-\___-\', '')
+----
+false
+
+eval
+like_escape('___', '\___', '')
+----
+false
+
+eval
+like_escape('aa', '__', '_')
+----
+false
+
+eval
+like_escape('aa', '_a_a', '_')
+----
+true
+
+eval
+like_escape('_', '__', '_')
+----
+true
+
+eval
+like_escape('__', '____', '_')
+----
+true
+
+eval
+like_escape('___', '______', '_')
+----
+true
+
+eval
+like_escape('abc', 'a%%', '%')
+----
+false
+
+eval
+like_escape('ab', '____', '_')
+----
+false
+
+eval
+like_escape('\a\b\c', '\_\_\_', '')
+----
+true
+
+eval
+like_escape('%%', '_%_%', '_')
+----
+true
+
+eval
+like_escape('%%a', '_%_%', '_')
+----
+false
+
+eval
+like_escape('\-\', '-\---\', '-')
+----
+true
+
+eval
+like_escape('\-\', '\--\', '-')
+----
+true
+
+eval
+like_escape('_%', 'a_a%', 'a')
+----
+true
+
+eval
+like_escape('\---\', '-\-------\', '-')
+----
+true
+
+eval
+like_escape('abc', '%bc', '%')
+----
+false
+
+eval
+like_escape('abc', '_bc', '_')
+----
+false
+
+eval
+like_escape('abc', '_b%', '_')
+----
+false
+
+eval
+like_escape('abc', '%b_', '%')
+----
+false
+
+eval
+like_escape('abc', '_a%', '_')
+----
+true
+
+eval
+like_escape('abc', '%a__', '%')
+----
+true
+
+eval
+like_escape('ww', '@w@w', '@')
+----
+true
+
+eval
+like_escape('\\', '@\@\', '@')
+----
+true
+
+eval
+like_escape('@ww', '@@w@w', '@')
+----
+true
+
+eval
+like_escape('@\', '@@@\', '@')
+----
+true
+
+eval
+like_escape('\', '@\', '@')
+----
+true
+
+eval
+like_escape('\@\', '@\@@@\', '@')
+----
+true
+
+eval
+like_escape('a', '日a', '日')
+----
+true
+
+eval
+like_escape('a日a', '%日日_', '日')
+----
+true
+
+eval
+like_escape('_漢', '漢_漢漢', '漢')
+----
+true
+
+eval
+like_escape('漢日', '漢漢漢日', '漢')
+----
+true
+
+eval
+like_escape('漢日', '漢%漢日', '漢')
+----
+false
+
+eval
+like_escape('%日_', '漢%漢日漢_', '漢')
+----
+true
+
+eval
+like_escape('a', '꧕', '�')
+----
+false
+
+eval
+like_escape('\꧕%', '�\꧕�%', '�')
+----
+true
+
+# ILIKE with ESCAPE clause
+
+eval
+ilike_escape('A', '\a', '')
+----
+false
+
+eval
+ilike_escape('\', '\', '-')
+----
+true
+
+eval
+ilike_escape('\', '-\', '-')
+----
+true
+
+eval
+ilike_escape('\ABC\', '-\___-\', '-')
+----
+true
+
+eval
+ilike_escape('\ABC\', '\___\', '-')
+----
+true
+
+eval
+ilike_escape('\ABC\', '-\___-\', '')
+----
+false
+
+eval
+ilike_escape('___', '\___', '')
+----
+false
+
+eval
+ilike_escape('AA', '__', '_')
+----
+false
+
+eval
+ilike_escape('AA', '_a_a', '_')
+----
+true
+
+eval
+ilike_escape('_', '__', '_')
+----
+true
+
+eval
+ilike_escape('__', '____', '_')
+----
+true
+
+eval
+ilike_escape('___', '______', '_')
+----
+true
+
+eval
+ilike_escape('ABC', 'a%%', '%')
+----
+false
+
+eval
+ilike_escape('AB', '____', '_')
+----
+false
+
+eval
+ilike_escape('\A\B\C', '\_\_\_', '')
+----
+true
+
+eval
+ilike_escape('%%', '_%_%', '_')
+----
+true
+
+eval
+ilike_escape('%%a', '_%_%', '_')
+----
+false
+
+eval
+ilike_escape('\-\', '-\---\', '-')
+----
+true
+
+eval
+ilike_escape('\-\', '\--\', '-')
+----
+true
+
+eval
+ilike_escape('_%', 'a_a%', 'a')
+----
+true
+
+eval
+ilike_escape('\---\', '-\-------\', '-')
+----
+true
+
+eval
+ilike_escape('abc', '%bc', '%')
+----
+false
+
+eval
+ilike_escape('abc', '_bc', '_')
+----
+false
+
+eval
+ilike_escape('abc', '_b%', '_')
+----
+false
+
+eval
+ilike_escape('abc', '%b_', '%')
+----
+false
+
+eval
+ilike_escape('abc', '_a%', '_')
+----
+true
+
+eval
+ilike_escape('abc', '%a__', '%')
+----
+true
+
+eval
+ilike_escape('ww', '@w@w', '@')
+----
+true
+
+eval
+ilike_escape('\\', '@\@\', '@')
+----
+true
+
+eval
+ilike_escape('@ww', '@@w@w', '@')
+----
+true
+
+eval
+ilike_escape('@\', '@@@\', '@')
+----
+true
+
+eval
+ilike_escape('\', '@\', '@')
+----
+true
+
+eval
+ilike_escape('\@\', '@\@@@\', '@')
+----
+true
+
+eval
+ilike_escape('a', '日a', '日')
+----
+true
+
+eval
+ilike_escape('a日a', '%日日_', '日')
+----
+true
+
+eval
+ilike_escape('_漢', '漢_漢漢', '漢')
+----
+true
+
+eval
+ilike_escape('漢日', '漢漢漢日', '漢')
+----
+true
+
+eval
+ilike_escape('漢日', '漢%漢日', '漢')
+----
+false
+
+eval
+ilike_escape('%日_', '漢%漢日漢_', '漢')
+----
+true
+
+eval
+ilike_escape('abCD', 'AB-c-d', '-')
+----
+true
+
+# NOT LIKE with ESCAPE clause
+
+eval
+not_like_escape('A', '\A', '')
+----
+true
+
+eval
+not_like_escape('\', '\', '-')
+----
+false
+
+eval
+not_like_escape('\', '-\', '-')
+----
+false
+
+eval
+not_like_escape('\abc\', '-\___-\', '-')
+----
+false
+
+eval
+not_like_escape('\abc\', '\___\', '-')
+----
+false
+
+eval
+not_like_escape('\abc\', '-\___-\', '')
+----
+true
+
+eval
+not_like_escape('___', '\___', '')
+----
+true
+
+eval
+not_like_escape('aa', '__', '_')
+----
+true
+
+eval
+not_like_escape('aa', '_a_a', '_')
+----
+false
+
+eval
+not_like_escape('_', '__', '_')
+----
+false
+
+eval
+not_like_escape('__', '____', '_')
+----
+false
+
+eval
+not_like_escape('___', '______', '_')
+----
+false
+
+eval
+not_like_escape('abc', 'a%%', '%')
+----
+true
+
+eval
+not_like_escape('ab', '____', '_')
+----
+true
+
+eval
+not_like_escape('\a\b\c', '\_\_\_', '')
+----
+false
+
+eval
+not_like_escape('%%', '_%_%', '_')
+----
+false
+
+eval
+not_like_escape('%%a', '_%_%', '_')
+----
+true
+
+eval
+not_like_escape('\-\', '-\---\', '-')
+----
+false
+
+eval
+not_like_escape('\-\', '\--\', '-')
+----
+false
+
+eval
+not_like_escape('_%', 'a_a%', 'a')
+----
+false
+
+eval
+not_like_escape('\---\', '-\-------\', '-')
+----
+false
+
+eval
+not_like_escape('abc', '%bc', '%')
+----
+true
+
+eval
+not_like_escape('abc', '_bc', '_')
+----
+true
+
+eval
+not_like_escape('abc', '_b%', '_')
+----
+true
+
+eval
+not_like_escape('abc', '%b_', '%')
+----
+true
+
+eval
+not_like_escape('abc', '_a%', '_')
+----
+false
+
+eval
+not_like_escape('abc', '%a__', '%')
+----
+false
+
+eval
+not_like_escape('ww', '@w@w', '@')
+----
+false
+
+eval
+not_like_escape('\\', '@\@\', '@')
+----
+false
+
+eval
+not_like_escape('@ww', '@@w@w', '@')
+----
+false
+
+eval
+not_like_escape('@\', '@@@\', '@')
+----
+false
+
+eval
+not_like_escape('\', '@\', '@')
+----
+false
+
+eval
+not_like_escape('\@\', '@\@@@\', '@')
+----
+false
+
+eval
+not_like_escape('a', '日a', '日')
+----
+false
+
+eval
+not_like_escape('a日a', '%日日_', '日')
+----
+false
+
+eval
+not_like_escape('_漢', '漢_漢漢', '漢')
+----
+false
+
+eval
+not_like_escape('漢日', '漢漢漢日', '漢')
+----
+false
+
+eval
+not_like_escape('漢日', '漢%漢日', '漢')
+----
+true
+
+eval
+not_like_escape('%日_', '漢%漢日漢_', '漢')
+----
+false
+
+# NOT ILIKE with ESCAPE clause
+
+eval
+not_ilike_escape('A', '\a', '')
+----
+true
+
+eval
+not_ilike_escape('\', '\', '-')
+----
+false
+
+eval
+not_ilike_escape('\', '-\', '-')
+----
+false
+
+eval
+not_ilike_escape('\ABC\', '-\___-\', '-')
+----
+false
+
+eval
+not_ilike_escape('\ABC\', '\___\', '-')
+----
+false
+
+eval
+not_ilike_escape('\ABC\', '-\___-\', '')
+----
+true
+
+eval
+not_ilike_escape('___', '\___', '')
+----
+true
+
+eval
+not_ilike_escape('AA', '__', '_')
+----
+true
+
+eval
+not_ilike_escape('AA', '_a_a', '_')
+----
+false
+
+eval
+not_ilike_escape('_', '__', '_')
+----
+false
+
+eval
+not_ilike_escape('__', '____', '_')
+----
+false
+
+eval
+not_ilike_escape('___', '______', '_')
+----
+false
+
+eval
+not_ilike_escape('ABC', 'a%%', '%')
+----
+true
+
+eval
+not_ilike_escape('AB', '____', '_')
+----
+true
+
+eval
+not_ilike_escape('\A\B\C', '\_\_\_', '')
+----
+false
+
+eval
+not_ilike_escape('%%', '_%_%', '_')
+----
+false
+
+eval
+not_ilike_escape('%%a', '_%_%', '_')
+----
+true
+
+eval
+not_ilike_escape('\-\', '-\---\', '-')
+----
+false
+
+eval
+not_ilike_escape('\-\', '\--\', '-')
+----
+false
+
+eval
+not_ilike_escape('_%', 'a_a%', 'a')
+----
+false
+
+eval
+not_ilike_escape('\---\', '-\-------\', '-')
+----
+false
+
+eval
+not_ilike_escape('abc', '%bc', '%')
+----
+true
+
+eval
+not_ilike_escape('abc', '_bc', '_')
+----
+true
+
+eval
+not_ilike_escape('abc', '_b%', '_')
+----
+true
+
+eval
+not_ilike_escape('abc', '%b_', '%')
+----
+true
+
+eval
+not_ilike_escape('abc', '_a%', '_')
+----
+false
+
+eval
+not_ilike_escape('abc', '%a__', '%')
+----
+false
+
+eval
+not_ilike_escape('ww', '@w@w', '@')
+----
+false
+
+eval
+not_ilike_escape('\\', '@\@\', '@')
+----
+false
+
+eval
+not_ilike_escape('@ww', '@@w@w', '@')
+----
+false
+
+eval
+not_ilike_escape('@\', '@@@\', '@')
+----
+false
+
+eval
+not_ilike_escape('\', '@\', '@')
+----
+false
+
+eval
+not_ilike_escape('\@\', '@\@@@\', '@')
+----
+false
+
+eval
+not_ilike_escape('a', '日a', '日')
+----
+false
+
+eval
+not_ilike_escape('a日a', '%日日_', '日')
+----
+false
+
+eval
+not_ilike_escape('_漢', '漢_漢漢', '漢')
+----
+false
+
+eval
+not_ilike_escape('漢日', '漢漢漢日', '漢')
+----
+false
+
+eval
+not_ilike_escape('漢日', '漢%漢日', '漢')
+----
+true
+
+eval
+not_ilike_escape('%日_', '漢%漢日漢_', '漢')
+----
+false
+
+eval
+not_ilike_escape('abCD', 'AB-c-d', '-')
+----
+false
+
+# optimizedLikeFunc expressions.
+
+eval
+'TEST' LIKE 'TE%'
+----
+true
+
+eval
+'TEST' LIKE '%E%'
+----
+true
+
+eval
+'TEST' LIKE '%e%'
+----
+false
+
+eval
+'TEST' LIKE 'TES_'
+----
+true
+
+eval
+'TEST' LIKE 'TE_%'
+----
+true
+
+eval
+'TEST' LIKE 'TE_'
+----
+false
+
+eval
+'TEST' LIKE '%'
+----
+true
+
+eval
+'TEST' LIKE '%R'
+----
+false
+
+eval
+'T' LIKE '\_'
+----
+false
+
+eval
+'T' LIKE '\%'
+----
+false
+
+eval
+'TE_T' LIKE 'TE\_T'
+----
+true
+
+eval
+'TE\AT' LIKE 'TE\_T'
+----
+false
+
+eval
+'TES%T' LIKE 'TES\%T'
+----
+true
+
+eval
+'TES\AT' LIKE 'TES\%T'
+----
+false
+
+eval
+'T' LIKE '_'
+----
+true
+
+eval
+'TE' LIKE '_'
+----
+false
+
+eval
+'TE' LIKE '_%'
+----
+true
+
+eval
+'T' LIKE '_%'
+----
+true
+
+eval
+'' LIKE '_%'
+----
+false
+
+eval
+'TE' LIKE '%_'
+----
+true
+
+eval
+'' LIKE '%_'
+----
+false
+
+eval
+'T' LIKE '%_'
+----
+true
+
+eval
+'TEST' LIKE '_ES_'
+----
+true
+
+eval
+'' LIKE '__'
+----
+false
+
+eval
+'A' LIKE 'T_'
+----
+false
+
+eval
+'A' LIKE '_T'
+----
+false
+
+eval
+'TEST' LIKE '_E%'
+----
+true
+
+eval
+'TEST' LIKE '_E\%'
+----
+false
+
+eval
+'TES_' LIKE '%S\_'
+----
+true
+
+eval
+'TES%' LIKE '%S\%'
+----
+true
+
+eval
+'TES_' LIKE '_ES\_'
+----
+true
+
+eval
+'TES%' LIKE '_ES\%'
+----
+true
+
+eval
+'TEST' LIKE '%S_'
+----
+true
+
+eval
+'TEST' LIKE '%S\_'
+----
+false
+
+eval
+'TEST' NOT LIKE '%E%'
+----
+false
+
+eval
+'TEST' NOT LIKE 'TES_'
+----
+false
+
+eval
+'TEST' NOT LIKE 'TeS_'
+----
+true
+
+eval
+'TEST' NOT LIKE 'TE_'
+----
+true
+
+# ILIKE and NOT ILIKE
+
+eval
+'TEST' ILIKE 'TEST'
+----
+true
+
+eval
+'TEST' ILIKE 'test'
+----
+true
+
+eval
+'TEST' ILIKE 'TE%'
+----
+true
+
+eval
+'TEST' ILIKE '%E%'
+----
+true
+
+eval
+'TEST' ILIKE '%e%'
+----
+true
+
+eval
+'TEST' ILIKE 'TES_'
+----
+true
+
+eval
+'TEST' ILIKE 'TE_%'
+----
+true
+
+eval
+'TEST' ILIKE 'TE_'
+----
+false
+
+eval
+'TEST' ILIKE '%'
+----
+true
+
+eval
+'TEST' ILIKE '%R'
+----
+false
+
+eval
+'TEST' ILIKE 'TESTER'
+----
+false
+
+eval
+'TEST' ILIKE 'tester'
+----
+false
+
+eval
+'TEST' ILIKE ''
+----
+false
+
+eval
+'' ILIKE ''
+----
+true
+
+eval
+'T' ILIKE '_'
+----
+true
+
+eval
+'TE' ILIKE '_'
+----
+false
+
+eval
+'TEST' NOT ILIKE '%E%'
+----
+false
+
+eval
+'TEST' NOT ILIKE 'TES_'
+----
+false
+
+eval
+'TEST' NOT ILIKE 'TeS_'
+----
+false
+
+eval
+'TEST' NOT ILIKE 'TE_'
+----
+true

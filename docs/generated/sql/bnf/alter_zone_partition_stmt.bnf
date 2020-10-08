@@ -1,0 +1,13 @@
+alter_zone_partition_stmt ::=
+	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' index_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' index_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' index_name 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' index_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' index_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' index_name 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' 'CONFIGURE' 'ZONE' 'DISCARD'

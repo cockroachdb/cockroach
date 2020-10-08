@@ -1,100 +1,133 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tpcc
 
 import (
-	"math/rand"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
+	"golang.org/x/exp/rand"
 )
-
-const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-const numbers = "1234567890"
-const aChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 
 var cLastTokens = [...]string{
 	"BAR", "OUGHT", "ABLE", "PRI", "PRES",
 	"ESE", "ANTI", "CALLY", "ATION", "EING"}
 
-// cLoad is the value of C at load time. See 2.1.6.1.
-// It's used for the non-uniform random generator.
-var cLoad int
-
-// cCustomerID is the value of C for the customer id generator. 2.1.6.
-var cCustomerID int
-
-// cCustomerID is the value of C for the item id generator. 2.1.6.
-var cItemID int
-
-func init() {
-	rand.Seed(timeutil.Now().UnixNano())
-	cLoad = rand.Intn(256)
-	cItemID = rand.Intn(1024)
-	cCustomerID = rand.Intn(8192)
+func (w *tpcc) initNonUniformRandomConstants() {
+	rng := rand.New(rand.NewSource(w.seed))
+	w.cLoad = rng.Intn(256)
+	w.cItemID = rng.Intn(1024)
+	w.cCustomerID = rng.Intn(8192)
 }
 
-func randStringFromAlphabet(rng *rand.Rand, minLen, maxLen int, alphabet string) string {
+const precomputedLength = 10000
+const aCharsAlphabet = `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890`
+const lettersAlphabet = `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
+const numbersAlphabet = `1234567890`
+
+type tpccRand struct {
+	*rand.Rand
+
+	aChars, letters, numbers workloadimpl.PrecomputedRand
+}
+
+type aCharsOffset int
+type lettersOffset int
+type numbersOffset int
+
+func randStringFromAlphabet(
+	rng *rand.Rand,
+	a *bufalloc.ByteAllocator,
+	minLen, maxLen int,
+	pr workloadimpl.PrecomputedRand,
+	prOffset *int,
+) []byte {
 	size := maxLen
 	if maxLen-minLen != 0 {
-		size = randInt(rng, minLen, maxLen)
+		size = int(randInt(rng, minLen, maxLen))
 	}
 	if size == 0 {
-		return ""
+		return nil
 	}
 
-	b := make([]byte, size)
-	for i := range b {
-		b[i] = alphabet[rng.Intn(len(alphabet))]
+	var b []byte
+	*a, b = a.Alloc(size, 0 /* extraCap */)
+	*prOffset = pr.FillBytes(*prOffset, b)
+	return b
+}
+
+// randAStringInitialDataOnly generates a random alphanumeric string of length
+// between min and max inclusive. It uses a set of pregenerated random data,
+// which the spec allows only for initial data. See 4.3.2.2.
+//
+// For speed, this is done using precomputed random data, which is explicitly
+// allowed by the spec for initial data only. See 4.3.2.1.
+func randAStringInitialDataOnly(
+	rng *tpccRand, ao *aCharsOffset, a *bufalloc.ByteAllocator, min, max int,
+) []byte {
+	return randStringFromAlphabet(rng.Rand, a, min, max, rng.aChars, (*int)(ao))
+}
+
+// randNStringInitialDataOnly generates a random numeric string of length
+// between min and max inclusive. See 4.3.2.2.
+//
+// For speed, this is done using precomputed random data, which is explicitly
+// allowed by the spec for initial data only. See 4.3.2.1.
+func randNStringInitialDataOnly(
+	rng *tpccRand, no *numbersOffset, a *bufalloc.ByteAllocator, min, max int,
+) []byte {
+	return randStringFromAlphabet(rng.Rand, a, min, max, rng.numbers, (*int)(no))
+}
+
+// randStateInitialDataOnly produces a random US state. (spec just says 2
+// letters)
+//
+// For speed, this is done using precomputed random data, which is explicitly
+// allowed by the spec for initial data only. See 4.3.2.1.
+func randStateInitialDataOnly(rng *tpccRand, lo *lettersOffset, a *bufalloc.ByteAllocator) []byte {
+	return randStringFromAlphabet(rng.Rand, a, 2, 2, rng.letters, (*int)(lo))
+}
+
+// randOriginalStringInitialDataOnly generates a random a-string[26..50] with
+// 10% chance of containing the string "ORIGINAL" somewhere in the middle of the
+// string. See 4.3.3.1.
+//
+// For speed, this is done using precomputed random data, which is explicitly
+// allowed by the spec for initial data only. See 4.3.2.1.
+func randOriginalStringInitialDataOnly(
+	rng *tpccRand, ao *aCharsOffset, a *bufalloc.ByteAllocator,
+) []byte {
+	if rng.Rand.Intn(9) == 0 {
+		l := int(randInt(rng.Rand, 26, 50))
+		off := int(randInt(rng.Rand, 0, l-8))
+		var buf []byte
+		*a, buf = a.Alloc(l, 0 /* extraCap */)
+		copy(buf[:off], randAStringInitialDataOnly(rng, ao, a, off, off))
+		copy(buf[off:off+8], originalString)
+		copy(buf[off+8:], randAStringInitialDataOnly(rng, ao, a, l-off-8, l-off-8))
+		return buf
 	}
-	return string(b)
-}
-
-// randAString generates a random alphanumeric string of length between min and
-// max inclusive. See 4.3.2.2.
-func randAString(rng *rand.Rand, min, max int) string {
-	return randStringFromAlphabet(rng, min, max, aChars)
-}
-
-// randOriginalString generates a random a-string[26..50] with 10% chance of
-// containing the string "ORIGINAL" somewhere in the middle of the string.
-// See 4.3.3.1.
-func randOriginalString(rng *rand.Rand) string {
-	if rng.Intn(9) == 0 {
-		l := randInt(rng, 26, 50)
-		off := randInt(rng, 0, l-8)
-		return randAString(rng, off, off) + originalString + randAString(rng, l-off-8, l-off-8)
-	}
-	return randAString(rng, 26, 50)
-}
-
-// randNString generates a random numeric string of length between min anx max
-// inclusive. See 4.3.2.2.
-func randNString(rng *rand.Rand, min, max int) string {
-	return randStringFromAlphabet(rng, min, max, numbers)
-}
-
-// randState produces a random US state. (spec just says 2 letters)
-func randState(rng *rand.Rand) string {
-	return randStringFromAlphabet(rng, 2, 2, letters)
+	return randAStringInitialDataOnly(rng, ao, a, 26, 50)
 }
 
 // randZip produces a random "zip code" - a 4-digit number plus the constant
 // "11111". See 4.3.2.7.
-func randZip(rng *rand.Rand) string {
-	return randNString(rng, 4, 4) + "11111"
+//
+// For speed, this is done using precomputed random data, which is explicitly
+// allowed by the spec for initial data only. See 4.3.2.1.
+func randZipInitialDataOnly(rng *tpccRand, no *numbersOffset, a *bufalloc.ByteAllocator) []byte {
+	var buf []byte
+	*a, buf = a.Alloc(9, 0 /* extraCap */)
+	copy(buf[:4], randNStringInitialDataOnly(rng, no, a, 4, 4))
+	copy(buf[4:], `11111`)
+	return buf
 }
 
 // randTax produces a random tax between [0.0000..0.2000]
@@ -105,31 +138,39 @@ func randTax(rng *rand.Rand) float64 {
 
 // randInt returns a number within [min, max] inclusive.
 // See 2.1.4.
-func randInt(rng *rand.Rand, min, max int) int {
-	return rng.Intn(max-min+1) + min
+func randInt(rng *rand.Rand, min, max int) int64 {
+	return int64(rng.Intn(max-min+1) + min)
+}
+
+// randCLastSyllables returns a customer last name string generated according to
+// the table in 4.3.2.3. Given a number between 0 and 999, each of the three
+// syllables is determined by the corresponding digit in the three digit
+// representation of the number. For example, the number 371 generates the name
+// PRICALLYOUGHT, and the number 40 generates the name BARPRESBAR.
+func randCLastSyllables(n int, a *bufalloc.ByteAllocator) []byte {
+	const scratchLen = 3 * 5 // 3 entries from cLastTokens * max len of an entry
+	var buf []byte
+	*a, buf = a.Alloc(scratchLen, 0 /* extraCap */)
+	buf = buf[:0]
+	buf = append(buf, cLastTokens[n/100]...)
+	n = n % 100
+	buf = append(buf, cLastTokens[n/10]...)
+	n = n % 10
+	buf = append(buf, cLastTokens[n]...)
+	return buf
 }
 
 // See 4.3.2.3.
-func randCLastSyllables(n int) string {
-	result := ""
-	for i := 0; i < 3; i++ {
-		result = cLastTokens[n%10] + result
-		n /= 10
-	}
-	return result
-}
-
-// See 4.3.2.3.
-func randCLast(rng *rand.Rand) string {
-	return randCLastSyllables(((rng.Intn(256) | rng.Intn(1000)) + cLoad) % 1000)
+func (w *tpcc) randCLast(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
+	return randCLastSyllables(((rng.Intn(256)|rng.Intn(1000))+w.cLoad)%1000, a)
 }
 
 // Return a non-uniform random customer ID. See 2.1.6.
-func randCustomerID(rng *rand.Rand) int {
-	return ((rng.Intn(1024) | (rng.Intn(3000) + 1) + cCustomerID) % 3000) + 1
+func (w *tpcc) randCustomerID(rng *rand.Rand) int {
+	return ((rng.Intn(1024) | (rng.Intn(3000) + 1) + w.cCustomerID) % 3000) + 1
 }
 
 // Return a non-uniform random item ID. See 2.1.6.
-func randItemID(rng *rand.Rand) int {
-	return ((rng.Intn(8190) | (rng.Intn(100000) + 1) + cItemID) % 100000) + 1
+func (w *tpcc) randItemID(rng *rand.Rand) int {
+	return ((rng.Intn(8190) | (rng.Intn(100000) + 1) + w.cItemID) % 100000) + 1
 }

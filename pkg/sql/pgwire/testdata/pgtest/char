@@ -1,0 +1,48 @@
+# Prepare the environment.
+
+send
+Query {"String": "DROP TABLE IF EXISTS a"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Start of test.
+
+send
+Query {"String": "CREATE TABLE a (a INT PRIMARY KEY)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO a VALUES(1)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Make sure that values casted to "char" get their type oid and type size
+# reported correctly via pgwire.
+
+send
+Query {"String": "SELECT 'a'::\"char\" FROM a"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"char","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"a"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

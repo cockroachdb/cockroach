@@ -13,26 +13,26 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	batcheval.RegisterCommand(roachpb.WriteBatch, batcheval.DefaultDeclareKeys, evalWriteBatch)
+	batcheval.RegisterReadWriteCommand(roachpb.WriteBatch, batcheval.DefaultDeclareKeys, evalWriteBatch)
 }
 
 // evalWriteBatch applies the operations encoded in a BatchRepr. Any existing
 // data in the affected keyrange is first cleared (not tombstoned), which makes
 // this command idempotent.
 func evalWriteBatch(
-	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+	ctx context.Context, batch storage.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
 
 	args := cArgs.Args.(*roachpb.WriteBatchRequest)
@@ -53,8 +53,8 @@ func evalWriteBatch(
 		return result.Result{}, errors.New("data spans multiple ranges")
 	}
 
-	mvccStartKey := engine.MVCCKey{Key: args.Key}
-	mvccEndKey := engine.MVCCKey{Key: args.EndKey}
+	mvccStartKey := storage.MVCCKey{Key: args.Key}
+	mvccEndKey := storage.MVCCKey{Key: args.EndKey}
 
 	// Verify that the keys in the batch are within the range specified by the
 	// request header.
@@ -66,7 +66,7 @@ func evalWriteBatch(
 
 	// Check if there was data in the affected keyrange. If so, delete it (and
 	// adjust the MVCCStats) before applying the WriteBatch data.
-	existingStats, err := clearExistingData(ctx, batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	existingStats, err := clearExistingData(ctx, batch, args.Key, args.EndKey, h.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "clearing existing data")
 	}
@@ -79,11 +79,11 @@ func evalWriteBatch(
 }
 
 func clearExistingData(
-	ctx context.Context, batch engine.ReadWriter, start, end engine.MVCCKey, nowNanos int64,
+	ctx context.Context, batch storage.ReadWriter, start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.Iterate(start, end, func(_ engine.MVCCKeyValue) (bool, error) {
+		if err := batch.Iterate(start, end, func(_ storage.MVCCKeyValue) (bool, error) {
 			isEmpty = false
 			return true, nil // stop right away
 		}); err != nil {
@@ -95,13 +95,13 @@ func clearExistingData(
 		}
 	}
 
-	iter := batch.NewIterator(engine.IterOptions{UpperBound: end.Key})
+	iter := batch.NewIterator(storage.IterOptions{UpperBound: end})
 	defer iter.Close()
 
-	iter.Seek(start)
+	iter.SeekGE(storage.MakeMVCCMetadataKey(start))
 	if ok, err := iter.Valid(); err != nil {
 		return enginepb.MVCCStats{}, err
-	} else if ok && !iter.UnsafeKey().Less(end) {
+	} else if ok && !iter.UnsafeKey().Less(storage.MakeMVCCMetadataKey(end)) {
 		return enginepb.MVCCStats{}, nil
 	}
 

@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 //
 // This file implements data structures used by index constraints generation.
 
@@ -19,9 +15,12 @@ package constraint
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestSpanSet(t *testing.T) {
@@ -52,6 +51,11 @@ func TestSpanSet(t *testing.T) {
 			MakeCompositeKey(tree.NewDInt(5), tree.NewDInt(1)), ExcludeBoundary,
 			"[/5 - /5/1)",
 		},
+		{ // 4
+			MakeKey(tree.DNull), IncludeBoundary,
+			MakeCompositeKey(tree.NewDInt(5), tree.NewDInt(1)), ExcludeBoundary,
+			"[/NULL - /5/1)",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -67,11 +71,10 @@ func TestSpanSet(t *testing.T) {
 	testPanic := func(t *testing.T, fn func(), expected string) {
 		t.Helper()
 		defer func() {
-			msg := recover()
-			if msg == nil {
+			if r := recover(); r == nil {
 				t.Errorf("panic expected with message: %s", expected)
-			} else if msg != expected {
-				t.Errorf("expected: %s, actual: %s", expected, msg)
+			} else if fmt.Sprint(r) != expected {
+				t.Errorf("expected: %s, actual: %v", expected, r)
 			}
 		}()
 		fn()
@@ -100,11 +103,101 @@ func TestSpanUnconstrained(t *testing.T) {
 		t.Errorf("unexpected string value for unconstrained span: %s", unconstrained.String())
 	}
 
+	unconstrained.startBoundary = IncludeBoundary
+	unconstrained.start = MakeKey(tree.DNull)
+	if !unconstrained.IsUnconstrained() {
+		t.Errorf("span beginning with NULL is not unconstrained")
+	}
+
 	// Test constrained span's IsUnconstrained method.
 	var sp Span
 	sp.Init(MakeKey(tree.NewDInt(5)), IncludeBoundary, MakeKey(tree.NewDInt(5)), IncludeBoundary)
 	if sp.IsUnconstrained() {
 		t.Errorf("IsUnconstrained should have returned false")
+	}
+}
+
+func TestSpanSingleKey(t *testing.T) {
+	testCases := []struct {
+		start         Key
+		startBoundary SpanBoundary
+		end           Key
+		endBoundary   SpanBoundary
+		expected      bool
+	}{
+		{ // 0
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			true,
+		},
+		{ // 1
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.NewDInt(2)), IncludeBoundary,
+			false,
+		},
+		{ // 2
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.NewDInt(1)), ExcludeBoundary,
+			false,
+		},
+		{ // 3
+			MakeKey(tree.NewDInt(1)), ExcludeBoundary,
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			false,
+		},
+		{ // 4
+			EmptyKey, IncludeBoundary,
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			false,
+		},
+		{ // 5
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			EmptyKey, IncludeBoundary,
+			false,
+		},
+		{ // 6
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.DNull), IncludeBoundary,
+			false,
+		},
+		{ // 7
+			MakeKey(tree.NewDString("a")), IncludeBoundary,
+			MakeKey(tree.NewDString("ab")), IncludeBoundary,
+			false,
+		},
+		{ // 8
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1)), IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1)), IncludeBoundary,
+			true,
+		},
+		{ // 9
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1)), IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("mango"), tree.NewDInt(1)), IncludeBoundary,
+			false,
+		},
+		{ // 10
+			MakeCompositeKey(tree.NewDString("cherry")), IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1)), IncludeBoundary,
+			false,
+		},
+		{ // 11
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1), tree.DNull), IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1), tree.DNull), IncludeBoundary,
+			true,
+		},
+	}
+
+	for i, tc := range testCases {
+		st := cluster.MakeTestingClusterSettings()
+		evalCtx := tree.MakeTestingEvalContext(st)
+
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			var sp Span
+			sp.Init(tc.start, tc.startBoundary, tc.end, tc.endBoundary)
+			if sp.HasSingleKey(&evalCtx) != tc.expected {
+				t.Errorf("expected: %v, actual: %v", tc.expected, !tc.expected)
+			}
+		})
 	}
 }
 
@@ -569,6 +662,218 @@ func TestSpanPreferInclusive(t *testing.T) {
 			sp.PreferInclusive(keyCtx)
 			if sp.String() != tc.expected {
 				t.Errorf("expected: %s, actual: %s", tc.expected, sp.String())
+			}
+		})
+	}
+}
+
+func TestSpan_KeyCount(t *testing.T) {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		keyCtx   *KeyContext
+		span     Span
+		expected string
+	}{
+		{ // 0
+			// Single key span with DString datum type.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST - /US_WEST]"),
+			expected: "1",
+		},
+		{ // 1
+			// Multiple key span with DInt datum type.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-5 - /5]"),
+			expected: "11",
+		},
+		{ // 2
+			// Multiple key span with DOid datum type.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-5 - /5]", types.OidFamily),
+			expected: "11",
+		},
+		{ // 3
+			// Multiple key span with DDate datum type.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/2000-1-1 - /2000-1-2]", types.DateFamily),
+			expected: "2",
+		},
+		{ // 4
+			// Single-key span with multiple-column key.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/item]"),
+			expected: "1",
+		},
+		{ // 5
+			// Fails because the span is multiple-key and the type is not enumerable.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/object]"),
+			expected: "FAIL",
+		},
+		{ // 6
+			// Descending multiple-key span.
+			keyCtx:   kcDescDesc,
+			span:     ParseSpan(&evalCtx, "[/5 - /-5]"),
+			expected: "11",
+		},
+		{ // 7
+			// Descending multiple-key span with multiple-column keys.
+			keyCtx:   kcDescDesc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/5 - /US_WEST/-5]"),
+			expected: "11",
+		},
+		{ // 8
+			// Fails because the keys can only differ in the last column.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/1 - /US_EAST/1]"),
+			expected: "FAIL",
+		},
+		{ // 9
+			// Fails because the keys must have the same length.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1/1 - /1]"),
+			expected: "FAIL",
+		},
+		{ // 10
+			// Fails because the keys must have the same length.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1 - /1/1]"),
+			expected: "FAIL",
+		},
+		{ // 11
+			// Fails because the keys must have the same length.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/1 - ]"),
+			expected: "FAIL",
+		},
+		{ // 12
+			// Fails because of overflow.
+			keyCtx: kcAscAsc,
+			span: Span{
+				start:         MakeKey(tree.NewDInt(math.MinInt64)),
+				end:           MakeKey(tree.NewDInt(math.MaxInt64)),
+				startBoundary: false,
+				endBoundary:   false,
+			},
+			expected: "FAIL",
+		},
+		{ // 13
+			// Fails because of underflow.
+			keyCtx: kcDescDesc,
+			span: Span{
+				start:         MakeKey(tree.NewDInt(math.MaxInt64)),
+				end:           MakeKey(tree.NewDInt(math.MinInt64)),
+				startBoundary: false,
+				endBoundary:   false,
+			},
+			expected: "FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(cnt int64, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return strconv.FormatInt(cnt, 10 /* base */)
+			}
+
+			if res := toStr(tc.span.KeyCount(tc.keyCtx)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
+			}
+		})
+	}
+}
+
+func TestSpan_SplitSpan(t *testing.T) {
+	const keyCountLimit = 10
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	kcAscAsc := testKeyContext(1, 2)
+	kcDescDesc := testKeyContext(-1, -2)
+
+	testCases := []struct {
+		keyCtx   *KeyContext
+		span     Span
+		expected string
+	}{
+		{ // 0
+			// Single-key span with multiple-column key.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/item]"),
+			expected: "[/'US_WEST'/'item' - /'US_WEST'/'item']",
+		},
+		{ // 1
+			// Fails because the datum type is not enumerable.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_WEST/item - /US_WEST/object]"),
+			expected: "FAIL",
+		},
+		{ // 2
+			// Fails because only the last datums can differ, and only if they are
+			// enumerable.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/US_EAST/item - /US_WEST/item]"),
+			expected: "FAIL",
+		},
+		{ // 3
+			// Ascending multiple-key span.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-1 - /1]"),
+			expected: "[/-1 - /-1] [/0 - /0] [/1 - /1]",
+		},
+		{ // 4
+			// Descending multiple-key span.
+			keyCtx:   kcDescDesc,
+			span:     ParseSpan(&evalCtx, "[/1 - /-1]"),
+			expected: "[/1 - /1] [/0 - /0] [/-1 - /-1]",
+		},
+		{ // 5
+			// Ascending multiple-key span with multiple-column keys.
+			keyCtx: kcAscAsc,
+			span:   ParseSpan(&evalCtx, "[/US_WEST/-1 - /US_WEST/1]"),
+			expected: "[/'US_WEST'/-1 - /'US_WEST'/-1] [/'US_WEST'/0 - /'US_WEST'/0] " +
+				"[/'US_WEST'/1 - /'US_WEST'/1]",
+		},
+		{ // 6
+			// Fails because the keys are different lengths.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[ - /'US_WEST']"),
+			expected: "FAIL",
+		},
+		{ // 7
+			// Single span with 10 keys (equal to maxKeyCount).
+			keyCtx: kcAscAsc,
+			span: ParseSpan(
+				&evalCtx,
+				"[/0 - /9]",
+			),
+			expected: "[/0 - /0] [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] [/6 - /6] [/7 - /7] " +
+				"[/8 - /8] [/9 - /9]",
+		},
+		{ // 8
+			// Fails because the number of keys exceeds maxKeyCount.
+			keyCtx:   kcAscAsc,
+			span:     ParseSpan(&evalCtx, "[/-1 - /10]"),
+			expected: "FAIL",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(spans *Spans, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return spans.String()
+			}
+
+			if res := toStr(tc.span.Split(tc.keyCtx, keyCountLimit)); res != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, res)
 			}
 		})
 	}

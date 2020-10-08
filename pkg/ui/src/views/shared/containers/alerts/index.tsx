@@ -1,6 +1,16 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import React from "react";
 import _ from "lodash";
-import { Dispatch, bindActionCreators } from "redux";
+import { Dispatch, Action, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
 import { AlertBox } from "src/views/shared/components/alertBox";
@@ -16,7 +26,7 @@ interface AlertSectionProps {
    * Raw dispatch method for the current store, will be used to dispatch
    * alert dismissal callbacks.
    */
-  dispatch: Dispatch<AdminUIState>;
+  dispatch: Dispatch<Action, AdminUIState>;
 }
 
 class AlertSection extends React.Component<AlertSectionProps, {}> {

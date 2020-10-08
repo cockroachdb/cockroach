@@ -1,0 +1,204 @@
+
+## We'll check the behavior of cput in the following circumstances:
+## A. last write is ignored, no intent history (need to go to store)
+## B. last write is ignored, intent history not ignored (need to pick last from history)
+## C. last write is ignored, last entry in intent history is ignored, other entry available (need to pick next-to-last from history)
+## D. last write is ignored, all intent history ignored (need to go to store)
+
+# Case A: just 1 put in txn before CPut (no intent history). Then ignore that put.
+# Expect cput to find original value (first).
+
+run ok
+put k=k v=first ts=1
+with t=A
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  txn_ignore_seqs seqs=(5-15)
+  txn_step  seq=20
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=6
+data: "k"/0.000000011,0 -> /BYTES/a
+data: "k"/0.000000001,0 -> /BYTES/first
+
+# Condition must fail to find the last write a.
+
+run error
+cput t=A k=k cond=a v=c
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=6
+data: "k"/0.000000011,0 -> /BYTES/a
+data: "k"/0.000000001,0 -> /BYTES/first
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003first" timestamp:<wall_time:1 > 
+
+# Condition succeeds to find the original value.
+
+run ok
+cput t=A k=k cond=first v=b
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=6
+data: "k"/0.000000011,0 -> /BYTES/b
+data: "k"/0.000000001,0 -> /BYTES/first
+
+run ok
+clear_range k=k end=-k
+----
+>> at end:
+<no data>
+
+# Case B: two writes, ignore last (check cput picks from history).
+
+run ok
+put k=k v=first ts=1
+with t=B
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  txn_step  seq=20
+  put       k=k  v=b
+  txn_ignore_seqs seqs=(15-25)
+  txn_step  seq=30
+----
+>> at end:
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+data: "k"/0.000000011,0 -> /BYTES/b
+data: "k"/0.000000001,0 -> /BYTES/first
+
+# Condition must fail to find the last write b.
+
+run error
+cput t=B k=k cond=b v=c
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+data: "k"/0.000000011,0 -> /BYTES/b
+data: "k"/0.000000001,0 -> /BYTES/first
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003a" timestamp:<> 
+
+# However it succeeds to find the write before that.
+
+run ok
+cput t=B k=k cond=a v=c
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+data: "k"/0.000000011,0 -> /BYTES/c
+data: "k"/0.000000001,0 -> /BYTES/first
+
+run ok
+clear_range k=k end=-k
+----
+>> at end:
+<no data>
+
+# Case C: two or more history entries, last is ignored.
+
+run ok
+put k=k v=first ts=1
+with t=C
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  txn_step  seq=20
+  put       k=k  v=b
+  txn_step  seq=30
+  put       k=k  v=c
+  txn_ignore_seqs seqs=(15-35)
+  txn_step  seq=40
+----
+>> at end:
+txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "k"/0.000000011,0 -> /BYTES/c
+data: "k"/0.000000001,0 -> /BYTES/first
+
+# Condition must fail to find the last write b and c.
+
+run error
+cput t=C k=k cond=c v=d
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "k"/0.000000011,0 -> /BYTES/c
+data: "k"/0.000000001,0 -> /BYTES/first
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003a" timestamp:<> 
+
+run error
+cput t=C k=k cond=b v=d
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "k"/0.000000011,0 -> /BYTES/c
+data: "k"/0.000000001,0 -> /BYTES/first
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003a" timestamp:<> 
+
+# However it succeeds to find the write before that.
+
+run ok
+cput t=C k=k cond=a v=c
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "k"/0.000000011,0 -> /BYTES/c
+data: "k"/0.000000001,0 -> /BYTES/first
+
+run ok
+clear_range k=k end=-k
+----
+>> at end:
+<no data>
+
+# Case D: last write + intent history all ignored.
+# We need just two writes to have a non-empty intent history, then we can ignore that.
+
+run ok
+put k=k v=first ts=1
+with t=D
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  txn_step  seq=20
+  put       k=k  v=b
+  txn_ignore_seqs seqs=(5-25)
+  txn_step  seq=30
+----
+>> at end:
+txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+data: "k"/0.000000011,0 -> /BYTES/b
+data: "k"/0.000000001,0 -> /BYTES/first
+
+# Condition must fail to find the last writes a and b.
+
+run error
+cput t=D k=k cond=a v=c
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+data: "k"/0.000000011,0 -> /BYTES/b
+data: "k"/0.000000001,0 -> /BYTES/first
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003first" timestamp:<wall_time:1 > 
+
+run error
+cput t=D k=k cond=b v=c
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+data: "k"/0.000000011,0 -> /BYTES/b
+data: "k"/0.000000001,0 -> /BYTES/first
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003first" timestamp:<wall_time:1 > 
+
+# However it succeeds to find the write before that.
+
+run ok
+cput t=D k=k cond=first v=c
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+data: "k"/0.000000011,0 -> /BYTES/c
+data: "k"/0.000000001,0 -> /BYTES/first

@@ -1,0 +1,37 @@
+@startuml
+box "On any node using txns"
+  participant "SQL executor\nor distsql server" as SQL
+  participant "RootTxn\nor LeafTxn" as Txn
+  participant TxnCoordSender
+end box
+participant cluster
+
+note over SQL: SQL transaction starts
+create Txn
+SQL -> Txn : client.NewTxn(Txn)
+create TxnCoordSender
+Txn -> TxnCoordSender : db.factory.TransactionalSender()
+TxnCoordSender -> TxnCoordSender : initialize txn object
+...
+note over SQL: during query execution
+SQL -> Txn : txn.Run(client.Batch)
+Txn -> Txn : translate Batch into BatchRequest
+Txn -> TxnCoordSender: sender.Send(BatchRequest)
+TxnCoordSender -> TxnCoordSender: populate txn object into batch
+TxnCoordSender -> cluster : distsender.Send(BatchRequest)
+...
+cluster --> TxnCoordSender : BatchResponse w/ txn object update
+TxnCoordSender -> TxnCoordSender: txn.Update(resp.Txn)
+TxnCoordSender --> Txn : BatchResponse
+Txn --> SQL : Batch modified in-place
+...
+note over SQL
+  when SQL txn completes
+  (only on the SQL gateway / RootTxn)
+end note
+SQL -> Txn : Commit/Rollback/CleanupOnError
+Txn -> Txn : construct BatchRequest with EndTxnRequest
+Txn -> TxnCoordSender : sender.Send(BatchRequest)
+TxnCoordSender --> cluster : clean up (not always)
+TxnCoordSender -> TxnCoordSender : finalize txn
+@enduml

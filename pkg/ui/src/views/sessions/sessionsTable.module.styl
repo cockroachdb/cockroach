@@ -1,0 +1,27 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~src/components/core/index'
+
+.sessions-table__col-time
+  white-space nowrap
+
+.cl-table__col-query-text a
+  font-family RobotoMono-Medium
+  font-size 12px
+  line-height 1.83
+  color $adminui-grey-1
+  width 400px
+  text-decoration none
+  cursor pointer
+  &:hover
+    color $colors--primary-blue-3
+    text-decoration underline

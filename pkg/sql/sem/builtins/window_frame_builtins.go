@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package builtins
 
@@ -19,10 +15,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
+	"github.com/cockroachdb/errors"
 )
 
 // indexedValue combines a value from the row with the index of that row.
@@ -31,101 +28,15 @@ type indexedValue struct {
 	idx   int
 }
 
-// RingBufferInitialSize defines the initial size of the ring buffer.
-const RingBufferInitialSize = 8
-
-// ringBuffer is a deque of indexedValue's maintained over a ring buffer.
-type ringBuffer struct {
-	values []*indexedValue
-	head   int // the index of the front of the deque.
-	tail   int // the index of the first position right after the end of the deque.
-
-	nonEmpty bool // indicates whether the deque is empty, necessary to distinguish
-	// between an empty deque and a deque that uses all of its capacity.
-}
-
-// len returns number of indexedValue's in the deque.
-func (r *ringBuffer) len() int {
-	if !r.nonEmpty {
-		return 0
-	}
-	if r.head < r.tail {
-		return r.tail - r.head
-	} else if r.head == r.tail {
-		return cap(r.values)
-	} else {
-		return cap(r.values) + r.tail - r.head
-	}
-}
-
-// add adds value to the end of the deque
-// and doubles it's underlying slice if necessary.
-func (r *ringBuffer) add(value *indexedValue) {
-	if cap(r.values) == 0 {
-		r.values = make([]*indexedValue, RingBufferInitialSize)
-		r.values[0] = value
-		r.tail = 1
-	} else {
-		if r.len() == cap(r.values) {
-			newValues := make([]*indexedValue, 2*cap(r.values))
-			if r.head < r.tail {
-				copy(newValues[:r.len()], r.values[r.head:r.tail])
-			} else {
-				copy(newValues[:cap(r.values)-r.head], r.values[r.head:])
-				copy(newValues[cap(r.values)-r.head:r.len()], r.values[:r.tail])
-			}
-			r.head = 0
-			r.tail = cap(r.values)
-			r.values = newValues
-		}
-		r.values[r.tail] = value
-		r.tail = (r.tail + 1) % cap(r.values)
-	}
-	r.nonEmpty = true
-}
-
-// get returns indexedValue at position pos in the deque (zero-based).
-func (r *ringBuffer) get(pos int) *indexedValue {
-	if !r.nonEmpty || pos < 0 || pos >= r.len() {
-		panic("unexpected behavior: index out of bounds")
-	}
-	return r.values[(pos+r.head)%cap(r.values)]
-}
-
-// removeHead removes a single element from the front of the deque.
-func (r *ringBuffer) removeHead() {
-	if r.len() == 0 {
-		panic("removing head from empty ring buffer")
-	}
-	r.values[r.head] = nil
-	r.head = (r.head + 1) % cap(r.values)
-	if r.head == r.tail {
-		r.nonEmpty = false
-	}
-}
-
-// removeTail removes a single element from the end of the deque.
-func (r *ringBuffer) removeTail() {
-	if r.len() == 0 {
-		panic("removing tail from empty ring buffer")
-	}
-	lastPos := (cap(r.values) + r.tail - 1) % cap(r.values)
-	r.values[lastPos] = nil
-	r.tail = lastPos
-	if r.tail == r.head {
-		r.nonEmpty = false
-	}
-}
-
 // slidingWindow maintains a deque of values along with corresponding indices
 // based on cmp function:
 // for Min behavior, cmp = -a.Compare(b)
 // for Max behavior, cmp = a.Compare(b)
 //
-// It assumes that the frame bounds will never go back, i.e. non-decreasing sequences
-// of frame start and frame end indices.
+// It assumes that the frame bounds will never go back, i.e. non-decreasing
+// sequences of frame start and frame end indices.
 type slidingWindow struct {
-	values  ringBuffer
+	values  ring.Buffer
 	evalCtx *tree.EvalContext
 	cmp     func(*tree.EvalContext, tree.Datum, tree.Datum) int
 }
@@ -140,37 +51,42 @@ func makeSlidingWindow(
 }
 
 // add first removes all values that are "smaller or equal" (depending on cmp)
-// from the end of the deque and then appends 'iv' to the end. This way, the deque
-// always contains unique values sorted in descending order of their "priority"
-// (when we encounter duplicates, we always keep the one with the largest idx).
+// from the end of the deque and then appends 'iv' to the end. This way, the
+// deque always contains unique values sorted in descending order of their
+// "priority" (when we encounter duplicates, we always keep the one with the
+// largest idx).
 func (sw *slidingWindow) add(iv *indexedValue) {
-	for i := sw.values.len() - 1; i >= 0; i-- {
-		if sw.cmp(sw.evalCtx, sw.values.get(i).value, iv.value) > 0 {
+	for i := sw.values.Len() - 1; i >= 0; i-- {
+		if sw.cmp(sw.evalCtx, sw.values.Get(i).(*indexedValue).value, iv.value) > 0 {
 			break
 		}
-		sw.values.removeTail()
+		sw.values.RemoveLast()
 	}
-	sw.values.add(iv)
+	sw.values.AddLast(iv)
 }
 
-// removeAllBefore removes all values from the beginning of the deque that have indices
-// smaller than given 'idx'.
-// This operation corresponds to shifting the start of the frame up to 'idx'.
+// removeAllBefore removes all values from the beginning of the deque that have
+// indices smaller than given 'idx'. This operation corresponds to shifting the
+// start of the frame up to 'idx'.
 func (sw *slidingWindow) removeAllBefore(idx int) {
-	for i := 0; i < sw.values.len() && i < idx; i++ {
-		if sw.values.get(i).idx >= idx {
+	for i := 0; i < sw.values.Len() && i < idx; i++ {
+		if sw.values.Get(i).(*indexedValue).idx >= idx {
 			break
 		}
-		sw.values.removeHead()
+		sw.values.RemoveFirst()
 	}
 }
 
 func (sw *slidingWindow) string() string {
 	var builder strings.Builder
-	for i := 0; i < sw.values.len(); i++ {
-		builder.WriteString(fmt.Sprintf("(%v, %v)\t", sw.values.get(i).value, sw.values.get(i).idx))
+	for i := 0; i < sw.values.Len(); i++ {
+		builder.WriteString(fmt.Sprintf("(%v, %v)\t", sw.values.Get(i).(*indexedValue).value, sw.values.Get(i).(*indexedValue).idx))
 	}
 	return builder.String()
+}
+
+func (sw *slidingWindow) reset() {
+	sw.values.Reset()
 }
 
 type slidingWindowFunc struct {
@@ -180,26 +96,82 @@ type slidingWindowFunc struct {
 
 // Compute implements WindowFunc interface.
 func (w *slidingWindowFunc) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
+	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	start, end := wfr.FrameStartIdx(), wfr.FrameEndIdx()
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !wfr.Frame.DefaultFrameExclusion() {
+		// We cannot use a sliding window approach because we have a frame
+		// exclusion clause - some rows will be in and out of the frame which
+		// breaks the necessary assumption, so we fallback to a naive quadratic
+		// approach.
+		var res tree.Datum
+		for idx := frameStartIdx; idx < frameEndIdx; idx++ {
+			if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+				return nil, err
+			} else if skipped {
+				continue
+			}
+			args, err := wfr.ArgsByRowIdx(ctx, idx)
+			if err != nil {
+				return nil, err
+			}
+			if res == nil {
+				res = args[0]
+			} else {
+				if w.sw.cmp(evalCtx, args[0], res) > 0 {
+					res = args[0]
+				}
+			}
+		}
+		if res == nil {
+			// Spec: the frame is empty, so we return NULL.
+			return tree.DNull, nil
+		}
+		return res, nil
+	}
 
 	// We need to discard all values that are no longer in the frame.
-	w.sw.removeAllBefore(start)
+	w.sw.removeAllBefore(frameStartIdx)
 
-	// We need to add all values that just entered the frame and have not been added yet.
-	for idx := max(w.prevEnd, start); idx < end; idx++ {
-		w.sw.add(&indexedValue{wfr.ArgsByRowIdx(idx)[0], idx})
+	// We need to add all values that just entered the frame and have not been
+	// added yet.
+	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
+		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+			return nil, err
+		} else if skipped {
+			continue
+		}
+		args, err := wfr.ArgsByRowIdx(ctx, idx)
+		if err != nil {
+			return nil, err
+		}
+		value := args[0]
+		if value == tree.DNull {
+			// Null value can neither be minimum nor maximum over a window frame with
+			// non-null values, so we're not adding them to the sliding window. The
+			// case of a window frame with no non-null values is handled below.
+			continue
+		}
+		w.sw.add(&indexedValue{value: value, idx: idx})
 	}
-	w.prevEnd = end
+	w.prevEnd = frameEndIdx
 
-	if w.sw.values.len() == 0 {
+	if w.sw.values.Len() == 0 {
 		// Spec: the frame is empty, so we return NULL.
 		return tree.DNull, nil
 	}
 
-	// The datum with "highest priority" within the frame is at the very front of the deque.
-	return w.sw.values.get(0).value, nil
+	// The datum with "highest priority" within the frame is at the very front
+	// of the deque.
+	return w.sw.values.GetFirst().(*indexedValue).value, nil
 }
 
 func max(a, b int) int {
@@ -209,41 +181,80 @@ func max(a, b int) int {
 	return b
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *slidingWindowFunc) Reset(context.Context) {
+	w.prevEnd = 0
+	w.sw.reset()
+}
+
 // Close implements WindowFunc interface.
 func (w *slidingWindowFunc) Close(context.Context, *tree.EvalContext) {
 	w.sw = nil
 }
 
-// slidingWindowSumFunc applies sliding window approach to summation over a frame.
-// It assumes that the frame bounds will never go back, i.e. non-decreasing sequences
-// of frame start and frame end indices.
+// slidingWindowSumFunc applies sliding window approach to summation over
+// a frame. It assumes that the frame bounds will never go back, i.e.
+// non-decreasing sequences of frame start and frame end indices.
 type slidingWindowSumFunc struct {
 	agg                tree.AggregateFunc // one of the four SumAggregates
 	prevStart, prevEnd int
+
+	// lastNonNullIdx is the index of the latest non-null value seen in the
+	// sliding window so far. noNonNullSeen indicates non-null values are yet to
+	// be seen.
+	lastNonNullIdx int
 }
 
-// removeAllBefore subtracts the values from all the rows that are no longer in the frame.
+const noNonNullSeen = -1
+
+func newSlidingWindowSumFunc(agg tree.AggregateFunc) *slidingWindowSumFunc {
+	return &slidingWindowSumFunc{
+		agg:            agg,
+		lastNonNullIdx: noNonNullSeen,
+	}
+}
+
+// removeAllBefore subtracts the values from all the rows that are no longer in
+// the frame.
 func (w *slidingWindowSumFunc) removeAllBefore(
-	ctx context.Context, wfr *tree.WindowFrameRun,
+	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) error {
-	for idx := w.prevStart; idx < wfr.FrameStartIdx() && idx < w.prevEnd; idx++ {
-		value := wfr.ArgsByRowIdx(idx)[0]
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
+	if err != nil {
+		return err
+	}
+	for idx := w.prevStart; idx < frameStartIdx && idx < w.prevEnd; idx++ {
+		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+			return err
+		} else if skipped {
+			continue
+		}
+		args, err := wfr.ArgsByRowIdx(ctx, idx)
+		if err != nil {
+			return err
+		}
+		value := args[0]
+		if value == tree.DNull {
+			// Null values do not contribute to the running sum, so there is nothing
+			// to subtract once they leave the window frame.
+			continue
+		}
 		switch v := value.(type) {
 		case *tree.DInt:
-			return w.agg.Add(ctx, tree.NewDInt(-*v))
+			err = w.agg.Add(ctx, tree.NewDInt(-*v))
 		case *tree.DDecimal:
 			d := tree.DDecimal{}
 			d.Neg(&v.Decimal)
-			return w.agg.Add(ctx, &d)
+			err = w.agg.Add(ctx, &d)
 		case *tree.DFloat:
-			return w.agg.Add(ctx, tree.NewDFloat(-*v))
+			err = w.agg.Add(ctx, tree.NewDFloat(-*v))
 		case *tree.DInterval:
-			// TODO(yuzefovich): currently only integer offsets are supported,
-			// but they could also be like '10 days' PRECEDING. When it is
-			// supported, this logic should be checked and tested.
-			return w.agg.Add(ctx, &tree.DInterval{Duration: duration.Duration{}.Sub(v.Duration)})
+			err = w.agg.Add(ctx, &tree.DInterval{Duration: duration.Duration{}.Sub(v.Duration)})
 		default:
-			return pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected value %v", v)
+			err = errors.AssertionFailedf("unexpected value %v", v)
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -253,25 +264,83 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 func (w *slidingWindowSumFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	start, end := wfr.FrameStartIdx(), wfr.FrameEndIdx()
-
-	// We need to discard all values that are no longer in the frame.
-	err := w.removeAllBefore(ctx, wfr)
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
-		return tree.DNull, err
+		return nil, err
+	}
+	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	if !wfr.Frame.DefaultFrameExclusion() {
+		// We cannot use a sliding window approach because we have a frame
+		// exclusion clause - some rows will be in and out of the frame which
+		// breaks the necessary assumption, so we fallback to a naive quadratic
+		// approach.
+		w.agg.Reset(ctx)
+		for idx := frameStartIdx; idx < frameEndIdx; idx++ {
+			if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+				return nil, err
+			} else if skipped {
+				continue
+			}
+			args, err := wfr.ArgsByRowIdx(ctx, idx)
+			if err != nil {
+				return nil, err
+			}
+			if err = w.agg.Add(ctx, args[0]); err != nil {
+				return nil, err
+			}
+		}
+		return w.agg.Result()
 	}
 
-	// We need to sum all values that just entered the frame and have not been added yet.
-	for idx := max(w.prevEnd, start); idx < end; idx++ {
-		err = w.agg.Add(ctx, wfr.ArgsByRowIdx(idx)[0])
+	// We need to discard all values that are no longer in the frame.
+	if err = w.removeAllBefore(ctx, evalCtx, wfr); err != nil {
+		return nil, err
+	}
+
+	// We need to sum all values that just entered the frame and have not been
+	// added yet.
+	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
+		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+			return nil, err
+		} else if skipped {
+			continue
+		}
+		args, err := wfr.ArgsByRowIdx(ctx, idx)
 		if err != nil {
-			return tree.DNull, err
+			return nil, err
+		}
+		if args[0] != tree.DNull {
+			w.lastNonNullIdx = idx
+			err = w.agg.Add(ctx, args[0])
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	w.prevStart = start
-	w.prevEnd = end
+	w.prevStart = frameStartIdx
+	w.prevEnd = frameEndIdx
+	// If last non-null value has index smaller than the start of the window
+	// frame, then only nulls can be in the frame. This holds true as well for
+	// the special noNonNullsSeen index.
+	onlyNulls := w.lastNonNullIdx < frameStartIdx
+	if frameStartIdx == frameEndIdx || onlyNulls {
+		// Either the window frame is empty or only null values are in the frame,
+		// so we return NULL as per spec.
+		return tree.DNull, nil
+	}
 	return w.agg.Result()
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *slidingWindowSumFunc) Reset(ctx context.Context) {
+	w.prevStart = 0
+	w.prevEnd = 0
+	w.lastNonNullIdx = noNonNullSeen
+	w.agg.Reset(ctx)
 }
 
 // Close implements WindowFunc interface.
@@ -281,43 +350,74 @@ func (w *slidingWindowSumFunc) Close(ctx context.Context, _ *tree.EvalContext) {
 
 // avgWindowFunc uses slidingWindowSumFunc to compute average over a frame.
 type avgWindowFunc struct {
-	sum slidingWindowSumFunc
+	sum *slidingWindowSumFunc
 }
 
 // Compute implements WindowFunc interface.
 func (w *avgWindowFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	if wfr.FrameSize() == 0 {
+	sum, err := w.sum.Compute(ctx, evalCtx, wfr)
+	if err != nil {
+		return nil, err
+	}
+	if sum == tree.DNull {
 		// Spec: the frame is empty, so we return NULL.
 		return tree.DNull, nil
 	}
 
-	var sum tree.Datum
-	var err error
-	sum, err = w.sum.Compute(ctx, evalCtx, wfr)
+	frameSize := 0
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
 		return nil, err
+	}
+	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	for idx := frameStartIdx; idx < frameEndIdx; idx++ {
+		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+			return nil, err
+		} else if skipped {
+			continue
+		}
+		args, err := wfr.ArgsByRowIdx(ctx, idx)
+		if err != nil {
+			return nil, err
+		}
+		if args[0] == tree.DNull {
+			// Null values do not count towards the number of rows that contribute
+			// to the sum, so we're omitting them from the frame.
+			continue
+		}
+		frameSize++
 	}
 
 	switch t := sum.(type) {
 	case *tree.DFloat:
-		return tree.NewDFloat(*t / tree.DFloat(wfr.FrameSize())), nil
+		return tree.NewDFloat(*t / tree.DFloat(frameSize)), nil
 	case *tree.DDecimal:
 		var avg tree.DDecimal
-		count := apd.New(int64(wfr.FrameSize()), 0)
+		count := apd.New(int64(frameSize), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &t.Decimal, count)
 		return &avg, err
 	case *tree.DInt:
 		dd := tree.DDecimal{}
-		dd.SetCoefficient(int64(*t))
+		dd.SetInt64(int64(*t))
 		var avg tree.DDecimal
-		count := apd.New(int64(wfr.FrameSize()), 0)
+		count := apd.New(int64(frameSize), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &dd.Decimal, count)
 		return &avg, err
+	case *tree.DInterval:
+		return &tree.DInterval{Duration: t.Duration.Div(int64(frameSize))}, nil
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected SUM result type: %s", t)
+		return nil, errors.AssertionFailedf("unexpected SUM result type: %s", t)
 	}
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *avgWindowFunc) Reset(ctx context.Context) {
+	w.sum.Reset(ctx)
 }
 
 // Close implements WindowFunc interface.

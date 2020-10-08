@@ -1,14 +1,22 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import _ from "lodash";
 import React from "react";
 import ReactPaginate from "react-paginate";
-import { Link } from "react-router";
 import { connect } from "react-redux";
-
+import { Link, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
-
-import { AdminUIState } from "src/redux/state";
 import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { AdminUIState } from "src/redux/state";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 /******************************
@@ -53,7 +61,7 @@ type RangesMainProps = RangesMainData & RangesMainActions;
  * Renders the main content of the raft ranges page, which is primarily a data
  * table of all ranges and their replicas.
  */
-class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
+export class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
   state: RangesMainState = {
     showState: true,
     showReplicas: true,
@@ -62,16 +70,16 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
     offset: 0,
   };
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshRaft();
   }
 
-  componentWillReceiveProps(props: RangesMainProps) {
+  componentDidUpdate() {
     // Refresh ranges when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    if (!props.state.valid) {
-      props.refreshRaft();
+    if (!this.props.state.valid) {
+      this.props.refreshRaft();
     }
   }
 
@@ -190,7 +198,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         // Render each replica into a cell
         range.nodes.forEach((node) => {
           const nodeRange = node.range;
-          const replicaLocations = nodeRange.state.state.desc.replicas.map(
+          const replicaLocations = nodeRange.state.state.desc.internal_replicas.map(
             (replica) => "(Node " + replica.node_id.toString() +
               " Store " + replica.store_id.toString() +
               " ReplicaID " + replica.replica_id.toString() + ")",
@@ -273,16 +281,18 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
 // Base selectors to extract data from redux state.
 const selectRaftState = (state: AdminUIState): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
 
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  state: selectRaftState(state),
+});
+
+const mapDispatchToProps = {
+  refreshRaft,
+};
+
 // Connect the RangesMain class with our redux store.
-const rangesMainConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      state: selectRaftState(state),
-    };
-  },
-  {
-    refreshRaft: refreshRaft,
-  },
-)(RangesMain);
+const rangesMainConnected = withRouter(connect(
+  mapStateToProps,
+  mapDispatchToProps,
+)(RangesMain));
 
 export { rangesMainConnected as default };

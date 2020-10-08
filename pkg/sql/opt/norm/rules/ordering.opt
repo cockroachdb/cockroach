@@ -22,10 +22,15 @@
 (Limit
     $input:*
     $limit:*
-    $ordering:* & (CanSimplifyLimitOffsetOrdering $input $ordering)
+    $ordering:* &
+        (CanSimplifyLimitOffsetOrdering $input $ordering)
 )
 =>
-(Limit $input $limit (SimplifyLimitOffsetOrdering $input $ordering))
+(Limit
+    $input
+    $limit
+    (SimplifyLimitOffsetOrdering $input $ordering)
+)
 
 # SimplifyOffsetOrdering removes redundant columns from the Offset operator's
 # input ordering.
@@ -33,38 +38,57 @@
 (Offset
     $input:*
     $offset:*
-    $ordering:* & (CanSimplifyLimitOffsetOrdering $input $ordering)
+    $ordering:* &
+        (CanSimplifyLimitOffsetOrdering $input $ordering)
 )
 =>
-(Offset $input $offset (SimplifyLimitOffsetOrdering $input $ordering))
+(Offset
+    $input
+    $offset
+    (SimplifyLimitOffsetOrdering $input $ordering)
+)
 
-# SimplifyGroupByOrdering removes redundant columns from the GroupBy operator's
+# SimplifyGroupByOrdering removes redundant columns from the GroupBy operators'
 # input ordering.
+#
+# Note: Doesn't match EnsureDistinctOn because test cases were too difficult to
+# find. If a test case for EnsureDistinctOn is found, it should be added to the
+# match pattern.
 [SimplifyGroupByOrdering, Normalize]
-(GroupBy
+(GroupBy | ScalarGroupBy | DistinctOn
     $input:*
     $aggregations:*
-    $def:* & (CanSimplifyGroupByOrdering $input $def)
+    $groupingPrivate:* &
+        (CanSimplifyGroupingOrdering $input $groupingPrivate)
 )
 =>
-(GroupBy $input $aggregations (SimplifyGroupByOrdering $input $def))
+((OpName)
+    $input
+    $aggregations
+    (SimplifyGroupingOrdering $input $groupingPrivate)
+)
 
-# SimplifyRowNumberOrdering removes redundant columns from the RowNumber
+# SimplifyOrdinalityOrdering removes redundant columns from the Ordinality
 # operator's input ordering.
-[SimplifyRowNumberOrdering, Normalize]
-(RowNumber
+[SimplifyOrdinalityOrdering, Normalize]
+(Ordinality
     $input:*
-    $def:* & (CanSimplifyRowNumberOrdering $input $def)
+    $ordinalityPrivate:* &
+        (CanSimplifyOrdinalityOrdering $input $ordinalityPrivate)
 )
 =>
-(RowNumber $input (SimplifyRowNumberOrdering $input $def))
+(Ordinality
+    $input
+    (SimplifyOrdinalityOrdering $input $ordinalityPrivate)
+)
 
 # SimplifyExplainOrdering removes redundant columns from the Explain operator's
 # input ordering.
 [SimplifyExplainOrdering, Normalize]
 (Explain
     $input:*
-    $def:* & (CanSimplifyExplainOrdering $input $def)
+    $explainPrivate:* &
+        (CanSimplifyExplainOrdering $input $explainPrivate)
 )
 =>
-(Explain $input (SimplifyExplainOrdering $input $def))
+(Explain $input (SimplifyExplainOrdering $input $explainPrivate))

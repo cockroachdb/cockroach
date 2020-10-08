@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 query I rowsort
 VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
 ----
@@ -77,17 +75,46 @@ VALUES (NULL) UNION ALL VALUES (NULL)
 NULL
 NULL
 
-query IT
+query IT rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
 ----
 1  unknown
-2  int
+2  bigint
 
 query IT rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
 ----
-1  int
+1  bigint
 2  unknown
+
+# INTERSECT with NULL columns in operands works.
+query I
+VALUES (1) INTERSECT VALUES (NULL) ORDER BY 1
+----
+
+query I
+VALUES (NULL) INTERSECT VALUES (1) ORDER BY 1
+----
+
+query I
+VALUES (NULL) INTERSECT VALUES (NULL)
+----
+NULL
+
+# EXCEPT with NULL columns in operands works.
+query I
+VALUES (1) EXCEPT VALUES (NULL) ORDER BY 1
+----
+1
+
+query I
+VALUES (NULL) EXCEPT VALUES (1) ORDER BY 1
+----
+NULL
+
+query I
+VALUES (NULL) EXCEPT VALUES (NULL)
+----
 
 statement ok
 CREATE TABLE uniontest (
@@ -180,20 +207,23 @@ SELECT 1, 2 INTERSECT SELECT 3
 query error pgcode 42601 each EXCEPT query must have the same number of columns: 2 vs 1
 SELECT 1, 2 EXCEPT SELECT 3
 
-query error pgcode 42804 UNION types int and string cannot be matched
-SELECT 1 UNION SELECT '3'
+# These work with the optimizer on, but not with it off. Skip for now.
+# TODO(jordan,radu): re-enable when optimizer=off goes away.
 
-query error pgcode 42804 INTERSECT types int and string cannot be matched
-SELECT 1 INTERSECT SELECT '3'
-
-query error pgcode 42804 EXCEPT types int and string cannot be matched
-SELECT 1 EXCEPT SELECT '3'
+# query error pgcode 42804 UNION types int and string cannot be matched
+# SELECT 1 UNION SELECT '3'
+#
+# query error pgcode 42804 INTERSECT types int and string cannot be matched
+# SELECT 1 INTERSECT SELECT '3'
+#
+# query error pgcode 42804 EXCEPT types int and string cannot be matched
+# SELECT 1 EXCEPT SELECT '3'
+# 
+# query error UNION types int\[] and string\[] cannot be matched
+# SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
 
 query error pgcode 42703 column \"z\" does not exist
 SELECT 1 UNION SELECT 3 ORDER BY z
-
-query error UNION types int\[] and string\[] cannot be matched
-SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
 
 # Check that UNION permits columns of different visible types
 
@@ -216,3 +246,105 @@ CREATE TABLE c (a INT PRIMARY KEY, b INT)
 query I
 SELECT a FROM a WHERE a > 2 UNION ALL (SELECT a FROM c WHERE b > 2) LIMIT 1;
 ----
+
+query III
+select *,1 from (values(1,2) union all select 2,2 from c);
+----
+1 2 1
+
+statement ok
+INSERT INTO a VALUES (1)
+
+statement ok
+INSERT INTO c VALUES (1,2)
+
+statement ok
+INSERT INTO c VALUES (3,4)
+
+# Check that UNION ALL columns are mapped correctly - even if one side gets optimized out
+query I
+SELECT a FROM (SELECT a FROM a UNION ALL SELECT a FROM c) ORDER BY a
+----
+1
+1
+3
+
+query I
+SELECT a FROM (SELECT a FROM a WHERE a > 3 AND a < 1 UNION ALL SELECT a FROM c) ORDER BY a
+----
+1
+3
+
+query I
+SELECT a FROM (SELECT a FROM c UNION ALL SELECT a FROM a WHERE a > 3 AND a < 1) ORDER BY a
+----
+1
+3
+
+query I
+SELECT a FROM (SELECT a FROM c UNION ALL SELECT a FROM a) WHERE a > 0 AND a < 3
+----
+1
+1
+
+query I
+SELECT 1 FROM (SELECT a FROM a WHERE a > 3 UNION ALL SELECT a FROM c)
+----
+1
+1
+
+query R
+SELECT * from ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';
+----
+
+# Regression test for 41973 (union operator with no output columns).
+statement ok
+CREATE TABLE tab41973 ()
+
+statement ok
+INSERT INTO tab41973 (rowid) VALUES (1), (2), (3)
+
+query I
+SELECT 1 FROM ((SELECT * FROM tab41973) UNION ALL (SELECT * FROM tab41973))
+----
+1
+1
+1
+1
+1
+1
+
+statement ok
+DROP TABLE IF EXISTS t1, t2;
+CREATE TABLE t1 (j JSONB);
+CREATE TABLE t2 (j JSONB);
+INSERT INTO t1 VALUES ('{"a": "b"}'), ('{"foo": "bar"}'), (NULL);
+INSERT INTO t2 VALUES ('{"c": "d"}'), ('{"foo": "bar"}'), (NULL);
+
+query T rowsort
+(SELECT j FROM t1) UNION (SELECT j FROM t2)
+----
+{"a": "b"}
+{"c": "d"}
+{"foo": "bar"}
+NULL
+
+statement ok
+DROP TABLE IF EXISTS t1, t2;
+CREATE TABLE t1 (a INT[]);
+CREATE TABLE t2 (b INT[]);
+INSERT INTO t1 VALUES (ARRAY[1]), (ARRAY[2]), (NULL);
+INSERT INTO t2 VALUES (ARRAY[2]), (ARRAY[3]), (NULL);
+
+query T rowsort
+(SELECT a FROM t1) UNION (SELECT b FROM t2)
+----
+{1}
+{2}
+NULL
+{3}
+
+# Allow UNION of hidden and non-hidden columns.
+statement ok
+CREATE TABLE ab (a INT, b INT);
+SELECT a, b, rowid FROM ab UNION VALUES (1, 2, 3);

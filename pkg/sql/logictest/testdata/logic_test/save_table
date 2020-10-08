@@ -1,0 +1,116 @@
+# savetables is the name of the database where tables created by the
+# saveTableNode are stored.
+statement ok
+CREATE DATABASE savetables; USE savetables
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, str STRING)
+
+statement ok
+INSERT INTO t SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i)
+
+statement ok
+CREATE TABLE u (key INT PRIMARY KEY, val STRING)
+
+statement ok
+INSERT INTO u SELECT i, to_english(i) FROM generate_series(2, 10) AS g(i)
+
+statement ok
+SET save_tables_prefix = 'save_table_test'
+
+query IT rowsort
+SELECT * FROM t
+----
+1  one
+2  two
+3  three
+4  four
+5  five
+
+query error create save table: relation "save_table_test_scan_1" already exists
+SELECT * FROM u
+
+statement ok
+SET save_tables_prefix = 'st_test'
+
+query IT rowsort
+SELECT u.key, t.str FROM t, u WHERE t.k = u.key AND t.k >= 3
+----
+3  three
+4  four
+5  five
+
+statement ok
+SET save_tables_prefix = 'st'
+
+query IT rowsort
+SELECT u.key, t.str FROM t, u WHERE t.k = u.key AND u.val LIKE 't%'
+----
+2  two
+3  three
+
+# Disable creation of saveTable nodes.
+statement ok
+SET save_tables_prefix = ''
+
+query ITI colnames
+SELECT * FROM st_test_merge_join_2 ORDER BY k
+----
+k  str    key
+3  three  3
+4  four   4
+5  five   5
+
+query IT colnames
+SELECT * FROM st_scan_4 ORDER BY key
+----
+key  val
+2    two
+3    three
+4    four
+5    five
+6    six
+7    seven
+8    eight
+9    nine
+10   one-zero
+
+query TTTTI rowsort
+SHOW TABLES
+----
+public  save_table_test_scan_1  table  root  0
+public  st_lookup_join_2        table  root  0
+public  st_project_1            table  root  0
+public  st_scan_4               table  root  0
+public  st_select_3             table  root  0
+public  st_test_merge_join_2    table  root  0
+public  st_test_project_1       table  root  0
+public  st_test_scan_3          table  root  0
+public  st_test_scan_4          table  root  0
+public  t                       table  root  0
+public  u                       table  root  0
+
+# Only root may use the saveTableNode.
+
+statement ok
+GRANT ALL ON t TO testuser
+
+user testuser
+
+statement ok
+USE savetables
+
+query IT rowsort
+SELECT * FROM t
+----
+1  one
+2  two
+3  three
+4  four
+5  five
+
+statement ok
+SET save_tables_prefix = 'tt'
+
+statement error sub-expression tables creation may only be used by root
+SELECT * FROM t

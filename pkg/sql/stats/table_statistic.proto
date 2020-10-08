@@ -1,0 +1,50 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Data structures and basic infrastructure for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto3";
+package cockroach.sql.stats;
+option go_package = "stats";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+import "sql/stats/histogram.proto";
+
+// A TableStatisticProto object holds a statistic for a particular column or
+// group of columns. It mirrors the structure of the system.table_statistics
+// table. It is also used as the format in which table statistics are
+// serialized in a backup.
+message TableStatisticProto {
+  // The ID of the table.
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  // The ID for this statistic.  It need not be globally unique,
+  // but must be unique for this table.
+  uint64 statistic_id = 2 [(gogoproto.customname) = "StatisticID"];
+  // Optional user-defined name for the statistic.
+  string name = 3;
+  // The column ID(s) for which this statistic is generated.
+  repeated uint32 column_ids = 4 [(gogoproto.customname) = "ColumnIDs",
+                                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  // The time at which the statistic was created.
+  google.protobuf.Timestamp created_at = 5 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  // The total number of rows in the table.
+  uint64 row_count = 6;
+  // The estimated number of distinct values of the columns in ColumnIDs.
+  uint64 distinct_count = 7;
+  // The number of rows that have a NULL in all of the columns in ColumnIDs.
+  uint64 null_count = 8;
+  // Histogram (if available)
+  HistogramData histogram_data = 9;
+}

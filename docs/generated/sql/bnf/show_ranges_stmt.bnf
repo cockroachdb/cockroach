@@ -1,3 +1,4 @@
 show_ranges_stmt ::=
-	'SHOW' 'EXPERIMENTAL_RANGES' 'FROM' 'TABLE' table_name
-	| 'SHOW' 'EXPERIMENTAL_RANGES' 'FROM' 'INDEX' table_name_with_index
+	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
+	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
+	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name

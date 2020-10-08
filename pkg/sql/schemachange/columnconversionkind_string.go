@@ -4,6 +4,17 @@ package schemachange
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[ColumnConversionDangerous - -1]
+	_ = x[ColumnConversionImpossible-0]
+	_ = x[ColumnConversionTrivial-1]
+	_ = x[ColumnConversionValidate-2]
+	_ = x[ColumnConversionGeneral-3]
+}
+
 const _ColumnConversionKind_name = "DangerousImpossibleTrivialValidateGeneral"
 
 var _ColumnConversionKind_index = [...]uint8{0, 9, 19, 26, 34, 41}

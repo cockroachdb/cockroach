@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package syncutil
 
@@ -33,4 +29,49 @@ func StoreFloat64(addr *AtomicFloat64, val float64) {
 // LoadFloat64 atomically loads tha float64 value from the provided address.
 func LoadFloat64(addr *AtomicFloat64) (val float64) {
 	return math.Float64frombits(atomic.LoadUint64((*uint64)(addr)))
+}
+
+// AtomicBool mimics an atomic boolean.
+type AtomicBool uint32
+
+// Set atomically sets the boolean.
+func (b *AtomicBool) Set(v bool) {
+	s := uint32(0)
+	if v {
+		s = 1
+	}
+	atomic.StoreUint32((*uint32)(b), s)
+}
+
+// Get atomically gets the boolean.
+func (b *AtomicBool) Get() bool {
+	return atomic.LoadUint32((*uint32)(b)) != 0
+}
+
+// Swap atomically swaps the value.
+func (b *AtomicBool) Swap(v bool) bool {
+	wanted := uint32(0)
+	if v {
+		wanted = 1
+	}
+	return atomic.SwapUint32((*uint32)(b), wanted) != 0
+}
+
+// AtomicString gives you atomic-style APIs for string.
+type AtomicString struct {
+	s atomic.Value
+}
+
+// Set atomically sets str as new value.
+func (s *AtomicString) Set(val string) {
+	s.s.Store(val)
+}
+
+// Get atomically returns the current value.
+func (s *AtomicString) Get() string {
+	val := s.s.Load()
+	if val == nil {
+		return ""
+	}
+	return val.(string)
 }

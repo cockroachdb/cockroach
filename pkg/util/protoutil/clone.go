@@ -1,24 +1,20 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package protoutil
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -38,6 +34,20 @@ var types struct {
 
 func init() {
 	types.known = make(map[typeKey]reflect.Type)
+}
+
+// RegisterUnclonableType registers a type as not being allowed for cloning.
+// This is an added hack on top of the hack to allow clients of this package to
+// disallow cloning of certain types which are not recursed into due to how
+// oneof is implemented. In particular it may be the case that one of the
+// implementations of an interface is unclonable. In this case, due to the type
+// (rather than value) traversal, we'd not discover this fact.
+//
+// See the comment on Clone.
+func RegisterUnclonableType(typ reflect.Type, verbotenKind reflect.Kind) {
+	types.Lock()
+	defer types.Unlock()
+	types.known[typeKey{typ: typ, verboten: verbotenKind}] = typ
 }
 
 func uncloneable(pb Message) (reflect.Type, bool) {
@@ -64,7 +74,7 @@ func uncloneable(pb Message) (reflect.Type, bool) {
 // upstream, see https://github.com/gogo/protobuf/issues/147.
 func Clone(pb Message) Message {
 	if t, ok := uncloneable(pb); ok {
-		panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
+		panic(errors.AssertionFailedf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
 	}
 	return proto.Clone(pb).(Message)
 }

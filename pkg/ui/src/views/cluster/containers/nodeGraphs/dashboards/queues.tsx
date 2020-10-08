@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import React from "react";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
@@ -19,7 +29,6 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.queue.raftlog.process.failure" title="Raft Log" nonNegativeRate />
         <Metric name="cr.store.queue.raftsnapshot.process.failure" title="Raft Snapshot" nonNegativeRate />
         <Metric name="cr.store.queue.tsmaintenance.process.failure" title="Time Series Maintenance" nonNegativeRate />
-        <Metric name="cr.store.compactor.compactions.failure" title="Compaction" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
@@ -33,7 +42,6 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.queue.raftlog.processingnanos" title="Raft Log" nonNegativeRate />
         <Metric name="cr.store.queue.raftsnapshot.processingnanos" title="Raft Snapshot" nonNegativeRate />
         <Metric name="cr.store.queue.tsmaintenance.processingnanos" title="Time Series Maintenance" nonNegativeRate />
-        <Metric name="cr.store.compactor.compactingnanos" title="Compaction" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
@@ -55,6 +63,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.queue.replicate.addreplica" title="Replicas Added / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.removereplica" title="Replicas Removed / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.removedeadreplica" title="Dead Replicas Removed / sec" nonNegativeRate />
+        <Metric name="cr.store.queue.replicate.removelearnerreplica" title="Learner Replicas Removed / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.rebalancereplica" title="Replicas Rebalanced / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.transferlease" title="Leases Transferred / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.purgatory" title="Replicas in Purgatory" downsampleMax />
@@ -65,6 +74,13 @@ export default function (props: GraphDashboardProps) {
       <Axis units={AxisUnits.Count} label="actions">
         <Metric name="cr.store.queue.split.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.split.pending" title="Pending Actions" downsampleMax />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Merge Queue" sources={storeSources}>
+      <Axis units={AxisUnits.Count} label="actions">
+        <Metric name="cr.store.queue.merge.process.success" title="Successful Actions / sec" nonNegativeRate />
+        <Metric name="cr.store.queue.merge.pending" title="Pending Actions" downsampleMax />
       </Axis>
     </LineGraph>,
 
@@ -100,17 +116,6 @@ export default function (props: GraphDashboardProps) {
       <Axis units={AxisUnits.Count} label="actions">
         <Metric name="cr.store.queue.tsmaintenance.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.tsmaintenance.pending" title="Pending Actions" downsampleMax />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Compaction Queue"
-      sources={storeSources}
-      tooltip={`The completed (or estimated) bytes of storage that were (or could be) reclaimed by forcing RocksDB compactions.`}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        <Metric name="cr.store.compactor.suggestionbytes.compacted" title="Bytes compacted / sec" nonNegativeRate />
-        <Metric name="cr.store.compactor.suggestionbytes.queued" title="Queued bytes" downsampleMax />
       </Axis>
     </LineGraph>,
   ];

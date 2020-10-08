@@ -19,10 +19,10 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const fileRegistryPath = "COCKROACHDB_REGISTRY"
@@ -90,7 +90,7 @@ func loadFileRegistry() {
 
 func loadStoreKey() {
 	if len(*storeKeyPath) == 0 || *storeKeyPath == "plain" {
-		log.Infof(context.Background(), "No store key specified")
+		log.Infof(context.Background(), "no store key specified")
 		return
 	}
 

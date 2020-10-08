@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package server_test
 
@@ -19,21 +15,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func TestAdminAPITableStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const nodeCount = 3
 	tc := testcluster.StartTestCluster(t, nodeCount, base.TestClusterArgs{
@@ -44,13 +41,13 @@ func TestAdminAPITableStats(t *testing.T) {
 			ScanMaxIdleTime: time.Millisecond,
 		},
 	})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	server0 := tc.Server(0)
 
 	// Create clients (SQL, HTTP) connected to server 0.
 	db := tc.ServerConn(0)
 
-	client, err := server0.GetAuthenticatedHTTPClient()
+	client, err := server0.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,8 +143,9 @@ func TestAdminAPITableStats(t *testing.T) {
 
 func TestLivenessAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	startTime := tc.Server(0).Clock().PhysicalNow()
 
@@ -161,7 +159,7 @@ func TestLivenessAPI(t *testing.T) {
 		if a, e := len(resp.Livenesses), tc.NumServers(); a != e {
 			return errors.Errorf("found %d liveness records, wanted %d", a, e)
 		}
-		livenessMap := make(map[roachpb.NodeID]storage.Liveness)
+		livenessMap := make(map[roachpb.NodeID]kvserverpb.Liveness)
 		for _, l := range resp.Livenesses {
 			livenessMap[l.NodeID] = l
 		}
@@ -183,7 +181,7 @@ func TestLivenessAPI(t *testing.T) {
 			if !ok {
 				return errors.Errorf("found no liveness status for node %d", s.NodeID())
 			}
-			if a, e := status, storage.NodeLivenessStatus_LIVE; a != e {
+			if a, e := status, kvserverpb.NodeLivenessStatus_LIVE; a != e {
 				return errors.Errorf(
 					"liveness status for node %s was %s, wanted %s", s.NodeID(), a, e,
 				)

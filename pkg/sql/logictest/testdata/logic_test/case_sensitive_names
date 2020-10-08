@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # Case sensitivity of database names
 
 statement ok
@@ -8,13 +6,13 @@ CREATE DATABASE D
 statement ok
 SHOW TABLES FROM d
 
-statement error "D" does not match any valid database or schema
+statement error target database or schema does not exist
 SHOW TABLES FROM "D"
 
 statement ok
 CREATE DATABASE "E"
 
-statement error "e" does not match any valid database or schema
+statement error target database or schema does not exist
 SHOW TABLES FROM e
 
 statement ok
@@ -200,7 +198,7 @@ CREATE VIEW XV AS SELECT X, "Y" FROM foo
 query TT
 SHOW CREATE VIEW xv
 ----
-xv  CREATE VIEW xv (x, "Y") AS SELECT x, "Y" FROM test.public.foo
+xv  CREATE VIEW public.xv (x, "Y") AS SELECT x, "Y" FROM test.public.foo
 
 query error pgcode 42P01 relation "XV" does not exist
 SHOW CREATE VIEW "XV"
@@ -211,7 +209,7 @@ CREATE VIEW "YV" AS SELECT X, "Y" FROM foo
 query TT
 SHOW CREATE VIEW "YV"
 ----
-"YV"  CREATE VIEW "YV" (x, "Y") AS SELECT x, "Y" FROM test.public.foo
+"YV"  CREATE VIEW public."YV" (x, "Y") AS SELECT x, "Y" FROM test.public.foo
 
 query error pgcode 42P01 relation "yv" does not exist
 SHOW CREATE VIEW YV

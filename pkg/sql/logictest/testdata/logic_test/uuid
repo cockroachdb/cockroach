@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE u (token uuid PRIMARY KEY,
                 token2 uuid,
@@ -87,13 +85,13 @@ INSERT INTO u VALUES ('urn:uuid:63616665-6630-3064-6465-616462656568'::uuid)
 statement ok
 INSERT INTO u VALUES (uuid_v4()::uuid)
 
-statement error value type bytes doesn't match type UUID
+statement error value type bytes doesn't match type uuid
 INSERT INTO u VALUES ('cafef00ddeadbeef'::bytes)
 
-statement error value type string doesn't match type UUID
+statement error value type string doesn't match type uuid
 INSERT INTO u VALUES ('63616665-6630-3064-6465-616462656562'::string)
 
-statement error value type bytes doesn't match type UUID
+statement error value type bytes doesn't match type uuid
 INSERT INTO u VALUES (uuid_v4())
 
 query T
@@ -111,7 +109,7 @@ SELECT token::bytes FROM u WHERE token=b'cafef00ddeadbeef'
 ----
 cafef00ddeadbeef
 
-statement error invalid cast: uuid -> INT
+statement error invalid cast: uuid -> int
 SELECT token::int FROM u
 
 query T

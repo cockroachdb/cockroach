@@ -1,17 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -37,12 +32,13 @@ import (
 //
 // Once DistSQL queries provide more testing knobs, these tests can likely be
 // replaced with unit tests.
-func registerCancel(r *registry) {
+func registerCancel(r *testRegistry) {
 	runCancel := func(ctx context.Context, t *test, c *cluster,
 		queries []string, warehouses int, useDistsql bool) {
+		t.Skip("skipping flaky cancel/tpcc test", "test needs to be updated see https://github.com/cockroachdb/cockroach/issues/42103")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t, c.All())
 
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
@@ -61,8 +57,8 @@ func registerCancel(r *registry) {
 			t.Status("running queries to cancel")
 			for _, q := range queries {
 				sem := make(chan struct{}, 1)
-				go func() {
-					fmt.Printf("executing \"%s\"\n", q)
+				go func(q string) {
+					t.l.Printf("executing \"%s\"\n", q)
 					sem <- struct{}{}
 					_, err := conn.Exec(queryPrefix + q)
 					if err == nil {
@@ -72,7 +68,7 @@ func registerCancel(r *registry) {
 						fmt.Printf("query failed with error: %s\n", err)
 					}
 					sem <- struct{}{}
-				}()
+				}(q)
 
 				<-sem
 
@@ -82,8 +78,8 @@ func registerCancel(r *registry) {
 				// a bit before attempting to cancel it.
 				time.Sleep(100 * time.Millisecond)
 
-				const cancelQuery = `CANCEL QUERY (
-	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%')`
+				const cancelQuery = `CANCEL QUERIES
+	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%'`
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "`+cancelQuery+`"`)
 				cancelStartTime := timeutil.Now()
 
@@ -117,18 +113,18 @@ func registerCancel(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:   fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=%d", warehouses, numNodes),
-		Nodes:  nodes(numNodes),
-		Stable: true, // DO NOT COPY to new tests
+		Name:    fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=%d", warehouses, numNodes),
+		Owner:   OwnerSQLExec,
+		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCancel(ctx, t, c, queries, warehouses, true /* useDistsql */)
 		},
 	})
 
 	r.Add(testSpec{
-		Name:   fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=%d", warehouses, numNodes),
-		Nodes:  nodes(numNodes),
-		Stable: true, // DO NOT COPY to new tests
+		Name:    fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=%d", warehouses, numNodes),
+		Owner:   OwnerSQLExec,
+		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCancel(ctx, t, c, queries, warehouses, false /* useDistsql */)
 		},

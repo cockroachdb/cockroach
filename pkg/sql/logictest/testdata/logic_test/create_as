@@ -1,21 +1,31 @@
-# LogicTest: local local-opt
-
-statement count 3
+statement ok
 CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 15), ('forks', 30)
 
-statement count 1
+statement count 3
+SELECT * FROM stock
+
+statement ok
 CREATE TABLE runningOut AS SELECT * FROM stock WHERE quantity < 12
+
+statement count 1
+SELECT * FROM runningOut
 
 query TI
 SELECT * FROM runningOut
 ----
 cups 10
 
-statement count 3
+statement ok
 CREATE TABLE itemColors (color) AS VALUES ('blue'), ('red'), ('green')
 
-statement count 9
+statement count 3
+SELECT * FROM  itemColors
+
+statement ok
 CREATE TABLE itemTypes AS (SELECT item, color FROM stock, itemColors)
+
+statement count 9
+SELECT * FROM itemTypes
 
 query TT rowsort
 SELECT * FROM itemTypes
@@ -39,8 +49,11 @@ CREATE TABLE t2 (col1, col2, col3) AS SELECT * FROM stock
 statement error pgcode 42601 CREATE TABLE specifies 1 column name, but data source has 2 columns
 CREATE TABLE t2 (col1) AS SELECT * FROM stock
 
-statement count 5
+statement ok
 CREATE TABLE unionstock AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50)
+
+statement count 5
+SELECT * FROM unionstock
 
 query TI
 SELECT * FROM unionstock ORDER BY quantity
@@ -51,7 +64,7 @@ spoons 25
 forks 30
 knives 50
 
-statement count 0
+statement ok
 CREATE TABLE IF NOT EXISTS unionstock AS VALUES ('foo', 'bar')
 
 query TI
@@ -62,10 +75,13 @@ cups 10
 statement ok
 CREATE DATABASE smtng
 
-statement count 3
+statement ok
 CREATE TABLE smtng.something AS SELECT * FROM stock
 
-statement count 0
+statement count 3
+SELECT * FROM smtng.something;
+
+statement ok
 CREATE TABLE IF NOT EXISTS smtng.something AS SELECT * FROM stock
 
 query TI
@@ -83,8 +99,11 @@ CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM in
 statement error pq: relation "foo" already exists
 CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
 
-statement error pq: unexpected type coltypes.TTuple
+statement error pq: value type tuple cannot be used for table columns
 CREATE TABLE foo2 (x) AS (VALUES(ROW()))
+
+statement error pq: nested array unsupported as column type: int\[\]\[\]
+CREATE TABLE foo2 (x) AS (VALUES(ARRAY[ARRAY[1]]))
 
 statement error generator functions are not allowed in VALUES
 CREATE TABLE foo2 (x) AS (VALUES(generate_series(1,3)))
@@ -104,3 +123,242 @@ query B
 CREATE TABLE foo4 (x) AS SELECT EXISTS(SELECT * FROM foo3 WHERE x IS NULL); SELECT * FROM foo4
 ----
 true
+
+# Regression test for #36930.
+statement ok
+CREATE TABLE bar AS SELECT 1 AS a, 2 AS b, count(*) AS c FROM foo
+
+query III colnames
+SELECT * FROM bar
+----
+a  b  c
+1  2  5
+
+statement ok
+CREATE TABLE baz (a, b, c) AS SELECT 1, 2, count(*) FROM foo
+
+query III colnames
+SELECT * FROM baz
+----
+a  b  c
+1  2  5
+
+# Check that CREATE TABLE AS allows users to specify primary key (#20940)
+statement ok
+CREATE TABLE foo5 (
+  a , b PRIMARY KEY, c,
+  FAMILY "primary" (a, b, c)
+) AS
+  SELECT * FROM baz
+
+query TT
+SHOW CREATE TABLE foo5
+----
+foo5  CREATE TABLE public.foo5 (
+      a INT8 NULL,
+      b INT8 NOT NULL,
+      c INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (b ASC),
+      FAMILY "primary" (a, b, c)
+)
+
+statement ok
+CREATE TABLE foo6 (
+  a PRIMARY KEY, b , c,
+  FAMILY "primary" (a, b, c)
+) AS
+  SELECT * FROM baz
+
+query TT
+SHOW CREATE TABLE foo6
+----
+foo6  CREATE TABLE public.foo6 (
+      a INT8 NOT NULL,
+      b INT8 NULL,
+      c INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC),
+      FAMILY "primary" (a, b, c)
+)
+
+statement error generate insert row: null value in column "x" violates not-null constraint
+CREATE TABLE foo7 (x PRIMARY KEY) AS VALUES (1), (NULL);
+
+statement ok
+BEGIN; CREATE TABLE foo8 (item PRIMARY KEY, qty, FAMILY "primary" (item, qty)) AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50); END
+
+query TT
+SHOW CREATE TABLE foo8
+----
+foo8  CREATE TABLE public.foo8 (
+      item STRING NOT NULL,
+      qty INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (item ASC),
+      FAMILY "primary" (item, qty)
+)
+
+# Allow CREATE TABLE AS to specify composite primary keys.
+statement ok
+CREATE TABLE foo9 (
+  a , b , c,
+  PRIMARY KEY (a, c),
+  FAMILY "primary" (a, b, c)
+) AS
+  SELECT * FROM baz
+
+query TT
+SHOW CREATE TABLE foo9
+----
+foo9  CREATE TABLE public.foo9 (
+      a INT8 NOT NULL,
+      b INT8 NULL,
+      c INT8 NOT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC, c ASC),
+      FAMILY "primary" (a, b, c)
+)
+
+statement ok
+CREATE TABLE foo10 (a, PRIMARY KEY (c, b, a), b, c, FAMILY "primary" (a, b, c)) AS SELECT * FROM foo9
+
+query TT
+SHOW CREATE TABLE foo10
+----
+foo10  CREATE TABLE public.foo10 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NOT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (c ASC, b ASC, a ASC),
+       FAMILY "primary" (a, b, c)
+)
+
+statement ok
+CREATE TABLE foo11 (
+  x , y , z,
+  PRIMARY KEY (x, z),
+  FAMILY "primary" (x, y, z)
+) AS
+  VALUES (1, 3, 4), (10, 20, 40);
+
+query TT
+SHOW CREATE TABLE foo11
+----
+foo11  CREATE TABLE public.foo11 (
+       x INT8 NOT NULL,
+       y INT8 NULL,
+       z INT8 NOT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (x ASC, z ASC),
+       FAMILY "primary" (x, y, z)
+)
+
+statement error pq: multiple primary keys for table "foo12" are not allowed
+CREATE TABLE foo12 (x PRIMARY KEY, y, PRIMARY KEY(y)) AS VALUES (1, 2), (3, 4);
+
+# Check that CREATE TABLE AS allows users to specify column families.
+statement ok
+CREATE TABLE abcd(
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT
+);
+
+# Test column qualifiers to define column families.
+statement ok
+CREATE TABLE foo12 (a PRIMARY KEY FAMILY f1, b, c FAMILY fam_1_c, d) AS SELECT * FROM abcd;
+
+query TT
+SHOW CREATE TABLE foo12
+----
+foo12  CREATE TABLE public.foo12 (
+       a INT8 NOT NULL,
+       b INT8 NULL,
+       c INT8 NULL,
+       d INT8 NULL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC),
+       FAMILY f1 (a, b, d),
+       FAMILY fam_1_c (c)
+)
+
+# Test constraint style definition of column families.
+statement ok
+CREATE TABLE foo13 (a, b, c, d, PRIMARY KEY(a, b), FAMILY pk (a, b), FAMILY (c, d)) AS SELECT * FROM abcd;
+
+query TT
+SHOW CREATE TABLE foo13
+----
+foo13  CREATE TABLE public.foo13 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       d INT8 NULL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+       FAMILY pk (a, b),
+       FAMILY fam_1_c_d (c, d)
+)
+
+# Test renaming columns still preserves the column families.
+statement ok
+ALTER TABLE foo13 RENAME d TO z
+
+statement ok
+ALTER TABLE foo13 RENAME c TO e
+
+query TT
+SHOW CREATE TABLE foo13
+----
+foo13  CREATE TABLE public.foo13 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       e INT8 NULL,
+       z INT8 NULL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+       FAMILY pk (a, b),
+       FAMILY fam_1_c_d (e, z)
+)
+
+# Regression test for #41004
+statement ok
+CREATE TABLE foo41004 (x, y, z, FAMILY (y), FAMILY (x), FAMILY (z)) AS
+    VALUES (1, 2, NULL::INT)
+
+query III
+SELECT * FROM foo41004
+----
+1  2  NULL
+
+# Test CREATE TABLE AS with a correlated subquery.
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TABLE cd (c INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3)
+
+statement ok
+INSERT INTO cd VALUES (2, 2), (3, 3), (4, 4)
+
+statement ok
+CREATE TABLE t AS SELECT a, b, EXISTS(SELECT c FROM cd WHERE cd.c=ab.a) FROM ab;
+
+query IIB rowsort
+SELECT * FROM t
+----
+1  1  false
+2  2  true
+3  3  true
+
+# Test CREATE TABLE AS with a mutation.
+statement ok
+CREATE TABLE t2 AS SELECT * FROM [DELETE FROM t WHERE b>2 RETURNING a,b]
+
+# TODO(radu): this should contain (3,3); bug tracked by #39197.
+query II
+SELECT * FROM t2
+----
+
+query IIB rowsort
+SELECT * FROM t
+----
+1  1  false
+2  2  true

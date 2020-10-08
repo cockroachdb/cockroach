@@ -1,17 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -19,17 +14,17 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
-func registerEncryption(r *registry) {
+func registerEncryption(r *testRegistry) {
 	// Note that no workload is run in this roachtest because kv roachtest
 	// ideally runs with encryption turned on to see the performance impact and
 	// to test the correctness of encryption at rest.
 	runEncryption := func(ctx context.Context, t *test, c *cluster) {
-		nodes := c.nodes
+		nodes := c.spec.NodeCount
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes), startArgs("--encrypt"))
+		c.Start(ctx, t, c.Range(1, nodes), startArgs("--encrypt"))
 
 		// Check that /_status/stores/local endpoint has encryption status.
 		for _, addr := range c.InternalAdminUIAddr(ctx, c.Range(1, nodes)) {
@@ -38,23 +33,14 @@ func registerEncryption(r *registry) {
 			}
 		}
 
-		stop := func(node int) error {
-			port := fmt.Sprintf("{pgport:%d}", node)
-			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port "+port); err != nil {
-				return err
-			}
-			c.Stop(ctx, c.Node(node))
-			return nil
-		}
-
 		for i := 1; i <= nodes; i++ {
-			if err := stop(i); err != nil {
+			if err := c.StopCockroachGracefullyOnNode(ctx, i); err != nil {
 				t.Fatal(err)
 			}
 		}
 
 		// Restart node with encryption turned on to verify old key works.
-		c.Start(ctx, c.Range(1, nodes), startArgs("--encrypt"))
+		c.Start(ctx, t, c.Range(1, nodes), startArgs("--encrypt"))
 
 		testCLIGenKey := func(size int) error {
 			// Generate encryption store key through `./cockroach gen encryption-key -s=size aes-size.key`.
@@ -90,8 +76,9 @@ func registerEncryption(r *registry) {
 	for _, n := range []int{1} {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
+			Owner:      OwnerStorage,
 			MinVersion: "v2.1.0",
-			Nodes:      nodes(n),
+			Cluster:    makeClusterSpec(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runEncryption(ctx, t, c)
 			},

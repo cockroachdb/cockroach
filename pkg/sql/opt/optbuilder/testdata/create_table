@@ -1,0 +1,61 @@
+# No AS clause.
+build
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+----
+create-table
+ └── CREATE TABLE ab (a INT8 PRIMARY KEY, b INT8)
+
+# With AS clause.
+build
+CREATE TABLE ab (a, b) AS SELECT 1, 2
+----
+create-table
+ ├── CREATE TABLE ab (a, b) AS SELECT 1, 2
+ └── project
+      ├── columns: rowid:3 "?column?":1!null "?column?":2!null
+      ├── project
+      │    ├── columns: "?column?":1!null "?column?":2!null
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         ├── 1 [as="?column?":1]
+      │         └── 2 [as="?column?":2]
+      └── projections
+           └── unique_rowid() [as=rowid:3]
+
+# Ensure that constraints are hoisted.
+build
+CREATE TABLE foo (a INT REFERENCES bar(a), b INT REFERENCES baz(b))
+----
+create-table
+ └── CREATE TABLE foo (a INT8, b INT8, FOREIGN KEY (a) REFERENCES bar (a), FOREIGN KEY (b) REFERENCES baz (b))
+
+# Schema does not exist.
+build
+CREATE TABLE unknown.ab (a INT PRIMARY KEY)
+----
+error (3F000): cannot create "unknown.ab" because the target database or schema does not exist
+
+# Schema can only be created in public schema.
+build
+CREATE TABLE t.crdb_internal.ab (a INT PRIMARY KEY)
+----
+error (42602): schema cannot be modified: "t.crdb_internal"
+
+# Too few input columns.
+build
+CREATE TABLE ab (a, b) AS SELECT 1
+----
+error (42601): CREATE TABLE specifies 2 column names, but data source has 1 column
+
+# Too many input columns.
+build
+CREATE TABLE ab (a, b) AS SELECT 1, 2, 3
+----
+error (42601): CREATE TABLE specifies 2 column names, but data source has 3 columns
+
+# Non-existent column.
+build
+CREATE TABLE ab (a, b) AS SELECT a
+----
+error (42703): column "a" does not exist

@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package treeprinter
 
@@ -34,8 +30,10 @@ func TestTreePrinter(t *testing.T) {
 	n12.Child("1.2.2")
 	n13 := n1.Child("1.3")
 	n13.AddEmptyLine()
-	n13.Child("1.3.1")
+	n131 := n13.Child("1.3.1\n1.3.1a")
+	n13.Child("1.3.2\n1.3.2a")
 	n13.AddEmptyLine()
+	n131.Child("1.3.1.1\n1.3.1.1a")
 	n1.Child("1.4")
 	r.Child("2")
 
@@ -53,11 +51,86 @@ root
  │    │    └── 1.2.2
  │    ├── 1.3
  │    │    │
- │    │    └── 1.3.1
- │    │
+ │    │    ├── 1.3.1
+ │    │    │   1.3.1a
+ │    │    └── 1.3.2
+ │    │        1.3.2a
+ │    │         │
+ │    │         └── 1.3.1.1
+ │    │             1.3.1.1a
  │    └── 1.4
  └── 2
 `
+	exp = strings.TrimLeft(exp, "\n")
+	if res != exp {
+		t.Errorf("incorrect result:\n%s", res)
+	}
+}
+
+func TestTreePrinterUTF(t *testing.T) {
+	n := New()
+
+	r := n.Child("root")
+	r1 := r.Child("日本語\n本語\n本語")
+	r1.Child("日本語\n本語\n本語")
+	r.Child("日本語\n本語\n本語")
+	res := n.String()
+	exp := `
+root
+ ├── 日本語
+ │   本語
+ │   本語
+ │    └── 日本語
+ │        本語
+ │        本語
+ └── 日本語
+     本語
+     本語
+`
+
+	exp = strings.TrimLeft(exp, "\n")
+	if res != exp {
+		t.Errorf("incorrect result:\n%s", res)
+	}
+}
+
+func TestTreePrinterNested(t *testing.T) {
+	// The output of a treeprinter can be used as a node inside a larger
+	// treeprinter. This is useful when formatting routines use treeprinter
+	// internally.
+	tp1 := New()
+	r1 := tp1.Child("root1")
+	r11 := r1.Child("1.1")
+	r11.Child("1.1.1")
+	r11.Child("1.1.2")
+	r1.Child("1.2")
+	tree1 := strings.TrimRight(tp1.String(), "\n")
+
+	tp2 := New()
+	r2 := tp2.Child("root2")
+	r2.Child("2.1")
+	r22 := r2.Child("2.2")
+	r22.Child("2.2.1")
+	tree2 := strings.TrimRight(tp2.String(), "\n")
+
+	tp := New()
+	r := tp.Child("tree of trees")
+	r.Child(tree1)
+	r.Child(tree2)
+	res := tp.String()
+	exp := `
+tree of trees
+ ├── root1
+ │    ├── 1.1
+ │    │    ├── 1.1.1
+ │    │    └── 1.1.2
+ │    └── 1.2
+ └── root2
+      ├── 2.1
+      └── 2.2
+           └── 2.2.1
+`
+
 	exp = strings.TrimLeft(exp, "\n")
 	if res != exp {
 		t.Errorf("incorrect result:\n%s", res)

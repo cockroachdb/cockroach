@@ -1,54 +1,51 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
-
-// PhysicalPropsID identifies a set of physical properties that has been
-// interned by a memo instance. If two ids are the same, then the physical
-// properties are the same.
-type PhysicalPropsID uint32
-
-const (
-	// MinPhysPropsID is the id of the well-known set of physical properties
-	// that requires nothing of an operator. Therefore, every operator is
-	// guaranteed to provide this set of properties. This is typically the most
-	// commonly used set of physical properties in the memo, since most
-	// operators do not require any physical properties from their children.
-	MinPhysPropsID PhysicalPropsID = 1
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Memo is a data structure for efficiently storing a forest of query plans.
 // Conceptually, the memo is composed of a numbered set of equivalency classes
 // called groups where each group contains a set of logically equivalent
-// expressions. The different expressions in a single group are called memo
-// expressions (memo-ized expressions). A memo expression has a list of child
-// groups as its children rather than a list of individual expressions. The
-// forest is composed of every possible combination of parent expression with
-// its children, recursively applied.
+// expressions. Two expressions are considered logically equivalent if:
+//
+//   1. They return the same number and data type of columns. However, order and
+//      naming of columns doesn't matter.
+//   2. They return the same number of rows, with the same values in each row.
+//      However, order of rows doesn't matter.
+//
+// The different expressions in a single group are called memo expressions
+// (memo-ized expressions). The children of a memo expression can themselves be
+// part of memo groups. Therefore, the memo forest is composed of every possible
+// combination of parent expression with its possible child expressions,
+// recursively applied.
 //
 // Memo expressions can be relational (e.g. join) or scalar (e.g. <). Operators
 // are always both logical (specify results) and physical (specify results and
 // a particular implementation). This means that even a "raw" unoptimized
 // expression tree can be executed (naively). Both relational and scalar
 // operators are uniformly represented as nodes in memo expression trees, which
-// facilitates tree pattern matching and replacement.
+// facilitates tree pattern matching and replacement. However, because scalar
+// expression memo groups never have more than one expression, scalar
+// expressions can use a simpler representation.
 //
 // Because memo groups contain logically equivalent expressions, all the memo
 // expressions in a group share the same logical properties. However, it's
@@ -68,25 +65,29 @@ const (
 // expressions have been fully normalized before insertion (see the comment in
 // factory.go for more details). A new group is created only when unique
 // normalized expressions are created by the factory during construction or
-// rewrite of the tree. Uniqueness is determined by computing the fingerprint
-// for a memo expression, which is simply the expression operator and its list
-// of child groups. For example, consider this query:
+// rewrite of the tree. Uniqueness is determined by "interning" each expression,
+// which means that multiple equivalent expressions are mapped to a single
+// in-memory instance. This allows interned expressions to be checked for
+// equivalence by simple pointer comparison. For example:
 //
 //   SELECT * FROM a, b WHERE a.x = b.x
 //
-// After insertion into the memo, the memo would contain these six groups:
+// After insertion into the memo, the memo would contain these six groups, with
+// numbers substituted for pointers to the normalized expression in each group:
 //
-//   6: [inner-join [1 2 5]]
-//   5: [eq [3 4]]
-//   4: [variable b.x]
-//   3: [variable a.x]
-//   2: [scan b]
-//   1: [scan a]
+//   G6: [inner-join [G1 G2 G5]]
+//   G5: [eq [G3 G4]]
+//   G4: [variable b.x]
+//   G3: [variable a.x]
+//   G2: [scan b]
+//   G1: [scan a]
 //
-// The fingerprint for the inner-join expression is [inner-join [1 2 5]]. The
-// memo maintains a map from expression fingerprint to memo group which allows
-// quick determination of whether the normalized form of an expression already
-// exists in the memo.
+// Each leaf expressions is interned by hashing its operator type and any
+// private field values. Expressions higher in the tree can then rely on the
+// fact that all children have been interned, and include their pointer values
+// in its hash value. Therefore, the memo need only hash the expression's fields
+// in order to determine whether the expression already exists in the memo.
+// Walking the subtree is not necessary.
 //
 // The normalizing factory will never add more than one expression to a memo
 // group. But the explorer does add denormalized expressions to existing memo
@@ -95,317 +96,304 @@ const (
 // added by the factory. For example, the join commutativity transformation
 // expands the memo like this:
 //
-//   6: [inner-join [1 2 5]] [inner-join [2 1 5]]
-//   5: [eq [3 4]]
-//   4: [variable b.x]
-//   3: [variable a.x]
-//   2: [scan b]
-//   1: [scan a]
+//   G6: [inner-join [G1 G2 G5]] [inner-join [G2 G1 G5]]
+//   G5: [eq [G3 G4]]
+//   G4: [variable b.x]
+//   G3: [variable a.x]
+//   G2: [scan b]
+//   G1: [scan a]
 //
-// TODO(andyk): See the comments in explorer.go for more details.
+// See the comments in explorer.go for more details.
 type Memo struct {
 	// metadata provides information about the columns and tables used in this
 	// particular query.
-	metadata *opt.Metadata
+	metadata opt.Metadata
 
-	// exprMap maps from expression fingerprint (Expr.fingerprint()) to
-	// that expression's group. Multiple different fingerprints can map to the
-	// same group, but only one of them is the fingerprint of the group's
-	// normalized expression.
-	exprMap map[Fingerprint]GroupID
+	// interner interns all expressions in the memo, ensuring that there is at
+	// most one instance of each expression in the memo.
+	interner interner
 
-	// groups is the set of all groups in the memo, indexed by group ID. Note
-	// the group ID 0 is invalid in order to allow zero initialization of an
-	// expression to indicate that it did not originate from the memo.
-	groups []group
+	// logPropsBuilder is inlined in the memo so that it can be reused each time
+	// scalar or relational properties need to be built.
+	logPropsBuilder logicalPropsBuilder
 
-	// Intern the set of unique physical properties used by expressions in the
-	// memo, since there are so many duplicates.
-	physPropsMap map[string]PhysicalPropsID
-	physProps    []props.Physical
+	// rootExpr is the root expression of the memo expression forest. It is set
+	// via a call to SetRoot. After optimization, it is set to be the root of the
+	// lowest cost tree in the forest.
+	rootExpr opt.Expr
 
-	// Some memoExprs have a variable number of children. The Expr stores
-	// the list as a ListID struct, which is a slice of an array maintained by
-	// listStorage. Note that ListID 0 is invalid in order to indicate an
-	// unknown list.
-	listStorage listStorage
+	// rootProps are the physical properties required of the root memo expression.
+	// It is set via a call to SetRoot.
+	rootProps *physical.Required
 
-	// Intern the set of unique privates used by expressions in the memo, since
-	// there are so many duplicates.
-	privateStorage privateStorage
+	// memEstimate is the approximate memory usage of the memo, in bytes.
+	memEstimate int64
 
-	// root is the root of the lowest cost expression tree in the memo. It is
-	// set once after optimization is complete.
-	root BestExprID
+	// The following are selected fields from SessionData which can affect
+	// planning. We need to cross-check these before reusing a cached memo.
+	reorderJoinsLimit       int
+	zigzagJoinEnabled       bool
+	useHistograms           bool
+	useMultiColStats        bool
+	safeUpdates             bool
+	preferLookupJoinsForFKs bool
+	saveTablesPrefix        string
+
+	// curID is the highest currently in-use scalar expression ID.
+	curID opt.ScalarID
+
+	// curWithID is the highest currently in-use WITH ID.
+	curWithID opt.WithID
+
+	newGroupFn func(opt.Expr)
+
+	// WARNING: if you add more members, add initialization code in Init.
 }
 
-// New constructs a new empty memo instance.
-func New() *Memo {
-	// NB: group 0 is reserved and intentionally nil so that the 0 group index
-	// can indicate that we don't know the group for an expression. Similarly,
-	// index 0 for private data, index 0 for physical properties, and index 0
-	// for lists are all reserved.
-	m := &Memo{
-		metadata:     opt.NewMetadata(),
-		exprMap:      make(map[Fingerprint]GroupID),
-		groups:       make([]group, 1),
-		physPropsMap: make(map[string]PhysicalPropsID),
-		physProps:    make([]props.Physical, 1, 2),
-	}
+// Init initializes a new empty memo instance, or resets existing state so it
+// can be reused. It must be called before use (or reuse). The memo collects
+// information about the context in which it is compiled from the evalContext
+// argument. If any of that changes, then the memo must be invalidated (see the
+// IsStale method for more details).
+func (m *Memo) Init(evalCtx *tree.EvalContext) {
+	m.metadata.Init()
+	m.interner.Clear()
+	m.logPropsBuilder.init(evalCtx, m)
 
-	// Intern physical properties that require nothing of operator.
-	physProps := props.Physical{}
-	m.physProps = append(m.physProps, physProps)
-	m.physPropsMap[physProps.Fingerprint()] = MinPhysPropsID
+	m.rootExpr = nil
+	m.rootProps = nil
+	m.memEstimate = 0
 
-	m.listStorage.init()
-	m.privateStorage.init()
-	return m
+	m.reorderJoinsLimit = evalCtx.SessionData.ReorderJoinsLimit
+	m.zigzagJoinEnabled = evalCtx.SessionData.ZigzagJoinEnabled
+	m.useHistograms = evalCtx.SessionData.OptimizerUseHistograms
+	m.useMultiColStats = evalCtx.SessionData.OptimizerUseMultiColStats
+	m.safeUpdates = evalCtx.SessionData.SafeUpdates
+	m.preferLookupJoinsForFKs = evalCtx.SessionData.PreferLookupJoinsForFKs
+	m.saveTablesPrefix = evalCtx.SessionData.SaveTablesPrefix
+
+	m.curID = 0
+	m.curWithID = 0
+}
+
+// NotifyOnNewGroup sets a callback function which is invoked each time we
+// create a new memo group.
+func (m *Memo) NotifyOnNewGroup(fn func(opt.Expr)) {
+	m.newGroupFn = fn
+}
+
+// IsEmpty returns true if there are no expressions in the memo.
+func (m *Memo) IsEmpty() bool {
+	// Root expression can be nil before optimization and interner is empty after
+	// exploration, so check both.
+	return m.interner.Count() == 0 && m.rootExpr == nil
+}
+
+// MemoryEstimate returns a rough estimate of the memo's memory usage, in bytes.
+// It only includes memory usage that is proportional to the size and complexity
+// of the query, rather than constant overhead bytes.
+func (m *Memo) MemoryEstimate() int64 {
+	// Multiply by 2 to take rough account of allocation fragmentation, private
+	// data, list overhead, properties, etc.
+	return m.memEstimate * 2
 }
 
 // Metadata returns the metadata instance associated with the memo.
 func (m *Memo) Metadata() *opt.Metadata {
-	return m.metadata
+	return &m.metadata
 }
 
-// Root returns the root of the memo's lowest cost expression tree. It can only
-// be accessed once the memo has been fully optimized.
-func (m *Memo) Root() ExprView {
-	if !m.isOptimized() {
-		panic("memo has not yet been optimized and had its root expression set")
+// RootExpr returns the root memo expression previously set via a call to
+// SetRoot.
+func (m *Memo) RootExpr() opt.Expr {
+	return m.rootExpr
+}
+
+// RootProps returns the physical properties required of the root memo group,
+// previously set via a call to SetRoot.
+func (m *Memo) RootProps() *physical.Required {
+	return m.rootProps
+}
+
+// SetRoot stores the root memo expression when it is a relational expression,
+// and also stores the physical properties required of the root group.
+func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
+	m.rootExpr = e
+	if m.rootProps != phys {
+		m.rootProps = m.InternPhysicalProps(phys)
 	}
-	return MakeExprView(m, m.root)
-}
 
-// SetRoot stores the root of the memo's lowest cost expression tree.
-func (m *Memo) SetRoot(root ExprView) {
-	if root.mem != m {
-		panic("the given root is in a different memo")
-	}
-	if root.best == normBestOrdinal {
-		panic("cannot set the memo root to be a normalized expression tree")
-	}
-	m.root = root.bestExprID()
-}
-
-// isOptimized returns true if the memo has been fully optimized.
-func (m *Memo) isOptimized() bool {
-	// The memo is optimized once a best expression has been set at the root.
-	return m.root.ordinal != normBestOrdinal
-}
-
-// --------------------------------------------------------------------
-// Group methods.
-// --------------------------------------------------------------------
-
-// GroupProperties returns the logical properties of the given group.
-func (m *Memo) GroupProperties(group GroupID) *props.Logical {
-	return &m.groups[group].logical
-}
-
-// GroupByFingerprint returns the group of the expression that has the given
-// fingerprint.
-func (m *Memo) GroupByFingerprint(f Fingerprint) GroupID {
-	return m.exprMap[f]
-}
-
-// AddAltFingerprint adds an additional fingerprint that references an existing
-// group. The new fingerprint corresponds to a denormalized expression that is
-// an alternate form of the group's normalized expression. Adding it to the
-// fingerprint map avoids re-adding the same expression in the future.
-func (m *Memo) AddAltFingerprint(alt Fingerprint, group GroupID) {
-	existing, ok := m.exprMap[alt]
-	if ok {
-		if existing != group {
-			panic("same fingerprint cannot map to different groups")
-		}
-	} else {
-		m.exprMap[alt] = group
+	// Once memo is optimized, release reference to the eval context and free up
+	// the memory used by the interner.
+	if m.IsOptimized() {
+		m.logPropsBuilder.clear()
+		m.interner.Clear()
 	}
 }
 
-// newGroup creates a new group and adds it to the memo.
-func (m *Memo) newGroup(norm Expr) *group {
-	id := GroupID(len(m.groups))
-	m.exprMap[norm.Fingerprint()] = id
-	m.groups = append(m.groups, makeMemoGroup(id, norm))
-	return &m.groups[len(m.groups)-1]
+// SetScalarRoot stores the root memo expression when it is a scalar expression.
+// Used only for testing.
+func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
+	m.rootExpr = scalar
 }
 
-// group returns the memo group for the given ID.
-func (m *Memo) group(group GroupID) *group {
-	return &m.groups[group]
-}
-
-// --------------------------------------------------------------------
-// Expression methods.
-// --------------------------------------------------------------------
-
-// ExprCount returns the number of expressions in the given memo group. There
-// is always at least one expression in the group (the normalized expression).
-func (m *Memo) ExprCount(group GroupID) int {
-	return m.groups[group].exprCount()
-}
-
-// Expr returns the memo expression for the given ID.
-func (m *Memo) Expr(eid ExprID) *Expr {
-	return m.groups[eid.Group].expr(eid.Expr)
-}
-
-// NormExpr returns the normalized expression for the given group. Each group
-// has one canonical expression that is always the first expression in the
-// group, and which results from running normalization rules on the expression
-// until the final normal state has been reached.
-func (m *Memo) NormExpr(group GroupID) *Expr {
-	return m.groups[group].expr(normExprOrdinal)
-}
-
-// MemoizeNormExpr enters a normalized expression into the memo. This requires
-// the creation of a new memo group with the normalized expression as its first
-// expression. If the expression is already part of an existing memo group, then
-// MemoizeNormExpr is a no-op, and returns the existing group.
-func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
-	existing := m.exprMap[norm.Fingerprint()]
-	if existing != 0 {
-		return existing
-	}
-	mgrp := m.newGroup(norm)
-	ev := MakeNormExprView(m, mgrp.id)
-	logPropsFactory := logicalPropsBuilder{evalCtx: evalCtx}
-	mgrp.logical = logPropsFactory.buildProps(ev)
-	return mgrp.id
-}
-
-// MemoizeDenormExpr enters a denormalized expression into the given memo
-// group. A denormalized expression is logically equivalent to the group's
-// normalized expression, but is an alternate form that may have a lower cost.
-// The group must already exist, since the normalized version of the expression
-// should have triggered its creation earlier.
-func (m *Memo) MemoizeDenormExpr(group GroupID, denorm Expr) {
-	existing := m.exprMap[denorm.Fingerprint()]
-	if existing != 0 {
-		// Expression has already been entered into the memo.
-		if existing != group {
-			panic("denormalized expression's group doesn't match fingerprint group")
-		}
-	} else {
-		// Add the denormalized expression to the memo.
-		m.group(group).addExpr(denorm)
-		m.exprMap[denorm.Fingerprint()] = group
-	}
-}
-
-// --------------------------------------------------------------------
-// Best expression methods.
-// --------------------------------------------------------------------
-
-// EnsureBestExpr finds the expression in the given group that can provide the
-// required properties for the lowest cost and returns its id. If no best
-// expression exists yet, then EnsureBestExpr creates a new empty BestExpr and
-// returns its id.
-func (m *Memo) EnsureBestExpr(group GroupID, required PhysicalPropsID) BestExprID {
-	return m.group(group).ensureBestExpr(required)
-}
-
-// RatchetBestExpr overwrites the existing best expression with the given id if
-// the candidate expression has a lower cost.
-func (m *Memo) RatchetBestExpr(best BestExprID, candidate *BestExpr) {
-	m.bestExpr(best).ratchetCost(candidate)
-}
-
-// BestExprCost returns the estimated cost of the given best expression.
-func (m *Memo) BestExprCost(best BestExprID) Cost {
-	return m.bestExpr(best).cost
-}
-
-// BestExprLogical returns the logical properties of the given best expression.
-func (m *Memo) BestExprLogical(best BestExprID) *props.Logical {
-	return m.GroupProperties(best.group)
-}
-
-// bestExpr returns the best expression with the given id.
-// NOTE: The returned best expression is only valid until the next call to
-//       EnsureBestExpr, since that may trigger a resize of the bestExprs slice
-//       in the group.
-func (m *Memo) bestExpr(best BestExprID) *BestExpr {
-	return m.groups[best.group].bestExpr(best.ordinal)
-}
-
-// --------------------------------------------------------------------
-// Interning methods.
-// --------------------------------------------------------------------
-
-// InternList adds the given list of group IDs to memo storage and returns an
-// ID that can be used for later lookup. If the same list was added previously,
-// this method is a no-op and returns the ID of the previous value.
-func (m *Memo) InternList(items []GroupID) ListID {
-	return m.listStorage.intern(items)
-}
-
-// LookupList returns a list of group IDs that was earlier stored in the memo
-// by a call to InternList.
-func (m *Memo) LookupList(id ListID) []GroupID {
-	return m.listStorage.lookup(id)
-}
-
-// InternPhysicalProps adds the given props to the memo if that set hasn't yet
-// been added, and returns an ID which can later be used to look up the props.
-// If the same list was added previously, then this method is a no-op and
-// returns the same ID as did the previous call.
-func (m *Memo) InternPhysicalProps(physical *props.Physical) PhysicalPropsID {
-	fingerprint := physical.Fingerprint()
-	id, ok := m.physPropsMap[fingerprint]
+// HasPlaceholders returns true if the memo contains at least one placeholder
+// operator.
+func (m *Memo) HasPlaceholders() bool {
+	rel, ok := m.rootExpr.(RelExpr)
 	if !ok {
-		id = PhysicalPropsID(len(m.physProps))
-		m.physProps = append(m.physProps, *physical)
-		m.physPropsMap[fingerprint] = id
+		panic(errors.AssertionFailedf("placeholders only supported when memo root is relational"))
 	}
-	return id
+
+	return rel.Relational().HasPlaceholder
 }
 
-// LookupPhysicalProps returns the set of physical props that was earlier
-// interned in the memo by a call to InternPhysicalProps.
-func (m *Memo) LookupPhysicalProps(id PhysicalPropsID) *props.Physical {
-	return &m.physProps[id]
+// IsStale returns true if the memo has been invalidated by changes to any of
+// its dependencies. Once a memo is known to be stale, it must be ejected from
+// any query cache or prepared statement and replaced with a recompiled memo
+// that takes into account the changes. IsStale checks the following
+// dependencies:
+//
+//   1. Current database: this can change name resolution.
+//   2. Current search path: this can change name resolution.
+//   3. Current location: this determines time zone, and can change how time-
+//      related types are constructed and compared.
+//   4. Data source schema: this determines most aspects of how the query is
+//      compiled.
+//   5. Data source privileges: current user may no longer have access to one or
+//      more data sources.
+//
+// This function cannot swallow errors and return only a boolean, as it may
+// perform KV operations on behalf of the transaction associated with the
+// provided catalog, and those errors are required to be propagated.
+func (m *Memo) IsStale(
+	ctx context.Context, evalCtx *tree.EvalContext, catalog cat.Catalog,
+) (bool, error) {
+	// Memo is stale if fields from SessionData that can affect planning have
+	// changed.
+	if m.reorderJoinsLimit != evalCtx.SessionData.ReorderJoinsLimit ||
+		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled ||
+		m.useHistograms != evalCtx.SessionData.OptimizerUseHistograms ||
+		m.useMultiColStats != evalCtx.SessionData.OptimizerUseMultiColStats ||
+		m.safeUpdates != evalCtx.SessionData.SafeUpdates ||
+		m.preferLookupJoinsForFKs != evalCtx.SessionData.PreferLookupJoinsForFKs ||
+		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix {
+		return true, nil
+	}
+
+	// Memo is stale if the fingerprint of any object in the memo's metadata has
+	// changed, or if the current user no longer has sufficient privilege to
+	// access the object.
+	if depsUpToDate, err := m.Metadata().CheckDependencies(ctx, catalog); err != nil {
+		return true, err
+	} else if !depsUpToDate {
+		return true, nil
+	}
+	return false, nil
 }
 
-// LookupPrivate returns a private value that was earlier interned in the memo
-// by a call to InternPrivate.
-func (m *Memo) LookupPrivate(id PrivateID) interface{} {
-	return m.privateStorage.lookup(id)
+// InternPhysicalProps adds the given physical props to the memo if they haven't
+// yet been added. If the same props was added previously, then return a pointer
+// to the previously added props. This allows interned physical props to be
+// compared for equality using simple pointer comparison.
+func (m *Memo) InternPhysicalProps(phys *physical.Required) *physical.Required {
+	// Special case physical properties that require nothing of operator.
+	if !phys.Defined() {
+		return physical.MinRequired
+	}
+	return m.interner.InternPhysicalProps(phys)
 }
 
-// --------------------------------------------------------------------
-// String representation.
-// --------------------------------------------------------------------
-
-// FmtFlags controls how the memo output is formatted.
-type FmtFlags int
-
-// HasFlags tests whether the given flags are all set.
-func (f FmtFlags) HasFlags(subset FmtFlags) bool {
-	return f&subset == subset
+// SetBestProps updates the physical properties, provided ordering, and cost of
+// a relational expression's memo group (see the relevant methods of RelExpr).
+// It is called by the optimizer once it determines the expression in the group
+// that is part of the lowest cost tree (for the overall query).
+func (m *Memo) SetBestProps(
+	e RelExpr, required *physical.Required, provided *physical.Provided, cost Cost,
+) {
+	if e.RequiredPhysical() != nil {
+		if e.RequiredPhysical() != required ||
+			!e.ProvidedPhysical().Equals(provided) ||
+			e.Cost() != cost {
+			panic(errors.AssertionFailedf(
+				"cannot overwrite %s / %s (%.9g) with %s / %s (%.9g)",
+				e.RequiredPhysical(),
+				e.ProvidedPhysical(),
+				log.Safe(e.Cost()),
+				required.String(),
+				provided.String(), // Call String() so provided doesn't escape.
+				cost,
+			))
+		}
+		return
+	}
+	bp := e.bestProps()
+	bp.required = required
+	bp.provided = *provided
+	bp.cost = cost
 }
 
-const (
-	// FmtPretty performs a breadth-first topological sort on the memo groups,
-	// and shows the root group at the top of the memo.
-	FmtPretty FmtFlags = 0
-
-	// FmtRaw shows the raw memo groups, in the order they were originally
-	// added, and including any "orphaned" groups.
-	FmtRaw FmtFlags = 1 << (iota - 1)
-)
-
-// String returns a human-readable string representation of this memo for
-// testing and debugging.
-func (m *Memo) String() string {
-	return m.FormatString(FmtPretty)
+// ResetCost updates the cost of a relational expression's memo group. It
+// should *only* be called by Optimizer.RecomputeCost() for testing purposes.
+func (m *Memo) ResetCost(e RelExpr, cost Cost) {
+	e.bestProps().cost = cost
 }
 
-// FormatString returns a string representation of this memo for testing
-// and debugging. The given flags control which properties are shown.
-func (m *Memo) FormatString(flags FmtFlags) string {
-	formatter := m.makeMemoFormatter(flags)
-	return formatter.format()
+// IsOptimized returns true if the memo has been fully optimized.
+func (m *Memo) IsOptimized() bool {
+	// The memo is optimized once the root expression has its physical properties
+	// assigned.
+	rel, ok := m.rootExpr.(RelExpr)
+	return ok && rel.RequiredPhysical() != nil
+}
+
+// NextID returns a new unique ScalarID to number expressions with.
+func (m *Memo) NextID() opt.ScalarID {
+	m.curID++
+	return m.curID
+}
+
+// RequestColStat calculates and returns the column statistic calculated on the
+// relational expression.
+func (m *Memo) RequestColStat(
+	expr RelExpr, cols opt.ColSet,
+) (colStat *props.ColumnStatistic, ok bool) {
+	// When SetRoot is called, the statistics builder may have been cleared.
+	// If this happens, we can't serve the request anymore.
+	if m.logPropsBuilder.sb.md != nil {
+		return m.logPropsBuilder.sb.colStat(cols, expr), true
+	}
+	return nil, false
+}
+
+// RowsProcessed calculates and returns the number of rows processed by the
+// relational expression. It is currently only supported for joins.
+func (m *Memo) RowsProcessed(expr RelExpr) (_ float64, ok bool) {
+	// When SetRoot is called, the statistics builder may have been cleared.
+	// If this happens, we can't serve the request anymore.
+	if m.logPropsBuilder.sb.md != nil {
+		return m.logPropsBuilder.sb.rowsProcessed(expr), true
+	}
+	return 0, false
+}
+
+// NextWithID returns a not-yet-assigned identifier for a WITH expression.
+func (m *Memo) NextWithID() opt.WithID {
+	m.curWithID++
+	return m.curWithID
+}
+
+// ClearColStats clears all column statistics from every relational expression
+// in the memo. This is used to free up the potentially large amount of memory
+// used by histograms.
+func (m *Memo) ClearColStats(parent opt.Expr) {
+	for i, n := 0, parent.ChildCount(); i < n; i++ {
+		child := parent.Child(i)
+		m.ClearColStats(child)
+	}
+
+	switch t := parent.(type) {
+	case RelExpr:
+		t.Relational().Stats.ColStats = props.ColStatsMap{}
+	}
 }

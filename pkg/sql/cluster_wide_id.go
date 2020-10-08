@@ -1,21 +1,17 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
@@ -27,10 +23,10 @@ type ClusterWideID struct {
 	uint128.Uint128
 }
 
-// GenerateClusterWideID takes a timestamp and node ID, and generates a
+// GenerateClusterWideID takes a timestamp and SQLInstanceID, and generates a
 // ClusterWideID.
-func GenerateClusterWideID(timestamp hlc.Timestamp, nodeID roachpb.NodeID) ClusterWideID {
-	loInt := (uint64)(nodeID)
+func GenerateClusterWideID(timestamp hlc.Timestamp, instID base.SQLInstanceID) ClusterWideID {
+	loInt := (uint64)(instID)
 	loInt = loInt | ((uint64)(timestamp.Logical) << 32)
 
 	return ClusterWideID{Uint128: uint128.FromInts((uint64)(timestamp.WallTime), loInt)}
@@ -47,6 +43,7 @@ func StringToClusterWideID(s string) (ClusterWideID, error) {
 }
 
 // BytesToClusterWideID converts raw bytes into a ClusterWideID.
+// The caller is responsible for ensuring the byte slice contains 16 bytes.
 func BytesToClusterWideID(b []byte) ClusterWideID {
 	id := uint128.FromBytes(b)
 	return ClusterWideID{Uint128: id}

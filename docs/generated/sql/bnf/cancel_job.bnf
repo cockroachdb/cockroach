@@ -1,0 +1,4 @@
+cancel_jobs_stmt ::=
+	'CANCEL' 'JOB' job_id
+	| 'CANCEL' 'JOBS' select_stmt
+	| 'CANCEL' 'JOBS' for_schedules_clause

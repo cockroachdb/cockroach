@@ -1,0 +1,221 @@
+# -------------------------------------------------------------
+# Read-only request runs into replicated intent. It informs the
+# lock-table and waits for the intent to be resolved.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  get key=k
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=1
+  intent txn=txn1 key=k
+----
+[2] handle write intent error req1: handled conflicting intents on "k", released latches
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: pushing timestamp of txn 00000001 above 0.000000012,1
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn1 status=aborted
+----
+[-] update txn: aborting txn1
+[3] sequence req1: resolving intent "k" for txn 00000001 with ABORTED status
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# Read-only request runs into replicated intent while the
+# lock-table is disabled. The lock-table cannot store the lock,
+# so the request is forced to push (PUSH_TIMESTAMP) immediately.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  get key=k
+----
+
+on-lease-updated leaseholder=false lease-seq=2
+----
+[-] transfer lease: released
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=2
+  intent txn=txn1 key=k
+----
+[2] handle write intent error req1: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] handle write intent error req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn1 status=aborted
+----
+[-] update txn: aborting txn1
+[2] handle write intent error req1: resolving intent "k" for txn 00000001 with ABORTED status
+[2] handle write intent error req1: handled conflicting intents on "k", released latches
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# Read-write request runs into replicated intent while the
+# lock-table is disabled. The lock-table cannot store the lock,
+# so the request is forced to push (PUSH_ABORT) immediately.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  put key=k value=v
+----
+
+on-lease-updated leaseholder=false lease-seq=2
+----
+[-] transfer lease: released
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=2
+  intent txn=txn1 key=k
+----
+[2] handle write intent error req1: pushing txn 00000001 to abort
+[2] handle write intent error req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn1 status=aborted
+----
+[-] update txn: aborting txn1
+[2] handle write intent error req1: resolving intent "k" for txn 00000001 with ABORTED status
+[2] handle write intent error req1: handled conflicting intents on "k", released latches
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# Read-write request runs into replicated intent while the
+# lock-table is disabled. The lock-table cannot store the lock,
+# so the request is forced to push (PUSH_ABORT) immediately.
+# The request's own transaction is aborted while pushing.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  get key=k
+----
+
+on-lease-updated leaseholder=false lease-seq=2
+----
+[-] transfer lease: released
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=2
+  intent txn=txn1 key=k
+----
+[2] handle write intent error req1: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] handle write intent error req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+[2] handle write intent error req1: detected pusher aborted
+[2] handle write intent error req1: handled conflicting intents on "k", returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+reset namespace
+----

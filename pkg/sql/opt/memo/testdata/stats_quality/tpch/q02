@@ -1,0 +1,774 @@
+import file=tpch_schema
+----
+
+import file=tpch_stats
+----
+
+# --------------------------------------------------
+# Q2
+# Minimum Cost Supplier
+# Finds which supplier should be selected to place an order for a given part in
+# a given region.
+#
+# Finds, in a given region, for each part of a certain type and size, the
+# supplier who can supply it at minimum cost. If several suppliers in that
+# region offer the desired part type and size at the same (minimum) cost, the
+# query lists the parts from suppliers with the 100 highest account balances.
+# For each supplier, the query lists the supplier's account balance, name and
+# nation; the part's number and manufacturer; the supplier's address, phone
+# number and comment information.
+#
+# TODO:
+#   1. Allow Select to be pushed below Ordinality used to add key column
+#   2. Add decorrelation rule for Ordinality/RowKey
+# --------------------------------------------------
+stats-quality database=tpch stats-quality-prefix=q2
+SELECT
+    s_acctbal,
+    s_name,
+    n_name,
+    p_partkey,
+    p_mfgr,
+    s_address,
+    s_phone,
+    s_comment
+FROM
+    part,
+    supplier,
+    partsupp,
+    nation,
+    region
+WHERE
+    p_partkey = ps_partkey
+    AND s_suppkey = ps_suppkey
+    AND p_size = 15
+    AND p_type LIKE '%BRASS'
+    AND s_nationkey = n_nationkey
+    AND n_regionkey = r_regionkey
+    AND r_name = 'EUROPE'
+    AND ps_supplycost = (
+        SELECT
+            min(ps_supplycost)
+        FROM
+            partsupp,
+            supplier,
+            nation,
+            region
+        WHERE
+            p_partkey = ps_partkey
+            AND s_suppkey = ps_suppkey
+            AND s_nationkey = n_nationkey
+            AND n_regionkey = r_regionkey
+            AND r_name = 'EUROPE'
+    )
+ORDER BY
+    s_acctbal DESC,
+    n_name,
+    s_name,
+    p_partkey
+LIMIT 100;
+----
+----
+project
+ ├── save-table-name: q2_project_1
+ ├── columns: s_acctbal:16(float!null) s_name:12(char!null) n_name:26(char!null) p_partkey:1(int!null) p_mfgr:3(char!null) s_address:13(varchar!null) s_phone:15(char!null) s_comment:17(varchar!null)
+ ├── cardinality: [0 - 100]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0, distinct(26)=1, null(26)=0]
+ ├── fd: (1)-->(3)
+ ├── ordering: -16,+26,+12,+1
+ └── limit
+      ├── save-table-name: q2_limit_2
+      ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:12(char!null) s_address:13(varchar!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null) n_name:26(char!null) min:57(float!null)
+      ├── internal-ordering: -16,+26,+12,+(1|19)
+      ├── cardinality: [0 - 100]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0, distinct(19)=0.999912219, null(19)=0, distinct(20)=0.999982118, null(20)=0, distinct(22)=1, null(22)=0, distinct(26)=1, null(26)=0, distinct(57)=1, null(57)=0]
+      ├── key: (19,20)
+      ├── fd: (1)-->(3), (19,20)-->(1,3,12,13,15-17,22,26,57), (1)==(19), (19)==(1), (20)-->(12,13,15-17,26), (22)==(57), (57)==(22)
+      ├── ordering: -16,+26,+12,+(1|19) [actual: -16,+26,+12,+1]
+      ├── sort
+      │    ├── save-table-name: q2_sort_3
+      │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:12(char!null) s_address:13(varchar!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null) n_name:26(char!null) min:57(float!null)
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0, distinct(19)=0.999912219, null(19)=0, distinct(20)=0.999982118, null(20)=0, distinct(22)=1, null(22)=0, distinct(26)=1, null(26)=0, distinct(57)=1, null(57)=0]
+      │    ├── key: (19,20)
+      │    ├── fd: (1)-->(3), (19,20)-->(1,3,12,13,15-17,22,26,57), (1)==(19), (19)==(1), (20)-->(12,13,15-17,26), (22)==(57), (57)==(22)
+      │    ├── ordering: -16,+26,+12,+(1|19) [actual: -16,+26,+12,+1]
+      │    ├── limit hint: 100.00
+      │    └── select
+      │         ├── save-table-name: q2_select_4
+      │         ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:12(char!null) s_address:13(varchar!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null) n_name:26(char!null) min:57(float!null)
+      │         ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0, distinct(19)=0.999912219, null(19)=0, distinct(20)=0.999982118, null(20)=0, distinct(22)=1, null(22)=0, distinct(26)=1, null(26)=0, distinct(57)=1, null(57)=0]
+      │         ├── key: (19,20)
+      │         ├── fd: (1)-->(3), (19,20)-->(1,3,12,13,15-17,22,26,57), (1)==(19), (19)==(1), (20)-->(12,13,15-17,26), (22)==(57), (57)==(22)
+      │         ├── group-by
+      │         │    ├── save-table-name: q2_group_by_5
+      │         │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:12(char!null) s_address:13(varchar!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null) n_name:26(char!null) min:57(float!null)
+      │         │    ├── grouping columns: ps_partkey:19(int!null) ps_suppkey:20(int!null)
+      │         │    ├── stats: [rows=1480.78794, distinct(1)=1480.78794, null(1)=0, distinct(3)=1480.78794, null(3)=0, distinct(12)=1480.78794, null(12)=0, distinct(13)=1480.78794, null(13)=0, distinct(15)=1480.78794, null(15)=0, distinct(16)=1480.78794, null(16)=0, distinct(17)=1480.78794, null(17)=0, distinct(19)=1175.29714, null(19)=0, distinct(20)=1406.32684, null(20)=0, distinct(22)=1480.78794, null(22)=0, distinct(26)=1480.78794, null(26)=0, distinct(57)=1480.78794, null(57)=0, distinct(19,20)=1480.78794, null(19,20)=0]
+      │         │    ├── key: (19,20)
+      │         │    ├── fd: (1)-->(3), (19,20)-->(1,3,12,13,15-17,22,26,57), (1)==(19), (19)==(1), (20)-->(12,13,15-17,26)
+      │         │    ├── inner-join (hash)
+      │         │    │    ├── save-table-name: q2_inner_join_6
+      │         │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:11(int!null) s_name:12(char!null) s_address:13(varchar!null) s_nationkey:14(int!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null) n_nationkey:25(int!null) n_name:26(char!null) n_regionkey:27(int!null) r_regionkey:30(int!null) r_name:31(char!null) ps_partkey:34(int!null) ps_suppkey:35(int!null) ps_supplycost:37(float!null) s_suppkey:40(int!null) s_nationkey:43(int!null) n_nationkey:48(int!null) n_regionkey:50(int!null) r_regionkey:53(int!null) r_name:54(char!null)
+      │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │         │    │    ├── stats: [rows=2825.38826, distinct(1)=1336.7885, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=149.999629, null(5)=0, distinct(6)=1, null(6)=0, distinct(11)=1406.32684, null(11)=0, distinct(12)=1406.88226, null(12)=0, distinct(13)=1406.96098, null(13)=0, distinct(14)=5, null(14)=0, distinct(15)=1406.96098, null(15)=0, distinct(16)=1406.70062, null(16)=0, distinct(17)=1406.43854, null(17)=0, distinct(19)=1175.29714, null(19)=0, distinct(20)=1406.32684, null(20)=0, distinct(22)=1476.57814, null(22)=0, distinct(25)=5, null(25)=0, distinct(26)=5, null(26)=0, distinct(27)=1, null(27)=0, distinct(30)=1, null(30)=0, distinct(31)=0.996222107, null(31)=0, distinct(34)=1336.7885, null(34)=0, distinct(35)=1445.95586, null(35)=0, distinct(37)=2776.24326, null(37)=0, distinct(40)=1445.95586, null(40)=0, distinct(43)=5, null(43)=0, distinct(48)=5, null(48)=0, distinct(50)=1, null(50)=0, distinct(53)=1, null(53)=0, distinct(54)=0.996222107, null(54)=0, distinct(19,20)=1480.78794, null(19,20)=0]
+      │         │    │    ├── key: (20,34,40)
+      │         │    │    ├── fd: ()-->(6,31,54), (1)-->(3,5), (11)-->(12-17), (19,20)-->(22), (11)==(20), (20)==(11), (25)-->(26,27), (27)==(30), (30)==(27), (14)==(25), (25)==(14), (1)==(19,34), (19)==(1,34), (34,35)-->(37), (40)-->(43), (48)-->(50), (50)==(53), (53)==(50), (43)==(48), (48)==(43), (35)==(40), (40)==(35), (34)==(1,19)
+      │         │    │    ├── inner-join (lookup partsupp)
+      │         │    │    │    ├── save-table-name: q2_lookup_join_7
+      │         │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:11(int!null) s_name:12(char!null) s_address:13(varchar!null) s_nationkey:14(int!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null) n_nationkey:25(int!null) n_name:26(char!null) n_regionkey:27(int!null) r_regionkey:30(int!null) r_name:31(char!null) ps_partkey:34(int!null) ps_suppkey:35(int!null) ps_supplycost:37(float!null)
+      │         │    │    │    ├── key columns: [1] = [34]
+      │         │    │    │    ├── stats: [rows=4463.96897, distinct(1)=1336.7885, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=150, null(5)=0, distinct(6)=1, null(6)=0, distinct(11)=3594.71629, null(11)=0, distinct(12)=3599.9653, null(12)=0, distinct(13)=3600.71001, null(13)=0, distinct(14)=25, null(14)=0, distinct(15)=3600.71001, null(15)=0, distinct(16)=3598.24759, null(16)=0, distinct(17)=3595.77116, null(17)=0, distinct(19)=1336.7885, null(19)=0, distinct(20)=3594.71629, null(20)=0, distinct(22)=4366.10413, null(22)=0, distinct(25)=25, null(25)=0, distinct(26)=25, null(26)=0, distinct(27)=1, null(27)=0, distinct(30)=1, null(30)=0, distinct(31)=1, null(31)=0, distinct(34)=4412.99786, null(34)=0, distinct(35)=3594.71629, null(35)=0, distinct(37)=4366.10413, null(37)=0]
+      │         │    │    │    ├── key: (20,34,35)
+      │         │    │    │    ├── fd: ()-->(6,31), (1)-->(3,5), (25)-->(26,27), (11)-->(12-17), (19,20)-->(22), (34,35)-->(37), (19)==(1,34), (34)==(1,19), (11)==(20), (20)==(11), (14)==(25), (25)==(14), (27)==(30), (30)==(27), (1)==(19,34)
+      │         │    │    │    ├── inner-join (hash)
+      │         │    │    │    │    ├── save-table-name: q2_inner_join_8
+      │         │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:11(int!null) s_name:12(char!null) s_address:13(varchar!null) s_nationkey:14(int!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null) n_nationkey:25(int!null) n_name:26(char!null) n_regionkey:27(int!null) r_regionkey:30(int!null) r_name:31(char!null)
+      │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │         │    │    │    │    ├── stats: [rows=1936.87223, distinct(1)=1336.7885, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=149.99963, null(5)=0, distinct(6)=1, null(6)=0, distinct(11)=1759.52132, null(11)=0, distinct(12)=1760.68631, null(12)=0, distinct(13)=1760.8515, null(13)=0, distinct(14)=5, null(14)=0, distinct(15)=1760.8515, null(15)=0, distinct(16)=1760.30522, null(16)=0, distinct(17)=1759.75555, null(17)=0, distinct(19)=1336.7885, null(19)=0, distinct(20)=1759.52132, null(20)=0, distinct(22)=1913.8755, null(22)=0, distinct(25)=5, null(25)=0, distinct(26)=5, null(26)=0, distinct(27)=1, null(27)=0, distinct(30)=1, null(30)=0, distinct(31)=0.996222107, null(31)=0, distinct(19,20)=1923.59922, null(19,20)=0]
+      │         │    │    │    │    ├── key: (19,20)
+      │         │    │    │    │    ├── fd: ()-->(6,31), (1)-->(3,5), (11)-->(12-17), (19,20)-->(22), (11)==(20), (20)==(11), (25)-->(26,27), (27)==(30), (30)==(27), (14)==(25), (25)==(14), (1)==(19), (19)==(1)
+      │         │    │    │    │    ├── inner-join (lookup partsupp)
+      │         │    │    │    │    │    ├── save-table-name: q2_lookup_join_9
+      │         │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null)
+      │         │    │    │    │    │    ├── key columns: [1] = [19]
+      │         │    │    │    │    │    ├── stats: [rows=5367.59223, distinct(1)=1336.7885, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=150, null(5)=0, distinct(6)=1, null(6)=0, distinct(19)=1336.7885, null(19)=0, distinct(20)=4145.43091, null(20)=0, distinct(22)=5226.61785, null(22)=0]
+      │         │    │    │    │    │    ├── key: (19,20)
+      │         │    │    │    │    │    ├── fd: ()-->(6), (1)-->(3,5), (19,20)-->(22), (1)==(19), (19)==(1)
+      │         │    │    │    │    │    ├── select
+      │         │    │    │    │    │    │    ├── save-table-name: q2_select_10
+      │         │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null)
+      │         │    │    │    │    │    │    ├── stats: [rows=1336.80556, distinct(1)=1336.7885, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=150, null(5)=0, distinct(6)=1, null(6)=0]
+      │         │    │    │    │    │    │    │   histogram(6)=  0 1336.8
+      │         │    │    │    │    │    │    │                <---- 15 -
+      │         │    │    │    │    │    │    ├── key: (1)
+      │         │    │    │    │    │    │    ├── fd: ()-->(6), (1)-->(3,5)
+      │         │    │    │    │    │    │    ├── scan part
+      │         │    │    │    │    │    │    │    ├── save-table-name: q2_scan_11
+      │         │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null)
+      │         │    │    │    │    │    │    │    ├── stats: [rows=200000, distinct(1)=199241, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=150, null(5)=0, distinct(6)=50, null(6)=0]
+      │         │    │    │    │    │    │    │    │   histogram(1)=  0  20  980  20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20
+      │         │    │    │    │    │    │    │    │                <--- 11 ----- 728 ----- 1645 ----- 2631 ----- 3709 ----- 4776 ----- 5561 ----- 6561 ----- 7453 ----- 8507 ----- 9391 ----- 10246 ----- 11291 ----- 12247 ----- 13190 ----- 14162 ----- 15360 ----- 16279 ----- 17470 ----- 18268 ----- 19116 ----- 20021 ----- 20910 ----- 21722 ----- 22568 ----- 23525 ----- 24605 ----- 25518 ----- 26552 ----- 27774 ----- 28571 ----- 29469 ----- 30689 ----- 31727 ----- 32646 ----- 33512 ----- 34737 ----- 35503 ----- 36365 ----- 37320 ----- 38146 ----- 39374 ----- 40214 ----- 41258 ----- 42381 ----- 43414 ----- 44505 ----- 45498 ----- 46687 ----- 47357 ----- 48402 ----- 49289 ----- 50503 ----- 51267 ----- 52365 ----- 53360 ----- 54114 ----- 54992 ----- 56028 ----- 56976 ----- 57919 ----- 58684 ----- 59544 ----- 60362 ----- 61372 ----- 62402 ----- 63261 ----- 64284 ----- 65157 ----- 66431 ----- 67649 ----- 68642 ----- 69759 ----- 70717 ----- 71768 ----- 72812 ----- 73928 ----- 75069 ----- 76089 ----- 77188 ----- 78003 ----- 79079 ----- 79895 ----- 80931 ----- 81904 ----- 82866 ----- 83812 ----- 84882 ----- 85743 ----- 86558 ----- 87686 ----- 88864 ----- 89834 ----- 90952 ----- 91855 ----- 92815 ----- 93983 ----- 95122 ----- 96110 ----- 97232 ----- 98327 ----- 99529 ----- 100662 ----- 101582 ----- 102475 ----- 103543 ----- 104588 ----- 105673 ----- 106646 ----- 107885 ----- 108848 ----- 109913 ----- 111053 ----- 111992 ----- 112875 ----- 113729 ----- 114830 ----- 115985 ----- 117017 ----- 118197 ----- 119027 ----- 119897 ----- 120979 ----- 122225 ----- 123339 ----- 124326 ----- 125507 ----- 126742 ----- 127739 ----- 128929 ----- 129766 ----- 130824 ----- 131780 ----- 132832 ----- 133849 ----- 134968 ----- 135887 ----- 136981 ----- 138203 ----- 139167 ----- 140214 ----- 141310 ----- 142333 ----- 143119 ----- 144146 ----- 145323 ----- 146333 ----- 147232 ----- 148140 ----- 148972 ----- 150048 ------ 151418 ------ 152456 ------ 153742 ------ 154633 ------ 155602 ------ 156660 ------ 157544 ------ 158653 ------ 159749 ------ 160523 ------ 161563 ------ 162605 ------ 163645 ------ 164720 ------ 165585 ------ 166792 ------ 167795 ------ 168739 ------ 169589 ------ 170526 ------ 171884 ------ 172894 ------ 173761 ------ 174914 ------ 176104 ------ 177260 ------ 178143 ------ 179073 ------ 179850 ------ 180913 ------ 181781 ------ 182661 ------ 183485 ------ 184505 ------ 185790 ------ 187010 ------ 187993 ------ 188916 ------ 190000 ------ 190931 ------ 192079 ------ 193006 ------ 193932 ------ 195013 ------ 196008 ------ 196799 ------ 197766 ------ 198943 ------ 199965
+      │         │    │    │    │    │    │    │    │   histogram(3)=  0       39420        1.2018e+05       40400
+      │         │    │    │    │    │    │    │    │                <--- 'Manufacturer#1' ------------ 'Manufacturer#5'
+      │         │    │    │    │    │    │    │    │   histogram(5)=  0            1340            1.9764e+05           1020
+      │         │    │    │    │    │    │    │    │                <--- 'ECONOMY ANODIZED BRASS' ------------ 'STANDARD POLISHED TIN'
+      │         │    │    │    │    │    │    │    │   histogram(6)=  0 3760 1.925e+05 3740
+      │         │    │    │    │    │    │    │    │                <--- 1 ------------ 50
+      │         │    │    │    │    │    │    │    ├── key: (1)
+      │         │    │    │    │    │    │    │    └── fd: (1)-->(3,5,6)
+      │         │    │    │    │    │    │    └── filters
+      │         │    │    │    │    │    │         ├── p_size:6 = 15 [type=bool, outer=(6), constraints=(/6: [/15 - /15]; tight), fd=()-->(6)]
+      │         │    │    │    │    │    │         └── p_type:5 LIKE '%BRASS' [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
+      │         │    │    │    │    │    └── filters (true)
+      │         │    │    │    │    ├── inner-join (hash)
+      │         │    │    │    │    │    ├── save-table-name: q2_inner_join_12
+      │         │    │    │    │    │    ├── columns: s_suppkey:11(int!null) s_name:12(char!null) s_address:13(varchar!null) s_nationkey:14(int!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) n_nationkey:25(int!null) n_name:26(char!null) n_regionkey:27(int!null) r_regionkey:30(int!null) r_name:31(char!null)
+      │         │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │         │    │    │    │    │    ├── stats: [rows=2000, distinct(11)=1844.80594, null(11)=0, distinct(12)=1846.09084, null(12)=0, distinct(13)=1846.27302, null(13)=0, distinct(14)=5, null(14)=0, distinct(15)=1846.27302, null(15)=0, distinct(16)=1845.67052, null(16)=0, distinct(17)=1845.06427, null(17)=0, distinct(25)=5, null(25)=0, distinct(26)=5, null(26)=0, distinct(27)=1, null(27)=0, distinct(30)=1, null(30)=0, distinct(31)=0.996222107, null(31)=0]
+      │         │    │    │    │    │    ├── key: (11)
+      │         │    │    │    │    │    ├── fd: ()-->(31), (11)-->(12-17), (25)-->(26,27), (27)==(30), (30)==(27), (14)==(25), (25)==(14)
+      │         │    │    │    │    │    ├── scan supplier
+      │         │    │    │    │    │    │    ├── save-table-name: q2_scan_13
+      │         │    │    │    │    │    │    ├── columns: s_suppkey:11(int!null) s_name:12(char!null) s_address:13(varchar!null) s_nationkey:14(int!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null)
+      │         │    │    │    │    │    │    ├── stats: [rows=10000, distinct(11)=9920, null(11)=0, distinct(12)=9990, null(12)=0, distinct(13)=10000, null(13)=0, distinct(14)=25, null(14)=0, distinct(15)=10000, null(15)=0, distinct(16)=9967, null(16)=0, distinct(17)=9934, null(17)=0]
+      │         │    │    │    │    │    │    │   histogram(11)=  0  1  49  1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1   49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    49   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50   1    50    1
+      │         │    │    │    │    │    │    │                 <--- 1 ---- 51 ---- 101 ---- 151 ---- 201 ---- 251 ---- 301 ---- 351 ---- 401 ---- 451 ---- 501 ---- 551 ---- 601 ---- 651 ---- 701 ---- 751 ---- 801 ---- 851 ---- 901 ---- 951 ---- 1001 ---- 1051 ---- 1101 ---- 1151 ---- 1201 ---- 1251 ---- 1301 ---- 1351 ---- 1401 ---- 1451 ---- 1501 ---- 1551 ---- 1601 ---- 1651 ---- 1701 ---- 1751 ---- 1801 ---- 1851 ---- 1901 ---- 1951 ---- 2001 ---- 2051 ---- 2101 ---- 2151 ---- 2201 ---- 2251 ---- 2301 ---- 2351 ---- 2401 ---- 2451 ---- 2501 ---- 2551 ---- 2601 ---- 2651 ---- 2701 ---- 2751 ---- 2801 ---- 2851 ---- 2901 ---- 2951 ---- 3001 ---- 3051 ---- 3101 ---- 3151 ---- 3201 ---- 3251 ---- 3301 ---- 3351 ---- 3401 ---- 3451 ---- 3501 ---- 3551 ---- 3601 ---- 3651 ---- 3701 ---- 3751 ---- 3801 ---- 3851 ---- 3901 ---- 3951 ---- 4001 ---- 4051 ---- 4101 ---- 4151 ---- 4201 ---- 4251 ---- 4301 ---- 4351 ---- 4401 ---- 4451 ---- 4501 ---- 4551 ---- 4601 ---- 4651 ---- 4701 ---- 4751 ---- 4801 ---- 4851 ---- 4901 ---- 4951 ---- 5001 ---- 5051 ---- 5101 ---- 5151 ---- 5201 ---- 5251 ---- 5301 ---- 5351 ---- 5401 ---- 5451 ---- 5501 ---- 5551 ---- 5601 ---- 5651 ---- 5701 ---- 5751 ---- 5801 ---- 5851 ---- 5901 ---- 5951 ---- 6001 ---- 6051 ---- 6101 ---- 6151 ---- 6201 ---- 6251 ---- 6301 ---- 6351 ---- 6401 ---- 6451 ---- 6501 ---- 6551 ---- 6601 ---- 6651 ---- 6701 ---- 6751 ---- 6801 ---- 6851 ---- 6901 ---- 6951 ---- 7001 ---- 7051 ---- 7101 ---- 7151 ---- 7201 ---- 7251 ---- 7301 ---- 7351 ---- 7401 ---- 7451 ---- 7501 ---- 7552 ---- 7603 ---- 7654 ---- 7705 ---- 7756 ---- 7807 ---- 7858 ---- 7909 ---- 7960 ---- 8011 ---- 8062 ---- 8113 ---- 8164 ---- 8215 ---- 8266 ---- 8317 ---- 8368 ---- 8419 ---- 8470 ---- 8521 ---- 8572 ---- 8623 ---- 8674 ---- 8725 ---- 8776 ---- 8827 ---- 8878 ---- 8929 ---- 8980 ---- 9031 ---- 9082 ---- 9133 ---- 9184 ---- 9235 ---- 9286 ---- 9337 ---- 9388 ---- 9439 ---- 9490 ---- 9541 ---- 9592 ---- 9643 ---- 9694 ---- 9745 ---- 9796 ---- 9847 ---- 9898 ---- 9949 ---- 10000
+      │         │    │    │    │    │    │    │   histogram(12)=  0           1            9998           1
+      │         │    │    │    │    │    │    │                 <--- 'Supplier#000000001' ------ 'Supplier#000010000'
+      │         │    │    │    │    │    │    │   histogram(13)=  0                     1                     9998                1
+      │         │    │    │    │    │    │    │                 <--- '  9aW1wwnBJJPnCx,nox0MA48Y0zpI1IeVfYZ' ------ 'zzfDhdtZcvmVzA8rNFU,Yctj1zBN'
+      │         │    │    │    │    │    │    │   histogram(14)=  0 420 0 413 0 397 0 412 0 415 0 380 0 402 0 396 0 415 0 405 0 393  0 438  0 377  0 362  0 376  0 373  0 406  0 421  0 407  0 398  0 411  0 399  0 401  0 390  0 393
+      │         │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
+      │         │    │    │    │    │    │    │   histogram(15)=  0          1          9998          1
+      │         │    │    │    │    │    │    │                 <--- '10-102-116-6785' ------ '34-998-900-4911'
+      │         │    │    │    │    │    │    │   histogram(16)=  0     1     9998     1
+      │         │    │    │    │    │    │    │                 <--- -998.22 ------ 9999.72
+      │         │    │    │    │    │    │    │   histogram(17)=  0                     1                      9998                                   1
+      │         │    │    │    │    │    │    │                 <--- ' about the blithely express foxes. bli' ------ 'zzle furiously. bold accounts haggle furiously ironic excuses. fur'
+      │         │    │    │    │    │    │    ├── key: (11)
+      │         │    │    │    │    │    │    └── fd: (11)-->(12-17)
+      │         │    │    │    │    │    ├── inner-join (hash)
+      │         │    │    │    │    │    │    ├── save-table-name: q2_inner_join_14
+      │         │    │    │    │    │    │    ├── columns: n_nationkey:25(int!null) n_name:26(char!null) n_regionkey:27(int!null) r_regionkey:30(int!null) r_name:31(char!null)
+      │         │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │         │    │    │    │    │    │    ├── stats: [rows=5, distinct(25)=5, null(25)=0, distinct(26)=5, null(26)=0, distinct(27)=1, null(27)=0, distinct(30)=1, null(30)=0, distinct(31)=0.996222107, null(31)=0]
+      │         │    │    │    │    │    │    ├── key: (25)
+      │         │    │    │    │    │    │    ├── fd: ()-->(31), (25)-->(26,27), (27)==(30), (30)==(27)
+      │         │    │    │    │    │    │    ├── scan nation
+      │         │    │    │    │    │    │    │    ├── save-table-name: q2_scan_15
+      │         │    │    │    │    │    │    │    ├── columns: n_nationkey:25(int!null) n_name:26(char!null) n_regionkey:27(int!null)
+      │         │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(25)=25, null(25)=0, distinct(26)=25, null(26)=0, distinct(27)=5, null(27)=0]
+      │         │    │    │    │    │    │    │    │   histogram(25)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+      │         │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
+      │         │    │    │    │    │    │    │    │   histogram(26)=  0      1      23      1
+      │         │    │    │    │    │    │    │    │                 <--- 'ALGERIA' ---- 'VIETNAM'
+      │         │    │    │    │    │    │    │    │   histogram(27)=  0  5  0  5  0  5  0  5  0  5
+      │         │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4
+      │         │    │    │    │    │    │    │    ├── key: (25)
+      │         │    │    │    │    │    │    │    └── fd: (25)-->(26,27)
+      │         │    │    │    │    │    │    ├── select
+      │         │    │    │    │    │    │    │    ├── save-table-name: q2_select_16
+      │         │    │    │    │    │    │    │    ├── columns: r_regionkey:30(int!null) r_name:31(char!null)
+      │         │    │    │    │    │    │    │    ├── stats: [rows=1, distinct(30)=1, null(30)=0, distinct(31)=1, null(31)=0]
+      │         │    │    │    │    │    │    │    │   histogram(31)=  0     1
+      │         │    │    │    │    │    │    │    │                 <--- 'EUROPE'
+      │         │    │    │    │    │    │    │    ├── key: (30)
+      │         │    │    │    │    │    │    │    ├── fd: ()-->(31)
+      │         │    │    │    │    │    │    │    ├── scan region
+      │         │    │    │    │    │    │    │    │    ├── save-table-name: q2_scan_17
+      │         │    │    │    │    │    │    │    │    ├── columns: r_regionkey:30(int!null) r_name:31(char!null)
+      │         │    │    │    │    │    │    │    │    ├── stats: [rows=5, distinct(30)=5, null(30)=0, distinct(31)=5, null(31)=0]
+      │         │    │    │    │    │    │    │    │    │   histogram(30)=  0  1  0  1  0  1  0  1  0  1
+      │         │    │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4
+      │         │    │    │    │    │    │    │    │    │   histogram(31)=  0     1      3        1
+      │         │    │    │    │    │    │    │    │    │                 <--- 'AFRICA' --- 'MIDDLE EAST'
+      │         │    │    │    │    │    │    │    │    ├── key: (30)
+      │         │    │    │    │    │    │    │    │    └── fd: (30)-->(31)
+      │         │    │    │    │    │    │    │    └── filters
+      │         │    │    │    │    │    │    │         └── r_name:31 = 'EUROPE' [type=bool, outer=(31), constraints=(/31: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(31)]
+      │         │    │    │    │    │    │    └── filters
+      │         │    │    │    │    │    │         └── n_regionkey:27 = r_regionkey:30 [type=bool, outer=(27,30), constraints=(/27: (/NULL - ]; /30: (/NULL - ]), fd=(27)==(30), (30)==(27)]
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── s_nationkey:14 = n_nationkey:25 [type=bool, outer=(14,25), constraints=(/14: (/NULL - ]; /25: (/NULL - ]), fd=(14)==(25), (25)==(14)]
+      │         │    │    │    │    └── filters
+      │         │    │    │    │         └── s_suppkey:11 = ps_suppkey:20 [type=bool, outer=(11,20), constraints=(/11: (/NULL - ]; /20: (/NULL - ]), fd=(11)==(20), (20)==(11)]
+      │         │    │    │    └── filters (true)
+      │         │    │    ├── inner-join (lookup supplier@s_nk)
+      │         │    │    │    ├── save-table-name: q2_lookup_join_18
+      │         │    │    │    ├── columns: s_suppkey:40(int!null) s_nationkey:43(int!null) n_nationkey:48(int!null) n_regionkey:50(int!null) r_regionkey:53(int!null) r_name:54(char!null)
+      │         │    │    │    ├── key columns: [48] = [43]
+      │         │    │    │    ├── stats: [rows=2000, distinct(40)=1844.80594, null(40)=0, distinct(43)=5, null(43)=0, distinct(48)=5, null(48)=0, distinct(50)=1, null(50)=0, distinct(53)=1, null(53)=0, distinct(54)=0.996222107, null(54)=0]
+      │         │    │    │    ├── key: (40)
+      │         │    │    │    ├── fd: ()-->(54), (40)-->(43), (48)-->(50), (50)==(53), (53)==(50), (43)==(48), (48)==(43)
+      │         │    │    │    ├── inner-join (lookup nation@n_rk)
+      │         │    │    │    │    ├── save-table-name: q2_lookup_join_19
+      │         │    │    │    │    ├── columns: n_nationkey:48(int!null) n_regionkey:50(int!null) r_regionkey:53(int!null) r_name:54(char!null)
+      │         │    │    │    │    ├── key columns: [53] = [50]
+      │         │    │    │    │    ├── stats: [rows=5, distinct(48)=5, null(48)=0, distinct(50)=1, null(50)=0, distinct(53)=1, null(53)=0, distinct(54)=0.996222107, null(54)=0]
+      │         │    │    │    │    ├── key: (48)
+      │         │    │    │    │    ├── fd: ()-->(54), (48)-->(50), (50)==(53), (53)==(50)
+      │         │    │    │    │    ├── select
+      │         │    │    │    │    │    ├── save-table-name: q2_select_20
+      │         │    │    │    │    │    ├── columns: r_regionkey:53(int!null) r_name:54(char!null)
+      │         │    │    │    │    │    ├── stats: [rows=1, distinct(53)=1, null(53)=0, distinct(54)=1, null(54)=0]
+      │         │    │    │    │    │    │   histogram(54)=  0     1
+      │         │    │    │    │    │    │                 <--- 'EUROPE'
+      │         │    │    │    │    │    ├── key: (53)
+      │         │    │    │    │    │    ├── fd: ()-->(54)
+      │         │    │    │    │    │    ├── scan region
+      │         │    │    │    │    │    │    ├── save-table-name: q2_scan_21
+      │         │    │    │    │    │    │    ├── columns: r_regionkey:53(int!null) r_name:54(char!null)
+      │         │    │    │    │    │    │    ├── stats: [rows=5, distinct(53)=5, null(53)=0, distinct(54)=5, null(54)=0]
+      │         │    │    │    │    │    │    │   histogram(53)=  0  1  0  1  0  1  0  1  0  1
+      │         │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4
+      │         │    │    │    │    │    │    │   histogram(54)=  0     1      3        1
+      │         │    │    │    │    │    │    │                 <--- 'AFRICA' --- 'MIDDLE EAST'
+      │         │    │    │    │    │    │    ├── key: (53)
+      │         │    │    │    │    │    │    └── fd: (53)-->(54)
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── r_name:54 = 'EUROPE' [type=bool, outer=(54), constraints=(/54: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(54)]
+      │         │    │    │    │    └── filters (true)
+      │         │    │    │    └── filters (true)
+      │         │    │    └── filters
+      │         │    │         └── s_suppkey:40 = ps_suppkey:35 [type=bool, outer=(35,40), constraints=(/35: (/NULL - ]; /40: (/NULL - ]), fd=(35)==(40), (40)==(35)]
+      │         │    └── aggregations
+      │         │         ├── min [as=min:57, type=float, outer=(37)]
+      │         │         │    └── ps_supplycost:37 [type=float]
+      │         │         ├── const-agg [as=s_name:12, type=char, outer=(12)]
+      │         │         │    └── s_name:12 [type=char]
+      │         │         ├── const-agg [as=s_address:13, type=varchar, outer=(13)]
+      │         │         │    └── s_address:13 [type=varchar]
+      │         │         ├── const-agg [as=s_phone:15, type=char, outer=(15)]
+      │         │         │    └── s_phone:15 [type=char]
+      │         │         ├── const-agg [as=s_acctbal:16, type=float, outer=(16)]
+      │         │         │    └── s_acctbal:16 [type=float]
+      │         │         ├── const-agg [as=s_comment:17, type=varchar, outer=(17)]
+      │         │         │    └── s_comment:17 [type=varchar]
+      │         │         ├── const-agg [as=ps_supplycost:22, type=float, outer=(22)]
+      │         │         │    └── ps_supplycost:22 [type=float]
+      │         │         ├── const-agg [as=n_name:26, type=char, outer=(26)]
+      │         │         │    └── n_name:26 [type=char]
+      │         │         ├── const-agg [as=p_mfgr:3, type=char, outer=(3)]
+      │         │         │    └── p_mfgr:3 [type=char]
+      │         │         └── const-agg [as=p_partkey:1, type=int, outer=(1)]
+      │         │              └── p_partkey:1 [type=int]
+      │         └── filters
+      │              └── ps_supplycost:22 = min:57 [type=bool, outer=(22,57), constraints=(/22: (/NULL - ]; /57: (/NULL - ]), fd=(22)==(57), (57)==(22)]
+      └── 100 [type=int]
+
+----Stats for q2_project_1----
+column_names  row_count  distinct_count  null_count
+{n_name}      100        5               0
+{p_mfgr}      100        5               0
+{p_partkey}   100        100             0
+{s_acctbal}   100        89              0
+{s_address}   100        89              0
+{s_comment}   100        89              0
+{s_name}      100        89              0
+{s_phone}     100        89              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_name}      1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
+{p_mfgr}      1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
+{p_partkey}   1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{s_acctbal}   1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_address}   1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_comment}   1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_name}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_phone}     1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+
+----Stats for q2_limit_2----
+column_names     row_count  distinct_count  null_count
+{min}            100        100             0
+{n_name}         100        5               0
+{p_mfgr}         100        5               0
+{p_partkey}      100        100             0
+{ps_partkey}     100        100             0
+{ps_suppkey}     100        89              0
+{ps_supplycost}  100        100             0
+{s_acctbal}      100        89              0
+{s_address}      100        89              0
+{s_comment}      100        89              0
+{s_name}         100        89              0
+{s_phone}        100        89              0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{min}            1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{n_name}         1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
+{p_mfgr}         1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
+{p_partkey}      1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{ps_partkey}     1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{ps_suppkey}     1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{ps_supplycost}  1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{s_acctbal}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_address}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_comment}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_name}         1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_phone}        1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+
+----Stats for q2_sort_3----
+column_names     row_count  distinct_count  null_count
+{min}            100        100             0
+{n_name}         100        5               0
+{p_mfgr}         100        5               0
+{p_partkey}      100        100             0
+{ps_partkey}     100        100             0
+{ps_suppkey}     100        89              0
+{ps_supplycost}  100        100             0
+{s_acctbal}      100        89              0
+{s_address}      100        89              0
+{s_comment}      100        89              0
+{s_name}         100        89              0
+{s_phone}        100        89              0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{min}            1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{n_name}         1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
+{p_mfgr}         1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
+{p_partkey}      1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{ps_partkey}     1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{ps_suppkey}     1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{ps_supplycost}  1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
+{s_acctbal}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_address}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_comment}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_name}         1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{s_phone}        1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+
+----Stats for q2_select_4----
+column_names     row_count  distinct_count  null_count
+{min}            460        458             0
+{n_name}         460        5               0
+{p_mfgr}         460        5               0
+{p_partkey}      460        460             0
+{ps_partkey}     460        460             0
+{ps_suppkey}     460        406             0
+{ps_supplycost}  460        458             0
+{s_acctbal}      460        406             0
+{s_address}      460        406             0
+{s_comment}      460        406             0
+{s_name}         460        406             0
+{s_phone}        460        406             0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{min}            1.00           460.00 <==     1.00                458.00 <==          0.00            1.00
+{n_name}         1.00           460.00 <==     1.00                5.00 <==            0.00            1.00
+{p_mfgr}         1.00           460.00 <==     1.00                5.00 <==            0.00            1.00
+{p_partkey}      1.00           460.00 <==     1.00                460.00 <==          0.00            1.00
+{ps_partkey}     1.00           460.00 <==     1.00                460.00 <==          0.00            1.00
+{ps_suppkey}     1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
+{ps_supplycost}  1.00           460.00 <==     1.00                458.00 <==          0.00            1.00
+{s_acctbal}      1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
+{s_address}      1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
+{s_comment}      1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
+{s_name}         1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
+{s_phone}        1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
+
+----Stats for q2_group_by_5----
+column_names     row_count  distinct_count  null_count
+{min}            642        458             0
+{n_name}         642        5               0
+{p_mfgr}         642        5               0
+{p_partkey}      642        460             0
+{ps_partkey}     642        460             0
+{ps_suppkey}     642        548             0
+{ps_supplycost}  642        640             0
+{s_acctbal}      642        548             0
+{s_address}      642        548             0
+{s_comment}      642        548             0
+{s_name}         642        548             0
+{s_phone}        642        548             0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{min}            1481.00        2.31 <==       1481.00             3.23 <==            0.00            1.00
+{n_name}         1481.00        2.31 <==       1481.00             296.20 <==          0.00            1.00
+{p_mfgr}         1481.00        2.31 <==       1481.00             296.20 <==          0.00            1.00
+{p_partkey}      1481.00        2.31 <==       1481.00             3.22 <==            0.00            1.00
+{ps_partkey}     1481.00        2.31 <==       1175.00             2.55 <==            0.00            1.00
+{ps_suppkey}     1481.00        2.31 <==       1406.00             2.57 <==            0.00            1.00
+{ps_supplycost}  1481.00        2.31 <==       1481.00             2.31 <==            0.00            1.00
+{s_acctbal}      1481.00        2.31 <==       1481.00             2.70 <==            0.00            1.00
+{s_address}      1481.00        2.31 <==       1481.00             2.70 <==            0.00            1.00
+{s_comment}      1481.00        2.31 <==       1481.00             2.70 <==            0.00            1.00
+{s_name}         1481.00        2.31 <==       1481.00             2.70 <==            0.00            1.00
+{s_phone}        1481.00        2.31 <==       1481.00             2.70 <==            0.00            1.00
+
+----Stats for q2_inner_join_6----
+column_names       row_count  distinct_count  null_count
+{n_name}           1070       5               0
+{n_nationkey_1}    1070       5               0
+{n_nationkey}      1070       5               0
+{n_regionkey_1}    1070       1               0
+{n_regionkey}      1070       1               0
+{p_mfgr}           1070       5               0
+{p_partkey}        1070       460             0
+{p_size}           1070       1               0
+{p_type}           1070       30              0
+{ps_partkey_1}     1070       460             0
+{ps_partkey}       1070       460             0
+{ps_suppkey_1}     1070       548             0
+{ps_suppkey}       1070       548             0
+{ps_supplycost_1}  1070       640             0
+{ps_supplycost}    1070       640             0
+{r_name_1}         1070       1               0
+{r_name}           1070       1               0
+{r_regionkey_1}    1070       1               0
+{r_regionkey}      1070       1               0
+{s_acctbal}        1070       548             0
+{s_address}        1070       548             0
+{s_comment}        1070       548             0
+{s_name}           1070       548             0
+{s_nationkey_1}    1070       5               0
+{s_nationkey}      1070       5               0
+{s_phone}          1070       548             0
+{s_suppkey_1}      1070       548             0
+{s_suppkey}        1070       548             0
+~~~~
+column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_name}           2825.00        2.64 <==       5.00                1.00                0.00            1.00
+{n_nationkey}      2825.00        2.64 <==       5.00                1.00                0.00            1.00
+{n_nationkey_1}    2825.00        2.64 <==       5.00                1.00                0.00            1.00
+{n_regionkey}      2825.00        2.64 <==       1.00                1.00                0.00            1.00
+{n_regionkey_1}    2825.00        2.64 <==       1.00                1.00                0.00            1.00
+{p_mfgr}           2825.00        2.64 <==       5.00                1.00                0.00            1.00
+{p_partkey}        2825.00        2.64 <==       1337.00             2.91 <==            0.00            1.00
+{p_size}           2825.00        2.64 <==       1.00                1.00                0.00            1.00
+{p_type}           2825.00        2.64 <==       150.00              5.00 <==            0.00            1.00
+{ps_partkey}       2825.00        2.64 <==       1175.00             2.55 <==            0.00            1.00
+{ps_partkey_1}     2825.00        2.64 <==       1337.00             2.91 <==            0.00            1.00
+{ps_suppkey}       2825.00        2.64 <==       1406.00             2.57 <==            0.00            1.00
+{ps_suppkey_1}     2825.00        2.64 <==       1446.00             2.64 <==            0.00            1.00
+{ps_supplycost}    2825.00        2.64 <==       1477.00             2.31 <==            0.00            1.00
+{ps_supplycost_1}  2825.00        2.64 <==       2776.00             4.34 <==            0.00            1.00
+{r_name}           2825.00        2.64 <==       1.00                1.00                0.00            1.00
+{r_name_1}         2825.00        2.64 <==       1.00                1.00                0.00            1.00
+{r_regionkey}      2825.00        2.64 <==       1.00                1.00                0.00            1.00
+{r_regionkey_1}    2825.00        2.64 <==       1.00                1.00                0.00            1.00
+{s_acctbal}        2825.00        2.64 <==       1407.00             2.57 <==            0.00            1.00
+{s_address}        2825.00        2.64 <==       1407.00             2.57 <==            0.00            1.00
+{s_comment}        2825.00        2.64 <==       1406.00             2.57 <==            0.00            1.00
+{s_name}           2825.00        2.64 <==       1407.00             2.57 <==            0.00            1.00
+{s_nationkey}      2825.00        2.64 <==       5.00                1.00                0.00            1.00
+{s_nationkey_1}    2825.00        2.64 <==       5.00                1.00                0.00            1.00
+{s_phone}          2825.00        2.64 <==       1407.00             2.57 <==            0.00            1.00
+{s_suppkey}        2825.00        2.64 <==       1406.00             2.57 <==            0.00            1.00
+{s_suppkey_1}      2825.00        2.64 <==       1446.00             2.64 <==            0.00            1.00
+
+----Stats for q2_lookup_join_7----
+column_names       row_count  distinct_count  null_count
+{n_name}           2568       5               0
+{n_nationkey}      2568       5               0
+{n_regionkey}      2568       1               0
+{p_mfgr}           2568       5               0
+{p_partkey}        2568       460             0
+{p_size}           2568       1               0
+{p_type}           2568       30              0
+{ps_partkey_1}     2568       460             0
+{ps_partkey}       2568       460             0
+{ps_suppkey_1}     2568       1661            0
+{ps_suppkey}       2568       548             0
+{ps_supplycost_1}  2568       1825            0
+{ps_supplycost}    2568       640             0
+{r_name}           2568       1               0
+{r_regionkey}      2568       1               0
+{s_acctbal}        2568       548             0
+{s_address}        2568       548             0
+{s_comment}        2568       548             0
+{s_name}           2568       548             0
+{s_nationkey}      2568       5               0
+{s_phone}          2568       548             0
+{s_suppkey}        2568       548             0
+~~~~
+column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_name}           4464.00        1.74           25.00               5.00 <==            0.00            1.00
+{n_nationkey}      4464.00        1.74           25.00               5.00 <==            0.00            1.00
+{n_regionkey}      4464.00        1.74           1.00                1.00                0.00            1.00
+{p_mfgr}           4464.00        1.74           5.00                1.00                0.00            1.00
+{p_partkey}        4464.00        1.74           1337.00             2.91 <==            0.00            1.00
+{p_size}           4464.00        1.74           1.00                1.00                0.00            1.00
+{p_type}           4464.00        1.74           150.00              5.00 <==            0.00            1.00
+{ps_partkey}       4464.00        1.74           1337.00             2.91 <==            0.00            1.00
+{ps_partkey_1}     4464.00        1.74           4413.00             9.59 <==            0.00            1.00
+{ps_suppkey}       4464.00        1.74           3595.00             6.56 <==            0.00            1.00
+{ps_suppkey_1}     4464.00        1.74           3595.00             2.16 <==            0.00            1.00
+{ps_supplycost}    4464.00        1.74           4366.00             6.82 <==            0.00            1.00
+{ps_supplycost_1}  4464.00        1.74           4366.00             2.39 <==            0.00            1.00
+{r_name}           4464.00        1.74           1.00                1.00                0.00            1.00
+{r_regionkey}      4464.00        1.74           1.00                1.00                0.00            1.00
+{s_acctbal}        4464.00        1.74           3598.00             6.57 <==            0.00            1.00
+{s_address}        4464.00        1.74           3601.00             6.57 <==            0.00            1.00
+{s_comment}        4464.00        1.74           3596.00             6.56 <==            0.00            1.00
+{s_name}           4464.00        1.74           3600.00             6.57 <==            0.00            1.00
+{s_nationkey}      4464.00        1.74           25.00               5.00 <==            0.00            1.00
+{s_phone}          4464.00        1.74           3601.00             6.57 <==            0.00            1.00
+{s_suppkey}        4464.00        1.74           3595.00             6.56 <==            0.00            1.00
+
+----Stats for q2_inner_join_8----
+column_names     row_count  distinct_count  null_count
+{n_name}         642        5               0
+{n_nationkey}    642        5               0
+{n_regionkey}    642        1               0
+{p_mfgr}         642        5               0
+{p_partkey}      642        460             0
+{p_size}         642        1               0
+{p_type}         642        30              0
+{ps_partkey}     642        460             0
+{ps_suppkey}     642        548             0
+{ps_supplycost}  642        640             0
+{r_name}         642        1               0
+{r_regionkey}    642        1               0
+{s_acctbal}      642        548             0
+{s_address}      642        548             0
+{s_comment}      642        548             0
+{s_name}         642        548             0
+{s_nationkey}    642        5               0
+{s_phone}        642        548             0
+{s_suppkey}      642        548             0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_name}         1937.00        3.02 <==       5.00                1.00                0.00            1.00
+{n_nationkey}    1937.00        3.02 <==       5.00                1.00                0.00            1.00
+{n_regionkey}    1937.00        3.02 <==       1.00                1.00                0.00            1.00
+{p_mfgr}         1937.00        3.02 <==       5.00                1.00                0.00            1.00
+{p_partkey}      1937.00        3.02 <==       1337.00             2.91 <==            0.00            1.00
+{p_size}         1937.00        3.02 <==       1.00                1.00                0.00            1.00
+{p_type}         1937.00        3.02 <==       150.00              5.00 <==            0.00            1.00
+{ps_partkey}     1937.00        3.02 <==       1337.00             2.91 <==            0.00            1.00
+{ps_suppkey}     1937.00        3.02 <==       1760.00             3.21 <==            0.00            1.00
+{ps_supplycost}  1937.00        3.02 <==       1914.00             2.99 <==            0.00            1.00
+{r_name}         1937.00        3.02 <==       1.00                1.00                0.00            1.00
+{r_regionkey}    1937.00        3.02 <==       1.00                1.00                0.00            1.00
+{s_acctbal}      1937.00        3.02 <==       1760.00             3.21 <==            0.00            1.00
+{s_address}      1937.00        3.02 <==       1761.00             3.21 <==            0.00            1.00
+{s_comment}      1937.00        3.02 <==       1760.00             3.21 <==            0.00            1.00
+{s_name}         1937.00        3.02 <==       1761.00             3.21 <==            0.00            1.00
+{s_nationkey}    1937.00        3.02 <==       5.00                1.00                0.00            1.00
+{s_phone}        1937.00        3.02 <==       1761.00             3.21 <==            0.00            1.00
+{s_suppkey}      1937.00        3.02 <==       1760.00             3.21 <==            0.00            1.00
+
+----Stats for q2_lookup_join_9----
+column_names     row_count  distinct_count  null_count
+{p_mfgr}         2988       5               0
+{p_partkey}      2988       747             0
+{p_size}         2988       1               0
+{p_type}         2988       30              0
+{ps_partkey}     2988       747             0
+{ps_suppkey}     2988       2570            0
+{ps_supplycost}  2988       2948            0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{p_mfgr}         5368.00        1.80           5.00                1.00                0.00            1.00
+{p_partkey}      5368.00        1.80           1337.00             1.79                0.00            1.00
+{p_size}         5368.00        1.80           1.00                1.00                0.00            1.00
+{p_type}         5368.00        1.80           150.00              5.00 <==            0.00            1.00
+{ps_partkey}     5368.00        1.80           1337.00             1.79                0.00            1.00
+{ps_suppkey}     5368.00        1.80           4145.00             1.61                0.00            1.00
+{ps_supplycost}  5368.00        1.80           5227.00             1.77                0.00            1.00
+
+----Stats for q2_select_10----
+column_names  row_count  distinct_count  null_count
+{p_mfgr}      747        5               0
+{p_partkey}   747        747             0
+{p_size}      747        1               0
+{p_type}      747        30              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{p_mfgr}      1337.00        1.79           5.00                1.00                0.00            1.00
+{p_partkey}   1337.00        1.79           1337.00             1.79                0.00            1.00
+{p_size}      1337.00        1.79           1.00                1.00                0.00            1.00
+{p_type}      1337.00        1.79           150.00              5.00 <==            0.00            1.00
+
+----Stats for q2_scan_11----
+column_names  row_count  distinct_count  null_count
+{p_mfgr}      200000     5               0
+{p_partkey}   200000     199241          0
+{p_size}      200000     50              0
+{p_type}      200000     150             0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{p_mfgr}      200000.00      1.00           5.00                1.00                0.00            1.00
+{p_partkey}   200000.00      1.00           199241.00           1.00                0.00            1.00
+{p_size}      200000.00      1.00           50.00               1.00                0.00            1.00
+{p_type}      200000.00      1.00           150.00              1.00                0.00            1.00
+
+----Stats for q2_inner_join_12----
+column_names   row_count  distinct_count  null_count
+{n_name}       1987       5               0
+{n_nationkey}  1987       5               0
+{n_regionkey}  1987       1               0
+{r_name}       1987       1               0
+{r_regionkey}  1987       1               0
+{s_acctbal}    1987       1983            0
+{s_address}    1987       1986            0
+{s_comment}    1987       1987            0
+{s_name}       1987       1987            0
+{s_nationkey}  1987       5               0
+{s_phone}      1987       1987            0
+{s_suppkey}    1987       1987            0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_name}       2000.00        1.01           5.00                1.00                0.00            1.00
+{n_nationkey}  2000.00        1.01           5.00                1.00                0.00            1.00
+{n_regionkey}  2000.00        1.01           1.00                1.00                0.00            1.00
+{r_name}       2000.00        1.01           1.00                1.00                0.00            1.00
+{r_regionkey}  2000.00        1.01           1.00                1.00                0.00            1.00
+{s_acctbal}    2000.00        1.01           1846.00             1.07                0.00            1.00
+{s_address}    2000.00        1.01           1846.00             1.08                0.00            1.00
+{s_comment}    2000.00        1.01           1845.00             1.08                0.00            1.00
+{s_name}       2000.00        1.01           1846.00             1.08                0.00            1.00
+{s_nationkey}  2000.00        1.01           5.00                1.00                0.00            1.00
+{s_phone}      2000.00        1.01           1846.00             1.08                0.00            1.00
+{s_suppkey}    2000.00        1.01           1845.00             1.08                0.00            1.00
+
+----Stats for q2_scan_13----
+column_names   row_count  distinct_count  null_count
+{s_acctbal}    10000      9967            0
+{s_address}    10000      10027           0
+{s_comment}    10000      9934            0
+{s_name}       10000      9990            0
+{s_nationkey}  10000      25              0
+{s_phone}      10000      10021           0
+{s_suppkey}    10000      9920            0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{s_acctbal}    10000.00       1.00           9967.00             1.00                0.00            1.00
+{s_address}    10000.00       1.00           10000.00            1.00                0.00            1.00
+{s_comment}    10000.00       1.00           9934.00             1.00                0.00            1.00
+{s_name}       10000.00       1.00           9990.00             1.00                0.00            1.00
+{s_nationkey}  10000.00       1.00           25.00               1.00                0.00            1.00
+{s_phone}      10000.00       1.00           10000.00            1.00                0.00            1.00
+{s_suppkey}    10000.00       1.00           9920.00             1.00                0.00            1.00
+
+----Stats for q2_inner_join_14----
+column_names   row_count  distinct_count  null_count
+{n_name}       5          5               0
+{n_nationkey}  5          5               0
+{n_regionkey}  5          1               0
+{r_name}       5          1               0
+{r_regionkey}  5          1               0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_name}       5.00           1.00           5.00                1.00                0.00            1.00
+{n_nationkey}  5.00           1.00           5.00                1.00                0.00            1.00
+{n_regionkey}  5.00           1.00           1.00                1.00                0.00            1.00
+{r_name}       5.00           1.00           1.00                1.00                0.00            1.00
+{r_regionkey}  5.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for q2_scan_15----
+column_names   row_count  distinct_count  null_count
+{n_name}       25         25              0
+{n_nationkey}  25         25              0
+{n_regionkey}  25         5               0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_name}       25.00          1.00           25.00               1.00                0.00            1.00
+{n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
+{n_regionkey}  25.00          1.00           5.00                1.00                0.00            1.00
+
+----Stats for q2_select_16----
+column_names   row_count  distinct_count  null_count
+{r_name}       1          1               0
+{r_regionkey}  1          1               0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{r_name}       1.00           1.00           1.00                1.00                0.00            1.00
+{r_regionkey}  1.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for q2_scan_17----
+column_names   row_count  distinct_count  null_count
+{r_name}       5          5               0
+{r_regionkey}  5          5               0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{r_name}       5.00           1.00           5.00                1.00                0.00            1.00
+{r_regionkey}  5.00           1.00           5.00                1.00                0.00            1.00
+
+----Stats for q2_lookup_join_18----
+column_names   row_count  distinct_count  null_count
+{n_nationkey}  1987       5               0
+{n_regionkey}  1987       1               0
+{r_name}       1987       1               0
+{r_regionkey}  1987       1               0
+{s_nationkey}  1987       5               0
+{s_suppkey}    1987       1987            0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_nationkey}  2000.00        1.01           5.00                1.00                0.00            1.00
+{n_regionkey}  2000.00        1.01           1.00                1.00                0.00            1.00
+{r_name}       2000.00        1.01           1.00                1.00                0.00            1.00
+{r_regionkey}  2000.00        1.01           1.00                1.00                0.00            1.00
+{s_nationkey}  2000.00        1.01           5.00                1.00                0.00            1.00
+{s_suppkey}    2000.00        1.01           1845.00             1.08                0.00            1.00
+
+----Stats for q2_lookup_join_19----
+column_names   row_count  distinct_count  null_count
+{n_nationkey}  5          5               0
+{n_regionkey}  5          1               0
+{r_name}       5          1               0
+{r_regionkey}  5          1               0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{n_nationkey}  5.00           1.00           5.00                1.00                0.00            1.00
+{n_regionkey}  5.00           1.00           1.00                1.00                0.00            1.00
+{r_name}       5.00           1.00           1.00                1.00                0.00            1.00
+{r_regionkey}  5.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for q2_select_20----
+column_names   row_count  distinct_count  null_count
+{r_name}       1          1               0
+{r_regionkey}  1          1               0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{r_name}       1.00           1.00           1.00                1.00                0.00            1.00
+{r_regionkey}  1.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for q2_scan_21----
+column_names   row_count  distinct_count  null_count
+{r_name}       5          5               0
+{r_regionkey}  5          5               0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{r_name}       5.00           1.00           5.00                1.00                0.00            1.00
+{r_regionkey}  5.00           1.00           5.00                1.00                0.00            1.00
+----
+----

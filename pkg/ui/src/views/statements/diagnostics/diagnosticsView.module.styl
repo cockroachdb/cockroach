@@ -1,0 +1,66 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-statements-diagnostics-view
+  display flex
+  flex-direction column
+
+  &__title
+    display flex
+    flex-direction row
+    justify-content space-between
+    margin-bottom $spacing-mid-large
+
+  &__footer
+    margin $spacing-medium 0 0 $spacing-smaller
+
+  &__content
+    max-width 650px
+
+  &__main
+    margin-bottom $spacing-small
+    color $colors--secondary-text
+
+  &__actions-column
+    display flex
+    flex-direction row
+    flex-wrap nowrap
+    justify-content flex-end
+
+  &__vertical-line
+    width 1px
+    min-height 100%
+    border-left 1px solid $colors--neutral-3
+    margin 0 $spacing-x-small
+
+  &__icon
+    display inline-block
+    color inherit
+    font-style normal
+    line-height 0
+    text-align center
+    text-transform none
+    vertical-align -0.125em
+    margin-right $spacing-x-small
+
+  &__statements-link
+    color $colors--primary-text
+    &:hover
+      color $colors--link
+
+.summary--card__empty-state
+  background-color $colors--white
+  background-image url("../../../../assets/statementsPage/emptyTracingBackground.svg")
+  background-repeat no-repeat
+  background-position-x right
+  padding 0
+

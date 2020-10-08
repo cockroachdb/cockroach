@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata fakedist-disk
-
 ##
 # Test a primary key with a collated string in first position (can get a key range).
 #

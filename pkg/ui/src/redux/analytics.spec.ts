@@ -1,29 +1,50 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import { assert } from "chai";
 import * as sinon from "sinon";
 
 import Analytics from "analytics-node";
-import { Location } from "history";
+import { Location, createLocation, createHashHistory } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
+import { history } from "src/redux/state";
 import { AnalyticsSync, defaultRedactions } from "./analytics";
 import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
 
 import * as protos from "src/js/protos";
 
-import { createLocation } from "src/hacks/createLocation";
+const sandbox = sinon.createSandbox();
 
 describe("analytics listener", function() {
   const clusterID = "a49f0ced-7ada-4135-af37-8acf6b548df0";
+  const setClusterData = (store: Store<AdminUIState>, enabled = true, enterprise = true) => {
+    store.dispatch(clusterReducerObj.receiveData(
+      new protos.cockroach.server.serverpb.ClusterResponse({
+        cluster_id: clusterID,
+        reporting_enabled: enabled,
+        enterprise_enabled: enterprise,
+      }),
+    ));
+  };
+
   describe("page method", function () {
     let store: Store<AdminUIState>;
     let analytics: Analytics;
     let pageSpy: sinon.SinonSpy;
 
     beforeEach(function () {
-      store = createAdminUIStore();
-      pageSpy = sinon.spy();
+      store = createAdminUIStore(createHashHistory());
+      pageSpy = sandbox.spy();
 
       // Analytics is a completely fake object, we don't want to call
       // segment if an unexpected method is called.
@@ -32,14 +53,9 @@ describe("analytics listener", function() {
       } as any;
     });
 
-    const setClusterData = function (enabled = true) {
-      store.dispatch(clusterReducerObj.receiveData(
-        new protos.cockroach.server.serverpb.ClusterResponse({
-          cluster_id: clusterID,
-          reporting_enabled: enabled,
-        }),
-      ));
-    };
+    afterEach(() => {
+      sandbox.reset();
+    });
 
     it("does nothing if cluster info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
@@ -53,7 +69,7 @@ describe("analytics listener", function() {
 
     it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(false);
+      setClusterData(store, false);
 
       sync.page({
         pathname: "/test/path",
@@ -64,7 +80,7 @@ describe("analytics listener", function() {
 
     it("correctly calls segment on a page call", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData();
+      setClusterData(store);
 
       sync.page({
         pathname: "/test/path",
@@ -88,7 +104,7 @@ describe("analytics listener", function() {
         pathname: "/test/path",
       } as Location);
 
-      setClusterData();
+      setClusterData(store);
       assert.isTrue(pageSpy.notCalled);
 
       sync.page({
@@ -115,7 +131,7 @@ describe("analytics listener", function() {
     });
 
     it("correctly applies redaction to matched paths", function () {
-      setClusterData();
+      setClusterData(store);
       const sync = new AnalyticsSync(analytics, store, [
         {
           match: RegExp("/test/.*/path"),
@@ -173,9 +189,14 @@ describe("analytics listener", function() {
         "/login?redirectTo=%2Fdatabase%2Ffoobar%2Ftable%2Fbaz",
         "/login?redirectTo=%2Fdatabase%2F%5Bdb%5D%2Ftable%2F%5Btbl%5D",
       ),
+      testRedaction(
+        "statement details page",
+        "/statement/SELECT * FROM database.table",
+        "/statement/[statement]",
+      ),
     ]).map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {
-        setClusterData();
+        setClusterData(store);
         const sync = new AnalyticsSync(analytics, store, defaultRedactions);
         const expectedLocation = createLocation(expected);
 
@@ -200,8 +221,8 @@ describe("analytics listener", function() {
     let identifySpy: sinon.SinonSpy;
 
     beforeEach(function () {
-      store = createAdminUIStore();
-      identifySpy = sinon.spy();
+      store = createAdminUIStore(createHashHistory());
+      identifySpy = sandbox.spy();
 
       // Analytics is a completely fake object, we don't want to call
       // segment if an unexpected method is called.
@@ -210,15 +231,9 @@ describe("analytics listener", function() {
       } as any;
     });
 
-    const setClusterData = function (enabled = true, enterprise = true) {
-      store.dispatch(clusterReducerObj.receiveData(
-        new protos.cockroach.server.serverpb.ClusterResponse({
-          cluster_id: clusterID,
-          reporting_enabled: enabled,
-          enterprise_enabled: enterprise,
-        }),
-      ));
-    };
+    afterEach(() => {
+      sandbox.reset();
+    });
 
     const setVersionData = function () {
       store.dispatch(nodesReducerObj.receiveData([
@@ -241,7 +256,7 @@ describe("analytics listener", function() {
 
     it("does nothing if version info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(true, true);
+      setClusterData(store, true, true);
 
       sync.identify();
 
@@ -250,7 +265,7 @@ describe("analytics listener", function() {
 
     it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(false, true);
+      setClusterData(store, false, true);
       setVersionData();
 
       sync.identify();
@@ -262,8 +277,8 @@ describe("analytics listener", function() {
       setVersionData();
 
       _.each([false, true], (enterpriseSetting) => {
-        identifySpy.reset();
-        setClusterData(true, enterpriseSetting);
+        sandbox.reset();
+        setClusterData(store, true, enterpriseSetting);
         const sync = new AnalyticsSync(analytics, store, []);
         sync.identify();
 
@@ -281,13 +296,92 @@ describe("analytics listener", function() {
 
     it("only reports once", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(true, true);
+      setClusterData(store, true, true);
       setVersionData();
 
       sync.identify();
       sync.identify();
 
       assert.isTrue(identifySpy.calledOnce);
+    });
+  });
+
+  describe("track method", function () {
+    const store: Store<AdminUIState> = createAdminUIStore(createHashHistory());
+    let analytics: Analytics;
+    let trackSpy: sinon.SinonSpy;
+
+    beforeEach(() => {
+      trackSpy = sandbox.spy();
+
+      // Analytics is a completely fake object, we don't want to call
+      // segment if an unexpected method is called.
+      analytics = {
+        track: trackSpy,
+      } as any;
+    });
+
+    afterEach(() => {
+      sandbox.reset();
+    });
+
+    it("does nothing if cluster info is not available", () => {
+      const sync = new AnalyticsSync(analytics, store, []);
+
+      sync.track({
+        event: "test",
+      });
+
+      assert.isTrue(trackSpy.notCalled);
+    });
+
+    it("add userId to track calls using the cluster_id", () => {
+      setClusterData(store);
+      const sync = new AnalyticsSync(analytics, store, []);
+
+      sync.track({
+        event: "test",
+      });
+
+      const expected = {
+        userId: clusterID,
+        properties: {
+          pagePath: "/",
+        },
+        event: "test",
+      };
+      const message = trackSpy.args[0][0];
+
+      assert.isTrue(trackSpy.calledOnce);
+      assert.deepEqual(message, expected);
+    });
+
+    it("add the page path to properties", () => {
+      setClusterData(store);
+      const sync = new AnalyticsSync(analytics, store, []);
+      const testPagePath = "/test/page/path";
+
+      history.push(testPagePath);
+
+      sync.track({
+        event: "test",
+        properties: {
+          testProp: "test",
+        },
+      });
+
+      const expected = {
+        userId: clusterID,
+        properties: {
+          pagePath: testPagePath,
+          testProp: "test",
+        },
+        event: "test",
+      };
+      const message = trackSpy.args[0][0];
+
+      assert.isTrue(trackSpy.calledOnce);
+      assert.deepEqual(message, expected);
     });
   });
 });

@@ -12,3 +12,7 @@ dist*/**
 !distccl/distccl.go
 !distoss/distoss.go
 *manifest.json
+
+cypress/screenshots/*
+cypress/videos/*
+cypress/snapshots/**/__diff_output__

@@ -1,17 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -19,14 +14,14 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-
-	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
+	"strings"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/errors"
+	_ "github.com/lib/pq"
 )
 
-func registerCopy(r *registry) {
+func registerCopy(r *testRegistry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.
@@ -43,12 +38,19 @@ func registerCopy(r *registry) {
 
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t, c.All())
 
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
+
+			// Disable load-based splitting so that we can more accurately
+			// predict an upper-bound on the number of ranges that the cluster
+			// will end up with.
+			if err := disableLoadBasedSplitting(ctx, db); err != nil {
+				return errors.Wrap(err, "disabling load-based splitting")
+			}
 
 			t.Status("importing Bank fixture")
 			c.Run(ctx, c.Node(1), fmt.Sprintf(
@@ -63,9 +65,16 @@ func registerCopy(r *registry) {
 
 			rangeCount := func() int {
 				var count int
-				const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]"
+				const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
 				if err := db.QueryRow(q).Scan(&count); err != nil {
-					t.Fatalf("failed to get range count: %v", err)
+					// TODO(rafi): Remove experimental_ranges query once we stop testing
+					// 19.1 or earlier.
+					if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
+						err = db.QueryRow("SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]").Scan(&count)
+					}
+					if err != nil {
+						t.Fatalf("failed to get range count: %v", err)
+					}
 				}
 				return count
 			}
@@ -119,11 +128,14 @@ func registerCopy(r *registry) {
 			if err != nil {
 				t.Fatalf("failed to copy rows: %s", err)
 			}
-
+			rangeMinBytes, rangeMaxBytes, err := getDefaultRangeSize(ctx, db)
+			if err != nil {
+				t.Fatalf("failed to get default range size: %v", err)
+			}
 			rc := rangeCount()
-			c.l.printf("range count after copy = %d\n", rc)
-			highExp := (rows * rowEstimate) / (32 << 20 /* 32MB */)
-			lowExp := (rows * rowEstimate) / (64 << 20 /* 64MB */)
+			t.l.Printf("range count after copy = %d\n", rc)
+			highExp := (rows * rowEstimate) / rangeMinBytes
+			lowExp := (rows * rowEstimate) / rangeMaxBytes
 			if rc > highExp || rc < lowExp {
 				return errors.Errorf("expected range count for table between %d and %d, found %d",
 					lowExp, highExp, rc)
@@ -133,18 +145,35 @@ func registerCopy(r *registry) {
 		m.Wait()
 	}
 
-	const rows = int(1E7)
+	const rows = int(1e7)
 	const numNodes = 9
 
 	for _, inTxn := range []bool{true, false} {
 		inTxn := inTxn
 		r.Add(testSpec{
-			Name:   fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
-			Nodes:  nodes(numNodes),
-			Stable: true, // DO NOT COPY to new tests
+			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
+			Owner:   OwnerKV,
+			Cluster: makeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runCopy(ctx, t, c, rows, inTxn)
 			},
 		})
 	}
+}
+
+func getDefaultRangeSize(
+	ctx context.Context, db *gosql.DB,
+) (rangeMinBytes, rangeMaxBytes int, err error) {
+	err = db.QueryRow(`SELECT
+    regexp_extract(regexp_extract(raw_config_sql, e'range_min_bytes = \\d+'), e'\\d+')::INT8
+        AS range_min_bytes,
+    regexp_extract(regexp_extract(raw_config_sql, e'range_max_bytes = \\d+'), e'\\d+')::INT8
+        AS range_max_bytes
+FROM
+    [SHOW ZONE CONFIGURATION FOR RANGE default];`).Scan(&rangeMinBytes, &rangeMaxBytes)
+	// Older cluster versions do not contain this column. Use the old default.
+	if err != nil && strings.Contains(err.Error(), `column "raw_config_sql" does not exist`) {
+		rangeMinBytes, rangeMaxBytes, err = 32<<20 /* 32MB */, 64<<20 /* 64MB */, nil
+	}
+	return rangeMinBytes, rangeMaxBytes, err
 }

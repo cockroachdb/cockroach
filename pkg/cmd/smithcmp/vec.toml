@@ -1,0 +1,36 @@
+# This test compares vectorized execution on vs off results.
+
+initsql = """
+DROP TABLE IF EXISTS tab_orig;
+
+CREATE TABLE IF NOT EXISTS tab_orig AS
+	SELECT
+		g::INT8 AS _int8,
+		g::FLOAT8 AS _float8,
+		'2001-01-01'::DATE + g AS _date,
+		g % 2 = 1 AS _bool,
+		g::DECIMAL AS _decimal,
+		g::STRING AS _string,
+		g::STRING::BYTES AS _bytes
+	FROM
+		generate_series(1, 5) AS g;
+
+SET statement_timeout = '9s';
+"""
+smither = "cockroach"
+seed = 0
+#postgres = true
+
+[databases.cockroach]
+addr = "postgresql://root@localhost:26257?sslmode=disable"
+allowmutations = true
+initsql = """
+set vectorize=off;
+"""
+
+[databases.vec]
+addr = "postgresql://root@localhost:26257?sslmode=disable"
+allowmutations = true
+initsql = """
+set vectorize=on;
+"""

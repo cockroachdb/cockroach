@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package util
 
@@ -26,7 +22,7 @@ func TestFastIntSet(t *testing.T) {
 	for _, mVal := range []int{1, 8, 30, smallCutoff, 2 * smallCutoff, 4 * smallCutoff} {
 		m := mVal
 		t.Run(fmt.Sprintf("%d", m), func(t *testing.T) {
-			t.Parallel()
+			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 			rng, _ := randutil.NewPseudoRand()
 			in := make([]bool, m)
 			forEachRes := make([]bool, m)
@@ -71,20 +67,33 @@ func TestFastIntSet(t *testing.T) {
 				if o := s.Ordered(); !reflect.DeepEqual(vals, o) {
 					t.Fatalf("set built with Next doesn't match Ordered: %v vs %v", vals, o)
 				}
+				assertSame := func(orig, copy FastIntSet) {
+					t.Helper()
+					if !orig.Equals(copy) || !copy.Equals(orig) {
+						t.Fatalf("expected equality: %v, %v", orig, copy)
+					}
+					if col, ok := copy.Next(0); ok {
+						copy.Remove(col)
+						if orig.Equals(copy) || copy.Equals(orig) {
+							t.Fatalf("unexpected equality: %v, %v", orig, copy)
+						}
+						copy.Add(col)
+						if !orig.Equals(copy) || !copy.Equals(orig) {
+							t.Fatalf("expected equality: %v, %v", orig, copy)
+						}
+					}
+				}
+				// Test Copy.
 				s2 := s.Copy()
-				if !s.Equals(s2) || !s2.Equals(s) {
-					t.Fatalf("expected equality: %v, %v", s, s2)
-				}
-				if col, ok := s2.Next(0); ok {
-					s2.Remove(col)
-					if s.Equals(s2) || s2.Equals(s) {
-						t.Fatalf("unexpected equality: %v, %v", s, s2)
-					}
-					s2.Add(col)
-					if !s.Equals(s2) || !s2.Equals(s) {
-						t.Fatalf("expected equality: %v, %v", s, s2)
-					}
-				}
+				assertSame(s, s2)
+				// Test CopyFrom.
+				var s3 FastIntSet
+				s3.CopyFrom(s)
+				assertSame(s, s3)
+				// Make sure CopyFrom into a non-empty set still works.
+				s.Shift(100)
+				s.CopyFrom(s3)
+				assertSame(s, s3)
 			}
 		})
 	}

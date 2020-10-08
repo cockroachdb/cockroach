@@ -1,47 +1,55 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqlutils
 
 import (
-	gosql "database/sql"
+	"context"
+	"testing"
 )
 
 // QueryDatabaseID returns the database ID of the specified database using the
 // system.namespace table.
-func QueryDatabaseID(sqlDB *gosql.DB, dbName string) (uint32, error) {
-	dbIDQuery := `SELECT id FROM system.namespace WHERE name = $1 AND "parentID" = 0`
+func QueryDatabaseID(t testing.TB, sqlDB DBHandle, dbName string) uint32 {
+	dbIDQuery := `
+		SELECT id FROM system.namespace
+		WHERE name = $1 AND "parentSchemaID" = 0 AND "parentID" = 0
+	`
 	var dbID uint32
-	result := sqlDB.QueryRow(dbIDQuery, dbName)
+	result := sqlDB.QueryRowContext(context.Background(), dbIDQuery, dbName)
 	if err := result.Scan(&dbID); err != nil {
-		return 0, err
+		t.Fatal(err)
 	}
-	return dbID, nil
+	return dbID
 }
 
 // QueryTableID returns the table ID of the specified database.table
 // using the system.namespace table.
-func QueryTableID(sqlDB *gosql.DB, dbName, tableName string) (uint32, error) {
+func QueryTableID(
+	t testing.TB, sqlDB DBHandle, dbName, schemaName string, tableName string,
+) uint32 {
 	tableIDQuery := `
  SELECT tables.id FROM system.namespace tables
    JOIN system.namespace dbs ON dbs.id = tables."parentID"
-   WHERE dbs.name = $1 AND tables.name = $2
+	 JOIN system.namespace schemas ON schemas.id = tables."parentSchemaID"
+   WHERE dbs.name = $1 AND schemas.name = $2 AND tables.name = $3
  `
 	var tableID uint32
-	result := sqlDB.QueryRow(tableIDQuery, dbName, tableName)
+	result := sqlDB.QueryRowContext(
+		context.Background(),
+		tableIDQuery, dbName,
+		schemaName,
+		tableName,
+	)
 	if err := result.Scan(&tableID); err != nil {
-		return 0, err
+		t.Fatal(err)
 	}
-	return tableID, nil
+	return tableID
 }

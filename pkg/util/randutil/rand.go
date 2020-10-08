@@ -1,16 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package randutil
 
@@ -19,7 +15,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log" // Don't bring cockroach/util/log into this low-level package.
-
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -35,11 +30,13 @@ func NewPseudoSeed() int64 {
 	return seed
 }
 
-// NewPseudoRand returns an instance of math/rand.Rand seeded from crypto/rand
-// and its seed so we can easily and cheaply generate unique streams of
-// numbers. The created object is not safe for concurrent access.
+// NewPseudoRand returns an instance of math/rand.Rand seeded from the
+// environment variable COCKROACH_RANDOM_SEED.  If that variable is not set,
+// crypto/rand is used to generate a seed. The seed is also returned so we can
+// easily and cheaply generate unique streams of numbers. The created object is
+// not safe for concurrent access.
 func NewPseudoRand() (*rand.Rand, int64) {
-	seed := NewPseudoSeed()
+	seed := envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
 	return rand.New(rand.NewSource(seed)), seed
 }
 
@@ -64,6 +61,19 @@ func RandBytes(r *rand.Rand, size int) []byte {
 	return arr
 }
 
+// ReadTestdataBytes reads random bytes, but then nudges them into printable
+// ASCII, *reducing their randomness* to make them a little friendlier for
+// humans using them as testdata.
+func ReadTestdataBytes(r *rand.Rand, arr []byte) {
+	_, _ = r.Read(arr)
+	for i := range arr {
+		arr[i] = arr[i] & 0x7F // mask out non-ascii
+		if arr[i] < ' ' {      // Nudge the control chars up, into the letters.
+			arr[i] += 'A'
+		}
+	}
+}
+
 // SeedForTests seeds the random number generator and prints the seed
 // value used. This value can be specified via an environment variable
 // COCKROACH_RANDOM_SEED=x to reuse the same value later. This function should
@@ -72,5 +82,5 @@ func RandBytes(r *rand.Rand, size int) []byte {
 func SeedForTests() {
 	seed := envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
 	rand.Seed(seed)
-	log.Printf("Random seed: %v", seed)
+	log.Printf("random seed: %v", seed)
 }

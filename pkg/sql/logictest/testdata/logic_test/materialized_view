@@ -1,0 +1,151 @@
+statement ok
+CREATE TABLE t (x INT, y INT);
+INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
+
+statement ok
+CREATE MATERIALIZED VIEW v AS SELECT x, y FROM t
+
+# Ensure that materialized views show up in SHOW TABLES.
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE type = 'materialized view'
+----
+v
+
+query II rowsort
+SELECT * FROM v
+----
+1 2
+3 4
+5 6
+
+# If we update t, the view shouldn't change.
+statement ok
+INSERT INTO t VALUES (7, 8)
+
+query II rowsort
+SELECT * FROM v
+----
+1 2
+3 4
+5 6
+
+# Now refresh the view.
+statement ok
+REFRESH MATERIALIZED VIEW v
+
+# The update should be visible now, as v has been recomputed.
+query II rowsort
+SELECT * FROM v
+----
+1 2
+3 4
+5 6
+7 8
+
+# Now add an index to the view, and use it.
+statement ok
+CREATE INDEX i ON v (y)
+
+query I rowsort
+SELECT y FROM v@i WHERE y > 4
+----
+6
+8
+
+# Now update t and refresh the view -- the index should be updated as well.
+statement ok
+INSERT INTO t VALUES (9, 10)
+
+statement ok
+REFRESH MATERIALIZED VIEW v
+
+query I rowsort
+SELECT y FROM v WHERE y > 4
+----
+6
+8
+10
+
+# Drop the index now.
+statement ok
+DROP INDEX v@i
+
+query I rowsort
+SELECT y FROM v WHERE y > 4
+----
+6
+8
+10
+
+# We can't refresh with an explicit txn.
+statement ok
+BEGIN
+
+statement error pq: cannot refresh view in an explicit transaction
+REFRESH MATERIALIZED VIEW v
+
+statement ok
+ROLLBACK
+
+statement error pq: cannot mutate materialized view "v"
+INSERT INTO v VALUES (1, 2)
+
+statement error pq: cannot mutate materialized view "v"
+UPDATE v SET x = 1 WHERE y = 1
+
+statement error pq: cannot mutate materialized view "v"
+DELETE FROM v WHERE x = 1
+
+statement error pq: "v" is not a table
+TRUNCATE v
+
+# Test that a materialized view with a unique index errors out if the refresh
+# runs into a uniqueness constraint violation.
+statement ok
+CREATE TABLE dup (x INT);
+CREATE MATERIALIZED VIEW v_dup AS SELECT x FROM dup;
+CREATE UNIQUE INDEX i ON v_dup (x);
+INSERT INTO dup VALUES (1), (1);
+
+statement error pq: duplicate key value \(x\)=\(1\) violates unique constraint "i"
+REFRESH MATERIALIZED VIEW v_dup
+
+# We shouldn't be able to mix materialized and non materialized views in DDLs.
+statement ok
+CREATE VIEW normal_view AS SELECT 1;
+CREATE MATERIALIZED VIEW materialized_view AS SELECT 1;
+
+statement error pq: "materialized_view" is a materialized view
+ALTER VIEW materialized_view RENAME TO newname
+
+statement error pq: "normal_view" is not a materialized view
+ALTER MATERIALIZED VIEW normal_view RENAME TO newname
+
+statement error pq: "materialized_view" is a materialized view
+ALTER VIEW materialized_view SET SCHEMA public
+
+statement error pq: "normal_view" is not a materialized view
+ALTER MATERIALIZED VIEW normal_view SET SCHEMA public
+
+statement error pq: "materialized_view" is a materialized view
+DROP VIEW materialized_view
+
+statement error pq: "normal_view" is not a materialized view
+DROP MATERIALIZED VIEW normal_view
+
+# Using REFRESH MATERIALIZED VIEW ... WITH NO DATA should result in
+# an empty view.
+statement ok
+CREATE MATERIALIZED VIEW with_options AS SELECT 1;
+REFRESH MATERIALIZED VIEW with_options WITH DATA
+
+query I
+SELECT * FROM with_options
+----
+1
+
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+query I
+SELECT * FROM with_options

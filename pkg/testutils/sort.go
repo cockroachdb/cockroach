@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package testutils
 
@@ -18,6 +14,8 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+
+	"github.com/cockroachdb/errors"
 )
 
 var _ sort.Interface = structSorter{}
@@ -110,14 +108,14 @@ func SortStructs(s interface{}, fieldNames ...string) {
 	// Verify that we've gotten a slice of structs or pointers to structs.
 	structs := reflect.ValueOf(s)
 	if structs.Kind() != reflect.Slice {
-		panic(fmt.Sprintf("expected slice, got %T", s))
+		panic(errors.AssertionFailedf("expected slice, got %T", s))
 	}
 	elemType := structs.Type().Elem()
 	if elemType.Kind() == reflect.Ptr {
 		elemType = elemType.Elem()
 	}
 	if elemType.Kind() != reflect.Struct {
-		panic(fmt.Sprintf("%s is not a struct or pointer to struct", structs.Elem()))
+		panic(errors.AssertionFailedf("%s is not a struct or pointer to struct", structs.Elem()))
 	}
 
 	sort.Sort(structSorter{structs, fieldNames})

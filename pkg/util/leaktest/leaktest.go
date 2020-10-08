@@ -7,17 +7,13 @@
 //
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // Package leaktest provides tools to detect leaked goroutines in tests.
 // To use it, call "defer leaktest.AfterTest(t)()" at the beginning of each
@@ -25,15 +21,17 @@
 package leaktest
 
 import (
+	"fmt"
 	"runtime"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/petermattis/goid"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/petermattis/goid"
 )
 
 // interestingGoroutines returns all goroutines we care about for the purpose
@@ -53,8 +51,11 @@ func interestingGoroutines() map[int64]string {
 		}
 
 		if stack == "" ||
-			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/log.init") ||
-			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/log.NewSecondaryLogger") ||
+			// Ignore HTTP keep alives
+			strings.Contains(stack, ").readLoop(") ||
+			strings.Contains(stack, ").writeLoop(") ||
+			// Ignore the Sentry client, which is created lazily on first use.
+			strings.Contains(stack, "sentry-go.(*HTTPTransport).worker") ||
 			// Seems to be gccgo specific.
 			(runtime.Compiler == "gccgo" && strings.Contains(stack, "testing.T.Parallel")) ||
 			// Below are the stacks ignored by the upstream leaktest code.
@@ -76,40 +77,79 @@ func interestingGoroutines() map[int64]string {
 	return gs
 }
 
+// Set once a test leaks goroutines so that further tests don't attempt to
+// detect leaks any more. Once a tests leaks, it has soiled the process beyond
+// repair: even though other tests would take a snapshot of goroutines at the
+// beginning that would include the previously-leaked goroutines, those leaked
+// goroutines can spin up other goroutines at random times and these would be
+// mis-attributed as leaked by the currently-running test.
+var leakDetectorDisabled uint32
+
+// PrintLeakedStoppers is injected from `pkg/util/stop` to avoid a dependency
+// cycle.
+var PrintLeakedStoppers = func(t testing.TB) {}
+
 // AfterTest snapshots the currently-running goroutines and returns a
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
 func AfterTest(t testing.TB) func() {
+	if atomic.LoadUint32(&leakDetectorDisabled) != 0 {
+		return func() {}
+	}
 	orig := interestingGoroutines()
 	return func() {
-		if t.Failed() {
-			return
-		}
+		// If there was a panic, "leaked" goroutines are expected.
 		if r := recover(); r != nil {
 			panic(r)
 		}
+
+		// If the test already failed, we don't pile on any more errors but we check
+		// to see if the leak detector should be disabled for future tests.
+		if t.Failed() {
+			if err := diffGoroutines(orig); err != nil {
+				atomic.StoreUint32(&leakDetectorDisabled, 1)
+			}
+			return
+		}
+
+		// TODO(tbg): make this call 't.Error' instead of 't.Logf' once there is
+		// enough Stopper discipline.
+		PrintLeakedStoppers(t)
+
 		// Loop, waiting for goroutines to shut down.
 		// Wait up to 5 seconds, but finish as quickly as possible.
 		deadline := timeutil.Now().Add(5 * time.Second)
 		for {
-			var leaked []string
-			for id, stack := range interestingGoroutines() {
-				if _, ok := orig[id]; !ok {
-					leaked = append(leaked, stack)
+			if err := diffGoroutines(orig); err != nil {
+				if timeutil.Now().Before(deadline) {
+					time.Sleep(50 * time.Millisecond)
+					continue
 				}
+				atomic.StoreUint32(&leakDetectorDisabled, 1)
+				t.Error(err)
 			}
-			if len(leaked) == 0 {
-				return
-			}
-			if timeutil.Now().Before(deadline) {
-				time.Sleep(50 * time.Millisecond)
-				continue
-			}
-			sort.Strings(leaked)
-			for _, g := range leaked {
-				t.Errorf("Leaked goroutine: %v", g)
-			}
-			return
+			break
 		}
 	}
+}
+
+// diffGoroutines compares the current goroutines with the base snapshort and
+// returns an error if they differ.
+func diffGoroutines(base map[int64]string) error {
+	var leaked []string
+	for id, stack := range interestingGoroutines() {
+		if _, ok := base[id]; !ok {
+			leaked = append(leaked, stack)
+		}
+	}
+	if len(leaked) == 0 {
+		return nil
+	}
+
+	sort.Strings(leaked)
+	var b strings.Builder
+	for _, g := range leaked {
+		b.WriteString(fmt.Sprintf("Leaked goroutine: %v\n\n", g))
+	}
+	return errors.Newf("%s", b.String())
 }

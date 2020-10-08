@@ -1,0 +1,174 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT NOT NULL,
+    b INT,
+    c INT NOT NULL DEFAULT (10),
+    d INT AS (b + c + 1) STORED,
+    "e:write-only" INT NOT NULL
+)
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+
+# Properties with no RETURNING clause.
+build
+DELETE FROM abcde WHERE a=1
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+      ├── key: (12)
+      ├── fd: ()-->(8), (12)-->(9-11,13,14)
+      ├── prune: (9-14)
+      ├── interesting orderings: (+12)
+      ├── scan abcde
+      │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+      │    ├── computed column expressions
+      │    │    └── d:11
+      │    │         └── plus [type=int]
+      │    │              ├── plus [type=int]
+      │    │              │    ├── variable: b:9 [type=int]
+      │    │              │    └── variable: c:10 [type=int]
+      │    │              └── const: 1 [type=int]
+      │    ├── key: (12)
+      │    ├── fd: (12)-->(8-11,13,14)
+      │    ├── prune: (8-14)
+      │    └── interesting orderings: (+12)
+      └── filters
+           └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+                ├── variable: a:8 [type=int]
+                └── const: 1 [type=int]
+
+# Properties with RETURNING clause.
+build
+DELETE FROM abcde WHERE a=1 RETURNING *
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int)
+ ├── volatile, mutations
+ ├── fd: ()-->(1)
+ ├── prune: (1-4)
+ └── delete abcde
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
+      ├── volatile, mutations
+      ├── key: (5)
+      ├── fd: ()-->(1), (5)-->(2-4)
+      ├── prune: (1-4)
+      └── select
+           ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           ├── key: (12)
+           ├── fd: ()-->(8), (12)-->(9-11,13,14)
+           ├── prune: (9-14)
+           ├── interesting orderings: (+12)
+           ├── scan abcde
+           │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           │    ├── computed column expressions
+           │    │    └── d:11
+           │    │         └── plus [type=int]
+           │    │              ├── plus [type=int]
+           │    │              │    ├── variable: b:9 [type=int]
+           │    │              │    └── variable: c:10 [type=int]
+           │    │              └── const: 1 [type=int]
+           │    ├── key: (12)
+           │    ├── fd: (12)-->(8-11,13,14)
+           │    ├── prune: (8-14)
+           │    └── interesting orderings: (+12)
+           └── filters
+                └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+                     ├── variable: a:8 [type=int]
+                     └── const: 1 [type=int]
+
+# Input is cardinality 0-1 expression.
+build
+DELETE FROM abcde WHERE rowid=1 RETURNING *
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int)
+ ├── cardinality: [0 - 1]
+ ├── volatile, mutations
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── prune: (1-4)
+ └── delete abcde
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
+      ├── cardinality: [0 - 1]
+      ├── volatile, mutations
+      ├── key: ()
+      ├── fd: ()-->(1-5)
+      ├── prune: (1-4)
+      └── select
+           ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(8-14)
+           ├── prune: (8-11,13,14)
+           ├── interesting orderings: (+12)
+           ├── scan abcde
+           │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           │    ├── computed column expressions
+           │    │    └── d:11
+           │    │         └── plus [type=int]
+           │    │              ├── plus [type=int]
+           │    │              │    ├── variable: b:9 [type=int]
+           │    │              │    └── variable: c:10 [type=int]
+           │    │              └── const: 1 [type=int]
+           │    ├── key: (12)
+           │    ├── fd: (12)-->(8-11,13,14)
+           │    ├── prune: (8-14)
+           │    └── interesting orderings: (+12)
+           └── filters
+                └── eq [type=bool, outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
+                     ├── variable: rowid:12 [type=int]
+                     └── const: 1 [type=int]
+
+# Filter FD set.
+build
+DELETE FROM abcde WHERE b=c RETURNING *;
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── volatile, mutations
+ ├── fd: (2)==(3), (3)==(2)
+ ├── prune: (1-4)
+ └── delete abcde
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
+      ├── volatile, mutations
+      ├── key: (5)
+      ├── fd: (2)==(3), (3)==(2), (5)-->(1-4)
+      ├── prune: (1-4)
+      └── select
+           ├── columns: a:8(int!null) b:9(int!null) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           ├── key: (12)
+           ├── fd: (12)-->(8-11,13,14), (9)==(10), (10)==(9)
+           ├── prune: (8,11-14)
+           ├── interesting orderings: (+12)
+           ├── scan abcde
+           │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+           │    ├── computed column expressions
+           │    │    └── d:11
+           │    │         └── plus [type=int]
+           │    │              ├── plus [type=int]
+           │    │              │    ├── variable: b:9 [type=int]
+           │    │              │    └── variable: c:10 [type=int]
+           │    │              └── const: 1 [type=int]
+           │    ├── key: (12)
+           │    ├── fd: (12)-->(8-11,13,14)
+           │    ├── prune: (8-14)
+           │    └── interesting orderings: (+12)
+           └── filters
+                └── eq [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+                     ├── variable: b:9 [type=int]
+                     └── variable: c:10 [type=int]

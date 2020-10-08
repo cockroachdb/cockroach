@@ -1,0 +1,442 @@
+subtest release
+
+begin
+----
+0 <noignore>
+
+put k a
+----
+
+get k
+----
+"k" -> a
+
+savepoint x
+----
+1 <noignore>
+
+put k b
+----
+
+get k
+----
+"k" -> b
+
+release x
+----
+2 <noignore>
+
+get k
+----
+"k" -> b
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get k
+----
+"k" -> b
+
+commit
+----
+
+subtest end
+
+
+subtest rollback
+
+begin
+----
+0 <noignore>
+
+put k a
+----
+
+get k
+----
+"k" -> a
+
+savepoint x
+----
+1 <noignore>
+
+put k b
+----
+
+get k
+----
+"k" -> b
+
+rollback x
+----
+2 [2-2]
+
+get k
+----
+"k" -> a
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get k
+----
+"k" -> a
+
+commit
+----
+
+subtest end
+
+subtest rollback_after_nested_release
+
+begin
+----
+0 <noignore>
+
+put k ar
+----
+
+savepoint x
+----
+1 <noignore>
+
+put k br
+----
+
+savepoint y
+----
+2 <noignore>
+
+put k cr
+----
+
+release y
+----
+3 <noignore>
+
+put k dr
+----
+
+rollback x
+----
+4 [2-4]
+
+get k
+----
+"k" -> ar
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get k
+----
+"k" -> ar
+
+commit
+----
+
+subtest end
+
+subtest disjoin_rollbacks
+
+begin
+----
+0 <noignore>
+
+put a d1
+----
+
+put b d1
+----
+
+savepoint x
+----
+2 <noignore>
+
+put a d2
+----
+
+rollback x
+----
+3 [3-3]
+
+put c d1
+----
+
+savepoint x
+----
+4 [3-3]
+
+put b 2
+----
+
+rollback x
+----
+5 [3-3][5-5]
+
+put d 1
+----
+
+
+get a
+----
+"a" -> d1
+
+get b
+----
+"b" -> d1
+
+get c
+----
+"c" -> d1
+
+get d
+----
+"d" -> 1
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get a
+----
+"a" -> d1
+
+get b
+----
+"b" -> d1
+
+get c
+----
+"c" -> d1
+
+get d
+----
+"d" -> 1
+
+commit
+----
+
+subtest end
+
+
+subtest rollback_with_no_op
+
+begin
+----
+0 <noignore>
+
+put k nop
+----
+
+savepoint x
+----
+1 <noignore>
+
+rollback x
+----
+1 <noignore>
+
+release x
+----
+1 <noignore>
+
+commit
+----
+
+subtest end
+
+subtest double_rollback_ok
+
+begin
+----
+0 <noignore>
+
+put k init
+----
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+put k da
+----
+
+rollback x
+----
+1 [1-1]
+
+rollback x
+----
+1 [1-1]
+
+get k
+----
+"k" -> init
+
+put k db
+----
+
+rollback x
+----
+2 [1-2]
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get k
+----
+"k" -> init
+
+commit
+----
+
+subtest end
+
+subtest rollback_across_retry
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+retry
+----
+synthetic error: TransactionRetryWithProtoRefreshError: forced retry
+epoch: 0 -> 1
+
+release x
+----
+0 <noignore>
+
+rollback x
+----
+0 <noignore>
+
+subtest end
+
+
+
+subtest rollback_after_failed_cput
+# CPut errors are white-listed to allow a rollback to savepoint afterwards.
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+cput k v bogus_expected
+----
+(*roachpb.ConditionFailedError) unexpected value
+
+rollback x
+----
+1 [1-1]
+
+subtest end
+
+
+
+subtest rollback_after_random_err
+# Only CPut errors allow rollbacks after them. Any other error results in the rollback failing.
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+inject-error
+----
+injected error
+
+rollback x
+----
+(*telemetrykeys.withTelemetry) unimplemented: cannot rollback to savepoint after error
+
+subtest end
+
+
+
+subtest rollback_across_abort
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+abort
+----
+(*roachpb.TransactionRetryWithProtoRefreshError)
+txn id changed
+
+release x
+----
+0 <noignore>
+
+rollback x
+----
+0 <noignore>
+
+subtest end
+
+subtest rollback_across_retry_fails_for_non-initial_savepoint
+# The difference from the previous test is that here we do a write before
+# creating the savepoint.
+begin
+----
+0 <noignore>
+
+put k a
+----
+
+savepoint x
+----
+1 <noignore>
+
+retry
+----
+synthetic error: TransactionRetryWithProtoRefreshError: forced retry
+epoch: 0 -> 1
+
+rollback x
+----
+(*roachpb.TransactionRetryWithProtoRefreshError) TransactionRetryWithProtoRefreshError: cannot rollback to savepoint after a transaction restart
+
+subtest end

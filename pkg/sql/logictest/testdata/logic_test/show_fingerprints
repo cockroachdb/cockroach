@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX (b) STORING (d))
 
@@ -112,3 +110,15 @@ query TT
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE blocks
 ----
 primary  590700560494856555
+
+# Verify that we can show fingerprints from a read-only transaction (#39204).
+statement ok
+BEGIN TRANSACTION AS OF SYSTEM TIME '-1us'
+
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  1205834892498753533
+
+statement ok
+COMMIT

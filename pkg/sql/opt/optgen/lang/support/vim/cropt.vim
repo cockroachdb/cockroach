@@ -34,14 +34,29 @@ syn keyword define contained define
 
 syn match func contained '(A-Za-z0-9_)*'
 
-syn keyword operator Subquery Variable Const Placeholder List OrderedList Filters Projections Exists
-syn keyword operator And Or Not Eq Lt Gt Le Ge Ne In NotIn
-syn keyword operator Like NotLike ILike NotILike SimilarTo NotSimilarTo RegMatch NotRegMatch RegIMatch NotRegIMatch
-syn keyword operator IsDistinctFrom IsNotDistinctFrom Is IsNot Any Some All
-syn keyword operator Bitand Bitor Bitxor Plus Minus Mult Div FloorDiv Mod Pow Concat LShift RShift
-syn keyword operator UnaryPlus UnaryMinus UnaryComplement Function True False
-syn keyword operator Scan Values Select Project Join InnerJoin LeftJoin RightJoin FullJoin SemiJoin AntiJoin
-syn keyword operator JoinApply InnerJoinApply LeftJoinApply RightJoinApply FullJoinApply SemiJoinApply AntiJoinApply GroupBy
-syn keyword operator Union Intersect Except Sort Arrange OpName
+syn keyword operator Subquery SubqueryPrivate Any Exists Variable Const Null True False Placeholder
+syn keyword operator Tuple Projections ColPrivate Aggregations AggregationsItem Filters FiltersItem
+syn keyword operator Zip ZipItem ZipItemPrivate And Or Not Eq Lt Gt Le Ge Ne In NotIn
+syn keyword operator Like NotLike ILike NotILike SimilarTo NotSimilarTo RegMatch NotRegMatch
+syn keyword operator RegIMatch NotRegIMatch Is IsNot Contains JsonExists JsonAllExists
+syn keyword operator JsonSomeExists AnyScalar Bitand Bitor Bitxor Plus Minus Mult Div FloorDiv
+syn keyword operator Mod Pow Concat LShift RShift FetchVal FetchText FetchValPath FetchTextPath
+syn keyword operator UnaryMinus UnaryComplement Cast Case When Array Indirection
+syn keyword operator Function FunctionPrivate Coalesce ColumnAccess UnsupportedExpr
+syn keyword operator Avg BoolAnd BoolOr ConcatAgg Count CountRows Max Min SumInt Sum SqrDiff
+syn keyword operator Variance StdDev XorAgg JsonAgg JsonbAgg ConstAgg ConstNotNullAgg
+syn keyword operator AnyNotNullAgg FirstAgg AggDistinct ScalarList
+syn keyword operator Scan ScanPrivate VirtualScan VirtualScanPrivate Values Select Project
+syn keyword operator InnerJoin LeftJoin RightJoin FullJoin SemiJoin AntiJoin
+syn keyword operator IndexJoin IndexJoinPrivate LookupJoin LookupJoinPrivate
+syn keyword operator MergeJoin MergeJoinPrivate
+syn keyword operator InnerJoinApply LeftJoinApply
+syn keyword operator SemiJoinApply AntiJoinApply
+syn keyword operator GroupBy GroupingPrivate ScalarGroupBy
+syn keyword operator DistinctOn EnsureDistinctOn UpsertDistinctOn EnsureUpsertDistinctOn
+syn keyword operator Union SetPrivate Intersect Except UnionAll IntersectAll ExceptAll
+syn keyword operator Limit Offset Max1Row Explain ExplainPrivate
+syn keyword operator ShowTraceForSession ShowTracePrivate RowNumber RowNumberPrivate ProjectSet
+syn keyword operator Sort Insert Update Upsert Delete CreateTable OpName
 
 let b:current_syntax = "cropt"

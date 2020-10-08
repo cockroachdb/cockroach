@@ -1,4 +1,4 @@
-### Bug Fixes
+### Bug fixes
 
 - Feature A [#1][#1] [beda26774][beda26774]
 - Feature B [#1][#1] [52d1235cc][52d1235cc]
@@ -7,15 +7,16 @@
 
 #### Changes without release note annotation
 
-- [#unknown][#unknown] [f872999e8][f872999e8] master update (test2)
+- [#unknown][#unknown] [f872999e8][f872999e8] master update (test2 <test2@example.com>)
 
-### Doc Updates
+### Doc updates
 
 Docs team: Please add these manually.
 
 ### Contributors
 
-This release includes 2 merged PRs by 1 author. We would like to thank the following contributors from the CockroachDB community:
+This release includes 2 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
 
 - test2
 

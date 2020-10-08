@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package timeofday
 
@@ -70,6 +66,28 @@ func TestFromAndToTime(t *testing.T) {
 	}
 }
 
+func TestRound(t *testing.T) {
+	testData := []struct {
+		t     TimeOfDay
+		round time.Duration
+		exp   TimeOfDay
+	}{
+		{New(12, 0, 0, 1000), time.Second, New(12, 0, 0, 0)},
+		{New(12, 0, 0, 1000), time.Millisecond, New(12, 0, 0, 1000)},
+		{Max, time.Second, Time2400},
+		{Time2400, time.Second, Time2400},
+		{Min, time.Second, Min},
+	}
+	for _, td := range testData {
+		t.Run(fmt.Sprintf("%s,%s", td.t, td.round), func(t *testing.T) {
+			actual := td.t.Round(td.round)
+			if actual != td.exp {
+				t.Errorf("expected %s, got %s", td.exp, actual)
+			}
+		})
+	}
+}
+
 func TestAdd(t *testing.T) {
 	testData := []struct {
 		t      TimeOfDay
@@ -78,11 +96,12 @@ func TestAdd(t *testing.T) {
 	}{
 		{New(12, 0, 0, 0), 1, New(12, 0, 0, 1)},
 		{New(12, 0, 0, 0), microsecondsPerDay, New(12, 0, 0, 0)},
-		{Max, 1, Min},
-		{Min, -1, Max},
+		{Max, 1, 1},
+		{Time2400, 1, 1},
+		{Min, -1, microsecondsPerDay - 1},
 	}
 	for _, td := range testData {
-		d := duration.Duration{Nanos: td.micros * nanosPerMicro}
+		d := duration.MakeDuration(td.micros*nanosPerMicro, 0, 0)
 		t.Run(fmt.Sprintf("%s,%s", td.t, d), func(t *testing.T) {
 			actual := td.t.Add(d)
 			if actual != td.exp {
@@ -101,12 +120,14 @@ func TestDifference(t *testing.T) {
 		{New(0, 0, 0, 0), New(0, 0, 0, 0), 0},
 		{New(0, 0, 0, 1), New(0, 0, 0, 0), 1},
 		{New(0, 0, 0, 0), New(0, 0, 0, 1), -1},
-		{Max, Min, microsecondsPerDay - 1},
-		{Min, Max, -1 * (microsecondsPerDay - 1)},
+		{Time2400, Min, microsecondsPerDay},
+		{Max, Min, microsecondsPerDay},
+		{Min, Max, -1 * (microsecondsPerDay)},
+		{Min, Time2400, -1 * (microsecondsPerDay)},
 	}
 	for _, td := range testData {
 		t.Run(fmt.Sprintf("%s,%s", td.t1, td.t2), func(t *testing.T) {
-			actual := Difference(td.t1, td.t2).Nanos / nanosPerMicro
+			actual := Difference(td.t1, td.t2).Nanos() / nanosPerMicro
 			if actual != td.expMicros {
 				t.Errorf("expected %d, got %d", td.expMicros, actual)
 			}

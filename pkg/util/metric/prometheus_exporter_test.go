@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package metric
 
@@ -33,8 +29,9 @@ func TestPrometheusExporter(t *testing.T) {
 	r2.AddMetric(NewCounter(c2Meta))
 
 	pe := MakePrometheusExporter()
-	pe.ScrapeRegistry(r1)
-	pe.ScrapeRegistry(r2)
+	const includeChildMetrics = false
+	pe.ScrapeRegistry(r1, includeChildMetrics)
+	pe.ScrapeRegistry(r2, includeChildMetrics)
 
 	type metricLabels map[string]string
 	type family struct {
@@ -83,6 +80,36 @@ func TestPrometheusExporter(t *testing.T) {
 						l.GetName(), i, name, l.GetValue(), val)
 				}
 			}
+		}
+	}
+
+	// Test Gather
+	families, err := pe.Gather()
+	if err != nil {
+		t.Errorf("unexpected error from Gather(): %v", err)
+	}
+	for _, fam := range families {
+		if len(fam.Metric) == 0 {
+			t.Errorf("gathered %s has no data points", fam.GetName())
+		}
+	}
+
+	// Test clearMetrics
+	pe.clearMetrics()
+	for _, fam := range pe.families {
+		if numPoints := len(fam.Metric); numPoints != 0 {
+			t.Errorf("%s has %d data points, want 0", fam.GetName(), numPoints)
+		}
+	}
+	// Check families returned by Gather are empty, right after calling clearMetrics
+	// before another call to scrape.
+	families, err = pe.Gather()
+	if err != nil {
+		t.Errorf("unexpected error from Gather(): %v", err)
+	}
+	for _, fam := range families {
+		if num := len(fam.Metric); num != 0 {
+			t.Errorf("gathered %s has %d data points but expect none", fam.GetName(), num)
 		}
 	}
 }

@@ -1,0 +1,43 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.text
+  letter-spacing $letter-spacing--compact
+
+.text--heading-1
+  @extend $text--heading-1
+
+.text--heading-2
+  @extend $text--heading-2
+
+.text--heading-3
+  @extend $text--heading-3
+
+.text--heading-5
+  @extend $text--heading-5
+
+.text--body
+  @extend $text--body
+
+.text--body-strong
+  @extend $text--body-strong
+
+.text--code
+  @extend $text--code
+
+.text--disabled
+  color $colors--disabled
+
+.text--no-wrap
+  text-overflow ellipsis
+  white-space nowrap
+  overflow hidden

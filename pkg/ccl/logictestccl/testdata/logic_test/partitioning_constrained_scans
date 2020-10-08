@@ -1,0 +1,262 @@
+# LogicTest: local fakedist
+
+# Simple partitioning example.
+statement ok
+CREATE TABLE abc (a INT8, b INT8, c INT8, PRIMARY KEY (a, b, c))
+    PARTITION BY LIST (a, b) (PARTITION small VALUES IN ((1, 1), (2, 2), (3, 3)))
+
+# Insert one value in a partition, one value out of all partitions
+# and one that doesn't satisfy the condition.
+statement ok
+INSERT INTO abc VALUES (1, 2, 4), (1, 1, 4), (0, 0, 0)
+
+query III rowsort
+SELECT * FROM abc
+----
+0  0  0
+1  1  4
+1  2  4
+
+# Make sure 2 values can be seen even when the partition constraints are used.
+# The (0, 0, 0) value should not be seen because the remaining filters
+# will be applied properly.
+query III rowsort
+SELECT * FROM abc where c = 4
+----
+1  1  4
+1  2  4
+
+# Use the partition values to constrain the scan.
+query T
+EXPLAIN (OPT) SELECT * FROM abc where c = 4
+----
+select
+ ├── scan abc
+ │    └── constraint: /1/2/3
+ │         ├── [ - /1/0/4]
+ │         ├── [/1/1/4 - /1/1/4]
+ │         ├── [/1/2/4 - /2/1/4]
+ │         ├── [/2/2/4 - /2/2/4]
+ │         ├── [/2/3/4 - /3/2/4]
+ │         ├── [/3/3/4 - /3/3/4]
+ │         └── [/3/4/4 - ]
+ └── filters
+      └── c = 4
+
+# Each partition has multiple spans.
+query T
+EXPLAIN (OPT) SELECT * FROM abc where c = 4 OR c = 6
+----
+select
+ ├── scan abc
+ │    └── constraint: /1/2/3
+ │         ├── [ - /1/0/6]
+ │         ├── [/1/1/4 - /1/1/4]
+ │         ├── [/1/1/6 - /1/1/6]
+ │         ├── [/1/2/4 - /2/1/6]
+ │         ├── [/2/2/4 - /2/2/4]
+ │         ├── [/2/2/6 - /2/2/6]
+ │         ├── [/2/3/4 - /3/2/6]
+ │         ├── [/3/3/4 - /3/3/4]
+ │         ├── [/3/3/6 - /3/3/6]
+ │         └── [/3/4/4 - ]
+ └── filters
+      └── (c = 4) OR (c = 6)
+
+# The partition spans and the in between spans both can't simplify all filters
+# and so we have the ((c % 2) = 1) filter remaining. This tests that the filter
+# still remains but is also not duplicated.
+query T
+EXPLAIN (OPT) SELECT * FROM abc where (c > 0 AND c < 10) AND (c % 2 = 1)
+----
+select
+ ├── scan abc
+ │    └── constraint: /1/2/3
+ │         ├── [ - /1/0/9]
+ │         ├── [/1/1/1 - /1/1/9]
+ │         ├── [/1/2/1 - /2/1/9]
+ │         ├── [/2/2/1 - /2/2/9]
+ │         ├── [/2/3/1 - /3/2/9]
+ │         ├── [/3/3/1 - /3/3/9]
+ │         └── [/3/4/1 - ]
+ └── filters
+      ├── (c % 2) = 1
+      └── (c > 0) AND (c < 10)
+
+# Perhaps an unintuitive example. The partition constraints don't really help
+# constrain the index. None of the spans created by the partitioning are constrained
+# and so this is equivalent to an unconstrained scan.
+query T
+EXPLAIN (OPT) SELECT * FROM abc where b = 3
+----
+select
+ ├── scan abc
+ └── filters
+      └── b = 3
+
+# The orders example that inspired the partitioning index scan (with creation
+# timestamp replaced with sequence number to reduce clutter in spans).
+statement ok
+CREATE TABLE orders (
+    region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, seq_num INT NOT NULL,
+    PRIMARY KEY (region, id)
+)
+
+# Create an index with the appropriate partitions.
+statement ok
+CREATE INDEX orders_by_seq_num
+    ON orders (region, seq_num, id)
+    STORING (total)
+    PARTITION BY LIST (region)
+        (
+            PARTITION us_east1 VALUES IN ('us-east1'),
+            PARTITION us_west1 VALUES IN ('us-west1'),
+            PARTITION europe_west2 VALUES IN ('europe-west2')
+        )
+
+# The index is used instead of the table scan.
+query T
+EXPLAIN (OPT) SELECT sum(total) FROM "orders" WHERE seq_num >= 100 AND seq_num < 200;
+----
+scalar-group-by
+ ├── select
+ │    ├── scan orders@orders_by_seq_num
+ │    │    └── constraint: /1/4/2
+ │    │         ├── [ - /'europe-west2')
+ │    │         ├── [/'europe-west2'/100 - /'europe-west2'/199]
+ │    │         ├── [/e'europe-west2\x00'/100 - /'us-east1')
+ │    │         ├── [/'us-east1'/100 - /'us-east1'/199]
+ │    │         ├── [/e'us-east1\x00'/100 - /'us-west1')
+ │    │         ├── [/'us-west1'/100 - /'us-west1'/199]
+ │    │         └── [/e'us-west1\x00'/100 - ]
+ │    └── filters
+ │         └── (seq_num >= 100) AND (seq_num < 200)
+ └── aggregations
+      └── sum
+           └── total
+
+# The partition values are not required as the index is constrained as is.
+query T
+EXPLAIN (OPT) SELECT sum(total) FROM "orders" WHERE region = 'us-east1' AND seq_num >= 100 AND seq_num < 200;
+----
+scalar-group-by
+ ├── scan orders@orders_by_seq_num
+ │    └── constraint: /1/4/2: [/'us-east1'/100 - /'us-east1'/199]
+ └── aggregations
+      └── sum
+           └── total
+
+# Create a truly distributed and partitioned table where we use multi-column
+# partitions.
+statement ok
+CREATE TABLE solar_system (
+    planet STRING, region STRING, subregion STRING, val INT8,
+    PRIMARY KEY (planet, region, subregion, val)
+)
+    PARTITION BY LIST (planet, region, subregion)
+        (
+            PARTITION westcoast VALUES IN (('earth', 'us', 'seatle'), ('earth', 'us', 'cali')),
+            PARTITION eu VALUES IN (('earth', 'eu', DEFAULT)),
+            PARTITION us VALUES IN (('earth', 'us', DEFAULT)),
+            PARTITION earth VALUES IN (('earth', DEFAULT, DEFAULT)),
+            PARTITION mars VALUES IN (('mars', DEFAULT, DEFAULT)),
+            PARTITION jupiter VALUES IN (('jupiter', DEFAULT, DEFAULT)),
+            PARTITION titan VALUES IN (('jupiter', 'titan', DEFAULT)),
+            PARTITION red_spot VALUES IN (('jupiter', 'titan', 'red spot'))
+        )
+
+statement ok
+insert into solar_system values ('earth', 'us', 'seatle', 1);
+
+statement ok
+insert into solar_system values ('earth', 'us', 'cali', 2);
+
+statement ok
+insert into solar_system values ('earth', 'us', 'cali', 3);
+
+statement ok
+insert into solar_system values ('earth', 'eu', '', 4);
+
+statement ok
+insert into solar_system values ('mars', '', '', 5);
+
+statement ok
+insert into solar_system values ('jupiter', '', '', 6);
+
+statement ok
+insert into solar_system values ('jupiter', 'titan', '', 7);
+
+statement ok
+insert into solar_system values ('jupiter', 'titan', 'red spot', 8);
+
+query TTTI
+select * from solar_system where val < 9 order by (planet, region, subregion, val)
+----
+earth    eu     ·         4
+earth    us     cali      2
+earth    us     cali      3
+earth    us     seatle    1
+jupiter  ·      ·         6
+jupiter  titan  ·         7
+jupiter  titan  red spot  8
+mars     ·      ·         5
+
+query T
+EXPLAIN (OPT) select * from solar_system where val = 8
+----
+select
+ ├── scan solar_system
+ │    └── constraint: /1/2/3/4
+ │         ├── [ - /'earth'/'us'/'cali')
+ │         ├── [/'earth'/'us'/'cali'/8 - /'earth'/'us'/'cali'/8]
+ │         ├── [/'earth'/'us'/e'cali\x00'/8 - /'earth'/'us'/'seatle')
+ │         ├── [/'earth'/'us'/'seatle'/8 - /'earth'/'us'/'seatle'/8]
+ │         ├── [/'earth'/'us'/e'seatle\x00'/8 - /'jupiter'/'titan'/'red spot')
+ │         ├── [/'jupiter'/'titan'/'red spot'/8 - /'jupiter'/'titan'/'red spot'/8]
+ │         └── [/'jupiter'/'titan'/e'red spot\x00'/8 - ]
+ └── filters
+      └── val = 8
+
+query T
+EXPLAIN (OPT) select * from solar_system where val > 6 AND val < 9
+----
+select
+ ├── scan solar_system
+ │    └── constraint: /1/2/3/4
+ │         ├── [ - /'earth'/'us'/'cali')
+ │         ├── [/'earth'/'us'/'cali'/7 - /'earth'/'us'/'cali'/8]
+ │         ├── [/'earth'/'us'/e'cali\x00'/7 - /'earth'/'us'/'seatle')
+ │         ├── [/'earth'/'us'/'seatle'/7 - /'earth'/'us'/'seatle'/8]
+ │         ├── [/'earth'/'us'/e'seatle\x00'/7 - /'jupiter'/'titan'/'red spot')
+ │         ├── [/'jupiter'/'titan'/'red spot'/7 - /'jupiter'/'titan'/'red spot'/8]
+ │         └── [/'jupiter'/'titan'/e'red spot\x00'/7 - ]
+ └── filters
+      └── (val > 6) AND (val < 9)
+
+# Test telemetry about this optimization works.
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.partitioning.partition-constrained-scan' AND usage_count > 0
+----
+sql.partitioning.partition-constrained-scan
+
+# Regression test for #44154: a remaining filter that is not identical to an
+# input filter should not be dropped.
+statement ok
+CREATE TABLE t0(c0 BOOL UNIQUE, c1 BOOL CHECK (true))
+
+statement ok
+INSERT INTO t0(c0) VALUES (true)
+
+query T
+EXPLAIN (OPT) SELECT * FROM t0 WHERE t0.c0 AND (c1 OR (c0 > false AND c0 < false))
+----
+select
+ ├── index-join t0
+ │    └── scan t0@t0_c0_key
+ │         └── constraint: /1: [/true - /true]
+ └── filters
+      └── c1 OR (c0 < false)
+
+query BB
+SELECT * FROM t0 WHERE t0.c0 AND (c1 OR (c0 > false AND c0 < false))
+----

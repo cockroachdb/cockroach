@@ -1,5 +1,15 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import React from "react";
-import { withRouter, WithRouterProps } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 
 import { AdminUIState } from "src/redux/state";
@@ -9,43 +19,43 @@ interface RequireLoginProps {
   loginState: LoginState;
 }
 
-class RequireLogin extends React.Component<WithRouterProps & RequireLoginProps> {
-  componentWillMount() {
+class RequireLogin extends React.Component<RouteComponentProps & RequireLoginProps> {
+  componentDidMount() {
     this.checkLogin();
   }
 
-  componentWillReceiveProps() {
+  componentDidUpdate() {
     this.checkLogin();
   }
 
   checkLogin() {
-    const { location, router } = this.props;
+    const { location, history } = this.props;
 
-    if (!this.hasAccess()) {
-      router.push(getLoginPage(location));
+    if (!this.hideLoginPage()) {
+      history.push(getLoginPage(location));
     }
   }
 
-  hasAccess() {
-    return this.props.loginState.hasAccess();
+  hideLoginPage() {
+    return this.props.loginState.hideLoginPage();
   }
 
   render() {
-    if (!this.hasAccess()) {
+    if (!this.hideLoginPage()) {
       return null;
     }
 
-    return (<React.Fragment>{ this.props.children }</React.Fragment>);
+    return this.props.children;
   }
 }
 
 // tslint:disable-next-line:variable-name
-const RequireLoginConnected = connect(
+const RequireLoginConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       loginState: selectLoginState(state),
     };
   },
-)(withRouter(RequireLogin));
+)(RequireLogin));
 
 export default RequireLoginConnected;

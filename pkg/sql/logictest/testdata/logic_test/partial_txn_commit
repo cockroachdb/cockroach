@@ -1,0 +1,36 @@
+# This test exercises the presence of an explanatory hint when a transaction
+# ends up partially committed and partially aborted.
+
+statement ok
+CREATE TABLE t (x INT); INSERT INTO t (x) VALUES (0);
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN z INT DEFAULT 123
+
+statement ok
+INSERT INTO t (x) VALUES (1)
+
+statement ok
+ALTER TABLE t ADD COLUMN y FLOAT AS (1::FLOAT / x::FLOAT) STORED
+
+statement error pgcode XXA00 division by zero.*\nHINT:.*\nManual inspection may be required
+COMMIT
+
+# Verify that the txn was indeed partially committed: the INSERT succeeded.
+query I rowsort
+SELECT * FROM t
+----
+0
+1
+
+# Verify that the txn was indeed partially aborted: the first ALTER failed.
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+   x INT8 NULL,
+   FAMILY "primary" (x, rowid)
+)

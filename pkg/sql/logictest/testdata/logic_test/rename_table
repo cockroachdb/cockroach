@@ -1,5 +1,3 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement error pgcode 42P01 relation "foo" does not exist
 ALTER TABLE foo RENAME TO bar
 
@@ -21,10 +19,10 @@ SELECT * FROM kv
 1 2
 3 4
 
-query T
+query TTTTI
 SHOW TABLES
 ----
-kv
+public  kv  table  root  0
 
 statement ok
 ALTER TABLE kv RENAME TO new_kv
@@ -38,10 +36,10 @@ SELECT * FROM new_kv
 1 2
 3 4
 
-query T
+query TTTTI
 SHOW TABLES
 ----
-new_kv
+public  new_kv  table  root  0
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
 query TTTTT
@@ -97,11 +95,11 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER TABLE test.t RENAME TO t2
 
-query T
+query TTTTI
 SHOW TABLES
 ----
-new_kv
-t2
+public  new_kv  table  root  0
+public  t2      table  root  0
 
 user testuser
 
@@ -124,15 +122,15 @@ ALTER TABLE test.new_kv RENAME TO test2.t
 statement ok
 ALTER TABLE test.t2 RENAME TO test2.t2
 
-query T
+query TTTTI
 SHOW TABLES
 ----
 
-query T
+query TTTTI
 SHOW TABLES FROM test2
 ----
-t
-t2
+public  t   table  root  NULL
+public  t2  table  root  NULL
 
 user root
 
@@ -211,25 +209,6 @@ INSERT INTO d.kv (k,v) VALUES ('g', 'h')
 statement ok
 ROLLBACK
 
-# The reuse of a name is allowed.
-statement ok
-BEGIN
-
-statement ok
-ALTER DATABASE d RENAME TO dnew
-
-statement ok
-CREATE DATABASE d
-
-statement ok
-CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR)
-
-statement ok
-INSERT INTO d.kv (k,v) VALUES ('a', 'b')
-
-statement ok
-COMMIT
-
 # Check that on a rollback a database name cannot be used.
 statement ok
 BEGIN
@@ -261,3 +240,24 @@ ROLLBACK
 
 statement error pgcode 42P01 relation \"d.kv2\" does not exist
 INSERT INTO d.kv2 (k,v) VALUES ('c', 'd')
+
+statement ok
+USE d
+
+query TTTTI
+SHOW TABLES
+----
+public  kv  table  root  0
+
+query TTT
+EXPLAIN ALTER TABLE kv RENAME TO kv2
+----
+·             distribution  local
+·             vectorized    false
+rename table  ·             ·
+
+# Verify that the EXPLAIN above does not actually rename the table (#30543)
+query TTTTI
+SHOW TABLES
+----
+public  kv  table  root  0

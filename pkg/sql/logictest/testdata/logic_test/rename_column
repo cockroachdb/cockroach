@@ -1,11 +1,9 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE users (
   uid    INT PRIMARY KEY,
   name  VARCHAR NOT NULL,
   title VARCHAR,
-  INDEX foo (name),
+  INDEX foo (name) STORING (title),
   UNIQUE INDEX bar (uid, name)
 )
 
@@ -19,10 +17,10 @@ uid name  title
 1  tom   cat
 2  jerry rat
 
-statement error column name "name" already exists
+statement error pq: column "name" of relation "users" already exists
 ALTER TABLE users RENAME COLUMN title TO name
 
-statement error empty column name
+statement error pgcode 42601 empty column name
 ALTER TABLE users RENAME COLUMN title TO ""
 
 statement error pgcode 42703 column "ttle" does not exist
@@ -49,7 +47,7 @@ id name  species
 
 user testuser
 
-statement error user testuser does not have CREATE privilege on relation users
+statement error pq: must be owner of table users or have CREATE privilege on table users
 ALTER TABLE users RENAME COLUMN name TO username
 
 user root
@@ -78,7 +76,8 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
 users       foo         true        1             username     ASC        false    false
-users       foo         true        2             id           ASC        false    true
+users       foo         true        2             species      N/A        true     false
+users       foo         true        3             id           ASC        false    true
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             username     ASC        false    false
 
@@ -107,3 +106,39 @@ ALTER TABLE users RENAME COLUMN id TO uid
 # TODO(knz): restore test after #17269 / #10083 is fixed.
 # statement ok
 # ALTER TABLE users RENAME COLUMN username TO name
+
+statement ok
+DROP VIEW v2
+
+query T
+SELECT column_name FROM [SHOW COLUMNS FROM users]
+----
+id
+username
+species
+
+query TTT
+EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
+----
+·            distribution  local
+·            vectorized    false
+alter table  ·             ·
+
+# Verify that EXPLAIN did not actually rename the column
+query T
+SELECT column_name FROM [SHOW COLUMNS FROM users]
+----
+id
+username
+species
+
+# Check that a column can be added and renamed in the same statement
+statement ok
+ALTER TABLE users RENAME COLUMN species TO species_old,
+                  ADD COLUMN species STRING AS (species_old || ' woo') STORED
+
+query T rowsort
+SELECT species FROM users
+----
+cat woo
+rat woo

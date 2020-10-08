@@ -1,97 +1,172 @@
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 build
 EXPLAIN SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:4(string) description:5(string)
- └── scan xy
-      └── columns: x:1(int!null) y:2(int)
-
-build
-EXPLAIN (PLAN,SYMVARS) SELECT * FROM xy
-----
-explain
- ├── columns: tree:3(string) field:4(string) description:5(string)
- └── scan xy
-      └── columns: x:1(int!null) y:2(int)
+ ├── columns: tree:4 field:5 description:6
+ └── project
+      ├── columns: x:1!null y:2
+      └── scan xy
+           └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 build
 EXPLAIN (TYPES) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
- └── scan xy
-      └── columns: x:1(int!null) y:2(int)
+ ├── columns: tree:4 field:7 description:8 columns:9 ordering:10  [hidden: level:5 node_type:6]
+ └── project
+      ├── columns: x:1!null y:2
+      └── scan xy
+           └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 build
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
- └── scan xy
-      └── columns: x:1(int!null) y:2(int)
+ ├── columns: tree:4 field:7 description:8 columns:9 ordering:10  [hidden: level:5 node_type:6]
+ ├── mode: verbose
+ └── project
+      ├── columns: x:1!null y:2
+      └── scan xy
+           └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 # Verify we preserve the ordering requirement of the explained query.
 build
 EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
+ ├── columns: tree:4 field:7 description:8 columns:9 ordering:10  [hidden: level:5 node_type:6]
+ ├── mode: verbose
  └── sort
-      ├── columns: x:1(int!null) y:2(int)
+      ├── columns: x:1!null y:2
       ├── ordering: +2
-      └── scan xy
-           └── columns: x:1(int!null) y:2(int)
+      └── project
+           ├── columns: x:1!null y:2
+           └── scan xy
+                └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
 
 build
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
 ----
 explain
- ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
- └── inner-join
-      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
-      ├── scan xy
-      │    └── columns: x:1(int!null) y:2(int)
-      ├── values
-      │    ├── columns: column1:3(int) column2:4(int)
-      │    ├── tuple [type=tuple{int, int}]
-      │    │    ├── const: 1 [type=int]
-      │    │    └── const: 2 [type=int]
-      │    └── tuple [type=tuple{int, int}]
-      │         ├── const: 3 [type=int]
-      │         └── const: 4 [type=int]
-      └── filters [type=bool]
-           └── eq [type=bool]
-                ├── variable: xy.x [type=int]
-                └── variable: column1 [type=int]
+ ├── columns: tree:6 field:9 description:10 columns:11 ordering:12  [hidden: level:7 node_type:8]
+ ├── mode: verbose
+ └── project
+      ├── columns: x:1!null y:2 u:4!null v:5!null
+      └── inner-join (hash)
+           ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 column1:4!null column2:5!null
+           ├── scan xy
+           │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+           ├── values
+           │    ├── columns: column1:4!null column2:5!null
+           │    ├── (1, 2)
+           │    └── (3, 4)
+           └── filters
+                └── x:1 = column1:4
 
 build
 SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ]
 ----
-project
- ├── columns: tree:3(string)
- └── explain
-      ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
-      └── scan xy
-           └── columns: x:1(int!null) y:2(int)
+with &1
+ ├── columns: tree:11
+ ├── explain
+ │    ├── columns: tree:4 level:5 node_type:6 field:7 description:8 columns:9 ordering:10
+ │    ├── mode: verbose
+ │    └── project
+ │         ├── columns: x:1!null y:2
+ │         └── scan xy
+ │              └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+ └── project
+      ├── columns: tree:11
+      └── with-scan &1
+           ├── columns: tree:11 level:12 node_type:13 field:14 description:15 columns:16 ordering:17
+           └── mapping:
+                ├──  tree:4 => tree:11
+                ├──  level:5 => level:12
+                ├──  node_type:6 => node_type:13
+                ├──  field:7 => field:14
+                ├──  description:8 => description:15
+                ├──  columns:9 => columns:16
+                └──  ordering:10 => ordering:17
 
 build
 SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y ]
 ----
-project
- ├── columns: tree:3(string)
- └── explain
-      ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
-      └── sort
-           ├── columns: x:1(int!null) x:1(int!null) y:2(int)
-           ├── ordering: +2
-           └── scan xy
-                └── columns: x:1(int!null) y:2(int)
+with &1
+ ├── columns: tree:11
+ ├── explain
+ │    ├── columns: tree:4 level:5 node_type:6 field:7 description:8 columns:9 ordering:10
+ │    ├── mode: verbose
+ │    └── sort
+ │         ├── columns: x:1!null x:1!null y:2
+ │         ├── ordering: +2
+ │         └── project
+ │              ├── columns: x:1!null y:2
+ │              └── scan xy
+ │                   └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+ └── project
+      ├── columns: tree:11
+      └── with-scan &1
+           ├── columns: tree:11 level:12 node_type:13 field:14 description:15 columns:16 ordering:17
+           └── mapping:
+                ├──  tree:4 => tree:11
+                ├──  level:5 => level:12
+                ├──  node_type:6 => node_type:13
+                ├──  field:7 => field:14
+                ├──  description:8 => description:15
+                ├──  columns:9 => columns:16
+                └──  ordering:10 => ordering:17
+
+build
+SELECT json FROM [EXPLAIN (DISTSQL) SELECT * FROM xy] WHERE false
+----
+with &1
+ ├── columns: json:9
+ ├── explain
+ │    ├── columns: automatic:4 url:5 json:6
+ │    ├── mode: distsql
+ │    └── project
+ │         ├── columns: x:1!null y:2
+ │         └── scan xy
+ │              └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+ └── project
+      ├── columns: json:9
+      └── select
+           ├── columns: automatic:7 url:8 json:9
+           ├── with-scan &1
+           │    ├── columns: automatic:7 url:8 json:9
+           │    └── mapping:
+           │         ├──  automatic:4 => automatic:7
+           │         ├──  url:5 => url:8
+           │         └──  json:6 => json:9
+           └── filters
+                └── false
+
+# Don't include hidden columns on a SELECT *.
+build
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM xy] WHERE false
+----
+with &1
+ ├── columns: automatic:7 url:8
+ ├── explain
+ │    ├── columns: automatic:4 url:5 json:6
+ │    ├── mode: distsql
+ │    └── project
+ │         ├── columns: x:1!null y:2
+ │         └── scan xy
+ │              └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
+ └── project
+      ├── columns: automatic:7 url:8
+      └── select
+           ├── columns: automatic:7 url:8 json:9
+           ├── with-scan &1
+           │    ├── columns: automatic:7 url:8 json:9
+           │    └── mapping:
+           │         ├──  automatic:4 => automatic:7
+           │         ├──  url:5 => url:8
+           │         └──  json:6 => json:9
+           └── filters
+                └── false

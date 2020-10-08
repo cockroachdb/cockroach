@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -19,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -32,32 +29,6 @@ import (
 // - resolution algorithms. These are used to map an unresolved name
 //   or pattern to something looked up from the database.
 //
-
-// NormalizeTableName transforms an UnresolvedName into a TableName.
-// This does not perform name resolution.
-func NormalizeTableName(n *UnresolvedName) (res TableName, err error) {
-	if n.NumParts < 1 || n.NumParts > 3 || n.Star {
-		// The Star part of the condition is really an assertion. The
-		// parser should not have let this star propagate to a point where
-		// this method is called.
-		return res, newInvTableNameError(n)
-	}
-
-	// Check that all the parts specified are not empty.
-	// It's OK if the catalog name is empty.
-	// We allow this in e.g. `select * from "".crdb_internal.tables`.
-	lastCheck := n.NumParts
-	if lastCheck > 2 {
-		lastCheck = 2
-	}
-	for i := 0; i < lastCheck; i++ {
-		if len(n.Parts[i]) == 0 {
-			return res, newInvTableNameError(n)
-		}
-	}
-
-	return makeTableNameFromUnresolvedName(n), nil
-}
 
 // classifyTablePattern distinguishes between a TableName (last name
 // part is a table name) and an AllTablesSelector.
@@ -85,7 +56,7 @@ func classifyTablePattern(n *UnresolvedName) (TablePattern, error) {
 
 	// Construct the result.
 	if n.Star {
-		return &AllTablesSelector{makeTableNamePrefixFromUnresolvedName(n)}, nil
+		return &AllTablesSelector{makeObjectNamePrefixFromUnresolvedName(n)}, nil
 	}
 	tb := makeTableNameFromUnresolvedName(n)
 	return &tb, nil
@@ -97,7 +68,7 @@ func classifyTablePattern(n *UnresolvedName) (TablePattern, error) {
 // Used e.g. in SELECT clauses.
 func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 	if n.NumParts < 1 || n.NumParts > 4 {
-		return nil, newInvColRef("invalid column name: %s", n)
+		return nil, newInvColRef(n)
 	}
 
 	// Check that all the parts specified are not empty.
@@ -114,17 +85,25 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 	}
 	for i := firstCheck; i < lastCheck; i++ {
 		if len(n.Parts[i]) == 0 {
-			return nil, newInvColRef("invalid column name: %s", n)
+			return nil, newInvColRef(n)
 		}
 	}
 
 	// Construct the result.
-	tn := UnresolvedName{
-		NumParts: n.NumParts - 1,
-		Parts:    NameParts{n.Parts[1], n.Parts[2], n.Parts[3]},
+	var tn *UnresolvedObjectName
+	if n.NumParts > 1 {
+		var err error
+		tn, err = NewUnresolvedObjectName(
+			n.NumParts-1,
+			[3]string{n.Parts[1], n.Parts[2], n.Parts[3]},
+			NoAnnotation,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if n.Star {
-		return &AllColumnsSelector{tn}, nil
+		return &AllColumnsSelector{TableName: tn}, nil
 	}
 	return &ColumnItem{TableName: tn, ColumnName: Name(n.Parts[0])}, nil
 }
@@ -134,7 +113,7 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 const (
 	// PublicSchema is the name of the physical schema in every
 	// database/catalog.
-	PublicSchema string = "public"
+	PublicSchema string = sessiondata.PublicSchemaName
 	// PublicSchemaName is the same, typed as Name.
 	PublicSchemaName Name = Name(PublicSchema)
 )
@@ -192,7 +171,7 @@ type ColumnResolutionResult interface {
 func (a *AllColumnsSelector) Resolve(
 	ctx context.Context, r ColumnItemResolver,
 ) (srcName *TableName, srcMeta ColumnSourceMeta, err error) {
-	prefix := makeTableNameFromUnresolvedName(&a.TableName)
+	prefix := a.TableName.ToTableName()
 
 	// Is there a data source with this prefix?
 	var res NumResolutionResults
@@ -223,7 +202,7 @@ func (c *ColumnItem) Resolve(
 	ctx context.Context, r ColumnItemResolver,
 ) (ColumnResolutionResult, error) {
 	colName := c.ColumnName
-	if c.TableName.NumParts == 0 {
+	if c.TableName == nil {
 		// Naked column name: simple case.
 		srcName, srcMeta, cHint, err := r.FindSourceProvidingColumn(ctx, colName)
 		if err != nil {
@@ -233,7 +212,7 @@ func (c *ColumnItem) Resolve(
 	}
 
 	// There is a prefix. We need to search for it.
-	prefix := makeTableNameFromUnresolvedName(&c.TableName)
+	prefix := c.TableName.ToTableName()
 
 	// Is there a data source with this prefix?
 	res, srcName, srcMeta, err := r.FindSourceMatchingName(ctx, prefix)
@@ -253,14 +232,16 @@ func (c *ColumnItem) Resolve(
 		}
 	}
 	if res == NoResults {
-		return nil, newSourceNotFoundError("no data source matches prefix: %s", &c.TableName)
+		return nil, newSourceNotFoundError("no data source matches prefix: %s in this context", c.TableName)
 	}
 	return r.Resolve(ctx, srcName, srcMeta, -1, colName)
 }
 
-// TableNameTargetResolver is the helper interface to resolve table
-// names when the object is not expected to exist.
-type TableNameTargetResolver interface {
+// ObjectNameTargetResolver is the helper interface to resolve object
+// names when the object is not expected to exist. The planner implements
+// LookupSchema to return an object consisting of the parent database and
+// resolved target schema.
+type ObjectNameTargetResolver interface {
 	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
 }
 
@@ -270,10 +251,14 @@ type SchemaMeta interface {
 	SchemaMeta()
 }
 
-// TableNameExistingResolver is the helper interface to resolve table
-// names when the object is expected to exist already.
-type TableNameExistingResolver interface {
-	LookupObject(ctx context.Context, dbName, scName, obName string) (found bool, objMeta NameResolutionResult, err error)
+// ObjectNameExistingResolver is the helper interface to resolve table
+// names when the object is expected to exist already. The boolean passed
+// is used to specify if a MutableTableDescriptor is to be returned in the
+// result.
+type ObjectNameExistingResolver interface {
+	LookupObject(ctx context.Context, flags ObjectLookupFlags, dbName, scName, obName string) (
+		found bool, objMeta NameResolutionResult, err error,
+	)
 }
 
 // NameResolutionResult is an opaque reference returned by LookupObject().
@@ -282,15 +267,40 @@ type NameResolutionResult interface {
 	NameResolutionResult()
 }
 
-// ResolveExisting performs name resolution for a table name when
-// the target object is expected to exist already.
-func (t *TableName) ResolveExisting(
-	ctx context.Context, r TableNameExistingResolver, curDb string, searchPath sessiondata.SearchPath,
-) (bool, NameResolutionResult, error) {
-	if t.ExplicitSchema {
-		if t.ExplicitCatalog {
+// ResolveExisting performs name resolution for an object name when
+// the target object is expected to exist already. It does not
+// mutate the input name. It additionally returns the resolved
+// prefix qualification for the object. For example, if the unresolved
+// name was "a.b" and the name was resolved to "a.public.b", the
+// prefix "a.public" is returned.
+func ResolveExisting(
+	ctx context.Context,
+	u *UnresolvedObjectName,
+	r ObjectNameExistingResolver,
+	lookupFlags ObjectLookupFlags,
+	curDb string,
+	searchPath sessiondata.SearchPath,
+) (bool, ObjectNamePrefix, NameResolutionResult, error) {
+	namePrefix := ObjectNamePrefix{
+		SchemaName:      Name(u.Schema()),
+		ExplicitSchema:  u.HasExplicitSchema(),
+		CatalogName:     Name(u.Catalog()),
+		ExplicitCatalog: u.HasExplicitCatalog(),
+	}
+	if u.HasExplicitSchema() {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(u.Schema())
+		if err != nil {
+			return false, namePrefix, nil, err
+		}
+		if u.HasExplicitCatalog() {
 			// Already 3 parts: nothing to search. Delegate to the resolver.
-			return r.LookupObject(ctx, t.Catalog(), t.Schema(), t.Table())
+			namePrefix.CatalogName = Name(u.Catalog())
+			namePrefix.SchemaName = Name(scName)
+			found, result, err := r.LookupObject(ctx, lookupFlags, u.Catalog(), scName, u.Object())
+			return found, namePrefix, result, err
 		}
 		// Two parts: D.T.
 		// Try to use the current database, and be satisfied if it's sufficient to find the object.
@@ -300,101 +310,137 @@ func (t *TableName) ResolveExisting(
 		// database is not set. For example, `select * from
 		// pg_catalog.pg_tables` is meant to show all tables across all
 		// databases when there is no current database set.
-		if found, objMeta, err := r.LookupObject(ctx, curDb, t.Schema(), t.Table()); found || err != nil {
+
+		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, scName, u.Object()); found || err != nil {
 			if err == nil {
-				t.CatalogName = Name(curDb)
+				namePrefix.CatalogName = Name(curDb)
+				namePrefix.SchemaName = Name(scName)
 			}
-			return found, objMeta, err
+			return found, namePrefix, objMeta, err
 		}
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T instead.
-		if found, objMeta, err := r.LookupObject(ctx, t.Schema(), PublicSchema, t.Table()); found || err != nil {
+		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, u.Schema(), PublicSchema, u.Object()); found || err != nil {
 			if err == nil {
-				t.CatalogName = t.SchemaName
-				t.SchemaName = PublicSchemaName
-				t.ExplicitCatalog = true
+				namePrefix.CatalogName = Name(u.Schema())
+				namePrefix.SchemaName = PublicSchemaName
+				namePrefix.ExplicitCatalog = true
 			}
-			return found, objMeta, err
+			return found, namePrefix, objMeta, err
 		}
 		// Welp, really haven't found anything.
-		return false, nil, nil
+		return false, namePrefix, nil, nil
 	}
 
 	// This is a naked table name. Use the search path.
 	iter := searchPath.Iter()
-	for next, ok := iter(); ok; next, ok = iter() {
-		if found, objMeta, err := r.LookupObject(ctx, curDb, next, t.Table()); found || err != nil {
+	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
+		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, next, u.Object()); found || err != nil {
 			if err == nil {
-				t.CatalogName = Name(curDb)
-				t.SchemaName = Name(next)
+				namePrefix.CatalogName = Name(curDb)
+				namePrefix.SchemaName = Name(next)
 			}
-			return found, objMeta, err
+			return found, namePrefix, objMeta, err
 		}
 	}
-	return false, nil, nil
+	return false, namePrefix, nil, nil
 }
 
-// ResolveTarget performs name resolution for a table name when
-// the target object is not expected to exist already.
-func (t *TableName) ResolveTarget(
-	ctx context.Context, r TableNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
-) (found bool, scMeta SchemaMeta, err error) {
-	if t.ExplicitSchema {
-		if t.ExplicitCatalog {
+// ResolveTarget performs name resolution for an object name when
+// the target object is not expected to exist already. It does not
+// mutate the input name. It additionally returns the resolved
+// prefix qualification for the object. For example, if the unresolved
+// name was "a.b" and the name was resolved to "a.public.b", the
+// prefix "a.public" is returned.
+func ResolveTarget(
+	ctx context.Context,
+	u *UnresolvedObjectName,
+	r ObjectNameTargetResolver,
+	curDb string,
+	searchPath sessiondata.SearchPath,
+) (found bool, namePrefix ObjectNamePrefix, scMeta SchemaMeta, err error) {
+	namePrefix = ObjectNamePrefix{
+		SchemaName:      Name(u.Schema()),
+		ExplicitSchema:  u.HasExplicitSchema(),
+		CatalogName:     Name(u.Catalog()),
+		ExplicitCatalog: u.HasExplicitCatalog(),
+	}
+	if u.HasExplicitSchema() {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(u.Schema())
+		if err != nil {
+			return false, namePrefix, nil, err
+		}
+		if u.HasExplicitCatalog() {
 			// Already 3 parts: nothing to do.
-			return r.LookupSchema(ctx, t.Catalog(), t.Schema())
+			namePrefix.CatalogName = Name(u.Catalog())
+			namePrefix.SchemaName = Name(scName)
+			found, scMeta, err = r.LookupSchema(ctx, u.Catalog(), scName)
+			return found, namePrefix, scMeta, err
 		}
 		// Two parts: D.T.
 		// Try to use the current database, and be satisfied if it's sufficient to find the object.
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, t.Schema()); found || err != nil {
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
-				t.CatalogName = Name(curDb)
+				namePrefix.CatalogName = Name(curDb)
+				namePrefix.SchemaName = Name(scName)
 			}
-			return found, scMeta, err
+			return found, namePrefix, scMeta, err
 		}
 		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
-		if found, scMeta, err = r.LookupSchema(ctx, t.Schema(), PublicSchema); found || err != nil {
+		if found, scMeta, err = r.LookupSchema(ctx, u.Schema(), PublicSchema); found || err != nil {
 			if err == nil {
-				t.CatalogName = t.SchemaName
-				t.SchemaName = PublicSchemaName
-				t.ExplicitCatalog = true
+				namePrefix.CatalogName = Name(u.Schema())
+				namePrefix.SchemaName = PublicSchemaName
+				namePrefix.ExplicitCatalog = true
 			}
-			return found, scMeta, err
+			return found, namePrefix, scMeta, err
 		}
 		// Welp, really haven't found anything.
-		return false, nil, nil
+		return false, namePrefix, nil, nil
 	}
 
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.
-	iter := searchPath.IterWithoutImplicitPGCatalog()
-	for scName, ok := iter(); ok; scName, ok = iter() {
+	iter := searchPath.IterWithoutImplicitPGSchemas()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
-				t.CatalogName = Name(curDb)
-				t.SchemaName = Name(scName)
+				namePrefix.CatalogName = Name(curDb)
+				namePrefix.SchemaName = Name(scName)
 			}
 			break
 		}
 	}
-	return found, scMeta, err
+	return found, namePrefix, scMeta, err
 }
 
 // Resolve is used for table prefixes. This is adequate for table
 // patterns with stars, e.g. AllTablesSelector.
-func (tp *TableNamePrefix) Resolve(
-	ctx context.Context, r TableNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
+func (tp *ObjectNamePrefix) Resolve(
+	ctx context.Context, r ObjectNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
 ) (found bool, scMeta SchemaMeta, err error) {
 	if tp.ExplicitSchema {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(tp.Schema())
+		if err != nil {
+			return false, nil, err
+		}
 		if tp.ExplicitCatalog {
 			// Catalog name is explicit; nothing to do.
-			return r.LookupSchema(ctx, tp.Catalog(), tp.Schema())
+			tp.SchemaName = Name(scName)
+			return r.LookupSchema(ctx, tp.Catalog(), scName)
 		}
 		// Try with the current database. This may be empty, because
 		// virtual schemas exist even when the db name is empty
 		// (CockroachDB extension).
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, tp.Schema()); found || err != nil {
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				tp.CatalogName = Name(curDb)
+				tp.SchemaName = Name(scName)
 			}
 			return found, scMeta, err
 		}
@@ -412,8 +458,8 @@ func (tp *TableNamePrefix) Resolve(
 	}
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.
-	iter := searchPath.IterWithoutImplicitPGCatalog()
-	for scName, ok := iter(); ok; scName, ok = iter() {
+	iter := searchPath.IterWithoutImplicitPGSchemas()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				tp.CatalogName = Name(curDb)
@@ -445,7 +491,7 @@ func (n *UnresolvedName) ResolveFunction(
 		// The Star part of the condition is really an assertion. The
 		// parser should not have let this star propagate to a point where
 		// this method is called.
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+		return nil, pgerror.Newf(pgcode.InvalidName,
 			"invalid function name: %s", n)
 	}
 
@@ -466,6 +512,14 @@ func (n *UnresolvedName) ResolveFunction(
 		// it in the global namespace.
 		prefix = ""
 	}
+	if prefix == sessiondata.PublicSchemaName {
+		// If the user specified public, it may be from a PostgreSQL extension.
+		// Double check the function definition allows resolution on the public
+		// schema, and resolve as such if appropriate.
+		if d, ok := FunDefs[function]; ok && d.AvailableOnPublicSchema {
+			return d, nil
+		}
+	}
 
 	if prefix != "" {
 		fullName = prefix + "." + function
@@ -477,7 +531,7 @@ func (n *UnresolvedName) ResolveFunction(
 			// The function wasn't qualified, so we must search for it via
 			// the search path first.
 			iter := searchPath.Iter()
-			for alt, ok := iter(); ok; alt, ok = iter() {
+			for alt, ok := iter.Next(); ok; alt, ok = iter.Next() {
 				fullName = alt + "." + function
 				if def, ok = FunDefs[fullName]; ok {
 					found = true
@@ -491,23 +545,133 @@ func (n *UnresolvedName) ResolveFunction(
 			if rdef, ok := FunDefs[strings.ToLower(function)]; ok {
 				extraMsg = fmt.Sprintf(", but %s() exists", rdef.Name)
 			}
-			return nil, pgerror.NewErrorf(
-				pgerror.CodeUndefinedFunctionError, "unknown function: %s()%s", ErrString(n), extraMsg)
+			return nil, pgerror.Newf(
+				pgcode.UndefinedFunction, "unknown function: %s()%s", ErrString(n), extraMsg)
 		}
 	}
 
 	return def, nil
 }
 
-func newInvColRef(fmt string, n *UnresolvedName) error {
-	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidColumnReferenceError, fmt, n)
+func newInvColRef(n *UnresolvedName) error {
+	return pgerror.NewWithDepthf(1, pgcode.InvalidColumnReference,
+		"invalid column name: %s", n)
 }
 
-func newInvTableNameError(n *UnresolvedName) error {
-	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidNameError,
+func newInvTableNameError(n fmt.Stringer) error {
+	return pgerror.NewWithDepthf(1, pgcode.InvalidName,
 		"invalid table name: %s", n)
 }
 
 func newSourceNotFoundError(fmt string, args ...interface{}) error {
-	return pgerror.NewErrorWithDepthf(1, pgerror.CodeUndefinedTableError, fmt, args...)
+	return pgerror.NewWithDepthf(1, pgcode.UndefinedTable, fmt, args...)
+}
+
+// CommonLookupFlags is the common set of flags for the various accessor interfaces.
+type CommonLookupFlags struct {
+	// if required is set, lookup will return an error if the item is not found.
+	Required bool
+	// RequireMutable specifies whether to return a mutable descriptor.
+	RequireMutable bool
+	// if AvoidCached is set, lookup will avoid the cache (if any).
+	AvoidCached bool
+	// IncludeOffline specifies if offline descriptors should be visible.
+	IncludeOffline bool
+	// IncludeOffline specifies if dropped descriptors should be visible.
+	IncludeDropped bool
+}
+
+// SchemaLookupFlags is the flag struct suitable for GetSchema().
+type SchemaLookupFlags = CommonLookupFlags
+
+// DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
+type DatabaseLookupFlags = CommonLookupFlags
+
+// DatabaseListFlags is the flag struct suitable for GetObjectNames().
+type DatabaseListFlags struct {
+	CommonLookupFlags
+	// ExplicitPrefix, when set, will cause the returned table names to
+	// have an explicit schema and catalog part.
+	ExplicitPrefix bool
+}
+
+// DesiredObjectKind represents what kind of object is desired in a name
+// resolution attempt.
+type DesiredObjectKind int
+
+const (
+	// TableObject is used when a table-like object is desired from resolution.
+	TableObject DesiredObjectKind = iota
+	// TypeObject is used when a type-like object is desired from resolution.
+	TypeObject
+)
+
+// NewQualifiedObjectName returns an ObjectName of the corresponding kind.
+// It is used mainly for constructing appropriate error messages depending
+// on what kind of object was requested.
+func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKind) ObjectName {
+	switch kind {
+	case TableObject:
+		name := MakeTableNameWithSchema(Name(catalog), Name(schema), Name(object))
+		return &name
+	case TypeObject:
+		name := MakeNewQualifiedTypeName(catalog, schema, object)
+		return &name
+	}
+	return nil
+}
+
+// RequiredTableKind controls what kind of TableDescriptor backed object is
+// requested to be resolved.
+type RequiredTableKind int
+
+// RequiredTableKind options have descriptive names.
+const (
+	ResolveAnyTableKind RequiredTableKind = iota
+	ResolveRequireTableDesc
+	ResolveRequireViewDesc
+	ResolveRequireTableOrViewDesc
+	ResolveRequireSequenceDesc
+)
+
+var requiredTypeNames = [...]string{
+	ResolveAnyTableKind:           "any",
+	ResolveRequireTableDesc:       "table",
+	ResolveRequireViewDesc:        "view",
+	ResolveRequireTableOrViewDesc: "table or view",
+	ResolveRequireSequenceDesc:    "sequence",
+}
+
+func (r RequiredTableKind) String() string {
+	return requiredTypeNames[r]
+}
+
+// ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
+type ObjectLookupFlags struct {
+	CommonLookupFlags
+	AllowWithoutPrimaryKey bool
+	// Control what type of object is being requested.
+	DesiredObjectKind DesiredObjectKind
+	// Control what kind of table object is being requested. This field is
+	// only respected when DesiredObjectKind is TableObject.
+	DesiredTableDescKind RequiredTableKind
+}
+
+// ObjectLookupFlagsWithRequired returns a default ObjectLookupFlags object
+// with just the Required flag true. This is a common configuration of the
+// flags.
+func ObjectLookupFlagsWithRequired() ObjectLookupFlags {
+	return ObjectLookupFlags{
+		CommonLookupFlags: CommonLookupFlags{Required: true},
+	}
+}
+
+// ObjectLookupFlagsWithRequiredTableKind returns an ObjectLookupFlags with
+// Required set to true, and the DesiredTableDescKind set to the input kind.
+func ObjectLookupFlagsWithRequiredTableKind(kind RequiredTableKind) ObjectLookupFlags {
+	return ObjectLookupFlags{
+		CommonLookupFlags:    CommonLookupFlags{Required: true},
+		DesiredObjectKind:    TableObject,
+		DesiredTableDescKind: kind,
+	}
 }

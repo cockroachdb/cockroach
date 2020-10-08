@@ -1,0 +1,1293 @@
+# LogicTest: local fakedist fakedist-disk 3node-tenant
+
+# Note that there is no much benefit from running this file with other logic
+# test configurations because we override vectorize setting.
+
+# Disable automatic stats.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+# NOTE: all queries in this file should run with vectorize=experimental_always
+# unless they are known to be unsupported (like CREATE, INSERT, etc). If you do
+# need to execute an unsupported query, follow the pattern of
+#   RESET vectorize
+#   <unsupported query>
+#   SET vectorize = experimental_always
+statement ok
+SET vectorize = experimental_always
+
+statement ok
+RESET vectorize;
+CREATE TABLE a (a INT, b INT, c INT4, PRIMARY KEY (a, b));
+INSERT INTO a SELECT g//2, g, g FROM generate_series(0,2000) g(g);
+SET vectorize = experimental_always
+
+query II
+SELECT a, CASE WHEN a = 0 THEN 0 WHEN a = 1 THEN 3 ELSE 5 END FROM a ORDER BY 1, 2 LIMIT 6
+----
+0  0
+0  0
+1  3
+1  3
+2  5
+2  5
+
+# Regression test for 40574.
+statement ok
+RESET vectorize;
+CREATE TABLE t40574(pk INTEGER PRIMARY KEY, col0 INTEGER, col1 FLOAT, col2 TEXT, col3 INTEGER, col4 FLOAT, col5 TEXT);
+SET vectorize = experimental_always
+
+query I
+SELECT pk FROM t40574 WHERE (col0 > 9 AND (col1 <= 6.38 OR col0 =5) AND (col0 = 7 OR col4 = 7))
+----
+
+# OR expression as projection.
+query IB rowsort
+SELECT b, b = 0 OR b = 2 FROM a WHERE b < 4
+----
+0  true
+1  false
+2  true
+3  false
+
+# OR expression as selection.
+query I rowsort
+SELECT b FROM a WHERE b = 0 OR b = 2
+----
+0
+2
+
+# Check that the right side of an OR isn't evaluated if the left side is true.
+query I rowsort
+SELECT b FROM a WHERE b = 0 OR 1/b = 1
+----
+0
+1
+
+statement ok
+RESET vectorize;
+CREATE TABLE bools (b BOOL, i INT, PRIMARY KEY (b, i)); INSERT INTO bools VALUES (true, 0), (false, 1), (true, 2), (false, 3);
+CREATE TABLE nulls (a INT, b INT);
+INSERT INTO nulls VALUES (NULL, NULL), (NULL, 1), (1, NULL), (1, 1);
+SET vectorize = experimental_always
+
+query I
+SELECT count(*) FROM a
+----
+2001
+
+query I
+SELECT count(*) FROM (SELECT DISTINCT a FROM a)
+----
+1001
+
+query III
+SELECT * FROM a ORDER BY 1, 2 LIMIT 10
+----
+0  0  0
+0  1  1
+1  2  2
+1  3  3
+2  4  4
+2  5  5
+3  6  6
+3  7  7
+4  8  8
+4  9  9
+
+query II
+SELECT DISTINCT(a), b FROM a ORDER BY 1, 2 LIMIT 10
+----
+0  0
+0  1
+1  2
+1  3
+2  4
+2  5
+3  6
+3  7
+4  8
+4  9
+
+# Simple filter.
+query I rowsort
+SELECT b FROM a WHERE b < 3
+----
+0
+1
+2
+
+# Mixed type comparison
+query IB rowsort
+SELECT c, c > 1 FROM a LIMIT 3
+----
+0  false
+1  false
+2  true
+
+# Simple filter with nulls.
+query I
+SELECT a FROM nulls WHERE a < 2
+----
+1
+1
+
+query II
+SELECT a, b FROM nulls WHERE a <= b
+----
+1 1
+
+
+# Filter on the result of a projection.
+query II
+SELECT a, b FROM a WHERE a * 2 < b ORDER BY 1, 2 LIMIT 5
+----
+0  1
+1  3
+2  5
+3  7
+4  9
+
+# Simple projection.
+query I rowsort
+SELECT b + 1 FROM a WHERE b < 3
+----
+1
+2
+3
+
+# Simple projection with nulls.
+query I rowsort
+SELECT b + 1 FROM nulls
+----
+NULL
+NULL
+2
+2
+
+query III rowsort
+SELECT a, b, a + b FROM nulls
+----
+NULL NULL NULL
+NULL 1    NULL
+1    NULL NULL
+1    1    2
+
+# Multiple step projection.
+query III rowsort
+SELECT a, b, (a + 1) * (b + 2) FROM a WHERE a < 3
+----
+0  0  2
+0  1  3
+1  2  8
+1  3  10
+2  4  18
+2  5  21
+
+statement error .* unhandled cast decimal -> int
+SELECT (a + 1.0::DECIMAL)::INT FROM a LIMIT 1
+
+# Operations with constants on the left work.
+query I
+SELECT 5 - a FROM a ORDER BY 1 DESC LIMIT 3
+----
+5
+5
+4
+
+# Constant projections.
+query II
+SELECT 5, a FROM a ORDER BY 2 LIMIT 3
+----
+5  0
+5  0
+5  1
+
+# Filter on a boolean column.
+
+query BI rowsort
+SELECT * FROM bools WHERE b
+----
+true 0
+true 2
+
+# Mismatched column types in projection.
+statement ok
+RESET vectorize;
+CREATE TABLE intdecfloat (a INT, b DECIMAL, c INT4, d INT2, e FLOAT8);
+INSERT INTO intdecfloat VALUES (1, 2.0, 3, 4, 3.5);
+SET vectorize = experimental_always
+
+statement error .* unhandled cast decimal -> int
+SELECT (a + b)::INT FROM intdecfloat
+
+query BB
+SELECT b > a, e < b FROM intdecfloat
+----
+true  false
+
+query IR
+SELECT a, b FROM intdecfloat WHERE a < b;
+----
+1  2.0
+
+query RIRRI
+SELECT a+b, a+c, b+c, b+d, c+d FROM intdecfloat
+----
+3.0  4  5.0  6.0  7
+
+query RIRRI
+SELECT a-b, a-c, b-c, b-d, c-d FROM intdecfloat
+----
+-1.0  -2  -1.0  -2.0  -1
+
+query RIRRI
+SELECT a*b, a*c, b*c, b*d, c*d FROM intdecfloat
+----
+2.0  3  6.0  8.0  12
+
+query RRRRR
+SELECT a/b, a/c, b/c, b/d, c/d FROM intdecfloat
+----
+0.5  0.33333333333333333333  0.66666666666666666667  0.5  0.75
+
+# vectorized decimal arithmetic
+statement ok
+RESET vectorize;
+CREATE table decimals (a DECIMAL, b DECIMAL);
+INSERT INTO decimals VALUES(123.0E200, 12.3);
+SET vectorize = experimental_always
+
+query R
+SELECT a*b FROM decimals
+----
+1.51290E+203
+
+query R
+SELECT a/b FROM decimals
+----
+1.0E+201
+
+query R
+SELECT a+b FROM decimals
+----
+12300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012.3
+
+query R
+SELECT a-b FROM decimals
+----
+12299999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999987.7
+
+# AND expressions.
+query IIBB rowsort
+SELECT a, b, a < 2 AND b > 0 AND a * b != 3, a < 2 AND b < 2 FROM a WHERE a < 2 AND b > 0 AND a * b != 3
+----
+0  1  true  true
+1  2  true  false
+
+query IIBBBBBB rowsort
+SELECT a, b, a < b AND NULL, a > b AND NULL, NULL OR a < b, NULL OR a > b, NULL AND NULL, NULL OR NULL FROM a WHERE a = 0
+----
+0 0 false false NULL NULL NULL NULL
+0 1 NULL  false true NULL NULL NULL
+
+statement ok
+RESET vectorize;
+CREATE TABLE b (a INT, b STRING, PRIMARY KEY (b,a));
+INSERT INTO b VALUES
+  (0, 'a'),
+  (1, 'a'),
+  (0, 'b'),
+  (1, 'b');
+SET vectorize = experimental_always
+
+query IT rowsort
+SELECT sum_int(a), b from b group by b
+----
+1 a
+1 b
+
+# Test that lookup joins run fine through columnar execution.
+
+statement ok
+RESET vectorize;
+CREATE TABLE c (a INT, b INT, c INT, d INT, PRIMARY KEY (a, c), INDEX sec (b));
+CREATE TABLE d (a INT, b INT, PRIMARY KEY (b, a));
+INSERT INTO c VALUES (1, 1, 1, 0), (2, 1, 2, 0);
+INSERT INTO d VALUES (1, 1), (1, 2);
+ALTER TABLE c INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+# Ensure that a lookup join is used. Note that this query cannot be run with
+# vectorize=experimental_always, but we check that the vectorized plan contains
+# a wrapped joinReader processor.
+query B
+SELECT count(*) > 0 FROM [EXPLAIN (VEC) SELECT c.a FROM c JOIN d ON d.b = c.b] WHERE text LIKE '%rowexec.joinReader%'
+----
+true
+
+statement ok
+SET vectorize = experimental_always
+
+# Simple lookup join.
+query I rowsort
+SELECT c.a FROM c JOIN d ON d.b = c.b
+----
+1
+2
+
+# Index join.
+query I
+SELECT c.d FROM c@sec
+----
+0
+0
+
+# Lookup join on secondary index, requires an index join into the primary
+# index. Both of these should be wrapped and work fine.
+query I
+SELECT c.d FROM c@sec JOIN d ON d.b = c.b
+----
+0
+0
+
+# Ordinality operator with a filter and limit.
+query IIII
+SELECT * FROM a WITH ORDINALITY WHERE a > 1 LIMIT 6
+----
+2  4  4  5
+2  5  5  6
+3  6  6  7
+3  7  7  8
+4  8  8  9
+4  9  9  10
+
+# Ensure that lookup joins properly get their postprocessing to select needed
+# columns.
+
+query I rowsort
+SELECT c.a FROM c INNER LOOKUP JOIN c@sec AS s ON c.b=s.b
+----
+1
+1
+2
+2
+
+# Test that LIKE expressions are properly handled by vectorized execution.
+
+statement ok
+RESET vectorize;
+CREATE TABLE e (x TEXT);
+INSERT INTO e VALUES ('abc'), ('xyz'), (NULL);
+SET vectorize = experimental_always
+
+query T
+SELECT * FROM e WHERE x LIKE ''
+----
+
+query T
+SELECT * FROM e WHERE x NOT LIKE '' ORDER BY 1
+----
+abc
+xyz
+
+query T
+SELECT * FROM e WHERE x LIKE '%' ORDER BY 1
+----
+abc
+xyz
+
+query T
+SELECT * FROM e WHERE x NOT LIKE '%'
+----
+
+query T
+SELECT * FROM e WHERE x LIKE 'ab%'
+----
+abc
+
+query T
+SELECT * FROM e WHERE x NOT LIKE 'ab%'
+----
+xyz
+
+query T
+SELECT * FROM e WHERE x LIKE '%bc'
+----
+abc
+
+query T
+SELECT * FROM e WHERE x NOT LIKE '%bc'
+----
+xyz
+
+query T
+SELECT * FROM e WHERE x LIKE '%b%'
+----
+abc
+
+query T
+SELECT * FROM e WHERE x NOT LIKE '%b%'
+----
+xyz
+
+query T
+SELECT * FROM e WHERE x LIKE 'a%c'
+----
+abc
+
+query T
+SELECT * FROM e WHERE x NOT LIKE 'a%c'
+----
+xyz
+
+query TBBBBBBBBBB
+SELECT x, x LIKE '%', x NOT LIKE '%', x LIKE 'ab%', x NOT LIKE 'ab%', x LIKE '%bc', x NOT LIKE '%bc', x LIKE '%b%', x NOT LIKE '%b%', x LIKE 'a%c', x NOT LIKE 'a%c' FROM e ORDER BY x
+----
+NULL  NULL  NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+abc   true  false  true   false  true   false  true   false  true   false
+xyz   true  false  false  true   false  true   false  true   false  true
+
+# Regression test for composite null handling
+# https://github.com/cockroachdb/cockroach/issues/37358
+statement ok
+RESET vectorize;
+CREATE TABLE composite (d DECIMAL, INDEX d_idx (d));
+INSERT INTO composite VALUES (NULL), (1), (1.0), (1.00);
+SET vectorize = experimental_always
+
+query T rowsort
+SELECT d FROM composite@primary
+----
+NULL
+1
+1.0
+1.00
+
+query T rowsort
+SELECT d FROM composite@d_idx
+----
+NULL
+1
+1.0
+1.00
+
+statement ok
+RESET vectorize
+
+# Test unhandled type conversion. (Should fall back to distsql.)
+query T
+SELECT ARRAY(SELECT 1) FROM a LIMIT 1
+----
+{1}
+
+statement ok
+SET vectorize = experimental_always
+
+# Regression test for decoding OID type.
+statement ok
+RESET vectorize;
+CREATE TABLE t38754 (a OID PRIMARY KEY);
+INSERT INTO t38754 VALUES (1);
+SET vectorize = experimental_always
+
+query O
+SELECT * FROM t38754
+----
+1
+
+# Test integer division.
+query T
+SELECT a/b FROM a WHERE b = 2
+----
+0.5
+
+# Test mixed types comparison.
+query I
+SELECT b FROM a WHERE b < 0.5
+----
+0
+
+# Test unsupported scrub (should fall back to distsql).
+statement ok
+RESET vectorize;
+CREATE TABLE t38626 (id int PRIMARY KEY, name STRING, CONSTRAINT abc CHECK (name > 'he'));
+INSERT INTO t38626 VALUES (1, 'hello');
+EXPERIMENTAL SCRUB TABLE t38626;
+SET vectorize = experimental_always
+
+# Regression test for issue with reading from system tables that have no
+# sentinel keys.
+query T
+SELECT "hashedPassword" FROM system.users LIMIT 1
+----
+·
+
+query IITI
+SELECT * FROM system.namespace LIMIT 1
+----
+0  0 defaultdb  50
+
+# Regression test for issue with fetching from unique indexes with embedded
+# nulls.
+statement ok
+RESET vectorize;
+CREATE TABLE t38753 (x INT PRIMARY KEY, y INT, UNIQUE INDEX (y)); INSERT INTO t38753 VALUES (0, NULL);
+SET vectorize = experimental_always
+
+query II
+SELECT * FROM t38753 ORDER BY y;
+----
+0  NULL
+
+# Regression test for #38752.
+query IIBB
+SELECT count(*), count(*) + 1, count(*) > 4, count(*) + 1 > 4 FROM b
+----
+4  5  false  true
+
+query I
+SELECT * FROM (SELECT count(*) AS x FROM b) WHERE x > 0;
+----
+4
+
+# Regression test for #38908
+statement ok
+RESET vectorize;
+CREATE TABLE t38908 (x INT);
+INSERT INTO t38908 VALUES (1);
+SET vectorize = experimental_always
+
+query I
+SELECT * FROM t38908 WHERE x IN (1, 2)
+----
+1
+
+# For now, we use the default vectorize setting for this query.
+# TODO(yuzefovich): with distributed configs this fails with 'zero length
+# schema unsupported' coming from NewRecordBatchSerializer(). Investigate this.
+
+statement ok
+RESET vectorize
+
+# Test that an aggregate with no aggregate functions is handled correctly.
+query III
+SELECT 0, 1 + 2, 3 * 4 FROM a HAVING true
+----
+0 3 12
+
+statement ok
+SET vectorize = experimental_always
+
+# Testing some builtin functions.
+statement ok
+RESET vectorize;
+CREATE TABLE builtin_test (x STRING, y INT);
+INSERT INTO builtin_test VALUES ('Hello', 3), ('There', 2);
+SET vectorize = experimental_always
+
+query T rowsort
+SELECT substring(x, 1, y) FROM builtin_test
+----
+Hel
+Th
+
+query T rowsort
+SELECT substring(x, 1, abs(y)) FROM builtin_test
+----
+Hel
+Th
+
+# Regression test for #44625.
+statement error negative substring length -1 not allowed
+SELECT substring(x, 0, -1) FROM builtin_test
+
+# Regression test for #44881 (non-Int64 argument types).
+query T rowsort
+SELECT substring(x, -1::INT2, 3::INT4) FROM builtin_test
+----
+H
+T
+
+query I rowsort
+SELECT abs(y) FROM builtin_test
+----
+3
+2
+
+statement ok
+RESET vectorize;
+CREATE TABLE extract_test (x DATE);
+INSERT INTO extract_test VALUES ('2017-01-01');
+SET vectorize = experimental_always
+
+query R
+SELECT EXTRACT(YEAR FROM x) FROM extract_test
+----
+2017
+
+# Regression test for #38937
+statement ok
+RESET vectorize;
+CREATE TABLE t38937 (_int2) AS SELECT 1::INT2;
+SET vectorize = experimental_always
+
+query I
+SELECT sum_int(_int2) FROM t38937
+----
+1
+
+# Regression tests for #38959
+
+statement ok
+RESET vectorize;
+CREATE TABLE t38959 (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX b_idx (b) STORING (c, d), UNIQUE INDEX c_idx (c) STORING (b, d));
+INSERT INTO t38959 VALUES (1, 2, 3, 4);
+SET tracing=on,kv,results;
+SET vectorize = experimental_always
+
+query IIII
+SELECT * FROM t38959@c_idx
+----
+1 2 3 4
+
+statement ok
+RESET vectorize;
+SET tracing=off;
+SET vectorize = experimental_always
+
+statement ok
+RESET vectorize;
+CREATE TABLE t38959_2 (x INT PRIMARY KEY, y INT, z FLOAT, INDEX xy (x, y), INDEX zyx (z, y, x), FAMILY (x), FAMILY (y), FAMILY (z));
+INSERT INTO t38959_2 VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0);
+SET tracing=on,kv,results;
+SET vectorize = experimental_always
+
+query I
+SELECT min(x) FROM t38959_2 WHERE (y, z) = (2, 3.0)
+----
+1
+
+statement ok
+RESET vectorize;
+SET tracing=off;
+SET vectorize = experimental_always
+
+# Test for #38858 -- handle aggregates correctly on an empty table.
+statement ok
+RESET vectorize;
+CREATE TABLE empty (a INT PRIMARY KEY, b FLOAT);
+SET vectorize = experimental_always
+
+# GROUP BY is omitted, so aggregates are in scalar context.
+query IIIIIRR
+SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty
+----
+0  0  NULL  NULL  NULL  NULL  NULL
+
+ # GROUP BY is present, so aggregates are in non-scalar context.
+query IIIIIRR
+SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty GROUP BY a
+----
+
+
+statement ok
+RESET vectorize;
+CREATE TABLE t_38995 (a INT PRIMARY KEY);
+INSERT INTO t_38995 VALUES (1), (2), (3);
+SET vectorize = experimental_always
+
+query II
+SELECT a, ordinality*2 FROM t_38995 WITH ORDINALITY
+----
+1 2
+2 4
+3 6
+
+# Test for #39827, top k sort with bytes.
+statement ok
+RESET vectorize;
+CREATE TABLE t_39827 (a STRING);
+INSERT INTO t_39827 VALUES ('hello'), ('world'), ('a'), ('foo');
+SET vectorize = experimental_always
+
+query T
+SELECT a FROM t_39827 ORDER BY a LIMIT 2
+----
+a
+foo
+
+# Regression test for #40227, an issue with flat bytes implementation.
+statement ok
+RESET vectorize;
+CREATE TABLE t_40227 AS SELECT g FROM generate_series(0, 5) AS g
+
+# For now, we use the default vectorize setting for this query.
+# TODO(yuzefovich): with distributed configs this fails with 'zero length
+# schema unsupported' coming from NewRecordBatchSerializer(). Investigate this.
+
+statement ok
+SELECT '' FROM t_40227 AS t1 JOIN t_40227 AS t2 ON true
+
+statement ok
+SET vectorize = experimental_always
+
+# Tests for #39417
+statement ok
+RESET vectorize;
+CREATE TABLE t39417 (x int8);
+INSERT INTO t39417 VALUES (10);
+SET vectorize = experimental_always
+
+statement error .* decimal casts with rounding unsupported
+select (x/1) from t39417
+
+# Regression tests for #39540, an issue caused by shallow copying decimals.
+# For now, we use the default vectorize setting for this query.
+# TODO(yuzefovich): with distributed configs this fails with 'zero length
+# schema unsupported' coming from NewRecordBatchSerializer(). Investigate this.
+statement ok
+RESET vectorize;
+CREATE TABLE IF NOT EXISTS t_39540 AS
+	SELECT
+		g % 2 = 0 AS _bool, g::DECIMAL AS _decimal
+	FROM
+		generate_series(0, 5) AS g;
+
+query R rowsort
+SELECT
+	tab_426212._decimal - tab_426216._decimal
+FROM
+	t_39540 AS tab_426212,
+	t_39540 AS tab_426214,
+	t_39540
+	RIGHT JOIN t_39540 AS tab_426216 ON true
+ORDER BY
+	tab_426214._bool ASC
+----
+1296 values hashing to cad02075a867c3c0564bf80fe665eed6
+
+statement ok
+SET vectorize = experimental_always
+
+# Regression test for #40372.
+statement ok
+RESET vectorize;
+CREATE TABLE t40372_1 (
+  a INT,
+  b INT,
+  c FLOAT,
+  d FLOAT
+);
+INSERT INTO t40372_1 VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3);
+CREATE TABLE t40372_2 (
+  a INT,
+  b FLOAT,
+  c FLOAT,
+  d INT
+);
+INSERT INTO t40372_2 VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3);
+SET vectorize = experimental_always
+
+query IIRR rowsort
+SELECT * FROM t40372_1 NATURAL JOIN t40372_2
+----
+1  1  1  1
+2  2  2  2
+3  3  3  3
+
+# Test that comparison against a null value selects the value out.
+statement ok
+RESET vectorize;
+CREATE TABLE tnull(a INT, b INT);
+INSERT INTO tnull VALUES(NULL, 238);
+SET vectorize = experimental_always
+
+query I rowsort
+SELECT a FROM tnull WHERE (a<=b OR a>=b)
+----
+
+# Test that AND'ing a true value with another true value while one of them is
+# actually NULL returns NULL.
+statement ok
+RESET vectorize;
+CREATE TABLE t1(a INTEGER, b INTEGER, c INTEGER);
+INSERT INTO t1 VALUES(NULL,2,1);
+SET vectorize = experimental_always
+
+# We need both parenthesis in WHERE clause so that the AND operation under test
+# is not optimized out.
+query I
+SELECT CASE WHEN a <= b THEN 1 ELSE 2 END
+  FROM t1
+ WHERE (a > b - 2 AND a < b + 2) OR (c > a AND c < b)
+----
+
+# Regression tests for NULL expression handling.
+statement ok
+RESET vectorize;
+CREATE TABLE t_case_null (x INT);
+INSERT INTO t_case_null VALUES (0);
+SET vectorize = experimental_always
+
+query I
+SELECT CASE WHEN x = 0 THEN 0 ELSE NULL END FROM t_case_null
+----
+0
+
+query I
+SELECT CASE WHEN x = 0 THEN NULL ELSE 0 END FROM t_case_null
+----
+NULL
+
+query I
+SELECT CASE WHEN x = 1 THEN 1 ELSE NULL END FROM t_case_null
+----
+NULL
+
+query I
+SELECT * FROM t_case_null WHERE NULL AND NULL
+----
+
+query I
+SELECT * FROM t_case_null WHERE NULL AND x = 0
+----
+
+query I
+SELECT * FROM t_case_null WHERE x = 0 AND NULL
+----
+
+# Regression test for #40732.
+statement ok
+RESET vectorize;
+CREATE TABLE t40732 AS SELECT g::INT8 AS _int8,
+                              g::FLOAT8 AS _float8,
+                              '2001-01-01'::DATE
+                              + g AS _date,
+                              g % 2 = 1 AS _bool,
+                              g::DECIMAL AS _decimal,
+                              g::STRING AS _string,
+                              g::STRING::BYTES AS _bytes
+                         FROM generate_series(1, 5) AS g;
+INSERT INTO t40732 DEFAULT VALUES;
+SET vectorize = experimental_always
+
+query I
+SELECT *
+  FROM (
+          SELECT tab_1541._int8 AS col_2976
+            FROM t40732 AS tab_1538
+            JOIN t40732 AS tab_1539
+            JOIN t40732 AS tab_1540 ON
+                  tab_1539._float8 = tab_1540._float8
+            JOIN t40732 AS tab_1541 ON
+                  tab_1540._int8 = tab_1541._int8 ON
+                  tab_1538._float8 = tab_1540._float8,
+                 t40732 AS tab_1542
+           WHERE tab_1542._bool > tab_1540._bool
+       )
+ORDER BY col_2976
+----
+2
+2
+2
+4
+4
+4
+
+statement ok
+RESET vectorize
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.query.is-vectorized' AND usage_count > 0
+----
+sql.exec.query.is-vectorized
+
+statement ok
+SET vectorize = experimental_always
+
+# Test IS NULL (and alike) projections.
+query IBBIBB rowsort
+SELECT a, a IS NULL, a IS NOT NULL, b, b IS NOT DISTINCT FROM NULL, b IS DISTINCT FROM NULL FROM nulls
+----
+NULL  true   false  NULL  true   false
+NULL  true   false  1     false  true
+1     false  true   NULL  true   false
+1     false  true   1     false  true
+
+# Test IS NULL (and alike) selections.
+query II rowsort
+SELECT a, b FROM nulls WHERE a IS NULL
+----
+NULL NULL
+NULL 1
+
+query II rowsort
+SELECT a, b FROM nulls WHERE a IS NOT NULL
+----
+1 NULL
+1 1
+
+query II rowsort
+SELECT a, b FROM nulls WHERE a IS NOT DISTINCT FROM NULL
+----
+NULL NULL
+NULL 1
+
+query II rowsort
+SELECT a, b FROM nulls WHERE a IS DISTINCT FROM NULL
+----
+1 NULL
+1 1
+
+query III rowsort
+SELECT
+	a,
+	b,
+	CASE
+	WHEN a IS NOT NULL AND b IS NULL THEN 0
+	WHEN a IS NULL THEN 1
+	WHEN b IS NOT NULL THEN 2
+	END
+FROM
+	nulls
+----
+NULL  NULL  1
+NULL  1     1
+1     NULL  0
+1     1     2
+
+# Regression test for #42816 - top K sort when K is greater than
+# coldata.BatchSize().
+statement ok
+RESET vectorize;
+CREATE TABLE t_42816 (a int); INSERT INTO t_42816 SELECT * FROM generate_series(0, 1025);
+SET vectorize = experimental_always
+
+query I
+SELECT * FROM t_42816 ORDER BY a OFFSET 1020 LIMIT 10
+----
+1020
+1021
+1022
+1023
+1024
+1025
+
+# Regression tests for #42994
+statement ok
+RESET vectorize;
+CREATE TABLE t42994 (a INT PRIMARY KEY, b BIT, INDEX i (a, b));
+INSERT INTO t42994 VALUES (1, 1::BIT);
+SET vectorize = experimental_always
+
+query I
+SELECT a FROM t42994@i
+----
+1
+
+statement ok
+RESET vectorize;
+CREATE TABLE t42994_2 (a BIT PRIMARY KEY, b INT, UNIQUE INDEX i (b));
+INSERT INTO t42994_2 VALUES (1::BIT, NULL);
+SET vectorize = experimental_always
+
+query I
+SELECT b FROM t42994_2@i
+----
+NULL
+
+# Regression test for zeroing out an aggregate value when NULLs are present.
+statement ok
+RESET vectorize;
+CREATE TABLE t43429(s STRING, i INT);
+INSERT INTO t43429 VALUES ('1', 1), (NULL, 2);
+SET vectorize = experimental_always
+
+query T
+SELECT max(s) FROM t43429 GROUP BY i ORDER BY 1
+----
+NULL
+1
+
+statement ok
+RESET vectorize;
+CREATE TABLE t43550(a INT2 PRIMARY KEY); INSERT INTO t43550 VALUES (1);
+SET vectorize = experimental_always
+
+query I
+SELECT CASE WHEN a = 0 THEN a ELSE 1:::INT8 END FROM t43550
+----
+1
+
+# Regression test for #43855.
+statement ok
+RESET vectorize;
+CREATE TABLE t43855(o OID, r REGPROCEDURE);
+SET vectorize = experimental_always
+
+query i
+SELECT CASE WHEN o = 0 THEN 0:::OID ELSE r END FROM t43855
+----
+
+# Regression test for an aggregate that has output type different from its
+# input type (INT4 is input whereas output is INT).
+query I
+SELECT max(c) FROM a
+----
+2000
+
+# Regression test for starting wrapped processors multiple times.
+statement ok
+RESET vectorize;
+CREATE TABLE t44133_0(c0 STRING); CREATE TABLE t44133_1(c0 STRING UNIQUE NOT NULL);
+SET vectorize = experimental_always
+
+statement ok
+SELECT * FROM t44133_0, t44133_1 WHERE t44133_0.c0 NOT BETWEEN t44133_1.c0 AND '' AND (t44133_1.c0 IS NULL)
+
+# Regression test for CASE operator with unhandled output type.
+statement ok
+RESET vectorize;
+CREATE TABLE t44304(c0 INT); INSERT INTO t44304 VALUES (0);
+SET vectorize = experimental_always
+
+query I
+SELECT * FROM t44304 WHERE CASE WHEN t44304.c0 > 0 THEN NULL END
+----
+
+# Regression test for CASE operator and flat bytes.
+statement ok
+RESET vectorize;
+CREATE TABLE t44624(c0 STRING, c1 BOOL); INSERT INTO t44624(rowid, c0, c1) VALUES (0, '', true), (1, '', NULL);
+SET vectorize = experimental_always
+
+# TODO(yuzefovich): #44700.
+statement error .* unsupported type string in CASE operator
+SELECT * FROM t44624 ORDER BY CASE WHEN c1 IS NULL THEN c0 WHEN true THEN c0 END
+
+# Regression test for 44726 (unknown WHEN expression type).
+statement ok
+RESET vectorize;
+CREATE TABLE t44726(c0 INT); INSERT INTO t44726(c0) VALUES (0);
+SET vectorize = experimental_always
+
+query I
+SELECT * FROM t44726 WHERE 0 > (CASE WHEN nullif(NULL, ilike_escape('', current_user(), '')) THEN 0 ELSE t44726.c0 END)
+----
+
+# Regression test for wrongly performing bounds check elimination on flat bytes
+# which might lead to a crash.
+statement ok
+RESET vectorize;
+CREATE TABLE t44822(c0 BYTES); CREATE VIEW v0(c0) AS SELECT min(t44822.c0) FROM t44822;
+SET vectorize = experimental_always
+
+query T
+SELECT * FROM v0 WHERE v0.c0 NOT BETWEEN v0.c0 AND v0.c0
+----
+
+# Regression test for #44935 (decimals with different number of trailing zeroes
+# hashing to different values).
+statement ok
+RESET vectorize;
+CREATE TABLE t44935 (x decimal); INSERT INTO t44935 VALUES (1.0), (1.00);
+SET vectorize = experimental_always
+
+query I
+SELECT count(*) FROM (SELECT DISTINCT x FROM t44935)
+----
+1
+
+# Regression test for #45481. Generate all combinations of values 1 to 7.
+statement ok
+RESET vectorize;
+CREATE TABLE t45481 (a INT, b INT, c FLOAT, d DECIMAL, e STRING, f BYTES, g UUID, PRIMARY KEY (a, b, c, d, e, f, g));
+INSERT INTO t45481 SELECT a, b, c::FLOAT, d::DECIMAL, d::STRING, d::STRING::BYTES, rpad(d::STRING, 32, d::STRING)::UUID FROM
+   generate_series(1, 7) AS a(a),
+   generate_series(1, 7) AS b(b),
+   generate_series(1, 7) AS c(c),
+   generate_series(1, 7) AS d(d);
+SET vectorize = experimental_always
+
+query IRTTTR
+SELECT b, d, e, f, g, sum(a) FROM t45481 GROUP BY b, d, e, f, g ORDER BY b, d, e, f, g
+----
+1  1  1  1  11111111-1111-1111-1111-111111111111  196
+1  2  2  2  22222222-2222-2222-2222-222222222222  196
+1  3  3  3  33333333-3333-3333-3333-333333333333  196
+1  4  4  4  44444444-4444-4444-4444-444444444444  196
+1  5  5  5  55555555-5555-5555-5555-555555555555  196
+1  6  6  6  66666666-6666-6666-6666-666666666666  196
+1  7  7  7  77777777-7777-7777-7777-777777777777  196
+2  1  1  1  11111111-1111-1111-1111-111111111111  196
+2  2  2  2  22222222-2222-2222-2222-222222222222  196
+2  3  3  3  33333333-3333-3333-3333-333333333333  196
+2  4  4  4  44444444-4444-4444-4444-444444444444  196
+2  5  5  5  55555555-5555-5555-5555-555555555555  196
+2  6  6  6  66666666-6666-6666-6666-666666666666  196
+2  7  7  7  77777777-7777-7777-7777-777777777777  196
+3  1  1  1  11111111-1111-1111-1111-111111111111  196
+3  2  2  2  22222222-2222-2222-2222-222222222222  196
+3  3  3  3  33333333-3333-3333-3333-333333333333  196
+3  4  4  4  44444444-4444-4444-4444-444444444444  196
+3  5  5  5  55555555-5555-5555-5555-555555555555  196
+3  6  6  6  66666666-6666-6666-6666-666666666666  196
+3  7  7  7  77777777-7777-7777-7777-777777777777  196
+4  1  1  1  11111111-1111-1111-1111-111111111111  196
+4  2  2  2  22222222-2222-2222-2222-222222222222  196
+4  3  3  3  33333333-3333-3333-3333-333333333333  196
+4  4  4  4  44444444-4444-4444-4444-444444444444  196
+4  5  5  5  55555555-5555-5555-5555-555555555555  196
+4  6  6  6  66666666-6666-6666-6666-666666666666  196
+4  7  7  7  77777777-7777-7777-7777-777777777777  196
+5  1  1  1  11111111-1111-1111-1111-111111111111  196
+5  2  2  2  22222222-2222-2222-2222-222222222222  196
+5  3  3  3  33333333-3333-3333-3333-333333333333  196
+5  4  4  4  44444444-4444-4444-4444-444444444444  196
+5  5  5  5  55555555-5555-5555-5555-555555555555  196
+5  6  6  6  66666666-6666-6666-6666-666666666666  196
+5  7  7  7  77777777-7777-7777-7777-777777777777  196
+6  1  1  1  11111111-1111-1111-1111-111111111111  196
+6  2  2  2  22222222-2222-2222-2222-222222222222  196
+6  3  3  3  33333333-3333-3333-3333-333333333333  196
+6  4  4  4  44444444-4444-4444-4444-444444444444  196
+6  5  5  5  55555555-5555-5555-5555-555555555555  196
+6  6  6  6  66666666-6666-6666-6666-666666666666  196
+6  7  7  7  77777777-7777-7777-7777-777777777777  196
+7  1  1  1  11111111-1111-1111-1111-111111111111  196
+7  2  2  2  22222222-2222-2222-2222-222222222222  196
+7  3  3  3  33333333-3333-3333-3333-333333333333  196
+7  4  4  4  44444444-4444-4444-4444-444444444444  196
+7  5  5  5  55555555-5555-5555-5555-555555555555  196
+7  6  6  6  66666666-6666-6666-6666-666666666666  196
+7  7  7  7  77777777-7777-7777-7777-777777777777  196
+
+# Test that unsupported post process specs get wrapped in the vectorized engine.
+statement ok
+RESET vectorize;
+CREATE TABLE mixed_type_a (a INT, b TIMESTAMPTZ);
+CREATE TABLE mixed_type_b (a INT, b INTERVAL, c TIMESTAMP);
+INSERT INTO mixed_type_a VALUES (0, 0::TIMESTAMPTZ);
+INSERT INTO mixed_type_b VALUES (0, INTERVAL '0 days', 0::TIMESTAMP);
+SET vectorize=experimental_always
+
+query B
+SELECT b > now() - interval '1 day'  FROM mixed_type_a
+----
+false
+
+statement error .* dates and timestamp\(tz\) not supported in mixed-type expressions in the vectorized engine
+SELECT * FROM mixed_type_a AS a INNER MERGE JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
+
+statement error .* dates and timestamp\(tz\) not supported in mixed-type expressions in the vectorized engine
+SELECT * FROM mixed_type_a AS a JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
+
+# Regression for 46140.
+statement ok
+RESET vectorize;
+DROP TABLE IF EXISTS t0, t1;
+CREATE TABLE t0(c0 INT);
+CREATE TABLE t1(c0 BOOL) INTERLEAVE IN PARENT t0(rowid);
+INSERT INTO t0(c0) VALUES (0);
+INSERT INTO t1(rowid, c0) VALUES(0, TRUE);
+SET vectorize=experimental_always
+
+query I
+SELECT max(t1.rowid) FROM t1 WHERE t1.c0
+----
+0
+
+
+# Regression for #46183.
+statement ok
+RESET vectorize;
+CREATE TABLE t46183 (x INT PRIMARY KEY, y JSONB, INVERTED INDEX (y));
+INSERT INTO t46183 VALUES (1, '{"y": "hello"}');
+SET vectorize = experimental_always
+
+query I
+SELECT count(*) FROM t46183 WHERE y->'y' = to_jsonb('hello')
+----
+1
+
+# Regression test for #47029 (not resetting nulls vector when cfetcher read a
+# NULL value in the interleaved table).
+statement ok
+RESET vectorize;
+CREATE TABLE t47029_0(c0 INT);
+CREATE TABLE t47029_1(c0 INT);
+INSERT INTO t47029_0(c0) VALUES(0);
+INSERT INTO t47029_1(c0) VALUES(NULL);
+CREATE INDEX ON t47029_1(c0) INTERLEAVE IN PARENT t47029_0(c0);
+SET vectorize = experimental_always
+
+query I
+SELECT * FROM t47029_0 WHERE (t47029_0.rowid > 0) IS NULL
+----
+
+# Regression for #47115 (cfetcher sometimes not reading value component
+# of composite encoded data).
+statement ok
+RESET vectorize;
+CREATE TABLE t47715 (c0 DECIMAL PRIMARY KEY, c1 INT UNIQUE);
+INSERT INTO t47715(c0) VALUES (1819487610);
+SET vectorize = experimental_always
+
+query T
+SELECT c0 FROM t47715 ORDER by c1
+----
+1819487610
+
+# Ensure that the vectorized engine can plan and produce the MVCC system column.
+statement ok
+RESET vectorize;
+CREATE TABLE mvcc (x INT PRIMARY KEY, y INT, z INT, INDEX i (z));
+INSERT INTO mvcc VALUES (1, 2, 3)
+
+statement ok
+SET vectorize = experimental_always
+
+query B
+SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM mvcc
+----
+true
+
+query B
+SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM mvcc@i
+----
+true
+
+# Regression test for builtin funcs that take no arguments, combined with
+# data that can't be safely decoded as input.
+
+statement ok
+RESET vectorize;
+CREATE TABLE t51841 (a) AS SELECT gen_random_uuid();
+SET vectorize = experimental_always
+
+statement ok
+SELECT random() from t51841
+
+# Regression test to ensure that we can EXPLAIN (VEC) plans that contain user
+# defined types. We aren't interested in the output here, but are just ensuring
+# that we don't panic.
+statement ok
+RESET vectorize;
+CREATE TYPE greeting AS ENUM ('hello');
+CREATE TABLE greeting_table (x greeting);
+EXPLAIN (VEC) SELECT * FROM greeting_table;
+SET vectorize = experimental_always

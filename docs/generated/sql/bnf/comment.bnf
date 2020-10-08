@@ -1,0 +1,5 @@
+comment_stmt ::=
+	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'COLUMN' column_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'INDEX' table_index_name 'IS' comment_text

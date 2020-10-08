@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This utility detects new tests added in a given pull request, and runs them
 // under stress in our CI infrastructure.
@@ -39,9 +35,9 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
-
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/google/go-github/github"
+	"golang.org/x/oauth2"
 )
 
 const githubAPITokenEnv = "GITHUB_API_TOKEN"
@@ -78,9 +74,9 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 	var inPrefix bool
 	for reader := bufio.NewReader(r); ; {
 		line, isPrefix, err := reader.ReadLine()
-		switch err {
-		case nil:
-		case io.EOF:
+		switch {
+		case err == nil:
+		case err == io.EOF:
 			return pkgs, nil
 		default:
 			return nil, err
@@ -106,23 +102,31 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 			curPkg.benchmarks = append(curPkg.benchmarks, string(newGoBenchmarkRE.ReplaceAll(line, []byte(replacement))))
 			pkgs[curPkgName] = curPkg
 		case currentGoTestRE.Match(line):
-			curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
-			curBenchmarkName = ""
-		case currentGoBenchmarkRE.Match(line):
-			curBenchmarkName = string(currentGoBenchmarkRE.ReplaceAll(line, []byte(replacement)))
 			curTestName = ""
+			curBenchmarkName = ""
+			if !bytes.HasPrefix(line, []byte{'-'}) {
+				curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
+			}
+		case currentGoBenchmarkRE.Match(line):
+			curTestName = ""
+			curBenchmarkName = ""
+			if !bytes.HasPrefix(line, []byte{'-'}) {
+				curBenchmarkName = string(currentGoBenchmarkRE.ReplaceAll(line, []byte(replacement)))
+			}
 		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")):
-			switch {
-			case len(curTestName) > 0:
-				if !(curPkgName == "build" && curTestName == "TestStyle") {
+			if curPkgName != "" {
+				switch {
+				case len(curTestName) > 0:
+					if !(curPkgName == "build" && curTestName == "TestStyle") {
+						curPkg := pkgs[curPkgName]
+						curPkg.tests = append(curPkg.tests, curTestName)
+						pkgs[curPkgName] = curPkg
+					}
+				case len(curBenchmarkName) > 0:
 					curPkg := pkgs[curPkgName]
-					curPkg.tests = append(curPkg.tests, curTestName)
+					curPkg.benchmarks = append(curPkg.benchmarks, curBenchmarkName)
 					pkgs[curPkgName] = curPkg
 				}
-			case len(curBenchmarkName) > 0:
-				curPkg := pkgs[curPkgName]
-				curPkg.benchmarks = append(curPkg.benchmarks, curBenchmarkName)
-				pkgs[curPkgName] = curPkg
 			}
 		}
 	}
@@ -153,6 +157,31 @@ func findPullRequest(
 	}
 }
 
+func ghClient(ctx context.Context) *github.Client {
+	var httpClient *http.Client
+	if token, ok := os.LookupEnv(githubAPITokenEnv); ok {
+		httpClient = oauth2.NewClient(ctx, oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: token},
+		))
+	} else {
+		log.Printf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
+	}
+	return github.NewClient(httpClient)
+}
+
+func getDiff(
+	ctx context.Context, client *github.Client, org, repo string, prNum int,
+) (string, error) {
+	diff, _, err := client.PullRequests.GetRaw(
+		ctx,
+		org,
+		repo,
+		prNum,
+		github.RawOptions{Type: github.Diff},
+	)
+	return diff, err
+}
+
 func main() {
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
@@ -173,16 +202,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-
-	var httpClient *http.Client
-	if token, ok := os.LookupEnv(githubAPITokenEnv); ok {
-		httpClient = oauth2.NewClient(ctx, oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: token},
-		))
-	} else {
-		log.Printf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
-	}
-	client := github.NewClient(httpClient)
+	client := ghClient(ctx)
 
 	currentPull := findPullRequest(ctx, client, org, repo, sha)
 	if currentPull == nil {
@@ -190,13 +210,7 @@ func main() {
 		return
 	}
 
-	diff, _, err := client.PullRequests.GetRaw(
-		ctx,
-		org,
-		repo,
-		*currentPull.Number,
-		github.RawOptions{Type: github.Patch},
-	)
+	diff, err := getDiff(ctx, client, org, repo, *currentPull.Number)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -242,12 +256,21 @@ func main() {
 			log.Fatal(err)
 		}
 		if len(pkgs) > 0 {
-			// 5 minutes total seems OK.
-			duration := (5 * time.Minute) / time.Duration(len(pkgs))
 			for name, pkg := range pkgs {
+				// 20 minutes total seems OK, but at least 2 minutes per test.
+				// This should be reduced. See #46941.
+				duration := (20 * time.Minute) / time.Duration(len(pkgs))
+				minDuration := (2 * time.Minute) * time.Duration(len(pkg.tests))
+				if duration < minDuration {
+					duration = minDuration
+				}
+				// Use a timeout shorter than the duration so that hanging tests don't
+				// get a free pass.
+				timeout := (3 * duration) / 4
+
 				tests := "-"
 				if len(pkg.tests) > 0 {
-					tests = "(" + strings.Join(pkg.tests, "|") + ")"
+					tests = "(" + strings.Join(pkg.tests, "$$|") + "$$)"
 				}
 
 				cmd := exec.Command(
@@ -255,6 +278,8 @@ func main() {
 					target,
 					fmt.Sprintf("PKG=./%s", name),
 					fmt.Sprintf("TESTS=%s", tests),
+					fmt.Sprintf("TESTTIMEOUT=%s", timeout),
+					fmt.Sprintf("GOTESTFLAGS=-json"), // allow TeamCity to parse failures
 					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
 				)
 				cmd.Env = append(os.Environ(), "COCKROACH_NIGHTLY_STRESS=true")

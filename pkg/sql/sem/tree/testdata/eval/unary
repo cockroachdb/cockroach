@@ -1,0 +1,91 @@
+# Unary operators
+
+eval
+-3
+----
+-3
+
+eval
+-4.1
+----
+-4.1
+
+eval
+-6.1:::float
+----
+-6.1
+
+eval
+- -1
+----
+1
+
+eval
+- -1:::float
+----
+1.0
+
+eval
+- +1
+----
+-1
+
+eval
++ -1
+----
+-1
+
+eval
+|/ 4.0::float
+----
+2.0
+
+eval
+|/ 9.0::decimal
+----
+3
+
+eval
+|/ NULL
+----
+NULL
+
+eval
+|/ float 'NaN'
+----
+NaN
+
+eval
+|/ decimal 'NaN'
+----
+NaN
+
+eval
+||/ -1.0::float
+----
+-1.0
+
+eval
+||/ 27.0::float
+----
+3.0
+
+eval
+||/ 19.3::decimal
+----
+2.6823725926296729544
+
+eval
+||/ NULL
+----
+NULL
+
+eval
+||/ float 'NaN'
+----
+NaN
+
+eval
+||/ decimal 'NaN'
+----
+NaN

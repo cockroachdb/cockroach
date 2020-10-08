@@ -1,0 +1,35 @@
+version: '3'
+services:
+  kdc:
+    build: ./kdc
+    volumes:
+      - ./kdc/start.sh:/start.sh
+      - keytab:/keytab
+  cockroach:
+    image: ubuntu:xenial-20170214
+    depends_on:
+      - kdc
+    command: /cockroach/cockroach --certs-dir=/certs start-single-node --listen-addr cockroach
+    environment:
+      - KRB5_KTNAME=/keytab/crdb.keytab
+    volumes:
+      - ../../.localcluster.certs:/certs
+      - keytab:/keytab
+      - ../../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+  psql:
+    build: ./psql
+    depends_on:
+      - cockroach
+    environment:
+      - PGHOST=cockroach
+      - PGPORT=26257
+      - PGSSLCERT=/certs/node.crt
+      - PGSSLKEY=/certs/node.key
+    volumes:
+      - ./kdc/krb5.conf:/etc/krb5.conf
+      - ./psql/gss_test.go:/test/gss_test.go
+      - ./psql/start.sh:/start.sh
+      - ../../.localcluster.certs:/certs
+      - ../../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+volumes:
+  keytab:

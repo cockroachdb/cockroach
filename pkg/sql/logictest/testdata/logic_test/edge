@@ -1,0 +1,256 @@
+# Test on-disk SQL semantics of edge cases and overflows. On-disk is
+# important because it avoids any constant folding that could happen
+# in the parse or normalization phases, forcing it to be handled by the
+# execution engine itself.
+
+# TODO(mjibson): Remove family definition when #41277 is fixed.
+statement ok
+CREATE TABLE t (
+    key
+        STRING PRIMARY KEY,
+    _date
+        DATE,
+    _float4
+        FLOAT4,
+    _float8
+        FLOAT8,
+    _int2
+        INT2,
+    _int4
+        INT4,
+    _int8
+        INT8,
+    FAMILY "primary" (key, _date, _float4, _float8, _int2, _int4, _int8)
+)
+
+statement ok
+INSERT
+INTO
+    t
+VALUES
+    (
+        'min',
+        '4714-11-24 BC',
+        -3.40282346638528859811704183484516925440e+38,
+        -1.7976931348623e+308,
+        -32768,
+        -2147483648,
+        -9223372036854775808
+    ),
+    (
+        'max',
+        '5874897-12-31',
+        3.40282346638528859811704183484516925440e+38,
+        1.7976931348623e+308,
+        32767,
+        2147483647,
+        9223372036854775807
+    )
+
+statement ok
+INSERT
+INTO
+    t (key, _date)
+VALUES
+    ('+inf', 'infinity'), ('-inf', '-infinity')
+
+# min and min + 1
+
+query TT
+SELECT _date, _date + 1 FROM t WHERE key = 'min'
+----
+-4713-11-24 00:00:00 +0000 +0000  -4713-11-25 00:00:00 +0000 +0000
+
+query IIIIIIRRRR
+SELECT
+    _int2,
+    _int2 + 1:::INT2,
+    _int4,
+    _int4 + 1:::INT4,
+    _int8,
+    _int8 + 1:::INT8,
+    _float4,
+    _float4 + 1,
+    _float8,
+    _float8 + 1
+FROM
+    t
+WHERE
+    key = 'min'
+----
+-32768  -32767  -2147483648  -2147483647  -9223372036854775808  -9223372036854775807  -3.40282346638529e+38  -3.40282346638529e+38  -1.7976931348623e+308  -1.7976931348623e+308
+
+# min - 1
+
+statement error date is out of range
+SELECT _date - 1 FROM t WHERE key = 'min'
+
+# For now we incorrectly do type promotion int2 -> int.
+query I
+SELECT _int2 - 1:::INT2 FROM t WHERE key = 'min'
+----
+-32769
+
+# Incorrect type promotion.
+query I
+SELECT _int4 - 1:::INT4 FROM t WHERE key = 'min'
+----
+-2147483649
+
+statement error integer out of range
+SELECT _int8 - 1:::INT8 FROM t WHERE key = 'min'
+
+query R
+SELECT _float8 - 1e300 FROM t WHERE key = 'min'
+----
+-Inf
+
+# max and max - 1
+
+query TT
+SELECT _date, _date - 1 FROM t WHERE key = 'max'
+----
+5874897-12-31 00:00:00 +0000 +0000  5874897-12-30 00:00:00 +0000 +0000
+
+query IIIIIIRRRR
+SELECT
+    _int2,
+    _int2 - 1:::INT2,
+    _int4,
+    _int4 - 1:::INT4,
+    _int8,
+    _int8 - 1:::INT8,
+    _float4,
+    _float4 - 1,
+    _float8,
+    _float8 - 1
+FROM
+    t
+WHERE
+    key = 'max'
+----
+32767  32766  2147483647  2147483646  9223372036854775807  9223372036854775806  3.40282346638529e+38  3.40282346638529e+38  1.7976931348623e+308  1.7976931348623e+308
+
+# max + 1
+
+statement error date is out of range
+SELECT _date + 1 FROM t WHERE key = 'max'
+
+# For now we incorrectly do type promotion int2 -> int.
+query I
+SELECT _int2 + 1:::INT2 FROM t WHERE key = 'max'
+----
+32768
+
+# Incorrect type promotion.
+query I
+SELECT _int4 + 1:::INT4 FROM t WHERE key = 'max'
+----
+2147483648
+
+statement error integer out of range
+SELECT _int8 + 1:::INT8 FROM t WHERE key = 'max'
+
+query R
+SELECT _float8 + 1e300 FROM t WHERE key = 'max'
+----
++Inf
+
+# infinity
+
+query TTT
+SELECT _date, _date + 1, _date - 1 FROM t WHERE key = '+inf'
+----
+infinity  infinity  infinity
+
+query TTT
+SELECT _date, _date + 1, _date - 1 FROM t WHERE key = '-inf'
+----
+-infinity  -infinity  -infinity
+
+# aggregates
+
+query RRRRRR
+SELECT
+    sum(t._int2),
+    sum(t._int4),
+    sum(t._int8),
+    avg(t._int2),
+    avg(t._int4),
+    avg(t._int8)
+FROM
+    t, t AS u
+WHERE
+    t.key = 'max'
+----
+131068  8589934588  36893488147419103228  32767  2147483647  9223372036854775807
+
+query II
+SELECT
+    sum_int(t._int2), sum_int(t._int4)
+FROM
+    t, t AS u
+WHERE
+    t.key = 'max'
+----
+131068  8589934588
+
+statement error integer out of range
+SELECT sum_int(t._int8) FROM t, t AS u WHERE t.key = 'max'
+
+query RRRRRRRRRR
+SELECT
+    sum(t._int2),
+    sum(t._int4),
+    sum(t._int8),
+    sum(t._float4),
+    sum(t._float8),
+    avg(t._int2),
+    avg(t._int4),
+    avg(t._int8),
+    avg(t._float4),
+    avg(t._float8)
+FROM
+    t, t AS u
+WHERE
+    t.key = 'min'
+----
+-131072  -8589934592  -36893488147419103232  -1.36112938655412e+39  -Inf  -32768  -2147483648  -9223372036854775808  -3.40282346638529e+38  -Inf
+
+query II
+SELECT
+    sum_int(t._int2), sum_int(t._int4)
+FROM
+    t, t AS u
+WHERE
+    t.key = 'min'
+----
+-131072  -8589934592
+
+statement error integer out of range
+SELECT sum_int(t._int8) FROM t, t AS u WHERE t.key = 'min'
+
+query RRRRRRRRRR
+SELECT
+    sum(t._int2),
+    sum(t._int4),
+    sum(t._int8),
+    sum(t._float4),
+    sum(t._float8),
+    avg(t._int2),
+    avg(t._int4),
+    avg(t._int8),
+    avg(t._float4),
+    avg(t._float8)
+FROM
+    t
+----
+-1  -1  -1  0  0  -0.5  -0.5  -0.5  0  0
+
+query III
+SELECT
+    sum_int(t._int2), sum_int(t._int4), sum_int(t._int8)
+FROM
+    t
+----
+-1  -1  -1

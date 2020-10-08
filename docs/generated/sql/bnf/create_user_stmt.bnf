@@ -1,7 +1,5 @@
 create_user_stmt ::=
-	'CREATE' 'USER' name 'WITH' 'PASSWORD' password
-	| 'CREATE' 'USER' name  'PASSWORD' password
+	'CREATE' 'USER' name opt_with role_options
 	| 'CREATE' 'USER' name 
-	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name 'WITH' 'PASSWORD' password
-	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name  'PASSWORD' password
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name opt_with role_options
 	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name 

@@ -1,0 +1,295 @@
+# SIMILAR TO and NOT SIMILAR TO
+
+eval
+'abc' SIMILAR TO 'abc'
+----
+true
+
+eval
+'abc' SIMILAR TO 'a'
+----
+false
+
+eval
+'abc' SIMILAR TO '%(b|d)%'
+----
+true
+
+eval
+'abc' SIMILAR TO '(b|c)%'
+----
+false
+
+eval
+'abc' NOT SIMILAR TO '%(b|d)%'
+----
+false
+
+eval
+'abc' NOT SIMILAR TO '(b|c)%'
+----
+true
+
+# SIMILAR TO with ESCAPE
+
+eval
+similar_to_escape('abc', 'abc', '')
+----
+true
+
+eval
+similar_to_escape('a\b', 'a\b', '')
+----
+true
+
+eval
+similar_to_escape('a\b', '%\%', '')
+----
+true
+
+eval
+similar_to_escape('a\b', '_\_', '')
+----
+true
+
+eval
+similar_to_escape('\\\', '\{3,}', '')
+----
+true
+
+eval
+similar_to_escape('abc', '[\a\b\c]+', '')
+----
+true
+
+eval
+similar_to_escape('%abc', '%%a__', '%')
+----
+true
+
+eval
+similar_to_escape('abc', '%(b|d)%', '|')
+----
+false
+
+eval
+similar_to_escape('a(b)c', '%((_()_', '(')
+----
+true
+
+eval
+similar_to_escape('a||bc', '%||%', '|')
+----
+true
+
+eval
+similar_to_escape('a||bc', '%||+%', '|')
+----
+true
+
+eval
+similar_to_escape('a||bc', '%||*%', '|')
+----
+true
+
+eval
+similar_to_escape('abc', '%||+%', '|')
+----
+false
+
+eval
+similar_to_escape('abc', '%||*%', '|')
+----
+true
+
+eval
+similar_to_escape('a|c', '(a||b*)%', '|')
+----
+true
+
+eval
+similar_to_escape('(abc)', '|(_+|)', '|')
+----
+true
+
+eval
+similar_to_escape('a*bc', '%|*b?%', '|')
+----
+true
+
+eval
+similar_to_escape('|||', '||*', '|')
+----
+true
+
+eval
+similar_to_escape('a|b|c', '_||+_||?||?_', '|')
+----
+true
+
+eval
+similar_to_escape('a|b|c', '_q|+_q|?q|?_', 'q')
+----
+true
+
+eval
+similar_to_escape('aaaa{bbbb}cccc', 'a{4}|{b{4,4}|}c{4,}', '|')
+----
+true
+
+eval
+similar_to_escape('%b|', '%b||', '|')
+----
+true
+
+eval
+similar_to_escape('%b漢', '%b漢漢', '漢')
+----
+true
+
+eval
+similar_to_escape('%b漢aaa', '漢%b漢漢%', '漢')
+----
+true
+
+eval
+similar_to_escape('%b漢aaa', '漢%b漢漢%漢', '漢')
+----
+true
+
+eval
+similar_to_escape('_ab%c', '漢__%漢%_漢', '漢')
+----
+true
+
+# NOT SIMILAR TO with ESCAPE
+
+eval
+not_similar_to_escape('abc', 'abc', '')
+----
+false
+
+eval
+not_similar_to_escape('a\b', 'a\b', '')
+----
+false
+
+eval
+not_similar_to_escape('a\b', '%\%', '')
+----
+false
+
+eval
+not_similar_to_escape('a\b', '_\_', '')
+----
+false
+
+eval
+not_similar_to_escape('\\\', '\{3,}', '')
+----
+false
+
+eval
+not_similar_to_escape('abc', '[\a\b\c]+', '')
+----
+false
+
+eval
+not_similar_to_escape('%abc', '%%a__', '%')
+----
+false
+
+eval
+not_similar_to_escape('abc', '%(b|d)%', '|')
+----
+true
+
+eval
+not_similar_to_escape('a(b)c', '%((_()_', '(')
+----
+false
+
+eval
+not_similar_to_escape('a||bc', '%||%', '|')
+----
+false
+
+eval
+not_similar_to_escape('a||bc', '%||+%', '|')
+----
+false
+
+eval
+not_similar_to_escape('a||bc', '%||*%', '|')
+----
+false
+
+eval
+not_similar_to_escape('abc', '%||+%', '|')
+----
+true
+
+eval
+not_similar_to_escape('abc', '%||*%', '|')
+----
+false
+
+eval
+not_similar_to_escape('a|c', '(a||b*)%', '|')
+----
+false
+
+eval
+not_similar_to_escape('(abc)', '|(_+|)', '|')
+----
+false
+
+eval
+not_similar_to_escape('a*bc', '%|*b?%', '|')
+----
+false
+
+eval
+not_similar_to_escape('|||', '||*', '|')
+----
+false
+
+eval
+not_similar_to_escape('a|b|c', '_||+_||?||?_', '|')
+----
+false
+
+eval
+not_similar_to_escape('a|b|c', '_q|+_q|?q|?_', 'q')
+----
+false
+
+eval
+not_similar_to_escape('aaaa{bbbb}cccc', 'a{4}|{b{4,4}|}c{4,}', '|')
+----
+false
+
+eval
+not_similar_to_escape('%b|', '%b||', '|')
+----
+false
+
+eval
+not_similar_to_escape('%b漢', '%b漢漢', '漢')
+----
+false
+
+eval
+not_similar_to_escape('%b漢aaa', '漢%b漢漢%', '漢')
+----
+false
+
+eval
+not_similar_to_escape('%b漢aaa', '漢%b漢漢%漢', '漢')
+----
+false
+
+eval
+not_similar_to_escape('_ab%c', '漢__%漢%_漢', '漢')
+----
+false

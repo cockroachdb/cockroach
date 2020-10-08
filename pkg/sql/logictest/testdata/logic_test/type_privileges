@@ -1,0 +1,121 @@
+# LogicTest: !3node-tenant(50049)
+
+# Types created in the public schema have usage provided to public.
+user root
+
+statement ok
+GRANT CREATE, DROP ON DATABASE test TO testuser;
+
+statement ok
+CREATE TYPE test AS ENUM ('hello');
+
+statement ok
+CREATE TABLE for_view(x test);
+
+statement ok
+GRANT SELECT on for_view TO testuser;
+
+# Ensure a user without explicit privileges can use the type if it is
+# the public schema.
+user testuser
+
+statement ok
+CREATE TABLE t(x test)
+
+statement ok
+DROP TABLE t
+
+user root
+
+statement ok
+REVOKE USAGE ON TYPE test FROM public;
+
+user testuser
+
+statement error pq: user testuser does not have USAGE privilege on type test
+CREATE TABLE t(x test)
+
+statement ok
+SELECT 'hello'::test
+
+statement error pq: user testuser does not have USAGE privilege on type test
+CREATE VIEW vx1 as SELECT 'hello'::test
+
+statement error pq: user testuser does not have USAGE privilege on type test
+CREATE VIEW vx2 as SELECT x FROM for_view
+
+# Granting usage on a type to a specific user should allow the user to
+# create objects that depend on the type.
+user root
+
+statement ok
+GRANT USAGE ON TYPE test TO testuser
+
+user testuser
+
+statement ok
+CREATE TABLE t(x test);
+
+statement ok
+CREATE VIEW vx1 as SELECT 'hello'::test
+
+statement ok
+CREATE VIEW vx2 as SELECT x FROM for_view
+
+# Need to be owner of a type to alter it.
+statement error pq: must be owner of type test
+ALTER TYPE test RENAME TO not_test
+
+# Need to be owner of a type to drop it.
+statement error pq: must be owner of type test
+DROP TYPE test
+
+user root
+
+# SELECT, INSERT, DELETE, UPDATE, ZONECONFIG privileges
+# should not be grantable on types.
+
+statement error pq: invalid privilege type SELECT for type
+GRANT SELECT ON type TEST to testuser
+
+statement error pq: invalid privilege type INSERT for type
+GRANT INSERT ON type TEST to testuser
+
+statement error pq: invalid privilege type DELETE for type
+GRANT DELETE ON type TEST to testuser
+
+statement error pq: invalid privilege type UPDATE for type
+GRANT UPDATE ON type TEST to testuser
+
+statement error pq: invalid privilege type ZONECONFIG for type
+GRANT ZONECONFIG ON type TEST to testuser
+
+# ALL, and GRANT should be grantable to enums.
+
+statement ok
+GRANT GRANT ON type TEST to testuser
+
+statement ok
+GRANT ALL ON type TEST to testuser
+
+# Grant ownership to testuser to allow testuser to drop and alter the type.
+statement ok
+GRANT root TO testuser
+
+# Drop objects that dependent on type in preparation for dropping the type,
+# since we do not support drop type cascade yet.
+statement ok
+DROP VIEW vx1;
+DROP VIEW vx2;
+DROP TABLE t;
+DROP TABLE for_view;
+
+user testuser
+
+# testuser should be able to alter the type now.
+statement ok
+ALTER TYPE test RENAME to test1
+
+# testuser should be able to drop the type now.
+statement ok
+DROP TYPE test1

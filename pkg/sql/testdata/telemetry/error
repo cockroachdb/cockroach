@@ -1,0 +1,67 @@
+# This file contains telemetry tests for counters triggered by errors.
+
+feature-allowlist
+othererror.*
+errorcodes.*
+unimplemented.*
+----
+
+# 42601 is pgcode.Syntax.
+feature-usage
+some non-parsing garbage
+----
+error: pq: at or near "some": syntax error
+errorcodes.42601
+
+feature-usage
+SELECT crdb_internal.force_error('blah', 'foo')
+----
+error: pq: foo
+errorcodes.blah
+
+# XXUUU is pgcode.Uncategorized.
+feature-usage
+SELECT crdb_internal.force_error('', 'foo')
+----
+error: pq: foo
+errorcodes.XXUUU
+othererror.XXUUU
+
+# XX000 is pgcode.Internal.
+feature-usage
+SELECT crdb_internal.force_assertion_error('woo')
+----
+error: pq: internal error: crdb_internal.force_assertion_error(): woo
+errorcodes.XX000
+
+# XXUUU is pgcode.Uncategorized.
+feature-usage
+SELECT crdb_internal.set_vmodule('invalid')
+----
+error: pq: crdb_internal.set_vmodule(): syntax error: expect comma-separated list of filename=N
+errorcodes.XXUUU
+othererror.XXUUU
+othererror.XXUUU.crdb_internal.set_vmodule()
+
+# 0A000 is pgcode.FeatureNotSupported.
+feature-usage
+CREATE TABLE foo (a INT8 PRIMARY KEY, b INT8, INDEX (b) INTERLEAVE IN PARENT foo (b))
+----
+error: pq: unimplemented: use CREATE INDEX to make interleaved indexes
+errorcodes.0A000
+unimplemented.#9148
+
+# 0A000 is pgcode.FeatureNotSupported.
+feature-usage
+SELECT * FROM pg_catalog.pg_stat_wal_receiver
+----
+error: pq: unimplemented: virtual schema table not implemented: pg_catalog.pg_stat_wal_receiver
+errorcodes.0A000
+unimplemented.pg_catalog.pg_stat_wal_receiver
+
+# 22012 is pgcode.DivisionByZero.
+feature-usage
+SELECT 2/0
+----
+error: pq: division by zero
+errorcodes.22012

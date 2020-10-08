@@ -1,16 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -20,14 +16,14 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // showTraceNode is a planNode that processes session trace data.
 type showTraceNode struct {
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 	compact bool
 
 	// If set, the trace will also include "KV trace" messages - verbose messages
@@ -45,14 +41,12 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTraceForSession) (p
 
 	// Ensure the messages are sorted in age order, so that the user
 	// does not get confused.
-	ageColIdx := sqlbase.GetTraceAgeColumnIdx(n.Compact)
+	ageColIdx := colinfo.GetTraceAgeColumnIdx(n.Compact)
 	node = &sortNode{
-		plan:    node,
-		columns: planColumns(node),
-		ordering: sqlbase.ColumnOrdering{
-			sqlbase.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
+		plan: node,
+		ordering: colinfo.ColumnOrdering{
+			colinfo.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
 		},
-		needSort: true,
 	}
 
 	if n.TraceType == tree.ShowTraceReplica {
@@ -74,9 +68,9 @@ func (p *planner) makeShowTraceNode(compact bool, kvTracingEnabled bool) *showTr
 	}
 	if compact {
 		// We make a copy here because n.columns can be mutated to rename columns.
-		n.columns = append(n.columns, sqlbase.ShowCompactTraceColumns...)
+		n.columns = append(n.columns, colinfo.ShowCompactTraceColumns...)
 	} else {
-		n.columns = append(n.columns, sqlbase.ShowTraceColumns...)
+		n.columns = append(n.columns, colinfo.ShowTraceColumns...)
 	}
 	return n
 }
@@ -170,6 +164,8 @@ var kvMsgRegexp = regexp.MustCompile(
 		"^Del ",
 		"^Get ",
 		"^Scan ",
+		"^FKScan ",
+		"^CascadeScan ",
 		"^querying next range at ",
 		"^output row: ",
 		"^rows affected: ",

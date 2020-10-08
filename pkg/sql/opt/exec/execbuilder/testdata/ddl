@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 # ------------------------------------------------------------------------------
 # ALTER TABLE tests.
@@ -10,7 +10,7 @@ statement ok
 INSERT INTO other VALUES (9)
 
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f))
+CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f), FAMILY (a, f))
 
 statement ok
 INSERT INTO t VALUES (1, 9)
@@ -19,8 +19,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/f -> /9
 output row: [1 9]
@@ -35,8 +36,9 @@ statement ok
 SET tracing = on,kv,results; SELECT b FROM t@foo; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/foo/NULL -> /1
 output row: [NULL]
@@ -57,14 +59,15 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/f -> /9
-output row: [1 9 NULL NULL]
 fetched: /t/primary/2/f/b/c -> /9/1/1
-output row: [2 9 1 1]
 fetched: /t/primary/3/f/b/c -> /9/2/1
+output row: [1 9 NULL NULL]
+output row: [2 9 1 1]
 output row: [3 9 2 1]
 
 statement ok
@@ -74,14 +77,15 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/f -> /9
-output row: [1 9]
 fetched: /t/primary/2/f -> /9
-output row: [2 9]
 fetched: /t/primary/3/f -> /9
+output row: [1 9]
+output row: [2 9]
 output row: [3 9]
 
 # Verify limits and orderings are propagated correctly to the select.
@@ -91,17 +95,16 @@ CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
 query TTTTT colnames
 EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----
-tree                 field     description       columns               ordering
-split                ·         ·                 (key, pretty)         ·
- └── limit           ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
-      │              count     3                 ·                     ·
-      └── render     ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
-           │         render 0  test.public.s.k1  ·                     ·
-           │         render 1  test.public.s.k2  ·                     ·
-           └── scan  ·         ·                 (k1, k2, v[omitted])  k1!=NULL; k2!=NULL; key(k1,k2); +k1
-·                    table     s@primary         ·                     ·
-·                    spans     ALL               ·                     ·
-·                    limit     3                 ·                     ·
+tree       field                description         columns                              ordering
+·          distribution         local               ·                                    ·
+·          vectorized           false               ·                                    ·
+split      ·                    ·                   (key, pretty, split_enforced_until)  ·
+ │         estimated row count  10 (missing stats)  ·                                    ·
+ └── scan  ·                    ·                   (k1, k2)                             +k1
+·          estimated row count  3 (missing stats)   ·                                    ·
+·          table                s@primary           ·                                    ·
+·          spans                LIMITED SCAN        ·                                    ·
+·          limit                3                   ·                                    ·
 
 statement ok
 DROP TABLE t; DROP TABLE other
@@ -124,8 +127,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1 -> NULL
 fetched: /t/primary/1/b -> 1
@@ -136,10 +140,10 @@ user root
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error duplicate index name: \"foo\"
+statement error relation \"foo\" already exists
 CREATE INDEX foo ON t (a)
 
-statement error index \"bar\" contains unknown column \"c\"
+statement error column "c" does not exist
 CREATE INDEX bar ON t (c)
 
 statement error index \"bar\" contains duplicate column \"b\"
@@ -149,8 +153,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@foo; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/foo/1/1 -> NULL
 output row: [1 1]
@@ -162,12 +167,13 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@foo; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/foo/1/1 -> NULL
-output row: [1 1]
 fetched: /t/foo/1/2 -> NULL
+output row: [1 1]
 output row: [2 1]
 
 # test for DESC index
@@ -179,7 +185,8 @@ statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
-  c INT
+  c INT,
+  FAMILY "primary" (a, b, c)
 )
 
 statement ok
@@ -196,15 +203,16 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@b_desc; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/b_desc/2/2 -> NULL
 fetched: /t/b_desc/1/1 -> NULL
-fetched: /t/primary/2/b/c -> /2/2
-output row: [2 2 2]
 fetched: /t/primary/1/b/c -> /1/1
+fetched: /t/primary/2/b/c -> /2/2
 output row: [1 1 1]
+output row: [2 2 2]
 
 statement ok
 DROP table t
@@ -215,7 +223,7 @@ DROP table t
 statement ok
 CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_v_idx ON test_kv(v);
-  CREATE INDEX test_v_idx2 ON test_kv(v DESC) STORING(k);
+  CREATE INDEX test_v_idx2 ON test_kv(v DESC) STORING(w);
   CREATE INDEX test_v_idx3 ON test_kv(w) STORING(v);
   CREATE TABLE test_kvr1(k INT PRIMARY KEY REFERENCES test_kv(k));
   CREATE TABLE test_kvr2(k INT, v INT UNIQUE REFERENCES test_kv(k));
@@ -225,31 +233,3 @@ CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_kvi2_idx ON test_kvi2(v) INTERLEAVE IN PARENT test_kv(v);
   CREATE VIEW test_v1 AS SELECT v FROM test_kv;
   CREATE VIEW test_v2 AS SELECT v FROM test_v1;
-
-# Verify that we report a dependency on a column that is being mutated.
-statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v INT);
-BEGIN;
-  ALTER TABLE kv ADD COLUMN z INT DEFAULT 123;
-  CREATE VIEW v AS SELECT k FROM [UPDATE kv SET v = 444 WHERE k > 0 RETURNING k];
-COMMIT
-
-# The view should contain column z.
-query TTTTT colnames
-EXPLAIN (VERBOSE) SELECT * FROM v
-----
-tree                      field     description       columns                ordering
-render                    ·         ·                 (k)                    ·
- │                        render 0  test.public.kv.k  ·                      ·
- └── run                  ·         ·                 (k, v, z)              ·
-      └── update          ·         ·                 (k, v, z)              ·
-           │              table     kv                ·                      ·
-           │              set       v                 ·                      ·
-           └── render     ·         ·                 (k, v, z, "?column?")  "?column?"=CONST; k!=NULL; key(k)
-                │         render 0  test.public.kv.k  ·                      ·
-                │         render 1  test.public.kv.v  ·                      ·
-                │         render 2  test.public.kv.z  ·                      ·
-                │         render 3  444               ·                      ·
-                └── scan  ·         ·                 (k, v, z)              k!=NULL; key(k)
-·                         table     kv@primary        ·                      ·
-·                         spans     /1-               ·                      ·

@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package props
 
@@ -64,36 +60,28 @@ func (c Cardinality) CanBeZero() bool {
 // AsLowAs ratchets the min bound downwards in order to ensure that it allows
 // values that are >= the min value.
 func (c Cardinality) AsLowAs(min uint32) Cardinality {
-	if min < c.Min {
-		return Cardinality{Min: min, Max: c.Max}
+	return Cardinality{
+		Min: minVal(c.Min, min),
+		Max: c.Max,
 	}
-	return c
 }
 
-// AtLeast ratchets the bounds upwards so that they're at least as big as the
-// given min value.
-func (c Cardinality) AtLeast(min uint32) Cardinality {
-	if c.Min > min {
-		min = c.Min
-	}
-	max := min
-	if c.Max > max {
-		max = c.Max
-	}
-	return Cardinality{Min: min, Max: max}
-}
-
-// AtMost ratchets the bounds downwards so that they're no bigger than the given
+// Limit ratchets the bounds downwards so that they're no bigger than the given
 // max value.
-func (c Cardinality) AtMost(max uint32) Cardinality {
-	min := max
-	if c.Min < min {
-		min = c.Min
+func (c Cardinality) Limit(max uint32) Cardinality {
+	return Cardinality{
+		Min: minVal(c.Min, max),
+		Max: minVal(c.Max, max),
 	}
-	if c.Max < max {
-		max = c.Max
+}
+
+// AtLeast ratchets the bounds upwards so that they're at least as large as the
+// bounds in the given cardinality.
+func (c Cardinality) AtLeast(other Cardinality) Cardinality {
+	return Cardinality{
+		Min: maxVal(c.Min, other.Min),
+		Max: maxVal(c.Max, other.Max),
 	}
-	return Cardinality{Min: min, Max: max}
 }
 
 // Add sums the min and max bounds to get a combined count of rows.
@@ -147,4 +135,18 @@ func (c Cardinality) String() string {
 		return fmt.Sprintf("[%d - ]", c.Min)
 	}
 	return fmt.Sprintf("[%d - %d]", c.Min, c.Max)
+}
+
+func minVal(a, b uint32) uint32 {
+	if a <= b {
+		return a
+	}
+	return b
+}
+
+func maxVal(a, b uint32) uint32 {
+	if a >= b {
+		return a
+	}
+	return b
 }

@@ -1,0 +1,219 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+build
+WITH foo AS (SELECT * FROM xy) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: x:4(int!null) y:5(int)
+ ├── key: (4)
+ ├── fd: (4)-->(5)
+ ├── prune: (4,5)
+ ├── project
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1)
+ │    └── scan xy
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2,3)
+ │         ├── prune: (1-3)
+ │         └── interesting orderings: (+1)
+ └── with-scan &1 (foo)
+      ├── columns: x:4(int!null) y:5(int)
+      ├── mapping:
+      │    ├──  xy.x:1(int) => x:4(int)
+      │    └──  xy.y:2(int) => y:5(int)
+      ├── key: (4)
+      ├── fd: (4)-->(5)
+      ├── prune: (4,5)
+      └── cte-uses
+           └── &1: count=1 used-columns=(1,2)
+
+# Side effects should be propagated up to the top-level from the Binding side
+# of a WITH.
+build
+WITH foo AS (SELECT 1/0) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":2(decimal!null)
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(2)
+ ├── prune: (2)
+ ├── project
+ │    ├── columns: "?column?":1(decimal!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── div [as="?column?":1, type=decimal, immutable]
+ │              ├── const: 1 [type=int]
+ │              └── const: 0 [type=int]
+ └── with-scan &1 (foo)
+      ├── columns: "?column?":2(decimal!null)
+      ├── mapping:
+      │    └──  "?column?":1(decimal) => "?column?":2(decimal)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      ├── prune: (2)
+      └── cte-uses
+           └── &1: count=1 used-columns=(1)
+
+# Side effects should be propagated up to the top-level from the Input side of
+# a With.
+build
+WITH foo AS (SELECT 1) SELECT 1/0 FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":3(decimal!null)
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── prune: (3)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── const: 1 [as="?column?":1, type=int]
+ └── project
+      ├── columns: "?column?":3(decimal!null)
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(3)
+      ├── prune: (3)
+      ├── cte-uses
+      │    └── &1: count=1 used-columns=(1)
+      ├── with-scan &1 (foo)
+      │    ├── columns: "?column?":2(int!null)
+      │    ├── mapping:
+      │    │    └──  "?column?":1(int) => "?column?":2(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(2)
+      │    ├── prune: (2)
+      │    └── cte-uses
+      │         └── &1: count=1 used-columns=(1)
+      └── projections
+           └── div [as="?column?":3, type=decimal, immutable]
+                ├── const: 1 [type=int]
+                └── const: 0 [type=int]
+
+build
+WITH foo AS (SELECT $1::INT) SELECT 1 FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":3(int!null)
+ ├── cardinality: [1 - 1]
+ ├── immutable, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── prune: (3)
+ ├── project
+ │    ├── columns: int8:1(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── immutable, has-placeholder
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── cast: INT8 [as=int8:1, type=int, immutable]
+ │              └── placeholder: $1 [type=string]
+ └── project
+      ├── columns: "?column?":3(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3)
+      ├── prune: (3)
+      ├── cte-uses
+      │    └── &1: count=1 used-columns=(1)
+      ├── with-scan &1 (foo)
+      │    ├── columns: int8:2(int)
+      │    ├── mapping:
+      │    │    └──  int8:1(int) => int8:2(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(2)
+      │    ├── prune: (2)
+      │    └── cte-uses
+      │         └── &1: count=1 used-columns=(1)
+      └── projections
+           └── const: 1 [as="?column?":3, type=int]
+
+# WithScan should not have outer columns.
+build
+SELECT
+    *
+FROM
+    (VALUES (1), (2)) AS v (x),
+    LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
+----
+error (0A000): CTEs may not be correlated
+
+# Regression test for #40930.
+
+exec-ddl
+CREATE TABLE t40930 (
+  s string
+)
+----
+
+opt
+WITH
+    with_4189
+        AS (
+            SELECT
+                tab_10102.s
+            FROM
+                t40930 AS tab_10102, (SELECT NULL) AS tab_10103 (col_24444)
+        )
+SELECT
+    NULL
+FROM
+    t40930, with_4189
+----
+project
+ ├── columns: "?column?":9(unknown)
+ ├── fd: ()-->(9)
+ ├── prune: (9)
+ ├── inner-join (cross)
+ │    ├── scan t40930
+ │    │    └── unfiltered-cols: (5-7)
+ │    ├── scan tab_10102
+ │    │    └── unfiltered-cols: (1-3)
+ │    └── filters (true)
+ └── projections
+      └── null [as="?column?":9, type=unknown]
+
+build
+SELECT
+    *
+FROM
+    (VALUES (1), (2)) AS v (x),
+    LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
+----
+error (0A000): CTEs may not be correlated

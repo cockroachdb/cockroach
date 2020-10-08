@@ -1,0 +1,31 @@
+statement ok
+CREATE TABLE t45837 AS SELECT 1.25::decimal AS d
+
+# Test that decimals get rounded when casting.
+query T
+SELECT d::decimal(10,1) FROM t45837
+----
+1.3
+
+statement ok
+CREATE TABLE t2 AS SELECT 18446744073709551616::FLOAT AS f
+
+statement error pgcode 22003 integer out of range
+SELECT f::int FROM t2
+
+# Regression test for #47327. Test that negative intervals are correctly
+# cast to a decimal.
+statement ok
+CREATE TABLE t0(c0 DECIMAL UNIQUE); INSERT INTO t0(c0) VALUES(0);
+
+statement ok
+CREATE TABLE t1(c0 DECIMAL); INSERT INTO t1(c0) VALUES(0);
+
+# Both of these queries should return no rows.
+query T
+SELECT t0.c0 FROM t0 WHERE t0.c0 BETWEEN t0.c0 AND INTERVAL '-1'::DECIMAL
+----
+
+query T
+SELECT t1.c0 FROM t1 WHERE t1.c0 BETWEEN t1.c0 AND INTERVAL '-1'::DECIMAL
+----

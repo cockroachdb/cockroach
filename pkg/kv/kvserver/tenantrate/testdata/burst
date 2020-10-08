@@ -1,0 +1,90 @@
+# This tests bursting and how requests above the burst limit put the limiter
+# into debt.
+
+init
+readrequests:  { rate: 1, burst: 2 }
+writerequests: { rate: 1, burst: 2 }
+readbytes:     { rate: 1024, burst: 2048 }
+writebytes:    { rate: 10, burst: 20 }
+----
+00:00:00.000
+
+# Set up a limiter for tenant 2.
+
+get_tenants
+- 2
+----
+[2#1]
+
+# Launch a request for tenant 2 that consumes more write bytes than the burst
+# limit. This will not block but will put the limiter into debt.
+
+launch
+- { id: g1, tenant: 2, iswrite: true, writebytes: 30 }
+----
+[g1@2]
+
+await
+- g1
+----
+[]
+
+# Launch another request which will block until there is sufficient write
+# quota available. This will be 2s because we're in debt 10 and the rate is
+# 10/s.
+
+launch
+- { id: g1, tenant: 2, iswrite: true, writebytes: 10 }
+----
+[g1@2]
+
+# Observe that the request indeed sees two seconds of waiting.
+
+timers
+----
+00:00:02.000
+
+# Advance time to unblock the above request.
+
+advance
+1s999ms
+----
+00:00:01.999
+
+advance
+1ms
+----
+00:00:02.000
+
+# Ensure that the request is indeed unblocked.
+
+await
+- g1
+----
+[]
+
+# Test that when consuming more than burst that we wait for the token bucket to
+# be full. At time 4s the token bucket will be full. When requesting 30, which
+# is above the burst of 20, we'll need to wait for the bucket to be full.
+
+launch
+- { id: g1,  tenant: 2, iswrite: true, writebytes: 30 }
+----
+[g1@2]
+
+# Verify that the timer exists to avoid races setting the timer and advancing
+# time.
+
+timers
+----
+00:00:04.000
+
+advance
+2s
+----
+00:00:04.000
+
+await
+- g1
+----
+[]

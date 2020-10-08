@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata local-parallel-stmts
-
 ## Basic creation
 
 query TT
@@ -86,13 +84,13 @@ SELECT NULL::JSON
 ----
 NULL
 
-statement error arrays of jsonb not allowed
+statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
 SELECT ARRAY['"hello"'::JSON]
 
-statement error arrays of JSONB not allowed
+statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
 SELECT '{}'::JSONB[]
 
-statement error arrays of JSONB not allowed
+statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
 CREATE TABLE x (y JSONB[])
 
 statement ok
@@ -106,7 +104,9 @@ INSERT INTO foo VALUES
   ('1.000'),
   ('true'),
   ('false'),
-  (NULL)
+  (NULL),
+  ('{"x": [1, 2, 3]}'),
+  ('{"x": {"y": "z"}}')
 
 query T rowsort
 SELECT bar FROM foo
@@ -118,6 +118,8 @@ SELECT bar FROM foo
 true
 false
 NULL
+{"x": [1, 2, 3]}
+{"x": {"y": "z"}}
 
 query T
 SELECT bar FROM foo WHERE bar->>'a' = 'b'
@@ -129,6 +131,28 @@ SELECT bar FROM foo WHERE bar ? 'a'
 ----
 {"a": "b"}
 
+query BBBBBBB
+VALUES (
+  '"hello"'::JSONB   ? 'hello',
+  '"hello"'::JSONB   ? 'goodbye',
+  '"hello"'::JSONB   ? 'ello',
+  '"hello"'::JSONB   ? 'h',
+  'true'::JSONB      ? 'true',
+  '1'::JSONB         ? '1',
+  'null'::JSONB      ? 'null'
+)
+----
+true  false  false  false  false  false  false
+
+query T
+SELECT bar FROM foo WHERE bar ? 'hello'
+----
+"hello"
+
+query T
+SELECT bar FROM foo WHERE bar ? 'goodbye'
+----
+
 query T
 SELECT bar FROM foo WHERE bar ?| ARRAY['a','b']
 ----
@@ -138,15 +162,31 @@ query T
 SELECT bar FROM foo WHERE bar ?& ARRAY['a','b']
 ----
 
+# ?| and ?& ignore NULLs.
+query T
+SELECT bar FROM foo WHERE bar ?| ARRAY['a', null]
+----
+{"a": "b"}
+
+# TODO(justin): #29355
+# query T
+# SELECT bar FROM foo WHERE bar ?| ARRAY[null, null]::STRING[]
+# ----
+
+query T
+SELECT bar FROM foo WHERE bar ?& ARRAY['a', null]
+----
+{"a": "b"}
+
 query T
 SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 ----
 {"a": "b"}
 
-statement error pgcode 0A000 can't order by column type jsonb
+statement error pgcode 0A000 can't order by column type jsonb.*\nHINT.*\n.*35706
 SELECT bar FROM foo ORDER BY bar
 
-statement error pgcode 0A000 column k is of type JSON and thus is not indexable
+statement error pgcode 0A000 column k is of type jsonb and thus is not indexable
 CREATE TABLE pk (k JSON PRIMARY KEY)
 
 query T rowsort
@@ -159,6 +199,16 @@ NULL
 NULL
 NULL
 NULL
+NULL
+NULL
+
+query T
+SELECT * from foo where bar->'x' = '[1]'
+----
+
+query T
+SELECT * from foo where bar->'x' = '{}'
+----
 
 statement ok
 DELETE FROM foo
@@ -286,7 +336,7 @@ NULL
 query T
 SELECT pg_typeof('{"a": 1}'::JSONB->>'a')
 ----
-string
+text
 
 query T
 SELECT '{"a": 1, "b": 2}'::JSONB->>'b'
@@ -332,6 +382,11 @@ query T
 SELECT '{"a": ["b"]}'::JSONB#>'{a,0}'::STRING[]
 ----
 "b"
+
+query T
+SELECT '{"a": 1}'::JSONB#>>ARRAY['foo', null]
+----
+NULL
 
 query T
 SELECT '{"a": 1}'::JSONB#>>'{a}'::STRING[]
@@ -442,6 +497,11 @@ SELECT '{"a": 1}'::JSONB - 'b'
 
 # `-` is one of the very few cases that PG errors in a JSON type mismatch with operators.
 query T
+SELECT '[1,2,3]'::JSONB - 0
+----
+[2, 3]
+
+query T
 SELECT '[1,2,3]'::JSONB - 1
 ----
 [1, 3]
@@ -500,6 +560,12 @@ query T
 SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', 'bar']
 ----
 {"foo": {}}
+
+statement error path element at position 1 is null
+SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY[null, 'foo']
+
+statement error path element at position 2 is null
+SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', null]
 
 query T
 SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo']
@@ -624,5 +690,32 @@ SELECT '{"b": [], "c": {"a": "b"}}'::JSONB - array['a'];
 ----
 {"b": [], "c": {"a": "b"}}
 
+# Regression test for #34756.
+query T
+SELECT '{"b": [], "c": {"a": "b"}}'::JSONB - array['foo', NULL]
+----
+{"b": [], "c": {"a": "b"}}
+
 statement error pgcode 22P02 a path element is not an integer: foo
 SELECT '{"a": {"b": ["foo"]}}'::JSONB #- ARRAY['a', 'b', 'foo']
+
+subtest single_family_jsonb
+
+statement ok
+CREATE TABLE json_family (a INT PRIMARY KEY, b JSONB, FAMILY fam0(a), FAMILY fam1(b))
+
+statement ok
+INSERT INTO json_family VALUES(0,'{}')
+
+statement ok
+INSERT INTO json_family VALUES(1,'{"a":123,"c":"asdf"}')
+
+query IT colnames
+SELECT a, b FROM json_family ORDER BY a
+----
+a  b
+0  {}
+1  {"a": 123, "c": "asdf"}
+
+statement ok
+DROP TABLE json_family

@@ -1,0 +1,82 @@
+# Disable automatic stats to avoid flakiness.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+subtest regression45707
+
+user root
+
+statement ok
+CREATE DATABASE d45707; CREATE TABLE d45707.t45707(x INT);
+  GRANT SELECT ON DATABASE d45707 TO testuser;
+  GRANT SELECT ON d45707.t45707 TO testuser
+
+statement ok
+COMMENT ON DATABASE d45707 IS 'd45707';
+COMMENT ON TABLE d45707.t45707 IS 't45707';
+COMMENT ON COLUMN d45707.t45707.x IS 'x45707';
+COMMENT ON INDEX d45707.t45707@primary IS 'p45707'
+
+user testuser
+
+statement ok
+SET DATABASE = d45707
+
+# Verify the user cannot modify the comments
+
+statement error user testuser does not have CREATE privilege on database d45707
+COMMENT ON DATABASE d45707 IS 'd45707'
+
+statement error user testuser does not have CREATE privilege on relation t45707
+COMMENT ON TABLE d45707.t45707 IS 't45707'
+
+statement error user testuser does not have CREATE privilege on relation t45707
+COMMENT ON COLUMN d45707.t45707.x IS 'x45707'
+
+statement error user testuser does not have CREATE privilege on relation t45707
+COMMENT ON INDEX d45707.t45707@primary IS 'p45707'
+
+# Verify that the user can view the comments
+
+query T
+SELECT shobj_description(oid, 'pg_database')
+  FROM pg_database
+ WHERE datname = 'd45707'
+----
+d45707
+
+query T
+SELECT col_description(attrelid, attnum)
+  FROM pg_attribute
+ WHERE attrelid = 't45707'::regclass AND attname = 'x'
+----
+x45707
+
+query T
+SELECT obj_description('t45707'::REGCLASS)
+----
+t45707
+
+query T
+SELECT obj_description(indexrelid)
+  FROM pg_index
+ WHERE indrelid = 't45707'::REGCLASS
+   AND indisprimary
+----
+p45707
+
+# Verify that the user can modify the comments.
+
+user root
+
+statement ok
+GRANT ALL ON DATABASE d45707 TO testuser;
+  GRANT ALL ON TABLE d45707.t45707 TO testuser
+
+user testuser
+
+statement ok
+COMMENT ON DATABASE d45707 IS 'd45707_2';
+COMMENT ON TABLE d45707.t45707 IS 't45707_2';
+COMMENT ON COLUMN d45707.t45707.x IS 'x45707_2';
+COMMENT ON INDEX d45707.t45707@primary IS 'p45707_2'

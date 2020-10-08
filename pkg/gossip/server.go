@@ -1,29 +1,21 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package gossip
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"math/rand"
 	"net"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 type serverInfo struct {
@@ -52,7 +45,7 @@ type server struct {
 	stopper *stop.Stopper
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		is       *infoStore                         // The backing infostore
 		incoming nodeSet                            // Incoming client node IDs
 		nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
@@ -153,18 +146,33 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	reply := new(Response)
 
-	for {
+	for init := true; ; init = false {
 		s.mu.Lock()
 		// Store the old ready so that if it gets replaced with a new one
 		// (once the lock is released) and is closed, we still trigger the
 		// select below.
 		ready := s.mu.ready
 		delta := s.mu.is.delta(args.HighWaterStamps)
+		if init {
+			s.mu.is.populateMostDistantMarkers(delta)
+		}
+		if args.HighWaterStamps == nil {
+			args.HighWaterStamps = make(map[roachpb.NodeID]int64)
+		}
 
-		if infoCount := len(delta); infoCount > 0 {
+		// Send a response if this is the first response on the connection, or if
+		// there are deltas to send. The first condition is necessary to make sure
+		// the remote node receives our high water stamps in a timely fashion.
+		if infoCount := len(delta); init || infoCount > 0 {
 			if log.V(1) {
-				log.Infof(ctx, "returning %d info(s) to node %d: %s",
+				log.Infof(ctx, "returning %d info(s) to n%d: %s",
 					infoCount, args.NodeID, extractKeys(delta))
+			}
+			// Ensure that the high water stamps for the remote client are kept up to
+			// date so that we avoid resending the same gossip infos as infos are
+			// updated locally.
+			for _, i := range delta {
+				ratchetHighWaterStamp(args.HighWaterStamps, i.NodeID, i.OrigStamp)
 			}
 
 			*reply = Response{
@@ -226,18 +234,18 @@ func (s *server) gossipReceiver(
 				// This is an incoming loopback connection which should be closed by
 				// the client.
 				if log.V(2) {
-					log.Infof(ctx, "ignoring gossip from node %d (loopback)", args.NodeID)
+					log.Infof(ctx, "ignoring gossip from n%d (loopback)", args.NodeID)
 				}
 			} else if _, ok := s.mu.nodeMap[args.Addr]; ok {
 				// This is a duplicate incoming connection from the same node as an existing
 				// connection. This can happen when bootstrap connections are initiated
 				// through a load balancer.
 				if log.V(2) {
-					log.Infof(ctx, "duplicate connection received from node %d at %s", args.NodeID, args.Addr)
+					log.Infof(ctx, "duplicate connection received from n%d at %s", args.NodeID, args.Addr)
 				}
 				return errors.Errorf("duplicate connection from node at %s", args.Addr)
 			} else if s.mu.incoming.hasSpace() {
-				log.VEventf(ctx, 2, "adding node %d to incoming set", args.NodeID)
+				log.VEventf(ctx, 2, "adding n%d to incoming set", args.NodeID)
 
 				s.mu.incoming.addNode(args.NodeID)
 				s.mu.nodeMap[args.Addr] = serverInfo{
@@ -246,7 +254,7 @@ func (s *server) gossipReceiver(
 				}
 
 				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
-					log.VEventf(ctx, 2, "removing node %d from incoming set", args.NodeID)
+					log.VEventf(ctx, 2, "removing n%d from incoming set", args.NodeID)
 					s.mu.incoming.removeNode(nodeID)
 					delete(s.mu.nodeMap, addr)
 				}(args.NodeID, args.Addr)
@@ -266,7 +274,7 @@ func (s *server) gossipReceiver(
 				}
 
 				s.nodeMetrics.ConnectionsRefused.Inc(1)
-				log.Infof(ctx, "refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+				log.Infof(ctx, "refusing gossip from n%d (max %d conns); forwarding to n%d (%s)",
 					args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
 
 				*reply = Response{
@@ -299,10 +307,10 @@ func (s *server) gossipReceiver(
 
 		freshCount, err := s.mu.is.combine(args.Delta, args.NodeID)
 		if err != nil {
-			log.Warningf(ctx, "failed to fully combine gossip delta from node %d: %s", args.NodeID, err)
+			log.Warningf(ctx, "failed to fully combine gossip delta from n%d: %s", args.NodeID, err)
 		}
 		if log.V(1) {
-			log.Infof(ctx, "received %s from node %d (%d fresh)", extractKeys(args.Delta), args.NodeID, freshCount)
+			log.Infof(ctx, "received %s from n%d (%d fresh)", extractKeys(args.Delta), args.NodeID, freshCount)
 		}
 		s.maybeTightenLocked()
 
@@ -333,6 +341,7 @@ func (s *server) gossipReceiver(
 		// receive a new non-nil request. We avoid assigning to *argsPtr directly
 		// because the gossip sender above has closed over *argsPtr and will NPE if
 		// *argsPtr were set to nil.
+		mergeHighWaterStamps(&recvArgs.HighWaterStamps, (*argsPtr).HighWaterStamps)
 		*argsPtr = recvArgs
 	}
 }
@@ -363,9 +372,12 @@ func (s *server) start(addr net.Addr) {
 		s.mu.ready = ready
 	}
 
+	// We require redundant callbacks here as the broadcast callback is
+	// propagating gossip infos to other nodes and needs to propagate the new
+	// expiration info.
 	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
 		broadcast()
-	})
+	}, Redundant)
 
 	s.stopper.RunWorker(context.TODO(), func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
@@ -378,20 +390,23 @@ func (s *server) start(addr net.Addr) {
 	})
 }
 
-func (s *server) status() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %s)\n",
-		s.mu.incoming.gauge.Value(), s.mu.incoming.maxSize, s.serverMetrics)
+func (s *server) status() ServerStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var status ServerStatus
+	status.ConnStatus = make([]ConnStatus, 0, len(s.mu.nodeMap))
+	status.MaxConns = int32(s.mu.incoming.maxSize)
+	status.MetricSnap = s.serverMetrics.Snapshot()
+
 	for addr, info := range s.mu.nodeMap {
-		// TODO(peter): Report per connection sent/received statistics. The
-		// structure of server.Gossip and server.gossipReceiver makes this
-		// irritating to track.
-		fmt.Fprintf(&buf, "  %d: %s (%s)\n",
-			info.peerID, addr.AddressField, roundSecs(timeutil.Since(info.createdAt)))
+		status.ConnStatus = append(status.ConnStatus, ConnStatus{
+			NodeID:   info.peerID,
+			Address:  addr.String(),
+			AgeNanos: timeutil.Since(info.createdAt).Nanoseconds(),
+		})
 	}
-	return buf.String()
+	return status
 }
 
 func roundSecs(d time.Duration) time.Duration {
@@ -400,7 +415,7 @@ func roundSecs(d time.Duration) time.Duration {
 
 // GetNodeAddr returns the node's address stored in the Infostore.
 func (s *server) GetNodeAddr() *util.UnresolvedAddr {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return &s.mu.is.NodeAddr
 }

@@ -1,0 +1,48 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE xyz (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT,
+  z INT
+)
+
+statement ok
+ALTER TABLE xyz SPLIT AT VALUES (2), (4), (6), (7)
+
+statement ok
+ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
+  (ARRAY[1], 0),
+  (ARRAY[2], 2),
+  (ARRAY[3], 4),
+  (ARRAY[4], 6),
+  (ARRAY[5], 7)
+
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE xyz]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         /4       {2}       2
+/4         /6       {3}       3
+/6         /7       {4}       4
+/7         NULL     {5}       5
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
+----
+·           distribution         local                 ·                        ·
+·           vectorized           true                  ·                        ·
+ordinality  ·                    ·                     (x, y, z, "ordinality")  ·
+ │          estimated row count  1000 (missing stats)  ·                        ·
+ └── scan   ·                    ·                     (x, y, z)                ·
+·           estimated row count  1000 (missing stats)  ·                        ·
+·           table                xyz@primary           ·                        ·
+·           spans                FULL SCAN             ·                        ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE9Lw0AQxe9-imVOCiNtqqc9pdiKC7GpSUClzWHNDiWQZuPuBpKWfHdJIv4DpR7nzfzee7tHsK8FcIiXwfImYbUp2G0U3rPN8mkdzMWKnS9EnMQPwQV7P2mQtcgOyLagjcpLWeSu3cKINe2BPYrkjoXRQqzmgUieU0AotaKV3JMFvgEPUoTK6Iys1aaXjsOBUA3wKUJeVrXr5RQh04aAH8HlriDgkMiXgiKSisxkCgiKnMyLwbZpD35l8r00LSDElSwtZ5eAENaOM3-G_hX615B2CLp2nxHWyR0B9zo8vUb48fCJ963Fb-6z_7hHZCtdWjrJedqlCKR2NH6k1bXJaG10NsSMYzhwg6DIunHrjYMox1Vf8Cvs_QnPfsBpd_YWAAD__zpkvUQ=

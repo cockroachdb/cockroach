@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package lex
 
@@ -41,29 +37,34 @@ func IsHexDigit(ch int) bool {
 		(ch >= 'A' && ch <= 'F')
 }
 
-// lookaheadKeywords are those keywords for which we need one token
-// of lookahead extra to determine their token type.
-var lookaheadKeywords = map[string]struct{}{
-	"between":    {},
-	"ilike":      {},
-	"in":         {},
-	"like":       {},
-	"of":         {},
-	"ordinality": {},
-	"similar":    {},
-	"time":       {},
+// reservedOrLookaheadKeywords are the reserved keywords plus those keywords for
+// which we need one token of lookahead extra to determine their token type.
+var reservedOrLookaheadKeywords = make(map[string]struct{})
+
+func init() {
+	for s := range reservedKeywords {
+		reservedOrLookaheadKeywords[s] = struct{}{}
+	}
+	for _, s := range []string{
+		"between",
+		"ilike",
+		"in",
+		"like",
+		"of",
+		"ordinality",
+		"similar",
+		"time",
+		"generated",
+	} {
+		reservedOrLookaheadKeywords[s] = struct{}{}
+	}
 }
 
 // isReservedKeyword returns true if the keyword is reserved, or needs
 // one extra token of lookahead.
 func isReservedKeyword(s string) bool {
-	if _, ok := reservedKeywords[s]; ok {
-		return true
-	}
-	if _, ok := lookaheadKeywords[s]; ok {
-		return true
-	}
-	return false
+	_, ok := reservedOrLookaheadKeywords[s]
+	return ok
 }
 
 // isBareIdentifier returns true if the input string is a permissible bare SQL

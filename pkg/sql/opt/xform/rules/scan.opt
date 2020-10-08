@@ -2,8 +2,9 @@
 # scan.opt contains exploration rules for the Scan operator.
 # =============================================================================
 
-
 # GenerateIndexScans creates alternate Scan expressions for each secondary index
 # on the scanned table.
 [GenerateIndexScans, Explore]
-(Scan $def:* & (CanGenerateIndexScans $def)) => (GenerateIndexScans $def)
+(Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+=>
+(GenerateIndexScans $scanPrivate)

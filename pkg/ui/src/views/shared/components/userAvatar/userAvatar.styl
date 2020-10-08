@@ -1,0 +1,36 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.user-avatar
+  height $line-height--large
+  width $line-height--large
+  border-radius 50%
+  background-color $colors--primary-blue-1
+  color: $colors--primary-blue-3
+  font-size 14px
+  font-weight bold
+  line-height $line-height--large
+  letter-spacing 0.1px
+  margin auto
+  text-align center
+
+.user-avatar:hover
+  border solid 2px $colors--primary-blue-3
+  line-height "calc( %s - 4px )" % $line-height--large
+
+.user-avatar--disabled
+  background-color $colors--neutral-2
+  color $colors--neutral-5
+
+.user-avatar--disabled:hover
+  border none
+  line-height $line-height--large

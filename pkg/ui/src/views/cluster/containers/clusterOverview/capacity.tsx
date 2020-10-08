@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import d3 from "d3";
 
 import { ComputeByteScale } from "src/util/format";
@@ -21,7 +31,7 @@ function capacityChart() {
 
   const margin = {
     top: 12,
-    right: 35,
+    right: 20,
     bottom: 25,
     left: 20,
   };
@@ -57,6 +67,11 @@ function capacityChart() {
   }
 
   return function chart(svg: d3.Selection<CapacityChartProps>) {
+    const rect = (svg.node().parentNode as HTMLElement).getBoundingClientRect();
+    size.width = rect.width;
+
+    scale.range([0, size.width]);
+
     svg
       .attr("width", size.width + margin.left + margin.right)
       .attr("height", size.height + margin.top + margin.bottom);

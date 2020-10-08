@@ -37,7 +37,7 @@ origin story.
 
 Note that egress bandwidth is *expensive*. Every gigabyte of outbound traffic
 costs 8¢, so one 2TB restore costs approximately $160. Data transfer within a
-region, like from an storage account in the `eastus` region to a VM in the
+region, like from a storage account in the `eastus` region to a VM in the
 `eastus` region, is not considered outbound traffic, however, and so is free.
 
 Ideally, we'd limit ourselves to one region and frolic in free bandwidth
@@ -71,7 +71,7 @@ done
 Since egress is expensive and ingress is free, be sure to run this on an
 azworker located in the source region—`eastus` in this case.
 
-You can fetch the source and destination access keysfrom the Azure Portal or
+You can fetch the source and destination access keys from the Azure Portal or
 with the following Azure CLI 2.0 command:
 
 ```shell

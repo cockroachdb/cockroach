@@ -1,0 +1,239 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~styl/base/layout-vars.styl'
+@require "~src/components/core/index.styl"
+
+// ---- Navigation ----
+$navbar-bg            = white
+$main-nav-active-bg   = $background-color
+$main-nav-active-font = $link-color
+$main-nav-active-icon = $link-color
+$main-nav-hover       = $link-color
+$subnav-active-color  = $healthy-color
+
+$subnav-underline-height = 3px
+
+.navigation-bar
+  position fixed
+  top 0
+  left 0
+  bottom 0
+  min-height 350px
+  z-index $z-index-navigation
+  width $nav-width
+  background-color $navbar-bg
+  border-right 1px solid $table-border-color
+  margin 0
+  padding 0
+  display flex
+  flex-direction column
+  justify-content space-between
+  overflow-y auto
+
+.navigation-bar__list
+  width 100%
+
+  li
+    width 100%
+    padding 0
+    border 0
+    font-family $font-family--bold
+    font-size 8px
+    text-transform uppercase
+    float left
+    color $body-color
+    list-style-type none
+    line-height 18px
+    word-break break-all
+
+    &.normal
+      polyline, rect, path, ellipse, line
+        stroke $body-color
+
+      a.active, a.active:hover, a:hover
+        color $link-color
+
+        polyline, rect, path, ellipse, line
+          stroke $link-color
+
+    &.login-indicator
+      padding-top 10px
+      text-align center
+
+      &--insecure
+        font-family $font-family--bold
+        font-size 8px
+        text-transform uppercase
+        text-align center
+        color $warning-color
+
+        path
+          fill $warning-color
+
+      .login-indicator__initial
+        border 2px solid $link-color
+        width 32px
+        height 32px
+        border-radius 5px
+        color $link-color
+        font-size 18px
+        line-height 32px
+        text-align center
+        margin 0 auto
+
+      a
+        display inline
+        padding 0
+        text-decoration none
+        color inherit
+
+        &:hover
+          color $link-color
+
+    &.active
+      background-color $navbar-bg
+
+    .icon-link
+      width 100%
+      padding 20px 0
+      display block
+      color inherit
+      text-decoration none
+      &:hover
+      &:visited
+      &:active
+        color @color
+
+      div
+        margin auto
+        width 100%
+        text-align center
+        letter-spacing 1px
+        word-break break-word
+
+    &.debug-pages-link
+      path
+        stroke $tooltip-color
+
+      .icon-link
+        padding-bottom 0
+
+.nav-container
+  padding 0 3rem 1rem
+  background-color $subnav-background
+  text-transform uppercase
+  letter-spacing 2.17px
+  height $subnav-height
+  left $nav-width
+  top $top-bar-height
+  right 0
+  width 100%
+  z-index $z-index-navigation
+
+  ul.nav
+    display flex
+    flex-flow row nowrap
+    justify-content flex-start
+    color $tooltip-color
+    list-style-type none
+    line-height $subnav-height - $subnav-underline-height
+
+    font-family $font-family--bold
+    font-size 9px
+    max-width calc(100vw - 80px)
+    @media (min-width: 1300px)
+      max-width 1300px
+
+    li
+      display inline-block
+      margin-right 3rem
+      height $subnav-height
+
+      &.title
+
+      &.selector
+        padding-right 0
+        margin-right 3em
+
+      a
+        height 100%
+        display block
+        color inherit
+        text-decoration none
+        &:hover
+        &:visited
+        &:active
+          color @color
+
+        div
+          display inline
+
+      a.active, a.active:hover
+        color $subnav-active-color
+        font-weight 600
+        border-bottom $subnav-underline-height solid $subnav-active-color
+
+      a:hover
+        color $main-nav-hover
+
+      &.timescale-button
+        align-self flex-start
+        flex-basis 100%
+        // width 100%
+        display flex
+        justify-content flex-start
+        flex-flow row nowrap
+        align-items flex-start
+
+        button
+          margin-top auto
+          margin-bottom auto
+          align-self flex-start
+          text-transform none
+          &:focus
+            outline 0
+
+ul.pagination
+  letter-spacing 2.17px
+  text-transform uppercase
+  font-family $font-family--bold
+  font-size 1.1rem
+  color $tooltip-color
+  list-style-type none
+  text-align center
+
+  li
+    display inline-block
+
+    &.active, &.active:hover
+      color $subnav-active-color
+      font-weight 600
+      border-bottom $subnav-underline-height solid $subnav-active-color
+
+    &:hover
+      color $main-nav-hover
+
+    &.disabled
+      display none
+
+    a
+      height 100%
+      display block
+      color inherit
+      text-decoration none
+      cursor pointer
+      padding 10px
+
+      &:hover
+      &:visited
+      &:active
+        color @color

@@ -1,5 +1,3 @@
-# LogicTest: local local-opt
-
 statement ok
 CREATE TABLE users (
   id    INT PRIMARY KEY,
@@ -13,7 +11,9 @@ CREATE TABLE users (
 statement ok
 CREATE TABLE othertable (
    x INT,
-   INDEX baw (x)
+   y INT,
+   INDEX baw (x),
+   INDEX yak (y, x)
 )
 
 statement error index name "baw" is ambiguous
@@ -21,6 +21,27 @@ DROP INDEX baw
 
 statement error index name "baw" is ambiguous
 DROP INDEX IF EXISTS baw
+
+statement error index "ark" does not exist
+DROP INDEX ark
+
+statement ok
+DROP INDEX IF EXISTS ark
+
+statement error index "ark" does not exist
+DROP INDEX users@ark
+
+statement ok
+DROP INDEX IF EXISTS users@ark
+
+statement ok
+DROP INDEX yak
+
+statement ok
+CREATE INDEX yak ON othertable (y, x)
+
+statement ok
+DROP INDEX IF EXISTS yak
 
 statement ok
 DROP TABLE othertable
@@ -147,12 +168,12 @@ users       foo         true        2             id           ASC        false 
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
 
-query T
+query TTTTI
 SHOW TABLES
 ----
-users
-v
-v2
+public  users  table  root  0
+public  v      view   root  0
+public  v2     view   root  0
 
 statement ok
 GRANT ALL ON users to testuser
@@ -176,10 +197,10 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
 
-query T
+query TTTTI
 SHOW TABLES
 ----
-users
+public  users  table  root  0
 
 # Test the syntax without a '@'
 
@@ -230,3 +251,63 @@ CREATE SEQUENCE s
 
 statement error pgcode 42704 pq: index "nonexistent_index" does not exist
 DROP INDEX nonexistent_index
+
+statement ok
+CREATE TABLE tu (a INT UNIQUE)
+
+statement ok
+CREATE UNIQUE INDEX tu_a ON tu(a)
+
+statement error in use as unique constraint
+DROP INDEX tu_a_key
+
+statement ok
+DROP INDEX tu_a
+
+# Test that we have more relaxed restrictions on dropping indexes referenced by fks.
+subtest fk_drop
+
+# Ensure that DROP INDEX CASCADE does not delete the foreign key when
+# there is another index that can satisfy the foreign key constraint.
+statement ok
+CREATE TABLE fk1 (x int);
+CREATE TABLE fk2 (x int PRIMARY KEY);
+CREATE INDEX i ON fk1 (x);
+CREATE INDEX i2 ON fk1 (x);
+ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
+DROP INDEX fk1@i CASCADE
+
+query TT
+SHOW CREATE fk1
+----
+fk1  CREATE TABLE public.fk1 (
+     x INT8 NULL,
+     CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
+     INDEX i2 (x ASC),
+     FAMILY "primary" (x, rowid)
+)
+
+# test that notices are generated on index drops
+subtest notice_on_drop_index
+
+query T noticetrace
+CREATE TABLE drop_index_test(a int); CREATE INDEX drop_index_test_index ON drop_index_test(a); DROP INDEX drop_index_test_index
+----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+# test correct error reporting from NewUniquenessConstraintViolationError; see #46276
+subtest new_uniqueness_constraint_error
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b DECIMAL(10,1) NOT NULL DEFAULT(0), UNIQUE INDEX t_secondary (b), FAMILY (a, b));
+INSERT INTO t VALUES (100, 500.5);
+
+statement ok
+BEGIN;
+DROP INDEX t_secondary CASCADE;
+ALTER TABLE t DROP COLUMN b;
+INSERT INTO t SELECT a + 1 FROM t;
+
+statement error pgcode 23505 duplicate key value: decoding err=column-id "2" does not exist
+UPSERT INTO t SELECT a + 1 FROM t;

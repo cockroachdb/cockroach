@@ -1,0 +1,62 @@
+# Regression test for cockroachdb-django#97.
+eval
+'2001-01-01 01:00:00'::timestamptz AT TIME ZONE '+3'
+----
+'2000-12-31 22:00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamptz AT TIME ZONE '-3:00'
+----
+'2001-01-01 04:00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamptz AT TIME ZONE 'GMT+3'
+----
+'2000-12-31 22:00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamptz AT TIME ZONE 'UTC-3:00'
+----
+'2001-01-01 04:00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamptz AT TIME ZONE '-3:00'
+----
+'2001-01-01 04:00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamptz AT TIME ZONE 'Pacific/Honolulu'
+----
+'2000-12-31 15:00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamp AT TIME ZONE '+3'
+----
+'2001-01-01 04:00:00+00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamp AT TIME ZONE '-3:00'
+----
+'2000-12-31 22:00:00+00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamp AT TIME ZONE 'GMT+3'
+----
+'2001-01-01 04:00:00+00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamp AT TIME ZONE 'UTC-3:00'
+----
+'2000-12-31 22:00:00+00:00'
+
+eval
+'2001-01-01 01:00:00'::timestamp AT TIME ZONE 'Pacific/Honolulu'
+----
+'2001-01-01 11:00:00+00:00'
+
+# Regression test for #44027.
+# Attempt to convert string to AT TIME ZONE. An implicit cast should also work with this.
+eval
+'2001-01-01 01:00:00' AT TIME ZONE 'GMT+3'
+----
+'2000-12-31 22:00:00'

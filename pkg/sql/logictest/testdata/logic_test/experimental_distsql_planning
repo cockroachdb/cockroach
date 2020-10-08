@@ -1,0 +1,120 @@
+# NOTE: all queries in this file should run with 'experimental_distsql_planning'
+# set to 'always' unless they are known to be unsupported. If you do need to
+# execute an unsupported query, use the following pattern:
+#   RESET experimental_distsql_planning
+#   <unsupported query>
+#   SET experimental_distsql_planning = always
+
+statement ok
+SET experimental_distsql_planning = always
+
+# Check that we get an error on an unsupported query.
+query error pq: unimplemented: experimental opt-driven distsql planning: create table
+CREATE TABLE foo (bar INT)
+
+statement ok
+RESET experimental_distsql_planning;
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 1), (2, 1), (3, 2);
+SET experimental_distsql_planning = always
+
+query II colnames,rowsort
+SELECT * FROM kv
+----
+k v
+1 1
+2 1
+3 2
+
+query I colnames,rowsort
+SELECT k FROM kv
+----
+k
+1
+2
+3
+
+query I colnames,rowsort
+SELECT v FROM kv
+----
+v
+1
+1
+2
+
+query II rowsort
+SELECT v, k FROM kv
+----
+1  1
+1  2
+2  3
+
+query III rowsort
+SELECT k, v, k + v FROM kv
+----
+1  1  2
+2  1  3
+3  2  5
+
+query II rowsort
+SELECT * FROM kv WHERE k > v
+----
+2 1
+3 2
+
+statement ok
+RESET experimental_distsql_planning;
+INSERT INTO kv VALUES (4, NULL), (5, 3);
+SET experimental_distsql_planning = always
+
+query I
+SELECT v FROM kv ORDER BY k
+----
+1
+1
+2
+NULL
+3
+
+# Check that non-scalar aggregation is supported.
+query III rowsort
+SELECT v, min(k), max(k) FROM kv GROUP BY v
+----
+1     1  2
+2     3  3
+NULL  4  4
+3     5  5
+
+# Check that scalar aggregation is supported.
+query I
+SELECT min(v) FROM kv
+----
+1
+
+# Check that sort is supported.
+query I
+SELECT v FROM kv ORDER BY v DESC
+----
+3
+2
+1
+1
+NULL
+
+# Check that an SRF is supported.
+query I colnames
+SELECT * FROM generate_series(1, 3)
+----
+generate_series
+1
+2
+3
+
+# Check that distinct is supported.
+query I rowsort
+SELECT DISTINCT v FROM kv
+----
+1
+2
+NULL
+3

@@ -1,0 +1,14 @@
+# =============================================================================
+# with.opt contains normalization rules for the With operator.
+# =============================================================================
+
+# InlineWith replaces use of a With which is referenced at most one time with
+# the contents of the With itself.
+[InlineWith, Normalize]
+(With
+    $binding:*
+    $input:*
+    $withPrivate:* & (CanInlineWith $binding $input $withPrivate)
+)
+=>
+(InlineWith $binding $input $withPrivate)

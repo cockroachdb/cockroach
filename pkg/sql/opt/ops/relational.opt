@@ -22,28 +22,82 @@
 #             subqueries).
 
 # Scan returns a result set containing every row in a table by scanning one of
-# the table's indexes according to its ordering. The private Def field is an
-# *opt.ScanOpDef that identifies the table and index to scan, as well as the
-# subset of columns to project from it.
+# the table's indexes according to its ordering. The ScanPrivate field
+# identifies the table and index to scan, as well as the subset of columns to
+# project from it.
+#
+# The scan can be constrained and/or have an internal row limit. A scan can be
+# executed either as a forward or as a reverse scan (except when it has a limit,
+# in which case the direction is fixed).
 [Relational]
 define Scan {
-    Def ScanOpDef
+    _ ScanPrivate
 }
 
-# VirtualScan returns a result set containing every row in a virtual table.
-# Virtual tables are system tables that are populated "on the fly" with rows
-# synthesized from system metadata and other state. An example is the
-# "information_schema.tables" virtual table which returns one row for each
-# accessible system or user table.
-#
-# VirtualScan has many of the same characteristics as the Scan operator.
-# However, virtual tables do not have indexes or keys, and the physical operator
-# used to scan virtual tables does not support limits or constraints. Therefore,
-# nearly all the rules that apply to Scan do not apply to VirtualScan, so it
-# makes sense to have a separate operator.
+[Private]
+define ScanPrivate {
+    # Table identifies the table to scan. It is an id that can be passed to
+    # the Metadata.Table method in order to fetch cat.Table metadata.
+    Table TableID
+
+    # Index identifies the index to scan (whether primary or secondary). It
+    # can be passed to the cat.Table.Index() method in order to fetch the
+    # cat.Index metadata.
+    Index IndexOrdinal
+
+    # Cols specifies the set of columns that the scan operator projects. This
+    # may be a subset of the columns that the table/index contains.
+    Cols ColSet
+
+    # If set, the scan is a constrained scan; the constraint contains the spans
+    # that need to be scanned.
+    Constraint Constraint
+
+    # If set, the scan is a constrained scan of an inverted index; the
+    # InvertedConstraint contains the spans that need to be scanned.
+    InvertedConstraint InvertedSpans
+
+    # HardLimit specifies the maximum number of rows that the scan can return
+    # (after applying any constraint), as well as the required scan direction.
+    # This is a "hard" limit, meaning that the scan operator must never return
+    # more than this number of rows, even if more are available. If its value is
+    # zero, then the limit is unknown, and the scan should return all available
+    # rows.
+    HardLimit ScanLimit
+
+    # Flags modify how the table is scanned, such as which index is used to scan.
+    Flags ScanFlags
+
+    # Locking represents the row-level locking mode of the Scan. Most scans
+    # leave this unset (Strength = ForNone), which indicates that no row-level
+    # locking will be performed while scanning the table. Stronger locking modes
+    # are used by SELECT .. FOR [KEY] UPDATE/SHARE statements and by the initial
+    # row retrieval of DELETE and UPDATE statements. The locking item's Targets
+    # list will always be empty when part of a ScanPrivate.
+    Locking LockingItem
+
+    # PartitionConstrainedScan records whether or not we were able to use partitions
+    # to constrain the lookup spans further. This flag is used to record telemetry
+    # about how often this optimization is getting applied.
+    PartitionConstrainedScan bool
+}
+
+# SequenceSelect represents a read from a sequence as a data source. It always returns
+# three columns, last_value, log_cnt, and is_called, with a single row. last_value is
+# the most recent value returned from the sequence and log_cnt and is_called are
+# always 0 and true, respectively.
 [Relational]
-define VirtualScan {
-    Def VirtualScanOpDef
+define SequenceSelect {
+    _ SequenceSelectPrivate
+}
+
+[Private]
+define SequenceSelectPrivate {
+    # Sequence identifies the sequence to read from.
+    Sequence SequenceID
+
+    # Cols is the 3 element list of column IDs returned by the operator.
+    Cols ColList
 }
 
 # Values returns a manufactured result set containing a constant number of rows.
@@ -57,8 +111,19 @@ define VirtualScan {
 # as an opt.ColList. It is legal for Cols to be empty.
 [Relational]
 define Values {
-    Rows ExprList
+    Rows ScalarListExpr
+    _ ValuesPrivate
+}
+
+[Private]
+define ValuesPrivate {
     Cols ColList
+
+    # ID is a memo-unique identifier which distinguishes between identical
+    # Values expressions which appear in different places in the query. In most
+    # cases the column set is sufficient to do this, but various rules make it
+    # possible to construct Values expressions with no columns.
+    ID UniqueID
 }
 
 # Select filters rows from its input result set, based on the boolean filter
@@ -68,20 +133,59 @@ define Values {
 # matching easier.
 [Relational]
 define Select {
-    Input  Expr
-    Filter Expr
+    Input RelExpr
+    Filters FiltersExpr
 }
 
 # Project modifies the set of columns returned by the input result set. Columns
 # can be removed, reordered, or renamed. In addition, new columns can be
 # synthesized.
-# Projections is a scalar Projections list operator that contains information
-# about the projected columns and any expressions that describe newly
-# synthesized output columns.
+#
+# Projections describes the synthesized columns constructed by Project, and
+# Passthrough describes the input columns that are passed through as Project
+# output columns.
 [Relational]
 define Project {
-    Input       Expr
-    Projections Expr
+    Input RelExpr
+    Projections ProjectionsExpr
+    Passthrough ColSet
+
+    # notNullCols is the set of columns (input or synthesized) that are known to
+    # be not-null.
+    notNullCols ColSet
+
+    # internalFuncDeps are the functional dependencies between all columns
+    # (input or synthesized).
+    internalFuncDeps FuncDepSet
+}
+
+# InvertedFilter filters rows from its input result set, based on the
+# InvertedExpression predicate (which is defined in InvertedFilterPrivate).
+# Rows which do not match the filter are discarded. The input should be a
+# constrained scan of an inverted index, possibly wrapped in other operators
+# such as Select.
+[Relational]
+define InvertedFilter {
+    Input RelExpr
+    _ InvertedFilterPrivate
+}
+
+[Private]
+define InvertedFilterPrivate {
+    # InvertedExpression represents the set operations (UNION or INTERSECTION)
+    # that should be executed on the inverted spans retrieved from the input.
+    # The input should already be filtered based on SpansToRead from the
+    # SpanExpression, but this InvertedExpression serves to filter the rows
+    # further by applying set operations on the primary key columns.
+    InvertedExpression SpanExpression
+
+    # PreFiltererState represents the optional pre-filtering state.
+    PreFiltererState PreFiltererState
+
+    # The InvertedColumn is the id of the inverted column in the input. It is
+    # used during execution to map rows from the input to their corresponding
+    # spans in the SpanExpression.
+    InvertedColumn ColumnID
 }
 
 # InnerJoin creates a result set that combines columns from its left and right
@@ -91,44 +195,66 @@ define Project {
 # allowed to refer to the other's projected columns.
 [Relational, Join, JoinNonApply]
 define InnerJoin {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
 define LeftJoin {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
 define RightJoin {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
 define FullJoin {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
 define SemiJoin {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
 define AntiJoin {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
+}
+
+# JoinPrivate is shared between the various join operators including apply
+# variants, but excluding IndexJoin, LookupJoin, MergeJoin.
+[Private]
+define JoinPrivate {
+    # Flags modify what type of join we choose.
+    Flags JoinFlags
+
+    # WasReordered indicates whether reorderings of the join tree rooted at this
+    # join have already been considered.
+    WasReordered bool
 }
 
 # IndexJoin represents an inner join between an input expression and a primary
@@ -140,129 +266,511 @@ define AntiJoin {
 # are created from Join operators).
 [Relational]
 define IndexJoin {
-    Input Expr
-    Def   IndexJoinDef
+    Input RelExpr
+    _ IndexJoinPrivate
 }
 
-# LookupJoin represents a join between an input expression and an index.
-# The type of join is in the Def private.
+[Private]
+define IndexJoinPrivate {
+    # Table identifies the table to do lookups in. The primary index is
+    # currently the only index used.
+    Table TableID
+
+    # Cols specifies the set of columns that the index join operator projects.
+    # This may be a subset of the columns that the table contains.
+    Cols ColSet
+}
+
+# LookupJoin represents a join between an input expression and an index. The
+# type of join is in the LookupJoinPrivate field.
 [Relational]
 define LookupJoin {
-    Input Expr
-    On    Expr
-    Def   LookupJoinDef
+    Input RelExpr
+    On FiltersExpr
+    _ LookupJoinPrivate
+
+    # lookupProps caches relational properties for the "table" side of the lookup
+    # join, treating it as if it were another relational input. This makes the
+    # lookup join appear more like other join operators.
+    lookupProps RelProps
+}
+
+[Private]
+define LookupJoinPrivate {
+    # JoinType is InnerJoin, LeftJoin, SemiJoin, or AntiJoin.
+    JoinType Operator
+
+    # Table identifies the table do to lookups in.
+    Table TableID
+
+    # Index identifies the index to do lookups in (whether primary or secondary).
+    # It can be passed to the cat.Table.Index() method in order to fetch the
+    # cat.Index metadata.
+    Index IndexOrdinal
+
+    # KeyCols are the columns (produced by the input) used to create lookup keys.
+    # The key columns must be non-empty, and are listed in the same order as the
+    # index columns (or a prefix of them).
+    KeyCols ColList
+
+    # Cols is the union between the set of input columns that are returned by
+    # the lookup join and the set of lookup columns retrieved through lookup.
+    #
+    # For inner/left join, this is the set of columns produced by the LookupJoin
+    # operator.
+    # For semi/anti-join, this contains the semi-join output columns (from the
+    # input) plus the columns that we need to look up for the ON condition.
+    #
+    # Cols may not contain some or all of the KeyCols, if they are not output
+    # columns for the join.
+    #
+    # TODO(radu): this effectively allows an arbitrary projection; it should be
+    # just a LookupCols set indicating which columns we should add from the
+    # index. However, this requires extra Project operators in the lookup join
+    # exploration transforms which currently leads to problems related to lookup
+    # join statistics.
+    Cols ColSet
+
+    # LookupColsAreTableKey is true if the lookup columns form a key in the
+    # table (and thus each left row matches with at most one table row).
+    LookupColsAreTableKey bool
+
+    # ConstFilters contains the constant filters that are represented as equality
+    # conditions on the KeyCols. These filters are needed by the statistics code to
+    # correctly estimate selectivity.
+    ConstFilters FiltersExpr
+    _ JoinPrivate
+}
+
+# InvertedJoin represents a join between an input expression and an inverted
+# index. The type of join is in the InvertedJoinPrivate field.
+[Relational]
+define InvertedJoin {
+    Input RelExpr
+
+    # On only contains filters on the input columns and primary key columns of
+    # the inverted index's base table.
+    On FiltersExpr
+    _ InvertedJoinPrivate
+
+    # lookupProps caches relational properties for the "table" side of the lookup
+    # join, treating it as if it were another relational input. This makes the
+    # lookup join appear more like other join operators.
+    lookupProps RelProps
+}
+
+[Private]
+define InvertedJoinPrivate {
+    # JoinType is InnerJoin, LeftJoin, SemiJoin, or AntiJoin.
+    JoinType Operator
+
+    # InvertedExpr is the inverted join condition. It is used to get the keys
+    # to lookup in the inverted index based on the values of the input columns.
+    InvertedExpr ScalarExpr
+
+    # Table identifies the table do to lookups in.
+    Table TableID
+
+    # Index identifies the inverted index to do lookups in. It can be passed to
+    # the cat.Table.Index() method in order to fetch the cat.Index metadata.
+    Index IndexOrdinal
+
+    # InvertedCol is the inverted column in the index that is referenced by
+    # InvertedExpr.
+    InvertedCol ColumnID
+
+    # Cols is the set of columns produced by the inverted join. This set can
+    # contain columns from the input and columns from the index. Any columns
+    # not in the input are retrieved from the index.
+    Cols ColSet
+    _ JoinPrivate
 }
 
 # MergeJoin represents a join that is executed using merge-join.
 # MergeOn is a scalar which contains the ON condition and merge-join ordering
 # information; see the MergeOn scalar operator.
-# It can be any type of join (identified in the private of MergeOn).
+# It can be any type of join (identified in the MergeJoinPrivate field).
 [Relational]
 define MergeJoin {
-    Left    Expr
-    Right   Expr
-    MergeOn Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ MergeJoinPrivate
+}
+
+[Private]
+define MergeJoinPrivate {
+    # JoinType is one of the basic join operators: InnerJoin, LeftJoin,
+    # RightJoin, FullJoin, SemiJoin, AntiJoin.
+    JoinType Operator
+
+    # LeftEq and RightEq are orderings on equality columns. They have the same
+    # length and LeftEq[i] is a column on the left side which is constrained to
+    # be equal to RightEq[i] on the right side. The directions also have to
+    # match.
+    #
+    # Examples of valid settings for abc JOIN def ON a=d,b=e:
+    #   LeftEq: a+,b+   RightEq: d+,e+
+    #   LeftEq: b-,a+   RightEq: e-,d+
+    LeftEq Ordering
+    RightEq Ordering
+
+    # LeftOrdering and RightOrdering are "simplified" versions of LeftEq/RightEq,
+    # taking into account the functional dependencies of each side. We need both
+    # versions because we need to configure execution with specific equality
+    # columns and orderings.
+    LeftOrdering OrderingChoice
+    RightOrdering OrderingChoice
+    _ JoinPrivate
+}
+
+# ZigzagJoin represents a join that is executed using the zigzag joiner.
+# All fields except for the ON expression are stored in the private;
+# since the zigzag joiner operates directly on indexes and doesn't
+# support arbitrary inputs.
+#
+# TODO(itsbilal): Add support for representing multi-way zigzag joins.
+[Relational, Telemetry]
+define ZigzagJoin {
+    On FiltersExpr
+    _ ZigzagJoinPrivate
+
+    # leftProps and rightProps cache relational properties corresponding to an
+    # unconstrained scan on the respective indexes. By putting this in the
+    # expr, zigzag joins can reuse a lot of the logical property building code
+    # for joins.
+    leftProps RelProps
+    rightProps RelProps
+}
+
+[Private]
+define ZigzagJoinPrivate {
+    # LeftTable and RightTable identifies the left and right tables for this
+    # join.
+    LeftTable TableID
+    RightTable TableID
+
+    # LeftIndex and RightIndex identifies the index to do lookups in (whether
+    # primary or secondary). It can be passed to the cat.Table.Index() method in
+    # order to fetch the cat.Index metadata.
+    LeftIndex IndexOrdinal
+    RightIndex IndexOrdinal
+
+    # LeftEqCols and RightEqCols contains lists of columns on the left and
+    # right sides that are being equated. Both lists must be of equal length.
+    LeftEqCols ColList
+    RightEqCols ColList
+
+    # FixedVals, LeftFixedCols and RightFixedCols reference fixed values.
+    # Fixed values are constants that constrain each index' prefix columns
+    # (the ones denoted in {Left,Right}FixedCols). These fixed columns must
+    # lie at the start of the index and must immediately precede EqCols.
+    #
+    # FixedVals is a list of 2 tuples, each representing one side's fixed
+    # values.
+    #
+    # Read the comment in pkg/sql/distsqlrun/zigzagjoiner.go for more on
+    # fixed and equality columns.
+    FixedVals ScalarListExpr
+    LeftFixedCols ColList
+    RightFixedCols ColList
+
+    # Cols is the set of columns produced by the zigzag join. This set can
+    # contain columns from either side's index.
+    Cols ColSet
 }
 
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike
 # InnerJoin, it allows the right input to refer to columns projected by the
 # left input.
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define InnerJoinApply {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
 }
 
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define LeftJoinApply {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
 }
 
-[Relational, Join, JoinApply]
-define RightJoinApply {
-    Left  Expr
-    Right Expr
-    On    Expr
-}
-
-[Relational, Join, JoinApply]
-define FullJoinApply {
-    Left  Expr
-    Right Expr
-    On    Expr
-}
-
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define SemiJoinApply {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
 }
 
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define AntiJoinApply {
-    Left  Expr
-    Right Expr
-    On    Expr
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+    _ JoinPrivate
 }
 
-# GroupBy is an operator that is used for performing aggregations (for queries
-# with aggregate functions, HAVING clauses and/or group by expressions). It
-# groups results that are equal on the grouping columns and computes
-# aggregations as described by Aggregations (which is always an Aggregations
-# operator). The arguments of the aggregations are columns from the input.
-[Relational]
+# GroupBy computes aggregate functions over groups of input rows. Input rows
+# that are equal on the grouping columns are grouped together. The set of
+# computed aggregate functions is described by the Aggregations field (which is
+# always an Aggregations operator).
+#
+# The arguments of the aggregate functions are columns from the input
+# (i.e. Variables), possibly wrapped in aggregate modifiers like AggDistinct.
+#
+# If the set of input rows is empty, then the output of the GroupBy operator
+# will also be empty. If the grouping columns are empty, then all input rows
+# form a single group. GroupBy is used for queries with aggregate functions,
+# HAVING clauses and/or GROUP BY expressions.
+#
+# The GroupingPrivate field contains an ordering; this ordering serves a
+# dual-purpose:
+#  - if we ignore any grouping columns, the remaining columns indicate an
+#    intra-group ordering; this is useful if there is an order-dependent
+#    aggregation (like ARRAY_AGG).
+#  - any prefix containing only grouping columns is used to execute the
+#    aggregation in a streaming fashion.
+#
+# Currently, the initially built GroupBy has all grouping columns as "optional"
+# in the ordering (we call this the "canonical" variant). Subsequently, the
+# GenerateStreamingGroupBy exploration rule can add more variants, based on
+# interesting orderings.
+[Relational, Grouping, Telemetry]
 define GroupBy {
-    Input        Expr
-    Aggregations Expr
-    Def          GroupByDef
+    Input RelExpr
+    Aggregations AggregationsExpr
+    _ GroupingPrivate
+}
+
+# GroupingPrivate is shared between the grouping-related operators: GroupBy
+# ScalarGroupBy, DistinctOn, EnsureDistinctOn, UpsertDistinctOn, and
+# EnsureUpsertDistinctOn. This allows the operators to be treated
+# polymorphically.
+[Private]
+define GroupingPrivate {
+    # GroupingCols partitions the GroupBy input rows into aggregation groups.
+    # All rows sharing the same values for these columns are in the same group.
+    # GroupingCols is always empty in the ScalarGroupBy case.
+    GroupingCols ColSet
+
+    # Ordering specifies the order required of the input. This order can intermix
+    # grouping and non-grouping columns, serving a dual-purpose:
+    #  - if we ignore grouping columns, it specifies an intra-group ordering (sort
+    #    order of values within each group, useful for order-sensitive aggregation
+    #    operators like ArrayAgg;
+    #  - leading grouping columns specify an inter-group ordering, allowing for
+    #    more efficient streaming execution.
+    #
+    # The canonical operation always contains an ordering that has no grouping
+    # columns. Exploration rules can create versions of the operator with
+    # orderings that contain grouping columns.
+    Ordering OrderingChoice
+
+    # NullsAreDistinct specifies the null behavior of the grouping operator. If
+    # true, the operator considers nulls to be distinct for grouping purposes.
+    # NullsAreDistinct should only be true for UpsertDistinctOn and
+    # EnsureUpsertDistinctOn.
+    NullsAreDistinct bool
+
+    # ErrorOnDup, if non-empty, triggers an error with the given text if any
+    # aggregation group contains more than one row. This can only take on a
+    # value for the EnsureDistinctOn and EnsureUpsertDistinctOn operators.
+    ErrorOnDup string
+}
+
+# ScalarGroupBy computes aggregate functions over the complete set of input
+# rows. This is similar to GroupBy with empty grouping columns, where all input
+# rows form a single group. However, there is an important difference. If the
+# input set is empty, then the output of the ScalarGroupBy operator will have a
+# single row containing default values for each aggregate function (typically
+# null or zero, depending on the function). ScalarGroupBy always returns exactly
+# one row - either the single-group aggregates or the default aggregate values.
+#
+# ScalarGroupBy uses the GroupingPrivate struct so that it's polymorphic with
+# GroupBy and can be used in the same rules (when appropriate). In the
+# ScalarGroupBy case, the grouping column field in GroupingPrivate is always
+# empty.
+[Relational, Grouping, Telemetry]
+define ScalarGroupBy {
+    Input RelExpr
+    Aggregations AggregationsExpr
+    _ GroupingPrivate
+}
+
+# DistinctOn filters out rows that are identical on the set of grouping columns;
+# only the first row (according to an ordering) is kept for each set of possible
+# values. It is roughly equivalent with a GroupBy on the same grouping columns
+# except that it uses FirstAgg functions that ensure the value on the first row
+# is chosen (across all aggregations).
+#
+# In addition, the value on that first row must be chosen for all the grouping
+# columns as well; this is relevant in the case of equal but non-identical
+# values, like decimals. For example, if we have rows (1, 2.0) and (1.0, 2) and
+# we are grouping on these two columns, the values output can be either (1, 2.0)
+# or (1.0, 2), but not (1.0, 2.0).
+#
+# The execution of DistinctOn resembles that of Select more than that of
+# GroupBy: each row is tested against a map of what groups we have seen already,
+# and is either passed through or discarded. In particular, note that this
+# preserves the input ordering.
+#
+# The ordering in the GroupingPrivate field will be required of the input; it
+# determines which row can get "chosen" for each group of values on the grouping
+# columns. There is no restriction on the ordering; but note that grouping
+# columns are inconsequential - they can appear anywhere in the ordering and
+# they won't change the results (other than the result ordering).
+#
+# Currently when we build DistinctOn, we set all grouping columns as optional
+# cols in Ordering (but this is not required by the operator).
+#
+# TODO(radu): in the future we may want an exploration transform to try out more
+# specific interesting orderings because execution is more efficient when we can
+# rely on an ordering on the grouping columns (or a subset of them).
+#
+# DistinctOn uses an Aggregations child and the GroupingPrivate struct so that
+# it's polymorphic with GroupBy and can be used in the same rules (when
+# appropriate). In the DistinctOn case, the aggregations can be only FirstAgg or
+# ConstAgg.
+[Relational, Grouping, Telemetry]
+define DistinctOn {
+    Input RelExpr
+    Aggregations AggregationsExpr
+    _ GroupingPrivate
+}
+
+# EnsureDistinctOn is a variation on DistinctOn that is only used to replace a
+# Max1Row operator in a decorrelation attempt. It raises an error if any
+# distinct grouping contains more than one row. Or in other words, it "ensures"
+# that the input is distinct on the grouping columns.
+#
+# EnsureDistinctOn is used when nulls are not considered distinct for grouping
+# purposes and an error should be raised when duplicates are detected.
+#
+# Rules should only "push through" or eliminate an EnsureDistinctOn if they
+# preserve the expected error behavior. For example, it would be invalid to
+# push a Select filter into an EnsureDistinctOn, as it might eliminate rows
+# that would otherwise trigger the EnsureDistinctOn error.
+[Relational, Grouping, Telemetry]
+define EnsureDistinctOn {
+    Input RelExpr
+    Aggregations AggregationsExpr
+    _ GroupingPrivate
+}
+
+# UpsertDistinctOn is a variation on DistinctOn that is only used with UPSERT
+# and INSERT..ON CONFLICT statements. Unlike DistinctOn, UpsertDistinctOn treats
+# NULL values as not equal to one another for purposes of grouping. Two rows
+# having a NULL-valued grouping column will be placed in different groups. This
+# differs from DistinctOn behavior, where the two rows would be grouped
+# together. This behavior difference reflects SQL semantics, in which a unique
+# index key still allows multiple NULL values.
+#
+# UpsertDistinctOn is used when nulls are considered distinct for grouping
+# purposes and duplicates should be filtered out without raising an error.
+[Relational, Grouping, Telemetry]
+define UpsertDistinctOn {
+    Input RelExpr
+    Aggregations AggregationsExpr
+    _ GroupingPrivate
+}
+
+# EnsureUpsertDistinctOn is a variation on UpsertDistinctOn that is only used
+# with UPSERT and INSERT..ON CONFLICT statements. Like UpsertDistinctOn,
+# EnsureUpsertDistinctOn treats NULL values as not equal to one another for
+# purposes of grouping. Unlike UpsertDistinctOn, it raises an error if any
+# distinct grouping contains more than one row. Or in other words, it "ensures"
+# that the input is distinct on the grouping columns.
+#
+# EnsureUpsertDistinctOn is used when nulls are considered distinct for grouping
+# purposes and an error should be raised when duplicates are detected.
+#
+# Rules should only "push through" or eliminate an EnsureUpsertDistinctOn if
+# they preserve the expected error behavior. For example, it would be invalid to
+# push a Select filter into an EnsureUpsertDistinctOn, as it might eliminate
+# rows that would otherwise trigger the EnsureUpsertDistinctOn error.
+[Relational, Grouping, Telemetry]
+define EnsureUpsertDistinctOn {
+    Input RelExpr
+    Aggregations AggregationsExpr
+    _ GroupingPrivate
 }
 
 # Union is an operator used to combine the Left and Right input relations into
 # a single set containing rows from both inputs. Duplicate rows are discarded.
-# The private field, ColMap, matches columns from the Left and Right inputs
-# of the Union with the output columns. See the comment above opt.SetOpColMap
-# for more details.
-[Relational]
+# The SetPrivate field matches columns from the Left and Right inputs of the
+# Union with the output columns. See the comment above SetPrivate for more
+# details.
+[Relational, Set]
 define Union {
-    Left   Expr
-    Right  Expr
-    ColMap SetOpColMap
+    Left RelExpr
+    Right RelExpr
+    _ SetPrivate
+}
+
+# SetPrivate contains fields used by the relational set operators: Union,
+# Intersect, Except, UnionAll, IntersectAll and ExceptAll. It matches columns
+# from the left and right inputs of the operator with the output columns, since
+# OutputCols are not ordered and may not correspond to each other.
+#
+# For example, consider the following query:
+#   SELECT y, x FROM xy UNION SELECT b, a FROM ab
+#
+# Given:
+#   col  index
+#   x    1
+#   y    2
+#   a    3
+#   b    4
+#
+# SetPrivate will contain the following values:
+#   Left:  [2, 1]
+#   Right: [4, 3]
+#   Out:   [5, 6]  <-- synthesized output columns
+#
+# To make normalization rules and execution simpler, both inputs to the set op
+# must have matching types.
+[Private]
+define SetPrivate {
+    LeftCols ColList
+    RightCols ColList
+    OutCols ColList
 }
 
 # Intersect is an operator used to perform an intersection between the Left
 # and Right input relations. The result consists only of rows in the Left
 # relation that are also present in the Right relation. Duplicate rows are
 # discarded.
-# The private field, ColMap, matches columns from the Left and Right inputs
-# of the Intersect with the output columns. See the comment above
-# opt.SetOpColMap for more details.
-[Relational]
+# The SetPrivate field matches columns from the Left and Right inputs of the
+# Intersect with the output columns. See the comment above SetPrivate for more
+# details.
+[Relational, Set]
 define Intersect {
-    Left   Expr
-    Right  Expr
-    ColMap SetOpColMap
+    Left RelExpr
+    Right RelExpr
+    _ SetPrivate
 }
 
 # Except is an operator used to perform a set difference between the Left and
 # Right input relations. The result consists only of rows in the Left relation
 # that are not present in the Right relation. Duplicate rows are discarded.
-# The private field, ColMap, matches columns from the Left and Right inputs
-# of the Except with the output columns. See the comment above opt.SetOpColMap
-# for more details.
-[Relational]
+# The SetPrivate field matches columns from the Left and Right inputs of the Except
+# with the output columns. See the comment above SetPrivate for more details.
+[Relational, Set]
 define Except {
-    Left   Expr
-    Right  Expr
-    ColMap SetOpColMap
+    Left RelExpr
+    Right RelExpr
+    _ SetPrivate
 }
 
 # UnionAll is an operator used to combine the Left and Right input relations
 # into a single set containing rows from both inputs. Duplicate rows are
 # not discarded. For example:
+#
 #   SELECT x FROM xx UNION ALL SELECT y FROM yy
 #     x       y         out
 #   -----   -----      -----
@@ -273,14 +781,14 @@ define Except {
 #                        2
 #                        3
 #
-# The private field, ColMap, matches columns from the Left and Right inputs
-# of the UnionAll with the output columns. See the comment above
-# opt.SetOpColMap for more details.
-[Relational]
+# The SetPrivate field matches columns from the Left and Right inputs of the
+# UnionAll with the output columns. See the comment above SetPrivate for more
+# details.
+[Relational, Set]
 define UnionAll {
-    Left   Expr
-    Right  Expr
-    ColMap SetOpColMap
+    Left RelExpr
+    Right RelExpr
+    _ SetPrivate
 }
 
 # IntersectAll is an operator used to perform an intersection between the Left
@@ -288,6 +796,7 @@ define UnionAll {
 # relation that have a corresponding row in the Right relation. Duplicate rows
 # are not discarded. This effectively creates a one-to-one mapping between the
 # Left and Right rows. For example:
+#
 #   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
 #     x       y         out
 #   -----   -----      -----
@@ -298,14 +807,14 @@ define UnionAll {
 #     2       3
 #     4
 #
-# The private field, ColMap, matches columns from the Left and Right inputs
-# of the IntersectAll with the output columns. See the comment above
-# opt.SetOpColMap for more details.
-[Relational]
+# The SetPrivate field matches columns from the Left and Right inputs of the
+# IntersectAll with the output columns. See the comment above SetPrivate for more
+# details.
+[Relational, Set]
 define IntersectAll {
-    Left   Expr
-    Right  Expr
-    ColMap SetOpColMap
+    Left RelExpr
+    Right RelExpr
+    _ SetPrivate
 }
 
 # ExceptAll is an operator used to perform a set difference between the Left
@@ -323,25 +832,25 @@ define IntersectAll {
 #     2       3
 #     4
 #
-# The private field, ColMap, matches columns from the Left and Right inputs
-# of the ExceptAll with the output columns. See the comment above
-# opt.SetOpColMap for more details.
-[Relational]
+# The SetPrivate field matches columns from the Left and Right inputs of the
+# ExceptAll with the output columns. See the comment above SetPrivate for more
+# details.
+[Relational, Set]
 define ExceptAll {
-    Left   Expr
-    Right  Expr
-    ColMap SetOpColMap
+    Left RelExpr
+    Right RelExpr
+    _ SetPrivate
 }
 
-# Limit returns a limited subset of the results in the input relation.
-# The limit expression is a scalar value; the operator returns at most this many
-# rows. The private field is a props.OrderingChoice which indicates the row
-# ordering required from the input (the first rows with respect to this ordering
-# are returned).
+# Limit returns a limited subset of the results in the input relation. The limit
+# expression is a scalar value; the operator returns at most this many rows. The
+# Orering field is a physical.OrderingChoice which indicates the row ordering
+# required from the input (the first rows with respect to this ordering are
+# returned).
 [Relational]
 define Limit {
-    Input    Expr
-    Limit    Expr
+    Input RelExpr
+    Limit ScalarExpr
     Ordering OrderingChoice
 }
 
@@ -349,63 +858,214 @@ define Limit {
 # conjunction with Limit.
 [Relational]
 define Offset {
-    Input    Expr
-    Offset   Expr
+    Input RelExpr
+    Offset ScalarExpr
     Ordering OrderingChoice
 }
 
-# Max1Row enforces that its input must return at most one row. It is used as
-# input to the Subquery operator. See the comment above Subquery for more
-# details.
+# Max1Row enforces that its input must return at most one row. If the input
+# has more than one row, Max1Row raises an error with the specified error text.
+#
+# Max1Row is most often used as input to the Subquery operator. See the comment
+# above Subquery for more details.
 [Relational]
 define Max1Row {
-    Input Expr
+    Input RelExpr
+    ErrorText string
 }
 
-# Explain returns information about the execution plan of the "input"
-# expression.
-[Relational]
-define Explain {
-    Input Expr
-    Def   ExplainOpDef
-}
-
-# ShowTraceForSession returns the current session traces.
-[Relational]
-define ShowTraceForSession {
-    Def   ShowTraceOpDef
-}
-
-# RowNumber adds a column to each row in its input containing a unique,
+# Ordinality adds a column to each row in its input containing a unique,
 # increasing number.
 [Relational]
-define RowNumber {
-    Input    Expr
-    Def      RowNumberDef
+define Ordinality {
+    Input RelExpr
+    _ OrdinalityPrivate
 }
 
-# Zip represents a functional zip over generators a,b,c, which returns tuples of
+[Private]
+define OrdinalityPrivate {
+    # Ordering denotes the required ordering of the input.
+    Ordering OrderingChoice
+
+    # ColID holds the id of the column introduced by this operator.
+    ColID ColumnID
+}
+
+# ProjectSet represents a relational operator which zips through a list of
+# generators for every row of the input.
+#
+# As a reminder, a functional zip over generators a,b,c returns tuples of
 # values from a,b,c picked "simultaneously". NULLs are used when a generator is
-# "shorter" than another. In SQL, these generators can be either a generator
-# function such as generate_series(), or a scalar function such as
-# upper(). For example, consider this query:
+# "shorter" than another.  For example:
 #
-#    SELECT * FROM ROWS FROM (generate_series(0, 1), upper('abc'));
+#    zip([1,2,3], ['a','b']) = [(1,'a'), (2,'b'), (3, null)]
 #
-# It is equivalent to (Zip [(Function generate_series), (Function upper)]).
-# It produces:
+# ProjectSet corresponds to a relational operator project(R, a, b, c, ...)
+# which, for each row in R, produces all the rows produced by zip(a, b, c, ...)
+# with the values of R prefixed. Formally, this performs a lateral cross join
+# of R with zip(a,b,c).
 #
-#     generate_series | upper
-#    -----------------+-------
-#                   0 | ABC
-#                   1 | NULL
+# See the Zip header for more details.
+[Relational, Telemetry]
+define ProjectSet {
+    Input RelExpr
+    Zip ZipExpr
+}
+
+# Window represents a window function. Window functions are operators which
+# allow computations that take into consideration other rows in the same result
+# set.
 #
-# In the Zip operation, Funcs represents the list of functions, and Cols
-# represents the columns output by the functions. Funcs and Cols might not be
-# the same length since a single function may output multiple columns
-# (e.g., pg_get_keywords() outputs three columns).
+# More concretely, a window function is a relational operator that takes in a
+# result set and appends a single new column whose value depends on the other
+# rows within the result set, and that row's relative position in it.
+#
+# Depending on the exact window function being computed, the value of the new
+# column could be the position of the row in the output (`row_number`), or a
+# cumulative sum, or something else.
 [Relational]
-define Zip {
-    Funcs ExprList
-    Cols  ColList
+define Window {
+    Input RelExpr
+
+    # Windows is the set of window functions to be computed for this operator.
+    Windows WindowsExpr
+    _ WindowPrivate
+}
+
+[Private]
+define WindowPrivate {
+    # Partition is the set of columns to partition on. Every set of rows
+    # sharing the values for this set of columns will be treated independently.
+    Partition ColSet
+
+    # Ordering is the ordering that the window function is computed relative to
+    # within each partition.
+    Ordering OrderingChoice
+}
+
+# With executes Binding, making its results available to Main. Within Main, the
+# results of Binding may be referenced by a WithScan expression containing the
+# ID of this With.
+[Relational, WithBinding]
+define With {
+    Binding RelExpr
+    Main RelExpr
+    _ WithPrivate
+}
+
+[Private]
+define WithPrivate {
+    ID WithID
+
+    # OriginalExpr contains the original CTE expression (so that we can display
+    # it in the EXPLAIN plan).
+    OriginalExpr Statement
+
+    # Mtr is used to specify whether or not to override the optimizer's
+    # default decision for materializing or not materializing tables.
+    Mtr MaterializeClause
+
+    # Name is used to identify the with for debugging purposes.
+    Name string
+}
+
+# WithScan returns the results present in the With expression referenced
+# by ID.
+# Note that in order to contruct a WithScan, the WithID must have a bound
+# expression in the metadata.
+[Relational]
+define WithScan {
+    _ WithScanPrivate
+}
+
+[Private]
+define WithScanPrivate {
+    # With identifies the CTE to scan.
+    With WithID
+
+    # Name is used to identify the with being referenced for debugging purposes.
+    Name string
+
+    # InCols are the columns output by the expression referenced by this
+    # expression. They correspond elementwise to the columns listed in OutCols.
+    InCols ColList
+
+    # OutCols contains a list of columns which correspond elementwise to the
+    # columns in InCols, which are the IDs output by the referenced With
+    # expression. WithScan cannot reuse the column IDs used in the original With
+    # expression, since multiple WithScans referencing the same With can occur in
+    # the same tree, so we maintain a mapping from the columns returned from
+    # the referenced expression to the referencing expression.
+    OutCols ColList
+
+    # ID is a memo-unique identifier which distinguishes between identical
+    # WithScan expressions which appear in different places in the query. In
+    # most cases the column set is sufficient to do this, but various rules make
+    # it possible to construct WithScan expressions with no columns.
+    ID UniqueID
+}
+
+# RecursiveCTE implements the logic of a recursive CTE:
+#  * the Initial query is evaluated; the results are emitted and also saved into
+#    a "working table".
+#  * so long as the working table is not empty:
+#    - the Recursive query (which refers to the working table using a specific
+#      WithID) is evaluated; the results are emitted and also saved into a new
+#      "working table" for the next iteration.
+[Relational, WithBinding]
+define RecursiveCTE {
+    # Binding is a dummy relational expression that is associated with the
+    # WithID; its logical properties are used by WithScan.
+    # TODO(radu): this is a little hacky; investigate other ways to fill out the
+    # WithScan properties in this case.
+    Binding RelExpr
+
+    # Initial is the expression that is executed once and returns the initial
+    # set of rows for the "working table".
+    Initial RelExpr
+
+    # Recursive is the expression that is executed repeatedly; it reads the
+    # "working table" using WithScan.
+    Recursive RelExpr
+    _ RecursiveCTEPrivate
+}
+
+[Private]
+define RecursiveCTEPrivate {
+    # Name is used to identify the CTE being referenced for debugging purposes.
+    Name string
+
+    # WithID is the ID through which the Recursive expression refers to the
+    # current working table.
+    WithID WithID
+
+    # InitialCols are the columns produced by the initial expression.
+    InitialCols ColList
+
+    # RecursiveCols are the columns produced by the recursive expression, that
+    # map 1-1 to InitialCols.
+    RecursiveCols ColList
+
+    # OutCols are the columns produced by the RecursiveCTE operator; they map
+    # 1-1 to InitialCols and to RecursiveCols. Similar to Union, we don't want
+    # to reuse column IDs from one side because the columns contain values from
+    # both sides.
+    #
+    # These columns are also used by the Recursive query to refer to the working
+    # table (see WithID).
+    OutCols ColList
+}
+
+# FakeRel is a mock relational operator used for testing and as a dummy binding
+# relation for building cascades; its logical properties are pre-determined and
+# stored in the private. It can be used as the child of an operator for which we
+# are calculating properties or statistics.
+[Relational]
+define FakeRel {
+    _ FakeRelPrivate
+}
+
+[Private]
+define FakeRelPrivate {
+    Props RelPropsPtr
 }

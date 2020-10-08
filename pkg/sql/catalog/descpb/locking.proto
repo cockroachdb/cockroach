@@ -1,0 +1,134 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.sql.sqlbase;
+option go_package = "descpb";
+
+// ScanLockingStrength controls the row-level locking mode used by scans.
+//
+// Typically, SQL scans read sequential keys from the key-value layer without
+// acquiring any locks. This means that two scans by different transactions will
+// not conflict and cause one of the two transactions to block the other. This
+// is usually desirable, as it increases concurrency between readers.
+//
+// However, there are cases where a SQL scan would like to acquire locks on each
+// of the keys that it reads to more carefully control concurrent access to the
+// data that it reads. The prototypical example of this is a scan that is used
+// to fetch the initial value of a row that its transction intends to later
+// update. In this case, it would be beneficial to acquire a lock on the row
+// during the initial scan instead of waiting until the mutation to acquire a
+// lock. This prevents the row from being modified between the scan and the
+// mutation. It also prevents situations that can lead to deadlocks.
+//
+// Locking modes have differing levels of strength, growing from "weakest" to
+// "strongest" in the order that the variants are presented in the enumeration.
+// The "stronger" a locking mode, the more protection it provides for the lock
+// holder but the more restrictive it is to concurrent transactions attempting
+// to access the same keys.
+//
+// The following matrix presents the compatibility of locking strengths with one
+// another.
+//
+//  +-------------------+---------------+-----------+-------------------+------------+
+//  |                   | FOR_KEY_SHARE | FOR_SHARE | FOR_NO_KEY_UPDATE | FOR_UPDATE |
+//  +-------------------+---------------+-----------+-------------------+------------+
+//  | FOR_KEY_SHARE     |               |           |                   |      X     |
+//  +-------------------+---------------+-----------+-------------------+------------+
+//  | FOR_SHARE         |               |           |         X         |      X     |
+//  +-------------------+---------------+-----------+-------------------+------------+
+//  | FOR_NO_KEY_UPDATE |               |     X     |         X         |      X     |
+//  +-------------------+---------------+-----------+-------------------+------------+
+//  | FOR_UPDATE        |       X       |     X     |         X         |      X     |
+//  +-------------------+---------------+-----------+-------------------+------------+
+//
+// A transaction can hold conflicting locks on the same row, but two different
+// transactions can never hold conflicting locks on the same row. Once acquired,
+// a lock is held until the end of the transaction.
+enum ScanLockingStrength {
+  // FOR_NONE represents the default - no row-level locking.
+  FOR_NONE = 0;
+
+  // FOR_KEY_SHARE represents the FOR KEY SHARE row-level locking mode.
+  //
+  // The mode behaves similarly to FOR SHARE, except that the lock is weaker:
+  // SELECT FOR UPDATE is blocked, but not SELECT FOR NO KEY UPDATE. A
+  // key-shared lock blocks other transactions from performing DELETE or any
+  // UPDATE that changes the key values, but not other UPDATE, and neither does
+  // it prevent SELECT FOR NO KEY UPDATE, SELECT FOR SHARE, or SELECT FOR KEY
+  // SHARE.
+  //
+  // The locking mode was introduced into Postgres as an alternative to FOR
+  // SHARE to improve concurrency between foreign key validation scans, which
+  // acquire FOR KEY SHARE locks, and UPDATEs to existing rows, which acquire
+  // FOR NO KEY UPDATE locks.
+  //
+  // NOTE: FOR_KEY_SHARE is currently ignored. No locks are acquired.
+  FOR_KEY_SHARE = 1;
+
+  // FOR_SHARE represents the FOR SHARE row-level locking mode.
+  //
+  // The mode behaves similarly to FOR NO KEY UPDATE, except that it acquires a
+  // shared lock rather than exclusive lock on each retrieved row. A shared lock
+  // blocks other transactions from performing UPDATE, DELETE, SELECT FOR UPDATE
+  // or SELECT FOR NO KEY UPDATE on these rows, but it does not prevent them
+  // from performing SELECT FOR SHARE or SELECT FOR KEY SHARE.
+  //
+  // NOTE: FOR_SHARE is currently ignored. No locks are acquired.
+  FOR_SHARE = 2;
+
+  // FOR_NO_KEY_UPDATE represents the FOR NO KEY UPDATE row-level locking mode.
+  //
+  // The mode behaves similarly to FOR UPDATE, except that the lock acquired is
+  // weaker: this lock will not block SELECT FOR KEY SHARE commands that attempt
+  // to acquire a lock on the same rows. This lock mode is also acquired by any
+  // UPDATE that does not acquire a FOR UPDATE lock.
+  //
+  // The locking mode was introduced into Postgres as an alternative to FOR
+  // UDPATE to improve concurrency between foreign key validation scans, which
+  // acquire FOR KEY SHARE locks, and UPDATEs to existing rows, which acquire
+  // FOR NO KEY UPDATE locks.
+  //
+  // NOTE: FOR_NO_KEY_UPDATE is currently promoted to FOR_UPDATE.
+  FOR_NO_KEY_UPDATE = 3;
+
+  // FOR_UPDATE represents the FOR UPDATE row-level locking mode.
+  //
+  // The mode causes the rows retrieved by the scan to be locked as though for
+  // update. This prevents them from being locked, modified or deleted by other
+  // transactions until the current transaction ends. That is, other
+  // transactions that attempt UPDATE, DELETE, SELECT FOR UPDATE, SELECT FOR NO
+  // KEY UPDATE, SELECT FOR SHARE or SELECT FOR KEY SHARE of these rows will be
+  // blocked until the current transaction ends. Conversely, SELECT FOR UPDATE
+  // will wait for a concurrent transaction that has run any of those commands
+  // on the same row, and will then lock and return the updated row (or no row,
+  // if the row was deleted).
+  //
+  // NOTE: FOR_UPDATE is currently implemented by acquiring lock.Exclusive locks
+  // on each key scanned.
+  FOR_UPDATE = 4;
+}
+  
+// LockingWaitPolicy controls the policy used for handling conflicting locks
+// held by other active transactions when attempting to lock rows due to FOR
+// UPDATE/SHARE clauses (i.e. it represents the NOWAIT and SKIP LOCKED options).
+enum ScanLockingWaitPolicy {
+  // BLOCK represents the default - wait for the lock to become available.
+  BLOCK = 0;
+
+  // SKIP represents SKIP LOCKED - skip rows that can't be locked.
+  //
+  // NOTE: SKIP is not currently implemented and does not make it out of the SQL
+  // optimizer without throwing an error.
+  SKIP  = 1;
+
+  // ERROR represents NOWAIT - raise an error if a row cannot be locked.
+  ERROR = 2;
+}

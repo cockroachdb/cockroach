@@ -1,0 +1,103 @@
+statement ok
+CREATE TABLE t (
+  x INT, y INT,
+  CONSTRAINT cu UNIQUE (x),
+  CONSTRAINT cc CHECK (x > 10),
+  CONSTRAINT cf FOREIGN KEY (x) REFERENCES t(x),
+  FAMILY "primary" (x, y, rowid)
+  )
+
+query T
+SELECT create_statement FROM [SHOW CREATE t]
+----
+CREATE TABLE public.t (
+   x INT8 NULL,
+   y INT8 NULL,
+   CONSTRAINT cf FOREIGN KEY (x) REFERENCES public.t(x),
+   UNIQUE INDEX cu (x ASC),
+   FAMILY "primary" (x, y, rowid),
+   CONSTRAINT cc CHECK (x > 10:::INT8)
+)
+
+query TT
+SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname
+----
+cc  c
+cf  f
+cu  u
+
+subtest rename_works
+
+statement ok
+ALTER TABLE t RENAME CONSTRAINT cu TO cu2,
+              RENAME CONSTRAINT cf TO cf2,
+			  RENAME CONSTRAINT cc TO cc2
+
+query T
+SELECT create_statement FROM [SHOW CREATE t]
+----
+CREATE TABLE public.t (
+   x INT8 NULL,
+   y INT8 NULL,
+   CONSTRAINT cf2 FOREIGN KEY (x) REFERENCES public.t(x),
+   UNIQUE INDEX cu2 (x ASC),
+   FAMILY "primary" (x, y, rowid),
+   CONSTRAINT cc2 CHECK (x > 10:::INT8)
+)
+
+query TT
+SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname
+----
+cc2  c
+cf2  f
+cu2  u
+
+
+subtest duplicate_constraints
+
+statement error duplicate constraint
+ALTER TABLE t RENAME CONSTRAINT cu2 TO cf2
+
+statement error duplicate constraint
+ALTER TABLE t RENAME CONSTRAINT cu2 TO cc2
+
+statement error duplicate constraint
+ALTER TABLE t RENAME CONSTRAINT cf2 TO cu2
+
+statement error duplicate constraint
+ALTER TABLE t RENAME CONSTRAINT cf2 TO cc2
+
+statement error duplicate constraint
+ALTER TABLE t RENAME CONSTRAINT cc2 TO cf2
+
+statement error duplicate constraint
+ALTER TABLE t RENAME CONSTRAINT cc2 TO cu2
+
+subtest multiple_renames
+
+statement ok
+ALTER TABLE t RENAME CONSTRAINT cu2 TO cu3,
+			  RENAME CONSTRAINT cc2 TO cc3,
+			  RENAME CONSTRAINT cf2 TO cf3,
+              RENAME CONSTRAINT cu3 TO cu4,
+			  RENAME CONSTRAINT cc3 TO cc4,
+			  RENAME CONSTRAINT cf3 TO cf4
+
+query T
+SELECT create_statement FROM [SHOW CREATE t]
+----
+CREATE TABLE public.t (
+   x INT8 NULL,
+   y INT8 NULL,
+   CONSTRAINT cf4 FOREIGN KEY (x) REFERENCES public.t(x),
+   UNIQUE INDEX cu4 (x ASC),
+   FAMILY "primary" (x, y, rowid),
+   CONSTRAINT cc4 CHECK (x > 10:::INT8)
+)
+
+query TT
+SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname
+----
+cc4  c
+cf4  f
+cu4  u

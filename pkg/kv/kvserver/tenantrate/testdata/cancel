@@ -1,0 +1,60 @@
+# This tests cancellation and unblocking subsequent requests.
+
+init
+readrequests:  { rate: 1, burst: 2 }
+writerequests: { rate: 1, burst: 2 }
+readbytes:     { rate: 1024, burst: 2048 }
+writebytes:    { rate: 1024, burst: 2048 }
+----
+00:00:00.000
+
+get_tenants
+- 2
+----
+[2#1]
+
+# Launch a request to consume half of the 1024 capacity.
+
+launch
+- { id: g1, tenant: 2, iswrite: true, writebytes: 1024 }
+----
+[g1@2]
+
+await
+[g1]
+----
+[]
+
+# Launch a request requiring more quota than exists.
+
+launch
+- { id: g2, tenant: 2, iswrite: true, writebytes: 1536 }
+----
+[g2@2]
+
+# Observe the timer indicating that the above request is blocked.
+
+timers
+----
+00:00:00.500
+
+# Launch another request which could be fulfilled by the existing quota.
+
+launch
+- { id: g3, tenant: 2, iswrite: true, writebytes: 1024 }
+----
+[g2@2, g3@2]
+
+# Cancel the blocked request.
+
+cancel
+- g2
+----
+[g3@2]
+
+# Observe that the previously blocked, second request proceeds.
+
+await
+- g3
+----
+[]

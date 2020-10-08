@@ -1,16 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package server
 
@@ -25,21 +21,27 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 const (
@@ -48,27 +50,60 @@ const (
 	loginPath  = "/login"
 	logoutPath = "/logout"
 	// secretLength is the number of random bytes generated for session secrets.
-	secretLength      = 16
-	sessionCookieName = "session"
+	secretLength = 16
+	// SessionCookieName is the name of the cookie used for HTTP auth.
+	SessionCookieName = "session"
 )
 
-var webSessionTimeout = settings.RegisterNonNegativeDurationSetting(
+type noOIDCConfigured struct{}
+
+func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
+	return ui.OIDCUIConf{
+		Enabled: false,
+	}
+}
+
+func (c *noOIDCConfigured) ValidateOIDCState(state *serverpb.OIDCState) error {
+	return errors.New("OIDC is not enabled")
+}
+
+// OIDC is an interface that an OIDC-based authentication module should implement to integrate with
+// the rest of the node's functionality
+type OIDC interface {
+	ui.OIDCUI
+	ValidateOIDCState(state *serverpb.OIDCState) error
+}
+
+// ConfigureOIDC is a hook for the `oidcccl` library to add OIDC login support. It's called during
+// server startup to initialize a client for OIDC support.
+var ConfigureOIDC = func(
+	ctx context.Context,
+	st *cluster.Settings,
+	mux *http.ServeMux,
+	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
+	ambientCtx log.AmbientContext,
+	cluster uuid.UUID,
+	nodeDialer *nodedialer.Dialer,
+	nodeID roachpb.NodeID,
+) (OIDC, error) {
+	return &noOIDCConfigured{}, nil
+}
+
+var webSessionTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 	"server.web_session_timeout",
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,
 )
 
 type authenticationServer struct {
-	server     *Server
-	memMetrics *sql.MemoryMetrics
+	server *Server
 }
 
 // newAuthenticationServer allocates and returns a new REST server for
 // authentication APIs.
 func newAuthenticationServer(s *Server) *authenticationServer {
 	return &authenticationServer{
-		server:     s,
-		memMetrics: &s.adminMemMetrics,
+		server: s,
 	}
 }
 
@@ -105,19 +140,17 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
-	// Root user does not have a password, simply disallow this.
-	if username == security.RootUser {
-		return nil, status.Errorf(
-			codes.Unauthenticated,
-			"user %s must use certificate authentication instead of password authentication",
-			security.RootUser,
-		)
-	}
-
 	// Verify the provided username/password pair.
-	verified, err := s.verifyPassword(ctx, username, req.Password)
+	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
+	}
+	if expired {
+		return nil, status.Errorf(
+			codes.Unauthenticated,
+			"the password for %s has expired",
+			username,
+		)
 	}
 	if !verified {
 		return nil, status.Errorf(
@@ -126,6 +159,57 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
+	cookie, err := s.createSessionFor(ctx, username)
+	if err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	// Set the cookie header on the outgoing response.
+	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	return &serverpb.UserLoginResponse{}, nil
+}
+
+var errUsernameDoesNotExist = errors.New("username for session does not exist")
+
+func (s *authenticationServer) ValidateOIDCState(
+	ctx context.Context, req *serverpb.ValidateOIDCStateRequest,
+) (*serverpb.ValidateOIDCStateResponse, error) {
+	err := s.server.oidc.ValidateOIDCState(req.State)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.ValidateOIDCStateResponse{}, nil
+}
+
+// UserLoginFromSSO checks for the existence of a given username and if it exists,
+// creates a session for the username in the `web_sessions` table.
+// The session's ID and secret are returned to the caller as an HTTP cookie,
+// added via a "Set-Cookie" header.
+func (s *authenticationServer) UserLoginFromSSO(
+	ctx context.Context, username string,
+) (*http.Cookie, error) {
+	exists, _, _, _, err := sql.GetUserHashedPassword(
+		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
+	)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "failed creating session for username")
+	}
+
+	if !exists {
+		return nil, errUsernameDoesNotExist
+	}
+
+	return s.createSessionFor(ctx, username)
+}
+
+func (s *authenticationServer) createSessionFor(
+	ctx context.Context, username string,
+) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.newAuthSession(ctx, username)
 	if err != nil {
@@ -139,17 +223,7 @@ func (s *authenticationServer) UserLogin(
 		ID:     id,
 		Secret: secret,
 	}
-	cookie, err := encodeSessionCookie(cookieValue)
-	if err != nil {
-		return nil, apiInternalError(ctx, err)
-	}
-
-	// Set the cookie header on the outgoing response.
-	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
-		return nil, apiInternalError(ctx, err)
-	}
-
-	return &serverpb.UserLoginResponse{}, nil
+	return EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
 }
 
 // UserLogout allows a user to terminate their currently active session.
@@ -171,23 +245,24 @@ func (s *authenticationServer) UserLogout(
 	}
 
 	// Revoke the session.
-	if n, err := s.server.internalExecutor.Exec(
+	if n, err := s.server.sqlServer.internalExecutor.ExecEx(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
 		return nil, apiInternalError(ctx, err)
 	} else if n == 0 {
-		msg := fmt.Sprintf("session with id %d nonexistent", sessionID)
-		log.Info(ctx, msg)
-		return nil, fmt.Errorf(msg)
+		err := errors.Newf("session with id %d nonexistent", sessionID)
+		log.Infof(ctx, "%v", err)
+		return nil, err
 	}
 
 	// Send back a header which will cause the browser to destroy the cookie.
 	// See https://tools.ietf.org/search/rfc6265, page 7.
-	cookie := makeCookieWithValue("")
+	cookie := makeCookieWithValue("", false /* forHTTPSOnly */)
 	cookie.MaxAge = -1
 
 	// Set the cookie header on the outgoing response.
@@ -218,18 +293,20 @@ WHERE id = $1`
 		isRevoked    bool
 	)
 
-	row, err := s.server.internalExecutor.QueryRow(
+	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx,
 		"lookup-auth-session",
-		nil /* txn */, sessionQuery, cookie.ID)
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
 		return false, "", err
 	}
 
 	if row.Len() != 4 ||
-		row[0].ResolvedType() != types.Bytes ||
-		row[1].ResolvedType() != types.String ||
-		row[2].ResolvedType() != types.Timestamp {
+		row[0].ResolvedType().Family() != types.BytesFamily ||
+		row[1].ResolvedType().Family() != types.StringFamily ||
+		row[2].ResolvedType().Family() != types.TimestampFamily {
 		return false, "", errors.Errorf("values returned from auth session lookup do not match expectation")
 	}
 
@@ -237,7 +314,7 @@ WHERE id = $1`
 	hashedSecret = []byte(*row[0].(*tree.DBytes))
 	username = string(*row[1].(*tree.DString))
 	expiresAt = row[2].(*tree.DTimestamp).Time
-	isRevoked = row[3].ResolvedType() != types.Unknown
+	isRevoked = row[3].ResolvedType().Family() != types.UnknownFamily
 
 	if isRevoked {
 		return false, "", nil
@@ -248,7 +325,8 @@ WHERE id = $1`
 	}
 
 	hasher := sha256.New()
-	hashedCookieSecret := hasher.Sum(cookie.Secret)
+	_, _ = hasher.Write(cookie.Secret)
+	hashedCookieSecret := hasher.Sum(nil)
 	if !bytes.Equal(hashedSecret, hashedCookieSecret) {
 		return false, "", nil
 	}
@@ -262,17 +340,45 @@ WHERE id = $1`
 // not be completed.
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username string, password string,
-) (bool, error) {
-	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, s.server.execCfg, s.memMetrics, username,
+) (valid bool, expired bool, err error) {
+	exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(
+		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
 	)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	if !exists {
-		return false, nil
+	if !exists || !canLogin {
+		return false, false, nil
 	}
-	return (security.CompareHashAndPassword(hashedPassword, password) == nil), nil
+	hashedPassword, err := pwRetrieveFn(ctx)
+	if err != nil {
+		return false, false, err
+	}
+
+	validUntil, err := validUntilFn(ctx)
+	if err != nil {
+		return false, false, err
+	}
+	if validUntil != nil {
+		if validUntil.Time.Sub(timeutil.Now()) < 0 {
+			return false, true, nil
+		}
+	}
+
+	return security.CompareHashAndPassword(hashedPassword, password) == nil, false, nil
+}
+
+// CreateAuthSecret creates a secret, hash pair to populate a session auth token.
+func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
+	secret = make([]byte, secretLength)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, nil, err
+	}
+
+	hasher := sha256.New()
+	_, _ = hasher.Write(secret)
+	hashedSecret = hasher.Sum(nil)
+	return secret, hashedSecret, nil
 }
 
 // newAuthSession attempts to create a new authentication session for the given
@@ -280,13 +386,11 @@ func (s *authenticationServer) verifyPassword(
 func (s *authenticationServer) newAuthSession(
 	ctx context.Context, username string,
 ) (int64, []byte, error) {
-	secret := make([]byte, secretLength)
-	if _, err := rand.Read(secret); err != nil {
+	secret, hashedSecret, err := CreateAuthSecret()
+	if err != nil {
 		return 0, nil, err
 	}
 
-	hasher := sha256.New()
-	hashedSecret := hasher.Sum(secret)
 	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
 
 	insertSessionStmt := `
@@ -296,10 +400,11 @@ RETURNING id
 `
 	var id int64
 
-	row, err := s.server.internalExecutor.QueryRow(
+	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		insertSessionStmt,
 		hashedSecret,
 		username,
@@ -308,7 +413,7 @@ RETURNING id
 	if err != nil {
 		return 0, nil, err
 	}
-	if row.Len() != 1 || row[0].ResolvedType() != types.Int {
+	if row.Len() != 1 || row[0].ResolvedType().Family() != types.IntFamily {
 		return 0, nil, errors.Errorf(
 			"expected create auth session statement to return exactly one integer, returned %v",
 			row,
@@ -327,6 +432,13 @@ type authenticationMux struct {
 	server *authenticationServer
 	inner  http.Handler
 
+	// allowAnonymous, if true, indicates that the authentication mux should
+	// call its inner HTTP handler even if the request doesn't have a valid
+	// session. If there is a valid session, the mux calls its inner handler
+	// with a context containing the username and session ID.
+	//
+	// If allowAnonymous is false, the mux returns an error if there is no
+	// valid session.
 	allowAnonymous bool
 }
 
@@ -351,42 +463,49 @@ func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenti
 type webSessionUserKey struct{}
 type webSessionIDKey struct{}
 
-const webSessionUserKeyStr = "webSessionUser"
-const webSessionIDKeyStr = "webSessionID"
+const webSessionUserKeyStr = "websessionuser"
+const webSessionIDKeyStr = "websessionid"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	username, cookie, err := am.getSession(w, req)
-	if err != nil && !am.allowAnonymous {
-		log.Infof(req.Context(), "Web session error: %s", err)
+	if err == nil {
+		ctx := req.Context()
+		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
+		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+		req = req.WithContext(ctx)
+	} else if !am.allowAnonymous {
+		if log.V(1) {
+			log.Infof(req.Context(), "web session error: %v", err)
+		}
 		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
 		return
 	}
-
-	newCtx := context.WithValue(req.Context(), webSessionUserKey{}, username)
-	if cookie != nil {
-		newCtx = context.WithValue(newCtx, webSessionIDKey{}, cookie.ID)
-	}
-	newReq := req.WithContext(newCtx)
-
-	am.inner.ServeHTTP(w, newReq)
+	am.inner.ServeHTTP(w, req)
 }
 
-func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
+// EncodeSessionCookie encodes a SessionCookie proto into an http.Cookie.
+// The flag forHTTPSOnly, if set, produces the "Secure" flag on the
+// resulting HTTP cookie, which means the cookie should only be
+// transmitted over HTTPS channels. Note that a cookie without
+// the "Secure" flag can be transmitted over either HTTP or HTTPS channels.
+func EncodeSessionCookie(
+	sessionCookie *serverpb.SessionCookie, forHTTPSOnly bool,
+) (*http.Cookie, error) {
 	cookieValueBytes, err := protoutil.Marshal(sessionCookie)
 	if err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be encoded")
 	}
 	value := base64.StdEncoding.EncodeToString(cookieValueBytes)
-	return makeCookieWithValue(value), nil
+	return makeCookieWithValue(value, forHTTPSOnly), nil
 }
 
-func makeCookieWithValue(value string) *http.Cookie {
+func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
 	return &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     SessionCookieName,
 		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   forHTTPSOnly,
 	}
 }
 
@@ -397,7 +516,7 @@ func (am *authenticationMux) getSession(
 	w http.ResponseWriter, req *http.Request,
 ) (string, *serverpb.SessionCookie, error) {
 	// Validate the returned cookie.
-	rawCookie, err := req.Cookie(sessionCookieName)
+	rawCookie, err := req.Cookie(SessionCookieName)
 	if err != nil {
 		return "", nil, err
 	}

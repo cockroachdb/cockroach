@@ -1,4 +1,3 @@
 grant_stmt ::=
-	
-	'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )*
+	'GRANT' privilege_list 'TO' name_list
 	| 'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )* 'WITH' 'ADMIN' 'OPTION'

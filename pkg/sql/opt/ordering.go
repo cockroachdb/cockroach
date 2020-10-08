@@ -1,22 +1,20 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package opt
 
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/cockroachdb/errors"
 )
 
 // OrderingColumn is the ColumnID for a column that is part of an ordering,
@@ -51,6 +49,14 @@ func (c OrderingColumn) Descending() bool {
 	return c < 0
 }
 
+// RemapColumn returns a new OrderingColumn that uses a ColumnID from the 'to'
+// table. The original ColumnID must be from the 'from' table.
+func (c OrderingColumn) RemapColumn(from, to TableID) OrderingColumn {
+	ord := from.ColumnOrdinal(c.ID())
+	newColID := to.ColumnID(ord)
+	return MakeOrderingColumn(newColID, c.Descending())
+}
+
 func (c OrderingColumn) String() string {
 	var buf bytes.Buffer
 	c.Format(&buf)
@@ -65,15 +71,6 @@ func (c OrderingColumn) Format(buf *bytes.Buffer) {
 		buf.WriteByte('+')
 	}
 	fmt.Fprintf(buf, "%d", c.ID())
-}
-
-// ColListToSet converts a column id list to a column id set.
-func ColListToSet(colList ColList) ColSet {
-	var r ColSet
-	for _, col := range colList {
-		r.Add(int(col))
-	}
-	return r
 }
 
 // Ordering defines the order of rows provided or required by an operator. A
@@ -105,7 +102,7 @@ func (o Ordering) Format(buf *bytes.Buffer) {
 func (o Ordering) ColSet() ColSet {
 	var colSet ColSet
 	for _, col := range o {
-		colSet.Add(int(col.ID()))
+		colSet.Add(col.ID())
 	}
 	return colSet
 }
@@ -162,6 +159,9 @@ func (os OrderingSet) Copy() OrderingSet {
 // Add an ordering to the list, checking whether it is a prefix of another
 // ordering (or vice-versa).
 func (os *OrderingSet) Add(o Ordering) {
+	if len(o) == 0 {
+		panic(errors.AssertionFailedf("empty ordering"))
+	}
 	for i := range *os {
 		prefix := (*os)[i].CommonPrefix(o)
 		if len(prefix) == len(o) {
@@ -199,7 +199,7 @@ func (os *OrderingSet) RestrictToCols(cols ColSet) {
 		// only columns in the set.
 		prefix := 0
 		for _, c := range o {
-			if !cols.Contains(int(c.ID())) {
+			if !cols.Contains(c.ID()) {
 				break
 			}
 			prefix++

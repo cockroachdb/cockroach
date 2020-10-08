@@ -1,0 +1,186 @@
+# ------------------------------------------------------------------------------
+# Zigzag join tests on non-inverted indexes.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b));
+INSERT INTO a SELECT a,a,a%3,'foo' FROM generate_series(1,10) AS g(a) ;
+SET enable_zigzag_join = true
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 4 AND b = 1
+----
+4  4  1
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 5 AND b = 2
+----
+5  5  2
+
+query IIIT rowsort
+SELECT * FROM a WHERE a = 4 AND b = 1
+----
+4  4  1  foo
+
+query IIIT rowsort
+SELECT * FROM a WHERE a = 4 AND b = 2
+----
+
+query IIIT rowsort
+SELECT * FROM a WHERE a = 5 AND b = 2 AND c = 'foo'
+----
+5  5  2  foo
+
+# Turn off zigzag joins and verify output.
+statement ok
+SET enable_zigzag_join = false
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 4 AND b = 1
+----
+4  4  1
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 5 AND b = 2
+----
+5  5  2
+
+statement ok
+SET enable_zigzag_join = true
+
+# Regression test for 42164 ("invalid indexIdx" error).
+statement ok
+DROP INDEX a@a_idx;
+DROP INDEX a@b_idx;
+CREATE INDEX c_idx ON a(c);
+CREATE INDEX a_idx_2 ON a(a);
+CREATE INDEX b_idx_2 ON a(b);
+SELECT n,a,b FROM a WHERE a = 4 AND b = 1;
+
+# Regression test for 48003 ("non-values node passed as fixed value to zigzag
+# join" error).
+statement ok
+SELECT n FROM a WHERE b = 1 AND (((a < 1) AND (a > 1)) OR (a >= 2 AND a <= 2))
+
+# ------------------------------------------------------------------------------
+# Zigzag join tests on inverted indexes.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE d (
+  a INT PRIMARY KEY,
+  b JSONB
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON d(b)
+
+statement ok
+SHOW INDEX FROM d
+
+statement ok
+INSERT INTO d VALUES(1, '{"a": "b"}')
+
+statement ok
+INSERT INTO d VALUES(2, '[1,2,3,4, "foo"]')
+
+statement ok
+INSERT INTO d VALUES(3, '{"a": {"b": "c"}}')
+
+statement ok
+INSERT INTO d VALUES(4, '{"a": {"b": [1]}}')
+
+statement ok
+INSERT INTO d VALUES(5, '{"a": {"b": [1, [2]]}}')
+
+statement ok
+INSERT INTO d VALUES(6, '{"a": {"b": [[2]]}}')
+
+statement ok
+INSERT INTO d VALUES(7, '{"a": "b", "c": "d"}')
+
+statement ok
+INSERT INTO d VALUES(8, '{"a": {"b":true}}')
+
+statement ok
+INSERT INTO d VALUES(9, '{"a": {"b":false}}')
+
+statement ok
+INSERT INTO d VALUES(10, '"a"')
+
+statement ok
+INSERT INTO d VALUES(11, 'null')
+
+statement ok
+INSERT INTO d VALUES(12, 'true')
+
+statement ok
+INSERT INTO d VALUES(13, 'false')
+
+statement ok
+INSERT INTO d VALUES(14, '1')
+
+statement ok
+INSERT INTO d VALUES(15, '1.23')
+
+statement ok
+INSERT INTO d VALUES(16, '[{"a": {"b": [1, [2]]}}, "d"]')
+
+statement ok
+INSERT INTO d VALUES(17, '{}')
+
+statement ok
+INSERT INTO d VALUES(18, '[]')
+
+statement ok
+INSERT INTO d VALUES (29,  NULL)
+
+statement ok
+INSERT INTO d VALUES (30,  '{"a": []}')
+
+statement ok
+INSERT INTO d VALUES (31,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
+
+## Multi-path contains queries with zigzag joins enabled.
+
+query IT
+SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
+----
+31  {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+query IT
+SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+31  {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+query IT
+SELECT * from d where b @> '{"c": "d", "a": "b"}'
+----
+7  {"a": "b", "c": "d"}
+
+query IT
+SELECT * from d where b @> '{"c": "d", "a": "b", "f": "g"}'
+----
+
+query IT
+SELECT * from d where b @> '{"a": "b", "c": "e"}'
+----
+
+query IT
+SELECT * from d where b @> '{"a": "e", "c": "d"}'
+----
+
+query IT
+SELECT * from d where b @> '["d", {"a": {"b": [1]}}]'
+----
+16  [{"a": {"b": [1, [2]]}}, "d"]
+
+query IT
+SELECT * from d where b @> '["d", {"a": {"b": [[2]]}}]'
+----
+16  [{"a": {"b": [1, [2]]}}, "d"]
+
+query IT
+SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
+----
+16  [{"a": {"b": [1, [2]]}}, "d"]

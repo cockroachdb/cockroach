@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import _ from "lodash";
 import React from "react";
 
@@ -8,23 +18,23 @@ import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";
 import { TimestampToMoment } from "src/util/convert";
 
-import spinner from "assets/spinner.gif";
-
 interface LogTableProps {
   rangeID: Long;
   log: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
 }
 
 function printLogEventType(
-  eventType: protos.cockroach.storage.RangeLogEventType,
+  eventType: protos.cockroach.kv.kvserver.storagepb.RangeLogEventType,
 ) {
   switch (eventType) {
-    case protos.cockroach.storage.RangeLogEventType.add:
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.add:
       return "Add";
-    case protos.cockroach.storage.RangeLogEventType.remove:
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.remove:
       return "Remove";
-    case protos.cockroach.storage.RangeLogEventType.split:
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.split:
       return "Split";
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.merge:
+      return "Merge";
     default:
       return "Unknown";
   }
@@ -76,18 +86,8 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     );
   }
 
-  render() {
+  renderContent = () => {
     const { log } = this.props;
-
-    if (log && !_.isEmpty(log.lastError)) {
-      return (
-        <div>
-          <h2>Range Log</h2>
-          There was an error retrieving the range log:
-          {log.lastError}
-        </div>
-      );
-    }
 
     // Sort by descending timestamp.
     const events = _.orderBy(
@@ -97,38 +97,44 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     );
 
     return (
+      <table className="log-table">
+        <tbody>
+          <tr className="log-table__row log-table__row--header">
+            <th className="log-table__cell log-table__cell--header">Timestamp</th>
+            <th className="log-table__cell log-table__cell--header">Store</th>
+            <th className="log-table__cell log-table__cell--header">Event Type</th>
+            <th className="log-table__cell log-table__cell--header">Range</th>
+            <th className="log-table__cell log-table__cell--header">Other Range</th>
+            <th className="log-table__cell log-table__cell--header">Info</th>
+          </tr>
+          {_.map(events, (event, key) => (
+            <tr key={key} className="log-table__row">
+              <td className="log-table__cell log-table__cell--date">
+                {Print.Timestamp(event.event.timestamp)}
+              </td>
+              <td className="log-table__cell">s{event.event.store_id}</td>
+              <td className="log-table__cell">{printLogEventType(event.event.event_type)}</td>
+              <td className="log-table__cell">{this.renderRangeID(event.event.range_id)}</td>
+              <td className="log-table__cell">{this.renderRangeID(event.event.other_range_id)}</td>
+              <td className="log-table__cell">{this.renderLogInfo(event.pretty_info)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  render() {
+    const { log } = this.props;
+
+    return (
       <div>
-        <h2>Range Log</h2>
+        <h2 className="base-heading">Range Log</h2>
         <Loading
           loading={!log || log.inFlight}
-          className="loading-image loading-image__spinner-left"
-          image={spinner}
-        >
-          <table className="log-table">
-            <tbody>
-              <tr className="log-table__row log-table__row--header">
-                <th className="log-table__cell log-table__cell--header">Timestamp</th>
-                <th className="log-table__cell log-table__cell--header">Store</th>
-                <th className="log-table__cell log-table__cell--header">Event Type</th>
-                <th className="log-table__cell log-table__cell--header">Range</th>
-                <th className="log-table__cell log-table__cell--header">Other Range</th>
-                <th className="log-table__cell log-table__cell--header">Info</th>
-              </tr>
-              {_.map(events, (event, key) => (
-                <tr key={key} className="log-table__row">
-                  <td className="log-table__cell log-table__cell--date">
-                    {Print.Timestamp(event.event.timestamp)}
-                  </td>
-                  <td className="log-table__cell">s{event.event.store_id}</td>
-                  <td className="log-table__cell">{printLogEventType(event.event.event_type)}</td>
-                  <td className="log-table__cell">{this.renderRangeID(event.event.range_id)}</td>
-                  <td className="log-table__cell">{this.renderRangeID(event.event.other_range_id)}</td>
-                  <td className="log-table__cell">{this.renderLogInfo(event.pretty_info)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Loading>
+          error={log && log.lastError}
+          render={this.renderContent}
+        />
       </div>
     );
   }

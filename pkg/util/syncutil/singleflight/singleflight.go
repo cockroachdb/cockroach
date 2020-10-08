@@ -1,3 +1,13 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 // Copyright 2013 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in licenses/BSD-golang.txt.
@@ -135,4 +145,14 @@ func (g *Group) Forget(key string) {
 	g.mu.Lock()
 	delete(g.m, key)
 	g.mu.Unlock()
+}
+
+// NumCalls returns the number of in-flight calls for a given key.
+func (g *Group) NumCalls(key string) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if c, ok := g.m[key]; ok {
+		return c.dups + 1
+	}
+	return 0
 }

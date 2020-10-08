@@ -36,8 +36,8 @@ class MemKeyManager : public KeyManager {
   explicit MemKeyManager(enginepbccl::SecretKey* key) : key_(key) {}
   virtual ~MemKeyManager();
 
-  virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() override;
-  virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
+  virtual std::shared_ptr<enginepbccl::SecretKey> CurrentKey() override;
+  virtual std::shared_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
 
   // Replace the key with the passed-in one. Takes ownership.
   void set_key(enginepbccl::SecretKey* key);

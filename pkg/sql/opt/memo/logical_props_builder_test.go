@@ -1,78 +1,205 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package memo_test
+package memo
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-func TestLogicalPropsBuilder(t *testing.T) {
-	flags := opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
-	runDataDrivenTest(t, "testdata/logprops/", flags)
-	runDataDrivenTest(t, "testdata/stats/", flags)
-}
+func TestJoinCardinality(t *testing.T) {
+	c := func(min, max uint32) props.Cardinality {
+		return props.Cardinality{Min: min, Max: max}
+	}
 
-// Test HasCorrelatedSubquery flag manually since it's not important enough
-// to add to the ExprView string representation in order to use data-driven
-// tests.
-func TestHasCorrelatedSubquery(t *testing.T) {
-	cat := createLogPropsCatalog(t)
+	type testCase struct {
+		left     props.Cardinality
+		right    props.Cardinality
+		expected props.Cardinality
+	}
 
-	testCases := []struct {
-		sql      string
-		expected bool
+	testCaseGroups := []struct {
+		joinType  opt.Operator
+		filter    string // "true", "false", or "other"
+		testCases []testCase
 	}{
-		{sql: "SELECT y FROM a WHERE 1=1", expected: false},
-		{sql: "SELECT y FROM a WHERE (SELECT count(*) FROM b) > 0", expected: false},
-		{sql: "SELECT y FROM a WHERE (SELECT y) > 5", expected: true},
-		{sql: "SELECT y FROM a WHERE (SELECT True FROM b WHERE z=y)", expected: true},
-		{sql: "SELECT y FROM a WHERE (SELECT z FROM b WHERE z=y) = 5", expected: true},
-		{sql: "SELECT y FROM a WHERE 1=1 AND (SELECT z FROM b WHERE z=y)+1 = 10", expected: true},
-		{sql: "SELECT (SELECT z FROM b WHERE z=y) FROM a WHERE False", expected: false},
-		{sql: "SELECT y FROM a WHERE EXISTS(SELECT z FROM b WHERE z=y)", expected: true},
-		{sql: "SELECT y FROM a WHERE EXISTS(SELECT z FROM b)", expected: false},
-		{sql: "SELECT y FROM a WHERE 5 = ANY(SELECT z FROM b WHERE z=y)", expected: true},
-		{sql: "SELECT y FROM a WHERE 5 = ANY(SELECT z FROM b)", expected: false},
+		{ // Inner join, true filter.
+			joinType: opt.InnerJoinOp,
+			filter:   "true",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(0, 10), right: c(5, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(5, 10), expected: c(25, 100)},
+			},
+		},
+
+		{ // Inner join, false filter.
+			joinType: opt.InnerJoinOp,
+			filter:   "false",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 0)},
+				{left: c(5, 10), right: c(0, 10), expected: c(0, 0)},
+				{left: c(0, 10), right: c(5, 10), expected: c(0, 0)},
+				{left: c(5, 10), right: c(5, 10), expected: c(0, 0)},
+			},
+		},
+
+		{ // Inner join, other filter.
+			joinType: opt.InnerJoinOp,
+			filter:   "other",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(0, 10), right: c(5, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(5, 10), expected: c(0, 100)},
+			},
+		},
+
+		{ // Left join, true filter.
+			joinType: opt.LeftJoinOp,
+			filter:   "true",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(0, 10), expected: c(5, 100)},
+				{left: c(0, 10), right: c(5, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(5, 10), expected: c(25, 100)},
+			},
+		},
+
+		{ // Left join, false filter.
+			joinType: opt.LeftJoinOp,
+			filter:   "false",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 10)},
+				{left: c(5, 10), right: c(0, 10), expected: c(5, 10)},
+				{left: c(0, 10), right: c(5, 10), expected: c(0, 10)},
+				{left: c(5, 10), right: c(5, 10), expected: c(5, 10)},
+			},
+		},
+
+		{ // Left join, other filter.
+			joinType: opt.LeftJoinOp,
+			filter:   "other",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(0, 10), expected: c(5, 100)},
+				{left: c(0, 10), right: c(5, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(5, 10), expected: c(5, 100)},
+			},
+		},
+
+		{ // Right join, true filter.
+			joinType: opt.RightJoinOp,
+			filter:   "true",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(0, 10), right: c(5, 10), expected: c(5, 100)},
+				{left: c(5, 10), right: c(5, 10), expected: c(25, 100)},
+			},
+		},
+
+		{ // Right join, false filter.
+			joinType: opt.RightJoinOp,
+			filter:   "false",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 10)},
+				{left: c(5, 10), right: c(0, 10), expected: c(0, 10)},
+				{left: c(0, 10), right: c(5, 10), expected: c(5, 10)},
+				{left: c(5, 10), right: c(5, 10), expected: c(5, 10)},
+			},
+		},
+
+		{ // Right join, other filter.
+			joinType: opt.RightJoinOp,
+			filter:   "other",
+			testCases: []testCase{
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(0, 10), right: c(5, 10), expected: c(5, 100)},
+				{left: c(5, 10), right: c(5, 10), expected: c(5, 100)},
+			},
+		},
+
+		{ // Full join, true filter.
+			joinType: opt.FullJoinOp,
+			filter:   "true",
+			testCases: []testCase{
+				{left: c(0, 1), right: c(0, 1), expected: c(0, 2)},
+				{left: c(1, 1), right: c(1, 1), expected: c(1, 2)},
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(0, 10), expected: c(5, 100)},
+				{left: c(0, 10), right: c(5, 10), expected: c(5, 100)},
+				{left: c(5, 10), right: c(5, 10), expected: c(25, 100)},
+				{left: c(7, 10), right: c(8, 10), expected: c(56, 100)},
+				{left: c(8, 10), right: c(7, 10), expected: c(56, 100)},
+			},
+		},
+
+		{ // Full join, false filter.
+			joinType: opt.FullJoinOp,
+			filter:   "false",
+			testCases: []testCase{
+				{left: c(0, 1), right: c(0, 1), expected: c(0, 2)},
+				{left: c(1, 1), right: c(1, 1), expected: c(2, 2)},
+				{left: c(2, 5), right: c(3, 8), expected: c(5, 13)},
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 20)},
+				{left: c(5, 10), right: c(0, 10), expected: c(5, 20)},
+				{left: c(0, 10), right: c(5, 10), expected: c(5, 20)},
+				{left: c(5, 10), right: c(5, 10), expected: c(10, 20)},
+				{left: c(7, 10), right: c(8, 10), expected: c(15, 20)},
+				{left: c(8, 10), right: c(7, 10), expected: c(15, 20)},
+			},
+		},
+
+		{ // Full join, other filter.
+			joinType: opt.FullJoinOp,
+			filter:   "other",
+			testCases: []testCase{
+				{left: c(0, 1), right: c(0, 1), expected: c(0, 2)},
+				{left: c(1, 1), right: c(1, 1), expected: c(1, 2)},
+				{left: c(2, 5), right: c(3, 8), expected: c(3, 40)},
+				{left: c(0, 10), right: c(0, 10), expected: c(0, 100)},
+				{left: c(5, 10), right: c(0, 10), expected: c(5, 100)},
+				{left: c(0, 10), right: c(5, 10), expected: c(5, 100)},
+				{left: c(5, 10), right: c(5, 10), expected: c(5, 100)},
+				{left: c(7, 10), right: c(8, 10), expected: c(8, 100)},
+				{left: c(8, 10), right: c(7, 10), expected: c(8, 100)},
+			},
+		},
 	}
 
-	for _, tc := range testCases {
-		tester := testutils.NewOptTester(cat, tc.sql)
-		ev, err := tester.OptBuild()
-		if err != nil {
-			t.Fatalf("%v", err)
-		}
+	for _, group := range testCaseGroups {
+		t.Run(fmt.Sprintf("%s/%s", group.joinType, group.filter), func(t *testing.T) {
+			for i, tc := range group.testCases {
+				t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+					h := &joinPropsHelper{}
+					h.joinType = group.joinType
+					h.leftProps = &props.Relational{Cardinality: tc.left}
+					h.rightProps = &props.Relational{Cardinality: tc.right}
+					h.filterIsTrue = (group.filter == "true")
+					h.filterIsFalse = (group.filter == "false")
 
-		// Dig down through input of Project operator and get Select filter.
-		child := ev.Child(0).Child(1)
-		if child.Logical().Scalar.HasCorrelatedSubquery != tc.expected {
-			t.Errorf("expected HasCorrelatedSubquery to be %v, got %v", tc.expected, !tc.expected)
-		}
+					res := h.cardinality()
+					if res != tc.expected {
+						t.Errorf(
+							"left=%s right=%s: expected %s, got %s\n", tc.left, tc.right, tc.expected, res,
+						)
+					}
+				})
+			}
+		})
 	}
-}
-
-func createLogPropsCatalog(t *testing.T) *testcat.Catalog {
-	cat := testcat.New()
-	if _, err := cat.ExecuteDDL("CREATE TABLE a (x INT PRIMARY KEY, y INT)"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := cat.ExecuteDDL("CREATE TABLE b (x INT PRIMARY KEY, z INT NOT NULL)"); err != nil {
-		t.Fatal(err)
-	}
-	return cat
 }

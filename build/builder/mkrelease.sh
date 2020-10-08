@@ -9,7 +9,6 @@
 # Possible configurations:
 #
 #   - amd64-linux-gnu:      amd64, Linux 2.6.32, dynamically link glibc 2.12.2
-#   - amd64-linux-musl:     amd64, Linux 2.6.32, statically link musl 1.1.16
 #   - amd64-linux-msan:     amd64, recent Linux, enable Clang's memory sanitizer
 #   - arm64-linux-gnueabi:  arm64, Linux 3.7.10, dynamically link glibc 2.12.2
 #   - amd64-darwin:         amd64, macOS 10.9
@@ -39,21 +38,18 @@ case "${1-}" in
       XGOARCH=amd64
       XCMAKE_SYSTEM_NAME=Linux
       TARGET_TRIPLE=x86_64-unknown-linux-gnu
-      LDFLAGS="-static-libgcc -static-libstdc++"
+      # -lrt is needed as clock_gettime isn't part of glibc prior to 2.17.
+      # If we update to a newer glibc, the -lrt can be removed.
+      LDFLAGS="-static-libgcc -static-libstdc++ -lrt"
       SUFFIX=-linux-2.6.32-gnu-amd64
     ) ;;
 
-  ?(amd64-)linux-musl)
-    args=(
-      XGOOS=linux
-      XGOARCH=amd64
-      XCMAKE_SYSTEM_NAME=Linux
-      TARGET_TRIPLE=x86_64-unknown-linux-musl
-      LDFLAGS=-static
-      SUFFIX=-linux-2.6.32-musl-amd64
-    ) ;;
-
   ?(arm64-)linux?(-gnueabi))
+    # Manually set the correct values for configure checks that libkrb5 won't be
+    # able to perform because we're cross-compiling.
+    export krb5_cv_attr_constructor_destructor=yes
+    export ac_cv_func_regcomp=yes
+    export ac_cv_printf_positional=yes
     args=(
       XGOOS=linux
       XGOARCH=arm64
@@ -78,9 +74,9 @@ case "${1-}" in
       XGOOS=darwin
       XGOARCH=amd64
       XCMAKE_SYSTEM_NAME=Darwin
-      TARGET_TRIPLE=x86_64-apple-darwin13
-      EXTRA_XCMAKE_FLAGS=-DCMAKE_INSTALL_NAME_TOOL=x86_64-apple-darwin13-install_name_tool
-      SUFFIX=-darwin-10.9-amd64
+      TARGET_TRIPLE=x86_64-apple-darwin14
+      EXTRA_XCMAKE_FLAGS=-DCMAKE_INSTALL_NAME_TOOL=x86_64-apple-darwin14-install_name_tool
+      SUFFIX=-darwin-10.10-amd64
     ) ;;
 
   ?(amd64-)windows)

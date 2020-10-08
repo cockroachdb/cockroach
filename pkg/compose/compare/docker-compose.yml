@@ -1,0 +1,27 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:11
+    environment:
+      - POSTGRES_INITDB_ARGS=--locale=C
+      - POSTGRES_HOST_AUTH_METHOD=trust
+  cockroach1:
+    image: ubuntu:xenial-20170214
+    command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach1
+    volumes:
+      - ../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+  cockroach2:
+    image: ubuntu:xenial-20170214
+    command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach2
+    volumes:
+      - ../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+  test:
+    image: ubuntu:xenial-20170214
+    # compare.test is a binary built by the pkg/compose/prepare.sh
+    command: /compare/compare.test -each ${EACH} -test.run ${TESTS} -artifacts /compare
+    depends_on:
+      - postgres
+      - cockroach1
+      - cockroach2
+    volumes:
+      - ./compare:/compare

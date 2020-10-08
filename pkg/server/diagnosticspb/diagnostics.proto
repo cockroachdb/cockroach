@@ -1,25 +1,22 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto3";
 package cockroach.server.diagnosticspb;
 option go_package = "diagnosticspb";
 
-import "config/zone.proto";
+import "build/info.proto";
+import "config/zonepb/zone.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/app_stats.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/catalog/descpb/structured.proto";
 import "roachpb/metadata.proto";
 
 message DiagnosticReport {
@@ -27,12 +24,14 @@ message DiagnosticReport {
   repeated StoreInfo stores = 2  [(gogoproto.nullable) = false];
   repeated sql.sqlbase.TableDescriptor schema = 3 [(gogoproto.nullable) = false];
   repeated sql.CollectedStatementStatistics sql_stats = 4 [(gogoproto.nullable) = false];
-  map<string, int64> unimplemented_errors = 5;
   map<string, string> altered_settings = 6;
-  map<string, int64> error_counts = 7;
-  map<int64, config.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];
+  map<int64, config.zonepb.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];
   map<string, int32> feature_usage = 9 [(gogoproto.nullable) = false];
-}
+
+
+  map<string, int64> legacy_unimplemented_errors = 5;
+  map<string, int64> legacy_error_counts = 7;
+  }
 
 message NodeInfo {
   int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
@@ -40,6 +39,13 @@ message NodeInfo {
   int64 key_count = 3;
   int64 range_count = 4;
   roachpb.Locality locality = 5 [(gogoproto.nullable) = false];
+
+  HardwareInfo hardware = 6 [(gogoproto.nullable) = false];
+  OSInfo os = 7 [(gogoproto.nullable) = false];
+  build.Info build = 8 [(gogoproto.nullable) = false];
+  int64 uptime = 9;
+  string license_type = 10;
+  TopologyInfo topology = 11 [(gogoproto.nullable) = false];
 }
 
 message StoreInfo {
@@ -48,5 +54,46 @@ message StoreInfo {
   int64 bytes = 3;
   int64 key_count = 4;
   int64 range_count = 5;
+
+  int64 capacity  = 6;
+  int64 available = 7;
+  int64 used = 8;
+
+  int64 encryption_algorithm = 9;
+
+  // Want: sync times, observed read/write speeds
 }
 
+message CPUInfo {
+  int32 numcpu = 1; // go's reported runtime.NUMCPU()
+  int32 sockets = 2; // number of cpus reported
+  int32 cores = 3;  // gopsutil's reported cores for first cpu
+  string model = 4; // reported model name e.g. `Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz`
+  float mhz = 5;  // speed of first cpu e.g. 3100
+  repeated string features = 6; // cpu feature flags for first cpu
+}
+
+message HardwareInfo {
+  string virtualization = 1;
+  CPUInfo cpu = 2 [(gogoproto.nullable) = false];
+  MemInfo mem = 3 [(gogoproto.nullable) = false];
+  float loadavg15 = 4;
+  string provider = 5;
+  string instance_class = 6;
+}
+
+message OSInfo {
+  string family = 1;
+  string platform = 2;
+  string version = 3;
+}
+
+message MemInfo {
+  uint64 total = 1;
+  uint64 available = 2;
+}
+
+message TopologyInfo {
+  string provider = 1;
+  string region = 2;
+}

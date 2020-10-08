@@ -1,16 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto2";
 package cockroach.rpc;
@@ -54,6 +50,11 @@ message PingRequest {
     (gogoproto.customname) = "ClusterID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   optional roachpb.Version server_version = 6 [(gogoproto.nullable) = false];
+  // Node ID to prevent connections from being misrouted to an invalid node inside the cluster.
+  optional int32 node_id = 7 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
 // A PingResponse contains the echoed ping request string.
@@ -62,6 +63,10 @@ message PingResponse {
   optional string pong = 1 [(gogoproto.nullable) = false];
   optional int64 server_time = 2 [(gogoproto.nullable) = false];
   optional roachpb.Version server_version = 3 [(gogoproto.nullable) = false];
+  // Cluster name to prevent joining a new node to the wrong cluster.
+  optional string cluster_name = 4 [(gogoproto.nullable) = false];
+  // Skip cluster name check if either side's name is empty / not configured.
+  optional bool disable_cluster_name_verification = 5 [(gogoproto.nullable) = false];
 }
 
 service Heartbeat {

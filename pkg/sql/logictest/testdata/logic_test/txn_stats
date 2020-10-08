@@ -1,0 +1,53 @@
+# Some sanity checks for node_txn_stats virtual table.
+
+statement ok
+SET application_name = test; SELECT 1
+
+query B
+SELECT count(*) > 0
+  FROM crdb_internal.node_txn_stats
+ WHERE application_name = 'test'
+----
+true
+
+# We shouldn't have any aborted transactions.
+query B
+SELECT txn_count - committed_count = 0
+  FROM crdb_internal.node_txn_stats
+ WHERE application_name = 'test'
+----
+true
+
+# We haven't executed any explicit transactions yet.
+query B
+SELECT txn_count = implicit_count
+  FROM crdb_internal.node_txn_stats
+ WHERE application_name = 'test'
+----
+true
+
+statement ok
+BEGIN TRANSACTION; SELECT 1; COMMIT TRANSACTION
+
+# Now we should have exactly one explicit transaction.
+query B
+SELECT txn_count - implicit_count = 1
+  FROM crdb_internal.node_txn_stats
+ WHERE application_name = 'test'
+----
+true
+
+# All transactions so far should be extremely fast, so we check that the
+# average transaction time is in [0s, 1s] range.
+# Note: if this query flakes again, you should remove it - it's a sanity check
+# on txn_time_avg_sec field.
+query B
+SELECT count(*) = 0
+  FROM crdb_internal.node_txn_stats
+ WHERE application_name = 'test'
+   AND (
+        txn_time_avg_sec < 0
+        OR txn_time_avg_sec > 1
+       )
+----
+true

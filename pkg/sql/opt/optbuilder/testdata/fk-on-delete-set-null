@@ -1,0 +1,120 @@
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p) ON DELETE SET NULL)
+----
+
+build-cascades
+DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3 > 1
+ └── cascade
+      └── update child
+           ├── columns: <none>
+           ├── fetch columns: c:8 child.p:9
+           ├── update-mapping:
+           │    └── p_new:12 => child.p:6
+           └── project
+                ├── columns: p_new:12 c:8!null child.p:9
+                ├── semi-join (hash)
+                │    ├── columns: c:8!null child.p:9
+                │    ├── scan child
+                │    │    └── columns: c:8!null child.p:9
+                │    ├── with-scan &1
+                │    │    ├── columns: p:11!null
+                │    │    └── mapping:
+                │    │         └──  parent.p:3 => p:11
+                │    └── filters
+                │         └── child.p:9 = p:11
+                └── projections
+                     └── NULL::INT8 [as=p_new:12]
+
+exec-ddl
+CREATE TABLE parent_multicol (p INT, q INT, r INT, PRIMARY KEY (p, q, r))
+----
+
+exec-ddl
+CREATE TABLE child_multicol (
+  c INT PRIMARY KEY,
+  p INT, q INT, r INT,
+  x INT AS (p+q+r) STORED,
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent_multicol(p,q,r) ON DELETE SET NULL,
+  CONSTRAINT ch CHECK (c > 100 OR p IS NOT NULL)
+)
+----
+
+# Verify that:
+#  - multiple FK columns are handled correctly;
+#  - we recalculate the stored column;
+#  - we verify the CHECK expression.
+build-cascades
+DELETE FROM parent_multicol WHERE p > 1
+----
+root
+ ├── delete parent_multicol
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:5 q:6 r:7
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── select
+ │         ├── columns: p:5!null q:6!null r:7!null crdb_internal_mvcc_timestamp:8
+ │         ├── scan parent_multicol
+ │         │    └── columns: p:5!null q:6!null r:7!null crdb_internal_mvcc_timestamp:8
+ │         └── filters
+ │              └── p:5 > 1
+ └── cascade
+      └── update child_multicol
+           ├── columns: <none>
+           ├── fetch columns: c:15 child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
+           ├── update-mapping:
+           │    ├── p_new:24 => child_multicol.p:10
+           │    ├── p_new:24 => child_multicol.q:11
+           │    ├── p_new:24 => child_multicol.r:12
+           │    └── column25:25 => x:13
+           ├── check columns: check1:26
+           └── project
+                ├── columns: check1:26!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 p_new:24 column25:25
+                ├── project
+                │    ├── columns: column25:25 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 p_new:24
+                │    ├── project
+                │    │    ├── columns: p_new:24 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
+                │    │    ├── semi-join (hash)
+                │    │    │    ├── columns: c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
+                │    │    │    ├── scan child_multicol
+                │    │    │    │    ├── columns: c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
+                │    │    │    │    ├── check constraint expressions
+                │    │    │    │    │    └── (c:15 > 100) OR (child_multicol.p:16 IS NOT NULL)
+                │    │    │    │    └── computed column expressions
+                │    │    │    │         └── x:19
+                │    │    │    │              └── (child_multicol.p:16 + child_multicol.q:17) + child_multicol.r:18
+                │    │    │    ├── with-scan &1
+                │    │    │    │    ├── columns: p:21!null q:22!null r:23!null
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  parent_multicol.p:5 => p:21
+                │    │    │    │         ├──  parent_multicol.q:6 => q:22
+                │    │    │    │         └──  parent_multicol.r:7 => r:23
+                │    │    │    └── filters
+                │    │    │         ├── child_multicol.p:16 = p:21
+                │    │    │         ├── child_multicol.q:17 = q:22
+                │    │    │         └── child_multicol.r:18 = r:23
+                │    │    └── projections
+                │    │         └── NULL::INT8 [as=p_new:24]
+                │    └── projections
+                │         └── (p_new:24 + p_new:24) + p_new:24 [as=column25:25]
+                └── projections
+                     └── (c:15 > 100) OR (p_new:24 IS NOT NULL) [as=check1:26]

@@ -1,23 +1,18 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // GetRenderColName computes a name for a result column.
@@ -91,12 +86,10 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			return 0, "", err
 		}
 		if strength <= 1 {
-			tname := strings.ToLower(e.Type.TypeName())
-			// TTuple has no short time name, so check this
-			// here. Otherwise we'll want to fall back below.
-			if tname != "" {
-				return 1, tname, nil
+			if typ, ok := GetStaticallyKnownType(e.Type); ok {
+				return 0, computeCastName(typ), nil
 			}
+			return 1, e.Type.SQLString(), nil
 		}
 		return strength, s, nil
 
@@ -107,12 +100,10 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			return 0, "", err
 		}
 		if strength <= 1 {
-			tname := strings.ToLower(e.Type.TypeName())
-			// TTuple has no short time name, so check this
-			// here. Otherwise we'll want to fall back below.
-			if tname != "" {
-				return 1, tname, nil
+			if typ, ok := GetStaticallyKnownType(e.Type); ok {
+				return 0, computeCastName(typ), nil
 			}
+			return 1, e.Type.SQLString(), nil
 		}
 		return strength, s, nil
 
@@ -186,7 +177,7 @@ func computeColNameInternalSubquery(
 	case *ParenSelect:
 		return computeColNameInternalSubquery(sp, e.Select.Select)
 	case *ValuesClause:
-		if len(e.Tuples) > 0 && len(e.Tuples[0].Exprs) == 1 {
+		if len(e.Rows) > 0 && len(e.Rows[0]) == 1 {
 			return 2, "column1", nil
 		}
 	case *SelectClause:
@@ -198,4 +189,15 @@ func computeColNameInternalSubquery(
 		}
 	}
 	return 0, "", nil
+}
+
+// computeCastName returns the name manufactured by Postgres for a computed (or
+// annotated, in case of CRDB) column.
+func computeCastName(typ *types.T) string {
+	// Postgres uses the array element type name in case of array casts.
+	if typ.Family() == types.ArrayFamily {
+		typ = typ.ArrayContents()
+	}
+	return typ.PGName()
+
 }

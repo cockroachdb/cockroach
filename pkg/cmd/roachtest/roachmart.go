@@ -1,17 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -20,11 +15,11 @@ import (
 	"fmt"
 )
 
-func registerRoachmart(r *registry) {
+func registerRoachmart(r *testRegistry) {
 	runRoachmart := func(ctx context.Context, t *test, c *cluster, partition bool) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
-		c.Start(ctx)
+		c.Start(ctx, t)
 
 		// TODO(benesch): avoid hardcoding this list.
 		nodes := []struct {
@@ -44,12 +39,7 @@ func registerRoachmart(r *registry) {
 				"--orders=100",
 				fmt.Sprintf("--partition=%v", partition))
 
-			l, err := c.l.childLogger(fmt.Sprint(nodes[i].i))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer l.close()
-			if err := c.RunL(ctx, l, c.Node(nodes[i].i), args...); err != nil {
+			if err := c.RunE(ctx, c.Node(nodes[i].i), args...); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -74,9 +64,9 @@ func registerRoachmart(r *registry) {
 	for _, v := range []bool{true, false} {
 		v := v
 		r.Add(testSpec{
-			Name:   fmt.Sprintf("roachmart/partition=%v", v),
-			Nodes:  nodes(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
-			Stable: true, // DO NOT COPY to new tests
+			Name:    fmt.Sprintf("roachmart/partition=%v", v),
+			Owner:   OwnerPartitioning,
+			Cluster: makeClusterSpec(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

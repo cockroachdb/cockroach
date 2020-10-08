@@ -1,0 +1,14 @@
+version: '3'
+services:
+  cockroach:
+    image: ubuntu:xenial-20170214
+    command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach
+    volumes:
+      - ../../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+  flyway:
+    depends_on:
+      - cockroach
+    image: flyway/flyway:6
+    volumes:
+      - ./sql:/sql
+    command: migrate -user=root -url=jdbc:postgresql://cockroach:26257/defaultdb -locations=filesystem:/sql
