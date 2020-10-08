@@ -446,8 +446,8 @@ func (o binOpOverload) lookupImpl(left, right *types.T) (*BinOp, bool) {
 	return nil, false
 }
 
-// getJSONPath is used for the #> and #>> operators.
-func getJSONPath(j DJSON, ary DArray) (Datum, error) {
+// GetJSONPath is used for the #> and #>> operators.
+func GetJSONPath(j DJSON, ary DArray) (Datum, error) {
 	// TODO(justin): this is slightly annoying because we have to allocate
 	// a new array since the JSON package isn't aware of DArray.
 	path := make([]string, len(ary.Array))
@@ -1833,7 +1833,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.MakeArray(types.String),
 			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				return GetJSONPath(*left.(*DJSON), *MustBeDArray(right))
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -1894,7 +1894,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.MakeArray(types.String),
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				res, err := GetJSONPath(*left.(*DJSON), *MustBeDArray(right))
 				if err != nil {
 					return nil, err
 				}

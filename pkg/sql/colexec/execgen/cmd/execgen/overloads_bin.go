@@ -203,6 +203,13 @@ func registerBinOpOutputTypes() {
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		binOpOutputTypes[tree.JSONFetchVal][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.Any
 	}
+
+	binOpOutputTypes[tree.JSONFetchTextPath] = map[typePair]*types.T{
+		{
+			typeconv.TypeFamilyToCanonicalTypeFamily(types.JsonFamily), anyWidth,
+			typeconv.TypeFamilyToCanonicalTypeFamily(types.ArrayFamily), anyWidth,
+		}: types.Any,
+	}
 }
 
 func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
@@ -769,10 +776,23 @@ func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumEl
 
 func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
-		return executeBinOpOnDatums(
-			"" /* prelude */, targetElem,
-			leftElem+".(*coldataext.Datum)", rightElem,
-		)
+		switch op.overloadBase.BinOp {
+		case tree.JSONFetchTextPath:
+			// TODO: this could have an arg structure to store method & context which needs to be called.
+			// Q2. Can we call tree.GetJSONPath? Should we make that function exportable or should the template refer to some other function?
+			return fmt.Sprintf(`
+					%s, err := tree.GetJSONPath(%s.(*tree.DJSON), *tree.MustBeDArray(%s))
+					if err != nil {
+						colexecerror.InternalError(err)
+					}
+					`,
+				targetElem, leftElem, rightElem)
+		default:
+			return executeBinOpOnDatums(
+				"" /* prelude */, targetElem,
+				leftElem+".(*coldataext.Datum)", rightElem,
+			)
+		}
 	}
 }
 

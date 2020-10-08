@@ -321,6 +321,13 @@ NULL
 [1, "hello", {"a": ["foo", {"b": 3}]}, 1, "hello", {"a": ["foo", {"b": 3}]}]
 
 query T
+SELECT _json #>> ["a", "foo", "b"] FROM many_types
+----
+NULL
+NULL
+3
+
+query T
 EXPLAIN (VEC) SELECT _varbit || _varbit FROM many_types
 ----
 │
