@@ -12,6 +12,7 @@ package cli
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -337,6 +338,19 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		}
 		if err := dumpTableDataForZip(z, sqlConn, timeout, base, table, selectClause); err != nil {
 			return errors.Wrapf(err, "fetching %s", table)
+		}
+	}
+
+	{
+		var doctorData bytes.Buffer
+		if err := runZipRequestWithTimeout(baseCtx, "doctor examining cluster...", timeout,
+			func(ctx context.Context) error {
+				return runClusterDoctor(nil, nil, sqlConn, &doctorData)
+			}); err != nil {
+			return err
+		}
+		if err := z.createRawOrError(reportsPrefix+"/doctor.txt", doctorData.Bytes(), err); err != nil {
+			return err
 		}
 	}
 
