@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -188,7 +189,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			successTestCases := []func(){
 				func() { _, _ = ro.Get(a) },
 				func() { _, _, _, _ = ro.GetProto(a, getVal) },
-				func() { _ = ro.Iterate(a.Key, a.Key, func(MVCCKeyValue) (bool, error) { return true, nil }) },
+				func() { _ = ro.Iterate(a.Key, a.Key, func(MVCCKeyValue) error { return iterutil.StopIteration() }) },
 				func() { ro.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
 					ro.NewIterator(IterOptions{
