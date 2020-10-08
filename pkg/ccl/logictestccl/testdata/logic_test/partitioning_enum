@@ -1,0 +1,34 @@
+
+# Enums are not supported as the values for partitioning as of 20.2 because of
+# unfortunate interactions during validation. Assert that that is true.
+
+statement ok
+CREATE TYPE places AS ENUM ('us', 'eu');
+
+statement error partitioning by enum values is not supported
+CREATE TABLE partitioned_table (
+    place places, id INT8,
+    PRIMARY KEY (place, id)
+)
+    PARTITION BY LIST (place)
+        (
+            PARTITION us VALUES IN ('us'),
+            PARTITION eu VALUES IN ('eu')
+        );
+
+statement ok
+SELECT * FROM crdb_internal.tables
+
+statement ok
+CREATE TABLE partitioned_table (
+    place places, id INT8,
+    PRIMARY KEY (place, id)
+);
+
+statement error partitioning by enum values is not supported
+ALTER TABLE partitioned_table PARTITION BY LIST (place)
+        (
+            PARTITION us VALUES IN ('us'),
+            PARTITION eu VALUES IN ('eu')
+        );
+
