@@ -92,25 +92,27 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	col = vec._L_TYP()
 	// {{end}}
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec._RET_TYP()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		_SET_PROJECTION(true)
-	} else {
-		_SET_PROJECTION(false)
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec._RET_TYP()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			_SET_PROJECTION(true)
+		} else {
+			_SET_PROJECTION(false)
+		}
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
