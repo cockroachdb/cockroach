@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -83,9 +84,9 @@ func clearExistingData(
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.Iterate(start, end, func(_ storage.MVCCKeyValue) (bool, error) {
+		if err := batch.Iterate(start, end, func(_ storage.MVCCKeyValue) error {
 			isEmpty = false
-			return true, nil // stop right away
+			return iterutil.StopIteration() // stop right away
 		}); err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "while checking for empty key space")
 		}

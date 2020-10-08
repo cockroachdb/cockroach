@@ -233,13 +233,19 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, func(kv storage.MVCCKeyValue) (bool, error) {
+	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, func(kv storage.MVCCKeyValue) error {
 		done, err := printer(kv)
-		if done || err != nil {
-			return done, err
+		if err != nil {
+			return err
+		}
+		if done {
+			return iterutil.StopIteration()
 		}
 		results++
-		return results == debugCtx.maxResults, nil
+		if results == debugCtx.maxResults {
+			return iterutil.StopIteration()
+		}
+		return nil
 	})
 }
 
@@ -363,25 +369,28 @@ func loadRangeDescriptor(
 	db storage.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
-	handleKV := func(kv storage.MVCCKeyValue) (bool, error) {
+	handleKV := func(kv storage.MVCCKeyValue) error {
 		if kv.Key.Timestamp == (hlc.Timestamp{}) {
 			// We only want values, not MVCCMetadata.
-			return false, nil
+			return nil
 		}
 		if err := kvserver.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
-			return false, nil //nolint:returnerrcheck
+			return nil //nolint:returnerrcheck
 		}
 		if len(kv.Value) == 0 {
 			// RangeDescriptor was deleted (range merged away).
-			return false, nil
+			return nil
 		}
 		if err := (roachpb.Value{RawBytes: kv.Value}).GetProto(&desc); err != nil {
 			log.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
-			return false, nil
+			return nil
 		}
-		return desc.RangeID == rangeID, nil
+		if desc.RangeID == rangeID {
+			return iterutil.StopIteration()
+		}
+		return nil
 	}
 
 	// Range descriptors are stored by key, so we have to scan over the
@@ -410,12 +419,12 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	start := keys.LocalRangePrefix
 	end := keys.LocalRangeMax
 
-	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
+	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) error {
 		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
-			return false, nil
+			return nil
 		}
 		kvserver.PrintKeyValue(kv)
-		return false, nil
+		return nil
 	})
 }
 
@@ -540,9 +549,9 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(start))),
 		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(end))))
 
-	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
+	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) error {
 		kvserver.PrintKeyValue(kv)
-		return false, nil
+		return nil
 	})
 }
 

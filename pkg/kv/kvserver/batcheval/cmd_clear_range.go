@@ -88,8 +88,8 @@ func ClearRange(
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
 		if err := readWriter.Iterate(from, to,
-			func(kv storage.MVCCKeyValue) (bool, error) {
-				return false, readWriter.Clear(kv.Key)
+			func(kv storage.MVCCKeyValue) error {
+				return readWriter.Clear(kv.Key)
 			},
 		); err != nil {
 			return result.Result{}, err

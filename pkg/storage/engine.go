@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -239,7 +240,7 @@ type Reader interface {
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error)) error
+	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
@@ -630,12 +631,12 @@ func PutProto(
 // Specify max=0 for unbounded scans.
 func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
+	err := reader.Iterate(start, end, func(kv MVCCKeyValue) error {
 		if max != 0 && int64(len(kvs)) >= max {
-			return true, nil
+			return iterutil.StopIteration()
 		}
 		kvs = append(kvs, kv)
-		return false, nil
+		return nil
 	})
 	return kvs, err
 }
@@ -769,9 +770,7 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.
 }
 
 // Helper function to implement Reader.Iterate().
-func iterateOnReader(
-	reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
-) error {
+func iterateOnReader(reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if reader.Closed() {
 		return errors.New("cannot call Iterate on a closed batch")
 	}
@@ -790,7 +789,10 @@ func iterateOnReader(
 		} else if !ok {
 			break
 		}
-		if done, err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); done || err != nil {
+		if err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
 			return err
 		}
 	}

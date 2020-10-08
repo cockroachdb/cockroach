@@ -100,7 +100,7 @@ func TestMVCCHistories(t *testing.T) {
 					err := engine.Iterate(
 						span.Key,
 						span.EndKey,
-						func(r MVCCKeyValue) (bool, error) {
+						func(r MVCCKeyValue) error {
 							hasData = true
 							if r.Key.Timestamp.IsEmpty() {
 								// Meta is at timestamp zero.
@@ -113,7 +113,7 @@ func TestMVCCHistories(t *testing.T) {
 							} else {
 								fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
 							}
-							return false, nil
+							return nil
 						})
 					if !hasData {
 						buf.WriteString("<no data>\n")
