@@ -817,12 +817,12 @@ func (c *indexConstraintCtx) makeSpansForOr(
 	return tightLeft && tightRight
 }
 
-// makeInvertedIndexSpansForJSONExpr is the implementation of
+// makeInvertedIndexSpansForJSONContainmentExpr is the implementation of
 // makeInvertedIndexSpans for JSON inverted indexes. The input datum is the JSON
 // to produce spans for. If allPaths is true, the slice is populated with
 // all constraints found. Otherwise, this function stops at the first
 // constraint.
-func (c *indexConstraintCtx) makeInvertedIndexSpansForJSONExpr(
+func (c *indexConstraintCtx) makeInvertedIndexSpansForJSONContainmentExpr(
 	datum *tree.DJSON, constraints []*constraint.Constraint, allPaths bool,
 ) (bool, []*constraint.Constraint) {
 	out := &constraint.Constraint{}
@@ -902,12 +902,12 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForJSONExpr(
 	return false, constraints
 }
 
-// makeInvertedIndexSpansForArrayExpr is the implementation of
+// makeInvertedIndexSpansForArrayContainmentExpr is the implementation of
 // makeInvertedIndexSpans for array inverted indexes. The input arr is the array
 // to produce spans for. If allPaths is true, the slice is populated with
 // all constraints found. Otherwise, this function stops at the first
 // constraint.
-func (c *indexConstraintCtx) makeInvertedIndexSpansForArrayExpr(
+func (c *indexConstraintCtx) makeInvertedIndexSpansForArrayContainmentExpr(
 	arr *tree.DArray, constraints []*constraint.Constraint, allPaths bool,
 ) (bool, []*constraint.Constraint) {
 	if len(arr.Array) == 0 {
@@ -952,6 +952,70 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForArrayExpr(
 	return len(arr.Array) == 1, constraints
 }
 
+// makeInvertedIndexSpanForJSONFetchValEqExpr attempts to create an inverted
+// index scan for filters of the form json->'key' = 'value'. An inverted index
+// constraint is only generated when all of the following are true:
+//
+//   1. The fetch column is an index column.
+//
+//   2. The fetch key (RHS of ->) is a constant string. This is required because
+//      we build a JSON object that is used as the boundaries of the span. An
+//      integer fetch key fetches a value at an index in a JSON array, not a
+//      JSON object.
+//
+//   3. The RHS of the equality operator is a constant, scalar JSON value.
+//      Supporting non-scalar JSON values would require the filter to be
+//      re-applied to the JSON column after scanning the index. As an example of
+//      what would happen without re-applying the filter, a row with column j as
+//      {"a": [1, 2]} would be incorrectly returned from the query filter
+//      j->'a' = '[1]'.
+//
+func (c *indexConstraintCtx) makeInvertedIndexSpanForJSONFetchValEqExpr(
+	fetch *memo.FetchValExpr, rhs opt.Expr, constraints []*constraint.Constraint,
+) (bool, []*constraint.Constraint) {
+	appendUnconstrained := func() []*constraint.Constraint {
+		out := &constraint.Constraint{}
+		c.unconstrained(0 /* offset */, out)
+		return append(constraints, out)
+	}
+
+	if !c.isIndexColumn(fetch.Json, 0 /* index */) {
+		return false, appendUnconstrained()
+	}
+
+	if !memo.CanExtractConstDatum(fetch.Index) {
+		return false, appendUnconstrained()
+	}
+
+	key, ok := memo.ExtractConstDatum(fetch.Index).(*tree.DString)
+	if !ok {
+		return false, appendUnconstrained()
+	}
+
+	if !memo.CanExtractConstDatum(rhs) {
+		return false, appendUnconstrained()
+	}
+
+	right, ok := memo.ExtractConstDatum(rhs).(*tree.DJSON)
+	if !ok {
+		return false, appendUnconstrained()
+	}
+
+	if right.JSON.Type() == json.ObjectJSONType || right.JSON.Type() == json.ArrayJSONType {
+		return false, appendUnconstrained()
+	}
+
+	// Build a new JSON object of the form: {<key>: <right>}.
+	b := json.NewObjectBuilder(1)
+	b.Add(string(*key), right.JSON)
+	obj := tree.NewDJSON(b.Build())
+
+	// Create an equality span with the JSON object as the value.
+	out := &constraint.Constraint{}
+	c.eqSpan(0 /* offset */, obj, out)
+	return true, append(constraints, out)
+}
+
 // makeInvertedIndexSpansForExpr is analogous to makeSpansForExpr, but it is
 // used for inverted indexes. If allPaths is true, the slice is populated with
 // all constraints found. Otherwise, this function stops at the first
@@ -968,29 +1032,32 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 	constrained := false
 	switch nd.Op() {
 	case opt.ContainsOp:
-		out := &constraint.Constraint{}
 		lhs, rhs := nd.Child(0), nd.Child(1)
 
 		if !c.isIndexColumn(lhs, 0 /* index */) || !opt.IsConstValueOp(rhs) {
-			c.unconstrained(0 /* offset */, out)
-			return false, append(constraints, out)
+			break
 		}
 
 		rightDatum := memo.ExtractConstDatum(rhs)
 
 		if rightDatum == tree.DNull {
-			c.contradiction(0 /* offset */, out)
-			return false, append(constraints, out)
+			break
 		}
 
 		switch rightDatum.ResolvedType().Family() {
 		case types.JsonFamily:
-			return c.makeInvertedIndexSpansForJSONExpr(rightDatum.(*tree.DJSON), constraints, allPaths)
+			return c.makeInvertedIndexSpansForJSONContainmentExpr(rightDatum.(*tree.DJSON), constraints, allPaths)
 		case types.ArrayFamily:
-			return c.makeInvertedIndexSpansForArrayExpr(rightDatum.(*tree.DArray), constraints, allPaths)
+			return c.makeInvertedIndexSpansForArrayContainmentExpr(rightDatum.(*tree.DArray), constraints, allPaths)
 
 		default:
 			log.Errorf(context.TODO(), "unexpected type in inverted index: %s", rightDatum.ResolvedType())
+		}
+
+	case opt.EqOp:
+		lhs, rhs := nd.Child(0), nd.Child(1)
+		if fetch, ok := lhs.(*memo.FetchValExpr); ok {
+			return c.makeInvertedIndexSpanForJSONFetchValEqExpr(fetch, rhs, constraints)
 		}
 
 	case opt.AndOp, opt.FiltersOp:
