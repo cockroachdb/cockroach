@@ -216,8 +216,9 @@ func (s *span) isBlackHole() bool {
 }
 
 func (s *span) isNoop() bool {
-	// Special case: trace id zero implies that everything else,
-	// with the exception of the tracer, is also zero.
+	// NB: this is the same as `s` being zero with the exception
+	// of the `tracer` field. However, `span` is not comparable,
+	// so this can't be expressed easily.
 	return s.isBlackHole() && s.crdbSpan.TraceID == 0
 }
 
