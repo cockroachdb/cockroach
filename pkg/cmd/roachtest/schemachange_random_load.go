@@ -32,7 +32,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 			maxOps := 5000
 			concurrency := 20
 			if local {
-				maxOps = 1000
+				maxOps = 200
 				concurrency = 2
 			}
 			runSchemaChangeRandomLoad(ctx, t, c, maxOps, concurrency)
