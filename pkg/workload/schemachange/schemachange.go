@@ -615,15 +615,14 @@ func (w *schemaChangeWorker) createView(tx *pgx.Tx) (string, error) {
 		names[i] = tree.Name(columnNames[i])
 	}
 
-	destSchemaName, destViewName, err := w.randView(tx, w.existingPct)
+	destViewName, err := w.randView(tx, w.existingPct)
 	if err != nil {
 		return "", err
 	}
-	qualifiedDestViewname := fmt.Sprintf("%s.%s", destSchemaName, destViewName)
 
 	// TODO(peter): Create views that are dependent on multiple tables.
 	return fmt.Sprintf(`CREATE VIEW "%s" AS SELECT %s FROM "%s"`,
-		qualifiedDestViewname, tree.Serialize(&names), tableName), nil
+		destViewName, tree.Serialize(&names), tableName), nil
 }
 
 func (w *schemaChangeWorker) dropColumn(tx *pgx.Tx) (string, error) {
@@ -719,12 +718,11 @@ func (w *schemaChangeWorker) dropTable(tx *pgx.Tx) (string, error) {
 }
 
 func (w *schemaChangeWorker) dropView(tx *pgx.Tx) (string, error) {
-	schemaName, viewName, err := w.randView(tx, 100)
+	viewName, err := w.randView(tx, 100)
 	if err != nil {
 		return "", err
 	}
-	qualifiedSchemaName := fmt.Sprintf("%s.%s", schemaName, viewName)
-	return fmt.Sprintf(`DROP VIEW "%s"`, qualifiedSchemaName), nil
+	return fmt.Sprintf(`DROP VIEW "%s"`, viewName.String()), nil
 }
 
 func (w *schemaChangeWorker) renameColumn(tx *pgx.Tx) (string, error) {
@@ -796,19 +794,17 @@ func (w *schemaChangeWorker) renameTable(tx *pgx.Tx) (string, error) {
 }
 
 func (w *schemaChangeWorker) renameView(tx *pgx.Tx) (string, error) {
-	srcSchemaName, srcViewName, err := w.randView(tx, 100)
+	srcViewName, err := w.randView(tx, 100)
 	if err != nil {
 		return "", err
 	}
-	qualifiedSrcSchemaName := fmt.Sprintf("%s.%s", srcSchemaName, srcViewName)
 
-	destSchemaName, destViewName, err := w.randView(tx, 50)
+	destViewName, err := w.randView(tx, 50)
 	if err != nil {
 		return "", err
 	}
-	qualifiedDestSchemaName := fmt.Sprintf("%s.%s", destSchemaName, destViewName)
 
-	return fmt.Sprintf(`ALTER VIEW "%s" RENAME TO "%s"`, qualifiedSrcSchemaName, qualifiedDestSchemaName), nil
+	return fmt.Sprintf(`ALTER VIEW "%s" RENAME TO "%s"`, srcViewName.String(), destViewName.String()), nil
 }
 
 func (w *schemaChangeWorker) setColumnDefault(tx *pgx.Tx) (string, error) {
@@ -1059,13 +1055,16 @@ ORDER BY random()
 	}, tree.Name(tableName)), nil
 }
 
-func (w *schemaChangeWorker) randView(tx *pgx.Tx, pctExisting int) (string, string, error) {
+func (w *schemaChangeWorker) randView(tx *pgx.Tx, pctExisting int) (tree.TableName, error) {
 	if w.rng.Intn(100) >= pctExisting {
-		randSchema, err := w.randSchema(tx, pctExisting)
+		randSchema, err := w.randSchema(tx, 90)
 		if err != nil {
-			return "", "", err
+			return tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, ""), err
 		}
-		return randSchema, fmt.Sprintf("view%d", atomic.AddInt64(w.seqNum, 1)), nil
+		return tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(randSchema),
+			ExplicitSchema: true,
+		}, tree.Name(fmt.Sprintf("view%d", atomic.AddInt64(w.seqNum, 1)))), nil
 	}
 	const q = `
   SELECT schema_name, table_name
@@ -1077,9 +1076,12 @@ ORDER BY random()
 	var schemaName string
 	var viewName string
 	if err := tx.QueryRow(q).Scan(&schemaName, &viewName); err != nil {
-		return "", "", err
+		return tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, ""), err
 	}
-	return schemaName, viewName, nil
+	return tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(schemaName),
+		ExplicitSchema: true,
+	}, tree.Name(viewName)), nil
 }
 
 func (w *schemaChangeWorker) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
