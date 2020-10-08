@@ -705,6 +705,31 @@ DROP TABLE table_with_nulls
 statement ok
 DROP TABLE c
 
+subtest json_fetch_val
+
+statement ok
+CREATE TABLE f (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX i (j)
+)
+
+statement ok
+INSERT INTO f VALUES
+  (0, '{"a": 1}'),
+  (1, '{"a": 10}'),
+  (2, '{"b": 2}'),
+  (3, '{"b": 2, "a": 1}'),
+  (4, '{"a": 1, "c": 3}'),
+  (5, '{"a": [1, 2]}')
+
+query T
+SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
+----
+{"a": 1}
+{"a": 1, "b": 2}
+{"a": 1, "c": 3}
+
 subtest arrays
 
 statement ok
