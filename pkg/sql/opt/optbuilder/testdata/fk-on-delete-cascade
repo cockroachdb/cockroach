@@ -6,9 +6,36 @@ exec-ddl
 CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
 ----
 
-# Simple cascade.
+# Simple cascade; fast path (the filter gets transferred over to the cascade).
 build-cascades
 DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3 > 1
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:8 child.p:9
+           └── select
+                ├── columns: c:8!null child.p:9!null
+                ├── scan child
+                │    └── columns: c:8!null child.p:9!null
+                └── filters
+                     └── child.p:9 > 1
+
+# Simple cascade; no fast path.
+build-cascades
+DELETE FROM parent WHERE p > 1 AND random() < 0.5
 ----
 root
  ├── delete parent
@@ -22,7 +49,7 @@ root
  │         ├── scan parent
  │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         └── filters
- │              └── p:3 > 1
+ │              └── (p:3 > 1) AND (random() < 0.5)
  └── cascade
       └── delete child
            ├── columns: <none>
@@ -38,13 +65,76 @@ root
                 └── filters
                      └── child.p:9 = p:11
 
+# Delete everything.
+build-cascades
+DELETE FROM parent
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── scan parent
+ │         └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:8 child.p:9
+           └── scan child
+                └── columns: c:8!null child.p:9!null
+
 exec-ddl
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c) ON DELETE CASCADE)
 ----
 
-# Two-level cascade.
+# Two-level cascade; fast path for the first cascade.
 build-cascades
 DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3 > 1
+ └── cascade
+      ├── delete child
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:8 child.p:9
+      │    ├── input binding: &1
+      │    ├── cascades
+      │    │    └── fk_c_ref_child
+      │    └── select
+      │         ├── columns: c:8!null child.p:9!null
+      │         ├── scan child
+      │         │    └── columns: c:8!null child.p:9!null
+      │         └── filters
+      │              └── child.p:9 > 1
+      └── cascade
+           └── delete grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:14 grandchild.c:15
+                └── semi-join (hash)
+                     ├── columns: g:14!null grandchild.c:15
+                     ├── scan grandchild
+                     │    └── columns: g:14!null grandchild.c:15
+                     ├── with-scan &1
+                     │    ├── columns: c:17!null
+                     │    └── mapping:
+                     │         └──  child.c:8 => c:17
+                     └── filters
+                          └── grandchild.c:15 = c:17
+
+# Two-level cascade; no fast path.
+build-cascades
+DELETE FROM parent WHERE p > 1 AND random() < 0.5
 ----
 root
  ├── delete parent
@@ -58,7 +148,7 @@ root
  │         ├── scan parent
  │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         └── filters
- │              └── p:3 > 1
+ │              └── (p:3 > 1) AND (random() < 0.5)
  └── cascade
       ├── delete child
       │    ├── columns: <none>
@@ -91,6 +181,37 @@ root
                      └── filters
                           └── grandchild.c:16 = c:18
 
+# Delete everything.
+build-cascades
+DELETE FROM parent
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── scan parent
+ │         └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ └── cascade
+      ├── delete child
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:8 child.p:9
+      │    ├── cascades
+      │    │    └── fk_c_ref_child
+      │    └── scan child
+      │         └── columns: c:8!null child.p:9!null
+      └── cascade
+           └── delete grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:14 grandchild.c:15
+                └── select
+                     ├── columns: g:14!null grandchild.c:15!null
+                     ├── scan grandchild
+                     │    └── columns: g:14!null grandchild.c:15
+                     └── filters
+                          └── grandchild.c:15 IS DISTINCT FROM CAST(NULL AS INT8)
+
 # Cascade with check query.
 exec-ddl
 DROP TABLE grandchild
@@ -107,7 +228,6 @@ root
  ├── delete parent
  │    ├── columns: <none>
  │    ├── fetch columns: p:3
- │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_p_ref_parent
  │    └── select
@@ -116,6 +236,46 @@ root
  │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         └── filters
  │              └── p:3 > 1
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: child.c:8 child.p:9
+           ├── input binding: &1
+           ├── select
+           │    ├── columns: child.c:8!null child.p:9!null
+           │    ├── scan child
+           │    │    └── columns: child.c:8!null child.p:9!null
+           │    └── filters
+           │         └── child.p:9 > 1
+           └── f-k-checks
+                └── f-k-checks-item: grandchild(c) -> child(c)
+                     └── semi-join (hash)
+                          ├── columns: c:11!null
+                          ├── with-scan &1
+                          │    ├── columns: c:11!null
+                          │    └── mapping:
+                          │         └──  child.c:8 => c:11
+                          ├── scan grandchild
+                          │    └── columns: grandchild.c:13
+                          └── filters
+                               └── c:11 = grandchild.c:13
+
+build-cascades
+DELETE FROM parent WHERE p > 1 AND random() < 0.5
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── (p:3 > 1) AND (random() < 0.5)
  └── cascade
       └── delete child
            ├── columns: <none>
@@ -242,6 +402,7 @@ exec-ddl
 ALTER TABLE ef ADD CONSTRAINT ef_ab FOREIGN KEY (f) REFERENCES ab(a) ON DELETE CASCADE
 ----
 
+# Fast path should not be used when there are cycles.
 build-cascades cascade-levels=3
 DELETE FROM ab WHERE a = 1
 ----
@@ -309,3 +470,361 @@ root
                           │         └──  cd.c:17 => c:27
                           └── filters
                                └── b:25 = c:27
+
+# Test a multi-level fast path.
+exec-ddl
+CREATE TABLE f1 (
+  a INT, data INT,
+  PRIMARY KEY (a)
+)
+----
+
+exec-ddl
+CREATE TABLE f2 (
+  a INT, b INT, data INT,
+  PRIMARY KEY (a,b),
+  CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES f1(a) ON DELETE CASCADE
+)
+----
+
+exec-ddl
+CREATE TABLE f3 (
+  a INT, b INT, c INT, data INT,
+  PRIMARY KEY (a,b,c),
+  CONSTRAINT fk3 FOREIGN KEY (a,b) REFERENCES f2(a,b) ON DELETE CASCADE
+)
+----
+
+build-cascades
+DELETE FROM f1 WHERE a >= 1 AND a <= 4
+----
+root
+ ├── delete f1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:4 data:5
+ │    ├── cascades
+ │    │    └── fk2
+ │    └── select
+ │         ├── columns: a:4!null data:5 crdb_internal_mvcc_timestamp:6
+ │         ├── scan f1
+ │         │    └── columns: a:4!null data:5 crdb_internal_mvcc_timestamp:6
+ │         └── filters
+ │              └── (a:4 >= 1) AND (a:4 <= 4)
+ └── cascade
+      ├── delete f2
+      │    ├── columns: <none>
+      │    ├── fetch columns: f2.a:11 b:12 f2.data:13
+      │    ├── cascades
+      │    │    └── fk3
+      │    └── select
+      │         ├── columns: f2.a:11!null b:12!null f2.data:13
+      │         ├── scan f2
+      │         │    └── columns: f2.a:11!null b:12!null f2.data:13
+      │         └── filters
+      │              └── (f2.a:11 >= 1) AND (f2.a:11 <= 4)
+      └── cascade
+           └── delete f3
+                ├── columns: <none>
+                ├── fetch columns: f3.a:20 f3.b:21 c:22 f3.data:23
+                └── select
+                     ├── columns: f3.a:20!null f3.b:21!null c:22!null f3.data:23
+                     ├── scan f3
+                     │    └── columns: f3.a:20!null f3.b:21!null c:22!null f3.data:23
+                     └── filters
+                          └── (f3.a:20 >= 1) AND (f3.a:20 <= 4)
+
+# No fast path possible (filter references other columns).
+build-cascades
+DELETE FROM f1 WHERE a = 1 AND data = 1
+----
+root
+ ├── delete f1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:4 data:5
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk2
+ │    └── select
+ │         ├── columns: a:4!null data:5!null crdb_internal_mvcc_timestamp:6
+ │         ├── scan f1
+ │         │    └── columns: a:4!null data:5 crdb_internal_mvcc_timestamp:6
+ │         └── filters
+ │              └── (a:4 = 1) AND (data:5 = 1)
+ └── cascade
+      ├── delete f2
+      │    ├── columns: <none>
+      │    ├── fetch columns: f2.a:11 b:12 f2.data:13
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── fk3
+      │    └── semi-join (hash)
+      │         ├── columns: f2.a:11!null b:12!null f2.data:13
+      │         ├── scan f2
+      │         │    └── columns: f2.a:11!null b:12!null f2.data:13
+      │         ├── with-scan &1
+      │         │    ├── columns: a:15!null
+      │         │    └── mapping:
+      │         │         └──  f1.a:4 => a:15
+      │         └── filters
+      │              └── f2.a:11 = a:15
+      └── cascade
+           └── delete f3
+                ├── columns: <none>
+                ├── fetch columns: f3.a:21 f3.b:22 c:23 f3.data:24
+                └── semi-join (hash)
+                     ├── columns: f3.a:21!null f3.b:22!null c:23!null f3.data:24
+                     ├── scan f3
+                     │    └── columns: f3.a:21!null f3.b:22!null c:23!null f3.data:24
+                     ├── with-scan &2
+                     │    ├── columns: a:26!null b:27!null
+                     │    └── mapping:
+                     │         ├──  f2.a:11 => a:26
+                     │         └──  f2.b:12 => b:27
+                     └── filters
+                          ├── f3.a:21 = a:26
+                          └── f3.b:22 = b:27
+
+# Test with a fast path cascade and a non-fast path cascade.
+exec-ddl
+CREATE TABLE g1 (a INT UNIQUE, b INT UNIQUE)
+----
+
+exec-ddl
+CREATE TABLE g2a (a INT REFERENCES g1(a) ON DELETE CASCADE, data INT)
+----
+
+exec-ddl
+CREATE TABLE g2b (b INT REFERENCES g1(b) ON DELETE CASCADE, data INT)
+----
+
+build-cascades
+DELETE FROM g1 WHERE a = 1
+----
+root
+ ├── delete g1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:5 b:6 rowid:7
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── fk_a_ref_g1
+ │    │    └── fk_b_ref_g1
+ │    └── select
+ │         ├── columns: a:5!null b:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+ │         ├── scan g1
+ │         │    └── columns: a:5 b:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+ │         └── filters
+ │              └── a:5 = 1
+ ├── cascade
+ │    └── delete g2a
+ │         ├── columns: <none>
+ │         ├── fetch columns: g2a.a:13 data:14 g2a.rowid:15
+ │         └── select
+ │              ├── columns: g2a.a:13!null data:14 g2a.rowid:15!null
+ │              ├── scan g2a
+ │              │    └── columns: g2a.a:13 data:14 g2a.rowid:15!null
+ │              └── filters
+ │                   ├── g2a.a:13 = 1
+ │                   └── g2a.a:13 IS DISTINCT FROM CAST(NULL AS INT8)
+ └── cascade
+      └── delete g2b
+           ├── columns: <none>
+           ├── fetch columns: g2b.b:21 g2b.data:22 g2b.rowid:23
+           └── semi-join (hash)
+                ├── columns: g2b.b:21 g2b.data:22 g2b.rowid:23!null
+                ├── scan g2b
+                │    └── columns: g2b.b:21 g2b.data:22 g2b.rowid:23!null
+                ├── with-scan &1
+                │    ├── columns: b:25
+                │    └── mapping:
+                │         └──  g1.b:6 => b:25
+                └── filters
+                     └── g2b.b:21 = b:25
+
+build-cascades
+DELETE FROM g1 WHERE b = 1
+----
+root
+ ├── delete g1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:5 b:6 rowid:7
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── fk_a_ref_g1
+ │    │    └── fk_b_ref_g1
+ │    └── select
+ │         ├── columns: a:5 b:6!null rowid:7!null crdb_internal_mvcc_timestamp:8
+ │         ├── scan g1
+ │         │    └── columns: a:5 b:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+ │         └── filters
+ │              └── b:6 = 1
+ ├── cascade
+ │    └── delete g2a
+ │         ├── columns: <none>
+ │         ├── fetch columns: g2a.a:13 data:14 g2a.rowid:15
+ │         └── semi-join (hash)
+ │              ├── columns: g2a.a:13 data:14 g2a.rowid:15!null
+ │              ├── scan g2a
+ │              │    └── columns: g2a.a:13 data:14 g2a.rowid:15!null
+ │              ├── with-scan &1
+ │              │    ├── columns: a:17
+ │              │    └── mapping:
+ │              │         └──  g1.a:5 => a:17
+ │              └── filters
+ │                   └── g2a.a:13 = a:17
+ └── cascade
+      └── delete g2b
+           ├── columns: <none>
+           ├── fetch columns: g2b.b:22 g2b.data:23 g2b.rowid:24
+           └── select
+                ├── columns: g2b.b:22!null g2b.data:23 g2b.rowid:24!null
+                ├── scan g2b
+                │    └── columns: g2b.b:22 g2b.data:23 g2b.rowid:24!null
+                └── filters
+                     ├── g2b.b:22 = 1
+                     └── g2b.b:22 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# Verify composite types handling.
+exec-ddl
+CREATE TABLE h1 (p DECIMAL PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE h2 (c INT PRIMARY KEY, p DECIMAL REFERENCES h1(p) ON DELETE CASCADE)
+----
+
+# Fast path cannot be used: it would be incorrect to transfer this
+# condition to the child column.
+build-cascades
+DELETE FROM h1 WHERE p::STRING = '1.0'
+----
+root
+ ├── delete h1
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_h1
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan h1
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3::STRING = '1.0'
+ └── cascade
+      └── delete h2
+           ├── columns: <none>
+           ├── fetch columns: c:8 h2.p:9
+           └── semi-join (hash)
+                ├── columns: c:8!null h2.p:9
+                ├── scan h2
+                │    └── columns: c:8!null h2.p:9
+                ├── with-scan &1
+                │    ├── columns: p:11!null
+                │    └── mapping:
+                │         └──  h1.p:3 => p:11
+                └── filters
+                     └── h2.p:9 = p:11
+
+# It is ok to use the fast path if the expression is not composite-sensitive.
+build-cascades
+DELETE FROM h1 WHERE p = 1
+----
+root
+ ├── delete h1
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── cascades
+ │    │    └── fk_p_ref_h1
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan h1
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3 = 1
+ └── cascade
+      └── delete h2
+           ├── columns: <none>
+           ├── fetch columns: c:8 h2.p:9
+           └── select
+                ├── columns: c:8!null h2.p:9!null
+                ├── scan h2
+                │    └── columns: c:8!null h2.p:9
+                └── filters
+                     ├── h2.p:9 = 1
+                     └── h2.p:9 IS DISTINCT FROM CAST(NULL AS DECIMAL)
+
+# Test null column handling for fast path cascades.
+exec-ddl
+CREATE TABLE m1 (
+  a INT,
+  b INT,
+  c INT,
+  UNIQUE(a,b,c)
+)
+----
+
+exec-ddl
+CREATE TABLE m2 (
+  a INT,
+  b INT NOT NULL,
+  c INT,
+  FOREIGN KEY (a,b,c) REFERENCES m1(a,b,c) ON DELETE CASCADE
+)
+----
+
+build-cascades
+DELETE FROM m1 WHERE a+b+c=1
+----
+root
+ ├── delete m1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:6 b:7 c:8 rowid:9
+ │    ├── cascades
+ │    │    └── fk_a_ref_m1
+ │    └── select
+ │         ├── columns: a:6 b:7 c:8 rowid:9!null crdb_internal_mvcc_timestamp:10
+ │         ├── scan m1
+ │         │    └── columns: a:6 b:7 c:8 rowid:9!null crdb_internal_mvcc_timestamp:10
+ │         └── filters
+ │              └── ((a:6 + b:7) + c:8) = 1
+ └── cascade
+      └── delete m2
+           ├── columns: <none>
+           ├── fetch columns: m2.a:16 m2.b:17 m2.c:18 m2.rowid:19
+           └── select
+                ├── columns: m2.a:16!null m2.b:17!null m2.c:18!null m2.rowid:19!null
+                ├── scan m2
+                │    └── columns: m2.a:16 m2.b:17!null m2.c:18 m2.rowid:19!null
+                └── filters
+                     ├── ((m2.a:16 + m2.b:17) + m2.c:18) = 1
+                     ├── m2.a:16 IS DISTINCT FROM CAST(NULL AS INT8)
+                     └── m2.c:18 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# The filter will end up being a contradiction, so the cascade is a no-op.
+build-cascades
+DELETE FROM m1 WHERE a IS NULL
+----
+root
+ ├── delete m1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:6 b:7 c:8 rowid:9
+ │    ├── cascades
+ │    │    └── fk_a_ref_m1
+ │    └── select
+ │         ├── columns: a:6 b:7 c:8 rowid:9!null crdb_internal_mvcc_timestamp:10
+ │         ├── scan m1
+ │         │    └── columns: a:6 b:7 c:8 rowid:9!null crdb_internal_mvcc_timestamp:10
+ │         └── filters
+ │              └── a:6 IS NULL
+ └── cascade
+      └── delete m2
+           ├── columns: <none>
+           ├── fetch columns: m2.a:16 m2.b:17 m2.c:18 m2.rowid:19
+           └── select
+                ├── columns: m2.a:16!null m2.b:17!null m2.c:18!null m2.rowid:19!null
+                ├── scan m2
+                │    └── columns: m2.a:16 m2.b:17!null m2.c:18 m2.rowid:19!null
+                └── filters
+                     ├── m2.a:16 IS NULL
+                     ├── m2.a:16 IS DISTINCT FROM CAST(NULL AS INT8)
+                     └── m2.c:18 IS DISTINCT FROM CAST(NULL AS INT8)

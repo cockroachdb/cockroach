@@ -804,7 +804,7 @@ UPSERT INTO t46397_child(c) VALUES (2)
 
 # Verify that cascade information shows up in EXPLAIN.
 statement ok
-CREATE TABLE cascadeparent (p INT PRIMARY KEY);
+CREATE TABLE cascadeparent (p INT PRIMARY KEY, data INT);
 CREATE TABLE cascadechild (
   c INT PRIMARY KEY,
   p INT NOT NULL REFERENCES cascadeparent(p) ON DELETE CASCADE
@@ -813,21 +813,37 @@ CREATE TABLE cascadechild (
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1
 ----
-·                    distribution         local                   ·    ·
-·                    vectorized           false                   ·    ·
-root                 ·                    ·                       ()   ·
- ├── delete          ·                    ·                       ()   ·
- │    │              estimated row count  0 (missing stats)       ·    ·
- │    │              from                 cascadeparent           ·    ·
- │    └── buffer     ·                    ·                       (p)  ·
- │         │         label                buffer 1                ·    ·
- │         └── scan  ·                    ·                       (p)  ·
- │                   estimated row count  333 (missing stats)     ·    ·
- │                   table                cascadeparent@primary   ·    ·
- │                   spans                /2-                     ·    ·
- └── fk-cascade      ·                    ·                       ·    ·
-·                    fk                   fk_p_ref_cascadeparent  ·    ·
-·                    input                buffer 1                ·    ·
+·                  distribution         local                   ·   ·
+·                  vectorized           false                   ·   ·
+root               ·                    ·                       ()  ·
+ ├── delete range  ·                    ·                       ()  ·
+ │                 estimated row count  0 (missing stats)       ·   ·
+ │                 from                 cascadeparent           ·   ·
+ │                 spans                /2-                     ·   ·
+ └── fk-cascade    ·                    ·                       ·   ·
+·                  fk                   fk_p_ref_cascadeparent  ·   ·
+
+query TTTTT
+EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1 AND data > 0
+----
+·                         distribution         local                   ·          ·
+·                         vectorized           false                   ·          ·
+root                      ·                    ·                       ()         ·
+ ├── delete               ·                    ·                       ()         ·
+ │    │                   estimated row count  0 (missing stats)       ·          ·
+ │    │                   from                 cascadeparent           ·          ·
+ │    └── buffer          ·                    ·                       (p, data)  ·
+ │         │              label                buffer 1                ·          ·
+ │         └── filter     ·                    ·                       (p, data)  ·
+ │              │         estimated row count  311 (missing stats)     ·          ·
+ │              │         filter               data > 0                ·          ·
+ │              └── scan  ·                    ·                       (p, data)  ·
+ │                        estimated row count  333 (missing stats)     ·          ·
+ │                        table                cascadeparent@primary   ·          ·
+ │                        spans                /2-                     ·          ·
+ └── fk-cascade           ·                    ·                       ·          ·
+·                         fk                   fk_p_ref_cascadeparent  ·          ·
+·                         input                buffer 1                ·          ·
 
 statement ok
 CREATE TABLE a (
