@@ -260,7 +260,8 @@ func (c *RowContainer) NumCols() int {
 	return c.numCols
 }
 
-// At accesses a row at a specific index.
+// At accesses a row at a specific index. Note that it does *not* copy the row:
+// callers must copy the row if they wish to mutate it.
 func (c *RowContainer) At(i int) tree.Datums {
 	// This is a hot-path: do not add additional checks here.
 	chunk, pos := c.getChunkAndPos(i)
