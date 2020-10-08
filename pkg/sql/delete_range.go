@@ -221,7 +221,9 @@ func (d *deleteRangeNode) processResults(
 
 // Next implements the planNode interface.
 func (*deleteRangeNode) Next(params runParams) (bool, error) {
-	panic("invalid")
+	// TODO(radu): this shouldn't be used, but it gets called when a cascade uses
+	// delete-range. Investigate this.
+	return false, nil
 }
 
 // Values implements the planNode interface.

@@ -75,8 +75,7 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 	// need to buffer it. This could be a normalization rule, but it's probably
 	// more efficient if we did it in here (or we'd end up building the entire FK
 	// subtrees twice).
-	mb.withID = mb.b.factory.Memo().NextWithID()
-	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
+	mb.initWithID()
 
 	h := &mb.fkCheckHelper
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
@@ -117,16 +116,14 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 //
 // -- Cascades --
 //
-// See onDeleteCascadeBuilder, onDeleteSetBuilder for details.
+// See onDeleteCascadeBuilder, onDeleteFastCascadeBuilder, onDeleteSetBuilder
+// for details.
 //
 func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 	if mb.tab.InboundForeignKeyCount() == 0 {
 		// No relevant FKs.
 		return
 	}
-
-	mb.withID = mb.b.factory.Memo().NextWithID()
-	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
 
 	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
 		h := &mb.fkCheckHelper
@@ -143,8 +140,17 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 			var builder memo.CascadeBuilder
 			switch a {
 			case tree.Cascade:
-				builder = newOnDeleteCascadeBuilder(mb.tab, i, h.otherTab)
+				// Try the fast builder first; if it cannot be used, use the regular builder.
+				var ok bool
+				builder, ok = tryNewOnDeleteFastCascadeBuilder(
+					mb.b.ctx, mb.md, mb.b.catalog, h.fk, i, mb.tab, h.otherTab, mb.outScope,
+				)
+				if !ok {
+					mb.initWithID()
+					builder = newOnDeleteCascadeBuilder(mb.tab, i, h.otherTab)
+				}
 			case tree.SetNull, tree.SetDefault:
+				mb.initWithID()
 				builder = newOnDeleteSetBuilder(mb.tab, i, h.otherTab, a)
 			default:
 				panic(errors.AssertionFailedf("unhandled action type %s", a))
@@ -164,6 +170,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 			continue
 		}
 
+		mb.initWithID()
 		fkInput, withScanCols, _ := h.makeFKInputScan(fkInputScanFetchedVals)
 		mb.checks = append(mb.checks, h.buildDeletionCheck(fkInput, withScanCols))
 	}
@@ -232,8 +239,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		return
 	}
 
-	mb.withID = mb.b.factory.Memo().NextWithID()
-	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
+	mb.initWithID()
 
 	// An Update can be thought of an insertion paired with a deletion, so for an
 	// Update we can emit both semi-joins and anti-joins.
@@ -376,8 +382,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		return
 	}
 
-	mb.withID = mb.b.factory.Memo().NextWithID()
-	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
+	mb.initWithID()
 
 	h := &mb.fkCheckHelper
 	for i := 0; i < numOutbound; i++ {
@@ -476,6 +481,19 @@ func (mb *mutationBuilder) inboundFKColsUpdated(fkOrdinal int) bool {
 		}
 	}
 	return false
+}
+
+// initWithID ensures that withID is initialized (and thus that the input to the
+// mutation will be buffered).
+//
+// Assumes that outScope.expr is the input to the mutation.
+func (mb *mutationBuilder) initWithID() {
+	if mb.withID != 0 {
+		return
+	}
+
+	mb.withID = mb.b.factory.Memo().NextWithID()
+	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
 }
 
 // fkCheckHelper is a type associated with a single FK constraint and is used to
