@@ -639,7 +639,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
-%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
+%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
@@ -970,6 +970,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.RangePartition> range_partition
 %type <[]tree.RangePartition> range_partitions
 %type <empty> opt_all_clause
+%type <empty> opt_privileges_clause
 %type <bool> distinct_clause
 %type <tree.DistinctOn> distinct_on_clause
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns
@@ -3689,7 +3690,7 @@ deallocate_stmt:
 // %Category: Priv
 // %Text:
 // Grant privileges:
-//   GRANT {ALL | <privileges...> } ON <targets...> TO <grantees...>
+//   GRANT {ALL [PRIVILEGES] | <privileges...> } ON <targets...> TO <grantees...>
 // Grant role membership:
 //   GRANT <roles...> TO <grantees...> [WITH ADMIN OPTION]
 //
@@ -3779,9 +3780,9 @@ revoke_stmt:
   }
 | REVOKE error // SHOW HELP: REVOKE
 
-// ALL is always by itself.
+// ALL can either be by itself, or with the optional PRIVILEGES keyword (which no-ops)
 privileges:
-  ALL
+  ALL opt_privileges_clause
   {
     $$.val = privilege.List{privilege.ALL}
   }
@@ -8026,6 +8027,10 @@ opt_all_clause:
   ALL {}
 | /* EMPTY */ {}
 
+opt_privileges_clause:
+  PRIVILEGES {}
+| /* EMPTY */ {}
+
 opt_sort_clause:
   sort_clause
   {
@@ -11733,6 +11738,7 @@ unreserved_keyword:
 | PREPARE
 | PRESERVE
 | PRIORITY
+| PRIVILEGES
 | PUBLIC
 | PUBLICATION
 | QUERIES
