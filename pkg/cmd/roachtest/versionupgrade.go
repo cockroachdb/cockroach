@@ -103,12 +103,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 	}
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
-	schemaChangeStep := runSchemaChangeWorkloadStep(
-		c.All().randNode()[0],
-		10, /* maxOps */
-		2,  /* concurrency */
-		predecessorVersion,
-	)
+	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().randNode()[0], 10 /* maxOps */, 2 /* concurrency */)
 	backupStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// This check was introduced for the system.tenants table and the associated
 		// changes to full-cluster backup to include tenants. It mostly wants to
