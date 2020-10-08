@@ -25,6 +25,8 @@ retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_inte
 retrieving SQL data for crdb_internal.partitions... writing: debug/crdb_internal.partitions.txt
 retrieving SQL data for crdb_internal.zones... writing: debug/crdb_internal.zones.txt
 retrieving SQL data for crdb_internal.invalid_objects... writing: debug/crdb_internal.invalid_objects.txt
+doctor examining cluster...No problems found!
+writing: debug/reports/doctor.txt
 requesting nodes... writing: debug/nodes.json
 requesting liveness... writing: debug/liveness.json
 requesting CPU profiles... ok
