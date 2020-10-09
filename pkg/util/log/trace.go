@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -146,7 +147,7 @@ func eventInternal(sp opentracing.Span, el *ctxEventLog, isErr bool, entry Entry
 	if sp != nil {
 		// TODO(radu): pass tags directly to sp.LogKV when LightStep supports
 		// that.
-		sp.LogFields(otlog.String(tracing.LogMessageField, msg))
+		sp.LogFields(otlog.String(tracingpb.LogMessageField, msg))
 		// if isErr {
 		// 	// TODO(radu): figure out a way to signal that this is an error. We
 		// 	// could use a different "error" key (provided it shows up in

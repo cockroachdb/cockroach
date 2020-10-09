@@ -40,7 +40,7 @@
 #include "storage/enginepb/mvcc.pb.h"
 #include "storage/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"
-#include "util/tracing/recorded_span.pb.h"
+#include "util/tracing/tracingpb/recorded_span.pb.h"
 // @@protoc_insertion_point(includes)
 #define PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto 
 
@@ -16261,12 +16261,12 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
   int collected_spans_size() const;
   void clear_collected_spans();
   static const int kCollectedSpansFieldNumber = 6;
-  ::cockroach::util::tracing::RecordedSpan* mutable_collected_spans(int index);
-  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan >*
+  ::cockroach::util::tracing::tracingpb::RecordedSpan* mutable_collected_spans(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::tracingpb::RecordedSpan >*
       mutable_collected_spans();
-  const ::cockroach::util::tracing::RecordedSpan& collected_spans(int index) const;
-  ::cockroach::util::tracing::RecordedSpan* add_collected_spans();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan >&
+  const ::cockroach::util::tracing::tracingpb::RecordedSpan& collected_spans(int index) const;
+  ::cockroach::util::tracing::tracingpb::RecordedSpan* add_collected_spans();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::tracingpb::RecordedSpan >&
       collected_spans() const;
 
   int range_infos_size() const;
@@ -16330,7 +16330,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan > collected_spans_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::tracingpb::RecordedSpan > collected_spans_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo > range_infos_;
   ::cockroach::roachpb::Error* error_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
@@ -35205,24 +35205,24 @@ inline void BatchResponse_Header::set_allocated_now(::cockroach::util::hlc::Time
 inline int BatchResponse_Header::collected_spans_size() const {
   return collected_spans_.size();
 }
-inline ::cockroach::util::tracing::RecordedSpan* BatchResponse_Header::mutable_collected_spans(int index) {
+inline ::cockroach::util::tracing::tracingpb::RecordedSpan* BatchResponse_Header::mutable_collected_spans(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.Header.collected_spans)
   return collected_spans_.Mutable(index);
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan >*
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::tracingpb::RecordedSpan >*
 BatchResponse_Header::mutable_collected_spans() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.BatchResponse.Header.collected_spans)
   return &collected_spans_;
 }
-inline const ::cockroach::util::tracing::RecordedSpan& BatchResponse_Header::collected_spans(int index) const {
+inline const ::cockroach::util::tracing::tracingpb::RecordedSpan& BatchResponse_Header::collected_spans(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.Header.collected_spans)
   return collected_spans_.Get(index);
 }
-inline ::cockroach::util::tracing::RecordedSpan* BatchResponse_Header::add_collected_spans() {
+inline ::cockroach::util::tracing::tracingpb::RecordedSpan* BatchResponse_Header::add_collected_spans() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.BatchResponse.Header.collected_spans)
   return collected_spans_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan >&
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::tracingpb::RecordedSpan >&
 BatchResponse_Header::collected_spans() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.Header.collected_spans)
   return collected_spans_;
