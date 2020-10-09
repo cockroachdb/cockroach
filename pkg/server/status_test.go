@@ -398,7 +398,7 @@ func TestStatusGetFiles(t *testing.T) {
 	ts := tsI.(*TestServer)
 	defer ts.Stopper().Stop(context.Background())
 
-	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
 	rpcContext := newRPCTestContext(ts, rootConfig)
 
 	url := ts.ServingRPCAddr()
@@ -1248,7 +1248,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
-	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
 	rpcContext := newRPCTestContext(ts, rootConfig)
 	var request serverpb.NodesRequest
 
@@ -1452,7 +1452,7 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	// don't indicate that the grpc gateway is correctly adding the necessary
 	// metadata for differentiating between the two (and that we're correctly
 	// interpreting said metadata).
-	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
 	rpcContext := newRPCTestContext(ts, rootConfig)
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
@@ -1833,10 +1833,10 @@ func TestListSessionsSecurity(t *testing.T) {
 
 	for _, requestWithAdmin := range []bool{true, false} {
 		t.Run(fmt.Sprintf("admin=%v", requestWithAdmin), func(t *testing.T) {
-			myUser := authenticatedUserNameNoAdmin
+			myUser := authenticatedUserNameNoAdmin()
 			expectedErrOnListingRootSessions := "does not have permission to view sessions from user"
 			if requestWithAdmin {
-				myUser = authenticatedUserName
+				myUser = authenticatedUserName()
 				expectedErrOnListingRootSessions = ""
 			}
 
@@ -1847,10 +1847,10 @@ func TestListSessionsSecurity(t *testing.T) {
 			}{
 				{"local_sessions", ""},
 				{"sessions", ""},
-				{fmt.Sprintf("local_sessions?username=%s", myUser), ""},
-				{fmt.Sprintf("sessions?username=%s", myUser), ""},
-				{"local_sessions?username=root", expectedErrOnListingRootSessions},
-				{"sessions?username=root", expectedErrOnListingRootSessions},
+				{fmt.Sprintf("local_sessions?username=%s", myUser.Normalized()), ""},
+				{fmt.Sprintf("sessions?username=%s", myUser.Normalized()), ""},
+				{"local_sessions?username=" + security.RootUser, expectedErrOnListingRootSessions},
+				{"sessions?username=" + security.RootUser, expectedErrOnListingRootSessions},
 			}
 			for _, tc := range testCases {
 				var response serverpb.ListSessionsResponse
@@ -1876,7 +1876,7 @@ func TestListSessionsSecurity(t *testing.T) {
 	}
 
 	// gRPC requests behave as root and thus are always allowed.
-	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
 	rpcContext := newRPCTestContext(ts, rootConfig)
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
@@ -1886,7 +1886,7 @@ func TestListSessionsSecurity(t *testing.T) {
 	}
 	client := serverpb.NewStatusClient(conn)
 
-	for _, user := range []string{"", authenticatedUserName, "root"} {
+	for _, user := range []string{"", authenticatedUser, security.RootUser} {
 		request := &serverpb.ListSessionsRequest{Username: user}
 		if resp, err := client.ListLocalSessions(ctx, request); err != nil || len(resp.Errors) > 0 {
 			t.Errorf("unexpected failure listing local sessions for %q; error: %v; response errors: %v",
@@ -1978,7 +1978,7 @@ func TestJobStatusResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
-	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
 	rpcContext := newRPCTestContext(ts, rootConfig)
 
 	url := ts.ServingRPCAddr()
@@ -2000,7 +2000,7 @@ func TestJobStatusResponse(t *testing.T) {
 		jobs.Record{
 			Description: "testing",
 			Statement:   "SELECT 1",
-			Username:    "root",
+			Username:    security.RootUserName(),
 			Details: jobspb.ImportDetails{
 				Tables: []jobspb.ImportDetails_Table{
 					{

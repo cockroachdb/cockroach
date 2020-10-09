@@ -58,11 +58,20 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
+	// TODO(solon): there are SQL identifiers (tree.Name) in n.Grantees,
+	// but we want SQL usernames. Do we normalize or not? For reference,
+	// REASSIGN / OWNER TO do normalize.
+	// Related: https://github.com/cockroachdb/cockroach/issues/54696
+	grantees := make([]security.SQLUsername, len(n.Grantees))
+	for i, grantee := range n.Grantees {
+		grantees[i] = security.MakeSQLUsernameFromPreNormalizedString(string(grantee))
+	}
+
 	return &changePrivilegesNode{
 		targets:      n.Targets,
-		grantees:     n.Grantees,
+		grantees:     grantees,
 		desiredprivs: n.Privileges,
-		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
+		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee security.SQLUsername) {
 			privDesc.Grant(grantee, n.Privileges)
 		},
 		grantOn: grantOn,
@@ -99,11 +108,20 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
+	// TODO(solon): there are SQL identifiers (tree.Name) in n.Grantees,
+	// but we want SQL usernames. Do we normalize or not? For reference,
+	// REASSIGN / OWNER TO do normalize.
+	// Related: https://github.com/cockroachdb/cockroach/issues/54696
+	grantees := make([]security.SQLUsername, len(n.Grantees))
+	for i, grantee := range n.Grantees {
+		grantees[i] = security.MakeSQLUsernameFromPreNormalizedString(string(grantee))
+	}
+
 	return &changePrivilegesNode{
 		targets:      n.Targets,
-		grantees:     n.Grantees,
+		grantees:     grantees,
 		desiredprivs: n.Privileges,
-		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
+		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee security.SQLUsername) {
 			privDesc.Revoke(grantee, n.Privileges, grantOn)
 		},
 		grantOn: grantOn,
@@ -112,9 +130,9 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 
 type changePrivilegesNode struct {
 	targets         tree.TargetList
-	grantees        tree.NameList
+	grantees        []security.SQLUsername
 	desiredprivs    privilege.List
-	changePrivilege func(*descpb.PrivilegeDescriptor, string)
+	changePrivilege func(*descpb.PrivilegeDescriptor, security.SQLUsername)
 	grantOn         privilege.ObjectType
 }
 
@@ -134,11 +152,12 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 	// We're allowed to grant/revoke privileges to/from the "public" role even though
 	// it does not exist: add it to the list of all users and roles.
-	users[security.PublicRole] = true // isRole
+	users[security.PublicRoleName()] = true // isRole
 
-	for _, grantee := range n.grantees {
-		if _, ok := users[string(grantee)]; !ok {
-			return errors.Errorf("user or role %s does not exist", &grantee)
+	for i, grantee := range n.grantees {
+		if _, ok := users[grantee]; !ok {
+			return errors.Errorf("user or role %s does not exist",
+				tree.Name(n.grantees[i].Normalized()))
 		}
 	}
 
@@ -170,7 +189,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 		privileges := descriptor.GetPrivileges()
 		for _, grantee := range n.grantees {
-			n.changePrivilege(privileges, string(grantee))
+			n.changePrivilege(privileges, grantee)
 		}
 
 		// Validate privilege descriptors directly as the db/table level Validate

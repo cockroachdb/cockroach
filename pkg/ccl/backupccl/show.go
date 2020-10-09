@@ -399,7 +399,6 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 		return ""
 	}
 	for _, userPriv := range privDesc.Show(objectType) {
-		user := userPriv.User
 		privs := userPriv.Privileges
 		if len(privs) == 0 {
 			continue
@@ -415,7 +414,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 		privStringBuilder.WriteString(" ON ")
 		privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
 		privStringBuilder.WriteString(" TO ")
-		privStringBuilder.WriteString(user)
+		privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
 		privStringBuilder.WriteString("; ")
 	}
 

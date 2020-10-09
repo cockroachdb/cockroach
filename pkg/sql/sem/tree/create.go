@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1278,7 +1279,9 @@ func (node *CreateTable) HoistConstraints() {
 type CreateSchema struct {
 	IfNotExists bool
 	Schema      string
-	AuthRole    string
+	// TODO(solon): Adjust this, see
+	// https://github.com/cockroachdb/cockroach/issues/54696
+	AuthRole security.SQLUsername
 }
 
 // Format implements the NodeFormatter interface.
@@ -1294,9 +1297,9 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 		ctx.WriteString(node.Schema)
 	}
 
-	if node.AuthRole != "" {
+	if !node.AuthRole.Undefined() {
 		ctx.WriteString(" AUTHORIZATION ")
-		ctx.WriteString(node.AuthRole)
+		ctx.FormatUsername(node.AuthRole)
 	}
 }
 

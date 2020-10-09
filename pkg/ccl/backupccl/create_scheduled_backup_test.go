@@ -140,7 +140,7 @@ func (h *testHelper) createBackupSchedule(
 		// Query system.scheduled_job table and load those schedules.
 		datums, cols, err := h.cfg.InternalExecutor.QueryWithCols(
 			context.Background(), "sched-load", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"SELECT * FROM system.scheduled_jobs WHERE schedule_id = $1",
 			id,
 		)

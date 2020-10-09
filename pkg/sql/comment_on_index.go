@@ -66,7 +66,7 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 			TableName string
 			IndexName string
 			Statement string
-			User      string
+			User      security.SQLUsername
 			Comment   *string
 		}{
 			n.tableDesc.Name,
@@ -84,7 +84,7 @@ func (p *planner) upsertIndexComment(
 		ctx,
 		"set-index-comment",
 		p.Txn(),
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 		keys.IndexCommentType,
 		tableID,
@@ -101,7 +101,7 @@ func (p *planner) removeIndexComment(
 		ctx,
 		"delete-index-comment",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 		keys.IndexCommentType,
 		tableID,

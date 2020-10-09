@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -122,7 +123,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			TableName  string
 			IndexName  string
 			Statement  string
-			User       string
+			User       security.SQLUsername
 			MutationID uint32
 		}{
 			n.n.Index.Table.FQString(), n.indexDesc.Name, n.n.String(),

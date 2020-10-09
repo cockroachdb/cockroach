@@ -113,7 +113,7 @@ func NewTestingStorage(
 		db:       db,
 		ex:       ie,
 		sd: sessiondata.InternalExecutorOverride{
-			User:     security.NodeUser,
+			User:     security.NodeUserName(),
 			Database: database,
 		},
 		newTimer: newTimer,

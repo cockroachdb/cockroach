@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -90,7 +91,7 @@ func (p *planner) alterSchemaOwner(
 	ctx context.Context,
 	db *dbdesc.Mutable,
 	scDesc *schemadesc.Mutable,
-	newOwner string,
+	newOwner security.SQLUsername,
 	jobDesc string,
 ) error {
 	privs := scDesc.GetPrivileges()
@@ -105,7 +106,7 @@ func (p *planner) alterSchemaOwner(
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
+	if newOwner == privs.Owner() {
 		return nil
 	}
 

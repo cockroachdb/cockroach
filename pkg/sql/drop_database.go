@@ -230,7 +230,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		struct {
 			DatabaseName         string
 			Statement            string
-			User                 string
+			User                 security.SQLUsername
 			DroppedSchemaObjects []string
 		}{n.n.Name.String(), n.n.String(), p.SessionData().User, n.d.droppedNames},
 	)
@@ -343,7 +343,7 @@ func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
 		ctx,
 		"delete-db-comment",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.DatabaseCommentType,
 		dbID)

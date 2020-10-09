@@ -47,7 +47,7 @@ func TestInternalExecutor(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestInternalExecutor(t *testing.T) {
 	// The following statement will succeed on the 2nd try.
 	row, err = ie.QueryRowEx(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
 	)
 	if err != nil {
@@ -90,7 +90,7 @@ func TestInternalExecutor(t *testing.T) {
 		cnt++
 		row, err = ie.QueryRowEx(
 			ctx, "test", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"select case nextval('test.seq') when 2 then crdb_internal.force_retry('1h') else 99 end",
 		)
 		if cnt == 1 {
@@ -150,7 +150,7 @@ func TestInternalFullTableScan(t *testing.T) {
 		&sessiondata.SessionData{
 			Database:               "db",
 			SequenceState:          &sessiondata.SequenceState{},
-			User:                   security.RootUser,
+			User:                   security.RootUserName(),
 			DisallowFullTableScans: true,
 		})
 
@@ -176,12 +176,12 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
 	testData := []struct {
-		user     string
+		user     security.SQLUsername
 		expAdmin bool
 	}{
-		{security.NodeUser, true},
-		{security.RootUser, true},
-		{"testuser", false},
+		{security.NodeUserName(), true},
+		{security.RootUserName(), true},
+		{security.TestUserName(), false},
 	}
 
 	for _, tc := range testData {
@@ -279,7 +279,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 		&sessiondata.SessionData{
 			Database:      expDB,
 			SequenceState: &sessiondata.SequenceState{},
-			User:          security.RootUser,
+			User:          security.RootUserName(),
 		})
 
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
@@ -343,7 +343,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		)
 		ie.SetSessionData(
 			&sessiondata.SessionData{
-				User:            security.RootUser,
+				User:            security.RootUserName(),
 				Database:        "defaultdb",
 				ApplicationName: "appname_findme",
 				SequenceState:   &sessiondata.SequenceState{},
@@ -521,7 +521,7 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err := ie.QueryEx(
-		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: security.RootUser}, "SELECT 1",
+		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: security.RootUserName()}, "SELECT 1",
 	)
 	require.NoError(t, err)
 }

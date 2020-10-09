@@ -820,7 +820,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		struct {
 			TableName           string
 			Statement           string
-			User                string
+			User                security.SQLUsername
 			MutationID          uint32
 			CascadeDroppedViews []string
 		}{params.p.ResolvedName(n.n.Table).FQString(), n.n.String(),
@@ -1131,7 +1131,7 @@ func (p *planner) removeColumnComment(
 		ctx,
 		"delete-column-comment",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 		keys.ColumnCommentType,
 		tableID,
@@ -1184,7 +1184,7 @@ func (p *planner) updateFKBackReferenceName(
 // alterTableOwner sets the owner of the table to newOwner and returns true if the descriptor
 // was updated.
 func (p *planner) alterTableOwner(
-	ctx context.Context, n *alterTableNode, newOwner string,
+	ctx context.Context, n *alterTableNode, newOwner security.SQLUsername,
 ) (bool, error) {
 	desc := n.tableDesc
 	privs := desc.GetPrivileges()
@@ -1200,7 +1200,7 @@ func (p *planner) alterTableOwner(
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
+	if newOwner == privs.Owner() {
 		return false, nil
 	}
 

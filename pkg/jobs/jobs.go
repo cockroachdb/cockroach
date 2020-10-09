@@ -63,7 +63,7 @@ type CreatedByInfo struct {
 type Record struct {
 	Description   string
 	Statement     string
-	Username      string
+	Username      security.SQLUsername
 	DescriptorIDs descpb.IDs
 	Details       jobspb.Details
 	Progress      jobspb.ProgressDetails
@@ -507,7 +507,7 @@ func (j *Job) pauseRequested(ctx context.Context, fn onPauseRequestFunc) error {
 			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
 		}
 		if fn != nil {
-			phs, cleanup := j.registry.planFn("pause request", j.Payload().Username)
+			phs, cleanup := j.registry.planFn("pause request", j.Payload().UsernameProto.Decode())
 			defer cleanup()
 			if err := fn(ctx, phs, txn, md.Progress); err != nil {
 				return err
@@ -724,7 +724,7 @@ func (j *Job) load(ctx context.Context) error {
 			stmt = newStmt
 		}
 		row, err := j.registry.ex.QueryRowEx(
-			ctx, "load-job-query", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
+			ctx, "load-job-query", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			stmt, *j.ID())
 		if err != nil {
 			return err

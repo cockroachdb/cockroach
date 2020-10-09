@@ -241,7 +241,7 @@ func readPostgresCreateTable(
 		stmt, err := ps.Next()
 		if err == io.EOF {
 			ret := make([]*tabledesc.Mutable, 0, len(createTbl))
-			owner := security.AdminRole
+			owner := security.AdminRoleName()
 			if params.SessionData() != nil {
 				owner = params.SessionData().User
 			}
@@ -614,7 +614,7 @@ func (m *pgDumpReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
 }

@@ -283,12 +283,12 @@ func (ds *ServerImpl) setupFlow(
 		sd := &sessiondata.SessionData{
 			ApplicationName: req.EvalContext.ApplicationName,
 			Database:        req.EvalContext.Database,
-			User:            req.EvalContext.User,
+			User:            req.EvalContext.User(),
 			SearchPath: sessiondata.MakeSearchPath(
 				req.EvalContext.SearchPath,
 			).WithTemporarySchemaName(
 				req.EvalContext.TemporarySchemaName,
-			).WithUserSchemaName(req.EvalContext.User),
+			).WithUserSchemaName(req.EvalContext.User().Normalized()),
 			SequenceState: sessiondata.NewSequenceState(),
 			DataConversion: sessiondata.DataConversionConfig{
 				Location:          location,

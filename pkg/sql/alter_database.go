@@ -33,6 +33,10 @@ func (p *planner) AlterDatabaseOwner(
 	}
 	privs := dbDesc.GetPrivileges()
 
+	// TODO(solon): This is good for the simple case of literal
+	// identifiers, but it mishandles the special SESSION_USER
+	// and CURRENT_USER identifiers.
+	// See also: https://github.com/cockroachdb/cockroach/issues/54696
 	if err := p.checkCanAlterToNewOwner(ctx, dbDesc, n.Owner); err != nil {
 		return nil, err
 	}
@@ -43,7 +47,12 @@ func (p *planner) AlterDatabaseOwner(
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if n.Owner == privs.Owner {
+	//
+	// TODO(solon): This is good for the simple case of literal
+	// identifiers, but it mishandles the special SESSION_USER
+	// and CURRENT_USER identifiers.
+	// See also: https://github.com/cockroachdb/cockroach/issues/54696
+	if n.Owner == privs.Owner() {
 		return nil, nil
 	}
 	return &alterDatabaseOwnerNode{n: n, desc: dbDesc}, nil

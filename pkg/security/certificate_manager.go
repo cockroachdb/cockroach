@@ -121,7 +121,7 @@ type CertificateManager struct {
 	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
 	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
 	uiCert         *CertInfo // optional: server certificate for the admin UI.
-	clientCerts    map[string]*CertInfo
+	clientCerts    map[SQLUsername]*CertInfo
 
 	// Certs only used with multi-tenancy.
 	tenantClientCACert, tenantClientCert *CertInfo
@@ -337,20 +337,24 @@ func TenantClientKeyFilename(tenantIdentifier string) string {
 }
 
 // ClientCertPath returns the expected file path for the user's certificate.
-func (cl CertsLocator) ClientCertPath(user string) string {
+func (cl CertsLocator) ClientCertPath(user SQLUsername) string {
 	return filepath.Join(cl.certsDir, ClientCertFilename(user))
 }
 
 // ClientCertFilename returns the expected file name for the user's certificate.
-func ClientCertFilename(user string) string { return "client." + user + certExtension }
+func ClientCertFilename(user SQLUsername) string {
+	return "client." + user.Normalized() + certExtension
+}
 
 // ClientKeyPath returns the expected file path for the user's key.
-func (cl CertsLocator) ClientKeyPath(user string) string {
+func (cl CertsLocator) ClientKeyPath(user SQLUsername) string {
 	return filepath.Join(cl.certsDir, ClientKeyFilename(user))
 }
 
 // ClientKeyFilename returns the expected file name for the user's key.
-func ClientKeyFilename(user string) string { return "client." + user + keyExtension }
+func ClientKeyFilename(user SQLUsername) string {
+	return "client." + user.Normalized() + keyExtension
+}
 
 // CACert returns the CA cert. May be nil.
 // Callers should check for an internal Error field.
@@ -402,7 +406,7 @@ func (cm *CertificateManager) NodeCert() *CertInfo {
 
 // ClientCerts returns the Client certs.
 // Callers should check for internal Error fields.
-func (cm *CertificateManager) ClientCerts() map[string]*CertInfo {
+func (cm *CertificateManager) ClientCerts() map[SQLUsername]*CertInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.clientCerts
@@ -441,7 +445,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 
 	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
 	var tenantClientCACert, tenantClientCert *CertInfo
-	clientCerts := make(map[string]*CertInfo)
+	clientCerts := make(map[SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
 		case CAPem:
@@ -468,8 +472,9 @@ func (cm *CertificateManager) LoadCertificates() error {
 		case UIPem:
 			uiCert = ci
 		case ClientPem:
-			clientCerts[ci.Name] = ci
-			if ci.Name == NodeUser {
+			username := MakeSQLUsernameFromPreNormalizedString(ci.Name)
+			clientCerts[username] = ci
+			if username.IsNodeUser() {
 				nodeClientCert = ci
 			}
 		default:
@@ -761,7 +766,7 @@ func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 // getClientCertLocked returns the client cert/key for the specified user,
 // or an error if not found.
 // cm.mu must be held.
-func (cm *CertificateManager) getClientCertLocked(user string) (*CertInfo, error) {
+func (cm *CertificateManager) getClientCertLocked(user SQLUsername) (*CertInfo, error) {
 	ci := cm.clientCerts[user]
 	if err := checkCertIsValid(ci); err != nil {
 		return nil, makeErrorf(err, "problem with client cert for user %s", user)
@@ -846,7 +851,7 @@ func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
 // GetClientTLSConfig returns the most up-to-date client tls.Config.
 // Returns the dual-purpose node certs if user == NodeUser and there is no
 // separate client cert for 'node'.
-func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, error) {
+func (cm *CertificateManager) GetClientTLSConfig(user SQLUsername) (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -856,7 +861,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 		return nil, err
 	}
 
-	if user != NodeUser {
+	if !user.IsNodeUser() {
 		clientCert, err := cm.getClientCertLocked(user)
 		if err != nil {
 			return nil, err

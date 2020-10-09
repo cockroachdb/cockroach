@@ -100,15 +100,15 @@ func TestSSLEnforcement(t *testing.T) {
 	}
 
 	// HTTPS with client certs for security.RootUser.
-	rootCertsContext := newRPCContext(testutils.NewTestBaseContext(security.RootUser))
+	rootCertsContext := newRPCContext(testutils.NewTestBaseContext(security.RootUserName()))
 	// HTTPS with client certs for security.NodeUser.
 	nodeCertsContext := newRPCContext(testutils.NewNodeTestBaseContext())
 	// HTTPS with client certs for TestUser.
-	testCertsContext := newRPCContext(testutils.NewTestBaseContext(TestUser))
+	testCertsContext := newRPCContext(testutils.NewTestBaseContext(security.TestUserName()))
 	// HTTPS without client certs. The user does not matter.
 	noCertsContext := insecureCtx{}
 	// Plain http.
-	plainHTTPCfg := testutils.NewTestBaseContext(TestUser)
+	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
 	plainHTTPCfg.Insecure = true
 	insecureContext := newRPCContext(plainHTTPCfg)
 
@@ -231,9 +231,10 @@ func TestVerifyPassword(t *testing.T) {
 		{"timelord", "12345", "", "VALID UNTIL $1",
 			[]interface{}{timeutil.Now().Add(59 * time.Minute).In(shanghaiLoc)}},
 	} {
+		username := security.MakeSQLUsernameFromPreNormalizedString(user.username)
 		cmd := fmt.Sprintf(
 			"CREATE USER %s WITH PASSWORD '%s' %s %s",
-			user.username, user.password, user.loginFlag, user.validUntilClause)
+			username.SQLIdentifier(), user.password, user.loginFlag, user.validUntilClause)
 
 		if _, err := db.Exec(cmd, user.qargs...); err != nil {
 			t.Fatalf("failed to create user: %s", err)
@@ -270,7 +271,8 @@ func TestVerifyPassword(t *testing.T) {
 		{"cthon98", "12345", true, ""},
 	} {
 		t.Run("", func(t *testing.T) {
-			valid, expired, err := ts.authentication.verifyPassword(context.Background(), tc.username, tc.password)
+			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
+			valid, expired, err := ts.authentication.verifyPassword(context.Background(), username, tc.password)
 			if err != nil {
 				t.Errorf(
 					"credentials %s/%s failed with error %s, wanted no error",
@@ -299,7 +301,7 @@ func TestCreateSession(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	username := "testuser"
+	username := security.TestUserName()
 
 	// Create an authentication, noting the time before and after creation. This
 	// lets us ensure that the timestamps created are accurate.
@@ -347,7 +349,7 @@ WHERE id = $1`
 	}
 
 	// Username.
-	if a, e := sessUsername, username; a != e {
+	if a, e := sessUsername, username.Normalized(); a != e {
 		t.Fatalf("session username got %s, wanted %s", a, e)
 	}
 
@@ -391,7 +393,7 @@ func TestVerifySession(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	sessionUsername := "testuser"
+	sessionUsername := security.TestUserName()
 	id, origSecret, err := ts.authentication.newAuthSession(context.Background(), sessionUsername)
 	if err != nil {
 		t.Fatal(err)
@@ -454,7 +456,7 @@ func TestVerifySession(t *testing.T) {
 			if a, e := valid, tc.shouldVerify; a != e {
 				t.Fatalf("cookie %v verification = %t, wanted %t", tc.cookie, a, e)
 			}
-			if a, e := username, sessionUsername; tc.shouldVerify && a != e {
+			if a, e := username, sessionUsername.Normalized(); tc.shouldVerify && a != e {
 				t.Fatalf("cookie %v verification returned username %s, wanted %s", tc.cookie, a, e)
 			}
 		})
@@ -560,7 +562,7 @@ func TestLogout(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Log in.
-	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName, true)
+	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
 	if err != nil {
 		t.Fatal("error opening HTTP client", err)
 	}
@@ -803,7 +805,7 @@ func TestGRPCAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tlsConfig, err := certManager.GetClientTLSConfig("testuser")
+	tlsConfig, err := certManager.GetClientTLSConfig(security.TestUserName())
 	if err != nil {
 		t.Fatal(err)
 	}

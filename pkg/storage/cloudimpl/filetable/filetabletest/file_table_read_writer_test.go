@@ -109,7 +109,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, security.RootUser)
+		executor, security.RootUserName())
 	require.NoError(t, err)
 
 	// Create first test file with multiple chunks.
@@ -160,7 +160,7 @@ func TestReadWriteFile(t *testing.T) {
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, security.RootUser)
+		executor, security.RootUserName())
 	require.NoError(t, err)
 
 	testFileName := "testfile"
@@ -311,7 +311,7 @@ func TestReadWriteFile(t *testing.T) {
 	// FileTable creation.
 	t.Run("no-db-or-schema-qualified-table-name", func(t *testing.T) {
 		_, err := filetable.NewFileToTableSystem(ctx, "foo",
-			executor, security.RootUser)
+			executor, security.RootUserName())
 		testutils.IsError(err, "could not resolve db or schema name")
 	})
 }
@@ -511,7 +511,7 @@ func TestDatabaseScope(t *testing.T) {
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, security.RootUser)
+		executor, security.RootUserName())
 	require.NoError(t, err)
 
 	// Verify defaultdb has the file we wrote.
@@ -528,7 +528,7 @@ func TestDatabaseScope(t *testing.T) {
 	_, err = sqlDB.Exec(`CREATE DATABASE newdb`)
 	require.NoError(t, err)
 	newFileTableReadWriter, err := filetable.NewFileToTableSystem(ctx,
-		"newdb.file_table_read_writer", executor, security.RootUser)
+		"newdb.file_table_read_writer", executor, security.RootUserName())
 	require.NoError(t, err)
 	_, err = newFileTableReadWriter.ReadFile(ctx, "file1")
 	require.True(t, os.IsNotExist(err))

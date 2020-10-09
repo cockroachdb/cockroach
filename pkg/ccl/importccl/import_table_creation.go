@@ -44,7 +44,7 @@ func readCreateTableFromStore(
 	ctx context.Context,
 	filename string,
 	externalStorageFromURI cloud.ExternalStorageFromURIFactory,
-	user string,
+	user security.SQLUsername,
 ) (*tree.CreateTable, error) {
 	store, err := externalStorageFromURI(ctx, filename, user)
 	if err != nil {
@@ -159,7 +159,7 @@ func MakeSimpleTableDescriptor(
 		parentSchemaID,
 		tableID,
 		hlc.Timestamp{WallTime: walltime},
-		descpb.NewDefaultPrivilegeDescriptor(security.AdminRole),
+		descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		affected,
 		semaCtx,
 		&evalCtx,

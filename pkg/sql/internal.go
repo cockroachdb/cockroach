@@ -325,7 +325,7 @@ type result struct {
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
-	if o.User != "" {
+	if !o.User.Undefined() {
 		sd.User = o.User
 	}
 	if o.Database != "" {
@@ -347,13 +347,13 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 ) sessiondata.InternalExecutorOverride {
 	if ie.sessionData == nil {
 		return sessiondata.InternalExecutorOverride{
-			User:            security.RootUser,
+			User:            security.RootUserName(),
 			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sessiondata.InternalExecutorOverride{}
-	if ie.sessionData.User == "" {
-		o.User = security.RootUser
+	if ie.sessionData.User.Undefined() {
+		o.User = security.RootUserName()
 	}
 	if ie.sessionData.ApplicationName == "" {
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
@@ -385,7 +385,7 @@ func (ie *InternalExecutor) execInternal(
 		sd = ie.s.newSessionData(SessionArgs{})
 	}
 	applyOverrides(sessionDataOverride, sd)
-	if sd.User == "" {
+	if sd.User.Undefined() {
 		return result{}, errors.AssertionFailedf("no user specified for internal query")
 	}
 	if sd.ApplicationName == "" {

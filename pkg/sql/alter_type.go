@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -101,7 +102,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		struct {
 			TypeName  string
 			Statement string
-			User      string
+			User      security.SQLUsername
 		}{n.desc.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.p.User()},
 	)
 }
@@ -297,7 +298,9 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 	)
 }
 
-func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner string) error {
+func (p *planner) alterTypeOwner(
+	ctx context.Context, n *alterTypeNode, newOwner security.SQLUsername,
+) error {
 	typeDesc := n.desc
 	privs := typeDesc.GetPrivileges()
 
@@ -312,7 +315,7 @@ func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
+	if newOwner == privs.Owner() {
 		return nil
 	}
 

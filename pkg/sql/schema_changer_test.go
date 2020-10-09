@@ -1938,7 +1938,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 			status = jobs.StatusFailed
 		}
 		if err := jobutils.VerifySystemJob(t, &runner, migrationJobOffset+i, jobspb.TypeSchemaChange, status, jobs.Record{
-			Username:    security.RootUser,
+			Username:    security.RootUserName(),
 			Description: tc.sql,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.ID,
@@ -1953,7 +1953,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 
 	// Roll back job.
 	if err := jobutils.VerifySystemJob(t, &runner, len(testCases), jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
+		Username:    security.RootUserName(),
 		Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, testCases[jobRolledBack].sql),
 		DescriptorIDs: descpb.IDs{
 			tableDesc.ID,
@@ -3143,7 +3143,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Description:   "CLEANUP JOB for 'ALTER TABLE t.public.test ALTER PRIMARY KEY USING COLUMNS (k)'",
-			Username:      security.RootUser,
+			Username:      security.RootUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.ID},
 		})
 	})
@@ -4007,7 +4007,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
 			Description:   "GC for TRUNCATE TABLE t.public.test",
-			Username:      security.RootUser,
+			Username:      security.RootUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.ID},
 		})
 	})
@@ -4136,7 +4136,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	// most recent job instead.
 	schemaChangeJobOffset := 0
 	if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset+2, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
+		Username:    security.RootUserName(),
 		Description: "TRUNCATE TABLE t.public.test",
 		DescriptorIDs: descpb.IDs{
 			tableDesc.ID,
@@ -4311,7 +4311,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
+		Username:    security.RootUserName(),
 		Description: add_column,
 		DescriptorIDs: descpb.IDs{
 			oldID,
@@ -4320,7 +4320,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
+		Username:    security.RootUserName(),
 		Description: drop_column,
 		DescriptorIDs: descpb.IDs{
 			oldID,
@@ -4690,7 +4690,7 @@ func TestCancelSchemaChange(t *testing.T) {
 				t.Fatalf("unexpected %v", err)
 			}
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusCanceled, jobs.Record{
-				Username:    security.RootUser,
+				Username:    security.RootUserName(),
 				Description: tc.sql,
 				DescriptorIDs: descpb.IDs{
 					tableDesc.ID,
@@ -4701,7 +4701,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			jobID := jobutils.GetJobID(t, sqlDB, idx)
 			idx++
 			jobRecord := jobs.Record{
-				Username:    security.RootUser,
+				Username:    security.RootUserName(),
 				Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, tc.sql),
 				DescriptorIDs: descpb.IDs{
 					tableDesc.ID,
@@ -4719,7 +4719,7 @@ func TestCancelSchemaChange(t *testing.T) {
 		} else {
 			sqlDB.Exec(t, tc.sql)
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUser,
+				Username:    security.RootUserName(),
 				Description: tc.sql,
 				DescriptorIDs: descpb.IDs{
 					tableDesc.ID,
@@ -5762,7 +5762,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 		// TODO (lucy): Maybe this test API should use an offset starting
 		// from the most recent job instead.
 		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
-			Username:    security.RootUser,
+			Username:    security.RootUserName(),
 			Description: "ALTER TABLE t.public.test ADD COLUMN a INT8 AS (v - 1) STORED, ADD CHECK ((a < v) AND (a IS NOT NULL))",
 			DescriptorIDs: descpb.IDs{
 				tableDesc.ID,

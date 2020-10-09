@@ -70,7 +70,7 @@ message EvalContext {
   optional string database = 5 [(gogoproto.nullable) = false];
   repeated string search_path = 6;
   optional string temporary_schema_name = 13 [(gogoproto.nullable) = false];
-  optional string user = 7 [(gogoproto.nullable) = false];
+  optional string user_proto = 7 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
   optional SequenceState seq_state = 8 [(gogoproto.nullable) = false];
   optional string application_name = 9 [(gogoproto.nullable) = false];
   optional BytesEncodeFormat bytes_encode_format = 10 [(gogoproto.nullable) = false];

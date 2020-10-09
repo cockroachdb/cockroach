@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -468,7 +469,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 			TableName  string
 			IndexName  string
 			Statement  string
-			User       string
+			User       security.SQLUsername
 			MutationID uint32
 		}{
 			n.n.Table.FQString(), indexName, n.n.String(),

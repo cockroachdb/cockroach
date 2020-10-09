@@ -136,7 +136,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 			struct {
 				TableName           string
 				Statement           string
-				User                string
+				User                security.SQLUsername
 				CascadeDroppedViews []string
 			}{toDel.tn.FQString(), n.n.String(),
 				params.SessionData().User, droppedViews},
@@ -629,7 +629,7 @@ func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.
 		ctx,
 		"delete-table-comments",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE object_id=$1",
 		tableDesc.ID)
 	if err != nil {
