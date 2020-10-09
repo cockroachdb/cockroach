@@ -911,9 +911,19 @@ func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
 
 // BaggageItem is part of the opentracing.Span interface.
 func (s *span) BaggageItem(restrictedKey string) string {
-	s.crdb.mu.Lock()
-	defer s.crdb.mu.Unlock()
-	return s.crdb.mu.Baggage[restrictedKey]
+	if s := s.crdb.BaggageItem(restrictedKey); s != "" {
+		return s
+	}
+	if s.ot.shadowSpan == nil {
+		return ""
+	}
+	return s.ot.shadowSpan.BaggageItem(restrictedKey)
+}
+
+func (s *crdbSpan) BaggageItem(restrictedKey string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.Baggage[restrictedKey]
 }
 
 // Tracer is part of the opentracing.Span interface.
