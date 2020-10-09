@@ -629,7 +629,10 @@ func parseClientProvidedSessionParameters(
 		// Load the parameter.
 		switch key {
 		case "user":
-			// Unicode-normalize and case-fold the username.
+			// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+			// case-insensitive. Therefore we need to normalize the username
+			// here, so that further lookups for authentication have the correct
+			// identifier.
 			args.User = tree.Name(value).Normalize()
 
 		case "results_buffer_size":

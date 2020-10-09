@@ -28,6 +28,9 @@ import (
 // GetUserHashedPassword determines if the given user exists and
 // also returns a password retrieval function.
 //
+// The caller is responsible for normalizing the username.
+// (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
+//
 // The function is tolerant of unavailable clusters (or unavailable
 // system.user) as follows:
 //
@@ -60,15 +63,14 @@ func GetUserHashedPassword(
 	validUntilFn func(ctx context.Context) (timestamp *tree.DTimestamp, err error),
 	err error,
 ) {
-	normalizedUsername := tree.Name(username).Normalize()
-	isRoot := normalizedUsername == security.RootUser
+	isRoot := username == security.RootUser
 
 	if isRoot {
 		// As explained above, for root we report that the user exists
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
 		rootFn := func(ctx context.Context) ([]byte, error) {
-			_, _, hashedPassword, _, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
+			_, _, hashedPassword, _, err := retrieveUserAndPassword(ctx, ie, isRoot, username)
 			return hashedPassword, err
 		}
 
@@ -81,7 +83,7 @@ func GetUserHashedPassword(
 
 	// Other users must reach for system.users no matter what, because
 	// only that contains the truth about whether the user exists.
-	exists, canLogin, hashedPassword, validUntil, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
+	exists, canLogin, hashedPassword, validUntil, err := retrieveUserAndPassword(ctx, ie, isRoot, username)
 	return exists, canLogin,
 		func(ctx context.Context) ([]byte, error) { return hashedPassword, nil },
 		func(ctx context.Context) (*tree.DTimestamp, error) { return validUntil, nil },
