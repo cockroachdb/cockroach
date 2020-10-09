@@ -164,9 +164,9 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fenginepb_2fmvcc_2eproto ::goo
 namespace protobuf_util_2fhlc_2ftimestamp_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2fhlc_2ftimestamp_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Timestamp;
 }  // namespace protobuf_util_2fhlc_2ftimestamp_2eproto
-namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto {
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_RecordedSpan;
-}  // namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto
+namespace protobuf_util_2ftracing_2ftracingpb_2frecorded_5fspan_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2ftracingpb_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_RecordedSpan;
+}  // namespace protobuf_util_2ftracing_2ftracingpb_2frecorded_5fspan_2eproto
 namespace cockroach {
 namespace roachpb {
 class RequestHeaderDefaultTypeInternal {
@@ -2753,7 +2753,7 @@ static void InitDefaultsBatchResponse_Header() {
       &protobuf_roachpb_2ferrors_2eproto::scc_info_AmbiguousResultError.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction.base,
-      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_RecordedSpan.base,
+      &protobuf_util_2ftracing_2ftracingpb_2frecorded_5fspan_2eproto::scc_info_RecordedSpan.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_RangeInfo.base,}};
 
 static void InitDefaultsBatchResponse() {

@@ -62,7 +62,7 @@ add_library(roach
   protos/util/hlc/legacy_timestamp.pb.cc
   protos/util/hlc/timestamp.pb.cc
   protos/util/log/log.pb.cc
-  protos/util/tracing/recorded_span.pb.cc
+  protos/util/tracing/tracingpb/recorded_span.pb.cc
   protos/util/unresolved_addr.pb.cc
   rocksdbutils/env_encryption.cc
 )

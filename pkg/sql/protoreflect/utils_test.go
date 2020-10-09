@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
@@ -76,8 +76,8 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 		},
 		{ // Message with embedded google.protobuf.Any message;
 			// nested inside other message; with maps
-			pbname: "cockroach.util.tracing.RecordedSpan",
-			message: &tracing.RecordedSpan{
+			pbname: "cockroach.util.tracing.tracingpb.RecordedSpan",
+			message: &tracingpb.RecordedSpan{
 				TraceID: 123,
 				Tags:    map[string]string{"one": "1", "two": "2", "three": "3"},
 				Stats:   makeAny(t, &descpb.ColumnDescriptor{Name: "bogus stats"}),

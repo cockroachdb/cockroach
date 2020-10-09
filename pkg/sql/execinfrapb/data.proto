@@ -28,7 +28,7 @@ import "sql/pgwire/pgerror/errors.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/encoded_datum.proto";
 import "sql/types/types.proto";
-import "util/tracing/recorded_span.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 import "google/protobuf/any.proto";
@@ -247,7 +247,7 @@ message RemoteProducerMetadata {
     repeated roachpb.RangeInfo range_info = 1 [(gogoproto.nullable) = false];
   }
   message TraceData {
-    repeated util.tracing.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
+    repeated util.tracing.tracingpb.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
   }
   // RowNum is used to count the rows sent from a processor. It is used in tests
   // to check that metadata is propagated correctly.
