@@ -1467,3 +1467,56 @@ vectorized: false
 
 statement ok
 SET prefer_lookup_joins_for_fks = false
+
+# Verify that we're using a hash anti-join when performing the FK check in case
+# when the parent table is much smaller than the number of rows being inserted
+# into the child table.
+statement ok
+CREATE TABLE small_parent (p INT PRIMARY KEY);
+ALTER TABLE small_parent INJECT STATISTICS '[
+  {
+    "columns": ["p"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+statement ok
+CREATE TABLE large_child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES small_parent(p))
+
+query T
+EXPLAIN INSERT INTO large_child SELECT i, i % 10 + 1 FROM generate_series(1, 10000) AS i
+----
+distribution: local
+vectorized: false
+·
+• root
+│
+├── • insert
+│   │ into: large_child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • project set
+│               │
+│               └── • emptyrow
+│
+└── • fk-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (anti)
+            │ equality: (?column?) = (p)
+            │ right cols are key
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  estimated row count: 10
+                  table: small_parent@primary
+                  spans: FULL SCAN
