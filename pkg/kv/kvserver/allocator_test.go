@@ -925,7 +925,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	repl.mu.state.Stats = &enginepb.MVCCStats{}
 	repl.mu.Unlock()
 
-	repl.leaseholderStats = newReplicaStats(clock, nil)
+	repl.replicaStats = newReplicaStats(clock, nil)
 	repl.writeStats = newReplicaStats(clock, nil)
 
 	var rangeUsageInfo RangeUsageInfo

@@ -500,7 +500,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		rs.record(store.Node.NodeID)
 	}
 	manual.Increment(int64(MinStatsDuration + time.Second))
-	replica.leaseholderStats = rs
+	replica.replicaStats = rs
 	replica.writeStats = rs
 
 	rangeUsageInfo := rangeUsageInfoForRepl(replica)
@@ -510,7 +510,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
 	}
-	QPS, _ := replica.leaseholderStats.avgQPS()
+	QPS, _ := replica.replicaStats.avgQPS()
 	WPS, _ := replica.writeStats.avgQPS()
 	if expectedRangeCount := int32(6); desc.Capacity.RangeCount != expectedRangeCount {
 		t.Errorf("expected RangeCount %d, but got %d", expectedRangeCount, desc.Capacity.RangeCount)
@@ -607,7 +607,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)
 	}
-	replica.leaseholderStats = newReplicaStats(store.Clock(), nil)
+	replica.replicaStats = newReplicaStats(store.Clock(), nil)
 
 	rangeUsageInfo := rangeUsageInfoForRepl(replica)
 

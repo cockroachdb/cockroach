@@ -443,7 +443,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				*localDesc,
 				candidate.StoreID,
 				candidates,
-				replWithStats.repl.leaseholderStats,
+				replWithStats.repl.replicaStats,
 			) {
 				log.VEventf(ctx, 3, "r%d is on s%d due to follow-the-workload; skipping",
 					desc.RangeID, localDesc.StoreID)

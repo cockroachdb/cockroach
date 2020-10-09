@@ -100,7 +100,7 @@ func newUnloadedReplica(
 		r.leaseHistory = newLeaseHistory()
 	}
 	if store.cfg.StorePool != nil {
-		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
+		r.replicaStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
 	}
 	// Pass nil for the localityOracle because we intentionally don't track the
 	// origin locality of write load.

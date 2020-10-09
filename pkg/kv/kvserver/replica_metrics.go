@@ -227,7 +227,7 @@ func calcBehindCount(
 // that weren't sent through a DistSender, which in practice should be
 // practically none).
 func (r *Replica) QueriesPerSecond() float64 {
-	qps, _ := r.leaseholderStats.avgQPS()
+	qps, _ := r.replicaStats.avgQPS()
 	return qps
 }
 

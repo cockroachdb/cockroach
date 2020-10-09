@@ -52,8 +52,8 @@ func (r *Replica) sendWithRangeID(
 	ctx context.Context, rangeID roachpb.RangeID, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
-	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
-		r.leaseholderStats.record(ba.Header.GatewayNodeID)
+	if r.replicaStats != nil && ba.Header.GatewayNodeID != 0 {
+		r.replicaStats.record(ba.Header.GatewayNodeID)
 	}
 
 	// Add the range log tag.

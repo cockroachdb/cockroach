@@ -97,7 +97,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 		// TODO(a-robinson): The below three lines won't be needed once the old
 		// rangeInfo code is ripped out of the allocator.
 		repl.mu.state.Stats = &enginepb.MVCCStats{}
-		repl.leaseholderStats = newReplicaStats(s.Clock(), nil)
+		repl.replicaStats = newReplicaStats(s.Clock(), nil)
 		repl.writeStats = newReplicaStats(s.Clock(), nil)
 		acc.addReplica(replicaWithStats{
 			repl: repl,

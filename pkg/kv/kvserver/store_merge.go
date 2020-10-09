@@ -56,8 +56,8 @@ func (s *Store) MergeRange(
 		return errors.Errorf("cannot remove range: %s", err)
 	}
 
-	if leftRepl.leaseholderStats != nil {
-		leftRepl.leaseholderStats.resetRequestCounts()
+	if leftRepl.replicaStats != nil {
+		leftRepl.replicaStats.resetRequestCounts()
 	}
 	if leftRepl.writeStats != nil {
 		// Note: this could be drastically improved by adding a replicaStats method

@@ -319,7 +319,7 @@ func (s *Store) SplitRange(
 
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
-	leftRepl.leaseholderStats.resetRequestCounts()
+	leftRepl.replicaStats.resetRequestCounts()
 
 	if rightReplOrNil == nil {
 		throwawayRightWriteStats := new(replicaStats)

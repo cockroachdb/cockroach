@@ -222,7 +222,7 @@ func rangeUsageInfoForRepl(repl *Replica) RangeUsageInfo {
 	info := RangeUsageInfo{
 		LogicalBytes: repl.GetMVCCStats().Total(),
 	}
-	if queriesPerSecond, dur := repl.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+	if queriesPerSecond, dur := repl.replicaStats.avgQPS(); dur >= MinStatsDuration {
 		info.QueriesPerSecond = queriesPerSecond
 	}
 	if writesPerSecond, dur := repl.writeStats.avgQPS(); dur >= MinStatsDuration {
