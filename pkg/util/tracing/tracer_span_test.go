@@ -53,7 +53,7 @@ func TestRecordingString(t *testing.T) {
 
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 3"))
 
-	ch2 := StartChildSpan("local child", root, nil /* logTags */, false /* separateRecording */)
+	ch2 := tr.StartChildSpan("local child", root.(*Span).SpanContext(), nil /* logTags */, false /* separateRecording */)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 4"))
 	ch2.LogFields(otlog.String(tracingpb.LogMessageField, "local child 1"))
 	ch2.Finish()
@@ -76,6 +76,7 @@ span remote child:
 	tags: sb=1
 	event: remote child 1
 span local child:
+	tags: sb=1
 	event: local child 1
 `)
 	require.NoError(t, err)
@@ -86,7 +87,7 @@ event:root 1
     event:remote child 1
 event:root 2
 event:root 3
-    === operation:local child
+    === operation:local child sb:1
     event:local child 1
 event:root 4
 event:root 5
