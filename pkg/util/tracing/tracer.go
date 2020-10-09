@@ -270,24 +270,24 @@ func (t *Tracer) StartSpan(
 
 	s := &span{
 		tracer: t,
-		crdbSpan: crdbSpan{
+		crdb: crdbSpan{
 			operation: operationName,
 			startTime: sso.StartTime,
 			logTags:   logTags,
 		},
 	}
-	if s.startTime.IsZero() {
-		s.startTime = time.Now()
+	if s.crdb.startTime.IsZero() {
+		s.crdb.startTime = time.Now()
 	}
-	s.mu.duration = -1
+	s.crdb.mu.duration = -1
 
 	if !hasParent {
 		// No parent Span; allocate new trace id.
-		s.TraceID = uint64(rand.Int63())
+		s.crdb.TraceID = uint64(rand.Int63())
 	} else {
-		s.TraceID = parentCtx.TraceID
+		s.crdb.TraceID = parentCtx.TraceID
 	}
-	s.SpanID = uint64(rand.Int63())
+	s.crdb.SpanID = uint64(rand.Int63())
 
 	if t.useNetTrace() {
 		s.netTr = trace.New("tracing", operationName)
@@ -295,12 +295,12 @@ func (t *Tracer) StartSpan(
 	}
 
 	if hasParent {
-		s.parentSpanID = parentCtx.SpanID
+		s.crdb.parentSpanID = parentCtx.SpanID
 		// Copy baggage from parent.
 		if l := len(parentCtx.Baggage); l > 0 {
-			s.mu.Baggage = make(map[string]string, l)
+			s.crdb.mu.Baggage = make(map[string]string, l)
 			for k, v := range parentCtx.Baggage {
-				s.mu.Baggage[k] = v
+				s.crdb.mu.Baggage[k] = v
 			}
 		}
 	}
@@ -311,7 +311,7 @@ func (t *Tracer) StartSpan(
 
 	// Copy baggage items to tags so they show up in the shadow tracer UI,
 	// x/net/trace, or recordings.
-	for k, v := range s.mu.Baggage {
+	for k, v := range s.crdb.mu.Baggage {
 		s.SetTag(k, v)
 	}
 
@@ -367,7 +367,7 @@ func (t *Tracer) StartRootSpan(
 
 	s := &span{
 		tracer: t,
-		crdbSpan: crdbSpan{
+		crdb: crdbSpan{
 			spanMeta: spanMeta{
 				TraceID: uint64(rand.Int63()),
 				SpanID:  uint64(rand.Int63()),
@@ -377,7 +377,7 @@ func (t *Tracer) StartRootSpan(
 			logTags:   logTags,
 		},
 	}
-	s.mu.duration = -1
+	s.crdb.mu.duration = -1
 
 	shadowTracer := t.getShadowTracer()
 	if shadowTracer != nil {
@@ -431,36 +431,36 @@ func StartChildSpan(
 
 	s := &span{
 		tracer: tr,
-		crdbSpan: crdbSpan{
+		crdb: crdbSpan{
 			operation:    opName,
 			startTime:    time.Now(),
-			parentSpanID: pSpan.SpanID,
+			parentSpanID: pSpan.crdb.SpanID,
 			logTags:      logTags,
 		},
 	}
 
 	// Copy baggage from parent.
-	pSpan.mu.Lock()
-	if l := len(pSpan.mu.Baggage); l > 0 {
-		s.mu.Baggage = make(map[string]string, l)
-		for k, v := range pSpan.mu.Baggage {
-			s.mu.Baggage[k] = v
+	pSpan.crdb.mu.Lock()
+	if l := len(pSpan.crdb.mu.Baggage); l > 0 {
+		s.crdb.mu.Baggage = make(map[string]string, l)
+		for k, v := range pSpan.crdb.mu.Baggage {
+			s.crdb.mu.Baggage[k] = v
 		}
 	}
 
-	s.TraceID = pSpan.TraceID
-	s.SpanID = uint64(rand.Int63())
+	s.crdb.TraceID = pSpan.crdb.TraceID
+	s.crdb.SpanID = uint64(rand.Int63())
 
 	if pSpan.ot.shadowTr != nil {
 		linkShadowSpan(s, pSpan.ot.shadowTr, pSpan.ot.shadowSpan.Context(), opentracing.ChildOfRef)
 	}
 
-	recordingType := pSpan.mu.recording.recordingType
+	recordingType := pSpan.crdb.mu.recording.recordingType
 
 	if pSpan.netTr != nil {
 		s.netTr = trace.New("tracing", opName)
 		s.netTr.SetMaxEvents(maxLogsPerSpan)
-		if startTags := s.logTags; startTags != nil {
+		if startTags := s.crdb.logTags; startTags != nil {
 			tags := startTags.Get()
 			for i := range tags {
 				tag := &tags[i]
@@ -471,12 +471,12 @@ func StartChildSpan(
 
 	if pSpan.netTr != nil || pSpan.ot.shadowTr != nil {
 		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
-		for k, v := range s.mu.Baggage {
+		for k, v := range s.crdb.mu.Baggage {
 			s.SetTag(k, v)
 		}
 	}
 
-	pSpan.mu.Unlock()
+	pSpan.crdb.mu.Unlock()
 
 	// Start recording if necessary.
 	if recordingType != NoRecording {
