@@ -1625,6 +1625,7 @@ $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
 .PHONY: execgen
+execgen: ## Regenerate generated code for the vectorized execution engine.
 execgen: $(EXECGEN_TARGETS) bin/execgen
 	for i in $(EXECGEN_TARGETS); do echo EXECGEN $$i && ./bin/execgen -fmt=false $$i > $$i; done
 	goimports -w $(EXECGEN_TARGETS)
