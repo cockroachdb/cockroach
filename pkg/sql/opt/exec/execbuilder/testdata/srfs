@@ -141,27 +141,27 @@ sort                               ·                    ·                     
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
 ----
-·                            distribution         local                  ·                        ·
-·                            vectorized           true                   ·                        ·
-project                      ·                    ·                      (generate_series)        ·
- │                           estimated row count  3333 (missing stats)   ·                        ·
- └── project set             ·                    ·                      (x, z, generate_series)  ·
-      │                      estimated row count  3333 (missing stats)   ·                        ·
-      │                      render 0             generate_series(x, z)  ·                        ·
-      └── cross join (semi)  ·                    ·                      (x, z)                   ·
-           │                 estimated row count  333 (missing stats)    ·                        ·
-           │                 pred                 z < generate_series    ·                        ·
-           ├── scan          ·                    ·                      (x, z)                   ·
-           │                 estimated row count  1000 (missing stats)   ·                        ·
-           │                 table                xz@primary             ·                        ·
-           │                 spans                FULL SCAN              ·                        ·
-           └── project set   ·                    ·                      (x, y, generate_series)  ·
-                │            estimated row count  10000 (missing stats)  ·                        ·
-                │            render 0             generate_series(x, y)  ·                        ·
-                └── scan     ·                    ·                      (x, y)                   ·
-·                            estimated row count  1000 (missing stats)   ·                        ·
-·                            table                xy@primary             ·                        ·
-·                            spans                FULL SCAN              ·                        ·
+·                                  distribution         local                  ·                        ·
+·                                  vectorized           true                   ·                        ·
+project                            ·                    ·                      (generate_series)        ·
+ │                                 estimated row count  3333 (missing stats)   ·                        ·
+ └── project set                   ·                    ·                      (x, z, generate_series)  ·
+      │                            estimated row count  3333 (missing stats)   ·                        ·
+      │                            render 0             generate_series(x, z)  ·                        ·
+      └── cross join (right semi)  ·                    ·                      (x, z)                   ·
+           │                       estimated row count  333 (missing stats)    ·                        ·
+           │                       pred                 z < generate_series    ·                        ·
+           ├── project set         ·                    ·                      (x, y, generate_series)  ·
+           │    │                  estimated row count  10000 (missing stats)  ·                        ·
+           │    │                  render 0             generate_series(x, y)  ·                        ·
+           │    └── scan           ·                    ·                      (x, y)                   ·
+           │                       estimated row count  1000 (missing stats)   ·                        ·
+           │                       table                xy@primary             ·                        ·
+           │                       spans                FULL SCAN              ·                        ·
+           └── scan                ·                    ·                      (x, z)                   ·
+·                                  estimated row count  1000 (missing stats)   ·                        ·
+·                                  table                xz@primary             ·                        ·
+·                                  spans                FULL SCAN              ·                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
