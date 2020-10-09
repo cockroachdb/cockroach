@@ -17,14 +17,15 @@ import {SessionTableTitle} from "src/views/sessions/sessionsTableContent";
 import {TimestampToMoment} from "src/util/convert";
 import {BytesWithPrecision, DATE_FORMAT} from "src/util/format";
 import {Link} from "react-router-dom";
-import React, {useState} from "react";
-import {Anchor, Tooltip} from "src/components";
+import React from "react";
+import { Button, Tooltip } from "src/components";
 import {Moment} from "moment";
 import {StatementLink} from "src/views/statements/statementsTableContent";
 import ISession = cockroach.server.serverpb.ISession;
-import {Button, Menu, Popover} from "antd";
 import {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
 import {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
+import { Dropdown, Item as DropdownItem } from "src/components/dropdown";
+import { Icon } from "antd";
 
 const cx = classNames.bind(styles);
 
@@ -38,7 +39,6 @@ export function makeSessionsColumns(
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
 ): ColumnDescriptor<SessionInfo>[]  {
-  const [openState, setIsOpen] = useState<string>("");
   return [
     {
       title: SessionTableTitle.sessionAge,
@@ -107,56 +107,55 @@ export function makeSessionsColumns(
     {
       title: SessionTableTitle.actions,
       className: cx("cl-table__col-session-actions"),
+      titleAlign: "right",
       cell: ({session}) => {
-        const sessionId = session.id.join("");
-        const menuItems = (
-          <Menu>
-            <Menu.Item
-              disabled={session.active_queries?.length === 0}
-            >
-              <Anchor
-                onClick={() => {
-                  if (session.active_queries?.length > 0) {
-                    terminateQueryRef?.current?.showModalFor({
-                      query_id: session.active_queries[0].id,
-                      node_id: session.node_id.toString(),
-                    });
-                  }
-                }}
-              >
-                Terminate Statement
-              </Anchor>
-            </Menu.Item>
-            <Menu.Item>
-              <Anchor
-                onClick={() => terminateSessionRef?.current?.showModalFor({
-                  session_id: session.id,
+        const menuItems: DropdownItem[] = [
+          {
+            value: "terminateStatement",
+            name: "Terminate Statement",
+            disabled: session.active_queries?.length === 0,
+          },
+          {
+            value: "terminateSession",
+            name: "Terminate Session",
+          },
+        ];
+
+        const onMenuItemChange = (value: "terminateStatement" | "terminateSession") => {
+          switch (value) {
+            case "terminateSession":
+              terminateSessionRef?.current?.showModalFor({
+                session_id: session.id,
+                node_id: session.node_id.toString(),
+              });
+              break;
+            case "terminateStatement":
+              if (session.active_queries?.length > 0) {
+                terminateQueryRef?.current?.showModalFor({
+                  query_id: session.active_queries[0].id,
                   node_id: session.node_id.toString(),
-                })}
-              >
-                Terminate Session
-              </Anchor>
-            </Menu.Item>
-          </Menu>
-        );
-        return (
-          <Popover
-            placement="bottomRight"
-            trigger="click"
-            visible={openState === sessionId}
-            onVisibleChange={(isVisible: boolean) => {
-              if (!isVisible) {
-                setIsOpen("");
-              } else {
-                setIsOpen(sessionId);
+                });
               }
-            }}
-            content={menuItems}
-          >
-            <Button>
-              ...
-            </Button>
-          </Popover>
+              break;
+            default:
+              break;
+          }
+        };
+
+        const renderDropdownToggleButton = () => (
+          <Button type="secondary" size="small">
+            <Icon type="ellipsis" />
+          </Button>
+        );
+
+        return (
+          <Dropdown
+            items={menuItems}
+            dropdownToggleButton={renderDropdownToggleButton}
+            onChange={onMenuItemChange}
+            className={cx("session-action--dropdown")}
+            menuPlacement="right"
+          />
         );
       },
     },
