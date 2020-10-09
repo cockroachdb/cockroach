@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -130,7 +130,7 @@ func (r *Replica) RangeFeed(
 ) *roachpb.Error {
 	if !r.isSystemRange() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-			base.DocsURL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
 	ctx := r.AnnotateCtx(stream.Context())
 

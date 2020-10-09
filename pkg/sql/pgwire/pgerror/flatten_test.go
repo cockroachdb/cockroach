@@ -17,8 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/testutils"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFlatten(t *testing.T) {
@@ -93,6 +96,58 @@ func TestFlatten(t *testing.T) {
 			func(t testutils.T, e *pgerror.Error) {
 				t.CheckRegexpEqual(e.Message, "result is ambiguous.*woo")
 				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.StatementCompletionUnknown)
+			},
+		},
+		{
+			errors.Wrap(
+				roachpb.NewTransactionRetryWithProtoRefreshError(
+					"test",
+					uuid.MakeV4(),
+					roachpb.Transaction{},
+				),
+				"",
+			),
+			func(t testutils.T, e *pgerror.Error) {
+				require.Regexp(t, `transaction-retry-error-reference\.html`, e.Hint)
+			},
+		},
+		{
+			errors.Wrap(
+				roachpb.NewTransactionRetryWithProtoRefreshError(
+					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil).Error(),
+					uuid.MakeV4(),
+					roachpb.Transaction{},
+				),
+				"",
+			),
+			func(t testutils.T, e *pgerror.Error) {
+				require.Regexp(t, `transaction-retry-error-reference\.html#readwithinuncertaintyinterval`, e.Hint)
+			},
+		},
+		{
+			errors.Wrap(
+				roachpb.NewTransactionRetryWithProtoRefreshError(
+					roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "").Error(),
+					uuid.MakeV4(),
+					roachpb.Transaction{},
+				),
+				"",
+			),
+			func(t testutils.T, e *pgerror.Error) {
+				require.Regexp(t, `transaction-retry-error-reference\.html#retry_serializable`, e.Hint)
+			},
+		},
+		{
+			errors.Wrap(
+				roachpb.NewTransactionRetryWithProtoRefreshError(
+					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED).Error(),
+					uuid.MakeV4(),
+					roachpb.Transaction{},
+				),
+				"",
+			),
+			func(t testutils.T, e *pgerror.Error) {
+				require.Regexp(t, `transaction-retry-error-reference\.html#abort_reason_pusher_aborted`, e.Hint)
 			},
 		},
 	}
