@@ -11,6 +11,7 @@
 package jobs
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -105,32 +106,37 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		selectStmt := "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
+		stmt := "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
 		if j.sessionID != "" {
-			selectStmt = fmt.Sprintf("%s AND claim_session_id=$2", selectStmt)
+			stmt = "SELECT status, payload, progress, claim_session_id FROM system.jobs WHERE id = $1"
 		}
 		var err error
 		var row tree.Datums
-		if j.sessionID == "" {
-			row, err = j.registry.ex.QueryRowEx(
-				ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
-				selectStmt, *j.id)
-		} else {
-			row, err = j.registry.ex.QueryRowEx(
-				ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
-				selectStmt, *j.id, j.sessionID.UnsafeBytes())
-		}
+		row, err = j.registry.ex.QueryRowEx(
+			ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
+			stmt, *j.id,
+		)
 		if err != nil {
 			return err
 		}
 		if row == nil {
-			return errors.Errorf("no such job %d found with session %s", *j.ID(), j.SessionIDString())
+			return errors.Errorf("job %d: not found in system.jobs table", *j.ID())
 		}
 
 		statusString, ok := row[0].(*tree.DString)
 		if !ok {
 			return errors.AssertionFailedf("job %d: expected string status, but got %T", *j.id, statusString)
 		}
+
+		if j.sessionID != "" {
+			storedSession := []byte(*row[3].(*tree.DBytes))
+			if !bytes.Equal(storedSession, j.sessionID.UnsafeBytes()) {
+				return errors.Errorf(
+					"job %d: with status '%s': expected session '%s' but found '%s'",
+					*j.ID(), statusString, j.sessionID, storedSession)
+			}
+		}
+
 		status := Status(*statusString)
 		if payload, err = UnmarshalPayload(row[1]); err != nil {
 			return err
