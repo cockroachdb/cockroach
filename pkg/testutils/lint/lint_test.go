@@ -708,7 +708,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`\btime\.(Now|Since|Unix)\(`,
+			`\btime\.(Now|Since|Unix|LoadLocation)\(`,
 			"--",
 			"*.go",
 			":!**/embedded.go",

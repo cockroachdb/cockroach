@@ -14,21 +14,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/errors"
+	"4d63.com/tz"
 )
-
-var errTZDataNotFound = errors.New("timezone data cannot be found")
 
 // LoadLocation returns the time.Location with the given name.
 // The name is taken to be a location name corresponding to a file
 // in the IANA Time Zone database, such as "America/New_York".
 //
 // We do not use Go's time.LoadLocation() directly because:
-// 1) it maps "Local" to the local time zone, whereas we want UTC.
-// 2) when a tz is not found, it reports some garbage message
-// related to zoneinfo.zip, which we don't ship, instead
-// of a more useful message like "the tz file with such name
-// is not present in one of the standard tz locations".
+// 1) It maps "Local" to the local time zone, whereas we want UTC.
+// 2) It depends on the operating system's installation of zoneinfo.zip.
+//    Instead, we use 4d63.com/tz's embedded time.
+//    In Go1.15+, we can re-use time.LoadLocation if we include
+//    https://tip.golang.org/doc/go1.15#time/tzdata.
 func LoadLocation(name string) (*time.Location, error) {
 	switch strings.ToLower(name) {
 	case "local", "default":
@@ -39,9 +37,5 @@ func LoadLocation(name string) (*time.Location, error) {
 		// case-insensitive lookup.
 		name = "UTC"
 	}
-	l, err := time.LoadLocation(name)
-	if err != nil && strings.Contains(err.Error(), "zoneinfo.zip") {
-		err = errTZDataNotFound
-	}
-	return l, err
+	return tz.LoadLocation(name)
 }
