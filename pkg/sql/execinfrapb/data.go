@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -179,7 +179,7 @@ type ProducerMetadata struct {
 	// TODO(vivek): change to type Error
 	Err error
 	// TraceData is sent if snowball tracing is enabled.
-	TraceData []tracing.RecordedSpan
+	TraceData []tracingpb.RecordedSpan
 	// LeafTxnFinalState contains the final state of the LeafTxn to be
 	// sent from leaf flows to the RootTxn held by the flow's ultimate
 	// receiver.

@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	proto "github.com/gogo/protobuf/proto"
@@ -139,7 +140,7 @@ type crdbSpan struct {
 			// started recording.
 			children []*span
 			// remoteSpan contains the list of remote child spans manually imported.
-			remoteSpans []RecordedSpan
+			remoteSpans []tracingpb.RecordedSpan
 		}
 
 		// tags are only set when recording. These are tags that have been added to
@@ -315,7 +316,7 @@ func IsRecordable(os opentracing.Span) bool {
 
 // Recording represents a group of RecordedSpans, as returned by GetRecording.
 // Spans are sorted by StartTime.
-type Recording []RecordedSpan
+type Recording []tracingpb.RecordedSpan
 
 // GetRecording retrieves the current recording, if the span has recording
 // enabled. This can be called while spans that are part of the recording are
@@ -423,13 +424,13 @@ func (r Recording) String() string {
 }
 
 // OrphanSpans returns the spans with parents missing from the recording.
-func (r Recording) OrphanSpans() []RecordedSpan {
+func (r Recording) OrphanSpans() []tracingpb.RecordedSpan {
 	spanIDs := make(map[uint64]struct{})
 	for _, sp := range r {
 		spanIDs[sp.SpanID] = struct{}{}
 	}
 
-	var orphans []RecordedSpan
+	var orphans []tracingpb.RecordedSpan
 	for i, sp := range r {
 		if i == 0 {
 			// The first span can be a root span. Note that any other root span will
@@ -460,20 +461,20 @@ func (r Recording) FindLogMessage(pattern string) (string, bool) {
 
 // FindSpan returns the span with the given operation. The bool retval is false
 // if the span is not found.
-func (r Recording) FindSpan(operation string) (RecordedSpan, bool) {
+func (r Recording) FindSpan(operation string) (tracingpb.RecordedSpan, bool) {
 	for _, sp := range r {
 		if sp.Operation == operation {
 			return sp, true
 		}
 	}
-	return RecordedSpan{}, false
+	return tracingpb.RecordedSpan{}, false
 }
 
 // visitSpan returns the log messages for sp, and all of sp's children.
 //
 // All messages from a span are kept together. Sibling spans are ordered within
 // the parent in their start order.
-func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
+func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogData {
 	ownLogs := make([]traceLogData, 0, len(sp.Logs)+1)
 
 	conv := func(l opentracing.LogRecord, ref time.Time) traceLogData {
@@ -594,7 +595,7 @@ func (r Recording) ToJaegerJSON(stmt string) (string, error) {
 	// getProcessID figures out what "process" a span belongs to. It looks for an
 	// "node: <node id>" tag. The processes map is populated with an entry for every
 	// node present in the trace.
-	getProcessID := func(sp RecordedSpan) jaegerjson.ProcessID {
+	getProcessID := func(sp tracingpb.RecordedSpan) jaegerjson.ProcessID {
 		node := "unknown node"
 		for k, v := range sp.Tags {
 			if k == "node" {
@@ -684,7 +685,7 @@ type TraceCollection struct {
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
-func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
+func ImportRemoteSpans(os opentracing.Span, remoteSpans []tracingpb.RecordedSpan) error {
 	s := os.(*span)
 	if !s.crdb.isRecording() {
 		return errors.New("adding Raw Spans to a span that isn't recording")
@@ -823,7 +824,7 @@ func (s *span) LogFields(fields ...otlog.Field) {
 		// TODO(radu): when LightStep supports arbitrary fields, we should make
 		// the formatting of the message consistent with that. Until then we treat
 		// legacy events that just have an "event" key specially.
-		if len(fields) == 1 && fields[0].Key() == LogMessageField {
+		if len(fields) == 1 && fields[0].Key() == tracingpb.LogMessageField {
 			s.netTr.LazyPrintf("%s", fields[0].Value())
 		} else {
 			var buf bytes.Buffer
@@ -898,12 +899,12 @@ func (s *span) Tracer() opentracing.Tracer {
 
 // LogEvent is part of the opentracing.Span interface. Deprecated.
 func (s *span) LogEvent(event string) {
-	s.LogFields(otlog.String(LogMessageField, event))
+	s.LogFields(otlog.String(tracingpb.LogMessageField, event))
 }
 
 // LogEventWithPayload is part of the opentracing.Span interface. Deprecated.
 func (s *span) LogEventWithPayload(event string, payload interface{}) {
-	s.LogFields(otlog.String(LogMessageField, event), otlog.Object("payload", payload))
+	s.LogFields(otlog.String(tracingpb.LogMessageField, event), otlog.Object("payload", payload))
 }
 
 // Log is part of the opentracing.Span interface. Deprecated.
@@ -913,8 +914,8 @@ func (s *span) Log(data opentracing.LogData) {
 
 // getRecordingLocked returns the span's recording. This does not include
 // children.
-func (s *span) getRecordingLocked() RecordedSpan {
-	rs := RecordedSpan{
+func (s *span) getRecordingLocked() tracingpb.RecordedSpan {
+	rs := tracingpb.RecordedSpan{
 		TraceID:      s.crdb.TraceID,
 		SpanID:       s.crdb.SpanID,
 		ParentSpanID: s.crdb.parentSpanID,
@@ -966,12 +967,12 @@ func (s *span) getRecordingLocked() RecordedSpan {
 			addTag(k, fmt.Sprint(v))
 		}
 	}
-	rs.Logs = make([]LogRecord, len(s.crdb.mu.recording.recordedLogs))
+	rs.Logs = make([]tracingpb.LogRecord, len(s.crdb.mu.recording.recordedLogs))
 	for i, r := range s.crdb.mu.recording.recordedLogs {
 		rs.Logs[i].Time = r.Timestamp
-		rs.Logs[i].Fields = make([]LogRecord_Field, len(r.Fields))
+		rs.Logs[i].Fields = make([]tracingpb.LogRecord_Field, len(r.Fields))
 		for j, f := range r.Fields {
-			rs.Logs[i].Fields[j] = LogRecord_Field{
+			rs.Logs[i].Fields[j] = tracingpb.LogRecord_Field{
 				Key:   f.Key(),
 				Value: fmt.Sprint(f.Value()),
 			}

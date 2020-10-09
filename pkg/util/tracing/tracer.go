@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -774,7 +775,7 @@ func StartSnowballTrace(
 // Note: this test function is in this file because it needs to be used by
 // both tests in the tracing package and tests outside of it, and the function
 // itself depends on tracing.
-func TestingCheckRecordedSpans(recSpans []RecordedSpan, expected string) error {
+func TestingCheckRecordedSpans(recSpans []tracingpb.RecordedSpan, expected string) error {
 	expected = strings.TrimSpace(expected)
 	var rows []string
 	row := func(format string, args ...interface{}) {
