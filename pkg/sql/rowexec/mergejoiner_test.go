@@ -684,6 +684,22 @@ func TestMergeJoiner(t *testing.T) {
 		},
 	}
 
+	for _, c := range testCases {
+		if c.spec.Type == descpb.LeftSemiJoin || c.spec.Type == descpb.LeftAntiJoin {
+			// For every left semi and left anti join, we will automatically
+			// populate a "mirroring" test case with right semi or right anti
+			// join - all we need to do is to switch the inputs and change the
+			// join type accordingly.
+			mirroringCase := c
+			mirroringCase.spec.Type, mirroringCase.spec.OnExpr = mirrorJoinTypeAndOnExpr(c.spec.Type, c.spec.OnExpr)
+			mirroringCase.spec.LeftOrdering, mirroringCase.spec.RightOrdering = mirroringCase.spec.RightOrdering, mirroringCase.spec.LeftOrdering
+			mirroringCase.spec.LeftEqColumnsAreKey, mirroringCase.spec.RightEqColumnsAreKey = mirroringCase.spec.RightEqColumnsAreKey, mirroringCase.spec.LeftEqColumnsAreKey
+			mirroringCase.leftTypes, mirroringCase.rightTypes = mirroringCase.rightTypes, mirroringCase.leftTypes
+			mirroringCase.leftInput, mirroringCase.rightInput = mirroringCase.rightInput, mirroringCase.leftInput
+			testCases = append(testCases, mirroringCase)
+		}
+	}
+
 	// Add INTERSECT ALL cases with MergeJoinerSpecs.
 	for _, tc := range intersectAllTestCases() {
 		testCases = append(testCases, setOpTestCaseToMergeJoinerTestCase(tc))
