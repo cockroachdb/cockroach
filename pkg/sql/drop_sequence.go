@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -90,8 +91,8 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 			struct {
 				SequenceName string
 				Statement    string
-				User         string
-			}{toDel.tn.FQString(), n.n.String(), params.SessionData().User},
+				User         security.SQLUsername
+			}{toDel.tn.FQString(), n.n.String(), params.SessionData().User()},
 		); err != nil {
 			return err
 		}

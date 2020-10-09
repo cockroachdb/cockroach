@@ -49,7 +49,7 @@ WHERE claim_session_id IS NULL ORDER BY created DESC LIMIT $3 RETURNING id`,
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
 	rows, err := r.ex.QueryEx(
 		ctx, "select-running/get-claimed-jobs", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 SELECT id FROM system.jobs
 WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
 		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
@@ -124,7 +124,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID int64, s sqlliveness.Ses
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 SELECT status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)
 FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 		jobID, s.ID().UnsafeBytes(),
@@ -229,7 +229,7 @@ func (r *Registry) runJob(
 	if job.mu.payload.FinalResumeError != nil {
 		finalResumeError = errors.DecodeError(ctx, *job.mu.payload.FinalResumeError)
 	}
-	username := job.mu.payload.Username
+	username := job.mu.payload.UsernameProto.Decode()
 	typ := job.mu.payload.Type()
 	job.mu.Unlock()
 
@@ -262,7 +262,7 @@ func (r *Registry) runJob(
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := r.ex.QueryEx(
-			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
+			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 UPDATE system.jobs
 SET status =
 		CASE

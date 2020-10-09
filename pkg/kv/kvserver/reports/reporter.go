@@ -784,7 +784,7 @@ func getReportGenerationTime(
 		ctx,
 		"get-previous-timestamp",
 		txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		"select generated from system.reports_meta where id = $1",
 		rid,
 	)

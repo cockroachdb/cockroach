@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -359,14 +358,14 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 			)
 		}
 
-		if p.SessionData().User != security.RootUser {
+		if !p.SessionData().User().IsRootUser() {
 			return nil, pgerror.New(pgcode.InsufficientPrivilege,
 				"PREPARE AS OPT PLAN may only be used by root",
 			)
 		}
 	}
 
-	if p.SessionData().SaveTablesPrefix != "" && p.SessionData().User != security.RootUser {
+	if p.SessionData().SaveTablesPrefix != "" && !p.SessionData().User().IsRootUser() {
 		return nil, pgerror.New(pgcode.InsufficientPrivilege,
 			"sub-expression tables creation may only be used by root",
 		)

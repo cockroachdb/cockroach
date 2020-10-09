@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -109,9 +110,9 @@ func (n *dropViewNode) startExec(params runParams) error {
 			struct {
 				ViewName            string
 				Statement           string
-				User                string
+				User                security.SQLUsername
 				CascadeDroppedViews []string
-			}{toDel.tn.FQString(), n.n.String(), params.SessionData().User, cascadeDroppedViews},
+			}{toDel.tn.FQString(), n.n.String(), params.SessionData().User(), cascadeDroppedViews},
 		); err != nil {
 			return err
 		}

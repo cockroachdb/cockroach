@@ -83,7 +83,8 @@ func checkUserFileContent(
 	ctx context.Context,
 	t *testing.T,
 	execcCfg interface{},
-	user, userfileURI string,
+	user security.SQLUsername,
+	userfileURI string,
 	expectedContent []byte,
 ) {
 	store, err := execcCfg.(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx,
@@ -141,8 +142,8 @@ func TestUserFileUpload(t *testing.T) {
 			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath, destination))
 			require.NoError(t, err)
 
-			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUser,
-				constructUserfileDestinationURI("", destination, security.RootUser),
+			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
+				constructUserfileDestinationURI("", destination, security.RootUserName()),
 				tc.fileContent)
 		})
 
@@ -152,7 +153,7 @@ func TestUserFileUpload(t *testing.T) {
 				destination))
 			require.NoError(t, err)
 
-			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUser,
+			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
 				destination, tc.fileContent)
 		})
 
@@ -164,7 +165,7 @@ func TestUserFileUpload(t *testing.T) {
 				destination))
 			require.NoError(t, err)
 
-			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUser,
+			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
 				destination, tc.fileContent)
 		})
 	}

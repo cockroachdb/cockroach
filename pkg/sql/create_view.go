@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -136,7 +137,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
-	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User())
 
 	var newDesc *tabledesc.Mutable
 
@@ -266,11 +267,11 @@ func (n *createViewNode) startExec(params runParams) error {
 		struct {
 			ViewName  string
 			ViewQuery string
-			User      string
+			User      security.SQLUsername
 		}{
 			ViewName:  n.viewName.FQString(),
 			ViewQuery: n.viewQuery,
-			User:      params.SessionData().User,
+			User:      params.SessionData().User(),
 		},
 	)
 }

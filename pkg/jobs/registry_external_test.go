@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -51,7 +52,7 @@ func TestRoundtripJob(t *testing.T) {
 
 	storedJob := registry.NewJob(jobs.Record{
 		Description:   "beep boop",
-		Username:      "robot",
+		Username:      security.MakeSQLUsernameFromPreNormalizedString("robot"),
 		DescriptorIDs: descpb.IDs{42},
 		Details:       jobspb.RestoreDetails{},
 		Progress:      jobspb.RestoreProgress{},

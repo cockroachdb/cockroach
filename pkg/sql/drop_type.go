@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -134,8 +135,8 @@ func (n *dropTypeNode) startExec(params runParams) error {
 			struct {
 				TypeName  string
 				Statement string
-				User      string
-			}{typ.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.SessionData().User},
+				User      security.SQLUsername
+			}{typ.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.SessionData().User()},
 		); err != nil {
 			return err
 		}

@@ -289,7 +289,10 @@ func CreateNodePair(
 
 	// Allow control of the principal to place in the cert via an env var. This
 	// is intended for testing purposes only.
-	nodeUser := envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser)
+	nodeUser, _ := MakeSQLUsernameFromUserInput(
+		envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser),
+		UsernameValidation)
+
 	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
 		nodeKey.Public(), lifetime, nodeUser, hosts)
 	if err != nil {
@@ -376,7 +379,7 @@ func CreateClientPair(
 	keySize int,
 	lifetime time.Duration,
 	overwrite bool,
-	user string,
+	user SQLUsername,
 	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {

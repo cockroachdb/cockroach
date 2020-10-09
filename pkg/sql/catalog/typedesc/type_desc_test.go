@@ -226,10 +226,10 @@ func TestValidateTypeDesc(t *testing.T) {
 		Name: "type",
 	})
 
-	defaultPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUser)
-	invalidPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUser)
+	defaultPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
+	invalidPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
 	// Make the PrivilegeDescriptor invalid by granting SELECT to a type.
-	invalidPrivileges.Grant("foo", privilege.List{privilege.SELECT})
+	invalidPrivileges.Grant(security.TestUserName(), privilege.List{privilege.SELECT})
 	typeDescID := descpb.ID(keys.MaxReservedDescID + 1)
 	testData := []struct {
 		err  string
@@ -374,7 +374,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"user foo must not have SELECT privileges on system type with ID=50",
+			"user testuser must not have SELECT privileges on system type with ID=50",
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,

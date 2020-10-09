@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -61,7 +62,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 
 	schemaName := string(n.Schema)
 	if n.Schema == "" {
-		schemaName = n.AuthRole
+		schemaName = n.AuthRole.Normalized()
 	}
 
 	// Ensure there aren't any name collisions.
@@ -102,7 +103,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		privs.Users[i].Privileges &= privilege.SchemaPrivileges.ToBitField()
 	}
 
-	if n.AuthRole != "" {
+	if !n.AuthRole.Undefined() {
 		exists, err := p.RoleExists(params.ctx, n.AuthRole)
 		if err != nil {
 			return err
@@ -112,7 +113,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		}
 		privs.SetOwner(n.AuthRole)
 	} else {
-		privs.SetOwner(params.SessionData().User)
+		privs.SetOwner(params.SessionData().User())
 	}
 
 	// Create the SchemaDescriptor.
@@ -159,9 +160,9 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			SchemaName string
-			Owner      string
-			User       string
-		}{schemaName, privs.Owner, params.SessionData().User},
+			Owner      security.SQLUsername
+			User       security.SQLUsername
+		}{schemaName, privs.Owner(), params.SessionData().User()},
 	)
 }
 

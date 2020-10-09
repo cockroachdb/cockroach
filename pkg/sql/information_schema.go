@@ -208,13 +208,13 @@ var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations.html`,
 	schema: vtable.InformationSchemaAdministrableRoleAuthorizations,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
+		currentUser := p.SessionData().User()
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
 			return err
 		}
 
-		grantee := tree.NewDString(currentUser)
+		grantee := tree.NewDString(currentUser.Normalized())
 		for roleName, isAdmin := range memberMap {
 			if !isAdmin {
 				// We only show memberships with the admin option.
@@ -222,9 +222,9 @@ https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations
 			}
 
 			if err := addRow(
-				grantee,                   // grantee: always the current user
-				tree.NewDString(roleName), // role_name
-				yesString,                 // is_grantable: always YES
+				grantee,                                // grantee: always the current user
+				tree.NewDString(roleName.Normalized()), // role_name
+				yesString,                              // is_grantable: always YES
 			); err != nil {
 				return err
 			}
@@ -240,19 +240,19 @@ var informationSchemaApplicableRoles = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 	schema: vtable.InformationSchemaApplicableRoles,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
+		currentUser := p.SessionData().User()
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
 			return err
 		}
 
-		grantee := tree.NewDString(currentUser)
+		grantee := tree.NewDString(currentUser.Normalized())
 
 		for roleName, isAdmin := range memberMap {
 			if err := addRow(
-				grantee,                   // grantee: always the current user
-				tree.NewDString(roleName), // role_name
-				yesOrNoDatum(isAdmin),     // is_grantable
+				grantee,                                // grantee: always the current user
+				tree.NewDString(roleName.Normalized()), // role_name
+				yesOrNoDatum(isAdmin),                  // is_grantable
 			); err != nil {
 				return err
 			}
@@ -350,14 +350,14 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 						for i := range columns {
 							cd := &columns[i]
 							if err := addRow(
-								tree.DNull,                       // grantor
-								tree.NewDString(u.User),          // grantee
-								dbNameStr,                        // table_catalog
-								scNameStr,                        // table_schema
-								tree.NewDString(table.GetName()), // table_name
-								tree.NewDString(cd.Name),         // column_name
-								tree.NewDString(priv.String()),   // privilege_type
-								tree.DNull,                       // is_grantable
+								tree.DNull,                             // grantor
+								tree.NewDString(u.User().Normalized()), // grantee
+								dbNameStr,                              // table_catalog
+								scNameStr,                              // table_schema
+								tree.NewDString(table.GetName()),       // table_name
+								tree.NewDString(cd.Name),               // column_name
+								tree.NewDString(priv.String()),         // privilege_type
+								tree.DNull,                             // is_grantable
 							); err != nil {
 								return err
 							}
@@ -501,7 +501,7 @@ CREATE TABLE information_schema.enabled_roles (
 	ROLE_NAME STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
+		currentUser := p.SessionData().User()
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
 			return err
@@ -509,14 +509,14 @@ CREATE TABLE information_schema.enabled_roles (
 
 		// The current user is always listed.
 		if err := addRow(
-			tree.NewDString(currentUser), // role_name: the current user
+			tree.NewDString(currentUser.Normalized()), // role_name: the current user
 		); err != nil {
 			return err
 		}
 
 		for roleName := range memberMap {
 			if err := addRow(
-				tree.NewDString(roleName), // role_name
+				tree.NewDString(roleName.Normalized()), // role_name
 			); err != nil {
 				return err
 			}
@@ -1084,7 +1084,7 @@ CREATE TABLE information_schema.type_privileges (
 					// https://github.com/cockroachdb/cockroach/issues/35572
 					privs := typeDesc.TypeDescriptor.GetPrivileges().Show(privilege.Type)
 					for _, u := range privs {
-						userNameStr := tree.NewDString(u.User)
+						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
 							if err := addRow(
 								userNameStr,           // grantee
@@ -1132,7 +1132,7 @@ CREATE TABLE information_schema.schema_privileges (
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
 					for _, u := range privs {
-						userNameStr := tree.NewDString(u.User)
+						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
 							if err := addRow(
 								userNameStr,           // grantee
@@ -1461,14 +1461,14 @@ func populateTablePrivileges(
 			for _, u := range table.GetPrivileges().Show(privilege.Table) {
 				for _, priv := range u.Privileges {
 					if err := addRow(
-						tree.DNull,                     // grantor
-						tree.NewDString(u.User),        // grantee
-						dbNameStr,                      // table_catalog
-						scNameStr,                      // table_schema
-						tbNameStr,                      // table_name
-						tree.NewDString(priv),          // privilege_type
-						tree.DNull,                     // is_grantable
-						yesOrNoDatum(priv == "SELECT"), // with_hierarchy
+						tree.DNull,                           // grantor
+						tree.NewDString(u.User.Normalized()), // grantee
+						dbNameStr,                            // table_catalog
+						scNameStr,                            // table_schema
+						tbNameStr,                            // table_name
+						tree.NewDString(priv),                // privilege_type
+						tree.DNull,                           // is_grantable
+						yesOrNoDatum(priv == "SELECT"),       // with_hierarchy
 					); err != nil {
 						return err
 					}
@@ -1950,7 +1950,7 @@ func forEachTableDescWithTableLookupInternal(
 func forEachRole(
 	ctx context.Context,
 	p *planner,
-	fn func(username string, isRole bool, noLogin bool, rolValidUntil *time.Time) error,
+	fn func(username security.SQLUsername, isRole bool, noLogin bool, rolValidUntil *time.Time) error,
 ) error {
 	query := `
 SELECT
@@ -1981,7 +1981,7 @@ FROM
 	}
 
 	for _, row := range rows {
-		username := tree.MustBeDString(row[0])
+		usernameS := tree.MustBeDString(row[0])
 		isRole, ok := row[1].(*tree.DBool)
 		if !ok {
 			return errors.Errorf("isRole should be a boolean value, found %s instead", row[1].ResolvedType())
@@ -1996,8 +1996,9 @@ FROM
 		} else if row[3] != tree.DNull {
 			return errors.Errorf("rolValidUntil should be a timestamp or null value, found %s instead", row[3].ResolvedType())
 		}
-
-		if err := fn(string(username), bool(*isRole), bool(*noLogin), rolValidUntil); err != nil {
+		// system tables already contain normalized usernames.
+		username := security.MakeSQLUsernameFromPreNormalizedString(string(usernameS))
+		if err := fn(username, bool(*isRole), bool(*noLogin), rolValidUntil); err != nil {
 			return err
 		}
 	}
@@ -2006,7 +2007,7 @@ FROM
 }
 
 func forEachRoleMembership(
-	ctx context.Context, p *planner, fn func(role, member string, isAdmin bool) error,
+	ctx context.Context, p *planner, fn func(role, member security.SQLUsername, isAdmin bool) error,
 ) error {
 	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
@@ -2021,7 +2022,11 @@ func forEachRoleMembership(
 		memberName := tree.MustBeDString(row[1])
 		isAdmin := row[2].(*tree.DBool)
 
-		if err := fn(string(roleName), string(memberName), bool(*isAdmin)); err != nil {
+		// The names in the system tables are already normalized.
+		if err := fn(
+			security.MakeSQLUsernameFromPreNormalizedString(string(roleName)),
+			security.MakeSQLUsernameFromPreNormalizedString(string(memberName)),
+			bool(*isAdmin)); err != nil {
 			return err
 		}
 	}
