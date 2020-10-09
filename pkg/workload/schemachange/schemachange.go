@@ -42,7 +42,7 @@ import (
 // includes table creation but note that the tables contain no data.
 //
 // Example usage:
-// `bin/workload run schemachange --init --concurrency=2 --verbose=false --max-ops=1000`
+// `bin/workload run schemachange --init --concurrency=2 --verbose=0 --max-ops-per-worker=1000`
 // will execute up to 1000 schema change operations per txn in two concurrent txns.
 //
 // TODO(peter): This is still work in progress, we need to
