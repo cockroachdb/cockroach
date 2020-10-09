@@ -99,12 +99,13 @@ type RuleSet = util.FastIntSet
 type OptTester struct {
 	Flags Flags
 
-	catalog   cat.Catalog
-	sql       string
-	ctx       context.Context
-	semaCtx   tree.SemaContext
-	evalCtx   tree.EvalContext
-	seenRules RuleSet
+	catalog      cat.Catalog
+	sql          string
+	ctx          context.Context
+	semaCtx      tree.SemaContext
+	evalCtx      tree.EvalContext
+	matchedRules RuleSet
+	appliedRules RuleSet
 
 	builder strings.Builder
 }
@@ -147,6 +148,10 @@ type Flags struct {
 	// UnexpectedRules is a set of rules which must not be exercised for the test
 	// to pass.
 	UnexpectedRules RuleSet
+
+	// ExpectedMatchOnlyRules is a set of exploration rules which must match but
+	// not generate new expressions for the test to pass.
+	ExpectedMatchOnlyRules RuleSet
 
 	// ColStats is a list of ColSets for which a column statistic is requested.
 	ColStats []opt.ColSet
@@ -332,9 +337,18 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
 //
-//  - expect: fail the test if the rules specified by name do not match.
+//  - expect: fail the test if the rules specified by name are not "applied".
+//    For normalization rules, "applied" means that the rule's pattern matched
+//    an expression. For exploration rules, "applied" means that the rule's
+//    pattern matched an expression and the rule generated one or more new
+//    expressions in the memo.
 //
 //  - expect-not: fail the test if the rules specified by name match.
+//
+//  - expect-match-only: fail the test if the exploration rules specified by
+//    name do not match, or if they match and generate new expressions in the
+//    memo. Normalization rules cannot be specified in this flag ("matched" and
+//    "applied" are synonymous for normalization rules).
 //
 //  - disable: disables optimizer rules by name. Examples:
 //      opt disable=ConstrainScan
@@ -609,16 +623,28 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 		}
 	}
 
-	if !ot.Flags.ExpectedRules.SubsetOf(ot.seenRules) {
-		unseen := ot.Flags.ExpectedRules.Difference(ot.seenRules)
-		d.Fatalf(tb, "expected to see %s, but was not triggered. Did see %s",
-			formatRuleSet(unseen), formatRuleSet(ot.seenRules))
+	if !ot.Flags.ExpectedRules.SubsetOf(ot.appliedRules) {
+		unseen := ot.Flags.ExpectedRules.Difference(ot.appliedRules)
+		d.Fatalf(tb, "expected to apply %s, but it was not applied. Did see %s",
+			formatRuleSet(unseen), formatRuleSet(ot.appliedRules))
 	}
 
-	if ot.Flags.UnexpectedRules.Intersects(ot.seenRules) {
-		seen := ot.Flags.UnexpectedRules.Intersection(ot.seenRules)
-		d.Fatalf(tb, "expected not to see %s, but it was triggered", formatRuleSet(seen))
+	if ot.Flags.UnexpectedRules.Intersects(ot.matchedRules) {
+		seen := ot.Flags.UnexpectedRules.Intersection(ot.matchedRules)
+		d.Fatalf(tb, "expected not to match %s, but it was matched", formatRuleSet(seen))
 	}
+
+	if !ot.Flags.ExpectedMatchOnlyRules.SubsetOf(ot.matchedRules) {
+		unmatched := ot.Flags.ExpectedMatchOnlyRules.Difference(ot.matchedRules)
+		d.Fatalf(tb, "expected to match %s, but it was not matched. Did match %s",
+			formatRuleSet(unmatched), formatRuleSet(ot.matchedRules))
+	}
+
+	if ot.Flags.ExpectedMatchOnlyRules.Intersects(ot.appliedRules) {
+		applied := ot.Flags.ExpectedMatchOnlyRules.Intersection(ot.appliedRules)
+		d.Fatalf(tb, "expected %s to not generate a new expression, but it did.", formatRuleSet(applied))
+	}
+
 }
 
 // Fills in lazily-derived properties (for display).
@@ -737,6 +763,22 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return err
 		}
 		f.UnexpectedRules.UnionWith(ruleset)
+
+	case "expect-match-only":
+		ruleset, err := ruleNamesToRuleSet(arg.Vals)
+		if err != nil {
+			return err
+		}
+		for _, rule := range ruleset.Ordered() {
+			ruleName := opt.RuleName(rule)
+			if ruleName.IsNormalize() {
+				return fmt.Errorf(
+					"%v is a normalization rule and is not allowed in expect-match-only",
+					ruleName,
+				)
+			}
+		}
+		f.ExpectedMatchOnlyRules.UnionWith(ruleset)
 
 	case "colstat":
 		if len(arg.Vals) == 0 {
@@ -860,7 +902,10 @@ func (ot *OptTester) OptNorm() (opt.Expr, error) {
 		if ot.Flags.DisableRules.Contains(int(ruleName)) {
 			return false
 		}
-		ot.seenRules.Add(int(ruleName))
+		ot.matchedRules.Add(int(ruleName))
+		// Normalization rules are always marked as "applied" if they are
+		// matched.
+		ot.appliedRules.Add(int(ruleName))
 		return true
 	})
 	if !ot.Flags.NoStableFolds {
@@ -878,8 +923,20 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 		if ot.Flags.DisableRules.Contains(int(ruleName)) {
 			return false
 		}
-		ot.seenRules.Add(int(ruleName))
+		ot.matchedRules.Add(int(ruleName))
+		// Normalization rules are always marked as "applied" if they are
+		// matched.
+		if ruleName.IsNormalize() {
+			ot.appliedRules.Add(int(ruleName))
+		}
 		return true
+	})
+	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
+		// Exploration rules are marked as "applied" if they generate one or
+		// more new expressions.
+		if ruleName.IsExplore() && target != nil {
+			ot.appliedRules.Add(int(ruleName))
+		}
 	})
 	o.Factory().FoldingControl().AllowStableFolds()
 	return ot.optimizeExpr(o)
@@ -918,7 +975,10 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 		if ot.Flags.DisableRules.Contains(int(ruleName)) {
 			return false
 		}
-		ot.seenRules.Add(int(ruleName))
+		ot.matchedRules.Add(int(ruleName))
+		// Normalization rules are always marked as "applied" if they are
+		// matched.
+		ot.appliedRules.Add(int(ruleName))
 		return true
 	})
 
