@@ -56,7 +56,7 @@ DROP USER IF EXISTS user1
 statement error username "node" reserved
 DROP USER node
 
-statement error pq: username "foo☂" invalid
+statement error pq: "foo☂": username is invalid
 DROP USER foo☂
 
 statement ok

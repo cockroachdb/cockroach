@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,7 +139,7 @@ func TestGet(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		if val := cfg.GetValue([]byte(tc.key)); !proto.Equal(val, tc.value) {
+		if val := cfg.GetValue([]byte(tc.key)); !val.Equal(tc.value) {
 			t.Errorf("#%d: expected=%s, found=%s", tcNum, tc.value, val)
 		}
 	}

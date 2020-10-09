@@ -32,9 +32,9 @@ func TestPutLocal(t *testing.T) {
 	testSettings.ExternalIODir = p
 	dest := cloudimpl.MakeLocalStorageURI(p)
 
-	testExportStore(t, dest, false, security.RootUser, nil, nil)
+	testExportStore(t, dest, false, security.RootUserName(), nil, nil)
 	testListFiles(t, "nodelocal://0/listing-test/basepath",
-		security.RootUser, nil, nil)
+		security.RootUserName(), nil, nil)
 }
 
 func TestLocalIOLimits(t *testing.T) {
@@ -45,7 +45,7 @@ func TestLocalIOLimits(t *testing.T) {
 	testSettings.ExternalIODir = allowed
 
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	user := security.RootUser
+	user := security.RootUserName()
 
 	baseDir, err := cloudimpl.ExternalStorageFromURI(ctx, "nodelocal://0/", base.ExternalIODirConfig{},
 		testSettings, clientFactory, user, nil, nil)

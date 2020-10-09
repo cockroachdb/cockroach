@@ -141,13 +141,13 @@ func runBackupProcessor(
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(spec.DefaultURI, spec.User)
+	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(spec.DefaultURI, spec.User())
 	if err != nil {
 		return err
 	}
 	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range spec.URIsByLocalityKV {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, spec.User)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, spec.User())
 		if err != nil {
 			return err
 		}

@@ -29,24 +29,26 @@ func TestClientSSLSettings(t *testing.T) {
 
 	const clientCertNotFound = "problem with client cert for user .*: not found"
 	const certDirNotFound = "no certificates found"
+	invalidUser := security.MakeSQLUsernameFromPreNormalizedString("not-a-user")
+	badUser := security.MakeSQLUsernameFromPreNormalizedString("bad-user")
 
 	testCases := []struct {
 		// args
 		insecure bool
 		hasCerts bool
-		user     string
+		user     security.SQLUsername
 		// output
 		requestScheme string
 		configErr     string
 		nilConfig     bool
 		noCAs         bool
 	}{
-		{true, false, security.NodeUser, "http", "", true, false},
-		{true, true, "not-a-user", "http", "", true, false},
-		{false, true, "not-a-user", "https", clientCertNotFound, true, false},
-		{false, false, security.NodeUser, "https", certDirNotFound, false, true},
-		{false, true, security.NodeUser, "https", "", false, false},
-		{false, true, "bad-user", "https", clientCertNotFound, false, false},
+		{true, false, security.NodeUserName(), "http", "", true, false},
+		{true, true, invalidUser, "http", "", true, false},
+		{false, true, invalidUser, "https", clientCertNotFound, true, false},
+		{false, false, security.NodeUserName(), "https", certDirNotFound, false, true},
+		{false, true, security.NodeUserName(), "https", "", false, false},
+		{false, true, badUser, "https", clientCertNotFound, false, false},
 	}
 
 	for _, tc := range testCases {
@@ -112,7 +114,7 @@ func TestServerSSLSettings(t *testing.T) {
 
 	for tcNum, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUser}
+			cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUserName()}
 			if tc.hasCerts {
 				testutils.FillCerts(cfg)
 			}

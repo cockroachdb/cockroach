@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -237,7 +238,11 @@ var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NO
 // NewInternalPlanner is an exported version of newInternalPlanner. It
 // returns an interface{} so it can be used outside of the sql package.
 func NewInternalPlanner(
-	opName string, txn *kv.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
+	opName string,
+	txn *kv.Txn,
+	user security.SQLUsername,
+	memMetrics *MemoryMetrics,
+	execCfg *ExecutorConfig,
 ) (interface{}, func()) {
 	return newInternalPlanner(opName, txn, user, memMetrics, execCfg)
 }
@@ -251,7 +256,11 @@ func NewInternalPlanner(
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
-	opName string, txn *kv.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
+	opName string,
+	txn *kv.Txn,
+	user security.SQLUsername,
+	memMetrics *MemoryMetrics,
+	execCfg *ExecutorConfig,
 ) (*planner, func()) {
 	// We need a context that outlives all the uses of the planner (since the
 	// planner captures it in the EvalCtx, and so does the cleanup function that
@@ -264,8 +273,8 @@ func newInternalPlanner(
 
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
-			Database: "system",
-			User:     user,
+			Database:  "system",
+			UserProto: user.EncodeProto(),
 		},
 		SearchPath:    sessiondata.DefaultSearchPathForUser(user),
 		SequenceState: sessiondata.NewSequenceState(),
@@ -456,8 +465,8 @@ func (p *planner) Txn() *kv.Txn {
 	return p.txn
 }
 
-func (p *planner) User() string {
-	return p.SessionData().User
+func (p *planner) User() security.SQLUsername {
+	return p.SessionData().User()
 }
 
 func (p *planner) TemporarySchemaName() string {

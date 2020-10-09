@@ -151,31 +151,36 @@ func (b *baseStatusServer) getLocalSessions(
 		return nil, err
 	}
 
+	reqUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
+	if err != nil {
+		return nil, err
+	}
+
 	if !isAdmin && !hasViewActivity {
 		// For non-superusers, requests with an empty username is
 		// implicitly a request for the client's own sessions.
-		if req.Username == "" {
-			req.Username = sessionUser
+		if reqUsername.Undefined() {
+			reqUsername = sessionUser
 		}
 
 		// Non-superusers are not allowed to query sessions others than their own.
-		if sessionUser != req.Username {
+		if sessionUser != reqUsername {
 			return nil, grpcstatus.Errorf(
 				codes.PermissionDenied,
 				"client user %q does not have permission to view sessions from user %q",
-				sessionUser, req.Username)
+				sessionUser, reqUsername)
 		}
 	}
 
 	// The empty username means "all sessions".
-	showAll := req.Username == ""
+	showAll := reqUsername.Undefined()
 
 	registry := b.sessionRegistry
 	sessions := registry.SerializeAll()
 	userSessions := make([]serverpb.Session, 0, len(sessions))
 
 	for _, session := range sessions {
-		if req.Username != session.Username && !showAll {
+		if reqUsername.Normalized() != session.Username && !showAll {
 			continue
 		}
 
@@ -221,18 +226,18 @@ func findSessionByQueryID(queryID string) sessionFinder {
 }
 
 func (b *baseStatusServer) checkCancelPrivilege(
-	ctx context.Context, username string, findSession sessionFinder,
+	ctx context.Context, username security.SQLUsername, findSession sessionFinder,
 ) error {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 	// reqUser is the user who made the cancellation request.
-	var reqUser string
+	var reqUser security.SQLUsername
 	{
 		sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 		if err != nil {
 			return err
 		}
-		if username == "" || username == sessionUser {
+		if username.Undefined() || username == sessionUser {
 			reqUser = sessionUser
 		} else {
 			// When CANCEL QUERY is run as a SQL statement, sessionUser is always root
@@ -256,7 +261,8 @@ func (b *baseStatusServer) checkCancelPrivilege(
 			return err
 		}
 
-		if session.Username != reqUser {
+		sessionUser := security.MakeSQLUsernameFromPreNormalizedString(session.Username)
+		if sessionUser != reqUser {
 			// Must have CANCELQUERY privilege to cancel other users'
 			// sessions/queries.
 			ok, err := b.privilegeChecker.hasRoleOption(ctx, reqUser, roleoption.CANCELQUERY)
@@ -267,7 +273,7 @@ func (b *baseStatusServer) checkCancelPrivilege(
 				return errRequiresRoleOption(roleoption.CANCELQUERY)
 			}
 			// Non-admins cannot cancel admins' sessions/queries.
-			isAdminSession, err := b.privilegeChecker.hasAdminRole(ctx, session.Username)
+			isAdminSession, err := b.privilegeChecker.hasAdminRole(ctx, sessionUser)
 			if err != nil {
 				return err
 			}
@@ -1929,7 +1935,12 @@ func (s *statusServer) CancelSession(
 		return status.CancelSession(ctx, req)
 	}
 
-	if err := s.checkCancelPrivilege(ctx, req.Username, findSessionBySessionID(req.SessionID)); err != nil {
+	reqUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(req.SessionID)); err != nil {
 		return nil, err
 	}
 
@@ -1956,7 +1967,12 @@ func (s *statusServer) CancelQuery(
 		return status.CancelQuery(ctx, req)
 	}
 
-	if err := s.checkCancelPrivilege(ctx, req.Username, findSessionByQueryID(req.QueryID)); err != nil {
+	reqUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(req.QueryID)); err != nil {
 		return nil, err
 	}
 
@@ -2121,25 +2137,28 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 	return &serverpb.JSONResponse{Data: data}, nil
 }
 
-func userFromContext(ctx context.Context) (string, error) {
+func userFromContext(ctx context.Context) (res security.SQLUsername, err error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		// If the incoming context has metadata but no attached web session user,
 		// it's a gRPC / internal SQL connection which has root on the cluster.
-		return security.RootUser, nil
+		return security.RootUserName(), nil
 	}
 	usernames, ok := md[webSessionUserKeyStr]
 	if !ok {
 		// If the incoming context has metadata but no attached web session user,
 		// it's a gRPC / internal SQL connection which has root on the cluster.
-		return security.RootUser, nil
+		return security.RootUserName(), nil
 	}
 	if len(usernames) != 1 {
 		log.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
-		return "", fmt.Errorf(
+		return res, fmt.Errorf(
 			"context's incoming metadata contains unexpected number of usernames: %+v ", md)
 	}
-	return usernames[0], nil
+	// At this point the user is already logged in, so we can assume
+	// the username has been normalized already.
+	username := security.MakeSQLUsernameFromPreNormalizedString(usernames[0])
+	return username, nil
 }
 
 type systemInfoOnce struct {

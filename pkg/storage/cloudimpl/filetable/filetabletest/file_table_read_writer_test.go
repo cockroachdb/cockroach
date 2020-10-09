@@ -109,7 +109,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, security.RootUser)
+		executor, security.RootUserName())
 	require.NoError(t, err)
 
 	// Create first test file with multiple chunks.
@@ -160,7 +160,7 @@ func TestReadWriteFile(t *testing.T) {
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, security.RootUser)
+		executor, security.RootUserName())
 	require.NoError(t, err)
 
 	testFileName := "testfile"
@@ -311,7 +311,7 @@ func TestReadWriteFile(t *testing.T) {
 	// FileTable creation.
 	t.Run("no-db-or-schema-qualified-table-name", func(t *testing.T) {
 		_, err := filetable.NewFileToTableSystem(ctx, "foo",
-			executor, security.RootUser)
+			executor, security.RootUserName())
 		testutils.IsError(err, "could not resolve db or schema name")
 	})
 }
@@ -340,8 +340,9 @@ func TestUserGrants(t *testing.T) {
 	// Operate under non-admin user.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
+	johnUser := security.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, "john")
+		executor, johnUser)
 	require.NoError(t, err)
 
 	// Upload a file to test INSERT privilege.
@@ -421,8 +422,9 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	// Operate under non-admin user john.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
+	johnUser := security.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, "john")
+		executor, johnUser)
 	require.NoError(t, err)
 
 	_, err = uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter, kvDB)
@@ -477,8 +479,9 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	// Operate under non-admin user john.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
+	johnUser := security.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, "john")
+		executor, johnUser)
 	require.NoError(t, err)
 
 	_, err = uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter, kvDB)
@@ -511,7 +514,7 @@ func TestDatabaseScope(t *testing.T) {
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
 		InternalExecutor), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
-		executor, security.RootUser)
+		executor, security.RootUserName())
 	require.NoError(t, err)
 
 	// Verify defaultdb has the file we wrote.
@@ -528,7 +531,7 @@ func TestDatabaseScope(t *testing.T) {
 	_, err = sqlDB.Exec(`CREATE DATABASE newdb`)
 	require.NoError(t, err)
 	newFileTableReadWriter, err := filetable.NewFileToTableSystem(ctx,
-		"newdb.file_table_read_writer", executor, security.RootUser)
+		"newdb.file_table_read_writer", executor, security.RootUserName())
 	require.NoError(t, err)
 	_, err = newFileTableReadWriter.ReadFile(ctx, "file1")
 	require.True(t, os.IsNotExist(err))

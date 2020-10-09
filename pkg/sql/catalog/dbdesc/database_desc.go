@@ -16,6 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -48,7 +49,7 @@ type Mutable struct {
 
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
-func NewInitial(id descpb.ID, name string, owner string) *Mutable {
+func NewInitial(id descpb.ID, name string, owner security.SQLUsername) *Mutable {
 	return NewInitialWithPrivileges(id, name,
 		descpb.NewDefaultPrivilegeDescriptor(owner))
 }

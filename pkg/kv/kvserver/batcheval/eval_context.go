@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -97,7 +98,7 @@ type EvalContext interface {
 	GetDescAndLease(context.Context) (roachpb.RangeDescriptor, roachpb.Lease)
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
-	GetExternalStorageFromURI(ctx context.Context, uri string, user string) (cloud.ExternalStorage,
+	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error)
 }
 
@@ -222,7 +223,7 @@ func (m *mockEvalCtxImpl) GetExternalStorage(
 }
 
 func (m *mockEvalCtxImpl) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user string,
+	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	panic("unimplemented")
 }

@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -111,7 +112,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 	switch ch {
 	case '$':
 		// placeholder? $[0-9]+
-		if lex.IsDigit(s.peek()) {
+		if lexbase.IsDigit(s.peek()) {
 			s.scanPlaceholder(lval)
 			return
 		} else if s.scanDollarQuotedString(lval) {
@@ -192,7 +193,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 			s.pos++
 			lval.id = DOT_DOT
 			return
-		case lex.IsDigit(t):
+		case lexbase.IsDigit(t):
 			s.scanNumber(lval, ch)
 			return
 		}
@@ -385,11 +386,11 @@ func (s *scanner) scan(lval *sqlSymType) {
 		return
 
 	default:
-		if lex.IsDigit(ch) {
+		if lexbase.IsDigit(ch) {
 			s.scanNumber(lval, ch)
 			return
 		}
-		if lex.IsIdentStart(ch) {
+		if lexbase.IsIdentStart(ch) {
 			s.scanIdent(lval)
 			return
 		}
@@ -526,7 +527,7 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 			isLower = false
 		}
 
-		if !lex.IsIdentMiddle(ch) {
+		if !lexbase.IsIdentMiddle(ch) {
 			break
 		}
 
@@ -551,7 +552,7 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		lval.str = *(*string)(unsafe.Pointer(&b))
 	} else {
 		// The string has unicode in it. No choice but to run Normalize.
-		lval.str = lex.NormalizeName(s.in[start:s.pos])
+		lval.str = lexbase.NormalizeName(s.in[start:s.pos])
 	}
 
 	isExperimental := false
@@ -594,7 +595,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 
 	for {
 		ch := s.peek()
-		if (isHex && lex.IsHexDigit(ch)) || lex.IsDigit(ch) {
+		if (isHex && lexbase.IsHexDigit(ch)) || lexbase.IsDigit(ch) {
 			s.pos++
 			continue
 		}
@@ -636,7 +637,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 				s.pos++
 			}
 			ch = s.peek()
-			if !lex.IsDigit(ch) {
+			if !lexbase.IsDigit(ch) {
 				lval.id = ERROR
 				lval.str = "invalid floating point literal"
 				return
@@ -686,7 +687,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 
 func (s *scanner) scanPlaceholder(lval *sqlSymType) {
 	start := s.pos
-	for lex.IsDigit(s.peek()) {
+	for lexbase.IsDigit(s.peek()) {
 		s.pos++
 	}
 	lval.str = s.in[start:s.pos]
@@ -943,7 +944,7 @@ outer:
 
 		default:
 			// If we haven't found a start tag yet, check whether the current characters is a valid for a tag.
-			if !foundStartTag && !lex.IsIdentStart(ch) {
+			if !foundStartTag && !lexbase.IsIdentStart(ch) {
 				return false
 			}
 			s.pos++

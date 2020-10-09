@@ -16,7 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -800,9 +800,9 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 		fk := origin.Table.OutboundForeignKey(c.FKOrdinal)
 		constraintName = fk.Name()
 		fmt.Fprintf(&msg, "%s on table ", c.OpName)
-		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.ObjectName))
+		lexbase.EncodeEscapedSQLIdent(&msg, string(origin.Alias.ObjectName))
 		msg.WriteString(" violates foreign key constraint ")
-		lex.EncodeEscapedSQLIdent(&msg, fk.Name())
+		lexbase.EncodeEscapedSQLIdent(&msg, fk.Name())
 
 		details.WriteString("Key (")
 		for i := 0; i < fk.ColumnCount(); i++ {
@@ -831,7 +831,7 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 			details.WriteString("MATCH FULL does not allow mixing of null and nonnull key values.")
 		} else {
 			details.WriteString(") is not present in table ")
-			lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.ObjectName))
+			lexbase.EncodeEscapedSQLIdent(&details, string(referenced.Alias.ObjectName))
 			details.WriteByte('.')
 		}
 	} else {
@@ -842,11 +842,11 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 		fk := referenced.Table.InboundForeignKey(c.FKOrdinal)
 		constraintName = fk.Name()
 		fmt.Fprintf(&msg, "%s on table ", c.OpName)
-		lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.ObjectName))
+		lexbase.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.ObjectName))
 		msg.WriteString(" violates foreign key constraint ")
-		lex.EncodeEscapedSQLIdent(&msg, fk.Name())
+		lexbase.EncodeEscapedSQLIdent(&msg, fk.Name())
 		msg.WriteString(" on table ")
-		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.ObjectName))
+		lexbase.EncodeEscapedSQLIdent(&msg, string(origin.Alias.ObjectName))
 
 		details.WriteString("Key (")
 		for i := 0; i < fk.ColumnCount(); i++ {
@@ -864,7 +864,7 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 			details.WriteString(d.String())
 		}
 		details.WriteString(") is still referenced from table ")
-		lex.EncodeEscapedSQLIdent(&details, string(origin.Alias.ObjectName))
+		lexbase.EncodeEscapedSQLIdent(&details, string(origin.Alias.ObjectName))
 		details.WriteByte('.')
 	}
 

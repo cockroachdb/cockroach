@@ -53,7 +53,7 @@ type transientCluster struct {
 	servers    []*server.TestServer
 
 	adminPassword string
-	adminUser     string
+	adminUser     security.SQLUsername
 }
 
 func (c *transientCluster) checkConfigAndSetupLogging(
@@ -275,10 +275,10 @@ func (c *transientCluster) start(
 	if err != nil {
 		return err
 	}
-	c.adminUser = demoUsername
+	c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
 	c.adminPassword = demoPassword
 	if demoCtx.insecure {
-		c.adminUser = security.RootUser
+		c.adminUser = security.RootUserName()
 		c.adminPassword = "unused"
 	}
 
@@ -546,7 +546,7 @@ func generateCerts(certsDir string) (err error) {
 		defaultKeySize,
 		defaultCertLifetime,
 		false, /* overwrite */
-		security.RootUser,
+		security.RootUserName(),
 		false, /* generatePKCS8Key */
 	)
 }
@@ -574,7 +574,7 @@ func (c *transientCluster) getNetworkURLForServer(
 		sqlURL.User = url.User(security.RootUser)
 		options.Add("sslmode", "disable")
 	} else {
-		sqlURL.User = url.UserPassword(c.adminUser, c.adminPassword)
+		sqlURL.User = url.UserPassword(c.adminUser.Normalized(), c.adminPassword)
 		options.Add("sslmode", "require")
 	}
 	sqlURL.RawQuery = options.Encode()
@@ -758,7 +758,7 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 type unixSocketDetails struct {
 	socketDir  string
 	portNumber int
-	username   string
+	username   security.SQLUsername
 	password   string
 }
 
@@ -784,7 +784,7 @@ func (s unixSocketDetails) String() string {
 	// mode the password is not checked on the server.
 	sqlURL := url.URL{
 		Scheme:   "postgres",
-		User:     url.UserPassword(s.username, s.password),
+		User:     url.UserPassword(s.username.Normalized(), s.password),
 		RawQuery: options.Encode(),
 	}
 	return sqlURL.String()

@@ -151,7 +151,7 @@ func TestGossipAlertsTable(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT * FROM crdb_internal.gossip_alerts WHERE store_id = 123")
 	if err != nil {
 		t.Fatal(err)

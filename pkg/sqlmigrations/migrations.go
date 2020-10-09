@@ -460,7 +460,7 @@ type runner struct {
 func (r runner) execAsRoot(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
 	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.RootUser,
+			User: security.RootUserName(),
 		},
 		stmt, qargs...)
 	return err
@@ -872,7 +872,7 @@ func (m *Manager) migrateSystemNamespace(
 			rows, err := r.sqlExecutor.QueryEx(
 				ctx, "read-deprecated-namespace-table", txn,
 				sessiondata.InternalExecutorOverride{
-					User: security.RootUser,
+					User: security.RootUserName(),
 				},
 				q)
 			if err != nil {
@@ -1085,7 +1085,7 @@ func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
 			// Get jobs in a non-terminal state.
 			rows, err := r.sqlExecutor.QueryEx(
 				ctx, "get-deprecated-schema-change-jobs", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				`SELECT id, status, payload FROM system.jobs WHERE status NOT IN ($1, $2, $3) LIMIT $4`,
 				jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, batchSize,
 			)
@@ -1125,7 +1125,7 @@ func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
 				}
 				if _, err := r.sqlExecutor.ExecEx(
 					ctx, "update-deprecated-schema-change-job", txn,
-					sessiondata.InternalExecutorOverride{User: security.RootUser},
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 					`UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3`,
 					jobs.StatusFailed, newPayloadBytes, id,
 				); err != nil {
@@ -1260,7 +1260,7 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 		row, err := r.sqlExecutor.QueryRowEx(
 			ctx, "disallowPublicUserOrRole", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
-				User: security.RootUser,
+				User: security.RootUserName(),
 			},
 			selectPublicStmt, security.PublicRole,
 		)
@@ -1353,7 +1353,7 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	// If so, we don't want to do anything.
 	row, err := r.sqlExecutor.QueryRowEx(ctx, "update-system-locations",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		`SELECT count(*) FROM system.locations`)
 	if err != nil {
 		return err
@@ -1405,7 +1405,7 @@ ON system.jobs (created_by_type, created_by_id)
 STORING (status)
 `
 	asNode := sessiondata.InternalExecutorOverride{
-		User: security.NodeUser,
+		User: security.NodeUserName(),
 	}
 
 	if _, err := r.sqlExecutor.ExecEx(
@@ -1430,7 +1430,7 @@ ADD COLUMN IF NOT EXISTS claim_session_id BYTES CREATE FAMILY claim,
 ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
 `
 	asNode := sessiondata.InternalExecutorOverride{
-		User: security.NodeUser,
+		User: security.NodeUserName(),
 	}
 	if _, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-claim-cols", nil, asNode, addColsStmt); err != nil {
 		return err
@@ -1444,7 +1444,7 @@ func createTenantsTable(ctx context.Context, r runner) error {
 
 func alterSystemScheduledJobsFixTableSchema(ctx context.Context, r runner) error {
 	setOwner := "UPDATE system.scheduled_jobs SET owner='root' WHERE owner IS NULL"
-	asNode := sessiondata.InternalExecutorOverride{User: security.NodeUser}
+	asNode := sessiondata.InternalExecutorOverride{User: security.NodeUserName()}
 
 	if _, err := r.sqlExecutor.ExecEx(ctx, "set-schedule-owner", nil, asNode, setOwner); err != nil {
 		return err

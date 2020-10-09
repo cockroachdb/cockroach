@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -164,7 +165,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			jobRecord := jobs.Record{
 				Description:   fmt.Sprintf("GC test"),
-				Username:      "user",
+				Username:      security.TestUserName(),
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 				Progress:      jobspb.SchemaChangeGCProgress{},
@@ -174,7 +175,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			// The job record that will be used to lookup this job.
 			lookupJR := jobs.Record{
 				Description:   fmt.Sprintf("GC test"),
-				Username:      "user",
+				Username:      security.TestUserName(),
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 			}

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -609,7 +610,7 @@ func (d *DBitArray) Format(ctx *FmtCtx) {
 	if f.HasFlags(fmtPgwireFormat) {
 		d.BitArray.Format(&ctx.Buffer)
 	} else {
-		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
+		withQuotes := !f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 		if withQuotes {
 			ctx.WriteString("B'")
 		}
@@ -1438,7 +1439,7 @@ func (d *DBytes) Format(ctx *FmtCtx) {
 		writeAsHexString(ctx, d)
 		ctx.WriteString(`"`)
 	} else {
-		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
+		withQuotes := !f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 		if withQuotes {
 			if f.HasFlags(fmtFormatByteLiterals) {
 				ctx.WriteByte('b')
@@ -1538,7 +1539,7 @@ func (*DUuid) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1700,7 +1701,7 @@ func (*DIPAddr) AmbiguousFormat() bool {
 // Format implements the NodeFormatter interface.
 func (d *DIPAddr) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1881,7 +1882,7 @@ func (*DDate) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1997,7 +1998,7 @@ func (*DTime) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTime) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2122,7 +2123,7 @@ func (*DTimeTZ) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimeTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2354,7 +2355,7 @@ func (*DTimestamp) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2511,7 +2512,7 @@ func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2723,7 +2724,7 @@ func (*DInterval) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DInterval) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2831,7 +2832,7 @@ func (*DGeography) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DGeography) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2939,7 +2940,7 @@ func (*DGeometry) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DGeometry) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3048,7 +3049,7 @@ func (*DBox2D) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DBox2D) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -4298,12 +4299,12 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		ctx.WriteByte('(')
 		d.DInt.Format(ctx)
 		ctx.WriteByte(',')
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lex.EncNoFlags)
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
 		ctx.WriteByte(')')
 	} else {
 		// This is used to print the name of pseudo-procedures in e.g.
 		// pg_catalog.pg_type.typinput
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lex.EncBareStrings)
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncBareStrings)
 	}
 }
 

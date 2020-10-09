@@ -80,7 +80,7 @@ func (s *Store) insertRangeLogEvent(
 	}
 
 	rows, err := s.cfg.SQLExecutor.ExecEx(ctx, "log-range-event", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		insertEventTableStmt, args...)
 	if err != nil {
 		return err

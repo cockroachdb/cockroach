@@ -61,7 +61,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 
 	schemaName := string(n.Schema)
 	if n.Schema == "" {
-		schemaName = n.AuthRole
+		schemaName = n.AuthRole.Normalized()
 	}
 
 	// Ensure there aren't any name collisions.
@@ -102,7 +102,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		privs.Users[i].Privileges &= privilege.SchemaPrivileges.ToBitField()
 	}
 
-	if n.AuthRole != "" {
+	if !n.AuthRole.Undefined() {
 		exists, err := p.RoleExists(params.ctx, n.AuthRole)
 		if err != nil {
 			return err
@@ -112,7 +112,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		}
 		privs.SetOwner(n.AuthRole)
 	} else {
-		privs.SetOwner(params.SessionData().User)
+		privs.SetOwner(params.SessionData().User())
 	}
 
 	// Create the SchemaDescriptor.
@@ -161,7 +161,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 			SchemaName string
 			Owner      string
 			User       string
-		}{schemaName, privs.Owner, params.SessionData().User},
+		}{schemaName, privs.Owner().Normalized(), params.p.User().Normalized()},
 	)
 }
 

@@ -197,7 +197,7 @@ func outputRels(baseRels []memo.RelExpr, names map[opt.ColumnID]string) string {
 // of names generated so far.
 func getRelationName(nameCount int) string {
 	const lenAlphabet = 26
-	name := string(int('A') + (nameCount % lenAlphabet))
+	name := string(rune(int('A') + (nameCount % lenAlphabet)))
 	number := nameCount / lenAlphabet
 	if number > 0 {
 		// Names will follow the pattern: A, B, ..., Z, A1, B1, etc.

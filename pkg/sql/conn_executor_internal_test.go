@@ -340,7 +340,7 @@ func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
 			flushed <- res
 		},
 	}
-	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUser}, stmtBuf, clientComm, MemoryMetrics{})
+	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUserName()}, stmtBuf, clientComm, MemoryMetrics{})
 	require.NoError(t, err)
 
 	stmts, err := parser.Parse(`

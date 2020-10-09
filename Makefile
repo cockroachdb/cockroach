@@ -812,7 +812,7 @@ SQLPARSER_TARGETS = \
 	pkg/sql/parser/help_messages.go \
 	pkg/sql/lex/tokens.go \
 	pkg/sql/lex/keywords.go \
-	pkg/sql/lex/reserved_keywords.go
+	pkg/sql/lexbase/reserved_keywords.go
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
 
@@ -1472,7 +1472,7 @@ pkg/sql/parser/gen/sql-gen.y: pkg/sql/parser/sql.y pkg/sql/parser/replace_help_r
 	mv -f $@.tmp $@
 	rm pkg/sql/parser/gen/types_regex.tmp
 
-pkg/sql/lex/reserved_keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/reserved_keywords.awk | bin/.bootstrap
+pkg/sql/lexbase/reserved_keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/reserved_keywords.awk | bin/.bootstrap
 	awk -f pkg/sql/parser/reserved_keywords.awk < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
 	gofmt -s -w $@

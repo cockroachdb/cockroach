@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -313,7 +314,7 @@ var strOrOidTypes = []*types.T{types.String, types.Oid}
 func makePGPrivilegeInquiryDef(
 	infoDetail string,
 	objSpecArgs argTypeOpts,
-	fn func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error),
+	fn func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error),
 ) builtinDefinition {
 	// Collect the different argument type variations.
 	//
@@ -359,16 +360,18 @@ func makePGPrivilegeInquiryDef(
 			Types:      argType,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				var user string
+				var user security.SQLUsername
 				if withUser {
-					var err error
-
 					arg := tree.UnwrapDatum(ctx, args[0])
-					user, err = getNameForArg(ctx, arg, "pg_roles", "rolname")
+					userS, err := getNameForArg(ctx, arg, "pg_roles", "rolname")
 					if err != nil {
 						return nil, err
 					}
-					if user == "" {
+					// Note: the username in pg_roles is already normalized, so
+					// we can safely turn it into a SQLUsername without
+					// re-normalization.
+					user = security.MakeSQLUsernameFromPreNormalizedString(userS)
+					if user.Undefined() {
 						if _, ok := arg.(*tree.DOid); ok {
 							// Postgres returns falseifn no matching user is
 							// found when given an OID.
@@ -381,11 +384,11 @@ func makePGPrivilegeInquiryDef(
 					// Remove the first argument.
 					args = args[1:]
 				} else {
-					if len(ctx.SessionData.User) == 0 {
+					if ctx.SessionData.User().Undefined() {
 						// Wut... is this possible?
 						return tree.DNull, nil
 					}
-					user = ctx.SessionData.User
+					user = ctx.SessionData.User()
 				}
 				return fn(ctx, args, user)
 			},
@@ -517,7 +520,12 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 // privilege check should also test whether the privilege is held with grant
 // option.
 func evalPrivilegeCheck(
-	ctx *tree.EvalContext, infoTable, user, pred string, priv privilege.Kind, withGrantOpt bool,
+	ctx *tree.EvalContext,
+	infoTable string,
+	user security.SQLUsername,
+	pred string,
+	priv privilege.Kind,
+	withGrantOpt bool,
 ) (tree.Datum, error) {
 	privChecks := []privilege.Kind{priv}
 	if withGrantOpt {
@@ -531,7 +539,7 @@ func evalPrivilegeCheck(
 		// TODO(mberhault): "public" is a constant defined in sql/sqlbase, but importing that
 		// would cause a dependency cycle sqlbase -> sem/transform -> sem/builtins -> sqlbase
 		r, err := ctx.InternalExecutor.QueryRow(
-			ctx.Ctx(), "eval-privilege-check", ctx.Txn, query, "public", user,
+			ctx.Ctx(), "eval-privilege-check", ctx.Txn, query, "public", user.Normalized(),
 		)
 		if err != nil {
 			return nil, err
@@ -1155,7 +1163,7 @@ SELECT description
 	"has_any_column_privilege": makePGPrivilegeInquiryDef(
 		"any column of table",
 		argTypeOpts{{"table", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
 			tn, err := getTableNameForArg(ctx, tableArg)
 			if err != nil {
@@ -1209,7 +1217,7 @@ SELECT description
 	"has_column_privilege": makePGPrivilegeInquiryDef(
 		"column",
 		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
 			tn, err := getTableNameForArg(ctx, tableArg)
 			if err != nil {
@@ -1291,7 +1299,7 @@ SELECT description
 	"has_database_privilege": makePGPrivilegeInquiryDef(
 		"database",
 		argTypeOpts{{"database", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			dbArg := tree.UnwrapDatum(ctx, args[0])
 			db, err := getNameForArg(ctx, dbArg, "pg_database", "datname")
 			if err != nil {
@@ -1347,7 +1355,7 @@ SELECT description
 	"has_foreign_data_wrapper_privilege": makePGPrivilegeInquiryDef(
 		"foreign-data wrapper",
 		argTypeOpts{{"fdw", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			fdwArg := tree.UnwrapDatum(ctx, args[0])
 			fdw, err := getNameForArg(ctx, fdwArg, "pg_foreign_data_wrapper", "fdwname")
 			if err != nil {
@@ -1376,7 +1384,7 @@ SELECT description
 	"has_function_privilege": makePGPrivilegeInquiryDef(
 		"function",
 		argTypeOpts{{"function", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			oidArg := tree.UnwrapDatum(ctx, args[0])
 			// When specifying a function by a text string rather than by OID,
 			// the allowed input is the same as for the regprocedure data type.
@@ -1418,7 +1426,7 @@ SELECT description
 	"has_language_privilege": makePGPrivilegeInquiryDef(
 		"language",
 		argTypeOpts{{"language", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			langArg := tree.UnwrapDatum(ctx, args[0])
 			lang, err := getNameForArg(ctx, langArg, "pg_language", "lanname")
 			if err != nil {
@@ -1452,7 +1460,7 @@ SELECT description
 	"has_schema_privilege": makePGPrivilegeInquiryDef(
 		"schema",
 		argTypeOpts{{"schema", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			schemaArg := tree.UnwrapDatum(ctx, args[0])
 			schema, err := getNameForArg(ctx, schemaArg, "pg_namespace", "nspname")
 			if err != nil {
@@ -1499,7 +1507,7 @@ SELECT description
 	"has_sequence_privilege": makePGPrivilegeInquiryDef(
 		"sequence",
 		argTypeOpts{{"sequence", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			seqArg := tree.UnwrapDatum(ctx, args[0])
 			tn, err := getTableNameForArg(ctx, seqArg)
 			if err != nil {
@@ -1559,7 +1567,7 @@ SELECT description
 	"has_server_privilege": makePGPrivilegeInquiryDef(
 		"foreign server",
 		argTypeOpts{{"server", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			serverArg := tree.UnwrapDatum(ctx, args[0])
 			server, err := getNameForArg(ctx, serverArg, "pg_foreign_server", "srvname")
 			if err != nil {
@@ -1588,7 +1596,7 @@ SELECT description
 	"has_table_privilege": makePGPrivilegeInquiryDef(
 		"table",
 		argTypeOpts{{"table", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
 			tn, err := getTableNameForArg(ctx, tableArg)
 			if err != nil {
@@ -1663,7 +1671,7 @@ SELECT description
 	"has_tablespace_privilege": makePGPrivilegeInquiryDef(
 		"tablespace",
 		argTypeOpts{{"tablespace", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			tablespaceArg := tree.UnwrapDatum(ctx, args[0])
 			tablespace, err := getNameForArg(ctx, tablespaceArg, "pg_tablespace", "spcname")
 			if err != nil {
@@ -1692,7 +1700,7 @@ SELECT description
 	"has_type_privilege": makePGPrivilegeInquiryDef(
 		"type",
 		argTypeOpts{{"type", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			oidArg := tree.UnwrapDatum(ctx, args[0])
 			// When specifying a type by a text string rather than by OID, the
 			// allowed input is the same as for the regtype data type.

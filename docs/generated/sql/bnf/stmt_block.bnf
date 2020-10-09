@@ -315,7 +315,7 @@ role_spec_list ::=
 	( role_spec ) ( ( ',' role_spec ) )*
 
 role_spec ::=
-	non_reserved_word_or_sconst
+	username_or_sconst
 	| 'CURRENT_USER'
 	| 'SESSION_USER'
 
@@ -1181,7 +1181,7 @@ type_name_list ::=
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
 
-non_reserved_word_or_sconst ::=
+username_or_sconst ::=
 	non_reserved_word
 	| 'SCONST'
 
@@ -1399,6 +1399,10 @@ drop_type_stmt ::=
 
 explain_option_name ::=
 	non_reserved_word
+
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
 
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*

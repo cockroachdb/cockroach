@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -1039,7 +1040,9 @@ type Mutator interface {
 }
 
 // MakeSchemaName creates a CreateSchema definition
-func MakeSchemaName(ifNotExists bool, schema string, authRole string) *tree.CreateSchema {
+func MakeSchemaName(
+	ifNotExists bool, schema string, authRole security.SQLUsername,
+) *tree.CreateSchema {
 	return &tree.CreateSchema{
 		IfNotExists: ifNotExists,
 		Schema:      tree.Name(schema),

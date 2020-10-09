@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -31,7 +32,7 @@ import (
 // chain.
 func fetchPreviousBackups(
 	ctx context.Context,
-	user string,
+	user security.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	prevBackupURIs []string,
 	encryptionParams backupEncryptionParams,
@@ -70,7 +71,7 @@ func fetchPreviousBackups(
 //  can determine the latter from the former.
 func resolveDest(
 	ctx context.Context,
-	user string,
+	user security.SQLUsername,
 	nested, appendToLatest bool,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
@@ -151,7 +152,7 @@ func resolveDest(
 // getBackupManifests fetches the backup manifest from a list of backup URIs.
 func getBackupManifests(
 	ctx context.Context,
-	user string,
+	user security.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	backupURIs []string,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -195,7 +196,7 @@ func getBackupManifests(
 // base backups.
 func getEncryptionFromBase(
 	ctx context.Context,
-	user string,
+	user security.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	baseBackupURI string,
 	encryptionParams backupEncryptionParams,
@@ -236,7 +237,7 @@ func getEncryptionFromBase(
 // should use for a backup that is pointing to a collection.
 func resolveBackupCollection(
 	ctx context.Context,
-	user string,
+	user security.SQLUsername,
 	defaultURI string,
 	appendToLatest bool,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,

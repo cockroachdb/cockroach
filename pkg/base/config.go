@@ -169,7 +169,7 @@ type Config struct {
 
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
-	User string
+	User security.SQLUsername
 
 	// Addr is the address the server is listening on.
 	Addr string
@@ -255,7 +255,7 @@ func (*Config) HistogramWindowInterval() time.Duration {
 // This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
-	cfg.User = defaultUser
+	cfg.User = security.MakeSQLUsernameFromPreNormalizedString(defaultUser)
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr

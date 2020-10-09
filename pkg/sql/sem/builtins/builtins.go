@@ -36,13 +36,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1629,7 +1629,7 @@ var builtins = map[string]builtinDefinition{
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
 				var buf bytes.Buffer
-				lex.EncodeRestrictedSQLIdent(&buf, s, lex.EncNoFlags)
+				lexbase.EncodeRestrictedSQLIdent(&buf, s, lexbase.EncNoFlags)
 				return tree.NewDString(buf.String()), nil
 			},
 			types.String,
@@ -3350,10 +3350,10 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if len(ctx.SessionData.User) == 0 {
+				if ctx.SessionData.User().Undefined() {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.SessionData.User), nil
+				return tree.NewDString(ctx.SessionData.User().Normalized()), nil
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",
@@ -6345,7 +6345,7 @@ var errInsufficientPriv = pgerror.New(
 )
 
 func checkPrivilegedUser(ctx *tree.EvalContext) error {
-	if ctx.SessionData.User != security.RootUser {
+	if !ctx.SessionData.User().IsRootUser() {
 		return errInsufficientPriv
 	}
 	return nil

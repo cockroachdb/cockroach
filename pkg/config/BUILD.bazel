@@ -45,7 +45,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
-        "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )

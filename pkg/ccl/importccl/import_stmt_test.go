@@ -1670,7 +1670,7 @@ func TestImportCSVStmt(t *testing.T) {
 			jobPrefix := fmt.Sprintf(`IMPORT TABLE %s.public.t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))`, intodb)
 
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUser,
+				Username:    security.RootUserName(),
 				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
 			}); err != nil {
 				t.Fatal(err)
@@ -1933,7 +1933,7 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 	t.Run("userfile-simple", func(t *testing.T) {
 		userfileURI := "userfile://defaultdb.public.root/test.csv"
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
-			ExternalStorageFromURI(ctx, userfileURI, security.RootUser)
+			ExternalStorageFromURI(ctx, userfileURI, security.RootUserName())
 		require.NoError(t, err)
 
 		data := []byte("1,2")
@@ -1949,7 +1949,7 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 	t.Run("userfile-relative-file-path", func(t *testing.T) {
 		userfileURI := "userfile:///import-test/employees.csv"
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
-			ExternalStorageFromURI(ctx, userfileURI, security.RootUser)
+			ExternalStorageFromURI(ctx, userfileURI, security.RootUserName())
 		require.NoError(t, err)
 
 		data := []byte("1,2")
@@ -2026,7 +2026,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 		// Write to userfile storage now that testuser has CREATE privileges.
 		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
 		fileTableSystem1, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, "testuser", ie, tc.Server(0).DB())
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, security.TestUserName(), ie, tc.Server(0).DB())
 		require.NoError(t, err)
 		require.NoError(t, fileTableSystem1.WriteFile(ctx, filename, bytes.NewReader([]byte("1,aaa"))))
 	}
@@ -2521,7 +2521,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 			jobPrefix := fmt.Sprintf(`IMPORT INTO defaultdb.public.t(a, b)`)
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUser,
+				Username:    security.RootUserName(),
 				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
 			}); err != nil {
 				t.Fatal(err)
@@ -3053,7 +3053,7 @@ func TestImportIntoCSV(t *testing.T) {
 	t.Run("import-into-userfile-simple", func(t *testing.T) {
 		userfileURI := "userfile://defaultdb.public.root/test.csv"
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
-			ExternalStorageFromURI(ctx, userfileURI, security.RootUser)
+			ExternalStorageFromURI(ctx, userfileURI, security.RootUserName())
 		require.NoError(t, err)
 
 		data := []byte("1,2")
@@ -3120,7 +3120,7 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 	} else if uri.Scheme == "userfile" {
 		// Write the test data to userfile storage.
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
-			ExternalStorageFromURI(ctx, uploadBaseURI+testFileBase, security.RootUser)
+			ExternalStorageFromURI(ctx, uploadBaseURI+testFileBase, security.RootUserName())
 		require.NoError(b, err)
 		content, err := ioutil.ReadAll(r)
 		require.NoError(b, err)
@@ -4169,7 +4169,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Start import job as root.
 			rootJobRecord := defaultRecord
-			rootJobRecord.Username = "root"
+			rootJobRecord.Username = security.RootUserName()
 			rootJob := startLeasedJob(t, rootJobRecord)
 
 			// Test root can control root job.
@@ -4178,7 +4178,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 
 			// Start import job as non-admin user.
 			nonAdminJobRecord := defaultRecord
-			nonAdminJobRecord.Username = "testuser"
+			nonAdminJobRecord.Username = security.TestUserName()
 			userJob := startLeasedJob(t, nonAdminJobRecord)
 
 			// Test testuser can control testuser job.

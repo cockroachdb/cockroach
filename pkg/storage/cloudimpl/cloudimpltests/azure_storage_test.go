@@ -39,7 +39,7 @@ func TestPutAzure(t *testing.T) {
 		bucket, "backup-test",
 		cloudimpl.AzureAccountNameParam, url.QueryEscape(accountName),
 		cloudimpl.AzureAccountKeyParam, url.QueryEscape(accountKey),
-	), false, security.RootUser, nil, nil)
+	), false, security.RootUserName(), nil, nil)
 	testListFiles(
 		t,
 		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
@@ -47,6 +47,6 @@ func TestPutAzure(t *testing.T) {
 			cloudimpl.AzureAccountNameParam, url.QueryEscape(accountName),
 			cloudimpl.AzureAccountKeyParam, url.QueryEscape(accountKey),
 		),
-		security.RootUser, nil, nil,
+		security.RootUserName(), nil, nil,
 	)
 }

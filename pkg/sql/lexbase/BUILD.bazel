@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "lex",
+    srcs = [
+        "encode.go",
+        "normalize.go",
+        "predicates.go",
+        "reserved_keywords.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/lexbase",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/golang.org/x/text/unicode/norm"],
+)
+
+go_test(
+    name = "lexbase_test",
+    srcs = ["encode_test.go"],
+    deps = [":lex"],
+)

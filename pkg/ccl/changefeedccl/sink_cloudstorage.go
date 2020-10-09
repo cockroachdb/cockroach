@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -306,7 +307,7 @@ func makeCloudStorageSink(
 	opts map[string]string,
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
-	user string,
+	user security.SQLUsername,
 ) (Sink, error) {
 	// Date partitioning is pretty standard, so no override for now, but we could
 	// plumb one down if someone needs it.

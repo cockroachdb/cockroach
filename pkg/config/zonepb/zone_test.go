@@ -649,7 +649,7 @@ lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 			if err := yaml.UnmarshalStrict(body, &unmarshaled); err != nil {
 				t.Fatal(err)
 			}
-			if !proto.Equal(&unmarshaled, &original) {
+			if !unmarshaled.Equal(&original) {
 				t.Errorf("yaml.UnmarshalStrict(%q)\ngot:\n%+v\nwant:\n%+v", body, unmarshaled, original)
 			}
 		})

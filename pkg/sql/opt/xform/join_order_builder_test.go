@@ -453,7 +453,7 @@ func parseVertexSet(sesStr string) vertexSet {
 func printVertexSet(set vertexSet) string {
 	buf := bytes.Buffer{}
 	for idx, ok := set.next(0); ok; idx, ok = set.next(idx + 1) {
-		buf.WriteString(string('A' + idx))
+		buf.WriteString(string(rune('A' + idx)))
 	}
 	return buf.String()
 }

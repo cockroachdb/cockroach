@@ -50,7 +50,9 @@ func writeFile(t *testing.T, testSendFile string, fileContent []byte) {
 	}
 }
 
-func prepareFileUploadURI(user, testSendFile, copyInternalTable string) (string, error) {
+func prepareFileUploadURI(
+	user security.SQLUsername, testSendFile, copyInternalTable string,
+) (string, error) {
 	var uri string
 	switch copyInternalTable {
 	case NodelocalFileUploadTable:
@@ -61,7 +63,10 @@ func prepareFileUploadURI(user, testSendFile, copyInternalTable string) (string,
 			return "", errors.New("userfile destination must start with a /")
 		}
 		uri = fmt.Sprintf("userfile://%s%s",
-			defaultQualifiedDBSchemaName+user, testSendFile)
+			// TODO(knz): This is suspicious; see
+			// https://github.com/cockroachdb/cockroach/issues/55389
+			defaultQualifiedDBSchemaName+user.Normalized(),
+			testSendFile)
 	default:
 		return "", errors.New("unsupported upload destination")
 	}
@@ -69,7 +74,9 @@ func prepareFileUploadURI(user, testSendFile, copyInternalTable string) (string,
 	return uri, nil
 }
 
-func runCopyFile(t *testing.T, db *gosql.DB, user, testSendFile, copyInternalTable string) error {
+func runCopyFile(
+	t *testing.T, db *gosql.DB, user security.SQLUsername, testSendFile, copyInternalTable string,
+) error {
 	// Make sure we can open this file first
 	reader, err := os.Open(testSendFile)
 	if err != nil {
@@ -131,7 +138,8 @@ func checkUserFileContent(
 	ctx context.Context,
 	t *testing.T,
 	s serverutils.TestServerInterface,
-	user, filename string,
+	user security.SQLUsername,
+	filename string,
 	expectedContent []byte,
 ) {
 	uri, err := prepareFileUploadURI(user, filename, UserFileUploadTable)
@@ -166,13 +174,13 @@ func TestFileUpload(t *testing.T) {
 	writeFile(t, testSendFile, fileContent)
 
 	for _, table := range fileUploadModes {
-		err := runCopyFile(t, db, security.RootUser, testSendFile, table)
+		err := runCopyFile(t, db, security.RootUserName(), testSendFile, table)
 		require.NoError(t, err)
 	}
 
 	// Verify contents of the uploaded file.
 	checkNodelocalContent(t, localExternalDir, testSendFile, fileContent)
-	checkUserFileContent(ctx, t, s, security.RootUser, testSendFile, fileContent)
+	checkUserFileContent(ctx, t, s, security.RootUserName(), testSendFile, fileContent)
 }
 
 func TestUploadEmptyFile(t *testing.T) {
@@ -194,13 +202,13 @@ func TestUploadEmptyFile(t *testing.T) {
 	writeFile(t, testSendFile, fileContent)
 
 	for _, table := range fileUploadModes {
-		err := runCopyFile(t, db, security.RootUser, testSendFile, table)
+		err := runCopyFile(t, db, security.RootUserName(), testSendFile, table)
 		require.NoError(t, err)
 	}
 
 	// Verify contents of the uploaded file.
 	checkNodelocalContent(t, localExternalDir, testSendFile, fileContent)
-	checkUserFileContent(ctx, t, s, security.RootUser, testSendFile, fileContent)
+	checkUserFileContent(ctx, t, s, security.RootUserName(), testSendFile, fileContent)
 }
 
 func TestFileNotExist(t *testing.T) {
@@ -216,7 +224,7 @@ func TestFileNotExist(t *testing.T) {
 
 	expectedErr := "no such file"
 	for _, table := range fileUploadModes {
-		err := runCopyFile(t, db, security.RootUser, filename, table)
+		err := runCopyFile(t, db, security.RootUserName(), filename, table)
 		require.True(t, testutils.IsError(err, expectedErr))
 	}
 }
@@ -239,13 +247,13 @@ func TestFileExist(t *testing.T) {
 
 	// Write successfully the first time.
 	for _, table := range fileUploadModes {
-		err := runCopyFile(t, db, security.RootUser, testSendFile, table)
+		err := runCopyFile(t, db, security.RootUserName(), testSendFile, table)
 		require.NoError(t, err)
 	}
 
 	// Writes fail the second time.
 	for _, table := range fileUploadModes {
-		require.True(t, testutils.IsError(runCopyFile(t, db, security.RootUser, testSendFile,
+		require.True(t, testutils.IsError(runCopyFile(t, db, security.RootUserName(), testSendFile,
 			table), "file already exists"))
 	}
 }
@@ -264,11 +272,14 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	s, rootDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	_, err := rootDB.Exec("CREATE USER jsmith")
+	const smithUser = "jsmith"
+	smithUserName := security.MakeSQLUsernameFromPreNormalizedString(smithUser)
+
+	_, err := rootDB.Exec("CREATE USER " + smithUser)
 	require.NoError(t, err)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User("jsmith"), false, /* withCerts */
+		t, s.ServingSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
 	)
 	defer cleanupGoDB()
 	pgURL.RawQuery = "sslmode=disable"
@@ -282,7 +293,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
 	writeFile(t, testSendFile, fileContent)
 
-	err = runCopyFile(t, userDB, "jsmith", testSendFile, NodelocalFileUploadTable)
+	err = runCopyFile(t, userDB, smithUserName, testSendFile, NodelocalFileUploadTable)
 	expectedErr := "only users with the admin role are allowed to upload"
 	require.True(t, testutils.IsError(err, expectedErr))
 }
@@ -300,13 +311,16 @@ func TestUserfileNotAdmin(t *testing.T) {
 	s, rootDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	_, err := rootDB.Exec("CREATE USER jsmith")
+	const smithUser = "jsmith"
+	smithUserName := security.MakeSQLUsernameFromPreNormalizedString(smithUser)
+
+	_, err := rootDB.Exec("CREATE USER " + smithUser)
 	require.NoError(t, err)
-	_, err = rootDB.Exec("GRANT CREATE ON DATABASE defaultdb TO jsmith")
+	_, err = rootDB.Exec("GRANT CREATE ON DATABASE defaultdb TO " + smithUser)
 	require.NoError(t, err)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User("jsmith"), false, /* withCerts */
+		t, s.ServingSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
 	)
 	defer cleanupGoDB()
 	pgURL.RawQuery = "sslmode=disable"
@@ -320,7 +334,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
 	writeFile(t, testSendFile, fileContent)
 
-	err = runCopyFile(t, userDB, "jsmith", testSendFile, UserFileUploadTable)
+	err = runCopyFile(t, userDB, smithUserName, testSendFile, UserFileUploadTable)
 	require.NoError(t, err)
-	checkUserFileContent(context.Background(), t, s, "jsmith", testSendFile, fileContent)
+	checkUserFileContent(context.Background(), t, s, smithUserName, testSendFile, fileContent)
 }

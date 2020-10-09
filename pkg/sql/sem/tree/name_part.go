@@ -11,7 +11,7 @@
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -34,7 +34,7 @@ func (n *Name) Format(ctx *FmtCtx) {
 	if f.HasFlags(FmtAnonymize) && !isArityIndicatorString(string(*n)) {
 		ctx.WriteByte('_')
 	} else {
-		lex.EncodeRestrictedSQLIdent(&ctx.Buffer, string(*n), f.EncodeFlags())
+		lexbase.EncodeRestrictedSQLIdent(&ctx.Buffer, string(*n), f.EncodeFlags())
 	}
 }
 
@@ -66,7 +66,7 @@ func ErrNameString(s string) string {
 // Normalize normalizes to lowercase and Unicode Normalization Form C
 // (NFC).
 func (n Name) Normalize() string {
-	return lex.NormalizeName(string(n))
+	return lexbase.NormalizeName(string(n))
 }
 
 // An UnrestrictedName is a Name that does not need to be escaped when it
@@ -89,7 +89,7 @@ func (u *UnrestrictedName) Format(ctx *FmtCtx) {
 	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
 	} else {
-		lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, string(*u), f.EncodeFlags())
+		lexbase.EncodeUnrestrictedSQLIdent(&ctx.Buffer, string(*u), f.EncodeFlags())
 	}
 }
 

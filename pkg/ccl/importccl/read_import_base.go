@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -99,7 +100,7 @@ func runImport(
 		}
 
 		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage,
-			spec.User)
+			spec.User())
 	})
 
 	// Ingest the KVs that the producer group emitted to the chan and the row result
@@ -149,7 +150,7 @@ func readInputFiles(
 	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	done := ctx.Done()
 
@@ -342,7 +343,7 @@ func (f fileReader) ReadFraction() float32 {
 type inputConverter interface {
 	start(group ctxgroup.Group)
 	readFiles(ctx context.Context, dataFiles map[int32]string, resumePos map[int32]int64,
-		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user string) error
+		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user security.SQLUsername) error
 }
 
 func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {

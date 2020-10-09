@@ -113,7 +113,7 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 		var err error
 		var row tree.Datums
 		row, err = j.registry.ex.QueryRowEx(
-			ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
+			ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			stmt, *j.id,
 		)
 		if err != nil {

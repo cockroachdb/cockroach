@@ -13,6 +13,8 @@ package sessiondatapb
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/security"
 )
 
 // GetFloatPrec computes a precision suitable for a call to
@@ -108,4 +110,9 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 		return 0, false
 	}
 	return m, true
+}
+
+// User retrieves the session user.
+func (s *SessionData) User() security.SQLUsername {
+	return s.UserProto.Decode()
 }

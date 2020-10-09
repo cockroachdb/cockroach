@@ -135,7 +135,7 @@ func (n *dropTypeNode) startExec(params runParams) error {
 				TypeName  string
 				Statement string
 				User      string
-			}{typ.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.SessionData().User},
+			}{typ.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.p.User().Normalized()},
 		); err != nil {
 			return err
 		}

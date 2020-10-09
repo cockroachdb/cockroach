@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -975,6 +976,7 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 		// A type switch to handle a few explicit types with special semantics:
 		// - Datums are passed along as is.
 		// - Time datatypes get special representation in the database.
+		// - Usernames are assumed pre-normalized for lookup and validation.
 		var d tree.Datum
 		switch t := arg.(type) {
 		case tree.Datum:
@@ -993,6 +995,8 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 			dd := &tree.DDecimal{}
 			dd.Set(t)
 			d = dd
+		case security.SQLUsername:
+			d = tree.NewDString(t.Normalized())
 		}
 		if d == nil {
 			// Handle all types which have an underlying type that can be stored in the
@@ -1239,7 +1243,7 @@ type SessionDefaults map[string]string
 
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
-	User            string
+	User            security.SQLUsername
 	SessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
@@ -1273,7 +1277,7 @@ func (r *SessionRegistry) deregister(id ClusterWideID) {
 }
 
 type registrySession interface {
-	user() string
+	user() security.SQLUsername
 	cancelQuery(queryID ClusterWideID) bool
 	cancelSession()
 	// serialize serializes a Session into a serverpb.Session

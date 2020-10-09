@@ -244,7 +244,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
-		p, cleanup := NewInternalPlanner(desc, txn, security.RootUser, &MemoryMetrics{}, sc.execCfg)
+		p, cleanup := NewInternalPlanner(desc, txn, security.RootUserName(), &MemoryMetrics{}, sc.execCfg)
 		defer cleanup()
 		localPlanner := p.(*planner)
 		stmt, err := parser.ParseOne(query)
@@ -464,7 +464,7 @@ func startGCJob(
 	ctx context.Context,
 	db *kv.DB,
 	jobRegistry *jobs.Registry,
-	username string,
+	username security.SQLUsername,
 	schemaChangeDescription string,
 	details jobspb.SchemaChangeGCDetails,
 ) error {
@@ -640,7 +640,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 			},
 		}
 		if err := startGCJob(
-			ctx, sc.db, sc.jobRegistry, sc.job.Payload().Username, sc.job.Payload().Description, gcDetails,
+			ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
 		); err != nil {
 			return err
 		}
@@ -856,7 +856,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		// Queue a GC job.
 		jobRecord := CreateGCJobRecord(
 			"ROLLBACK OF "+sc.job.Payload().Description,
-			sc.job.Payload().Description,
+			sc.job.Payload().UsernameProto.Decode(),
 			jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
 					{
@@ -981,7 +981,7 @@ func (sc *SchemaChanger) createIndexGCJob(
 		ParentID: sc.descID,
 	}
 
-	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().Username, indexGCDetails)
+	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails)
 	indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn, nil /* resultsCh */)
 	if err != nil {
 		return nil, err
@@ -1823,7 +1823,7 @@ func (sc *SchemaChanger) reverseMutation(
 // CreateGCJobRecord creates the job record for a GC job, setting some
 // properties which are common for all GC jobs.
 func CreateGCJobRecord(
-	originalDescription string, username string, details jobspb.SchemaChangeGCDetails,
+	originalDescription string, username security.SQLUsername, details jobspb.SchemaChangeGCDetails,
 ) jobs.Record {
 	descriptorIDs := make([]descpb.ID, 0)
 	if len(details.Indexes) > 0 {
@@ -2034,10 +2034,10 @@ func newFakeSessionData() *sessiondata.SessionData {
 			// And in fact it is used by `current_schemas()`, which, although is a pure
 			// function, takes arguments which might be impure (so it can't always be
 			// pre-evaluated).
-			Database: "",
-			User:     security.NodeUser,
+			Database:  "",
+			UserProto: security.NodeUserName().EncodeProto(),
 		},
-		SearchPath:    sessiondata.DefaultSearchPathForUser(security.NodeUser),
+		SearchPath:    sessiondata.DefaultSearchPathForUser(security.NodeUserName()),
 		SequenceState: sessiondata.NewSequenceState(),
 		Location:      time.UTC,
 	}
@@ -2203,7 +2203,7 @@ func (r schemaChangeResumer) Resume(
 			ctx,
 			p.ExecCfg().DB,
 			p.ExecCfg().JobRegistry,
-			r.job.Payload().Username,
+			r.job.Payload().UsernameProto.Decode(),
 			r.job.Payload().Description,
 			multiTableGCDetails,
 		); err != nil {
@@ -2348,7 +2348,7 @@ func (sc *SchemaChanger) queueCleanupJobs(
 	if len(spanList) > 0 {
 		jobRecord := jobs.Record{
 			Description:   fmt.Sprintf("CLEANUP JOB for '%s'", sc.job.Payload().Description),
-			Username:      sc.job.Payload().Username,
+			Username:      sc.job.Payload().UsernameProto.Decode(),
 			DescriptorIDs: descpb.IDs{scDesc.GetID()},
 			Details: jobspb.SchemaChangeDetails{
 				DescID:          sc.descID,

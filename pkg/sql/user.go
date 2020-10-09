@@ -55,7 +55,7 @@ import (
 //   via the cluster setting.
 //
 func GetUserHashedPassword(
-	ctx context.Context, ie *InternalExecutor, username string,
+	ctx context.Context, ie *InternalExecutor, username security.SQLUsername,
 ) (
 	exists bool,
 	canLogin bool,
@@ -63,7 +63,7 @@ func GetUserHashedPassword(
 	validUntilFn func(ctx context.Context) (timestamp *tree.DTimestamp, err error),
 	err error,
 ) {
-	isRoot := username == security.RootUser
+	isRoot := username.IsRootUser()
 
 	if isRoot {
 		// As explained above, for root we report that the user exists
@@ -91,7 +91,7 @@ func GetUserHashedPassword(
 }
 
 func retrieveUserAndPassword(
-	ctx context.Context, ie *InternalExecutor, isRoot bool, normalizedUsername string,
+	ctx context.Context, ie *InternalExecutor, isRoot bool, normalizedUsername security.SQLUsername,
 ) (exists bool, canLogin bool, hashedPassword []byte, validUntil *tree.DTimestamp, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
@@ -115,7 +115,7 @@ func retrieveUserAndPassword(
 			`WHERE username=$1`
 		values, err := ie.QueryRowEx(
 			ctx, "get-hashed-pwd", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			getHashedPassword, normalizedUsername)
 		if err != nil {
 			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
@@ -136,7 +136,7 @@ func retrieveUserAndPassword(
 
 		loginDependencies, err := ie.QueryEx(
 			ctx, "get-login-dependencies", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			getLoginDependencies,
 			normalizedUsername,
 		)
@@ -188,30 +188,31 @@ var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 )
 
 // GetAllRoles returns a "set" (map) of Roles -> true.
-func (p *planner) GetAllRoles(ctx context.Context) (map[string]bool, error) {
+func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUsername]bool, error) {
 	query := `SELECT username FROM system.users`
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 		ctx, "read-users", p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query)
 	if err != nil {
 		return nil, err
 	}
 
-	users := make(map[string]bool)
+	users := make(map[security.SQLUsername]bool)
 	for _, row := range rows {
 		username := tree.MustBeDString(row[0])
-		users[string(username)] = true
+		// The usernames in system.users are already normalized.
+		users[security.MakeSQLUsernameFromPreNormalizedString(string(username))] = true
 	}
 	return users, nil
 }
 
 // RoleExists returns true if the role exists.
-func (p *planner) RoleExists(ctx context.Context, role string) (bool, error) {
+func (p *planner) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
 	query := `SELECT username FROM system.users WHERE username = $1`
 	row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 		ctx, "read-users", p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query, role,
 	)
 	if err != nil {

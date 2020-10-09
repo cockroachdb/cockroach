@@ -66,7 +66,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 	datums, cols, err := params.ExecCfg().InternalExecutor.QueryWithCols(
 		params.ctx,
 		"load-schedule",
-		params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
+		params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			"SELECT schedule_id, schedule_expr FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),
@@ -103,7 +103,7 @@ func deleteSchedule(params runParams, scheduleID int64) error {
 		params.ctx,
 		"delete-schedule",
 		params.EvalContext().Txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			"DELETE FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),

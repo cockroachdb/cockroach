@@ -217,7 +217,7 @@ func newLoopStats(
 		readyToRunStmt, numRunningJobsStmt)
 
 	datums, err := ex.QueryRowEx(ctx, "scheduler-stats", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		statsStmt)
 	if err != nil {
 		return nil, err
@@ -283,7 +283,7 @@ func (s *jobScheduler) executeSchedules(
 	rows, cols, err := s.InternalExecutor.QueryWithCols(
 		ctx, "find-scheduled-jobs",
 		txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		findSchedulesStmt)
 
 	if err != nil {

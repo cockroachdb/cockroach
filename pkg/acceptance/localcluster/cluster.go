@@ -268,7 +268,7 @@ func (c *Cluster) RPCPort(nodeIdx int) string {
 
 func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*Node, <-chan error) {
 	baseCtx := &base.Config{
-		User:     security.NodeUser,
+		User:     security.NodeUserName(),
 		Insecure: true,
 	}
 	rpcCtx := rpc.NewContext(rpc.ContextOptions{
