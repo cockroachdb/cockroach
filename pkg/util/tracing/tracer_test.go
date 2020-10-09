@@ -295,7 +295,7 @@ func TestLightstepContext(t *testing.T) {
 	}
 
 	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext))
-	s2Ctx := s2.(*span).otSpan.shadowSpan.Context()
+	s2Ctx := s2.(*span).ot.shadowSpan.Context()
 
 	// Verify that the baggage is correct in both the tracer context and in the
 	// lightstep context.
