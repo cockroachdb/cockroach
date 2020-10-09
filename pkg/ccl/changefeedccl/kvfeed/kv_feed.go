@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,6 +38,7 @@ import (
 type Config struct {
 	Settings           *cluster.Settings
 	DB                 *kv.DB
+	Codec              keys.SQLCodec
 	Clock              *hlc.Clock
 	Gossip             gossip.OptionalGossip
 	Spans              []roachpb.Span
@@ -94,6 +96,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater,
+		cfg.Codec,
 		sf, sc, pff, bf)
 	g.GoCtx(f.run)
 	err := g.Wait()
@@ -131,6 +134,7 @@ type kvFeed struct {
 	withInitialBackfill bool
 	initialHighWater    hlc.Timestamp
 	sink                EventBufferWriter
+	codec               keys.SQLCodec
 
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
@@ -149,6 +153,7 @@ func newKVFeed(
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff bool,
 	initialHighWater hlc.Timestamp,
+	codec keys.SQLCodec,
 	tf schemaFeed,
 	sc kvScanner,
 	pff physicalFeedFactory,
@@ -162,6 +167,7 @@ func newKVFeed(
 		initialHighWater:    initialHighWater,
 		schemaChangeEvents:  schemaChangeEvents,
 		schemaChangePolicy:  schemaChangePolicy,
+		codec:               codec,
 		tableFeed:           tf,
 		scanner:             sc,
 		physicalFeed:        pff,
@@ -212,12 +218,21 @@ func (f *kvFeed) scanIfShould(
 	// time with an initial backfill but if you use a cursor then you will get the
 	// updates after that timestamp.
 	isInitialScan := initialScan && f.withInitialBackfill
+	var spansToBackfill []roachpb.Span
 	if isInitialScan {
 		scanTime = highWater
+		spansToBackfill = f.spans
 	} else if len(events) > 0 {
-		// TODO(ajwerner): In this case we should only backfill for the tables
-		// which have events which may not be all of the targets.
+		// Only backfill for the tables which have events which may not be all
+		// of the targets.
 		for _, ev := range events {
+			tablePrefix := f.codec.TablePrefix(uint32(ev.After.ID))
+			tableSpan := roachpb.Span{Key: tablePrefix, EndKey: tablePrefix.PrefixEnd()}
+			for _, sp := range f.spans {
+				if tableSpan.Overlaps(sp) {
+					spansToBackfill = append(spansToBackfill, sp)
+				}
+			}
 			if !scanTime.Equal(ev.After.ModificationTime) {
 				log.Fatalf(ctx, "found event in shouldScan which did not occur at the scan time %v: %v",
 					scanTime, ev)
@@ -237,7 +252,7 @@ func (f *kvFeed) scanIfShould(
 	}
 
 	if err := f.scanner.Scan(ctx, f.sink, physicalConfig{
-		Spans:     f.spans,
+		Spans:     spansToBackfill,
 		Timestamp: scanTime,
 		WithDiff:  !isInitialScan && f.withDiff,
 	}); err != nil {
