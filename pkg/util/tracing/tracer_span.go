@@ -695,19 +695,21 @@ type TraceCollection struct {
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
 func ImportRemoteSpans(os opentracing.Span, remoteSpans []tracingpb.RecordedSpan) error {
-	s := os.(*span)
-	if !s.crdb.isRecording() {
-		return errors.New("adding Raw Spans to a span that isn't recording")
-	}
+	return os.(*span).crdb.ImportRemoteSpans(remoteSpans)
+}
 
+func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
+	if !s.isRecording() {
+		return errors.AssertionFailedf("adding Raw Spans to a span that isn't recording")
+	}
 	// Change the root of the remote recording to be a child of this span. This is
 	// usually already the case, except with DistSQL traces where remote
 	// processors run in spans that FollowFrom an RPC span that we don't collect.
-	remoteSpans[0].ParentSpanID = s.crdb.SpanID
+	remoteSpans[0].ParentSpanID = s.SpanID
 
-	s.crdb.mu.Lock()
-	s.crdb.mu.recording.remoteSpans = append(s.crdb.mu.recording.remoteSpans, remoteSpans...)
-	s.crdb.mu.Unlock()
+	s.mu.Lock()
+	s.mu.recording.remoteSpans = append(s.mu.recording.remoteSpans, remoteSpans...)
+	s.mu.Unlock()
 	return nil
 }
 
