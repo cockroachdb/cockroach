@@ -207,15 +207,6 @@ func (j *Job) ID() *int64 {
 	return j.id
 }
 
-// SessionIDString returns the session of the job that this Job is currently
-// tracking. This will be "<empty>" if the job is created before version 20.1.
-func (j *Job) SessionIDString() string {
-	if j.sessionID == "" {
-		return "<empty>"
-	}
-	return string(j.sessionID)
-}
-
 // CreatedBy returns name/id of this job creator.  This will be nil if this information
 // was not set.
 func (j *Job) CreatedBy() *CreatedByInfo {
