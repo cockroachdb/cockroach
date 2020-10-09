@@ -55,11 +55,6 @@ func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp *types.T) bool {
 	return scalar.DataType().Identical(dstTyp)
 }
 
-// IsString returns true if the given scalar expression is of type String.
-func (c *CustomFuncs) IsString(scalar opt.ScalarExpr) bool {
-	return scalar.DataType().Family() == types.StringFamily
-}
-
 // IsTimestamp returns true if the given scalar expression is of type Timestamp.
 func (c *CustomFuncs) IsTimestamp(scalar opt.ScalarExpr) bool {
 	return scalar.DataType().Family() == types.TimestampFamily

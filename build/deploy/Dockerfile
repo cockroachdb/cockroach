@@ -6,7 +6,9 @@ FROM registry.access.redhat.com/ubi8/ubi
 # ca-certificates - to authenticate TLS connections for telemetry and
 #                   bulk-io with S3/GCS/Azure
 # tzdata - for time zone functions
-RUN yum update --disablerepo=* --enablerepo=ubi-8-appstream --enablerepo=ubi-8-baseos -y && rm -rf /var/cache/yum
+RUN yum update --disablerepo=* --enablerepo=ubi-8-appstream --enablerepo=ubi-8-baseos -y && \
+    yum install --disablerepo=* --enablerepo=ubi-8-appstream --enablerepo=ubi-8-baseos hostname -y && \
+    rm -rf /var/cache/yum
 
 # Install GEOS libraries.
 RUN mkdir /usr/local/lib/cockroach
