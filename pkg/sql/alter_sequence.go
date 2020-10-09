@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -79,7 +80,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		struct {
 			SequenceName string
 			Statement    string
-			User         string
+			User         security.SQLUsername
 		}{params.p.ResolvedName(n.n.Name).FQString(), n.n.String(), params.SessionData().User},
 	)
 }

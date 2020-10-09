@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -41,8 +42,8 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	privs := n.desc.GetPrivileges()
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	newOwner := string(n.n.Owner)
-	if newOwner == privs.Owner {
+	newOwner := n.n.Owner
+	if newOwner == privs.Owner() {
 		return nil
 	}
 	if err := params.p.checkCanAlterDatabaseAndSetNewOwner(params.ctx, n.desc, newOwner); err != nil {
@@ -59,7 +60,7 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 // checkCanAlterDatabaseAndSetNewOwner handles privilege checking and setting new owner.
 // Called in ALTER DATABASE and REASSIGN OWNED BY.
 func (p *planner) checkCanAlterDatabaseAndSetNewOwner(
-	ctx context.Context, desc catalog.MutableDescriptor, newOwner string,
+	ctx context.Context, desc catalog.MutableDescriptor, newOwner security.SQLUsername,
 ) error {
 	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
 		return err

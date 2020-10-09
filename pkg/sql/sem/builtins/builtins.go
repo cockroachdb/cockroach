@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -3349,10 +3348,10 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if len(ctx.SessionData.User) == 0 {
+				if ctx.SessionData.User.Undefined() {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.SessionData.User), nil
+				return tree.NewDString(ctx.SessionData.User.Normalized()), nil
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",
@@ -6344,7 +6343,7 @@ var errInsufficientPriv = pgerror.New(
 )
 
 func checkPrivilegedUser(ctx *tree.EvalContext) error {
-	if ctx.SessionData.User != security.RootUser {
+	if !ctx.SessionData.User.IsRootUser() {
 		return errInsufficientPriv
 	}
 	return nil

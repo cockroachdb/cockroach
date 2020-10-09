@@ -38,7 +38,7 @@ message ChangeAggregatorSpec {
 
   // User who initiated the changefeed. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user = 3 [(gogoproto.nullable) = false];
+  optional string user_proto = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -61,5 +61,5 @@ message ChangeFrontierSpec {
 
   // User who initiated the changefeed. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user = 4 [(gogoproto.nullable) = false];
+  optional string user_proto = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 }

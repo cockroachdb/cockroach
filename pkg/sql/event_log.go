@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -130,7 +131,7 @@ const (
 type EventLogSetClusterSettingDetail struct {
 	SettingName string
 	Value       string
-	User        string
+	User        security.SQLUsername
 }
 
 // An EventLogger exposes methods used to record events to the event table.

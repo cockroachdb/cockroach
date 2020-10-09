@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -158,7 +159,7 @@ func doCreateSequence(
 		struct {
 			SequenceName string
 			Statement    string
-			User         string
+			User         security.SQLUsername
 		}{name.FQString(), context, params.SessionData().User},
 	)
 }

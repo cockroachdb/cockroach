@@ -597,7 +597,8 @@ func TestBackupRestoreAppend(t *testing.T) {
 			store, err := cloudimpl.ExternalStorageFromURI(ctx, "userfile:///0",
 				base.ExternalIODirConfig{},
 				tc.Servers[0].ClusterSettings(),
-				blobs.TestEmptyBlobClientFactory, "root",
+				blobs.TestEmptyBlobClientFactory,
+				security.RootUserName(),
 				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB())
 			require.NoError(t, err)
 			defer store.Close()
@@ -1093,7 +1094,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP TABLE bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobspb.TypeBackup, jobs.StatusSucceeded, jobs.Record{
-		Username: security.RootUser,
+		Username: security.RootUserName(),
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir+"redacted", sanitizedFullDir+"redacted",
@@ -1108,7 +1109,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS (into_db='restoredb')`, fullDir, incDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
-		Username: security.RootUser,
+		Username: security.RootUserName(),
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db='restoredb'`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
@@ -1194,7 +1195,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			// Verify the BACKUP job description is sanitized.
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StatusSucceeded,
 				jobs.Record{
-					Username: security.RootUser,
+					Username: security.RootUserName(),
 					Description: fmt.Sprintf(
 						`BACKUP DATABASE data TO '%s' WITH %s`,
 						backupLoc1, sanitizedEncryptionOption),
@@ -1212,7 +1213,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 
 			// Verify the RESTORE job description is sanitized.
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
-				Username: security.RootUser,
+				Username: security.RootUserName(),
 				Description: fmt.Sprintf(
 					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db='restoredb'`,
 					backupLoc1, sanitizedEncryptionOption,
@@ -1418,7 +1419,7 @@ func createAndWaitForJob(
 	t.Helper()
 	now := timeutil.ToUnixMicros(timeutil.Now())
 	payload, err := protoutil.Marshal(&jobspb.Payload{
-		Username:      security.RootUser,
+		UsernameProto: security.RootUserName().EncodeProto(),
 		DescriptorIDs: descriptorIDs,
 		StartedMicros: now,
 		Details:       jobspb.WrapPayloadDetails(details),

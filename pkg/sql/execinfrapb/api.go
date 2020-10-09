@@ -11,6 +11,7 @@
 package execinfrapb
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -50,7 +51,7 @@ func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 		Location:              evalCtx.GetLocation().String(),
 		Database:              evalCtx.SessionData.Database,
 		TemporarySchemaName:   evalCtx.SessionData.SearchPath.GetTemporarySchemaName(),
-		User:                  evalCtx.SessionData.User,
+		UserProto:             evalCtx.SessionData.User.EncodeProto(),
 		ApplicationName:       evalCtx.SessionData.ApplicationName,
 		BytesEncodeFormat:     be,
 		ExtraFloatDigits:      int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
@@ -73,4 +74,34 @@ func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 		}
 	}
 	return res
+}
+
+// User accesses the user field.
+func (e EvalContext) User() security.SQLUsername {
+	return e.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *BackupDataSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *CSVWriterSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *ReadImportDataSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *ChangeAggregatorSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *ChangeFrontierSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
 }

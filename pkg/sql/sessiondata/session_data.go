@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 )
@@ -78,7 +79,7 @@ type SessionData struct {
 	// If set to 0, there is no timeout.
 	IdleInTransactionSessionTimeout time.Duration
 	// User is the name of the user logged into the session.
-	User string
+	User security.SQLUsername
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool

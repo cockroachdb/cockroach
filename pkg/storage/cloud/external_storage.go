@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
@@ -82,7 +83,7 @@ type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStora
 
 // ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
 type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
-	user string) (ExternalStorage, error)
+	user security.SQLUsername) (ExternalStorage, error)
 
 // SQLConnI encapsulates the interfaces which will be implemented by the network
 // backed SQLConn which is used to interact with the userfile tables.

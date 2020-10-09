@@ -91,7 +91,7 @@ func (m *mysqldumpReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
 }
@@ -400,7 +400,7 @@ func mysqlTableToCockroach(
 
 	var seqDesc *tabledesc.Mutable
 	// If we have an auto-increment seq, create it and increment the id.
-	owner := security.AdminRole
+	owner := security.AdminRoleName()
 	if seqName != "" {
 		var opts tree.SequenceOptions
 		if startingValue != 0 {

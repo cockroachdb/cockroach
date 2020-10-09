@@ -132,8 +132,7 @@ func (s *authenticationServer) RegisterGateway(
 func (s *authenticationServer) UserLogin(
 	ctx context.Context, req *serverpb.UserLoginRequest,
 ) (*serverpb.UserLoginResponse, error) {
-	username := req.Username
-	if username == "" {
+	if req.Username == "" {
 		return nil, status.Errorf(
 			codes.Unauthenticated,
 			"no username was provided",
@@ -145,7 +144,7 @@ func (s *authenticationServer) UserLogin(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username = tree.Name(username).Normalize()
+	username, _ := security.MakeSQLUsernameFromUserInput(req.Username, security.UsernameValidation)
 
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
@@ -197,14 +196,14 @@ func (s *authenticationServer) ValidateOIDCState(
 // The session's ID and secret are returned to the caller as an HTTP cookie,
 // added via a "Set-Cookie" header.
 func (s *authenticationServer) UserLoginFromSSO(
-	ctx context.Context, username string,
+	ctx context.Context, reqUsername string,
 ) (*http.Cookie, error) {
 	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
 	// case-insensitive. Therefore we need to normalize the username
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username = tree.Name(username).Normalize()
+	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
 	exists, canLogin, _, _, err := sql.GetUserHashedPassword(
 		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
@@ -225,7 +224,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) createSessionFor(
-	ctx context.Context, username string,
+	ctx context.Context, username security.SQLUsername,
 ) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.newAuthSession(ctx, username)
@@ -268,7 +267,7 @@ func (s *authenticationServer) UserLogout(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
@@ -318,7 +317,7 @@ WHERE id = $1`
 		ctx,
 		"lookup-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
 		return false, "", err
@@ -363,7 +362,7 @@ WHERE id = $1`
 // The caller is responsible for ensuring that the username is normalized.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) verifyPassword(
-	ctx context.Context, username string, password string,
+	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
 	exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(
 		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
@@ -410,7 +409,7 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) newAuthSession(
-	ctx context.Context, username string,
+	ctx context.Context, username security.SQLUsername,
 ) (int64, []byte, error) {
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
@@ -430,10 +429,10 @@ RETURNING id
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		insertSessionStmt,
 		hashedSecret,
-		username,
+		username.Normalized(),
 		expiration,
 	)
 	if err != nil {

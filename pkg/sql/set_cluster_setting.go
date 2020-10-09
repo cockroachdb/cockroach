@@ -195,7 +195,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			expectedEncodedValue = n.setting.EncodedDefault()
 			if _, err := execCfg.InternalExecutor.ExecEx(
 				ctx, "reset-setting", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"DELETE FROM system.settings WHERE name = $1", n.name,
 			); err != nil {
 				return err
@@ -210,7 +210,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			if _, ok := n.setting.(*settings.StateMachineSetting); ok {
 				datums, err := execCfg.InternalExecutor.QueryRowEx(
 					ctx, "retrieve-prev-setting", txn,
-					sessiondata.InternalExecutorOverride{User: security.RootUser},
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 					"SELECT value FROM system.settings WHERE name = $1", n.name,
 				)
 				if err != nil {
@@ -232,7 +232,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 			if _, err = execCfg.InternalExecutor.ExecEx(
 				ctx, "update-setting", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
 				n.name, encoded, n.setting.Typ(),
 			); err != nil {

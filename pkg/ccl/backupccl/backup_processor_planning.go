@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -136,7 +137,7 @@ func makeBackupDataProcessorSpecs(
 	mvccFilter roachpb.MVCCFilter,
 	encryption *jobspb.BackupEncryptionOptions,
 	startTime, endTime hlc.Timestamp,
-	user string,
+	user security.SQLUsername,
 	execCfg *sql.ExecutorConfig,
 ) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
 	var spanPartitions []sql.SpanPartition
@@ -191,7 +192,7 @@ func makeBackupDataProcessorSpecs(
 			PKIDs:            pkIDs,
 			BackupStartTime:  startTime,
 			BackupEndTime:    endTime,
-			User:             user,
+			UserProto:        user.EncodeProto(),
 		}
 		nodeToSpec[partition.Node] = spec
 	}
@@ -212,7 +213,7 @@ func makeBackupDataProcessorSpecs(
 				PKIDs:            pkIDs,
 				BackupStartTime:  startTime,
 				BackupEndTime:    endTime,
-				User:             user,
+				UserProto:        user.EncodeProto(),
 			}
 			nodeToSpec[partition.Node] = spec
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -150,7 +151,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 			struct {
 				SchemaName string
 				Statement  string
-				User       string
+				User       security.SQLUsername
 			}{sc.Name, n.n.String(), p.SessionData().User},
 		); err != nil {
 			return err

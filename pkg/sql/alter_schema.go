@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -82,19 +83,22 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			params.ctx, n.db, n.desc, string(t.NewName), tree.AsStringWithFQNames(n.n, params.Ann()))
 	case *tree.AlterSchemaOwner:
 		return params.p.alterSchemaOwner(
-			params.ctx, n.desc, string(t.Owner), tree.AsStringWithFQNames(n.n, params.Ann()))
+			params.ctx, n.desc, t.Owner, tree.AsStringWithFQNames(n.n, params.Ann()))
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
 	}
 }
 
 func (p *planner) alterSchemaOwner(
-	ctx context.Context, scDesc *schemadesc.Mutable, newOwner string, jobDescription string,
+	ctx context.Context,
+	scDesc *schemadesc.Mutable,
+	newOwner security.SQLUsername,
+	jobDescription string,
 ) error {
 	privs := scDesc.GetPrivileges()
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
+	if newOwner == privs.Owner() {
 		return nil
 	}
 
@@ -108,7 +112,7 @@ func (p *planner) alterSchemaOwner(
 // checkCanAlterSchemaAndSetNewOwner handles privilege checking and setting new owner.
 // Called in ALTER SCHEMA and REASSIGN OWNED BY.
 func (p *planner) checkCanAlterSchemaAndSetNewOwner(
-	ctx context.Context, scDesc *schemadesc.Mutable, newOwner string,
+	ctx context.Context, scDesc *schemadesc.Mutable, newOwner security.SQLUsername,
 ) error {
 	if err := p.checkCanAlterToNewOwner(ctx, scDesc, newOwner); err != nil {
 		return err
