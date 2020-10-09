@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // IndexOpts configures the behavior of TableDescriptor.ForeachIndex.
@@ -223,3 +224,42 @@ type Descriptors []Descriptor
 func (d Descriptors) Len() int           { return len(d) }
 func (d Descriptors) Less(i, j int) bool { return d[i].GetID() < d[j].GetID() }
 func (d Descriptors) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }
+
+// FormatSafeDescriptorProperties is a shared helper function for writing
+// un-redacted, common parts of a descriptor. It writes <prop>: value separated
+// by commas to w. These key-value pairs would be valid YAML if wrapped in
+// curly braces.
+func FormatSafeDescriptorProperties(w *redact.StringBuilder, desc Descriptor) {
+	w.Printf("ID: %d, Version: %d", desc.GetID(), desc.GetVersion())
+	if desc.IsUncommittedVersion() {
+		w.Printf(", IsUncommitted: true")
+	}
+	w.Printf(", ModificationTime: %q", desc.GetModificationTime())
+	if parentID := desc.GetParentID(); parentID != 0 {
+		w.Printf(", ParentID: %d", parentID)
+	}
+	if parentSchemaID := desc.GetParentSchemaID(); parentSchemaID != 0 {
+		w.Printf(", ParentSchemaID: %d", parentSchemaID)
+	}
+	{
+		var state descpb.DescriptorState
+		switch {
+		case desc.Public():
+			state = descpb.DescriptorState_PUBLIC
+		case desc.Dropped():
+			state = descpb.DescriptorState_DROP
+		case desc.Adding():
+			state = descpb.DescriptorState_ADD
+		case desc.Offline():
+			state = descpb.DescriptorState_OFFLINE
+		}
+		w.Printf(", State: %v", state)
+		if offlineReason := desc.GetOfflineReason(); state == descpb.DescriptorState_OFFLINE &&
+			offlineReason != "" {
+			w.Printf(", OfflineReason: %q", redact.Safe(offlineReason))
+		}
+	}
+	if drainingNames := desc.GetDrainingNames(); len(drainingNames) > 0 {
+		w.Printf(", NumDrainingNames: %d", len(drainingNames))
+	}
+}

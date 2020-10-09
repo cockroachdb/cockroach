@@ -20,6 +20,11 @@ pkg/sql/catalog/descpb/structured.go | `DescriptorVersion`
 pkg/sql/catalog/descpb/structured.go | `IndexDescriptorVersion`
 pkg/sql/catalog/descpb/structured.go | `ColumnID`
 pkg/sql/catalog/descpb/structured.go | `MutationID`
+pkg/sql/catalog/descpb/structured.go | `ConstraintValidity`
+pkg/sql/catalog/descpb/structured.go | `DescriptorMutation_Direction`
+pkg/sql/catalog/descpb/structured.go | `DescriptorMutation_State`
+pkg/sql/catalog/descpb/structured.go | `DescriptorState`
+pkg/sql/catalog/descpb/structured.go | `ConstraintType`
 pkg/sql/sem/tree/table_ref.go | `ID`
 pkg/sql/sem/tree/table_ref.go | `ColumnID`
 pkg/storage/enginepb/mvcc3.go | `MVCCStatsDelta`
