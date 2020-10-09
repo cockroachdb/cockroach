@@ -160,10 +160,7 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 	if !verified {
-		return nil, status.Errorf(
-			codes.Unauthenticated,
-			"the provided username and password did not match any credentials on the server",
-		)
+		return nil, errWebAuthenticationFailure
 	}
 
 	cookie, err := s.createSessionFor(ctx, username)
@@ -179,7 +176,10 @@ func (s *authenticationServer) UserLogin(
 	return &serverpb.UserLoginResponse{}, nil
 }
 
-var errUsernameDoesNotExist = errors.New("username for session does not exist")
+var errWebAuthenticationFailure = status.Errorf(
+	codes.Unauthenticated,
+	"the provided credentials did not match any account on the server",
+)
 
 func (s *authenticationServer) ValidateOIDCState(
 	ctx context.Context, req *serverpb.ValidateOIDCStateRequest,
@@ -206,7 +206,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username = tree.Name(username).Normalize()
 
-	exists, _, _, _, err := sql.GetUserHashedPassword(
+	exists, canLogin, _, _, err := sql.GetUserHashedPassword(
 		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
 	)
 
@@ -214,8 +214,8 @@ func (s *authenticationServer) UserLoginFromSSO(
 		return nil, errors.Wrap(err, "failed creating session for username")
 	}
 
-	if !exists {
-		return nil, errUsernameDoesNotExist
+	if !exists || !canLogin {
+		return nil, errWebAuthenticationFailure
 	}
 
 	return s.createSessionFor(ctx, username)
