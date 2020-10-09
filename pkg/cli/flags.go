@@ -581,6 +581,7 @@ func init() {
 		statusNodeCmd,
 		lsNodesCmd,
 		debugZipCmd,
+		doctorClusterCmd,
 		// If you add something here, make sure the actual implementation
 		// of the command uses `cmdTimeoutContext(.)` or it will ignore
 		// the timeout.
