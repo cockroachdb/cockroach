@@ -90,10 +90,6 @@ func (sc *spanContext) ForeachBaggageItem(handler func(k, v string) bool) {
 	}
 }
 
-func (sc *spanContext) isNoop() bool {
-	return sc.spanMeta == spanMeta{}
-}
-
 // RecordingType is the type of recording that a span might be performing.
 type RecordingType int
 
@@ -742,8 +738,12 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 // IsNoopContext returns true if the span context is from a "no-op" span. If
 // this is true, any span derived from this context will be a "black hole span".
 func IsNoopContext(spanCtx opentracing.SpanContext) bool {
-	// TODO(tbg): remove this.
-	return spanCtx.(*spanContext).isNoop()
+	sc := spanCtx.(*spanContext)
+	return sc.isNoop()
+}
+
+func (sc *spanContext) isNoop() bool {
+	return sc.recordingType == NoRecording && sc.shadowTr == nil
 }
 
 // SetSpanStats sets the stats on a span. stats.Stats() will also be added to
@@ -788,11 +788,36 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 func (s *span) Context() opentracing.SpanContext {
 	s.crdb.mu.Lock()
 	defer s.crdb.mu.Unlock()
-	baggageCopy := make(map[string]string, len(s.crdb.mu.Baggage))
+	sc := s.SpanContext()
+	return &sc
+}
+
+// TODO(tbg): these are temporary to get things to compile without larger
+// mechanical refactors.
+
+// SpanContext is information about a span, used to derive spans
+// from a parent in a way that's uniform between local and remote
+// parents. For local parents, this generally references their Span
+// to unlock features such as sharing recordings with the parent. For
+// remote parents, it only contains the TraceID and related metadata.
+type SpanContext = spanContext
+
+// Span is the tracing span used throughout CockroachDB.
+type Span = span
+
+// spanContext returns a spanContext. Note that this returns a value,
+// not a pointer, which the caller can use to avoid heap allocations.
+func (s *span) SpanContext() SpanContext {
+	n := len(s.crdb.mu.Baggage)
+	// In the common case, we have no baggage, so avoid making an empty map.
+	var baggageCopy map[string]string
+	if n > 0 {
+		baggageCopy = make(map[string]string, n)
+	}
 	for k, v := range s.crdb.mu.Baggage {
 		baggageCopy[k] = v
 	}
-	sc := &spanContext{
+	sc := spanContext{
 		spanMeta: s.crdb.spanMeta,
 		span:     s,
 		Baggage:  baggageCopy,
