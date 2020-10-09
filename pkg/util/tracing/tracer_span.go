@@ -851,15 +851,20 @@ func (s *span) LogFields(fields ...otlog.Field) {
 			s.netTr.LazyPrintf("%s", buf.String())
 		}
 	}
-	if s.crdb.isRecording() {
-		s.crdb.mu.Lock()
-		if len(s.crdb.mu.recording.recordedLogs) < maxLogsPerSpan {
-			s.crdb.mu.recording.recordedLogs = append(s.crdb.mu.recording.recordedLogs, opentracing.LogRecord{
-				Timestamp: time.Now(),
-				Fields:    fields,
-			})
-		}
-		s.crdb.mu.Unlock()
+	s.crdb.LogFields(fields...)
+}
+
+func (s *crdbSpan) LogFields(fields ...otlog.Field) {
+	if !s.isRecording() {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.mu.recording.recordedLogs) < maxLogsPerSpan {
+		s.mu.recording.recordedLogs = append(s.mu.recording.recordedLogs, opentracing.LogRecord{
+			Timestamp: time.Now(),
+			Fields:    fields,
+		})
 	}
 }
 
