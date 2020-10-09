@@ -31,7 +31,7 @@ func TestRecordingString(t *testing.T) {
 	StartRecording(root, SnowballRecording)
 	root.LogFields(otlog.String(LogMessageField, "root 1"))
 	// Hackily fix the timing on the first log message, so that we can check it later.
-	rootSp.mu.recording.recordedLogs[0].Timestamp = rootSp.startTime.Add(time.Millisecond)
+	rootSp.crdb.mu.recording.recordedLogs[0].Timestamp = rootSp.crdb.startTime.Add(time.Millisecond)
 	// Sleep a bit so that everything that comes afterwards has higher timestamps
 	// than the one we just assigned. Otherwise the sorting will be screwed up.
 	time.Sleep(10 * time.Millisecond)
