@@ -131,7 +131,7 @@ func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
 	sp1 := tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 := StartChildSpan("child", sp1, nil /* logTags */, false /*separateRecording*/)
+	sp2 := tr.StartChildSpan("child", sp1.(*Span).SpanContext(), nil /* logTags */, false /*separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
@@ -143,7 +143,7 @@ func TestStartChildSpan(t *testing.T) {
 
 	sp1 = tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 = StartChildSpan("child", sp1, nil /* logTags */, true /*separateRecording*/)
+	sp2 = tr.StartChildSpan("child", sp1.(*Span).SpanContext(), nil /* logTags */, true /*separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
@@ -159,8 +159,8 @@ func TestStartChildSpan(t *testing.T) {
 
 	sp1 = tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 = StartChildSpan(
-		"child", sp1, logtags.SingleTagBuffer("key", "val"), false, /*separateRecording*/
+	sp2 = tr.StartChildSpan(
+		"child", sp1.(*Span).SpanContext(), logtags.SingleTagBuffer("key", "val"), false, /*separateRecording*/
 	)
 	sp2.Finish()
 	sp1.Finish()
