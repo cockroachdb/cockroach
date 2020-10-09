@@ -952,6 +952,42 @@ func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
 	return testCases
 }
 
+// mirrorJoinTypeAndOnExpr returns a "mirror" of the join type and the ON
+// expression. Only left semi/anti joins are expected.
+func mirrorJoinTypeAndOnExpr(
+	t descpb.JoinType, onExpr execinfrapb.Expression,
+) (descpb.JoinType, execinfrapb.Expression) {
+	switch t {
+	case descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+	default:
+		panic(errors.AssertionFailedf("only left semi/anti joins can be mirrored, %s requested", t))
+	}
+	var mirrorJoinType descpb.JoinType
+	if t == descpb.LeftSemiJoin {
+		mirrorJoinType = descpb.RightSemiJoin
+	} else {
+		mirrorJoinType = descpb.RightAntiJoin
+	}
+	var mirrorOnExpr execinfrapb.Expression
+	if onExpr.Expr != "" {
+		// We update the ON expression by switching the index variables
+		// (namely, if we have both inputs with two columns, we need to do the
+		// following replacement: @1 -> @3, @2 -> @4, @3 -> @1, and @4 -> @2).
+		onExpr := []byte(onExpr.Expr)
+		// Make a copy of the original.
+		mirroringOnExpr := []byte(string(onExpr))
+		for i := range onExpr {
+			if onExpr[i] == '@' {
+				oldIdxVar := onExpr[i+1] - '0'
+				newIdxVar := (oldIdxVar+1)%4 + 1
+				mirroringOnExpr[i+1] = newIdxVar + '0'
+			}
+		}
+		mirrorOnExpr.Expr = string(mirroringOnExpr)
+	}
+	return mirrorJoinType, mirrorOnExpr
+}
+
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -964,30 +1000,10 @@ func TestHashJoiner(t *testing.T) {
 			// join - all we need to do is to switch the inputs and change the
 			// join type accordingly.
 			mirroringCase := c
-			if c.joinType == descpb.LeftSemiJoin {
-				mirroringCase.joinType = descpb.RightSemiJoin
-			} else {
-				mirroringCase.joinType = descpb.RightAntiJoin
-			}
+			mirroringCase.joinType, mirroringCase.onExpr = mirrorJoinTypeAndOnExpr(c.joinType, c.onExpr)
 			mirroringCase.leftEqCols, mirroringCase.rightEqCols = mirroringCase.rightEqCols, mirroringCase.leftEqCols
 			mirroringCase.leftTypes, mirroringCase.rightTypes = mirroringCase.rightTypes, mirroringCase.leftTypes
 			mirroringCase.leftInput, mirroringCase.rightInput = mirroringCase.rightInput, mirroringCase.leftInput
-			if !c.onExpr.Empty() {
-				// We also need to update the ON expression by switching the
-				// index variables (namely, if we have both inputs with two
-				// columns, we need to do the following replacement:
-				// @1 -> @3, @2 -> @4, @3 -> @1, and @4 -> @2).
-				onExpr := []byte(c.onExpr.Expr)
-				mirroringOnExpr := []byte(mirroringCase.onExpr.Expr)
-				for i := range onExpr {
-					if onExpr[i] == '@' {
-						oldIdxVar := onExpr[i+1] - '0'
-						newIdxVar := (oldIdxVar+1)%4 + 1
-						mirroringOnExpr[i+1] = newIdxVar + '0'
-					}
-				}
-				mirroringCase.onExpr.Expr = string(mirroringOnExpr)
-			}
 			testCases = append(testCases, mirroringCase)
 		}
 	}
