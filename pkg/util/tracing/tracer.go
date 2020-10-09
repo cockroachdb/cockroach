@@ -328,7 +328,11 @@ func (t *Tracer) StartSpan(
 	// recordings and so it's done after all of s' fields not protected by a lock
 	// are set.
 	if recordingType != NoRecording {
-		s.enableRecording(parentCtx.span, recordingType, false /* separateRecording */)
+		var p *crdbSpan
+		if parentCtx.span != nil {
+			p = &parentCtx.span.crdb
+		}
+		s.crdb.enableRecording(p, recordingType, false /* separateRecording */)
 	}
 	return s
 }
@@ -481,7 +485,7 @@ func StartChildSpan(
 
 	// Start recording if necessary.
 	if recordingType != NoRecording {
-		s.enableRecording(pSpan, recordingType, separateRecording)
+		s.crdb.enableRecording(&pSpan.crdb, recordingType, separateRecording)
 	}
 
 	return s
