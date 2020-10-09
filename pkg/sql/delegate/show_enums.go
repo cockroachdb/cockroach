@@ -22,7 +22,7 @@ func (d *delegator) delegateShowEnums() (tree.Statement, error) {
 WITH enums(enumtypid, values) AS (
 	SELECT
 		enums.enumtypid AS enumtypid,
-		string_agg(enums.enumlabel, '|') WITHIN GROUP (ORDER BY (enumsortorder)) AS values
+		array_agg(enums.enumlabel) WITHIN GROUP (ORDER BY (enumsortorder)) AS values
 	FROM pg_catalog.pg_enum AS enums
 	GROUP BY enumtypid
 )
