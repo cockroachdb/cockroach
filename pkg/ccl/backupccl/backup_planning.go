@@ -695,6 +695,7 @@ func backupPlanHook(
 					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 				}
 			}
+			return err
 		}
 
 		// Collect telemetry.

@@ -878,6 +878,7 @@ func doRestorePlan(
 				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
+		return err
 	}
 
 	return sj.Run(ctx)
