@@ -98,12 +98,26 @@ func (sc *spanContext) isNoop() bool {
 type RecordingType int
 
 const (
-	// NoRecording means that the span isn't recording.
+	// NoRecording means that the span isn't recording. Child spans created from
+	// it similarly won't be recording by default.
 	NoRecording RecordingType = iota
-	// SnowballRecording means that remote child spans (generally opened through
-	// RPCs) are also recorded.
+	// SnowballRecording means that the span is recording and that derived
+	// spans will be as well, in the same mode (this includes remote spans,
+	// i.e. this mode crosses RPC boundaries). Derived spans will maintain
+	// their own recording, and this recording will be included in that of
+	// any local parent spans.
+	//
+	// TODO(tbg): there's ChildSpanSeparateRecording which avoids sharing
+	// the recording with the parent. I hope we can remove it.
 	SnowballRecording
-	// SingleNodeRecording means that only spans on the current node are recorded.
+	// SingleNodeRecording means that the span is recording and that locally
+	// derived spans will as well (i.e. a remote span typically won't be
+	// recording by default, in contrast to SnowballRecording). Similar to
+	// SnowballRecording, children have their own recording which is also
+	// included in that of their parents.
+	//
+	// TODO(tbg): there's ChildSpanSeparateRecording which avoids sharing
+	// the recording with the parent. I hope we can remove it.
 	SingleNodeRecording
 )
 
@@ -265,6 +279,9 @@ func (s *crdbSpan) enableRecording(
 //
 // If recording was already started on this span (either directly or because a
 // parent span is recording), the old recording is lost.
+//
+// Children spans created from the span while it is *not* recording will not
+// necessarily be recordable.
 func StartRecording(os opentracing.Span, recType RecordingType) {
 	if recType == NoRecording {
 		panic("StartRecording called with NoRecording")
