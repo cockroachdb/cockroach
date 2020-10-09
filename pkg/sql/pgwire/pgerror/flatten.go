@@ -13,8 +13,10 @@ package pgerror
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
 )
@@ -46,6 +48,11 @@ func Flatten(err error) *Error {
 	// Populate the source field if available.
 	if file, line, fn, ok := errors.GetOneLineSource(err); ok {
 		resErr.Source = &Error_Source{File: file, Line: int32(line), Function: fn}
+	}
+
+	// Add serialization failure hints if available.
+	if resErr.Code == pgcode.SerializationFailure.String() {
+		err = withSerializationFailureHints(err)
 	}
 
 	// Populate the details and hints.
@@ -82,6 +89,24 @@ func Flatten(err error) *Error {
 	}
 
 	return resErr
+}
+
+// serializationFailureReasonRegexp captures known failure reasons for
+// the serialization failure error messages.
+// We cannot use roachpb.TransactionRetryReason or roachpb.TransactionAbortedReason
+// as this introduces a circular dependency.
+var serializationFailureReasonRegexp = regexp.MustCompile(
+	`((?:ABORT_|RETRY_)[A-Z_]*|ReadWithinUncertaintyInterval)`,
+)
+
+// withSerializationFailureHints appends a doc URL that contains information for
+// commonly seen error messages.
+func withSerializationFailureHints(err error) error {
+	url := docs.URL("transaction-retry-error-reference.html")
+	if match := serializationFailureReasonRegexp.FindStringSubmatch(err.Error()); len(match) >= 2 {
+		url += "#" + strings.ToLower(match[1])
+	}
+	return errors.WithIssueLink(err, errors.IssueLink{IssueURL: url})
 }
 
 func getInnerMostStackTraceAsDetail(err error) string {

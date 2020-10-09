@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -238,8 +238,8 @@ func (c *cliState) printCliHelp() {
 	}
 	fmt.Printf(helpMessageFmt,
 		demoHelpStr,
-		base.DocsURL("sql-statements.html"),
-		base.DocsURL("use-the-built-in-sql-client.html"),
+		docs.URL("sql-statements.html"),
+		docs.URL("use-the-built-in-sql-client.html"),
 	)
 	fmt.Println()
 }
