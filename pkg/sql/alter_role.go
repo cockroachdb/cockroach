@@ -98,10 +98,13 @@ func (p *planner) checkPasswordOptionConstraints(
 
 	if roleOptions.Contains(roleoption.CREATELOGIN) ||
 		roleOptions.Contains(roleoption.NOCREATELOGIN) ||
-		roleOptions.Contains(roleoption.LOGIN) ||
-		(roleOptions.Contains(roleoption.NOLOGIN) && !newUser) || // CREATE ROLE NOLOGIN is valid without CREATELOGIN.
 		roleOptions.Contains(roleoption.PASSWORD) ||
-		roleOptions.Contains(roleoption.VALIDUNTIL) {
+		roleOptions.Contains(roleoption.VALIDUNTIL) ||
+		roleOptions.Contains(roleoption.LOGIN) ||
+		// CREATE ROLE NOLOGIN is valid without CREATELOGIN.
+		(roleOptions.Contains(roleoption.NOLOGIN) && !newUser) ||
+		// Disallow implicit LOGIN upon new user.
+		(newUser && !roleOptions.Contains(roleoption.NOLOGIN) && !roleOptions.Contains(roleoption.LOGIN)) {
 		// Only a role who has CREATELOGIN itself can grant CREATELOGIN or
 		// NOCREATELOGIN to another role, or set up a password for
 		// authentication, or set up password validity, or enable/disable
