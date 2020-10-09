@@ -201,7 +201,7 @@ type span struct {
 	tracer *Tracer // never nil
 
 	// Internal trace span. Can be zero.
-	crdbSpan
+	crdb crdbSpan
 	// x/net/trace.Trace instance; nil if not tracing to x/net/trace.
 	netTr trace.Trace
 	// Shadow tracer and span; zero if not using a shadow tracer.
@@ -212,19 +212,19 @@ type span struct {
 var _ opentracing.Span = &span{}
 
 func (s *span) isBlackHole() bool {
-	return !s.crdbSpan.isRecording() && s.netTr == nil && s.ot == (otSpan{})
+	return !s.crdb.isRecording() && s.netTr == nil && s.ot == (otSpan{})
 }
 
 func (s *span) isNoop() bool {
 	// NB: this is the same as `s` being zero with the exception
 	// of the `tracer` field. However, `span` is not comparable,
 	// so this can't be expressed easily.
-	return s.isBlackHole() && s.crdbSpan.TraceID == 0
+	return s.isBlackHole() && s.crdb.TraceID == 0
 }
 
 // IsRecording returns true if the span is recording its events.
 func IsRecording(s opentracing.Span) bool {
-	return s.(*span).isRecording()
+	return s.(*span).crdb.isRecording()
 }
 
 // enableRecording start recording on the span. From now on, log events and child spans
@@ -235,10 +235,10 @@ func IsRecording(s opentracing.Span) bool {
 // If separate recording is specified, the child is not registered with the
 // parent. Thus, the parent's recording will not include this child.
 func (s *span) enableRecording(parent *span, recType RecordingType, separateRecording bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	atomic.StoreInt32(&s.recording, 1)
-	s.mu.recording.recordingType = recType
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	atomic.StoreInt32(&s.crdb.recording, 1)
+	s.crdb.mu.recording.recordingType = recType
 	if parent != nil && !separateRecording {
 		parent.addChild(s)
 	}
@@ -248,9 +248,9 @@ func (s *span) enableRecording(parent *span, recType RecordingType, separateReco
 	// Clear any previously recorded info. This is needed by SQL SessionTracing,
 	// who likes to start and stop recording repeatedly on the same span, and
 	// collect the (separate) recordings every time.
-	s.mu.recording.recordedLogs = nil
-	s.mu.recording.children = nil
-	s.mu.recording.remoteSpans = nil
+	s.crdb.mu.recording.recordedLogs = nil
+	s.crdb.mu.recording.children = nil
+	s.crdb.mu.recording.remoteSpans = nil
 }
 
 // StartRecording enables recording on the span. Events from this point forward
@@ -273,7 +273,7 @@ func StartRecording(os opentracing.Span, recType RecordingType) {
 
 	// If we're already recording (perhaps because the parent was recording when
 	// this span was created), there's nothing to do.
-	if !sp.isRecording() {
+	if !sp.crdb.isRecording() {
 		sp.enableRecording(nil /* parent */, recType, false /* separateRecording */)
 	}
 }
@@ -290,17 +290,17 @@ func StopRecording(os opentracing.Span) {
 }
 
 func (s *span) disableRecording() {
-	s.mu.Lock()
-	atomic.StoreInt32(&s.recording, 0)
+	s.crdb.mu.Lock()
+	atomic.StoreInt32(&s.crdb.recording, 0)
 	// We test the duration as a way to check if the span has been finished. If it
 	// has, we don't want to do the call below as it might crash (at least if
 	// there's a netTr).
-	if (s.mu.duration == -1) && (s.mu.recording.recordingType == SnowballRecording) {
+	if (s.crdb.mu.duration == -1) && (s.crdb.mu.recording.recordingType == SnowballRecording) {
 		// Clear the Snowball baggage item, assuming that it was set by
 		// enableRecording().
 		s.setBaggageItemLocked(Snowball, "")
 	}
-	s.mu.Unlock()
+	s.crdb.mu.Unlock()
 }
 
 // IsRecordable returns true if {Start,Stop}Recording() can be called on this
@@ -322,18 +322,18 @@ type Recording []RecordedSpan
 // still open; it can run concurrently with operations on those spans.
 func GetRecording(os opentracing.Span) Recording {
 	s := os.(*span)
-	if !s.isRecording() {
+	if !s.crdb.isRecording() {
 		return nil
 	}
-	s.mu.Lock()
+	s.crdb.mu.Lock()
 	// The capacity here is approximate since we don't know how many grandchildren
 	// there are.
-	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
+	result := make(Recording, 0, 1+len(s.crdb.mu.recording.children)+len(s.crdb.mu.recording.remoteSpans))
 	// Shallow-copy the children so we can process them without the lock.
-	children := s.mu.recording.children
+	children := s.crdb.mu.recording.children
 	result = append(result, s.getRecordingLocked())
-	result = append(result, s.mu.recording.remoteSpans...)
-	s.mu.Unlock()
+	result = append(result, s.crdb.mu.recording.remoteSpans...)
+	s.crdb.mu.Unlock()
 
 	for _, child := range children {
 		result = append(result, GetRecording(child)...)
@@ -686,18 +686,18 @@ type TraceCollection struct {
 // recorded traces from other nodes.
 func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 	s := os.(*span)
-	if !s.isRecording() {
+	if !s.crdb.isRecording() {
 		return errors.New("adding Raw Spans to a span that isn't recording")
 	}
 
 	// Change the root of the remote recording to be a child of this span. This is
 	// usually already the case, except with DistSQL traces where remote
 	// processors run in spans that FollowFrom an RPC span that we don't collect.
-	remoteSpans[0].ParentSpanID = s.SpanID
+	remoteSpans[0].ParentSpanID = s.crdb.SpanID
 
-	s.mu.Lock()
-	s.mu.recording.remoteSpans = append(s.mu.recording.remoteSpans, remoteSpans...)
-	s.mu.Unlock()
+	s.crdb.mu.Lock()
+	s.crdb.mu.recording.remoteSpans = append(s.crdb.mu.recording.remoteSpans, remoteSpans...)
+	s.crdb.mu.Unlock()
 	return nil
 }
 
@@ -721,12 +721,12 @@ func IsNoopContext(spanCtx opentracing.SpanContext) bool {
 // the span tags.
 func SetSpanStats(os opentracing.Span, stats SpanStats) {
 	s := os.(*span)
-	s.mu.Lock()
-	s.mu.stats = stats
+	s.crdb.mu.Lock()
+	s.crdb.mu.stats = stats
 	for name, value := range stats.Stats() {
 		s.setTagInner(StatTagPrefix+name, value, true /* locked */)
 	}
-	s.mu.Unlock()
+	s.crdb.mu.Unlock()
 }
 
 // Finish is part of the opentracing.Span interface.
@@ -740,9 +740,9 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 	if finishTime.IsZero() {
 		finishTime = time.Now()
 	}
-	s.mu.Lock()
-	s.mu.duration = finishTime.Sub(s.startTime)
-	s.mu.Unlock()
+	s.crdb.mu.Lock()
+	s.crdb.mu.duration = finishTime.Sub(s.crdb.startTime)
+	s.crdb.mu.Unlock()
 	if s.ot.shadowTr != nil {
 		s.ot.shadowSpan.Finish()
 	}
@@ -757,14 +757,14 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 // that's not currently recording? That might save work and allocations when
 // creating child spans.
 func (s *span) Context() opentracing.SpanContext {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	baggageCopy := make(map[string]string, len(s.mu.Baggage))
-	for k, v := range s.mu.Baggage {
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	baggageCopy := make(map[string]string, len(s.crdb.mu.Baggage))
+	for k, v := range s.crdb.mu.Baggage {
 		baggageCopy[k] = v
 	}
 	sc := &spanContext{
-		spanMeta: s.spanMeta,
+		spanMeta: s.crdb.spanMeta,
 		span:     s,
 		Baggage:  baggageCopy,
 	}
@@ -773,8 +773,8 @@ func (s *span) Context() opentracing.SpanContext {
 		sc.shadowCtx = s.ot.shadowSpan.Context()
 	}
 
-	if s.isRecording() {
-		sc.recordingType = s.mu.recording.recordingType
+	if s.crdb.isRecording() {
+		sc.recordingType = s.crdb.mu.recording.recordingType
 	}
 	return sc
 }
@@ -784,7 +784,7 @@ func (s *span) SetOperationName(operationName string) opentracing.Span {
 	if s.ot.shadowTr != nil {
 		s.ot.shadowSpan.SetOperationName(operationName)
 	}
-	s.operation = operationName
+	s.crdb.operation = operationName
 	return s
 }
 
@@ -802,14 +802,14 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 	}
 	// The internal tags will be used if we start a recording on this span.
 	if !locked {
-		s.mu.Lock()
+		s.crdb.mu.Lock()
 	}
-	if s.mu.tags == nil {
-		s.mu.tags = make(opentracing.Tags)
+	if s.crdb.mu.tags == nil {
+		s.crdb.mu.tags = make(opentracing.Tags)
 	}
-	s.mu.tags[key] = value
+	s.crdb.mu.tags[key] = value
 	if !locked {
-		s.mu.Unlock()
+		s.crdb.mu.Unlock()
 	}
 	return s
 }
@@ -837,15 +837,15 @@ func (s *span) LogFields(fields ...otlog.Field) {
 			s.netTr.LazyPrintf("%s", buf.String())
 		}
 	}
-	if s.isRecording() {
-		s.mu.Lock()
-		if len(s.mu.recording.recordedLogs) < maxLogsPerSpan {
-			s.mu.recording.recordedLogs = append(s.mu.recording.recordedLogs, opentracing.LogRecord{
+	if s.crdb.isRecording() {
+		s.crdb.mu.Lock()
+		if len(s.crdb.mu.recording.recordedLogs) < maxLogsPerSpan {
+			s.crdb.mu.recording.recordedLogs = append(s.crdb.mu.recording.recordedLogs, opentracing.LogRecord{
 				Timestamp: time.Now(),
 				Fields:    fields,
 			})
 		}
-		s.mu.Unlock()
+		s.crdb.mu.Unlock()
 	}
 }
 
@@ -861,20 +861,20 @@ func (s *span) LogKV(alternatingKeyValues ...interface{}) {
 
 // SetBaggageItem is part of the opentracing.Span interface.
 func (s *span) SetBaggageItem(restrictedKey, value string) opentracing.Span {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
 	return s.setBaggageItemLocked(restrictedKey, value)
 }
 
 func (s *span) setBaggageItemLocked(restrictedKey, value string) opentracing.Span {
-	if oldVal, ok := s.mu.Baggage[restrictedKey]; ok && oldVal == value {
+	if oldVal, ok := s.crdb.mu.Baggage[restrictedKey]; ok && oldVal == value {
 		// No-op.
 		return s
 	}
-	if s.mu.Baggage == nil {
-		s.mu.Baggage = make(map[string]string)
+	if s.crdb.mu.Baggage == nil {
+		s.crdb.mu.Baggage = make(map[string]string)
 	}
-	s.mu.Baggage[restrictedKey] = value
+	s.crdb.mu.Baggage[restrictedKey] = value
 
 	if s.ot.shadowTr != nil {
 		s.ot.shadowSpan.SetBaggageItem(restrictedKey, value)
@@ -886,9 +886,9 @@ func (s *span) setBaggageItemLocked(restrictedKey, value string) opentracing.Spa
 
 // BaggageItem is part of the opentracing.Span interface.
 func (s *span) BaggageItem(restrictedKey string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.Baggage[restrictedKey]
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	return s.crdb.mu.Baggage[restrictedKey]
 }
 
 // Tracer is part of the opentracing.Span interface.
@@ -915,12 +915,12 @@ func (s *span) Log(data opentracing.LogData) {
 // children.
 func (s *span) getRecordingLocked() RecordedSpan {
 	rs := RecordedSpan{
-		TraceID:      s.TraceID,
-		SpanID:       s.SpanID,
-		ParentSpanID: s.parentSpanID,
-		Operation:    s.operation,
-		StartTime:    s.startTime,
-		Duration:     s.mu.duration,
+		TraceID:      s.crdb.TraceID,
+		SpanID:       s.crdb.SpanID,
+		ParentSpanID: s.crdb.parentSpanID,
+		Operation:    s.crdb.operation,
+		StartTime:    s.crdb.startTime,
+		Duration:     s.crdb.mu.duration,
 	}
 
 	addTag := func(k, v string) {
@@ -939,35 +939,35 @@ func (s *span) getRecordingLocked() RecordedSpan {
 		addTag("unfinished", "")
 	}
 
-	if s.mu.stats != nil {
-		stats, err := types.MarshalAny(s.mu.stats)
+	if s.crdb.mu.stats != nil {
+		stats, err := types.MarshalAny(s.crdb.mu.stats)
 		if err != nil {
 			panic(err)
 		}
 		rs.Stats = stats
 	}
 
-	if len(s.mu.Baggage) > 0 {
+	if len(s.crdb.mu.Baggage) > 0 {
 		rs.Baggage = make(map[string]string)
-		for k, v := range s.mu.Baggage {
+		for k, v := range s.crdb.mu.Baggage {
 			rs.Baggage[k] = v
 		}
 	}
-	if s.logTags != nil {
-		tags := s.logTags.Get()
+	if s.crdb.logTags != nil {
+		tags := s.crdb.logTags.Get()
 		for i := range tags {
 			tag := &tags[i]
 			addTag(tagName(tag.Key()), tag.ValueStr())
 		}
 	}
-	if len(s.mu.tags) > 0 {
-		for k, v := range s.mu.tags {
+	if len(s.crdb.mu.tags) > 0 {
+		for k, v := range s.crdb.mu.tags {
 			// We encode the tag values as strings.
 			addTag(k, fmt.Sprint(v))
 		}
 	}
-	rs.Logs = make([]LogRecord, len(s.mu.recording.recordedLogs))
-	for i, r := range s.mu.recording.recordedLogs {
+	rs.Logs = make([]LogRecord, len(s.crdb.mu.recording.recordedLogs))
+	for i, r := range s.crdb.mu.recording.recordedLogs {
 		rs.Logs[i].Time = r.Timestamp
 		rs.Logs[i].Fields = make([]LogRecord_Field, len(r.Fields))
 		for j, f := range r.Fields {
@@ -982,7 +982,7 @@ func (s *span) getRecordingLocked() RecordedSpan {
 }
 
 func (s *span) addChild(child *span) {
-	s.mu.Lock()
-	s.mu.recording.children = append(s.mu.recording.children, child)
-	s.mu.Unlock()
+	s.crdb.mu.Lock()
+	s.crdb.mu.recording.children = append(s.crdb.mu.recording.children, child)
+	s.crdb.mu.Unlock()
 }

@@ -86,12 +86,12 @@ func linkShadowSpan(
 	// Create the shadow lightstep span.
 	var opts []opentracing.StartSpanOption
 	// Replicate the options, using the lightstep context in the reference.
-	opts = append(opts, opentracing.StartTime(s.startTime))
-	if s.logTags != nil {
-		opts = append(opts, LogTags(s.logTags))
+	opts = append(opts, opentracing.StartTime(s.crdb.startTime))
+	if s.crdb.logTags != nil {
+		opts = append(opts, LogTags(s.crdb.logTags))
 	}
-	if s.mu.tags != nil {
-		opts = append(opts, s.mu.tags)
+	if s.crdb.mu.tags != nil {
+		opts = append(opts, s.crdb.mu.tags)
 	}
 	if parentShadowCtx != nil {
 		opts = append(opts, opentracing.SpanReference{
@@ -100,7 +100,7 @@ func linkShadowSpan(
 		})
 	}
 	s.ot.shadowTr = shadowTr
-	s.ot.shadowSpan = shadowTr.StartSpan(s.operation, opts...)
+	s.ot.shadowSpan = shadowTr.StartSpan(s.crdb.operation, opts...)
 }
 
 func createLightStepTracer(token string) (shadowTracerManager, opentracing.Tracer) {
