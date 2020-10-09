@@ -200,27 +200,27 @@ vectorized: true
     │ estimated row count: 3333 (missing stats)
     │ render 0: generate_series(x, z)
     │
-    └── • cross join (semi)
+    └── • cross join (right semi)
         │ columns: (x, z)
         │ estimated row count: 333 (missing stats)
         │ pred: z < generate_series
         │
-        ├── • scan
-        │     columns: (x, z)
-        │     estimated row count: 1000 (missing stats)
-        │     table: xz@primary
-        │     spans: FULL SCAN
+        ├── • project set
+        │   │ columns: (x, y, generate_series)
+        │   │ estimated row count: 10000 (missing stats)
+        │   │ render 0: generate_series(x, y)
+        │   │
+        │   └── • scan
+        │         columns: (x, y)
+        │         estimated row count: 1000 (missing stats)
+        │         table: xy@primary
+        │         spans: FULL SCAN
         │
-        └── • project set
-            │ columns: (x, y, generate_series)
-            │ estimated row count: 10000 (missing stats)
-            │ render 0: generate_series(x, y)
-            │
-            └── • scan
-                  columns: (x, y)
-                  estimated row count: 1000 (missing stats)
-                  table: xy@primary
-                  spans: FULL SCAN
+        └── • scan
+              columns: (x, z)
+              estimated row count: 1000 (missing stats)
+              table: xz@primary
+              spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
