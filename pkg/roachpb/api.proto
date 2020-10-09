@@ -19,7 +19,7 @@ import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
-import "util/tracing/recorded_span.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
@@ -2100,7 +2100,7 @@ message BatchResponse {
     util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
     // collected_spans stores trace spans recorded during the execution of this
     // request.
-    repeated util.tracing.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
+    repeated util.tracing.tracingpb.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
     // Range or list of ranges used to execute the request. The server only
     // populates this if return_range_info is set on the request, or if the
     // server detects the client's client_range_info to be stale.
