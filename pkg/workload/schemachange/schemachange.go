@@ -503,7 +503,7 @@ func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
 		Type: typ,
 	}
 	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
-	return fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
+	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
 }
 
 func (w *schemaChangeWorker) addConstraint(tx *pgx.Tx) (string, error) {
@@ -600,7 +600,7 @@ func (w *schemaChangeWorker) createTableAs(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`CREATE TABLE "%s" AS SELECT %s FROM "%s"`,
+	return fmt.Sprintf(`CREATE TABLE %s AS SELECT %s FROM %s`,
 		destTableName, tree.Serialize(&names), tableName), nil
 }
 
@@ -627,7 +627,7 @@ func (w *schemaChangeWorker) createView(tx *pgx.Tx) (string, error) {
 	}
 
 	// TODO(peter): Create views that are dependent on multiple tables.
-	return fmt.Sprintf(`CREATE VIEW "%s" AS SELECT %s FROM "%s"`,
+	return fmt.Sprintf(`CREATE VIEW %s AS SELECT %s FROM %s`,
 		destViewName, tree.Serialize(&names), tableName), nil
 }
 
@@ -641,7 +641,7 @@ func (w *schemaChangeWorker) dropColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" DROP COLUMN "%s"`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) dropColumnDefault(tx *pgx.Tx) (string, error) {
@@ -653,7 +653,7 @@ func (w *schemaChangeWorker) dropColumnDefault(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) dropColumnNotNull(tx *pgx.Tx) (string, error) {
@@ -665,7 +665,7 @@ func (w *schemaChangeWorker) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) dropColumnStored(tx *pgx.Tx) (string, error) {
@@ -678,7 +678,7 @@ func (w *schemaChangeWorker) dropColumnStored(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP STORED`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) dropConstraint(tx *pgx.Tx) (string, error) {
@@ -691,7 +691,7 @@ func (w *schemaChangeWorker) dropConstraint(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" DROP CONSTRAINT "%s"`, tableName, constraintName), nil
+	return fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName), nil
 }
 
 func (w *schemaChangeWorker) dropIndex(tx *pgx.Tx) (string, error) {
@@ -704,7 +704,7 @@ func (w *schemaChangeWorker) dropIndex(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP INDEX "%s"@"%s"`, tableName, indexName), nil
+	return fmt.Sprintf(`DROP INDEX %s@"%s"`, tableName, indexName), nil
 }
 
 func (w *schemaChangeWorker) dropSequence(tx *pgx.Tx) (string, error) {
@@ -720,7 +720,7 @@ func (w *schemaChangeWorker) dropTable(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP TABLE "%s"`, tableName), nil
+	return fmt.Sprintf(`DROP TABLE %s`, tableName), nil
 }
 
 func (w *schemaChangeWorker) dropView(tx *pgx.Tx) (string, error) {
@@ -728,7 +728,7 @@ func (w *schemaChangeWorker) dropView(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP VIEW "%s"`, viewName), nil
+	return fmt.Sprintf(`DROP VIEW %s`, viewName), nil
 }
 
 func (w *schemaChangeWorker) renameColumn(tx *pgx.Tx) (string, error) {
@@ -747,7 +747,7 @@ func (w *schemaChangeWorker) renameColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER TABLE "%s" RENAME COLUMN "%s" TO "%s"`,
+	return fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "%s" TO "%s"`,
 		tableName, srcColumnName, destColumnName), nil
 }
 
@@ -767,7 +767,7 @@ func (w *schemaChangeWorker) renameIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER TABLE "%s" RENAME CONSTRAINT "%s" TO "%s"`,
+	return fmt.Sprintf(`ALTER TABLE %s RENAME CONSTRAINT "%s" TO "%s"`,
 		tableName, srcIndexName, destIndexName), nil
 }
 
@@ -796,7 +796,7 @@ func (w *schemaChangeWorker) renameTable(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER TABLE "%s" RENAME TO "%s"`, srcTableName, destTableName), nil
+	return fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName), nil
 }
 
 func (w *schemaChangeWorker) renameView(tx *pgx.Tx) (string, error) {
@@ -810,7 +810,7 @@ func (w *schemaChangeWorker) renameView(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER VIEW "%s" RENAME TO "%s"`, srcViewName, destViewName), nil
+	return fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName), nil
 }
 
 func (w *schemaChangeWorker) setColumnDefault(tx *pgx.Tx) (string, error) {
@@ -828,7 +828,7 @@ func (w *schemaChangeWorker) setColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
@@ -844,7 +844,7 @@ func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" SET DATA TYPE %s`,
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
 		tableName, columnName, typ), nil
 }
 
@@ -872,7 +872,7 @@ func (w *schemaChangeWorker) insertRow(tx *pgx.Tx) (string, error) {
 		rows = append(rows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
 	}
 	return fmt.Sprintf(
-		`INSERT INTO "%s" (%s) VALUES %s`,
+		`INSERT INTO %s (%s) VALUES %s`,
 		tableName,
 		strings.Join(colNames, ","),
 		strings.Join(rows, ","),
@@ -919,7 +919,7 @@ type column struct {
 func (w *schemaChangeWorker) getTableColumns(tx *pgx.Tx, tableName string) ([]column, error) {
 	q := fmt.Sprintf(`
   SELECT column_name, data_type, is_nullable
-    FROM [SHOW COLUMNS FROM "%s"]
+    FROM [SHOW COLUMNS FROM %s]
 `, tableName)
 	rows, err := tx.Query(q)
 	if err != nil {
@@ -971,7 +971,7 @@ func (w *schemaChangeWorker) randColumn(
 	}
 	q := fmt.Sprintf(`
   SELECT column_name
-    FROM [SHOW COLUMNS FROM "%s"]
+    FROM [SHOW COLUMNS FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -985,7 +985,7 @@ ORDER BY random()
 func (w *schemaChangeWorker) randConstraint(tx *pgx.Tx, tableName string) (string, error) {
 	q := fmt.Sprintf(`
   SELECT constraint_name
-    FROM [SHOW CONSTRAINTS FROM "%s"]
+    FROM [SHOW CONSTRAINTS FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -1008,7 +1008,7 @@ func (w *schemaChangeWorker) randIndex(
 	}
 	q := fmt.Sprintf(`
   SELECT index_name
-    FROM [SHOW INDEXES FROM "%s"]
+    FROM [SHOW INDEXES FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -1134,7 +1134,7 @@ ORDER BY random()
 func (w *schemaChangeWorker) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
-FROM [SHOW COLUMNS FROM "%s"];
+FROM [SHOW COLUMNS FROM %s];
 `, tableName)
 
 	rows, err := tx.Query(q)
