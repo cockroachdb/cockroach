@@ -451,8 +451,8 @@ func StartChildSpan(
 	s.TraceID = pSpan.TraceID
 	s.SpanID = uint64(rand.Int63())
 
-	if pSpan.otSpan.shadowTr != nil {
-		linkShadowSpan(s, pSpan.otSpan.shadowTr, pSpan.otSpan.shadowSpan.Context(), opentracing.ChildOfRef)
+	if pSpan.ot.shadowTr != nil {
+		linkShadowSpan(s, pSpan.ot.shadowTr, pSpan.ot.shadowSpan.Context(), opentracing.ChildOfRef)
 	}
 
 	recordingType := pSpan.mu.recording.recordingType
@@ -469,7 +469,7 @@ func StartChildSpan(
 		}
 	}
 
-	if pSpan.netTr != nil || pSpan.otSpan.shadowTr != nil {
+	if pSpan.netTr != nil || pSpan.ot.shadowTr != nil {
 		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
