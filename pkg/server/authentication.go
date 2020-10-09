@@ -140,6 +140,13 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username = tree.Name(username).Normalize()
+
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
 	if err != nil {
@@ -192,6 +199,13 @@ func (s *authenticationServer) ValidateOIDCState(
 func (s *authenticationServer) UserLoginFromSSO(
 	ctx context.Context, username string,
 ) (*http.Cookie, error) {
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username = tree.Name(username).Normalize()
+
 	exists, _, _, _, err := sql.GetUserHashedPassword(
 		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
 	)
@@ -342,6 +356,9 @@ WHERE id = $1`
 // system.users table. The returned boolean indicates whether or not the
 // verification succeeded; an error is returned if the validation process could
 // not be completed.
+//
+// The caller is responsible for ensuring that the username is normalized.
+// (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username string, password string,
 ) (valid bool, expired bool, err error) {
@@ -390,6 +407,13 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 func (s *authenticationServer) newAuthSession(
 	ctx context.Context, username string,
 ) (int64, []byte, error) {
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username = tree.Name(username).Normalize()
+
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
 		return 0, nil, err
