@@ -342,19 +342,20 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	tabMeta := md.TableMeta(scanPrivate.Table)
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes)
 	for iter.Next() {
+		filters := explicitFilters
 		// If the index is a partial index, check whether or not the filter
 		// implies the predicate.
 		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
 		var pred memo.FiltersExpr
 		if isPartialIndex {
 			pred = memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
-			remainingFilters, ok := c.im.FiltersImplyPredicate(explicitFilters, pred)
+			remainingFilters, ok := c.im.FiltersImplyPredicate(filters, pred)
 			if !ok {
 				// The filters do not imply the predicate, so the partial index
 				// cannot be used.
 				continue
 			}
-			explicitFilters = remainingFilters
+			filters = remainingFilters
 		}
 
 		// We only consider the partition values when a particular index can otherwise
@@ -429,7 +430,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Check whether the filter (along with any partitioning filters) can constrain the index.
 		constraint, remainingFilters, ok := c.tryConstrainIndex(
-			explicitFilters,
+			filters,
 			append(optionalFilters, partitionFilters...),
 			scanPrivate.Table,
 			iter.IndexOrdinal(),
@@ -441,7 +442,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		if len(partitionFilters) > 0 {
 			inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
-				explicitFilters,
+				filters,
 				append(optionalFilters, inBetweenFilters...),
 				scanPrivate.Table,
 				iter.IndexOrdinal(),
