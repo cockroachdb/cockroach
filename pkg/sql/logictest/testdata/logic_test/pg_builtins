@@ -33,3 +33,50 @@ query T
 SELECT format_type(152100, 0)
 ----
 unknown (OID=152100)
+
+subtest pg_column_size
+
+query I
+SELECT pg_column_size(1::float)
+----
+9
+
+query I
+SELECT pg_column_size(1::int)
+----
+2
+
+query I
+SELECT pg_column_size((1, 1))
+----
+7
+
+query I
+SELECT pg_column_size('{}'::json)
+----
+7
+
+query I
+SELECT pg_column_size('')
+----
+2
+
+query I
+SELECT pg_column_size('a')
+----
+3
+
+query I
+SELECT pg_column_size((1,'a'))
+----
+8
+
+query I
+SELECT pg_column_size(true)
+----
+1
+
+query I
+SELECT pg_column_size(NULL::int)
+----
+NULL
