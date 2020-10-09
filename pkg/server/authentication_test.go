@@ -299,7 +299,7 @@ func TestCreateSession(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	username := "testUser"
+	username := "testuser"
 
 	// Create an authentication, noting the time before and after creation. This
 	// lets us ensure that the timestamps created are accurate.
@@ -391,7 +391,7 @@ func TestVerifySession(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	sessionUsername := "testUser"
+	sessionUsername := "testuser"
 	id, origSecret, err := ts.authentication.newAuthSession(context.Background(), sessionUsername)
 	if err != nil {
 		t.Fatal(err)

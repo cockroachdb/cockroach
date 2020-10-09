@@ -89,6 +89,7 @@ func TestVerifyPassword(t *testing.T) {
 		expectedErrString  string
 	}{
 		{"azure_diamond", "hunter2", true, ""},
+		{"Azure_Diamond", "hunter2", false, ""},
 		{"azure_diamond", "hunter", false, "crypto/bcrypt"},
 		{"azure_diamond", "", false, "crypto/bcrypt"},
 		{"azure_diamond", "🍦", false, "crypto/bcrypt"},

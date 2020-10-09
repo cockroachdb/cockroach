@@ -140,6 +140,13 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username = tree.Name(username).Normalize()
+
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
 	if err != nil {
@@ -153,10 +160,7 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 	if !verified {
-		return nil, status.Errorf(
-			codes.Unauthenticated,
-			"the provided username and password did not match any credentials on the server",
-		)
+		return nil, errWebAuthenticationFailure
 	}
 
 	cookie, err := s.createSessionFor(ctx, username)
@@ -172,7 +176,10 @@ func (s *authenticationServer) UserLogin(
 	return &serverpb.UserLoginResponse{}, nil
 }
 
-var errUsernameDoesNotExist = errors.New("username for session does not exist")
+var errWebAuthenticationFailure = status.Errorf(
+	codes.Unauthenticated,
+	"the provided credentials did not match any account on the server",
+)
 
 func (s *authenticationServer) ValidateOIDCState(
 	ctx context.Context, req *serverpb.ValidateOIDCStateRequest,
@@ -192,7 +199,14 @@ func (s *authenticationServer) ValidateOIDCState(
 func (s *authenticationServer) UserLoginFromSSO(
 	ctx context.Context, username string,
 ) (*http.Cookie, error) {
-	exists, _, _, _, err := sql.GetUserHashedPassword(
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username = tree.Name(username).Normalize()
+
+	exists, canLogin, _, _, err := sql.GetUserHashedPassword(
 		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
 	)
 
@@ -200,13 +214,16 @@ func (s *authenticationServer) UserLoginFromSSO(
 		return nil, errors.Wrap(err, "failed creating session for username")
 	}
 
-	if !exists {
-		return nil, errUsernameDoesNotExist
+	if !exists || !canLogin {
+		return nil, errWebAuthenticationFailure
 	}
 
 	return s.createSessionFor(ctx, username)
 }
 
+// createSessionFor creates a login cookie for the given user.
+//
+// The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) createSessionFor(
 	ctx context.Context, username string,
 ) (*http.Cookie, error) {
@@ -241,7 +258,9 @@ func (s *authenticationServer) UserLogout(
 
 	sessionID, err := strconv.Atoi(sessionIDs[0])
 	if err != nil {
-		return nil, fmt.Errorf("invalid session id: %d", sessionID)
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			"invalid session id: %d", sessionID)
 	}
 
 	// Revoke the session.
@@ -255,7 +274,9 @@ func (s *authenticationServer) UserLogout(
 	); err != nil {
 		return nil, apiInternalError(ctx, err)
 	} else if n == 0 {
-		err := errors.Newf("session with id %d nonexistent", sessionID)
+		err := status.Errorf(
+			codes.InvalidArgument,
+			"session with id %d nonexistent", sessionID)
 		log.Infof(ctx, "%v", err)
 		return nil, err
 	}
@@ -338,6 +359,9 @@ WHERE id = $1`
 // system.users table. The returned boolean indicates whether or not the
 // verification succeeded; an error is returned if the validation process could
 // not be completed.
+//
+// The caller is responsible for ensuring that the username is normalized.
+// (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username string, password string,
 ) (valid bool, expired bool, err error) {
@@ -383,6 +407,8 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 
 // newAuthSession attempts to create a new authentication session for the given
 // user. If successful, returns the ID and secret value for the new session.
+//
+// The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) newAuthSession(
 	ctx context.Context, username string,
 ) (int64, []byte, error) {

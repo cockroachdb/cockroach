@@ -43,7 +43,13 @@ The user for which the HTTP session is opened can be arbitrary.
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
 	username := tree.Name(args[0]).Normalize()
+
 	id, httpCookie, err := createAuthSessionToken(username)
 	if err != nil {
 		return err
