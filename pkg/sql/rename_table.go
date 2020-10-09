@@ -254,7 +254,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 			Statement    string
 			User         string
 			NewTableName string
-		}{oldTn.FQString(), n.n.String(), params.SessionData().User, newTn.FQString()},
+		}{oldTn.FQString(), n.n.String(), params.p.User().Normalized(), newTn.FQString()},
 	)
 }
 

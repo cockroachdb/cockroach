@@ -139,7 +139,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 				User                string
 				CascadeDroppedViews []string
 			}{toDel.tn.FQString(), n.n.String(),
-				params.SessionData().User, droppedViews},
+				params.p.User().Normalized(), droppedViews},
 		); err != nil {
 			return err
 		}
@@ -629,7 +629,7 @@ func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.
 		ctx,
 		"delete-table-comments",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE object_id=$1",
 		tableDesc.ID)
 	if err != nil {

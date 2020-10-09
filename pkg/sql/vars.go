@@ -888,14 +888,14 @@ var varGen = map[string]sessionVar{
 	// In PG this is a pseudo-function used with SELECT, not SHOW.
 	// See https://www.postgresql.org/docs/10/static/functions-info.html
 	`session_user`: {
-		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData.User },
+		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData.User().Normalized() },
 	},
 
 	// See pg sources src/backend/utils/misc/guc.c. The variable is defined
 	// but is hidden from SHOW ALL.
 	`session_authorization`: {
 		Hidden: true,
-		Get:    func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData.User },
+		Get:    func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData.User().Normalized() },
 	},
 
 	// Supported for PG compatibility only.

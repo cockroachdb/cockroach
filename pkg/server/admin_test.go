@@ -335,7 +335,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 		"GRANT %s ON DATABASE %s TO %s",
 		strings.Join(privileges, ", "),
 		testdb,
-		authenticatedUserNameNoAdmin,
+		authenticatedUserNameNoAdmin().SQLIdentifier(),
 	)
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
@@ -389,7 +389,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 			userGrants := make(map[string][]string)
 			for _, grant := range details.Grants {
 				switch grant.User {
-				case security.AdminRole, security.RootUser, authenticatedUserNameNoAdmin:
+				case security.AdminRole, security.RootUser, authenticatedUserNoAdmin:
 					userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
 				default:
 					t.Fatalf("unknown grant to user %s", grant.User)
@@ -405,7 +405,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 					if !reflect.DeepEqual(p, []string{"ALL"}) {
 						t.Fatalf("privileges %v != expected %v", p, privileges)
 					}
-				case authenticatedUserNameNoAdmin:
+				case authenticatedUserNoAdmin:
 					sort.Strings(p)
 					if !reflect.DeepEqual(p, privileges) {
 						t.Fatalf("privileges %v != expected %v", p, privileges)
@@ -416,7 +416,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUser, testdb)
+			databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUserName(), testdb)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -767,7 +767,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			tableID, err := ts.admin.queryTableID(ctx, security.RootUser, tc.dbName, tc.tblName)
+			tableID, err := ts.admin.queryTableID(ctx, security.RootUserName(), tc.dbName, tc.tblName)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -810,7 +810,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 		if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
 			t.Fatal(err)
 		}
-		if a, e := &resp.ZoneConfig, &expectedZone; !proto.Equal(a, e) {
+		if a, e := &resp.ZoneConfig, &expectedZone; !a.Equal(e) {
 			t.Errorf("actual table zone config %v did not match expected value %v", a, e)
 		}
 		if a, e := resp.ZoneConfigLevel, expectedLevel; a != e {
@@ -830,7 +830,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 		if err := getAdminJSONProto(s, "databases/test", &resp); err != nil {
 			t.Fatal(err)
 		}
-		if a, e := &resp.ZoneConfig, &expectedZone; !proto.Equal(a, e) {
+		if a, e := &resp.ZoneConfig, &expectedZone; !a.Equal(e) {
 			t.Errorf("actual db zone config %v did not match expected value %v", a, e)
 		}
 		if a, e := resp.ZoneConfigLevel, expectedLevel; a != e {
@@ -857,11 +857,11 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	verifyDbZone(s.(*TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 	verifyTblZone(s.(*TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 
-	databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUser, "test")
+	databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUserName(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableID, err := ts.admin.queryTableID(ctx, security.RootUser, "test", "tbl")
+	tableID, err := ts.admin.queryTableID(ctx, security.RootUserName(), "test", "tbl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1422,16 +1422,16 @@ func TestAdminAPIJobs(t *testing.T) {
 		status   jobs.Status
 		details  jobspb.Details
 		progress jobspb.ProgressDetails
-		username string
+		username security.SQLUsername
 	}{
-		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUser},
-		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUser},
-		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUser},
-		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUser},
-		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, authenticatedUserNameNoAdmin},
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUserName()},
+		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName()},
+		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName()},
+		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName()},
+		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, authenticatedUserNameNoAdmin()},
 	}
 	for _, job := range testJobs {
-		payload := jobspb.Payload{Username: job.username, Details: jobspb.WrapPayloadDetails(job.details)}
+		payload := jobspb.Payload{UsernameProto: job.username.EncodeProto(), Details: jobspb.WrapPayloadDetails(job.details)}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
 			t.Fatal(err)

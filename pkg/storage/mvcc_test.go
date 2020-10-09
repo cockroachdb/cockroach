@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -5332,7 +5331,7 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 				}
 			}
 
-			if first, second := vals[0], vals[1]; !proto.Equal(first, second) {
+			if first, second := vals[0], vals[1]; !first.Equal(second) {
 				var firstTS, secondTS roachpb.InternalTimeSeriesData
 				if err := first.GetProto(&firstTS); err != nil {
 					t.Fatal(err)

@@ -26,6 +26,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",

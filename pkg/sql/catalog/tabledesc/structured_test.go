@@ -73,7 +73,7 @@ func TestAllocateIDs(t *testing.T) {
 				return idx
 			}(),
 		},
-		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRole),
+		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		FormatVersion: descpb.FamilyFormatVersion,
 	})
 	if err := desc.AllocateIDs(ctx); err != nil {
@@ -114,7 +114,7 @@ func TestAllocateIDs(t *testing.T) {
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				EncodingType:     descpb.PrimaryIndexEncoding},
 		},
-		Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.AdminRole),
+		Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		NextColumnID:   4,
 		NextFamilyID:   1,
 		NextIndexID:    5,
@@ -979,7 +979,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		descs := catalog.MapDescGetter{}
 		descs[1] = dbdesc.NewImmutable(descpb.DatabaseDescriptor{ID: 1})
 		for _, otherDesc := range test.otherDescs {
-			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
+			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
 			descs[otherDesc.ID] = NewImmutable(otherDesc)
 		}
 		desc := NewImmutable(test.desc)
@@ -1326,7 +1326,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor("root"),
+				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
 			},
 			expUpgrade: true,
 			verify: func(i int, desc *Immutable) {
@@ -1342,7 +1342,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor("root"),
+				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
 			},
 			expUpgrade: false,
 			verify:     nil,
@@ -1373,7 +1373,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			{Name: "c", Type: types.Int}},
 		FormatVersion: descpb.FamilyFormatVersion,
 		Indexes:       []descpb.IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
-		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRole),
+		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		OutboundFKs: []descpb.ForeignKeyConstraint{
 			{
 				Name:              "fk",

@@ -62,7 +62,7 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 		})
 	}
 
-	plainHTTPCfg := testutils.NewTestBaseContext(server.TestUser)
+	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
 	testCertsContext := newRPCContext(plainHTTPCfg)
 
 	client, err := testCertsContext.GetHTTPClient()
@@ -179,7 +179,7 @@ func TestOIDCEnabled(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
 
-	plainHTTPCfg := testutils.NewTestBaseContext(server.TestUser)
+	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
 	testCertsContext := newRPCContext(plainHTTPCfg)
 
 	client, err := testCertsContext.GetHTTPClient()

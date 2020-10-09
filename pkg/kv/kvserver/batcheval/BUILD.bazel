@@ -63,6 +63,7 @@ go_library(
         "//pkg/kv/kvserver/stateloader",
         "//pkg/kv/kvserver/txnwait",
         "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/cloud",

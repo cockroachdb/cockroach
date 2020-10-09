@@ -24,6 +24,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/tests",
         "//pkg/storage/cloud",
         "//pkg/storage/cloudimpl",

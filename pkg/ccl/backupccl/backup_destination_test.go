@@ -36,7 +36,7 @@ func newTestStorageFactory(t *testing.T) (cloud.ExternalStorageFromURIFactory, f
 	settings := cluster.MakeTestingClusterSettings()
 	settings.ExternalIODir = dir
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
-	externalStorageFromURI := func(ctx context.Context, uri, user string) (cloud.ExternalStorage,
+	externalStorageFromURI := func(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error) {
 		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
 		require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 
 	// writeManifest writes an empty backup manifest file to the given URI.
 	writeManifest := func(t *testing.T, uri string) {
-		storage, err := externalStorageFromURI(ctx, uri, security.RootUser)
+		storage, err := externalStorageFromURI(ctx, uri, security.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
 		require.NoError(t, storage.WriteFile(ctx, backupManifestName, emptyReader))
@@ -69,7 +69,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	// writeLatest writes latestBackupSuffix to the LATEST file in the given
 	// collection.
 	writeLatest := func(t *testing.T, collectionURI, latestBackupSuffix string) {
-		storage, err := externalStorageFromURI(ctx, collectionURI, security.RootUser)
+		storage, err := externalStorageFromURI(ctx, collectionURI, security.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
 		require.NoError(t, storage.WriteFile(ctx, latestFileName, bytes.NewReader([]byte(latestBackupSuffix))))
@@ -136,7 +136,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					require.NoError(t, err)
 
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
-						ctx, security.RootUser,
+						ctx, security.RootUserName(),
 						false /* nested */, false, /* appendToLatest */
 						defaultDest, localitiesDest,
 						externalStorageFromURI, endTime,
@@ -205,7 +205,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					dest, localitiesDest, err := getURIsByLocalityKV(to, "")
 					require.NoError(t, err)
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
-						ctx, security.RootUser,
+						ctx, security.RootUserName(),
 						false /* nested */, false, /* appendToLatest */
 						dest, localitiesDest,
 						externalStorageFromURI, endTime,
@@ -308,7 +308,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					defaultCollection, localityCollections, err := getURIsByLocalityKV(collectionTo, "")
 					require.NoError(t, err)
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
-						ctx, security.RootUser,
+						ctx, security.RootUserName(),
 						true /* nested */, appendToLatest,
 						defaultCollection, localityCollections,
 						externalStorageFromURI, endTime,

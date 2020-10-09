@@ -231,9 +231,9 @@ CREATE TABLE crdb_internal.databases (
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
 				return addRow(
-					tree.NewDInt(tree.DInt(db.GetID())), // id
-					tree.NewDString(db.GetName()),       // name
-					tree.NewDName(getOwnerOfDesc(db)),   // owner
+					tree.NewDInt(tree.DInt(db.GetID())),            // id
+					tree.NewDString(db.GetName()),                  // name
+					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
 				)
 			})
 	},
@@ -387,7 +387,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
             GROUP BY s."tableID"`
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 			ctx, "crdb-internal-statistics-table", p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query)
 		if err != nil {
 			return err
@@ -553,7 +553,7 @@ CREATE TABLE crdb_internal.jobs (
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
-		currentUser := p.SessionData().User
+		currentUser := p.SessionData().User()
 		isAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -569,7 +569,7 @@ CREATE TABLE crdb_internal.jobs (
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query)
 		if err != nil {
 			return nil, nil, err
@@ -618,14 +618,16 @@ CREATE TABLE crdb_internal.jobs (
 				// We filter out masked rows before we allocate all the
 				// datums. Needless allocate when not necessary.
 				ownedByAdmin := false
+				var sqlUsername security.SQLUsername
 				if payload != nil {
-					ownedByAdmin, err = p.UserHasAdminRole(ctx, payload.Username)
+					sqlUsername = payload.UsernameProto.Decode()
+					ownedByAdmin, err = p.UserHasAdminRole(ctx, sqlUsername)
 					if err != nil {
 						errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
 					}
 				}
 
-				sameUser := payload != nil && payload.Username == currentUser
+				sameUser := payload != nil && sqlUsername == currentUser
 				// The user can access the row if the meet one of the conditions:
 				//  1. The user is an admin.
 				//  2. The job is owned by the user.
@@ -641,7 +643,7 @@ CREATE TABLE crdb_internal.jobs (
 					jobType = tree.NewDString(payload.Type().String())
 					description = tree.NewDString(payload.Description)
 					statement = tree.NewDString(payload.Statement)
-					username = tree.NewDString(payload.Username)
+					username = tree.NewDString(sqlUsername.Normalized())
 					descriptorIDsArr := tree.NewDArray(types.Int)
 					for _, descID := range payload.DescriptorIDs {
 						if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
@@ -1281,7 +1283,7 @@ CREATE TABLE crdb_internal.%s (
 )`
 
 func (p *planner) makeSessionsRequest(ctx context.Context) (serverpb.ListSessionsRequest, error) {
-	req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+	req := serverpb.ListSessionsRequest{Username: p.SessionData().User().Normalized()}
 	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return serverpb.ListSessionsRequest{}, err

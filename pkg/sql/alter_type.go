@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -77,7 +78,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeSetSchema:
 		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
-		err = params.p.alterTypeOwner(params.ctx, n, string(t.Owner))
+		err = params.p.alterTypeOwner(params.ctx, n, t.Owner)
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -102,7 +103,11 @@ func (n *alterTypeNode) startExec(params runParams) error {
 			TypeName  string
 			Statement string
 			User      string
-		}{n.desc.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.p.User()},
+		}{
+			n.desc.Name,
+			tree.AsStringWithFQNames(n.n, params.Ann()),
+			params.p.User().Normalized(),
+		},
 	)
 }
 
@@ -297,13 +302,15 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 	)
 }
 
-func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner string) error {
+func (p *planner) alterTypeOwner(
+	ctx context.Context, n *alterTypeNode, newOwner security.SQLUsername,
+) error {
 	typeDesc := n.desc
 
 	privs := typeDesc.GetPrivileges()
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
+	if newOwner == privs.Owner() {
 		return nil
 	}
 
@@ -330,9 +337,11 @@ func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner
 // checkCanAlterTypeAndSetNewOwner handles privilege checking and setting new owner.
 // Called in ALTER TYPE and REASSIGN OWNED BY.
 func (p *planner) checkCanAlterTypeAndSetNewOwner(
-	ctx context.Context, typeDesc *typedesc.Mutable, arrayTypeDesc *typedesc.Mutable, newOwner string,
+	ctx context.Context,
+	typeDesc *typedesc.Mutable,
+	arrayTypeDesc *typedesc.Mutable,
+	newOwner security.SQLUsername,
 ) error {
-
 	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
 		return err
 	}

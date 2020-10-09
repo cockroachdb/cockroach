@@ -74,7 +74,6 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )

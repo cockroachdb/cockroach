@@ -38,7 +38,7 @@ import (
 type scheduledJobRecord struct {
 	ScheduleID      int64                     `col:"schedule_id"`
 	ScheduleLabel   string                    `col:"schedule_name"`
-	Owner           string                    `col:"owner"`
+	Owner           security.SQLUsername      `col:"owner"`
 	NextRun         time.Time                 `col:"next_run"`
 	ScheduleState   jobspb.ScheduleState      `col:"schedule_state"`
 	ScheduleExpr    string                    `col:"schedule_expr"`
@@ -85,7 +85,7 @@ func LoadScheduledJob(
 	txn *kv.Txn,
 ) (*ScheduledJob, error) {
 	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
 			env.ScheduledJobsTableName(), id))
 
@@ -123,12 +123,12 @@ func (j *ScheduledJob) SetScheduleLabel(label string) {
 }
 
 // Owner returns schedule owner.
-func (j *ScheduledJob) Owner() string {
+func (j *ScheduledJob) Owner() security.SQLUsername {
 	return j.rec.Owner
 }
 
 // SetOwner updates schedule owner.
-func (j *ScheduledJob) SetOwner(owner string) {
+func (j *ScheduledJob) SetOwner(owner security.SQLUsername) {
 	j.rec.Owner = owner
 	j.markDirty("owner")
 }
@@ -311,8 +311,25 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.Result
 			// But, be paranoid and double check.
 			rv := reflect.ValueOf(native)
 			if !rv.Type().AssignableTo(field.Type()) {
-				return errors.Newf("value of type %T cannot be assigned to %s",
-					native, field.Type().String())
+				// Is this the owner field? This needs special treatment.
+				ok := false
+				if col.Name == "owner" {
+					// The owner field has type SQLUsername, but the datum is a
+					// simple string.  So we need to convert.
+					//
+					// TODO(someone): We need a more generic mechanism than this
+					// naive go reflect stuff here.
+					var s string
+					s, ok = native.(string)
+					if ok {
+						// Replace the value by one of the right type.
+						rv = reflect.ValueOf(security.MakeSQLUsernameFromPreNormalizedString(s))
+					}
+				}
+				if !ok {
+					return errors.Newf("value of type %T cannot be assigned to %s",
+						native, field.Type().String())
+				}
 			}
 			field.Set(rv)
 		}
@@ -346,7 +363,7 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 	}
 
 	rows, retCols, err := ex.QueryWithCols(ctx, "sched-create", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s) RETURNING schedule_id",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","), generatePlaceholders(len(qargs))),
 		qargs...,
@@ -384,7 +401,7 @@ func (j *ScheduledJob) Update(ctx context.Context, ex sqlutil.InternalExecutor, 
 	}
 
 	n, err := ex.ExecEx(ctx, "sched-update", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("UPDATE %s SET (%s) = (%s) WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","),
 			generatePlaceholders(len(qargs)), j.ScheduleID()),
@@ -418,7 +435,7 @@ func (j *ScheduledJob) marshalChanges() ([]string, []interface{}, error) {
 		case `schedule_name`:
 			arg = tree.NewDString(j.rec.ScheduleLabel)
 		case `owner`:
-			arg = tree.NewDString(j.rec.Owner)
+			arg = tree.NewDString(j.rec.Owner.Normalized())
 		case `next_run`:
 			if (j.rec.NextRun == time.Time{}) {
 				arg = tree.DNull

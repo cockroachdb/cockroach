@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/settings/cluster",
         "//vendor/github.com/cockroachdb/errors",
     ],

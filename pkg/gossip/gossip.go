@@ -79,7 +79,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 )
 
@@ -824,7 +823,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	}
 
 	existingDesc, ok := g.nodeDescs[desc.NodeID]
-	if !ok || !proto.Equal(existingDesc, &desc) {
+	if !ok || !existingDesc.Equal(&desc) {
 		g.nodeDescs[desc.NodeID] = &desc
 	}
 	// Skip all remaining logic if the address hasn't changed, since that's all

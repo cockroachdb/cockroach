@@ -151,7 +151,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 				SchemaName string
 				Statement  string
 				User       string
-			}{sc.Name, n.n.String(), p.SessionData().User},
+			}{sc.Name, n.n.String(), p.User().Normalized()},
 		); err != nil {
 			return err
 		}

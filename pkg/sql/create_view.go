@@ -136,7 +136,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
-	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User())
 
 	var newDesc *tabledesc.Mutable
 
@@ -270,7 +270,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}{
 			ViewName:  n.viewName.FQString(),
 			ViewQuery: n.viewQuery,
-			User:      params.SessionData().User,
+			User:      params.p.User().Normalized(),
 		},
 	)
 }

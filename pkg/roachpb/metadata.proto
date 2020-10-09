@@ -20,6 +20,7 @@ import "gogoproto/gogo.proto";
 // node topology, store type, and machine capabilities.
 message Attributes {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   repeated string attrs = 1 [(gogoproto.moretags) = "yaml:\"attrs,flow\""];
 }
@@ -303,6 +304,7 @@ message StoreCapacity {
 
 // NodeDescriptor holds details on node physical/network topology.
 message NodeDescriptor {
+  option (gogoproto.equal) = true;
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
@@ -322,6 +324,7 @@ message NodeDescriptor {
 // LocalityAddress holds the private address accessible only from other nodes
 // in the corresponding locality.
 message LocalityAddress {
+  option (gogoproto.equal) = true;
   optional util.UnresolvedAddr address = 1 [(gogoproto.nullable) = false];
   optional Tier locality_tier = 2 [(gogoproto.nullable) = false];
 }
@@ -348,6 +351,7 @@ message StoreDeadReplicas {
 // Locality is an ordered set of key value Tiers that describe a node's
 // location. The tier keys should be the same across all nodes.
 message Locality {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
 
   repeated Tier tiers = 1 [(gogoproto.nullable) = false];
@@ -355,6 +359,7 @@ message Locality {
 
 // Tier represents one level of the locality hierarchy.
 message Tier {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
 
   // Key is the name of tier and should match all other nodes.
@@ -364,6 +369,7 @@ message Tier {
 }
 
 message Version {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
 
   // The names "major" and "minor" are reserved in C in

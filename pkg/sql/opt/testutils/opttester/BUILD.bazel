@@ -15,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
