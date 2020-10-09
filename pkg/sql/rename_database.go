@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -256,9 +257,9 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		struct {
 			DatabaseName    string
 			Statement       string
-			User            string
+			User            security.SQLUsername
 			NewDatabaseName string
-		}{n.n.Name.String(), n.n.String(), p.SessionData().User, n.newName},
+		}{n.n.Name.String(), n.n.String(), p.SessionData().User(), n.newName},
 	)
 }
 

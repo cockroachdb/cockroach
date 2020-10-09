@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -113,7 +114,9 @@ var ErrListingUnsupported = errors.New("listing is not supported")
 var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
-func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, error) {
+func ExternalStorageConfFromURI(
+	path string, user security.SQLUsername,
+) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	uri, err := url.Parse(path)
 	if err != nil {
@@ -197,18 +200,22 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		}
 	case "userfile":
 		qualifiedTableName := uri.Host
-		if user == "" {
+		if user.Undefined() {
 			return conf, errors.Errorf("user creating the FileTable ExternalStorage must be specified")
 		}
 
 		// If the import statement does not specify a qualified table name then use
 		// the default to attempt to locate the file(s).
 		if qualifiedTableName == "" {
-			qualifiedTableName = DefaultQualifiedNamePrefix + user
+			composedTableName := security.MakeSQLUsernameFromPreNormalizedString(
+				DefaultQualifiedNamePrefix + user.Normalized())
+			qualifiedTableName = DefaultQualifiedNamespace +
+				// Escape special identifiers as needed.
+				composedTableName.SQLIdentifier()
 		}
 
 		conf.Provider = roachpb.ExternalStorageProvider_FileTable
-		conf.FileTableConfig.User = user
+		conf.FileTableConfig.User = user.Normalized()
 		conf.FileTableConfig.QualifiedTableName = qualifiedTableName
 		conf.FileTableConfig.Path = uri.Path
 	default:
@@ -226,7 +233,7 @@ func ExternalStorageFromURI(
 	externalConfig base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
-	user string,
+	user security.SQLUsername,
 	ie *sql.InternalExecutor,
 	kvDB *kv.DB,
 ) (cloud.ExternalStorage, error) {

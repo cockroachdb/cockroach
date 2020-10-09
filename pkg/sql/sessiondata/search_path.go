@@ -13,6 +13,7 @@ package sessiondata
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -64,8 +65,8 @@ var EmptySearchPath = SearchPath{}
 
 // DefaultSearchPathForUser returns the default search path with the user
 // specific schema name set so that it can be expanded during resolution.
-func DefaultSearchPathForUser(username string) SearchPath {
-	return DefaultSearchPath.WithUserSchemaName(username)
+func DefaultSearchPathForUser(username security.SQLUsername) SearchPath {
+	return DefaultSearchPath.WithUserSchemaName(username.Normalized())
 }
 
 // MakeSearchPath returns a new immutable SearchPath struct. The paths slice

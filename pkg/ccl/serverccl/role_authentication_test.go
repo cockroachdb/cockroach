@@ -113,7 +113,8 @@ func TestVerifyPassword(t *testing.T) {
 		{"cthon98", "12345", true, ""},
 	} {
 		t.Run("", func(t *testing.T) {
-			exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(context.Background(), &ie, tc.username)
+			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
+			exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(context.Background(), &ie, username)
 
 			if err != nil {
 				t.Errorf(

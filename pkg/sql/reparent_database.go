@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -298,8 +299,8 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		struct {
 			DatabaseName    string
 			NewDatabaseName string
-			User            string
-		}{n.db.Name, n.newParent.Name, p.SessionData().User},
+			User            security.SQLUsername
+		}{n.db.Name, n.newParent.Name, p.SessionData().User()},
 	)
 }
 

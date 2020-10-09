@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -90,7 +91,7 @@ func doCreateSequence(
 		return err
 	}
 
-	privs := CreateInheritedPrivilegesFromDBDesc(dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(dbDesc, params.SessionData().User())
 
 	if persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempSequenceCounter)
@@ -158,8 +159,8 @@ func doCreateSequence(
 		struct {
 			SequenceName string
 			Statement    string
-			User         string
-		}{name.FQString(), context, params.SessionData().User},
+			User         security.SQLUsername
+		}{name.FQString(), context, params.SessionData().User()},
 	)
 }
 

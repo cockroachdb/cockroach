@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -214,7 +213,7 @@ func (c *conn) serveImpl(
 ) {
 	defer func() { _ = c.conn.Close() }()
 
-	if c.sessionArgs.User == security.RootUser || c.sessionArgs.User == security.NodeUser {
+	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
 		ctx = logtags.AddTag(ctx, "user", log.Safe(c.sessionArgs.User))
 	} else {
 		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
@@ -673,14 +672,14 @@ func (c *conn) sendInitialConnData(
 	}
 	// The two following status parameters have no equivalent session
 	// variable.
-	if err := c.sendParamStatus("session_authorization", c.sessionArgs.User); err != nil {
+	if err := c.sendParamStatus("session_authorization", c.sessionArgs.User.Normalized()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 
 	// TODO(knz): this should retrieve the admin status during
 	// authentication using the roles table, instead of using a
 	// simple/naive username match.
-	isSuperUser := c.sessionArgs.User == security.RootUser
+	isSuperUser := c.sessionArgs.User.IsRootUser()
 	superUserVal := "off"
 	if isSuperUser {
 		superUserVal = "on"

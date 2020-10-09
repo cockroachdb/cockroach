@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -116,8 +117,8 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 			struct {
 				DatabaseName string
 				Statement    string
-				User         string
-			}{n.n.Name.String(), n.n.String(), params.SessionData().User},
+				User         security.SQLUsername
+			}{n.n.Name.String(), n.n.String(), params.SessionData().User()},
 		); err != nil {
 			return err
 		}

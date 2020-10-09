@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -252,9 +253,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 		struct {
 			TableName    string
 			Statement    string
-			User         string
+			User         security.SQLUsername
 			NewTableName string
-		}{oldTn.FQString(), n.n.String(), params.SessionData().User, newTn.FQString()},
+		}{oldTn.FQString(), n.n.String(), params.SessionData().User(), newTn.FQString()},
 	)
 }
 

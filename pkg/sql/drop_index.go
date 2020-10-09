@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -534,10 +535,10 @@ func (p *planner) dropIndexByName(
 			TableName           string
 			IndexName           string
 			Statement           string
-			User                string
+			User                security.SQLUsername
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{tn.FQString(), string(idxName), jobDesc, p.SessionData().User, uint32(mutationID),
+		}{tn.FQString(), string(idxName), jobDesc, p.SessionData().User(), uint32(mutationID),
 			droppedViews},
 	)
 }

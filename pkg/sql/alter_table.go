@@ -782,7 +782,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			descriptorChanged = true
 		case *tree.AlterTableOwner:
-			changed, err := params.p.alterTableOwner(params.p.EvalContext().Context, n, string(t.Owner))
+			changed, err := params.p.alterTableOwner(params.p.EvalContext().Context, n, t.Owner)
 			if err != nil {
 				return err
 			}
@@ -835,11 +835,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 		struct {
 			TableName           string
 			Statement           string
-			User                string
+			User                security.SQLUsername
 			MutationID          uint32
 			CascadeDroppedViews []string
 		}{params.p.ResolvedName(n.n.Table).FQString(), n.n.String(),
-			params.SessionData().User, uint32(mutationID), droppedViews},
+			params.SessionData().User(), uint32(mutationID), droppedViews},
 	)
 }
 
@@ -1146,7 +1146,7 @@ func (p *planner) removeColumnComment(
 		ctx,
 		"delete-column-comment",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 		keys.ColumnCommentType,
 		tableID,
@@ -1199,12 +1199,12 @@ func (p *planner) updateFKBackReferenceName(
 // alterTableOwner sets the owner of the table to newOwner and returns true if the descriptor
 // was updated.
 func (p *planner) alterTableOwner(
-	ctx context.Context, n *alterTableNode, newOwner string,
+	ctx context.Context, n *alterTableNode, newOwner security.SQLUsername,
 ) (bool, error) {
 	privs := n.tableDesc.GetPrivileges()
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
+	if newOwner == privs.Owner() {
 		return false, nil
 	}
 
@@ -1218,7 +1218,7 @@ func (p *planner) alterTableOwner(
 // checkCanAlterTableAndSetNewOwner handles privilege checking and setting new owner.
 // Called in ALTER TABLE and REASSIGN OWNED BY.
 func (p *planner) checkCanAlterTableAndSetNewOwner(
-	ctx context.Context, desc *tabledesc.Mutable, newOwner string,
+	ctx context.Context, desc *tabledesc.Mutable, newOwner security.SQLUsername,
 ) error {
 	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
 		return err

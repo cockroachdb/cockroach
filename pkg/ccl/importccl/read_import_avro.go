@@ -17,8 +17,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -174,7 +175,7 @@ func (a *avroConsumer) convertNative(x interface{}, conv *row.DatumRowConverter)
 	}
 
 	for f, v := range record {
-		field := lex.NormalizeName(f)
+		field := lexbase.NormalizeName(f)
 		idx, ok := a.fieldNameToIdx[field]
 		if !ok {
 			if a.strict {
@@ -480,7 +481,7 @@ func (a *avroInputReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, a.readFile, makeExternalStorage, user)
 }

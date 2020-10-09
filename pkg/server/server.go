@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/goroutinedumper"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
@@ -202,7 +203,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
-	ctx context.Context, uri string, user string,
+	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
@@ -467,7 +468,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return externalStorageBuilder.makeExternalStorage(ctx, dest)
 	}
 	externalStorageFromURI := func(ctx context.Context, uri string,
-		user string) (cloud.ExternalStorage, error) {
+		user security.SQLUsername) (cloud.ExternalStorage, error) {
 		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri, user)
 	}
 

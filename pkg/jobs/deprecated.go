@@ -352,7 +352,7 @@ func (r *Registry) deprecatedResume(
 		}
 		// Bookkeeping.
 		payload := job.Payload()
-		phs, cleanup := r.planFn("resume-"+job.taskName(), payload.Username)
+		phs, cleanup := r.planFn("resume-"+job.taskName(), payload.UsernameProto.Decode())
 		defer cleanup()
 		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
 		var span opentracing.Span

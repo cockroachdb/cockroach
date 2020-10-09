@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -94,11 +95,11 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			struct {
 				SchemaName    string
 				NewSchemaName string
-				User          string
-			}{oldName, newName, params.p.SessionData().User},
+				User          security.SQLUsername
+			}{oldName, newName, params.p.SessionData().User()},
 		)
 	case *tree.AlterSchemaOwner:
-		newOwner := string(t.Owner)
+		newOwner := t.Owner
 		if err := params.p.alterSchemaOwner(
 			params.ctx, n.desc, newOwner, tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
@@ -112,9 +113,9 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 			struct {
 				SchemaName string
-				Owner      string
-				User       string
-			}{n.desc.Name, newOwner, params.p.SessionData().User},
+				Owner      security.SQLUsername
+				User       security.SQLUsername
+			}{n.desc.Name, newOwner, params.p.SessionData().User()},
 		)
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
@@ -122,12 +123,15 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 }
 
 func (p *planner) alterSchemaOwner(
-	ctx context.Context, scDesc *schemadesc.Mutable, newOwner string, jobDescription string,
+	ctx context.Context,
+	scDesc *schemadesc.Mutable,
+	newOwner security.SQLUsername,
+	jobDescription string,
 ) error {
 	privs := scDesc.GetPrivileges()
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
+	if newOwner == privs.Owner() {
 		return nil
 	}
 
@@ -141,7 +145,7 @@ func (p *planner) alterSchemaOwner(
 // checkCanAlterSchemaAndSetNewOwner handles privilege checking and setting new owner.
 // Called in ALTER SCHEMA and REASSIGN OWNED BY.
 func (p *planner) checkCanAlterSchemaAndSetNewOwner(
-	ctx context.Context, scDesc *schemadesc.Mutable, newOwner string,
+	ctx context.Context, scDesc *schemadesc.Mutable, newOwner security.SQLUsername,
 ) error {
 	if err := p.checkCanAlterToNewOwner(ctx, scDesc, newOwner); err != nil {
 		return err

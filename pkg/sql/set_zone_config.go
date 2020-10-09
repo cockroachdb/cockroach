@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -206,7 +207,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"user %s does not have %s or %s privilege on %s %s",
-			p.SessionData().User, privilege.ZONECONFIG, privilege.CREATE, dbDesc.TypeName(), dbDesc.GetName())
+			p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, dbDesc.TypeName(), dbDesc.GetName())
 	}
 	tableDesc, err := p.resolveTableForZone(ctx, &zs)
 	if err != nil {
@@ -229,7 +230,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s or %s privilege on %s %s",
-		p.SessionData().User, privilege.ZONECONFIG, privilege.CREATE, tableDesc.TypeName(), tableDesc.GetName())
+		p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, tableDesc.TypeName(), tableDesc.GetName())
 }
 
 // setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
@@ -674,12 +675,12 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			Target  string
 			Config  string `json:",omitempty"`
 			Options string `json:",omitempty"`
-			User    string
+			User    security.SQLUsername
 		}{
 			Target:  tree.AsStringWithFQNames(&zs, params.Ann()),
 			Config:  strings.TrimSpace(yamlConfig),
 			Options: optionStr.String(),
-			User:    params.SessionData().User,
+			User:    params.SessionData().User(),
 		}
 		if deleteZone {
 			eventLogType = EventLogRemoveZoneConfig

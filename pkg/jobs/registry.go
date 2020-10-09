@@ -179,7 +179,7 @@ type Registry struct {
 // subpackage like sqlbase is difficult because of the amount of sql-only
 // stuff that PlanHookState exports. One other choice is to merge this package
 // back into the sql package. There's maybe a better way that I'm unaware of.
-type planHookMaker func(opName, user string) (interface{}, func())
+type planHookMaker func(opName string, user security.SQLUsername) (interface{}, func())
 
 // PreventAdoptionFile is the name of the file which, if present in the first
 // on-disk store, will prevent the adoption of background jobs by that node.
@@ -348,7 +348,7 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 			ctx,
 			"poll-show-jobs",
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query,
 		)
 		if err != nil {
@@ -389,7 +389,7 @@ func (r *Registry) NewJob(record Record) *Job {
 	job.mu.payload = jobspb.Payload{
 		Description:   record.Description,
 		Statement:     record.Statement,
-		Username:      record.Username,
+		UsernameProto: record.Username.EncodeProto(),
 		DescriptorIDs: record.DescriptorIDs,
 		Details:       jobspb.WrapPayloadDetails(record.Details),
 		Noncancelable: record.NonCancelable,
@@ -620,7 +620,7 @@ func (r *Registry) Start(
 	removeClaimsFromDeadSessions := func(ctx context.Context, s sqlliveness.Session) {
 		if _, err := r.ex.QueryRowEx(
 			ctx, "expire-sessions", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUser}, `
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id <> $1

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -128,6 +129,7 @@ func verifySystemJob(
 	var statusString string
 	var runningStatus gosql.NullString
 	var runningStatusString string
+	var usernameString string
 	// We have to query for the nth job created rather than filtering by ID,
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
@@ -137,9 +139,10 @@ func verifySystemJob(
 		filterType.String(),
 		offset,
 	).Scan(
-		&actual.Description, &actual.Username, &rawDescriptorIDs,
+		&actual.Description, &usernameString, &rawDescriptorIDs,
 		&statusString, &runningStatus,
 	)
+	actual.Username = security.MakeSQLUsernameFromPreNormalizedString(usernameString)
 	if runningStatus.Valid {
 		runningStatusString = runningStatus.String
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -302,7 +303,10 @@ func testListFiles(t *testing.T, storeURI, user string, ie *sql.InternalExecutor
 		for i := range in {
 			u := *uri
 			if u.Scheme == "userfile" && u.Host == "" {
-				u.Host = cloudimpl.DefaultQualifiedNamePrefix + user
+				composedTableName := tree.Name(cloudimpl.DefaultQualifiedNamePrefix + user)
+				u.Host = cloudimpl.DefaultQualifiedNamespace +
+					// Escape special identifiers as needed.
+					composedTableName.String()
 			}
 			u.Path = u.Path + "/" + in[i]
 			out[i] = u.String()

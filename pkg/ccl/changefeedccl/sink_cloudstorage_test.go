@@ -102,13 +102,13 @@ func TestCloudStorageSink(t *testing.T) {
 	require.NoError(t, err)
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
-	externalStorageFromURI := func(ctx context.Context, uri, user string) (cloud.ExternalStorage,
+	externalStorageFromURI := func(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error) {
 		return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
 			clientFactory, user, nil, nil)
 	}
 
-	user := security.RootUser
+	user := security.RootUserName()
 
 	t.Run(`golden`, func(t *testing.T) {
 		t1 := tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t1`})

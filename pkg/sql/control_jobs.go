@@ -87,7 +87,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		}
 
 		if job != nil {
-			owner := job.Payload().Username
+			owner := job.Payload().UsernameProto.Decode()
 
 			if !userIsAdmin {
 				ok, err := params.p.UserHasAdminRole(params.ctx, owner)

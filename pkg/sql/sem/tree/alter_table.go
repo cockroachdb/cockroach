@@ -13,6 +13,7 @@ package tree
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
@@ -581,7 +582,9 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 
 // AlterTableOwner represents an ALTER TABLE OWNER TO command.
 type AlterTableOwner struct {
-	Owner Name
+	// TODO(solon): Adjust this, see
+	// https://github.com/cockroachdb/cockroach/issues/54696
+	Owner security.SQLUsername
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
@@ -592,5 +595,5 @@ func (node *AlterTableOwner) TelemetryCounter() telemetry.Counter {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatNode(&node.Owner)
+	ctx.FormatUsername(node.Owner)
 }

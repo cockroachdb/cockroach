@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -118,7 +119,7 @@ func (w *workloadReader) readFiles(
 	_ map[int32]int64,
 	_ roachpb.IOFileFormat,
 	_ cloud.ExternalStorageFactory,
-	_ string,
+	_ security.SQLUsername,
 ) error {
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))
