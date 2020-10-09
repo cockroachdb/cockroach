@@ -241,7 +241,9 @@ func (s *authenticationServer) UserLogout(
 
 	sessionID, err := strconv.Atoi(sessionIDs[0])
 	if err != nil {
-		return nil, fmt.Errorf("invalid session id: %d", sessionID)
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			"invalid session id: %d", sessionID)
 	}
 
 	// Revoke the session.
@@ -255,7 +257,9 @@ func (s *authenticationServer) UserLogout(
 	); err != nil {
 		return nil, apiInternalError(ctx, err)
 	} else if n == 0 {
-		err := errors.Newf("session with id %d nonexistent", sessionID)
+		err := status.Errorf(
+			codes.InvalidArgument,
+			"session with id %d nonexistent", sessionID)
 		log.Infof(ctx, "%v", err)
 		return nil, err
 	}
