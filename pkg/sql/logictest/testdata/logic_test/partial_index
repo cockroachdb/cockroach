@@ -1280,3 +1280,21 @@ CREATE TABLE public.indexes_article (
 
 statement ok
 CREATE INDEX "recent_article_idx" ON "indexes_article" ("pub_date") WHERE "pub_date" IS NOT NULL
+
+# Regression test for #55387. The optimizer should not incorrectly remove
+# filters from an expression while proving partial index implication.
+subtest regression_55387
+
+statement ok
+CREATE TABLE t55387 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a) WHERE a > 1,
+  INDEX (b) WHERE b > 2
+);
+INSERT INTO t55387 VALUES (1, 1, 5);
+
+query I rowsort
+SELECT k FROM t55387 WHERE a > 1 AND b > 3
+----
