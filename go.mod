@@ -3,6 +3,8 @@ module github.com/cockroachdb/cockroach
 go 1.13
 
 require (
+	4d63.com/embedfiles v1.0.0 // indirect
+	4d63.com/tz v1.2.0
 	cloud.google.com/go v0.34.0
 	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.0.0-20190104215108-45d0c5e3638e
