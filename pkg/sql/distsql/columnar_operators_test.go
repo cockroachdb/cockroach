@@ -795,7 +795,12 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: descpb.ExceptAllJoin,
 		},
-		// TODO(yuzefovich): add right semi/anti once supported.
+		{
+			joinType: descpb.RightSemiJoin,
+		},
+		{
+			joinType: descpb.RightAntiJoin,
+		},
 	}
 
 	rng, seed := randutil.NewPseudoRand()
@@ -868,10 +873,11 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								return cmp < 0
 							})
 							var outputTypes []*types.T
+							if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
+								outputTypes = append(outputTypes, lInputTypes...)
+							}
 							if testSpec.joinType.ShouldIncludeRightColsInOutput() {
-								outputTypes = append(lInputTypes, rInputTypes...)
-							} else {
-								outputTypes = lInputTypes
+								outputTypes = append(outputTypes, rInputTypes...)
 							}
 							outputColumns := make([]uint32, len(outputTypes))
 							for i := range outputColumns {
