@@ -2229,6 +2229,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
 	tab := c.e.mem.Metadata().Table(scanPrivate.Table)
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
 
 	// Short circuit unless zigzag joins are explicitly enabled.
 	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled {
@@ -2285,7 +2287,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	//
 	// TODO(mgartner): We should consider primary indexes when it has multiple
 	// columns and only the first is being constrained.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectPrimaryIndex|rejectInvertedIndexes|rejectPartialIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectPrimaryIndex|rejectInvertedIndexes)
 	for iter.Next() {
 		leftFixed := c.indexConstrainedCols(iter.Index(), scanPrivate.Table, fixedCols)
 		// Short-circuit quickly if the first column in the index is not a fixed
@@ -2294,7 +2296,23 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			continue
 		}
 
-		iter2 := makeScanIndexIter(c.e.mem, scanPrivate, rejectPrimaryIndex|rejectInvertedIndexes|rejectPartialIndexes)
+		currFilters := filters
+
+		// If the left index is a partial index, check whether or not the filter
+		// implies the predicate.
+		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
+		if isPartialIndex {
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			remainingFilters, ok := c.im.FiltersImplyPredicate(currFilters, pred)
+			if !ok {
+				// The filters do not imply the predicate, so the partial index
+				// cannot be used.
+				continue
+			}
+			currFilters = remainingFilters
+		}
+
+		iter2 := makeScanIndexIter(c.e.mem, scanPrivate, rejectPrimaryIndex|rejectInvertedIndexes)
 		// Only look at indexes after this one.
 		iter2.StartAfter(iter.IndexOrdinal())
 
@@ -2305,6 +2323,21 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			if leftFixed.SubsetOf(rightFixed) || rightFixed.SubsetOf(leftFixed) {
 				continue
 			}
+
+			// If the right index is a partial index, check whether or not the
+			// filter implies the predicate.
+			_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter2.IndexOrdinal()).Predicate()
+			if isPartialIndex {
+				pred := memo.PartialIndexPredicate(tabMeta, iter2.IndexOrdinal())
+				remainingFilters, ok := c.im.FiltersImplyPredicate(currFilters, pred)
+				if !ok {
+					// The filters do not imply the predicate, so the partial index
+					// cannot be used.
+					continue
+				}
+				currFilters = remainingFilters
+			}
+
 			// Columns that are in both indexes are, by definition, equal.
 			leftCols := iter.IndexColumns()
 			rightCols := iter2.IndexColumns()
@@ -2318,7 +2351,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			// If there are any equalities across the columns of the two indexes,
 			// push them into the zigzag join spec.
 			leftEq, rightEq := memo.ExtractJoinEqualityColumns(
-				leftCols, rightCols, filters,
+				leftCols, rightCols, currFilters,
 			)
 			leftEqCols, rightEqCols := eqColsForZigzag(
 				tab,
@@ -2362,31 +2395,33 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 				continue
 			}
 
-			zigzagJoin := memo.ZigzagJoinExpr{
-				On: filters,
-				ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
-					LeftTable:   scanPrivate.Table,
-					LeftIndex:   iter.IndexOrdinal(),
-					RightTable:  scanPrivate.Table,
-					RightIndex:  iter2.IndexOrdinal(),
-					LeftEqCols:  leftEqCols,
-					RightEqCols: rightEqCols,
-				},
-			}
-
 			leftFixedCols, leftVals, leftTypes := c.fixedColsForZigzag(
-				iter.Index(), scanPrivate.Table, filters,
+				iter.Index(), scanPrivate.Table, currFilters,
 			)
 			rightFixedCols, rightVals, rightTypes := c.fixedColsForZigzag(
-				iter2.Index(), scanPrivate.Table, filters,
+				iter2.Index(), scanPrivate.Table, currFilters,
 			)
 
+			// If the fixed cols have been reduced during partial index
+			// implication, then a zigzag join cannot be planned. A single index
+			// scan should be more efficient.
 			if len(leftFixedCols) != leftFixed.Len() || len(rightFixedCols) != rightFixed.Len() {
-				panic(errors.AssertionFailedf("could not populate all fixed columns for zig zag join"))
+				continue
 			}
 
-			zigzagJoin.LeftFixedCols = leftFixedCols
-			zigzagJoin.RightFixedCols = rightFixedCols
+			zigzagJoin := memo.ZigzagJoinExpr{
+				On: currFilters,
+				ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
+					LeftTable:      scanPrivate.Table,
+					LeftIndex:      iter.IndexOrdinal(),
+					RightTable:     scanPrivate.Table,
+					RightIndex:     iter2.IndexOrdinal(),
+					LeftEqCols:     leftEqCols,
+					RightEqCols:    rightEqCols,
+					LeftFixedCols:  leftFixedCols,
+					RightFixedCols: rightFixedCols,
+				},
+			}
 
 			leftTupleTyp := types.MakeTuple(leftTypes)
 			rightTupleTyp := types.MakeTuple(rightTypes)
@@ -2396,7 +2431,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			}
 
 			zigzagJoin.On = memo.ExtractRemainingJoinFilters(
-				filters,
+				currFilters,
 				zigzagJoin.LeftEqCols,
 				zigzagJoin.RightEqCols,
 			)
