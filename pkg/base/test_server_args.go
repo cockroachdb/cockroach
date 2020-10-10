@@ -191,6 +191,7 @@ func DefaultTestTempStorageConfigWithSize(
 	return TempStorageConfig{
 		InMemory: true,
 		Mon:      monitor,
+		Settings: st,
 	}
 }
 

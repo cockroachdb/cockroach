@@ -74,6 +74,7 @@ func storageConfigFromTempStorageConfigAndStoreSpec(
 		Dir:   config.Path,
 		// MaxSize doesn't matter for temp storage - it's not enforced in any way.
 		MaxSize:         0,
+		Settings:        config.Settings,
 		UseFileRegistry: spec.UseFileRegistry,
 		ExtraOptions:    spec.ExtraOptions,
 	}
