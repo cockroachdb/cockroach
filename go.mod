@@ -85,7 +85,7 @@ require (
 	github.com/goware/modvendor v0.3.0
 	github.com/grpc-ecosystem/grpc-gateway v1.13.0
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
-	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20170921033129-f5072df9c550 // indirect
+	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20201002210021-dda951febc36 // indirect
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgconn v1.6.1 // indirect
 	github.com/jackc/pgproto3/v2 v2.0.4
