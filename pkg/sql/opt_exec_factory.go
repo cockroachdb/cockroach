@@ -439,11 +439,11 @@ func (ef *execFactory) ConstructGroupBy(
 	}
 	for _, col := range n.groupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
-		f := n.newAggregateFuncHolder(
+		f := newAggregateFuncHolder(
 			builtins.AnyNotNull,
 			[]int{col},
-			nil, /* arguments */
-			ef.planner.EvalContext().Mon.MakeBoundAccount(),
+			nil,   /* arguments */
+			false, /* isDistinct */
 		)
 		n.funcs = append(n.funcs, f)
 	}
@@ -458,15 +458,12 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 		agg := &aggregations[i]
 		renderIdxs := convertOrdinalsToInts(agg.ArgCols)
 
-		f := n.newAggregateFuncHolder(
+		f := newAggregateFuncHolder(
 			agg.FuncName,
 			renderIdxs,
 			agg.ConstArgs,
-			ef.planner.EvalContext().Mon.MakeBoundAccount(),
+			agg.Distinct,
 		)
-		if agg.Distinct {
-			f.setDistinct()
-		}
 		f.filterRenderIdx = int(agg.Filter)
 
 		n.funcs = append(n.funcs, f)
