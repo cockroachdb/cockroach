@@ -1266,6 +1266,8 @@ func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "#55403")
+
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer setTestJobsAdoptInterval()()
 
