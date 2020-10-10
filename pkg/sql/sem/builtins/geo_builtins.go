@@ -5277,6 +5277,22 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 		},
 	),
 
+	"st_memsize": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{
+					Name: "geometry",
+					Typ:  types.Geometry,
+				},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geo := tree.MustBeDGeometry(args[0])
+				return tree.NewDInt(tree.DInt(geo.Size())), nil
+			},
+			Info:       "Returns the amount of memory space (in bytes) the geometry takes.",
+			Volatility: tree.VolatilityImmutable,
+		}),
 	//
 	// Unimplemented.
 	//
@@ -5308,7 +5324,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_linecrossingdirection":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
 	"st_linelocatepoint":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48973}),
 	"st_linesubstring":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
-	"st_memsize":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48985}),
 	"st_minimumboundingcircle":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
 	"st_minimumboundingradius":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
 	"st_node":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
