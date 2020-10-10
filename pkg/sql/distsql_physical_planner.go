@@ -1936,6 +1936,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:             *n.table.desc.TableDesc(),
 		IndexIdx:          0,
+		Type:              descpb.InnerJoin,
 		Visibility:        n.table.colCfg.visibility,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
@@ -1981,8 +1982,6 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 }
 
 // createPlanForLookupJoin creates a distributed plan for a lookupJoinNode.
-// Note that this is a separate code path from the experimental path which
-// converts joins to lookup joins.
 func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	planCtx *PlanningCtx, n *lookupJoinNode,
 ) (*PhysicalPlan, error) {
@@ -2029,8 +2028,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		}
 	}
 
-	if n.joinType == descpb.LeftSemiJoin || n.joinType == descpb.LeftAntiJoin {
-		// For anti/semi join, we only produce the input columns.
+	if !n.joinType.ShouldIncludeRightColsInOutput() {
 		planToStreamColMap, post.OutputColumns, types = truncateToInputForLookupJoins(
 			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
 	}
@@ -2169,8 +2167,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		}
 	}
 
-	if n.joinType == descpb.LeftSemiJoin || n.joinType == descpb.LeftAntiJoin {
-		// For anti/semi join, we only produce the input columns.
+	if !n.joinType.ShouldIncludeRightColsInOutput() {
 		planToStreamColMap, post.OutputColumns, types = truncateToInputForLookupJoins(
 			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
 	}

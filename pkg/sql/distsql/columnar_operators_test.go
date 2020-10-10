@@ -587,6 +587,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: descpb.ExceptAllJoin,
 		},
+		// TODO(yuzefovich): add right semi/anti once supported.
 	}
 
 	rng, seed := randutil.NewPseudoRand()
@@ -787,6 +788,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: descpb.ExceptAllJoin,
 		},
+		// TODO(yuzefovich): add right semi/anti once supported.
 	}
 
 	rng, seed := randutil.NewPseudoRand()
