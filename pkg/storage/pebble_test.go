@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -21,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -279,16 +282,17 @@ func TestPebbleDiskSlowEmit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	eng := createTestPebbleEngine()
-	defer eng.Close()
+	settings := cluster.MakeTestingClusterSettings()
+	MaxSyncDurationFatalOnExceeded.Override(&settings.SV, false)
+	p := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, settings)
+	defer p.Close()
 
-	p := eng.(*Pebble)
 	require.Equal(t, uint64(0), p.diskSlowCount)
 	require.Equal(t, uint64(0), p.diskStallCount)
 	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 1 * time.Second})
 	require.Equal(t, uint64(1), p.diskSlowCount)
 	require.Equal(t, uint64(0), p.diskStallCount)
-	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 1 * time.Minute})
+	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 70 * time.Second})
 	require.Equal(t, uint64(1), p.diskSlowCount)
 	require.Equal(t, uint64(1), p.diskStallCount)
 }

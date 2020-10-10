@@ -87,7 +87,7 @@ func createTestRocksDBEngine() Engine {
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() Engine {
-	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
 }
 
 var mvccEngineImpls = []struct {
