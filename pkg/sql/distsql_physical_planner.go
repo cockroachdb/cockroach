@@ -1342,7 +1342,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 			return err
 		}
 		aggregations[i].Func = execinfrapb.AggregatorSpec_Func(funcIdx)
-		aggregations[i].Distinct = fholder.isDistinct()
+		aggregations[i].Distinct = fholder.isDistinct
 		for _, renderIdx := range fholder.argRenderIdxs {
 			aggregations[i].ColIdx = append(aggregations[i].ColIdx, uint32(p.PlanToStreamColMap[renderIdx]))
 		}
@@ -2393,7 +2393,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		leftPlanToStreamColMap:  leftMap,
 		rightPlanToStreamColMap: rightMap,
 	}
-	post, joinToStreamColMap := helper.joinOutColumns(n.joinType, n.columns)
+	post, joinToStreamColMap := helper.joinOutColumns(n.pred.joinType, n.columns)
 	onExpr, err := helper.remapOnExpr(planCtx, n.pred.onCond)
 	if err != nil {
 		return nil, err
@@ -2415,7 +2415,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	return dsp.planJoiners(&joinPlanningInfo{
 		leftPlan:           leftPlan,
 		rightPlan:          rightPlan,
-		joinType:           n.joinType,
+		joinType:           n.pred.joinType,
 		joinResultTypes:    joinResultTypes,
 		onExpr:             onExpr,
 		post:               post,
