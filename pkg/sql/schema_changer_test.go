@@ -509,6 +509,9 @@ func TestRollbackOfAddingTable(t *testing.T) {
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "#55407")
+
 	// protects backfillNotification
 	var mu syncutil.Mutex
 	var backfillNotification chan struct{}
