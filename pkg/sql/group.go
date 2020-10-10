@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // A groupNode implements the planNode interface and handles the grouping logic.
@@ -38,7 +37,7 @@ type groupNode struct {
 	// even if there are no input rows, e.g. SELECT MIN(x) FROM t.
 	isScalar bool
 
-	// funcs are the aggregation functions that the renders use.
+	// funcs contains the information about all aggregate functions.
 	funcs []*aggregateFuncHolder
 
 	reqOrdering ReqOrdering
@@ -58,16 +57,11 @@ func (n *groupNode) Values() tree.Datums {
 
 func (n *groupNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
-	for _, f := range n.funcs {
-		f.close(ctx)
-	}
 }
 
 type aggregateFuncHolder struct {
-	// Name of the aggregate function. Empty if this column reproduces a bucket
-	// key unchanged.
+	// Name of the aggregate function.
 	funcName string
-
 	// The argument of the function is a single value produced by the renderNode
 	// underneath. If the function has no argument (COUNT_ROWS), it is empty.
 	argRenderIdxs []int
@@ -75,20 +69,11 @@ type aggregateFuncHolder struct {
 	// renderNode underneath. If there is no filter, it is set to
 	// tree.NoColumnIdx.
 	filterRenderIdx int
-
 	// arguments are constant expressions that can be optionally passed into an
 	// aggregator.
 	arguments tree.Datums
-
-	run aggregateFuncRun
-}
-
-// aggregateFuncRun contains the run-time state for one aggregation function
-// during local execution.
-type aggregateFuncRun struct {
-	buckets       map[string]tree.AggregateFunc
-	bucketsMemAcc mon.BoundAccount
-	seen          map[string]struct{}
+	// isDistinct indicates whether only distinct values are aggregated.
+	isDistinct bool
 }
 
 // newAggregateFuncHolder creates an aggregateFuncHolder.
@@ -98,44 +83,19 @@ type aggregateFuncRun struct {
 //
 // If the aggregation function takes no arguments (e.g. COUNT_ROWS),
 // argRenderIdx is noRenderIdx.
-func (n *groupNode) newAggregateFuncHolder(
-	funcName string, argRenderIdxs []int, arguments tree.Datums, acc mon.BoundAccount,
+func newAggregateFuncHolder(
+	funcName string, argRenderIdxs []int, arguments tree.Datums, isDistinct bool,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		funcName:        funcName,
 		argRenderIdxs:   argRenderIdxs,
 		filterRenderIdx: tree.NoColumnIdx,
 		arguments:       arguments,
-		run: aggregateFuncRun{
-			buckets:       make(map[string]tree.AggregateFunc),
-			bucketsMemAcc: acc,
-		},
+		isDistinct:      isDistinct,
 	}
 	return res
 }
 
 func (a *aggregateFuncHolder) hasFilter() bool {
 	return a.filterRenderIdx != tree.NoColumnIdx
-}
-
-// setDistinct causes a to ignore duplicate values of the argument.
-func (a *aggregateFuncHolder) setDistinct() {
-	a.run.seen = make(map[string]struct{})
-}
-
-// isDistinct returns true if only distinct values are aggregated,
-// e.g. SUM(DISTINCT x).
-func (a *aggregateFuncHolder) isDistinct() bool {
-	return a.run.seen != nil
-}
-
-func (a *aggregateFuncHolder) close(ctx context.Context) {
-	for _, aggFunc := range a.run.buckets {
-		aggFunc.Close(ctx)
-	}
-
-	a.run.buckets = nil
-	a.run.seen = nil
-
-	a.run.bucketsMemAcc.Close(ctx)
 }
