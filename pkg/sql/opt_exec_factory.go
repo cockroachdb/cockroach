@@ -717,7 +717,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	// Build the result columns.
 	inputCols := planColumns(input.(planNode))
 	var scanCols colinfo.ResultColumns
-	if joinType != descpb.LeftSemiJoin && joinType != descpb.LeftAntiJoin {
+	if joinType.ShouldIncludeRightColsInOutput() {
 		scanCols = planColumns(tableScan)
 	}
 	numCols := len(inputCols) + len(scanCols)

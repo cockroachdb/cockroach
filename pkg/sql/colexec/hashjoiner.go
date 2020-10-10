@@ -685,6 +685,8 @@ func MakeHashJoinerSpec(
 		// TODO(yuzefovich): refactor these joins to take advantage of the
 		// actual distinctness information.
 		rightDistinct = false
+	case descpb.RightSemiJoin, descpb.RightAntiJoin:
+		return spec, errors.New("hash join of right semi/anti type is not supported yet")
 	default:
 		return spec, errors.AssertionFailedf("hash join of type %s not supported", joinType)
 	}
