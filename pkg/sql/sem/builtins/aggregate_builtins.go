@@ -373,7 +373,7 @@ var aggregates = map[string]builtinDefinition{
 				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 			) tree.AggregateFunc {
 				return &stMakeLineAgg{
-					acc: evalCtx.Mon.MakeBoundAccount(),
+					acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
 				}
 			},
 			infoBuilder{
@@ -630,7 +630,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 			) tree.AggregateFunc {
 				return &stUnionAgg{
-					acc: evalCtx.Mon.MakeBoundAccount(),
+					acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
 				}
 			},
 			infoBuilder{
@@ -787,7 +787,7 @@ type stCollectAgg struct {
 
 func newSTCollectAgg(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &stCollectAgg{
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
 	}
 }
 
@@ -1091,10 +1091,10 @@ const (
 
 // makeSingleDatumAggregateBase makes a new singleDatumAggregateBase. If
 // evalCtx has non-nil SingleDatumAggMemAccount field, then that memory account
-// will be used by the new struct which will operate in "shared" mode
+// will be used by the new struct which will operate in "shared" mode.
 func makeSingleDatumAggregateBase(evalCtx *tree.EvalContext) singleDatumAggregateBase {
 	if evalCtx.SingleDatumAggMemAccount == nil {
-		newAcc := evalCtx.Mon.MakeBoundAccount()
+		newAcc := evalCtx.Mon.MakeBoundAccount() //nolint:monitor
 		return singleDatumAggregateBase{
 			mode: nonSharedSingleDatumAggregateBaseMode,
 			acc:  &newAcc,
@@ -1223,7 +1223,7 @@ func newArrayAggregate(
 ) tree.AggregateFunc {
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
 	}
 }
 
@@ -3374,7 +3374,7 @@ func newPercentileDiscAggregate(
 ) tree.AggregateFunc {
 	return &percentileDiscAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
 	}
 }
 
@@ -3472,7 +3472,7 @@ func newPercentileContAggregate(
 ) tree.AggregateFunc {
 	return &percentileContAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
 	}
 }
 

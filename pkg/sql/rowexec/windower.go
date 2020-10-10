@@ -163,8 +163,8 @@ func newWindower(
 			limit = memRequiredByWindower
 		}
 	}
-	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
-	limitedMon.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon) //nolint:monitor
+	limitedMon.Start(ctx, evalCtx.Mon, mon.BoundAccount{})                               //nolint:monitor
 
 	if err := w.InitWithEvalCtx(
 		w,

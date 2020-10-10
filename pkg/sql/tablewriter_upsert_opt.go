@@ -106,7 +106,7 @@ func (tu *optTableUpserter) init(
 	if tu.rowsNeeded {
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))
 		tu.rows = rowcontainer.NewRowContainer(
-			evalCtx.Mon.MakeBoundAccount(),
+			evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
 			colinfo.ColTypeInfoFromColDescs(tu.returnCols),
 		)
 

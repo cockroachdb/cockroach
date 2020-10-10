@@ -157,17 +157,8 @@ type MemRowContainer struct {
 var _ heap.Interface = &MemRowContainer{}
 var _ IndexedRowContainer = &MemRowContainer{}
 
-// Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
-// to track memory usage.
+// Init initializes the MemRowContainer.
 func (mc *MemRowContainer) Init(
-	ordering colinfo.ColumnOrdering, types []*types.T, evalCtx *tree.EvalContext,
-) {
-	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon)
-}
-
-// InitWithMon initializes the MemRowContainer with an explicit monitor. Only
-// use this if the default MemRowContainer.Init() function is insufficient.
-func (mc *MemRowContainer) InitWithMon(
 	ordering colinfo.ColumnOrdering,
 	types []*types.T,
 	evalCtx *tree.EvalContext,
@@ -413,7 +404,7 @@ func (f *DiskBackedRowContainer) Init(
 	diskMonitor *mon.BytesMonitor,
 ) {
 	mrc := MemRowContainer{}
-	mrc.InitWithMon(ordering, types, evalCtx, memoryMonitor)
+	mrc.Init(ordering, types, evalCtx, memoryMonitor)
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine

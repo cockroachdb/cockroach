@@ -189,7 +189,7 @@ func TestDiskRowContainer(t *testing.T) {
 				// Make another row container that stores all the rows then sort
 				// it to compare equality.
 				var sortedRows MemRowContainer
-				sortedRows.Init(ordering, types, &evalCtx)
+				sortedRows.Init(ordering, types, &evalCtx, evalCtx.Mon)
 				defer sortedRows.Close(ctx)
 				for _, row := range rows {
 					if err := sortedRows.AddRow(ctx, row); err != nil {

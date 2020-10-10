@@ -125,7 +125,7 @@ func (u *updateNode) startExec(params runParams) error {
 
 	if u.run.rowsNeeded {
 		u.run.tu.rows = rowcontainer.NewRowContainer(
-			params.EvalContext().Mon.MakeBoundAccount(),
+			params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
 			colinfo.ColTypeInfoFromResCols(u.columns),
 		)
 	}

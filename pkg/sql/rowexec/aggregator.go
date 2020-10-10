@@ -95,7 +95,7 @@ func (ag *aggregatorBase) init(
 	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem") //nolint:monitor
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		input = newInputStatCollector(input)
 		ag.FinishTrace = ag.outputStatsToTrace
@@ -145,13 +145,23 @@ func (ag *aggregatorBase) init(
 		ag.outputTypes[i] = outputType
 	}
 
-	return ag.ProcessorBase.Init(
+	if err := ag.ProcessorBase.Init(
 		self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
 		execinfra.ProcStateOpts{
 			InputsToDrain:        []execinfra.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,
 		},
-	)
+	); err != nil {
+		return err
+	}
+	// Some aggregate functions in their constructor might create a memory
+	// account bound to the monitor set in the eval context. In
+	// createAggregateFuncs, ag.EvalCtx is passed in, so in order for those
+	// accounts to be bound to the correct monitor we override it here. Note
+	// that modifying the eval context is acceptable since we have created a
+	// copy in ProcessorBase.Init call above.
+	ag.EvalCtx.Mon = memMonitor //nolint:monitor
+	return nil
 }
 
 var _ execinfrapb.DistSQLSpanStats = &AggregatorStats{}

@@ -1906,8 +1906,8 @@ func columnBackfillInTxn(
 	}
 	var columnBackfillerMon *mon.BytesMonitor
 	// This is the planner's memory monitor.
-	if evalCtx.Mon != nil {
-		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-column-backfill-mon")
+	if evalCtx.Mon != nil { //nolint:monitor
+		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-column-backfill-mon") //nolint:monitor
 	}
 
 	var backfiller backfill.ColumnBackfiller
@@ -1944,8 +1944,8 @@ func indexBackfillInTxn(
 ) error {
 	var indexBackfillerMon *mon.BytesMonitor
 	// This is the planner's memory monitor.
-	if evalCtx.Mon != nil {
-		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-index-backfill-mon")
+	if evalCtx.Mon != nil { //nolint:monitor
+		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-index-backfill-mon") //nolint:monitor
 	}
 
 	var backfiller backfill.IndexBackfiller

@@ -1672,6 +1672,48 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestEvalCtxMon", func(t *testing.T) {
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			// We want to encourage the developers to think through whether the
+			// usage of the memory monitor from the eval context is
+			// appropriate, so we try to guess the most common string patterns
+			// that would correspond to such usage.
+			fmt.Sprintf(`(ctx|Ctx|Ctx\(\)|Context\(\))\.Mon`),
+			"--",
+			"*",
+			":!*_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			if !strings.Contains(s, "//nolint:monitor") {
+				t.Errorf(
+					"\n%s <- make sure that you're using the appropriate monitor, "+
+						"and if so, add '//nolint:monitor' directive to the end of this line", s,
+				)
+			}
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestVectorizedTypeSchemaCopy", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
@@ -1683,7 +1725,7 @@ func TestLint(t *testing.T) {
 			// a new slice. See the comment in execplan.go file.
 			fmt.Sprintf(`(yps|ypes) = append\(`),
 			"--",
-			"sql/colexec/execplan.go",
+			"sql/colexec/colbuilder/execplan.go",
 		)
 		if err != nil {
 			t.Fatal(err)

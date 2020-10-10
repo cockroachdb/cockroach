@@ -100,7 +100,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	defer m.Stop(ctx)
 
 	var mc MemRowContainer
-	mc.InitWithMon(
+	mc.Init(
 		colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}},
 		[]*types.T{types.Int, types.String}, evalCtx, m,
 	)
@@ -142,11 +142,7 @@ func TestRowContainerIterators(t *testing.T) {
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	var mc MemRowContainer
-	mc.Init(
-		ordering,
-		rowenc.OneIntCol,
-		evalCtx,
-	)
+	mc.Init(ordering, rowenc.OneIntCol, evalCtx, evalCtx.Mon)
 	defer mc.Close(ctx)
 
 	for _, row := range rows {
