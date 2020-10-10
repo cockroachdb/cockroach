@@ -212,6 +212,9 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.HashJoiner != nil:
+		if spec.Core.HashJoiner.Type == descpb.RightSemiJoin || spec.Core.HashJoiner.Type == descpb.RightAntiJoin {
+			return errors.New("vectorized right semi/anti hash join is not supported yet")
+		}
 		if !spec.Core.HashJoiner.OnExpr.Empty() && spec.Core.HashJoiner.Type != descpb.InnerJoin {
 			return errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
@@ -227,8 +230,10 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.MergeJoiner != nil:
-		if !spec.Core.MergeJoiner.OnExpr.Empty() &&
-			spec.Core.MergeJoiner.Type != descpb.InnerJoin {
+		if spec.Core.MergeJoiner.Type == descpb.RightSemiJoin || spec.Core.MergeJoiner.Type == descpb.RightAntiJoin {
+			return errors.New("vectorized right semi/anti merge join is not supported yet")
+		}
+		if !spec.Core.MergeJoiner.OnExpr.Empty() && spec.Core.MergeJoiner.Type != descpb.InnerJoin {
 			return errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
 		return nil
@@ -923,12 +928,12 @@ func NewColOperator(
 					args.TestingKnobs.SpillingCallbackFn,
 				)
 			}
-			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
-			copy(result.ColumnTypes, leftTypes)
-			if !core.HashJoiner.Type.ShouldIncludeRightColsInOutput() {
-				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
-			} else {
-				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
+			result.ColumnTypes = make([]*types.T, 0, len(leftTypes)+len(rightTypes))
+			if core.HashJoiner.Type.ShouldIncludeLeftColsInOutput() {
+				result.ColumnTypes = append(result.ColumnTypes, leftTypes...)
+			}
+			if core.HashJoiner.Type.ShouldIncludeRightColsInOutput() {
+				result.ColumnTypes = append(result.ColumnTypes, rightTypes...)
 			}
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
@@ -984,12 +989,12 @@ func NewColOperator(
 
 			result.Op = mj
 			result.ToClose = append(result.ToClose, mj.(colexecbase.Closer))
-			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
-			copy(result.ColumnTypes, leftTypes)
-			if !core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
-				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
-			} else {
-				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
+			result.ColumnTypes = make([]*types.T, 0, len(leftTypes)+len(rightTypes))
+			if core.MergeJoiner.Type.ShouldIncludeLeftColsInOutput() {
+				result.ColumnTypes = append(result.ColumnTypes, leftTypes...)
+			}
+			if core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
+				result.ColumnTypes = append(result.ColumnTypes, rightTypes...)
 			}
 
 			if onExpr != nil {

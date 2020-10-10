@@ -830,8 +830,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	}
 
 	var outputCols opt.ColMap
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// For semi and anti join, only the left columns are output.
+	if !joinType.ShouldIncludeRightColsInOutput() {
 		outputCols = leftPlan.outputCols
 	} else {
 		outputCols = allCols
@@ -1007,8 +1006,7 @@ func (b *Builder) initJoinBuild(
 		}
 	}
 
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// For semi and anti join, only the left columns are output.
+	if !joinType.ShouldIncludeRightColsInOutput() {
 		return leftPlan, rightPlan, onExpr, leftPlan.outputCols, nil
 	}
 	return leftPlan, rightPlan, onExpr, allCols, nil
@@ -1045,6 +1043,8 @@ func joinOpToJoinType(op opt.Operator) descpb.JoinType {
 
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		return descpb.LeftAntiJoin
+
+	// TODO(yuzefovich): add right semi and right anti.
 
 	default:
 		panic(errors.AssertionFailedf("not a join op %s", log.Safe(op)))

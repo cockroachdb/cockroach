@@ -104,7 +104,7 @@ func (h *ProcOutputHelper) Reset() {
 // modify it.
 func (h *ProcOutputHelper) Init(
 	post *execinfrapb.PostProcessSpec,
-	typs []*types.T,
+	coreOutputTypes []*types.T,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	output RowReceiver,
@@ -116,10 +116,10 @@ func (h *ProcOutputHelper) Init(
 		return errors.Errorf("post-processing has both projection and rendering: %s", post)
 	}
 	h.output = output
-	h.numInternalCols = len(typs)
+	h.numInternalCols = len(coreOutputTypes)
 	if post.Filter != (execinfrapb.Expression{}) {
 		h.filter = &execinfrapb.ExprHelper{}
-		if err := h.filter.Init(post.Filter, typs, semaCtx, evalCtx); err != nil {
+		if err := h.filter.Init(post.Filter, coreOutputTypes, semaCtx, evalCtx); err != nil {
 			return err
 		}
 	}
@@ -141,7 +141,7 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes = make([]*types.T, nOutputCols)
 		}
 		for i, c := range h.outputCols {
-			h.OutputTypes[i] = typs[c]
+			h.OutputTypes[i] = coreOutputTypes[c]
 		}
 	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
 		if cap(h.renderExprs) >= nRenders {
@@ -156,19 +156,19 @@ func (h *ProcOutputHelper) Init(
 		}
 		for i, expr := range post.RenderExprs {
 			h.renderExprs[i] = execinfrapb.ExprHelper{}
-			if err := h.renderExprs[i].Init(expr, typs, semaCtx, evalCtx); err != nil {
+			if err := h.renderExprs[i].Init(expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
 				return err
 			}
 			h.OutputTypes[i] = h.renderExprs[i].Expr.ResolvedType()
 		}
 	} else {
 		// No rendering or projection.
-		if cap(h.OutputTypes) >= len(typs) {
-			h.OutputTypes = h.OutputTypes[:len(typs)]
+		if cap(h.OutputTypes) >= len(coreOutputTypes) {
+			h.OutputTypes = h.OutputTypes[:len(coreOutputTypes)]
 		} else {
-			h.OutputTypes = make([]*types.T, len(typs))
+			h.OutputTypes = make([]*types.T, len(coreOutputTypes))
 		}
-		copy(h.OutputTypes, typs)
+		copy(h.OutputTypes, coreOutputTypes)
 	}
 	if h.outputCols != nil || len(h.renderExprs) > 0 {
 		// We're rendering or projecting, so allocate an output row.
@@ -788,10 +788,13 @@ type ProcStateOpts struct {
 }
 
 // Init initializes the ProcessorBase.
+// - coreOutputTypes are the type schema of the rows output by the processor
+// core (i.e. the "internal schema" of the processor, see
+// execinfrapb.ProcessorSpec for more details).
 func (pb *ProcessorBase) Init(
 	self RowSource,
 	post *execinfrapb.PostProcessSpec,
-	types []*types.T,
+	coreOutputTypes []*types.T,
 	flowCtx *FlowCtx,
 	processorID int32,
 	output RowReceiver,
@@ -799,15 +802,18 @@ func (pb *ProcessorBase) Init(
 	opts ProcStateOpts,
 ) error {
 	return pb.InitWithEvalCtx(
-		self, post, types, flowCtx, flowCtx.NewEvalCtx(), processorID, output, memMonitor, opts,
+		self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, output, memMonitor, opts,
 	)
 }
 
 // InitWithEvalCtx initializes the ProcessorBase with a given EvalContext.
+// - coreOutputTypes are the type schema of the rows output by the processor
+// core (i.e. the "internal schema" of the processor, see
+// execinfrapb.ProcessorSpec for more details).
 func (pb *ProcessorBase) InitWithEvalCtx(
 	self RowSource,
 	post *execinfrapb.PostProcessSpec,
-	types []*types.T,
+	coreOutputTypes []*types.T,
 	flowCtx *FlowCtx,
 	evalCtx *tree.EvalContext,
 	processorID int32,
@@ -825,13 +831,13 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 
 	// Hydrate all types used in the processor.
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	if err := resolver.HydrateTypeSlice(evalCtx.Context, types); err != nil {
+	if err := resolver.HydrateTypeSlice(evalCtx.Context, coreOutputTypes); err != nil {
 		return err
 	}
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.TypeResolver = resolver
 
-	return pb.Out.Init(post, types, &semaCtx, pb.EvalCtx, output)
+	return pb.Out.Init(post, coreOutputTypes, &semaCtx, pb.EvalCtx, output)
 }
 
 // AddInputToDrain adds an input to drain when moving the processor to a

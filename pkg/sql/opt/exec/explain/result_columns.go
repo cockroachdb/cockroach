@@ -211,6 +211,9 @@ func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) colinfo.
 func joinColumns(
 	joinType descpb.JoinType, left, right colinfo.ResultColumns,
 ) colinfo.ResultColumns {
+	if !joinType.ShouldIncludeLeftColsInOutput() {
+		return right
+	}
 	if !joinType.ShouldIncludeRightColsInOutput() {
 		return left
 	}
