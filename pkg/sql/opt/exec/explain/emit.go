@@ -309,6 +309,7 @@ func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
 		typ = "semi"
 	case descpb.LeftAntiJoin:
 		typ = "anti"
+	// TODO(yuzefovich): add right semi and right anti.
 	default:
 		typ = fmt.Sprintf("invalid: %d", joinType)
 	}

@@ -60,6 +60,9 @@ func newMergeJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*mergeJoiner, error) {
+	if spec.Type == descpb.RightSemiJoin || spec.Type == descpb.RightAntiJoin {
+		return nil, errors.New("right semi/anti merge join is not yet supported")
+	}
 	leftEqCols := make([]uint32, 0, len(spec.LeftOrdering.Columns))
 	rightEqCols := make([]uint32, 0, len(spec.RightOrdering.Columns))
 	for i, c := range spec.LeftOrdering.Columns {
@@ -196,7 +199,7 @@ func (m *mergeJoiner) nextRow() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 			}
 
 			// If we didn't match any rows on the right-side of the batch and this is
-			// a left outer join, full outer join, anti join, or EXCEPT ALL, emit an
+			// a left outer join, full outer join, left anti join, or EXCEPT ALL, emit an
 			// unmatched left-side row.
 			if m.matchedRightCount == 0 && shouldEmitUnmatchedRow(leftSide, m.joinType) {
 				return m.renderUnmatchedRow(lrow, leftSide), nil

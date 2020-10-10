@@ -77,15 +77,16 @@ func (jb *joinerBase) init(
 	size := len(leftTypes) + len(rightTypes)
 	jb.combinedRow = make(rowenc.EncDatumRow, size)
 
-	condTypes := make([]*types.T, 0, size)
-	condTypes = append(condTypes, leftTypes...)
-	condTypes = append(condTypes, rightTypes...)
+	onCondTypes := make([]*types.T, 0, size)
+	onCondTypes = append(onCondTypes, leftTypes...)
+	onCondTypes = append(onCondTypes, rightTypes...)
 
-	outputSize := len(leftTypes)
-	if jb.joinType.ShouldIncludeRightColsInOutput() {
-		outputSize += len(rightTypes)
+	outputTypes := onCondTypes[:]
+	if !jType.ShouldIncludeLeftColsInOutput() {
+		outputTypes = onCondTypes[len(leftTypes):]
+	} else if !jType.ShouldIncludeRightColsInOutput() {
+		outputTypes = onCondTypes[:len(leftTypes)]
 	}
-	outputTypes := condTypes[:outputSize]
 
 	if err := jb.ProcessorBase.Init(
 		self, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
@@ -93,7 +94,7 @@ func (jb *joinerBase) init(
 		return err
 	}
 	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
-	return jb.onCond.Init(onExpr, condTypes, semaCtx, jb.EvalCtx)
+	return jb.onCond.Init(onExpr, onCondTypes, semaCtx, jb.EvalCtx)
 }
 
 // joinSide is the utility type to distinguish between two sides of the join.
@@ -129,18 +130,22 @@ func (jb *joinerBase) renderUnmatchedRow(row rowenc.EncDatumRow, side joinSide) 
 	}
 
 	jb.combinedRow = jb.combinedRow[:0]
-	jb.combinedRow = append(jb.combinedRow, lrow...)
-	jb.combinedRow = append(jb.combinedRow, rrow...)
+	if jb.joinType.ShouldIncludeLeftColsInOutput() {
+		jb.combinedRow = append(jb.combinedRow, lrow...)
+	}
+	if jb.joinType.ShouldIncludeRightColsInOutput() {
+		jb.combinedRow = append(jb.combinedRow, rrow...)
+	}
 	return jb.combinedRow
 }
 
-// shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
+// shouldEmitUnmatchedRow determines if we should emit an unmatched row (with
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
 // and LEFT or RIGHT OUTER joins and ANTI joins (depending on which stream is
 // stored).
 func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 	switch joinType {
-	case descpb.LeftSemiJoin, descpb.InnerJoin, descpb.IntersectAllJoin:
+	case descpb.LeftSemiJoin, descpb.InnerJoin, descpb.IntersectAllJoin, descpb.RightSemiJoin:
 		return false
 	case descpb.RightOuterJoin:
 		return side == rightSide
@@ -152,23 +157,36 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 		return side == leftSide
 	case descpb.FullOuterJoin:
 		return true
+	case descpb.RightAntiJoin:
+		return side == rightSide
 	default:
-		return true
+		panic(errors.AssertionFailedf("unexpected join type %s", joinType))
 	}
 }
 
-// render constructs a row with columns from both sides. The ON condition is
+// render constructs a row according to the join type (for semi/anti and set-op
+// joins only the columns of one side are included). The ON condition is
 // evaluated; if it fails, returns nil.
 func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
-	jb.combinedRow = jb.combinedRow[:len(lrow)+len(rrow)]
-	copy(jb.combinedRow, lrow)
-	copy(jb.combinedRow[len(lrow):], rrow)
-
+	if (jb.joinType.ShouldIncludeLeftColsInOutput() && jb.joinType.ShouldIncludeRightColsInOutput()) ||
+		jb.onCond.Expr != nil {
+		// Construct the combined row only if it is needed for the output or
+		// for the ON condition evaluation.
+		jb.combinedRow = jb.combinedRow[:len(lrow)+len(rrow)]
+		copy(jb.combinedRow, lrow)
+		copy(jb.combinedRow[len(lrow):], rrow)
+	}
 	if jb.onCond.Expr != nil {
 		res, err := jb.onCond.EvalFilter(jb.combinedRow)
 		if !res || err != nil {
 			return nil, err
 		}
+	}
+	if !jb.joinType.ShouldIncludeLeftColsInOutput() {
+		return rrow, nil
+	}
+	if !jb.joinType.ShouldIncludeRightColsInOutput() {
+		return lrow, nil
 	}
 	return jb.combinedRow, nil
 }

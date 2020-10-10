@@ -25,7 +25,7 @@ enum JoinType {
   LEFT_SEMI = 4;
 
   // A left anti join is an "inverted" semi join: it returns the rows from the
-  // left side that don't match any columns on the right side (as per equality
+  // left side that don't match any rows on the right side (as per equality
   // columns and ON condition).
   LEFT_ANTI = 5;
 
@@ -75,4 +75,13 @@ enum JoinType {
   // In practice, there is a one-to-one mapping between the left and right
   // columns (they are all equality columns).
   EXCEPT_ALL = 7;
+
+  // A right semi join returns the rows from the right side that match at least
+  // one row from the left side (as per equality columns and ON condition).
+  RIGHT_SEMI = 8;
+
+  // A right anti join is an "inverted" semi join: it returns the rows from the
+  // right side that don't match any rows on the left side (as per equality
+  // columns and ON condition).
+  RIGHT_ANTI = 9;
 }
