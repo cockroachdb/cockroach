@@ -529,7 +529,7 @@ func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BytesMonitor {
 	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited",
+		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited", //nolint:monitor
 	)
 	s.monitors = append(s.monitors, bufferingOpUnlimitedMemMonitor)
 	return bufferingOpUnlimitedMemMonitor
@@ -558,7 +558,7 @@ func (s *vectorizedFlowCreator) createDiskAccounts(
 func (s *vectorizedFlowCreator) newStreamingMemAccount(
 	flowCtx *execinfra.FlowCtx,
 ) *mon.BoundAccount {
-	streamingMemAccount := flowCtx.EvalCtx.Mon.MakeBoundAccount()
+	streamingMemAccount := flowCtx.EvalCtx.Mon.MakeBoundAccount() //nolint:monitor
 	s.streamingMemAccounts = append(s.streamingMemAccounts, &streamingMemAccount)
 	return &streamingMemAccount
 }

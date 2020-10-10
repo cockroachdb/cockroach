@@ -495,7 +495,7 @@ func (r *createStatsResumer) Resume(
 	evalCtx := p.ExtendedEvalContext()
 
 	ci := colinfo.ColTypeInfoFromColTypes([]*types.T{})
-	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci)
+	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci) //nolint:monitor
 	defer func() {
 		if rows != nil {
 			rows.Close(ctx)

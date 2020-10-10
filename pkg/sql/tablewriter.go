@@ -117,6 +117,8 @@ type tableWriterBase struct {
 	lastBatchSize int
 	// rows contains the accumulated result rows if rowsNeeded is set on the
 	// corresponding tableWriter.
+	// TODO(yuzefovich): should this be disk-backed container with an in-memory
+	// limit?
 	rows *rowcontainer.RowContainer
 }
 

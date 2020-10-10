@@ -3301,7 +3301,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 		NodeID:      base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
-	ctx.Mon = monitor
+	ctx.Mon = monitor //nolint:monitor
 	ctx.Context = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
@@ -3341,7 +3341,7 @@ func NewTestingEvalContext(st *cluster.Settings) *EvalContext {
 
 // Stop closes out the EvalContext and must be called once it is no longer in use.
 func (ctx *EvalContext) Stop(c context.Context) {
-	ctx.Mon.Stop(c)
+	ctx.Mon.Stop(c) //nolint:monitor
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per

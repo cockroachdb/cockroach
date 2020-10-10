@@ -53,7 +53,7 @@ type recursiveCTERun struct {
 
 func (n *recursiveCTENode) startExec(params runParams) error {
 	n.workingRows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
+		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
 		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.initial, false /* mut */)),
 	)
 	n.nextRowIdx = 0
@@ -102,7 +102,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	defer lastWorkingRows.Close(params.ctx)
 
 	n.workingRows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
+		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
 		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.initial, false /* mut */)),
 	)
 

@@ -186,14 +186,14 @@ func newHashJoiner(
 		if h.FlowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 			limit = 1
 		}
-		h.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hashjoiner-limited")
+		h.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hashjoiner-limited") //nolint:monitor
 		h.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "hashjoiner-disk")
 		// Override initialBufferSize to be half of this processor's memory
 		// limit. We consume up to h.initialBufferSize bytes from each input
 		// stream.
 		h.initialBufferSize = limit / 2
 	} else {
-		h.MemMonitor = execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "hashjoiner-mem")
+		h.MemMonitor = execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "hashjoiner-mem") //nolint:monitor
 	}
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
@@ -203,10 +203,10 @@ func newHashJoiner(
 		h.FinishTrace = h.outputStatsToTrace
 	}
 
-	h.rows[leftSide].InitWithMon(
+	h.rows[leftSide].Init(
 		nil /* ordering */, h.leftSource.OutputTypes(), h.EvalCtx, h.MemMonitor,
 	)
-	h.rows[rightSide].InitWithMon(
+	h.rows[rightSide].Init(
 		nil /* ordering */, h.rightSource.OutputTypes(), h.EvalCtx, h.MemMonitor,
 	)
 

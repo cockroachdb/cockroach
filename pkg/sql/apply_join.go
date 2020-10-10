@@ -109,7 +109,10 @@ func (a *applyJoinNode) startExec(params runParams) error {
 	}
 	a.run.out = make(tree.Datums, len(a.columns))
 	ci := colinfo.ColTypeInfoFromResCols(a.rightCols)
-	acc := params.EvalContext().Mon.MakeBoundAccount()
+	// TODO(yuzefovich): at the moment, this memory account is only limited by
+	// the total SQL memory budget, we probably should change that and use a
+	// disk-backed container as well.
+	acc := params.EvalContext().Mon.MakeBoundAccount() //nolint:monitor
 	a.run.rightRows = rowcontainer.NewRowContainer(acc, ci)
 	return nil
 }

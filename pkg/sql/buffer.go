@@ -36,7 +36,7 @@ type bufferNode struct {
 
 func (n *bufferNode) startExec(params runParams) error {
 	n.bufferedRows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
+		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
 		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.plan, false /* mut */)),
 	)
 	return nil

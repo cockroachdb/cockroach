@@ -88,7 +88,7 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 		return
 	}
 	r.ti.rows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
+		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 

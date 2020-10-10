@@ -140,7 +140,7 @@ func newTableReader(
 		spec.Reverse,
 		neededColumns,
 		spec.IsCheck,
-		flowCtx.EvalCtx.Mon,
+		flowCtx.EvalCtx.Mon, //nolint:monitor
 		&tr.alloc,
 		spec.Visibility,
 		spec.LockingStrength,

@@ -42,7 +42,7 @@ func (s *spoolNode) startExec(params runParams) error {
 	}
 
 	s.rows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
+		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
 		colinfo.ColTypeInfoFromResCols(planColumns(s.source)),
 	)
 

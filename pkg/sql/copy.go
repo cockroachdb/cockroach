@@ -149,8 +149,8 @@ func newCopyMachine(
 			PGAttributeNum: cols[i].GetPGAttributeNum(),
 		}
 	}
-	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
-	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount() //nolint:monitor
+	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()  //nolint:monitor
 	c.processRows = c.insertRows
 	return c, nil
 }

@@ -468,8 +468,8 @@ func (z *zigzagJoiner) setupInfo(
 		info.table.ColumnIdxMap(),
 		false, /* reverse */
 		neededCols,
-		false, /* check */
-		flowCtx.EvalCtx.Mon,
+		false,               /* check */
+		flowCtx.EvalCtx.Mon, //nolint:monitor
 		info.alloc,
 		execinfra.ScanVisibilityPublic,
 		// NB: zigzag joins are disabled when a row-level locking clause is

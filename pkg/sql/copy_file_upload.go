@@ -152,8 +152,8 @@ func newFileUploadMachine(
 	c.resultColumns = make(colinfo.ResultColumns, 1)
 	c.resultColumns[0] = colinfo.ResultColumn{Typ: types.Bytes}
 	c.parsingEvalCtx = c.p.EvalContext()
-	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
-	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount() //nolint:monitor
+	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()  //nolint:monitor
 	c.processRows = f.writeFile
 	c.forceNotNull = true
 	return

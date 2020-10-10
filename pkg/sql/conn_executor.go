@@ -2168,7 +2168,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.IVarContainer = nil
 	evalCtx.Context = ex.Ctx()
 	evalCtx.Txn = txn
-	evalCtx.Mon = ex.state.mon
+	evalCtx.Mon = ex.state.mon //nolint:monitor
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
 }

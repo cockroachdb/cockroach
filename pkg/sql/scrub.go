@@ -470,7 +470,7 @@ func scrubRunDistSQL(
 	ctx context.Context, planCtx *PlanningCtx, p *planner, plan *PhysicalPlan, columnTypes []*types.T,
 ) (*rowcontainer.RowContainer, error) {
 	ci := colinfo.ColTypeInfoFromColTypes(columnTypes)
-	acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+	acc := p.extendedEvalCtx.Mon.MakeBoundAccount() //nolint:monitor
 	rows := rowcontainer.NewRowContainer(acc, ci)
 	rowResultWriter := NewRowResultWriter(rows)
 	recv := MakeDistSQLReceiver(

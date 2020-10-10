@@ -252,7 +252,7 @@ func (ds *ServerImpl) setupFlow(
 	var leafTxn *kv.Txn
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
-		evalCtx.Mon = monitor
+		evalCtx.Mon = monitor //nolint:monitor
 	} else {
 		if localState.IsLocal {
 			return nil, nil, errors.AssertionFailedf(

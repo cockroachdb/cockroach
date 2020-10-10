@@ -99,7 +99,7 @@ func newDistinct(
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem") //nolint:monitor
 	d := &distinct{
 		input:            input,
 		memAcc:           memMonitor.MakeBoundAccount(),
