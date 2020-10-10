@@ -1868,6 +1868,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_maxdistance"></a><code>st_maxdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum distance across every pair of points comprising the given geometries. Note if the geometries are the same, it will return the maximum distance between the geometry’s vertexes.</p>
 </span></td></tr>
+<tr><td><a name="st_memsize"></a><code>st_memsize(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the amount of memory space (in bytes) the geometry takes.</p>
+</span></td></tr>
 <tr><td><a name="st_minimumclearance"></a><code>st_minimumclearance(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the minimum distance a vertex can move before producing an invalid geometry. Returns Infinity if no minimum clearance can be found (e.g. for a single point).</p>
 </span></td></tr>
 <tr><td><a name="st_minimumclearanceline"></a><code>st_minimumclearanceline(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a LINESTRING spanning the minimum distance a vertex can move before producing an invalid geometry. If no minimum clearance can be found (e.g. for a single point), an empty LINESTRING is returned.</p>
