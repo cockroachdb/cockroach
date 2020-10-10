@@ -4248,7 +4248,7 @@ project
            └── n.geom:16 ~ c.geom:10 [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 # --------------------------------------------------
-# GenerateZigZagJoins
+# GenerateZigzagJoins
 # --------------------------------------------------
 
 # Simple zigzag case - where all requested columns are in the indexes being
@@ -4540,6 +4540,277 @@ inner-join (zigzag pqr@q pqr@s)
       ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
       └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Tests for zigzag joins over partial indexes.
+
+exec-ddl
+CREATE TABLE zz_partial (
+    k INT PRIMARY KEY,
+    i INT,
+    j INT,
+    b1 BOOL,
+    b2 BOOL,
+    s STRING
+)
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i) WHERE b1
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j) WHERE b2
+----
+
+# Generate a zigzag join over two partial indexes.
+opt expect=GenerateZigzagJoins
+SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20 AND b2
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── inner-join (lookup zz_partial)
+      ├── columns: k:1!null i:2!null j:3!null b1:4!null b2:5!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── key: (1)
+      ├── fd: ()-->(2-5)
+      ├── inner-join (zigzag zz_partial@i zz_partial@j)
+      │    ├── columns: k:1!null i:2!null j:3!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [10]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── filters (true)
+
+# Don't generate a zigzag join when the first index predicate is not implied.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20 AND b2
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── select
+      │         ├── scan zz_partial@j,partial
+      │         └── filters
+      │              └── j = 20
+      └── filters
+           └── i = 10
+
+# Don't generate a zigzag join when the second index predicate is not implied.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── select
+      │         ├── scan zz_partial@i,partial
+      │         └── filters
+      │              └── i = 10
+      └── filters
+           └── j = 20
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j)
+----
+
+# Generate a zigzag join over one partial and one non-partial index.
+opt expect=GenerateZigzagJoins
+SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── inner-join (lookup zz_partial)
+      ├── columns: k:1!null i:2!null j:3!null b1:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── key: (1)
+      ├── fd: ()-->(2-4)
+      ├── inner-join (zigzag zz_partial@i zz_partial@j)
+      │    ├── columns: k:1!null i:2!null j:3!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [10]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── filters (true)
+
+# Don't generate a zigzag join when the partial index predicate is not implied.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── scan zz_partial@j
+      │         └── constraint: /3/1: [/20 - /20]
+      └── filters
+           └── i = 10
+
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i) WHERE i = 10
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j)
+----
+
+# Don't generate a zigzag join when the expression that fixes the left columns
+# is removed during partial index implication of the left index.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── scan zz_partial@i,partial
+      └── filters
+           └── j = 20
+
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i)
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j) WHERE j = 20
+----
+
+# Don't generate a zigzag join when the expression that fixes the right columns
+# is removed during partial index implication of the right index.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── scan zz_partial@j,partial
+      └── filters
+           └── i = 10
+
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX zz_partial_s ON zz_partial (s)
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j) WHERE s = 'foo'
+----
+
+# Don't generate a zigzag join when the expression that fixes the left columns
+# is removed during partial index implication of the right index.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE s = 'foo' AND j = 20
+----
+project
+ └── scan zz_partial@j,partial
+      └── constraint: /3/1: [/20 - /20]
+
+exec-ddl
+DROP INDEX zz_partial_s
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i) WHERE s = 'foo'
+----
+
+exec-ddl
+CREATE INDEX zz_partial_s ON zz_partial (s)
+----
+
+# Don't generate a zigzag join when the expression that fixes the right columns
+# is removed during partial index implication of the left index.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND s = 'foo'
+----
+project
+ └── scan zz_partial@i,partial
+      └── constraint: /2/1: [/10 - /10]
+
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX zz_partial_s
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i)
+----
+
+exec-ddl
+CREATE INDEX b1 ON zz_partial (b1) WHERE s = 'foo'
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j)
+----
+
+# The filters should be reset during each iteration over the left and right
+# indexes if they are reduced while proving partial index implication. In this
+# test, (s = 'foo') must be applied after the zigzag join.
+opt expect=GenerateZigzagJoins
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20 AND b1 AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── inner-join (lookup zz_partial)
+      ├── columns: k:1!null i:2!null j:3!null b1:4!null s:6!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── key: (1)
+      ├── fd: ()-->(2-4,6)
+      ├── inner-join (zigzag zz_partial@i zz_partial@j)
+      │    ├── columns: k:1!null i:2!null j:3!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [10]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── filters
+           ├── b1:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+           └── s:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
 
 # Don't generate a zigzag which has the PK as its equality columns against
 # nullable unique indexes where the primary key is not part of the indexed
