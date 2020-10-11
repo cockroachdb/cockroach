@@ -5289,6 +5289,27 @@ POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((0.1 -0, -1 0, -
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((1 -0, 0 0, -0 -1, 1 -1, 1 -0))               POLYGON ((-0.707106781186548 -0.707106781186547, 0 0, -0.707106781186547 0.707106781186548, -1.414213562373095 0, -0.707106781186548 -0.707106781186547))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, -1 0, -1 -1, -0 -1, 0 0))               POLYGON ((0 0, 0.707106781186548 0.707106781186547, 0 1.414213562373095, -0.707106781186547 0.707106781186548, 0 0))
 
+query TT
+SELECT
+    ST_AsText(a.geom) d,
+    ST_AsText(ST_Rotate(a.geom, pi(),4,7))
+FROM geom_operators_test a
+ORDER BY d;
+----
+NULL                                                   NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (8 14)))
+GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY
+LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (8.5 13.5, 7.5 13.5)
+LINESTRING EMPTY                                       LINESTRING EMPTY
+POINT (-0.5 0.5)                                       POINT (8.5 13.5)
+POINT (0.5 0.5)                                        POINT (7.5 13.5)
+POINT (5 5)                                            POINT (2.999999999999999 9)
+POINT EMPTY                                            POINT EMPTY
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((8.1 14, 7 14, 7 13, 8.1 13, 8.1 14))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((9 14, 8 14, 8 13, 9 13, 9 14))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((8 14, 7 14, 7 13, 8 13, 8 14))
+
+
 query T
 SELECT
     ST_AsText(ST_Rotate(a.geom, pi(), 'POINT (6 3)'::geometry)) as t
