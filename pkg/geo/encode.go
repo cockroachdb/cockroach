@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -310,4 +311,58 @@ func StringToByteOrder(s string) binary.ByteOrder {
 	default:
 		return DefaultEWKBEncodingFormat
 	}
+}
+
+// LineFromEncodedPolyline takes the encoded polyline ASCII and precision, decodes the points and returns them as a geometry
+func LineFromEncodedPolyline(encodedPolyline string, precision int) (Geometry, error) {
+	flatCoords := decodePolylinePoints(encodedPolyline, precision)
+	ls := geom.NewLineStringFlat(geom.XY, flatCoords).SetSRID(4326)
+
+	g, err := MakeGeometryFromGeomT(ls)
+	if err != nil {
+		return Geometry{}, fmt.Errorf("parsing geography error: %v", err)
+	}
+	return g, nil
+}
+
+func decodePolylinePoints(encoded string, precision int) []float64 {
+	idx := 0
+	latitude := float64(0)
+	longitude := float64(0)
+	bytes := []byte(encoded)
+	results := []float64{}
+	for idx < len(bytes) {
+		var deltaLat float64
+		idx, deltaLat = decodePointValue(idx, bytes)
+		latitude += deltaLat
+
+		var deltaLng float64
+		idx, deltaLng = decodePointValue(idx, bytes)
+		longitude += deltaLng
+		results = append(results,
+			longitude/math.Pow10(precision),
+			latitude/math.Pow10(precision))
+	}
+	return results
+}
+
+func decodePointValue(idx int, bytes []byte) (int, float64) {
+	res := int32(0)
+	shift := 0
+	for byte := byte(0x20); byte >= 0x20; {
+		if idx > len(bytes)-1 {
+			return idx, 0
+		}
+		byte = bytes[idx] - 63
+		idx++
+		res |= int32(byte&0x1F) << shift
+		shift += 5
+	}
+	var pointValue float64
+	if (res & 1) == 1 {
+		pointValue = float64(^(res >> 1))
+	} else {
+		pointValue = float64(res >> 1)
+	}
+	return idx, pointValue
 }
