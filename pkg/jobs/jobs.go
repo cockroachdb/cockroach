@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,6 +46,7 @@ type Job struct {
 	id        *int64
 	createdBy *CreatedByInfo
 	txn       *kv.Txn
+	sessionID sqlliveness.SessionID
 	mu        struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
@@ -215,16 +217,6 @@ func (j *Job) CreatedBy() *CreatedByInfo {
 // execute this job.
 func (j *Job) taskName() string {
 	return fmt.Sprintf(`job-%d`, *j.ID())
-}
-
-// Created records the creation of a new job in the system.jobs table and
-// remembers the assigned ID of the job in the Job. The job information is read
-// from the Record field at the time Created is called.
-func (j *Job) created(ctx context.Context) error {
-	if j.ID() != nil {
-		return errors.Errorf("job already created with ID %v", *j.ID())
-	}
-	return j.insert(ctx, j.registry.makeJobID(), nil /* lease */)
 }
 
 // Started marks the tracked job as started.
@@ -625,6 +617,9 @@ func (j *Job) succeeded(ctx context.Context, fn func(context.Context, *kv.Txn) e
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if err := md.CheckRunningOrReverting(); err != nil {
+			return err
+		}
 		md.Payload.Details = jobspb.WrapPayloadDetails(details)
 		ju.UpdatePayload(md.Payload)
 		return nil
@@ -634,6 +629,9 @@ func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 // SetProgress sets the details field of the currently running tracked job.
 func (j *Job) SetProgress(ctx context.Context, details interface{}) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if err := md.CheckRunningOrReverting(); err != nil {
+			return err
+		}
 		md.Progress.Details = jobspb.WrapProgressDetails(details)
 		ju.UpdateProgress(md.Progress)
 		return nil
@@ -754,65 +752,6 @@ func (j *Job) load(ctx context.Context) error {
 	return nil
 }
 
-func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
-	if j.id != nil {
-		// Already created - do nothing.
-		return nil
-	}
-
-	j.mu.payload.Lease = lease
-
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Note: although the following uses ReadTimestamp and
-		// ReadTimestamp can diverge from the value of now() throughout a
-		// transaction, this may be OK -- we merely required ModifiedMicro
-		// to be equal *or greater* than previously inserted timestamps
-		// computed by now(). For now ReadTimestamp can only move forward
-		// and the assertion ReadTimestamp >= now() holds at all times.
-		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
-		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
-		if err != nil {
-			return err
-		}
-		progressBytes, err := protoutil.Marshal(&j.mu.progress)
-		if err != nil {
-			return err
-		}
-
-		if j.createdBy == nil {
-			const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
-			_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
-			return err
-		}
-		const stmt = `
-INSERT INTO system.jobs (id, status, payload, progress, created_by_type, created_by_id) 
-VALUES ($1, $2, $3, $4, $5, $6)`
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
-			id, StatusRunning, payloadBytes, progressBytes, j.createdBy.Name, j.createdBy.ID)
-		return err
-
-	}); err != nil {
-		return err
-	}
-	j.id = &id
-	return nil
-}
-
-func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
-	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		if !md.Payload.Lease.Equal(oldLease) {
-			return errors.Errorf("current lease %v did not match expected lease %v",
-				md.Payload.Lease, oldLease)
-		}
-		md.Payload.Lease = j.registry.deprecatedNewLease()
-		if md.Payload.StartedMicros == 0 {
-			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
-		}
-		ju.UpdatePayload(md.Payload)
-		return nil
-	})
-}
-
 // UnmarshalPayload unmarshals and returns the Payload encoded in the input
 // datum, which should be a tree.DBytes.
 func UnmarshalPayload(datum tree.Datum) (*jobspb.Payload, error) {
@@ -893,6 +832,11 @@ func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err erro
 		return nil, errors.AssertionFailedf(
 			"StartableJob %d cannot be started more than once", *sj.ID())
 	}
+	if sj.registry.startUsingSQLLivenessAdoption(ctx) && sj.sessionID == "" {
+		return nil, errors.AssertionFailedf(
+			"StartableJob %d cannot be started without sqlliveness session", *sj.ID())
+	}
+
 	defer func() {
 		if err != nil {
 			sj.registry.unregister(*sj.ID())
