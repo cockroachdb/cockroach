@@ -409,7 +409,7 @@ func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.
 	if !r.startUsingSQLLivenessAdoption(ctx) {
 		// TODO(spaskob): remove in 20.2 as this code path is only needed while
 		// migrating to 20.2 cluster.
-		if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.deprecatedNewLease()); err != nil {
+		if err := j.WithTxn(txn).deprecatedInsert(ctx, r.makeJobID(), r.deprecatedNewLease()); err != nil {
 			return nil, err
 		}
 		return j, nil
@@ -419,6 +419,7 @@ func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting live session")
 	}
+	j.sessionID = s.ID()
 	jobID := r.makeJobID()
 	start := timeutil.Now()
 	if txn != nil {
@@ -457,7 +458,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 	// in the cluster) to adopt this job at a later time.
 	lease := &jobspb.Lease{NodeID: invalidNodeID}
 
-	if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), lease); err != nil {
+	if err := j.WithTxn(txn).deprecatedInsert(ctx, r.makeJobID(), lease); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -507,11 +508,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		if _, alreadyRegistered := r.mu.adoptedJobs[*j.ID()]; alreadyRegistered {
 			log.Fatalf(ctx, "job %d: was just created but found in registered adopted jobs", *j.ID())
 		}
-		s, err := r.sqlInstance.Session(ctx)
-		if err != nil {
-			return nil, err
-		}
-		r.mu.adoptedJobs[*j.ID()] = &adoptedJob{sid: s.ID(), cancel: cancel}
+		r.mu.adoptedJobs[*j.ID()] = &adoptedJob{sid: j.sessionID, cancel: cancel}
 	} else {
 		// TODO(spaskob): remove in 20.2 as this code path is only needed while
 		// migrating to 20.2 cluster.
@@ -1176,67 +1173,6 @@ func (r *Registry) stepThroughStateMachine(
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"job %d: has unsupported status %s", *job.ID(), status)
 	}
-}
-
-// resume starts or resumes a job. If no error is returned then the job was
-// asynchronously executed. The job is executed with the ctx, so ctx must
-// only by canceled if the job should also be canceled. resultsCh is passed
-// to the resumable func and should be closed by the caller after errCh sends
-// a value. The onDone function is called when the async task completes or if
-// an error is returned.
-func (r *Registry) resume(
-	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job, onDone func(),
-) (<-chan error, error) {
-	errCh := make(chan error, 1)
-	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
-		if onDone != nil {
-			defer onDone()
-		}
-		// Bookkeeping.
-		payload := job.Payload()
-		phs, cleanup := r.planFn("resume-"+job.taskName(), payload.Username)
-		defer cleanup()
-		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
-		var span opentracing.Span
-		ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
-		defer span.Finish()
-
-		// Run the actual job.
-		status, err := job.CurrentStatus(ctx)
-		if err == nil {
-			var finalResumeError error
-			if job.Payload().FinalResumeError != nil {
-				finalResumeError = errors.DecodeError(ctx, *job.Payload().FinalResumeError)
-			}
-			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, finalResumeError)
-			if err != nil {
-				// TODO (lucy): This needs to distinguish between assertion errors in
-				// the job registry and assertion errors in job execution returned from
-				// Resume() or OnFailOrCancel(), and only fail on the former. We have
-				// tests that purposely introduce bad state in order to produce
-				// assertion errors, which shouldn't cause the test to panic. For now,
-				// comment this out.
-				// if errors.HasAssertionFailure(err) {
-				// 	log.ReportOrPanic(ctx, nil, err.Error())
-				// }
-				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
-			}
-			status, err := job.CurrentStatus(ctx)
-			if err != nil {
-				log.Errorf(ctx, "job %d: failed querying status: %v", *job.ID(), err)
-			} else {
-				log.Infof(ctx, "job %d: status %s after adoption finished", *job.ID(), status)
-			}
-		}
-		r.unregister(*job.ID())
-		errCh <- err
-	}); err != nil {
-		if onDone != nil {
-			onDone()
-		}
-		return nil, err
-	}
-	return errCh, nil
 }
 
 func (r *Registry) adoptionDisabled(ctx context.Context) bool {
