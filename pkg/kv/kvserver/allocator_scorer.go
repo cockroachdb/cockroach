@@ -407,15 +407,21 @@ func (cl candidateList) removeCandidate(c candidate) candidateList {
 // for allocating a new replica ordered from the best to the worst. Only
 // stores that meet the criteria are included in the list.
 func allocateCandidates(
+	ctx context.Context,
 	sl StoreList,
 	constraints constraint.AnalyzedConstraints,
 	existing []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
+	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
 	for _, s := range sl.stores {
 		if nodeHasReplica(s.Node.NodeID, existing) {
+			continue
+		}
+		if !isNodeValidForRoutineReplicaTransfer(ctx, s.Node.NodeID) {
+			log.VEventf(ctx, 3, "not considering non-ready node n%d for allocate", s.Node.NodeID)
 			continue
 		}
 		constraintsOK, necessary := allocateConstraintsCheck(s, constraints)
@@ -523,6 +529,7 @@ func rebalanceCandidates(
 	constraints constraint.AnalyzedConstraints,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
+	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
 	options scorerOptions,
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
@@ -530,6 +537,10 @@ func rebalanceCandidates(
 	var needRebalanceFrom bool
 	curDiversityScore := rangeDiversityScore(existingStoreLocalities)
 	for _, store := range allStores.stores {
+		if !isNodeValidForRoutineReplicaTransfer(ctx, store.Node.NodeID) {
+			log.VEventf(ctx, 3, "not considering non-ready node n%d for rebalance", store.Node.NodeID)
+			continue
+		}
 		for _, repl := range existingReplicas {
 			if store.StoreID != repl.StoreID {
 				continue

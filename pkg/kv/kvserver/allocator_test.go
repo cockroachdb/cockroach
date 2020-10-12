@@ -2454,6 +2454,128 @@ var (
 	}
 )
 
+// TestAllocateCandidatesExcludeNonReadyNodes checks that non-ready
+// (e.g. draining) nodes, as per a store pool's
+// isNodeValidForRoutineReplicaTransfer(), are excluded from the list
+// of candidates for an allocation.
+func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 600},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 600},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 600},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 600},
+		},
+	}
+
+	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+	sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+
+	testCases := []struct {
+		existing []roachpb.StoreID
+		excluded []roachpb.StoreID
+		expected []roachpb.StoreID
+	}{
+		{
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{2},
+			[]roachpb.StoreID{3, 4},
+		},
+		{
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{2, 3},
+			[]roachpb.StoreID{4},
+		},
+		{
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{2, 3, 4},
+			[]roachpb.StoreID{},
+		},
+	}
+
+	for testIdx, tc := range testCases {
+		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
+		for i, storeID := range tc.existing {
+			existingRepls[i] = roachpb.ReplicaDescriptor{
+				NodeID:  roachpb.NodeID(storeID),
+				StoreID: storeID,
+			}
+		}
+		// No constraints.
+		zone := &zonepb.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: nil}
+		analyzed := constraint.AnalyzeConstraints(
+			context.Background(), a.storePool.getStoreDescriptor, existingRepls, zone)
+
+		a.storePool.isNodeReadyForRoutineReplicaTransfer = func(_ context.Context, n roachpb.NodeID) bool {
+			for _, s := range tc.excluded {
+				// NodeID match StoreIDs here, so this comparison is valid.
+				if roachpb.NodeID(s) == n {
+					return false
+				}
+			}
+			return true
+		}
+
+		t.Run(fmt.Sprintf("%d/allocate", testIdx), func(t *testing.T) {
+			candidates := allocateCandidates(
+				context.Background(),
+				sl,
+				analyzed,
+				existingRepls,
+				a.storePool.getLocalitiesByStore(existingRepls),
+				a.storePool.isNodeReadyForRoutineReplicaTransfer,
+				a.scorerOptions(),
+			)
+
+			if !expectedStoreIDsMatch(tc.expected, candidates) {
+				t.Errorf("expected allocateCandidates(%v) = %v, but got %v",
+					tc.existing, tc.expected, candidates)
+			}
+		})
+
+		t.Run(fmt.Sprintf("%d/rebalance", testIdx), func(t *testing.T) {
+			results := rebalanceCandidates(
+				context.Background(),
+				sl,
+				analyzed,
+				existingRepls,
+				a.storePool.getLocalitiesByStore(existingRepls),
+				a.storePool.isNodeReadyForRoutineReplicaTransfer,
+				a.scorerOptions(),
+			)
+
+			for i := range results {
+				if !expectedStoreIDsMatch(tc.existing, results[i].existingCandidates) {
+					t.Errorf("results[%d]: expected existing candidates %v, got %v", i, tc.existing, results[i].existingCandidates)
+				}
+				if !expectedStoreIDsMatch(tc.expected, results[i].candidates) {
+					t.Errorf("results[%d]: expected candidates %v, got %v", i, tc.expected, results[i].candidates)
+				}
+			}
+		})
+	}
+}
+
 func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2666,10 +2788,12 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 		analyzed := constraint.AnalyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, existingRepls, zone)
 		candidates := allocateCandidates(
+			context.Background(),
 			sl,
 			analyzed,
 			existingRepls,
 			a.storePool.getLocalitiesByStore(existingRepls),
+			func(context.Context, roachpb.NodeID) bool { return true }, /* isNodeValidForRoutineReplicaTransfer */
 			a.scorerOptions(),
 		)
 		best := candidates.best()
@@ -3690,6 +3814,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			analyzed,
 			existingRepls,
 			a.storePool.getLocalitiesByStore(existingRepls),
+			func(context.Context, roachpb.NodeID) bool { return true }, /* isNodeValidForRoutineReplicaTransfer */
 			a.scorerOptions(),
 		)
 		match := true

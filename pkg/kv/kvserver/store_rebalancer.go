@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft"
 )
 
@@ -417,7 +418,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			}
 
 			meanQPS := storeList.candidateQueriesPerSecond.mean
-			if shouldNotMoveTo(ctx, storeMap, replWithStats, candidate.StoreID, meanQPS, minQPS, maxQPS) {
+			if sr.shouldNotMoveTo(ctx, storeMap, replWithStats, candidate.StoreID, meanQPS, minQPS, maxQPS) {
 				continue
 			}
 
@@ -521,6 +522,13 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			// could cause mass evictions if the storePool gets out of sync.
 			storeDesc, ok := storeMap[currentReplicas[i].StoreID]
 			if !ok || storeDesc.Capacity.QueriesPerSecond < maxQPS {
+				if log.V(3) {
+					var reason redact.RedactableString
+					if ok {
+						reason = redact.Sprintf(" (qps %.2f vs max %.2f)", storeDesc.Capacity.QueriesPerSecond, maxQPS)
+					}
+					log.VEventf(ctx, 3, "keeping r%d/%d on s%d%s", desc.RangeID, currentReplicas[i].ReplicaID, currentReplicas[i].StoreID, reason)
+				}
 				targets = append(targets, roachpb.ReplicationTarget{
 					NodeID:  currentReplicas[i].NodeID,
 					StoreID: currentReplicas[i].StoreID,
@@ -553,7 +561,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			}
 
 			meanQPS := storeList.candidateQueriesPerSecond.mean
-			if shouldNotMoveTo(ctx, storeMap, replWithStats, target.StoreID, meanQPS, minQPS, maxQPS) {
+			if sr.shouldNotMoveTo(ctx, storeMap, replWithStats, target.StoreID, meanQPS, minQPS, maxQPS) {
 				break
 			}
 
@@ -634,7 +642,7 @@ func shouldNotMoveAway(
 	return false
 }
 
-func shouldNotMoveTo(
+func (sr *StoreRebalancer) shouldNotMoveTo(
 	ctx context.Context,
 	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
 	replWithStats replicaWithStats,
@@ -664,6 +672,16 @@ func shouldNotMoveTo(
 		return true
 	}
 
+	// If the target store is on a separate node, we will also care
+	// about node liveness.
+	targetNodeID := storeDesc.Node.NodeID
+	if targetNodeID != sr.rq.store.Ident.NodeID {
+		if !sr.rq.store.cfg.StorePool.isNodeReadyForRoutineReplicaTransfer(ctx, targetNodeID) {
+			log.VEventf(ctx, 3,
+				"refusing to transfer replica to n%d/s%d", targetNodeID, storeDesc.StoreID)
+			return true
+		}
+	}
 	return false
 }
 
