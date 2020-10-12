@@ -519,8 +519,8 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		if !index.IsInverted() {
 			continue
 		}
-		// The first column of inverted indexes is always virtual.
-		col := index.Column(0)
+		// The last column of inverted indexes is always virtual.
+		col := index.Column(index.IndexedColumnCount() - 1)
 		srcOrd := col.InvertedSourceColumnOrdinal()
 		invIndexVirtualCols[srcOrd] = append(invIndexVirtualCols[srcOrd], col.Ordinal())
 	}

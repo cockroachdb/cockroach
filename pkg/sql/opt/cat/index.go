@@ -62,10 +62,10 @@ type Index interface {
 	// the table.
 	ColumnCount() int
 
-	// Predicate returns the partial index predicate expression and true if the
-	// index is a partial index. If it is not a partial index, the empty string
-	// and false are returned.
-	Predicate() (string, bool)
+	// IndexedColumnCount returns the number of columns indexed by the index. It
+	// is equal to the length of the column_names list specified when creating
+	// an index and does not included any stored columns.
+	IndexedColumnCount() int
 
 	// KeyColumnCount returns the number of columns in the index that are part
 	// of its unique key. No two rows in the index will have the same values for
@@ -129,6 +129,11 @@ type Index interface {
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
+
+	// Predicate returns the partial index predicate expression and true if the
+	// index is a partial index. If it is not a partial index, the empty string
+	// and false are returned.
+	Predicate() (string, bool)
 
 	// Zone returns the zone which constrains placement of the index's range
 	// replicas. If the index was not explicitly assigned to a zone, then it

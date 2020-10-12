@@ -1060,10 +1060,11 @@ type optIndex struct {
 	// otherwise it is desc.StoreColumnIDs.
 	storedCols []descpb.ColumnID
 
-	indexOrdinal  int
-	numCols       int
-	numKeyCols    int
-	numLaxKeyCols int
+	indexOrdinal   int
+	numCols        int
+	numIndexedCols int
+	numKeyCols     int
+	numLaxKeyCols  int
 
 	// invertedVirtualColOrd is used if this is an inverted index; it stores the
 	// ordinal of the virtual column created to refer to the key of this index.
@@ -1087,6 +1088,7 @@ func (oi *optIndex) init(
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
 	oi.invertedVirtualColOrd = invertedVirtualColOrd
+	oi.numIndexedCols = len(desc.ColumnIDs)
 	if desc == &tab.desc.PrimaryIndex {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
@@ -1164,11 +1166,9 @@ func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
 }
 
-// Predicate is part of the cat.Index interface. It returns the predicate
-// expression and true if the index is a partial index. If the index is not
-// partial, the empty string and false is returned.
-func (oi *optIndex) Predicate() (string, bool) {
-	return oi.desc.Predicate, oi.desc.Predicate != ""
+// IndexedColumnCount is part of the cat.Index interface.
+func (oi *optIndex) IndexedColumnCount() int {
+	return oi.numIndexedCols
 }
 
 // KeyColumnCount is part of the cat.Index interface.
@@ -1207,6 +1207,13 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
+}
+
+// Predicate is part of the cat.Index interface. It returns the predicate
+// expression and true if the index is a partial index. If the index is not
+// partial, the empty string and false is returned.
+func (oi *optIndex) Predicate() (string, bool) {
+	return oi.desc.Predicate, oi.desc.Predicate != ""
 }
 
 // Zone is part of the cat.Index interface.
@@ -1819,9 +1826,10 @@ func (oi *optVirtualIndex) ColumnCount() int {
 	return oi.numCols
 }
 
-// Predicate is part of the cat.Index interface.
-func (oi *optVirtualIndex) Predicate() (string, bool) {
-	return "", false
+// IndexedColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) IndexedColumnCount() int {
+	// Virtual indexes always index 1 column.
+	return 1
 }
 
 // KeyColumnCount is part of the cat.Index interface.
@@ -1874,6 +1882,11 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	i -= length + 1
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
+}
+
+// Predicate is part of the cat.Index interface.
+func (oi *optVirtualIndex) Predicate() (string, bool) {
+	return "", false
 }
 
 // Zone is part of the cat.Index interface.

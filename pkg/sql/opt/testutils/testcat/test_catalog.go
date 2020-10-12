@@ -728,6 +728,10 @@ func (tt *Table) FindOrdinal(name string) int {
 type Index struct {
 	IdxName string
 
+	// IndexedCount is the number of columns indexed by the index. It is equal
+	// to the length of the column_names list specified when creating an index.
+	IndexedCount int
+
 	// KeyCount is the number of columns that make up the unique key for the
 	// index. See the cat.Index.KeyColumnCount for more details.
 	KeyCount int
@@ -800,6 +804,11 @@ func (ti *Index) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
+}
+
+// IndexedColumnCount is part of the cat.Index interface.
+func (ti *Index) IndexedColumnCount() int {
+	return ti.IndexedCount
 }
 
 // KeyColumnCount is part of the cat.Index interface.
