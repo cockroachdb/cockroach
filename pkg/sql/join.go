@@ -14,15 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// joinNode is a planNode whose rows are the result of an inner or
-// left/right outer join.
+// joinNode is a planNode whose rows are the result of a join operation.
 type joinNode struct {
-	joinType descpb.JoinType
-
 	// The data sources.
 	left  planDataSource
 	right planDataSource
@@ -46,11 +42,10 @@ func (p *planner) makeJoinNode(
 	left planDataSource, right planDataSource, pred *joinPredicate,
 ) *joinNode {
 	n := &joinNode{
-		left:     left,
-		right:    right,
-		joinType: pred.joinType,
-		pred:     pred,
-		columns:  pred.cols,
+		left:    left,
+		right:   right,
+		pred:    pred,
+		columns: pred.cols,
 	}
 	return n
 }
