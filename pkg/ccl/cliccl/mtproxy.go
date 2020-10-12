@@ -131,7 +131,8 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 		return err
 	}
 	defer func() { _ = ln.Close() }()
-	return sqlproxyccl.Serve(ln, sqlproxyccl.Options{
+	server := sqlproxyccl.NewServer()
+	return server.Serve(ln, sqlproxyccl.Options{
 		IncomingTLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{cer},
 		},
