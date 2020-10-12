@@ -76,6 +76,7 @@ type AlterTypeAddValuePlacement struct {
 
 // AlterTypeRenameValue represents an ALTER TYPE RENAME VALUE command.
 type AlterTypeRenameValue struct {
+	// TODO?
 	OldVal string
 	NewVal string
 }
@@ -90,33 +91,33 @@ func (node *AlterTypeRenameValue) Format(ctx *FmtCtx) {
 
 // AlterTypeRename represents an ALTER TYPE RENAME command.
 type AlterTypeRename struct {
-	NewName string
+	NewName Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTypeRename) Format(ctx *FmtCtx) {
 	ctx.WriteString(" RENAME TO ")
-	ctx.WriteString(node.NewName)
+	ctx.FormatNode(&node.NewName)
 }
 
 // AlterTypeSetSchema represents an ALTER TYPE SET SCHEMA command.
 type AlterTypeSetSchema struct {
-	Schema string
+	Schema Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTypeSetSchema) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SET SCHEMA ")
-	ctx.WriteString(node.Schema)
+	ctx.FormatNode(&node.Schema)
 }
 
 // AlterTypeOwner represents an ALTER TYPE OWNER TO command.
 type AlterTypeOwner struct {
-	Owner string
+	Owner Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTypeOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatNameP(&node.Owner)
+	ctx.FormatNode(&node.Owner)
 }

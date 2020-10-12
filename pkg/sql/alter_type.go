@@ -71,11 +71,11 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeRenameValue:
 		err = params.p.renameTypeValue(params.ctx, n, t.OldVal, t.NewVal)
 	case *tree.AlterTypeRename:
-		err = params.p.renameType(params.ctx, n, t.NewName)
+		err = params.p.renameType(params.ctx, n, string(t.NewName))
 	case *tree.AlterTypeSetSchema:
-		err = params.p.setTypeSchema(params.ctx, n, t.Schema)
+		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
-		err = params.p.alterTypeOwner(params.ctx, n, t.Owner)
+		err = params.p.alterTypeOwner(params.ctx, n, string(t.Owner))
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
