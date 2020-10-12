@@ -762,6 +762,10 @@ type Index struct {
 	// predicate is the partial index predicate expression, if it exists.
 	predicate string
 
+	// invertableCol is the ordinal of the invertable column in Columns, if this
+	// index is an inverted index.
+	invertableCol int
+
 	// geoConfig is the geospatial index configuration, if this is a geospatial
 	// inverted index. Otherwise geoConfig is nil.
 	geoConfig *geoindex.Config
@@ -810,6 +814,14 @@ func (ti *Index) KeyColumnCount() int {
 // LaxKeyColumnCount is part of the cat.Index interface.
 func (ti *Index) LaxKeyColumnCount() int {
 	return ti.LaxKeyCount
+}
+
+// InvertableColumn is part of the cat.Index interface.
+func (ti *Index) InvertableColumn() int {
+	if !ti.IsInverted() {
+		panic("non-inverted indexes do not have invertable columns")
+	}
+	return ti.invertableCol
 }
 
 // Column is part of the cat.Index interface.
