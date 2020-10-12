@@ -103,7 +103,12 @@ func getResultColumns(
 
 	case invertedJoinOp:
 		a := args.(*invertedJoinArgs)
-		return joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols)), nil
+		cols := joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols))
+		// The following matches the behavior of execFactory.ConstructInvertedJoin.
+		if a.IsFirstJoinInPairedJoiner {
+			cols = append(cols, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+		}
+		return cols, nil
 
 	case zigzagJoinOp:
 		a := args.(*zigzagJoinArgs)

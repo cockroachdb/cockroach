@@ -335,6 +335,10 @@ define LookupJoinPrivate {
     # table (and thus each left row matches with at most one table row).
     LookupColsAreTableKey bool
 
+    # IsSecondJoinInPairedJoiner is true if this is the second join of a
+    # paired-joiner used for left joins.
+    IsSecondJoinInPairedJoiner bool
+
     # ConstFilters contains the constant filters that are represented as equality
     # conditions on the KeyCols. These filters are needed by the statistics code to
     # correctly estimate selectivity.
@@ -378,6 +382,14 @@ define InvertedJoinPrivate {
     # InvertedCol is the inverted column in the index that is referenced by
     # InvertedExpr.
     InvertedCol ColumnID
+
+    # IsFirstJoinInPairedJoiner is true if this is the first join of a
+    # paired-joiner used for left joins.
+    IsFirstJoinInPairedJoiner bool
+
+    # ContinuationCol is the column ID of the continuation column when
+    # IsFirstJoinInPairedJoiner is true.
+    ContinuationCol ColumnID
 
     # Cols is the set of columns produced by the inverted join. This set can
     # contain columns from the input and columns from the index. Any columns

@@ -41,6 +41,8 @@ type lookupJoinNode struct {
 	// equality condition on eqCols.
 	onCond tree.TypedExpr
 
+	isSecondJoinInPairedJoiner bool
+
 	reqOrdering ReqOrdering
 }
 

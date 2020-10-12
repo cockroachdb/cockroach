@@ -29,12 +29,15 @@ type invertedJoinNode struct {
 	invertedExpr tree.TypedExpr
 
 	// columns are the produced columns, namely the input columns and (unless the
-	// join type is semi or anti join) the columns in the table scanNode.
+	// join type is semi or anti join) the columns in the table scanNode. It can
+	// include an additional continuation column for paired joins.
 	columns colinfo.ResultColumns
 
 	// onExpr is any ON condition to be used in conjunction with the inverted
 	// expression.
 	onExpr tree.TypedExpr
+
+	isFirstJoinInPairedJoiner bool
 
 	reqOrdering ReqOrdering
 }

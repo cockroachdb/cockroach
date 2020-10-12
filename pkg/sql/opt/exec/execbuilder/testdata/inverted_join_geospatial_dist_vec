@@ -1,0 +1,96 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE ltable(
+  lk int primary key,
+  geom1 geometry,
+  geom2 geometry
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)', 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)', 'POINT(3.0 3.0)'),
+  (3, 'POINT(1.5 1.5)', 'POINT(3.0 3.0)')
+
+statement ok
+CREATE TABLE rtable(
+  rk int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 'POINT(1.0 1.0)'),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 'POINT(3.0 3.0)'),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+statement ok
+ALTER TABLE ltable SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE ltable EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE ltable] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         /3       {2}       2
+/3         NULL     {3}       3
+
+query T
+EXPLAIN (VEC) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
+----
+│
+├ Node 1
+│ └ *colexec.OrderedSynchronizer
+│   ├ *colexec.sortChunksOp
+│   │ └ *rowexec.joinReader
+│   │   └ *rowexec.invertedJoiner
+│   │     └ *colfetcher.ColBatchScan
+│   ├ *colrpc.Inbox
+│   └ *colrpc.Inbox
+├ Node 2
+│ └ *colrpc.Outbox
+│   └ *colexec.sortChunksOp
+│     └ *rowexec.joinReader
+│       └ *rowexec.invertedJoiner
+│         └ *colfetcher.ColBatchScan
+└ Node 3
+  └ *colrpc.Outbox
+    └ *colexec.sortChunksOp
+      └ *rowexec.joinReader
+        └ *rowexec.invertedJoiner
+          └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
+----
+│
+├ Node 1
+│ └ *colexec.OrderedSynchronizer
+│   ├ *colexec.sortChunksOp
+│   │ └ *rowexec.joinReader
+│   │   └ *rowexec.invertedJoiner
+│   │     └ *colfetcher.ColBatchScan
+│   ├ *colrpc.Inbox
+│   └ *colrpc.Inbox
+├ Node 2
+│ └ *colrpc.Outbox
+│   └ *colexec.sortChunksOp
+│     └ *rowexec.joinReader
+│       └ *rowexec.invertedJoiner
+│         └ *colfetcher.ColBatchScan
+└ Node 3
+  └ *colrpc.Outbox
+    └ *colexec.sortChunksOp
+      └ *rowexec.joinReader
+        └ *rowexec.invertedJoiner
+          └ *colfetcher.ColBatchScan
