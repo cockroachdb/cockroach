@@ -127,7 +127,7 @@ var (
 	// is responsible for ensuring the raft log doesn't grow without bound by
 	// making sure the leader doesn't get too far ahead.
 	defaultRaftLogTruncationThreshold = envutil.EnvOrDefaultInt64(
-		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 8<<20 /* 8 MB */)
+		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 16<<20 /* 16 MB */)
 
 	// defaultRaftMaxSizePerMsg specifies the maximum aggregate byte size of Raft
 	// log entries that a leader will send to followers in a single MsgApp.
