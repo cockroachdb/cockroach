@@ -12,7 +12,6 @@ import React from "react";
 import {getMatchParamByName} from "src/util/query";
 import {sessionAttr} from "src/util/constants";
 import {Helmet} from "react-helmet";
-import {BackIcon, Button} from "src/components";
 import Loading from "src/views/shared/components/loading";
 import _ from "lodash";
 import {Link, RouteComponentProps, withRouter} from "react-router-dom";
@@ -35,6 +34,8 @@ import {nodeDisplayNameByIDSelector} from "src/redux/nodes";
 import {NodeLink, StatementLinkTarget} from "src/views/statements/statementsTableContent";
 import TerminateSessionModal, {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
 import TerminateQueryModal, {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
+import { Button } from "@cockroachlabs/admin-ui-components";
+import { ArrowLeft } from "@cockroachlabs/icons";
 
 interface OwnProps {
   id: string;
@@ -90,6 +91,14 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
     this.terminateQueryRef = React.createRef();
   }
 
+  backToSessionsPage = () => {
+    const { history, location } = this.props;
+    history.push({
+      ...location,
+      pathname: "/sessions",
+    });
+  }
+
   render() {
     const sessionID = getMatchParamByName(this.props.match, sessionAttr);
     return (
@@ -97,13 +106,13 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
         <Helmet title={`Details | ${sessionID} | Sessions`} />
         <div className={cx("section", "page--header")}>
           <Button
-            onClick={this.props.history.goBack}
+            onClick={this.backToSessionsPage}
             type="unstyled-link"
             size="small"
-            icon={BackIcon}
+            icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
           >
-            Active Sessions
+            Sessions
           </Button>
           <h1 className={cx("base-heading", "page--header__title")}>
             Active Session {sessionID}

@@ -47,8 +47,8 @@ import classNames from "classnames/bind";
 import {
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
-import { Button } from "src/components/button";
-import { BackIcon } from "src/components/icon";
+import { Button } from "@cockroachlabs/admin-ui-components";
+import { ArrowLeft } from "@cockroachlabs/icons";
 import { trackSubnavSelection } from "src/util/analytics";
 import styles from "./statementDetails.module.styl";
 import sortableTableStyles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
@@ -250,7 +250,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             onClick={this.prevPage}
             type="unstyled-link"
             size="small"
-            icon={BackIcon}
+            icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
           >
             Statements
