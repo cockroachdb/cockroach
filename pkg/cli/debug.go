@@ -1152,6 +1152,7 @@ var debugMergeLogsOpts = struct {
 	prefix         string
 	keepRedactable bool
 	redactInput    bool
+	dbName         string
 }{
 	program:        regexp.MustCompile("^cockroach.*$"),
 	file:           regexp.MustCompile(log.FilePattern),
@@ -1169,7 +1170,8 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix, o.keepRedactable)
+	//return writeLogStream(s, o.filter, o.prefix, o.keepRedactable)
+	return writeLogStreamToSQL(s, o.prefix, o.dbName)
 }
 
 // DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
@@ -1282,4 +1284,6 @@ func init() {
 		"keep the output log file redactable")
 	f.BoolVar(&debugMergeLogsOpts.redactInput, "redact", debugMergeLogsOpts.redactInput,
 		"redact the input files to remove sensitive information")
+	f.StringVar(&debugMergeLogsOpts.dbName, "db", "./crdb_logs.db",
+		"the name of the sqlite db to export the logs to")
 }

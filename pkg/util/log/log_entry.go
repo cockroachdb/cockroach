@@ -73,6 +73,13 @@ func (l *loggingT) formatLogEntryInternal(entry Entry, cp ttycolor.Profile) *buf
 		entry.Severity = Severity_INFO // for safety.
 	}
 
+	buf.WriteString("\nFile: ")
+	buf.WriteString(entry.File)
+	buf.WriteString("\nTags: ")
+	buf.WriteString(entry.Tags)
+	buf.WriteString("\nMes: ")
+	buf.WriteString(entry.Message)
+	return buf
 	tmp := buf.tmp[:len(buf.tmp)]
 	var n int
 	var prefix []byte
