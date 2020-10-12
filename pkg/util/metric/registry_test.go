@@ -88,6 +88,8 @@ func TestRegistry(t *testing.T) {
 		StructHistogram     *Histogram
 		NestedStructGauge   NestedStruct
 		ArrayStructCounters [4]*Counter
+		// Ensure that nil struct values in arrays are safe.
+		NestedStructArray [2]*NestedStruct
 		// A few extra ones: either not exported, or not metric objects.
 		privateStructGauge            *Gauge
 		privateStructGauge64          *GaugeFloat64
@@ -113,6 +115,12 @@ func TestRegistry(t *testing.T) {
 			nil, // skipped
 			NewCounter(Metadata{Name: "array.struct.counter.3"}),
 		},
+		NestedStructArray: [2]*NestedStruct{
+			0: nil, // skipped
+			1: {
+				NestedStructGauge: NewGauge(Metadata{Name: "nested.struct.array.1.gauge"}),
+			},
+		},
 		privateStructGauge:     NewGauge(Metadata{Name: "private.struct.gauge"}),
 		privateStructGauge64:   NewGaugeFloat64(Metadata{Name: "private.struct.gauge64"}),
 		privateStructCounter:   NewCounter(Metadata{Name: "private.struct.counter"}),
@@ -132,19 +140,20 @@ func TestRegistry(t *testing.T) {
 	r.AddMetricStruct(ms)
 
 	expNames := map[string]struct{}{
-		"top.histogram":          {},
-		"top.gauge":              {},
-		"top.floatgauge":         {},
-		"top.counter":            {},
-		"bottom.gauge":           {},
-		"struct.gauge":           {},
-		"struct.gauge64":         {},
-		"struct.counter":         {},
-		"struct.histogram":       {},
-		"nested.struct.gauge":    {},
-		"array.struct.counter.0": {},
-		"array.struct.counter.1": {},
-		"array.struct.counter.3": {},
+		"top.histogram":               {},
+		"top.gauge":                   {},
+		"top.floatgauge":              {},
+		"top.counter":                 {},
+		"bottom.gauge":                {},
+		"struct.gauge":                {},
+		"struct.gauge64":              {},
+		"struct.counter":              {},
+		"struct.histogram":            {},
+		"nested.struct.gauge":         {},
+		"array.struct.counter.0":      {},
+		"array.struct.counter.1":      {},
+		"array.struct.counter.3":      {},
+		"nested.struct.array.1.gauge": {},
 	}
 
 	r.Each(func(name string, _ interface{}) {
