@@ -5284,6 +5284,56 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_pointinsidecircle": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"x_coord", types.Float},
+				{"y_coord", types.Float},
+				{"radius", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				point := tree.MustBeDGeometry(args[0])
+
+				geomT, err := point.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				if _, ok := geomT.(*geom.Point); !ok {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"first parameter has to be of type Point",
+					)
+				}
+
+				x := float64(tree.MustBeDFloat(args[1]))
+				y := float64(tree.MustBeDFloat(args[2]))
+				radius := float64(tree.MustBeDFloat(args[3]))
+				if radius <= 0 {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"radius of the circle has to be positive",
+					)
+				}
+				center, err := geo.MakeGeometryFromPointCoords(x, y)
+				if err != nil {
+					return nil, err
+				}
+				dist, err := geomfn.MinDistance(point.Geometry, center)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(dist <= radius), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the true if the geometry is a point and is inside the circle. Returns false otherwise.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	"st_memsize": makeBuiltin(defProps(),
 		tree.Overload{
@@ -5336,7 +5386,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_minimumboundingradius":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
 	"st_node":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
 	"st_orientedenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
-	"st_pointinsidecircle":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49007}),
 	"st_polygonize":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
 	"st_quantizecoordinates":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
 	"st_seteffectivearea":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
