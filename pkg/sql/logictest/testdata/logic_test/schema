@@ -45,6 +45,16 @@ CREATE TYPE myschema.typ AS ENUM ('user', 'defined', 'schema');
 CREATE VIEW myschema.v AS SELECT x FROM myschema.tb;
 CREATE SEQUENCE myschema.s
 
+query TITITI rowsort
+SELECT
+  database_name, parent_id, schema_name, parent_schema_id, name, table_id
+FROM crdb_internal.tables
+WHERE database_name = 'test'
+----
+test  52  myschema  54  tb  55
+test  52  myschema  54  v   58
+test  52  myschema  54  s   59
+
 query I
 SELECT * FROM myschema.tb
 ----
@@ -533,35 +543,6 @@ query I colnames
 SELECT * FROM testuser.test_table
 ----
 a
-
-query TITITI rowsort
-SELECT
-  database_name, parent_id, schema_name, parent_schema_id, name, table_id
-FROM crdb_internal.tables
-WHERE database_name IN ('test', 'new_db')
-----
-test    52   myschema2    54   tb                55
-test    52   myschema2    54   v                 58
-test    52   myschema2    54   s                 59
-test    52   myschema2    54   tb2               60
-test    52   [62]         62   myschema_t1       64
-test    52   [62]         62   myschema_t2       65
-test    52   [62]         62   myschema_seq1     66
-test    52   [62]         62   myschema_t3       67
-test    52   otherschema  70   otherschema_v1    71
-test    52   otherschema  70   otherschema_t1    72
-test    52   otherschema  70   otherschema_seq1  73
-test    52   [75]         75   scdrop1_t1        78
-test    52   [75]         75   scdrop1_t2        79
-test    52   [76]         76   scdrop2_t1        80
-test    52   [76]         76   scdrop2_v1        81
-test    52   [77]         77   scdrop3_v1        82
-test    52   privs        90   tbl               93
-test    52   privs        90   usage_tbl         96
-new_db  103  [104]        104  bar               105
-new_db  103  public       29   public_table      107
-new_db  103  testuser     106  test_table        108
-new_db  103  public       29   test_table        109
 
 # Ensure that when we create a schema, it inherits privileges from its parent
 # database, but only those which are valid for schemas.
