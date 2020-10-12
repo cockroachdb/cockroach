@@ -82,6 +82,7 @@ const (
 	VersionCreateLoginPrivilege
 	VersionHBAForNonTLS
 	Version20_2
+	VersionStart21_1
 
 	// Add new versions here (step one of two).
 )
@@ -611,6 +612,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// Version20_2 is CockroachDB v20.2. It's used for all v20.2.x patch releases.
 		Key:     Version20_2,
 		Version: roachpb.Version{Major: 20, Minor: 2},
+	},
+	{
+		// VersionStart21_1 demarcates work towards CockroachDB v21.1.
+		Key:     VersionStart21_1,
+		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 1},
 	},
 
 	// Add new versions here (step two of two).
