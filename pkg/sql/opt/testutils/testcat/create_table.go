@@ -489,14 +489,30 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	for i, colDef := range def.Columns {
 		ordinal := tt.FindOrdinal(string(colDef.Column))
 		colType := tt.Columns[ordinal].DatumType()
+		isLastCol := i == len(def.Columns)-1
 		if !def.Inverted && !colinfo.ColumnTypeIsIndexable(colType) {
 			panic(fmt.Errorf("column %s of type %s is not indexable", colDef.Column, colType))
 		}
-		if def.Inverted && i == 0 && !colinfo.ColumnTypeIsInvertedIndexable(colType) {
-			panic(fmt.Errorf("column %s of type %s is not inverted indexable", colDef.Column, colType))
+		if def.Inverted && !isLastCol && colinfo.ColumnTypeIsInvertedIndexable(colType) {
+			panic(fmt.Errorf(
+				"column %s of type %s is not allowed as a non-terminal column of an inverted index",
+				colDef.Column,
+				colType,
+			))
+		}
+		if def.Inverted && isLastCol {
+			if !colinfo.ColumnTypeIsInvertedIndexable(colType) {
+				panic(fmt.Errorf(
+					"column %s of type %s is not allowed as the last column of an inverted index",
+					colDef.Column,
+					colType,
+				))
+			}
+
+			idx.invertedOrd = i
 		}
 
-		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, keyCol)
+		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, keyCol, isLastCol)
 
 		if typ == primaryIndex && col.IsNullable() {
 			// Reinitialize the column to make it non-nullable.
@@ -527,7 +543,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			notNullIndex = false
 		}
 
-		if i == 0 && def.Inverted {
+		if isLastCol && def.Inverted {
 			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
@@ -592,6 +608,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 
 		if !found {
 			name := string(pkCol.ColName())
+			ordinal := tt.FindOrdinal(name)
 
 			if typ == uniqueIndex {
 				// If unique index has no NULL columns, then the implicit columns
@@ -599,15 +616,15 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 				// strict key, since they're needed to ensure uniqueness (but they
 				// are not part of the lax key).
 				if notNullIndex {
-					idx.addColumn(tt, name, tree.Ascending, nonKeyCol)
+					idx.addColumnByOrdinal(tt, ordinal, tree.Ascending, nonKeyCol)
 				} else {
-					idx.addColumn(tt, name, tree.Ascending, strictKeyCol)
+					idx.addColumnByOrdinal(tt, ordinal, tree.Ascending, strictKeyCol)
 				}
 			} else {
 				// Implicit columns are always added to the key for a non-unique
 				// index. In addition, there is no separate lax key, so the lax
 				// key column count = key column count.
-				idx.addColumn(tt, name, tree.Ascending, keyCol)
+				idx.addColumnByOrdinal(tt, ordinal, tree.Ascending, keyCol)
 			}
 		}
 	}
@@ -623,7 +640,8 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			}
 		}
 		if !found {
-			idx.addColumn(tt, string(name), tree.Ascending, nonKeyCol)
+			ordinal := tt.FindOrdinal(string(name))
+			idx.addColumnByOrdinal(tt, ordinal, tree.Ascending, nonKeyCol)
 		}
 	}
 
@@ -674,14 +692,14 @@ func (tt *Table) addFamily(def *tree.FamilyTableDef) {
 }
 
 func (ti *Index) addColumn(
-	tt *Table, name string, direction tree.Direction, colType colType,
+	tt *Table, name string, direction tree.Direction, colType colType, isLastCol bool,
 ) *cat.Column {
 	ordinal := tt.FindOrdinal(name)
-	if ti.Inverted && len(ti.Columns) == 0 {
-		// First column of an inverted index is special: the index key does not
-		// contain values from the column itself, but contains inverted index
-		// entries derived from that column. Create a virtual column to be able to
-		// refer to it separately.
+	if ti.Inverted && isLastCol {
+		// The last column of an inverted index is special: the index key
+		// does not contain values from the column itself, but contains inverted
+		// index entries derived from that column. Create a virtual column to be
+		// able to refer to it separately.
 		var col cat.Column
 		// TODO(radu,mjibson): update this when the corresponding type in the real
 		// catalog is fixed (see sql.newOptTable).
@@ -713,7 +731,7 @@ func (ti *Index) addColumnByOrdinal(
 	// Update key column counts.
 	switch colType {
 	case keyCol:
-		// Column is part of both any lax key, as well as the strict key.
+		// Column is part of both lax and strict keys.
 		ti.LaxKeyCount++
 		ti.KeyCount++
 

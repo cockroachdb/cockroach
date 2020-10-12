@@ -62,11 +62,6 @@ type Index interface {
 	// the table.
 	ColumnCount() int
 
-	// Predicate returns the partial index predicate expression and true if the
-	// index is a partial index. If it is not a partial index, the empty string
-	// and false are returned.
-	Predicate() (string, bool)
-
 	// KeyColumnCount returns the number of columns in the index that are part
 	// of its unique key. No two rows in the index will have the same values for
 	// those columns (where NULL values are treated as equal). Every index has a
@@ -129,6 +124,15 @@ type Index interface {
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
+
+	// VirtualInvertedColumn returns the VirtualInverted IndexColumn of the
+	// index. Panics if the index is not an inverted index.
+	VirtualInvertedColumn() IndexColumn
+
+	// Predicate returns the partial index predicate expression and true if the
+	// index is a partial index. If it is not a partial index, the empty string
+	// and false are returned.
+	Predicate() (string, bool)
 
 	// Zone returns the zone which constrains placement of the index's range
 	// replicas. If the index was not explicitly assigned to a zone, then it
