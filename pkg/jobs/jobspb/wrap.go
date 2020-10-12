@@ -11,6 +11,7 @@
 package jobspb
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -217,3 +218,13 @@ const (
 
 // SafeValue implements the redact.SafeValue interface.
 func (Type) SafeValue() {}
+
+// NumJobTypes is the number of jobs types.
+const NumJobTypes = 10
+
+func init() {
+	if len(Type_name) != NumJobTypes {
+		panic(fmt.Errorf("NumJobTypes (%d) does not match generated job type name map length (%d)",
+			NumJobTypes, len(Type_name)))
+	}
+}

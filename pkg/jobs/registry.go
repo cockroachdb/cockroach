@@ -219,7 +219,7 @@ func MakeRegistry(
 	r.mu.deprecatedEpoch = 1
 	r.mu.deprecatedJobs = make(map[int64]context.CancelFunc)
 	r.mu.adoptedJobs = make(map[int64]*adoptedJob)
-	r.metrics.InitHooks(histogramWindowInterval)
+	r.metrics.init(histogramWindowInterval)
 	return r
 }
 
@@ -1058,6 +1058,7 @@ func (r *Registry) stepThroughStateMachine(
 	payload := job.Payload()
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, *job.ID(), status, jobErr)
+	jm := r.metrics.JobMetrics[jobType]
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1070,8 +1071,14 @@ func (r *Registry) stepThroughStateMachine(
 				return err
 			}
 		}
-		err := resumer.Resume(resumeCtx, phs, resultsCh)
+		var err error
+		func() {
+			jm.CurrentlyRunning.Inc(1)
+			defer jm.CurrentlyRunning.Dec(1)
+			err = resumer.Resume(resumeCtx, phs, resultsCh)
+		}()
 		if err == nil {
+			jm.ResumeCompleted.Inc(1)
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusSucceeded, nil)
 		}
 		if resumeCtx.Err() != nil {
@@ -1080,14 +1087,17 @@ func (r *Registry) stepThroughStateMachine(
 			//
 			// TODO(ajwerner): We'll also end up here if the job was canceled or
 			// paused. We should make this error clearer.
+			jm.ResumeRetryError.Inc(1)
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
 		// TODO(spaskob,lucy): Add metrics on job retries. Consider having a backoff
 		// mechanism (possibly combined with a retry limit).
 		if errors.Is(err, retryJobErrorSentinel) {
+			jm.ResumeRetryError.Inc(1)
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
 		}
+		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusCancelRequested && sErr.status != StatusPauseRequested {
 				return errors.NewAssertionErrorWithWrappedErrf(jobErr,
@@ -1131,8 +1141,14 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", *job.ID(), jobErr)
 		}
 		onFailOrCancelCtx := logtags.AddTag(ctx, "job", *job.ID())
-		err := resumer.OnFailOrCancel(onFailOrCancelCtx, phs)
+		var err error
+		func() {
+			jm.CurrentlyRunning.Inc(1)
+			defer jm.CurrentlyRunning.Dec(1)
+			err = resumer.OnFailOrCancel(onFailOrCancelCtx, phs)
+		}()
 		if successOnFailOrCancel := err == nil; successOnFailOrCancel {
+			jm.FailOrCancelCompleted.Inc(1)
 			// If the job has failed with any error different than canceled we
 			// mark it as Failed.
 			nextStatus := StatusFailed
@@ -1142,13 +1158,16 @@ func (r *Registry) stepThroughStateMachine(
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, nextStatus, jobErr)
 		}
 		if onFailOrCancelCtx.Err() != nil {
+			jm.FailOrCancelRetryError.Inc(1)
 			// The context was canceled. Tell the user, but don't attempt to
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
 		}
 		if errors.Is(err, retryJobErrorSentinel) {
+			jm.FailOrCancelRetryError.Inc(1)
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
 		}
+		jm.FailOrCancelFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusPauseRequested {
 				return errors.NewAssertionErrorWithWrappedErrf(jobErr,
