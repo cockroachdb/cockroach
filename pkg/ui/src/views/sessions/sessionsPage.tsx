@@ -24,16 +24,14 @@ import {CachedDataReducerState, refreshSessions} from "src/redux/apiReducers";
 
 import sortableTableStyles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
 import classNames from "classnames/bind";
-import styles from "src/views/sessions/sessionsPage.module.styl";
-import {paginationPageCount} from "src/components/pagination/pagination";
+import styles from "./sessionsPage.module.styl";
 import {ISortedTablePagination} from "src/views/shared/components/sortedtable";
 import {createSelector} from "reselect";
 import {SessionsResponseMessage} from "src/util/api";
 import TerminateSessionModal, {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
 import TerminateQueryModal, {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
-import Pagination from "antd/lib/pagination";
-import Icon from "antd/lib/icon";
 import {showSessions} from "src/util/docs";
+import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/admin-ui-components";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const cx = classNames.bind(styles);
@@ -140,31 +138,6 @@ export class SessionsPage extends React.Component<SessionsPageProps, SessionsPag
     this.props.onPageChanged(current);
   }
 
-  renderPage = (
-    _page: number,
-    type: "page" | "prev" | "next" | "jump-prev" | "jump-next",
-    originalElement: React.ReactNode,
-  ) => {
-    switch (type) {
-      case "jump-prev":
-        return (
-          <div className={cx("_pg-jump")}>
-            <Icon type="left" />
-            <span className={cx("_jump-dots")}>•••</span>
-          </div>
-        );
-      case "jump-next":
-        return (
-          <div className={cx("_pg-jump")}>
-            <Icon type="right" />
-            <span className={cx("_jump-dots")}>•••</span>
-          </div>
-        );
-      default:
-        return originalElement;
-    }
-  }
-
   renderSessions = () => {
     const sessionsData = this.props.sessions;
     const { pagination } = this.state;
@@ -173,11 +146,11 @@ export class SessionsPage extends React.Component<SessionsPageProps, SessionsPag
         <section className={sortableTableCx("cl-table-container")}>
          <div className={cx("cl-table-statistic")}>
             <h4 className={cx("cl-count-title")}>
-              {
-                paginationPageCount(
-                { ...pagination, total: this.props.sessions.length },
-                "active sessions", null, appAttr, null)
-              }
+              <ResultsPerPageLabel
+                pagination={{ ...pagination, total: this.props.sessions.length }}
+                pageName={"active sessions"}
+                selectedApp={appAttr}
+              />
             </h4>
           </div>
           <SessionsSortedTable
@@ -200,18 +173,10 @@ export class SessionsPage extends React.Component<SessionsPageProps, SessionsPag
           />
         </section>
         <Pagination
-          size="small"
-          itemRender={
-            this.renderPage as (
-              page: number,
-              type: "page" | "prev" | "next" | "jump-prev" | "jump-next",
-            ) => React.ReactNode
-          }
           pageSize={pagination.pageSize}
           current={pagination.current}
           total={sessionsData.length}
           onChange={this.onChangePage}
-          hideOnSinglePage
         />
       </div>
     );

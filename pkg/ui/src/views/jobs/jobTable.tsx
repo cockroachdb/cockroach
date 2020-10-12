@@ -14,14 +14,13 @@ import {cockroach} from "src/js/protos";
 import {TimestampToMoment} from "src/util/convert";
 import {DATE_FORMAT} from "src/util/format";
 import {JobStatusCell} from "src/views/jobs/jobStatusCell";
-import {Icon, Pagination} from "antd";
 import {SortSetting} from "src/views/shared/components/sortabletable";
 import {CachedDataReducerState} from "src/redux/cachedDataReducer";
 import { isEmpty, isEqual, map } from "lodash";
 import {JobDescriptionCell} from "src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { paginationPageCount } from "src/components/pagination/pagination";
+import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/admin-ui-components";
 import { jobTable } from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
 
@@ -94,27 +93,6 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     this.setState({ pagination: { ...pagination, current }});
   }
 
-  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
-    switch (type) {
-      case "jump-prev":
-        return (
-          <div className="_pg-jump">
-            <Icon type="left" />
-            <span className="_jump-dots">•••</span>
-          </div>
-        );
-      case "jump-next":
-        return (
-          <div className="_pg-jump">
-            <Icon type="right" />
-            <span className="_jump-dots">•••</span>
-          </div>
-        );
-      default:
-        return originalElement;
-    }
-  }
-
   renderCounts = () => {
     const { pagination: { current, pageSize } } = this.state;
     const total = this.props.jobs.data.jobs.length;
@@ -143,7 +121,10 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
       <React.Fragment>
         <div className="cl-table-statistic">
           <h4 className="cl-count-title">
-            {paginationPageCount({ ...pagination, total: jobs.length }, "jobs")}
+            <ResultsPerPageLabel
+              pagination={{ ...pagination, total: jobs.length }}
+              pageName="jobs"
+            />
           </h4>
         </div>
         <JobsSortedTable
@@ -164,13 +145,10 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
           pagination={pagination}
         />
         <Pagination
-          size="small"
-          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
           pageSize={pagination.pageSize}
           current={pagination.current}
           total={jobs.length}
           onChange={this.onChangePage}
-          hideOnSinglePage
         />
       </React.Fragment>
     );
