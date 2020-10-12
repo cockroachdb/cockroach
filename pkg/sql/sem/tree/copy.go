@@ -52,24 +52,24 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 	var addSep bool
 	maybeAddSep := func() {
 		if addSep {
-			ctx.WriteString(", ")
+			ctx.WriteString(" ")
 		}
 		addSep = true
 	}
+	if o.CopyFormat != CopyFormatText {
+		switch o.CopyFormat {
+		case CopyFormatBinary:
+			ctx.WriteString("BINARY")
+			addSep = true
+		}
+	}
 	if o.Destination != nil {
+		maybeAddSep()
 		// Lowercase because that's what has historically been produced
 		// by copy_file_upload.go, so this will provide backward
 		// compatibility with older servers.
 		ctx.WriteString("destination = ")
 		o.Destination.Format(ctx)
-		addSep = true
-	}
-	if o.CopyFormat != CopyFormatText {
-		maybeAddSep()
-		switch o.CopyFormat {
-		case CopyFormatBinary:
-			ctx.WriteString("BINARY")
-		}
 	}
 }
 
