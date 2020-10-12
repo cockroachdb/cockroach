@@ -1070,6 +1070,7 @@ func (r *Registry) stepThroughStateMachine(
 				return err
 			}
 		}
+		resumeCtx = kv.ContextWithInjectRetry(ctx)
 		err := resumer.Resume(resumeCtx, phs, resultsCh)
 		if err == nil {
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusSucceeded, nil)
