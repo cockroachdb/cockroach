@@ -1164,13 +1164,6 @@ func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
 }
 
-// Predicate is part of the cat.Index interface. It returns the predicate
-// expression and true if the index is a partial index. If the index is not
-// partial, the empty string and false is returned.
-func (oi *optIndex) Predicate() (string, bool) {
-	return oi.desc.Predicate, oi.desc.Predicate != ""
-}
-
 // KeyColumnCount is part of the cat.Index interface.
 func (oi *optIndex) KeyColumnCount() int {
 	return oi.numKeyCols
@@ -1207,6 +1200,22 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
+}
+
+// VirtualInvertedColumn is part of the cat.Index interface.
+func (oi *optIndex) VirtualInvertedColumn() cat.IndexColumn {
+	if !oi.IsInverted() {
+		panic("non-inverted indexes do not have inverted virtual columns")
+	}
+	ord := len(oi.desc.ColumnIDs) - 1
+	return oi.Column(ord)
+}
+
+// Predicate is part of the cat.Index interface. It returns the predicate
+// expression and true if the index is a partial index. If the index is not
+// partial, the empty string and false is returned.
+func (oi *optIndex) Predicate() (string, bool) {
+	return oi.desc.Predicate, oi.desc.Predicate != ""
 }
 
 // Zone is part of the cat.Index interface.
@@ -1819,11 +1828,6 @@ func (oi *optVirtualIndex) ColumnCount() int {
 	return oi.numCols
 }
 
-// Predicate is part of the cat.Index interface.
-func (oi *optVirtualIndex) Predicate() (string, bool) {
-	return "", false
-}
-
 // KeyColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) KeyColumnCount() int {
 	// Virtual indexes for the time being always have exactly 2 key columns,
@@ -1874,6 +1878,16 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	i -= length + 1
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
+}
+
+// VirtualInvertedColumn is part of the cat.Index interface.
+func (oi *optVirtualIndex) VirtualInvertedColumn() cat.IndexColumn {
+	panic("virtual indexes do not have inverted virtual columns")
+}
+
+// Predicate is part of the cat.Index interface.
+func (oi *optVirtualIndex) Predicate() (string, bool) {
+	return "", false
 }
 
 // Zone is part of the cat.Index interface.
