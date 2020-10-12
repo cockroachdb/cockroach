@@ -48,6 +48,7 @@ for pkg in $pkgspec; do
   tc_start_block "Run ${pkg} under race detector"
   run_json_test build/builder.sh env \
     COCKROACH_LOGIC_TESTS_SKIP=true \
+    GOMAXPROCS=8 \
     stdbuf -oL -eL \
     make testrace \
     GOTESTFLAGS=-json \
