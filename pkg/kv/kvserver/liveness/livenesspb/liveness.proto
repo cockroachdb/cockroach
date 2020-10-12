@@ -125,6 +125,8 @@ enum NodeLivenessStatus {
   // UNAVAILABLE indicates that the node is unavailable - it has not updated its
   // liveness record recently enough to be considered live, but has not been
   // unavailable long enough to be considered dead.
+  // UNAVAILABLE is also reported for nodes whose descriptor is marked
+  // as draining.
   NODE_STATUS_UNAVAILABLE = 2 [(gogoproto.enumvalue_customname) = "UNAVAILABLE"];
   // LIVE indicates a live node.
   NODE_STATUS_LIVE = 3 [(gogoproto.enumvalue_customname) = "LIVE"];
