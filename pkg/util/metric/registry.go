@@ -114,18 +114,18 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 func (r *Registry) addMetricValue(
 	ctx context.Context, val reflect.Value, name string, skipNil bool,
 ) {
+	if val.Kind() == reflect.Ptr && val.IsNil() {
+		if skipNil {
+			if log.V(2) {
+				log.Infof(ctx, "skipping nil metric field %s", name)
+			}
+		} else {
+			log.Fatalf(ctx, "found nil metric field %s", name)
+		}
+		return
+	}
 	switch typ := val.Interface().(type) {
 	case Iterable:
-		if val.Kind() == reflect.Ptr && val.IsNil() {
-			if skipNil {
-				if log.V(2) {
-					log.Infof(ctx, "skipping nil metric field %s", name)
-				}
-			} else {
-				log.Fatalf(ctx, "found nil metric field %s", name)
-			}
-			return
-		}
 		r.AddMetric(typ)
 	case Struct:
 		r.AddMetricStruct(typ)
