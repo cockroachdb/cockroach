@@ -412,7 +412,10 @@ func (w *worker) run(context.Context) error {
 		)
 	}
 	var query string
-	if w.config.addFKs {
+	if !w.config.addFKs {
+		// Foreign key relationships were not established which means that we
+		// are simulating a "fake cascade" operator, so we manually issue the
+		// DELETE queries for all descendant tables.
 		for l := w.config.levels - 1; l > level; l-- {
 			for ord := 0; ord < w.config.tablesPerLevel[l]; ord++ {
 				query += fmt.Sprintf("DELETE FROM %s %s; ", w.config.getTableName(l, ord), filter)
