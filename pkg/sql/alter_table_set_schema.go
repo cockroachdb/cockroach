@@ -77,7 +77,7 @@ func (p *planner) AlterTableSetSchema(
 	}
 
 	return &alterTableSetSchemaNode{
-		newSchema: n.Schema,
+		newSchema: string(n.Schema),
 		tableDesc: tableDesc,
 		n:         n,
 	}, nil
