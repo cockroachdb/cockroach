@@ -328,23 +328,19 @@ CREATE TABLE external_ref (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                    distribution   local
-·                    vectorized     false
-root                 ·              ·
- ├── delete          ·              ·
- │    │              from           parent
- │    └── buffer     ·              ·
- │         │         label          buffer 1
- │         └── scan  ·              ·
- │                   missing stats  ·
- │                   table          parent@primary
- │                   spans          [/11 - ]
- ├── fk-cascade      ·              ·
- │                   fk             fk_pid_ref_parent
- │                   input          buffer 1
- └── fk-cascade      ·              ·
-·                    fk             fk_pid_ref_parent
-·                    input          buffer 1
+·                distribution   local
+·                vectorized     false
+root             ·              ·
+ ├── delete      ·              ·
+ │    │          from           parent
+ │    └── scan   ·              ·
+ │               missing stats  ·
+ │               table          parent@primary
+ │               spans          [/11 - ]
+ ├── fk-cascade  ·              ·
+ │               fk             fk_pid_ref_parent
+ └── fk-cascade  ·              ·
+·                fk             fk_pid_ref_parent
 
 statement ok
 DROP TABLE external_ref
@@ -458,23 +454,19 @@ CREATE TABLE child_without_fk (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                    distribution   local
-·                    vectorized     false
-root                 ·              ·
- ├── delete          ·              ·
- │    │              from           parent
- │    └── buffer     ·              ·
- │         │         label          buffer 1
- │         └── scan  ·              ·
- │                   missing stats  ·
- │                   table          parent@primary
- │                   spans          [/11 - ]
- ├── fk-cascade      ·              ·
- │                   fk             fk_pid_ref_parent
- │                   input          buffer 1
- └── fk-cascade      ·              ·
-·                    fk             fk_pid_ref_parent
-·                    input          buffer 1
+·                distribution   local
+·                vectorized     false
+root             ·              ·
+ ├── delete      ·              ·
+ │    │          from           parent
+ │    └── scan   ·              ·
+ │               missing stats  ·
+ │               table          parent@primary
+ │               spans          [/11 - ]
+ ├── fk-cascade  ·              ·
+ │               fk             fk_pid_ref_parent
+ └── fk-cascade  ·              ·
+·                fk             fk_pid_ref_parent
 
 statement ok
 DROP TABLE child_without_fk
@@ -496,17 +488,14 @@ CREATE TABLE abc (
 query TTT
 EXPLAIN DELETE FROM ab WHERE a = 1
 ----
-·                    distribution   local
-·                    vectorized     false
-root                 ·              ·
- ├── delete          ·              ·
- │    │              from           ab
- │    └── buffer     ·              ·
- │         │         label          buffer 1
- │         └── scan  ·              ·
- │                   missing stats  ·
- │                   table          ab@primary
- │                   spans          [/1 - /1]
- └── fk-cascade      ·              ·
-·                    fk             fk_b_ref_ab
-·                    input          buffer 1
+·                distribution   local
+·                vectorized     false
+root             ·              ·
+ ├── delete      ·              ·
+ │    │          from           ab
+ │    └── scan   ·              ·
+ │               missing stats  ·
+ │               table          ab@primary
+ │               spans          [/1 - /1]
+ └── fk-cascade  ·              ·
+·                fk             fk_b_ref_ab

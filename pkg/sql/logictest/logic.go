@@ -1005,11 +1005,10 @@ var allowedKVOpTypes = []string{
 	"Put",
 	"InitPut",
 	"Del",
+	"DelRange",
 	"ClearRange",
 	"Get",
 	"Scan",
-	"FKScan",
-	"CascadeScan",
 }
 
 func isAllowedKVOp(op string) bool {

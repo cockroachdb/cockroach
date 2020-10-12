@@ -141,7 +141,9 @@ func (f *Factory) ConstructPlan(
 	}
 	wrappedCascades := append([]exec.Cascade(nil), cascades...)
 	for i := range wrappedCascades {
-		wrappedCascades[i].Buffer = wrappedCascades[i].Buffer.(*Node).WrappedNode()
+		if wrappedCascades[i].Buffer != nil {
+			wrappedCascades[i].Buffer = wrappedCascades[i].Buffer.(*Node).WrappedNode()
+		}
 	}
 	wrappedChecks := make([]exec.Node, len(checks))
 	for i := range wrappedChecks {

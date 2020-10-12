@@ -391,8 +391,17 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 		g.w.unnest("\n")
 	}
 
-	g.w.writeIndent("}\n")
+	for _, define := range g.compiled.Defines.WithTag("List") {
+		opTyp := g.md.typeOf(define)
+		g.w.nestIndent("case *%s:\n", opTyp.name)
+		g.w.writeIndent("newVal := f.copyAndReplaceDefault%s(*t, replace)\n", opTyp.friendlyName)
+		g.w.writeIndent("return &newVal\n")
+		g.w.unnest("\n")
+	}
+
+	g.w.nestIndent("default:\n")
 	g.w.writeIndent("panic(errors.AssertionFailedf(\"unhandled op %%s\", errors.Safe(src.Op())))\n")
+	g.w.unnest("}\n")
 	g.w.unnest("}\n\n")
 
 	for _, define := range g.compiled.Defines.WithTag("List") {

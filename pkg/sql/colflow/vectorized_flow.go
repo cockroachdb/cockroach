@@ -1031,6 +1031,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
 				result.Op = colexec.NewInvariantsChecker(result.Op)
 			}
+			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
+				result.Op = colexec.NewPanicInjector(result.Op)
+			}
 			if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
 				!result.IsStreaming {
 				err = errors.Errorf("non-streaming operator encountered when vectorize=201auto")

@@ -1025,10 +1025,14 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		// TODO(radu): this requires keeping all previous plans "alive" until the
 		// very end. We may want to make copies of the buffer nodes and clean up
 		// everything else.
-		buf := plan.cascades[i].Buffer.(*bufferNode)
-		if buf.bufferedRows.Len() == 0 {
-			// No rows were actually modified.
-			continue
+		buf := plan.cascades[i].Buffer
+		var numBufferedRows int
+		if buf != nil {
+			numBufferedRows = buf.(*bufferNode).bufferedRows.Len()
+			if numBufferedRows == 0 {
+				// No rows were actually modified.
+				continue
+			}
 		}
 
 		log.VEventf(ctx, 1, "executing cascade for constraint %s", plan.cascades[i].FKName)
@@ -1055,7 +1059,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		}
 		cascadePlan, err := plan.cascades[i].PlanFn(
 			ctx, &planner.semaCtx, &evalCtx.EvalContext, execFactory,
-			buf, buf.bufferedRows.Len(), allowAutoCommit,
+			buf, numBufferedRows, allowAutoCommit,
 		)
 		if err != nil {
 			recv.SetError(err)
