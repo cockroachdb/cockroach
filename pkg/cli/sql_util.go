@@ -968,7 +968,7 @@ func maybeShowTimes(
 		fmt.Fprintln(w)
 	}()
 
-	clientSideQueryTime := queryCompleteTime.Sub(startTime)
+	clientSideQueryLatency := queryCompleteTime.Sub(startTime)
 	// We don't print timings for multi-statement queries as we don't have an
 	// accurate way to measure them currently. See #48180.
 	if isMultiStatementQuery {
@@ -990,18 +990,18 @@ func maybeShowTimes(
 	unit := "s"
 	multiplier := 1.
 	precision := 3
-	if clientSideQueryTime.Seconds() < 1 {
+	if clientSideQueryLatency.Seconds() < 1 {
 		unit = "ms"
 		multiplier = 1000.
 		precision = 0
 	}
 
 	if sqlCtx.verboseTimings {
-		fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
+		fmt.Fprintf(w, "Time: %s", clientSideQueryLatency)
 	} else {
 		// Simplified displays: human users typically can't
 		// distinguish sub-millisecond latencies.
-		fmt.Fprintf(w, "Time: %.*f%s", precision, clientSideQueryTime.Seconds()*multiplier, unit)
+		fmt.Fprintf(w, "Time: %.*f%s", precision, clientSideQueryLatency.Seconds()*multiplier, unit)
 	}
 
 	if !sqlCtx.enableServerExecutionTimings {
@@ -1018,7 +1018,13 @@ func maybeShowTimes(
 
 	fmt.Fprint(stderr, " total")
 
-	networkLat := clientSideQueryTime - serviceLat
+	networkLat := clientSideQueryLatency - serviceLat
+	// serviceLat can be greater than clientSideQueryLatency for some extremely quick
+	// statements (eg. BEGIN). So as to not confuse the user, we attribute all of
+	// the clientSideQueryLatency to the network in such cases.
+	if networkLat.Seconds() < 0 {
+		networkLat = clientSideQueryLatency
+	}
 	otherLat := serviceLat - parseLat - planLat - execLat
 	if sqlCtx.verboseTimings {
 		fmt.Fprintf(w, " (parse %s / plan %s / exec %s / other %s / network %s)\n",

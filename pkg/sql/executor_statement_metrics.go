@@ -39,13 +39,17 @@ const (
 	sessionInit sessionPhase = iota
 
 	// Executor phases.
-	sessionQueryReceived                  // Query is received.
-	sessionStartParse                     // Parse starts.
-	sessionEndParse                       // Parse ends.
-	plannerStartLogicalPlan               // Planning starts.
-	plannerEndLogicalPlan                 // Planning ends.
-	plannerStartExecStmt                  // Execution starts.
-	plannerEndExecStmt                    // Execution ends.
+	sessionQueryReceived    // Query is received.
+	sessionStartParse       // Parse starts.
+	sessionEndParse         // Parse ends.
+	plannerStartLogicalPlan // Planning starts.
+	plannerEndLogicalPlan   // Planning ends.
+	plannerStartExecStmt    // Execution starts.
+	plannerEndExecStmt      // Execution ends.
+	// Query is serviced. Note that we compute this even for empty queries or
+	// "special" statements that have no execution, like SHOW TRANSACTION STATUS.
+	sessionQueryServiced
+
 	sessionTransactionReceived            // Transaction is received.
 	sessionFirstStartExecTransaction      // Transaction is started for the first time.
 	sessionMostRecentStartExecTransaction // Transaction is started for the most recent time.
@@ -67,6 +71,21 @@ type phaseTimes [sessionNumPhases]time.Time
 // getServiceLatency returns the time between a query being received and the end
 // of run.
 func (p *phaseTimes) getServiceLatency() time.Duration {
+	// Ideally, service latency would always be defined as:
+	// p[sessionQueryServiced] - p[sessionQueryReceived]. Unfortunately, this
+	// isn't always possible with the current structure of the code, as the
+	// service latency calculation is required when recording metrics for
+	// a statement that hits the execution engine. At this point,
+	// `sessionQueryServiced` is unset, because that happens in execCmd. To
+	// prevent negative values for the case mentioned above, we have this second
+	// possible way of calculating the service latency by relying on the
+	// plannerEndExecStmt phase. It's worth noting that the plannerEndExecStmt
+	// phase is unset for queries that don't go through the execution engine (such
+	// as observer statements, prepare statements etc.), so simply relying on the
+	// second calculation isn't an option either.
+	if !p[sessionQueryServiced].IsZero() {
+		return p[sessionQueryServiced].Sub(p[sessionQueryReceived])
+	}
 	return p[plannerEndExecStmt].Sub(p[sessionQueryReceived])
 }
 
