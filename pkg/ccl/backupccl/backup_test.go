@@ -2740,6 +2740,44 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
 		sqlDBRestore.ExpectErr(t, "without interleave child", `RESTORE TABLE data.bank FROM $1`, LocalFoo)
 	})
+
+	t.Run("interleaved table with dropped grandparent", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE p2 (i INT PRIMARY KEY, s STRING);
+
+CREATE TABLE p1_0 (
+  i INT,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL,
+  PRIMARY KEY (i, s1),
+  FAMILY (i, s1, s2),
+  FAMILY (d)
+) INTERLEAVE IN PARENT p2 (i);
+
+CREATE TABLE p1_1 (
+  i INT PRIMARY KEY,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL
+) INTERLEAVE IN PARENT p2 (i);
+
+CREATE TABLE p0 (
+  i INT,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL,
+  PRIMARY KEY (i, s1, s2)
+) INTERLEAVE IN PARENT p1_0 (i, s1);
+
+DROP TABLE p2 CASCADE;
+`)
+		sqlDB.Exec(t, `BACKUP DATABASE data TO 'nodelocal://1/interleave_hierarchy'`)
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
+		defer tcRestore.Stopper().Stop(context.Background())
+		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		sqlDBRestore.Exec(t, `RESTORE DATABASE data FROM 'nodelocal://1/interleave_hierarchy'`)
+	})
 }
 
 func TestBackupRestoreCrossTableReferences(t *testing.T) {

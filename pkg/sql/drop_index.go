@@ -408,15 +408,8 @@ func (p *planner) dropIndexByName(
 	}
 	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 
-	if len(idx.Interleave.Ancestors) > 0 {
-		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-			return err
-		}
-	}
-	for _, ref := range idx.InterleavedBy {
-		if err := p.removeInterleave(ctx, ref); err != nil {
-			return err
-		}
+	if err := p.removeInterleaveReferences(ctx, tableDesc, idx); err != nil {
+		return err
 	}
 
 	var droppedViews []string
