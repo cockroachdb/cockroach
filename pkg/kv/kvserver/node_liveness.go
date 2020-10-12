@@ -343,6 +343,29 @@ func (nl *NodeLiveness) SetDraining(
 	return errors.New("failed to drain self")
 }
 
+// TimeUntilLivenessExpiry returns a duration equal to the difference
+// between the current time and the current expiration deadline on
+// this node's liveness record.
+func (nl *NodeLiveness) TimeUntilLivenessExpiry(ctx context.Context) (time.Duration, error) {
+	myID := nl.gossip.NodeID.Get()
+	liveness, ok := nl.GetLiveness(myID)
+	if !ok {
+		// Our liveness record does not exist yet? This is surprising,
+		// but it does mean we have nothing to do here.
+		return 0, nil
+	}
+	if !liveness.Draining {
+		// We should have marked the liveness as draining earlier. If it
+		// is back up, that means that the drain has been aborted
+		// somewhere else.
+		return 0, errors.AssertionFailedf("liveness record is not draining any more")
+	}
+
+	// Wait until the record has expired.
+	expiryTime := timeutil.Unix(0, liveness.Expiration.WallTime)
+	return expiryTime.Sub(nl.clock.PhysicalTime()), nil
+}
+
 // SetMembershipStatus changes the liveness record to reflect the target
 // membership status. It does so idempotently, and may retry internally until it
 // observes its target state durably persisted. It returns whether it was able
@@ -1409,6 +1432,21 @@ func (nl *NodeLiveness) GetNodeCount() int {
 	var count int
 	for _, l := range nl.mu.nodes {
 		if l.Membership.Active() {
+			count++
+		}
+	}
+	return count
+}
+
+// GetAvailableNodeCount returns a count of the number of live,
+// non-decommission{ed,ing} nodes as known to liveness.
+func (nl *NodeLiveness) GetAvailableNodeCount() int {
+	now := nl.clock.Now().GoTime()
+	nl.mu.RLock()
+	defer nl.mu.RUnlock()
+	var count int
+	for _, l := range nl.mu.nodes {
+		if l.Membership.Active() && l.IsLive(now) {
 			count++
 		}
 	}
