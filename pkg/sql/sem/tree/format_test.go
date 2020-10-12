@@ -98,6 +98,24 @@ func TestFormatStatement(t *testing.T) {
 			`SET time zone = utc`},
 		{`SET "time zone" = UTC`, tree.FmtBareStrings,
 			`SET "time zone" = utc`},
+
+		// Test schema anonymization.
+		{`CREATE SCHEMA s`, tree.FmtAnonymize,
+			`CREATE SCHEMA _`},
+		{`ALTER SCHEMA s1 RENAME TO s2`, tree.FmtAnonymize,
+			`ALTER SCHEMA _ RENAME TO _`},
+		{`DROP SCHEMA a, b`, tree.FmtAnonymize,
+			`DROP SCHEMA _, _`},
+		{`GRANT SELECT ON SCHEMA a TO b, c`, tree.FmtAnonymize,
+			`GRANT SELECT ON SCHEMA _ TO _, _`},
+		{`ALTER TYPE t SET SCHEMA s`, tree.FmtAnonymize,
+			`ALTER TYPE _ SET SCHEMA _`},
+
+		// Test owner anonymization.
+		{`ALTER DATABASE d OWNER TO o`, tree.FmtAnonymize,
+			`ALTER DATABASE _ OWNER TO _`},
+		{`ALTER SCHEMA s OWNER TO o`, tree.FmtAnonymize,
+			`ALTER SCHEMA _ OWNER TO _`},
 	}
 
 	for i, test := range testData {

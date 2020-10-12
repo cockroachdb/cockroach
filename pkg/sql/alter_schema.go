@@ -42,7 +42,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if err != nil {
 		return nil, err
 	}
-	found, schema, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, n.Schema, true /* required */)
+	found, schema, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, string(n.Schema), true /* required */)
 	if err != nil {
 		return nil, err
 	}
@@ -78,9 +78,11 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 func (n *alterSchemaNode) startExec(params runParams) error {
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterSchemaRename:
-		return params.p.renameSchema(params.ctx, n.db, n.desc, t.NewName, tree.AsStringWithFQNames(n.n, params.Ann()))
+		return params.p.renameSchema(
+			params.ctx, n.db, n.desc, string(t.NewName), tree.AsStringWithFQNames(n.n, params.Ann()))
 	case *tree.AlterSchemaOwner:
-		return params.p.alterSchemaOwner(params.ctx, n.db, n.desc, t.Owner, tree.AsStringWithFQNames(n.n, params.Ann()))
+		return params.p.alterSchemaOwner(
+			params.ctx, n.db, n.desc, string(t.Owner), tree.AsStringWithFQNames(n.n, params.Ann()))
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
 	}

@@ -53,7 +53,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 	d := newDropCascadeState()
 
 	// Collect all schemas to be deleted.
-	for _, scName := range n.Names {
+	for _, scName := range n.Names.ToStrings() {
 		found, sc, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, scName, false /* required */)
 		if err != nil {
 			return nil, err

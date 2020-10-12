@@ -767,7 +767,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			descriptorChanged = true
 		case *tree.AlterTableOwner:
-			changed, err := params.p.alterTableOwner(params.p.EvalContext().Context, n, t.Owner)
+			changed, err := params.p.alterTableOwner(params.p.EvalContext().Context, n, string(t.Owner))
 			if err != nil {
 				return err
 			}

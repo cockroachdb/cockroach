@@ -551,7 +551,7 @@ func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 // AlterTableSetSchema represents an ALTER TABLE SET SCHEMA command.
 type AlterTableSetSchema struct {
 	Name           *UnresolvedObjectName
-	Schema         string
+	Schema         Name
 	IfExists       bool
 	IsView         bool
 	IsMaterialized bool
@@ -576,12 +576,12 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	}
 	node.Name.Format(ctx)
 	ctx.WriteString(" SET SCHEMA ")
-	ctx.WriteString(node.Schema)
+	ctx.FormatNode(&node.Schema)
 }
 
 // AlterTableOwner represents an ALTER TABLE OWNER TO command.
 type AlterTableOwner struct {
-	Owner string
+	Owner Name
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
@@ -592,5 +592,5 @@ func (node *AlterTableOwner) TelemetryCounter() telemetry.Counter {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatNameP(&node.Owner)
+	ctx.FormatNode(&node.Owner)
 }
