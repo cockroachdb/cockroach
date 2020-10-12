@@ -39,10 +39,10 @@ type Options struct {
 
 // Proxy takes an incoming client connection and relays it to a backend SQL
 // server.
-func Proxy(conn net.Conn, opts Options) error {
+func (s *Server) Proxy(conn net.Conn) error {
 	sendErrToClient := func(conn net.Conn, code ErrorCode, msg string) {
-		if opts.OnSendErrToClient != nil {
-			msg = opts.OnSendErrToClient(code, msg)
+		if s.opts.OnSendErrToClient != nil {
+			msg = s.opts.OnSendErrToClient(code, msg)
 		}
 		_, _ = conn.Write((&pgproto3.ErrorResponse{
 			Severity: "FATAL",
@@ -74,14 +74,14 @@ func Proxy(conn net.Conn, opts Options) error {
 			return newErrorf(CodeClientWriteFailed, "acking SSLRequest: %v", err)
 		}
 
-		cfg := opts.IncomingTLSConfig.Clone()
+		cfg := s.opts.IncomingTLSConfig.Clone()
 		var sniServerName string
 		cfg.GetConfigForClient = func(h *tls.ClientHelloInfo) (*tls.Config, error) {
 			sniServerName = h.ServerName
 			return nil, nil
 		}
-		if opts.OutgoingAddrFromSNI != nil {
-			addr, clientErr := opts.OutgoingAddrFromSNI(sniServerName)
+		if s.opts.OutgoingAddrFromSNI != nil {
+			addr, clientErr := s.opts.OutgoingAddrFromSNI(sniServerName)
 			if clientErr != nil {
 				code := CodeSNIRoutingFailed
 				sendErrToClient(conn, code, clientErr.Error()) // won't actually be shown by most clients
@@ -103,8 +103,9 @@ func Proxy(conn net.Conn, opts Options) error {
 		return newErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
 	}
 
-	outgoingAddr, clientErr := opts.OutgoingAddrFromParams(msg.Parameters)
+	outgoingAddr, clientErr := s.opts.OutgoingAddrFromParams(msg.Parameters)
 	if clientErr != nil {
+		s.metrics.RoutingErrCount.Inc(1)
 		code := CodeParamsRoutingFailed
 		sendErrToClient(conn, code, clientErr.Error())
 		return newErrorf(code, "rejected by OutgoingAddrFromParams: %v", clientErr)
@@ -112,6 +113,7 @@ func Proxy(conn net.Conn, opts Options) error {
 
 	crdbConn, err := net.Dial("tcp", outgoingAddr)
 	if err != nil {
+		s.metrics.BackendDownCount.Inc(1)
 		code := CodeBackendDown
 		sendErrToClient(conn, code, "unable to reach backend SQL server")
 		return newErrorf(code, "dialing backend server: %v", err)
@@ -119,23 +121,27 @@ func Proxy(conn net.Conn, opts Options) error {
 
 	// Send SSLRequest.
 	if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
+		s.metrics.BackendDownCount.Inc(1)
 		return newErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
 	}
 
 	response := make([]byte, 1)
 	if _, err = io.ReadFull(crdbConn, response); err != nil {
+		s.metrics.BackendDownCount.Inc(1)
 		return newErrorf(CodeBackendDown, "reading response to SSLRequest")
 	}
 
 	if response[0] != pgAcceptSSLRequest {
+		s.metrics.BackendDownCount.Inc(1)
 		return newErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
 	}
 
-	outCfg := opts.OutgoingTLSConfig.Clone()
+	outCfg := s.opts.OutgoingTLSConfig.Clone()
 	outCfg.ServerName = outgoingAddr
 	crdbConn = tls.Client(crdbConn, outCfg)
 
 	if _, err := crdbConn.Write(msg.Encode(nil)); err != nil {
+		s.metrics.BackendDownCount.Inc(1)
 		return newErrorf(CodeBackendDown, "relaying StartupMessage to target server %v: %v", outgoingAddr, err)
 	}
 
@@ -161,12 +167,14 @@ func Proxy(conn net.Conn, opts Options) error {
 	// meaning either case is possible.
 	case err := <-errIncoming:
 		if err != nil {
+			s.metrics.BackendDisconnectCount.Inc(1)
 			return newErrorf(CodeBackendDisconnected, "copying from target server to client: %s", err)
 		}
 		return nil
 	case err := <-errOutgoing:
 		// The incoming connection got closed.
 		if err != nil {
+			s.metrics.ClientDisconnectCount.Inc(1)
 			return newErrorf(CodeClientDisconnected, "copying from target server to client: %v", err)
 		}
 		return nil
