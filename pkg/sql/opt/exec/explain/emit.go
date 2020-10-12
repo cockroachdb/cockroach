@@ -212,6 +212,10 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 		}
 		return e.joinNodeName("lookup", a.JoinType), nil
 
+	case invertedJoinOp:
+		a := n.args.(*invertedJoinArgs)
+		return e.joinNodeName("inverted", a.JoinType), nil
+
 	case applyJoinOp:
 		a := n.args.(*applyJoinArgs)
 		return e.joinNodeName("apply", a.JoinType), nil
