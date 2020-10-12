@@ -47,6 +47,18 @@ export interface LayoutProps {
  * Individual pages provide their content via react-router.
  */
 class Layout extends React.Component<LayoutProps & RouteComponentProps> {
+  contentRef = React.createRef<HTMLDivElement>();
+
+  componentDidUpdate(prevProps: RouteComponentProps) {
+    // `react-router` doesn't handle scroll restoration (https://reactrouter.com/react-router/web/guides/scroll-restoration)
+    // and when location changed with react-router's Link it preserves scroll position whenever it is.
+    // AdminUI layout keeps left and top panels have fixed position on a screen and has internal scrolling for content div
+    // element which has to be scrolled back on top with navigation change.
+    if (this.props.location.pathname !== prevProps.location.pathname) {
+      this.contentRef.current.scrollTo(0, 0);
+    }
+  }
+
   render() {
     const { clusterName, clusterVersion, clusterId } = this.props;
     return (
@@ -80,7 +92,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
             <div className="layout-panel__sidebar">
               <NavigationBar/>
             </div>
-            <div className="layout-panel__content">
+            <div ref={this.contentRef} className="layout-panel__content">
               { this.props.children }
             </div>
           </div>
