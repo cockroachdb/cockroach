@@ -98,6 +98,11 @@ func registerSQLSmith(r *testRegistry) {
 		setup := setupFunc(rng)
 		setting := settingFunc(rng)
 
+		// We will enable panic injection on this connection in the vectorized
+		// engine (and will ignore the injected errors) in order to test that
+		// the panic-catching mechanism of error propagation works as expected.
+		setup += "SET testing_vectorize_inject_panics=true;"
+
 		conn := c.Conn(ctx, 1)
 		t.Status("executing setup")
 		c.l.Printf("setup:\n%s", setup)

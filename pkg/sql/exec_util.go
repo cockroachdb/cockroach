@@ -2136,6 +2136,10 @@ func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
 	m.data.VectorizeRowCountThreshold = val
 }
 
+func (m *sessionDataMutator) SetTestingVectorizeInjectPanics(val bool) {
+	m.data.TestingVectorizeInjectPanics = val
+}
+
 func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {
 	m.data.OptimizerFKCascadesLimit = val
 }

@@ -204,7 +204,7 @@ type Cascade struct {
 	FKName string
 
 	// Buffer is the Node returned by ConstructBuffer which stores the input to
-	// the mutation.
+	// the mutation. It is nil if the cascade does not require a buffer.
 	Buffer Node
 
 	// PlanFn builds the cascade query and creates the plan for it.
@@ -216,6 +216,9 @@ type Cascade struct {
 	// however, we allow the execution engine to provide a different copy or
 	// implementation of the node (e.g. to facilitate early cleanup of the
 	// original plan).
+	//
+	// If the cascade does not require input buffering (Buffer is nil), then
+	// bufferRef should be nil and numBufferedRows should be 0.
 	//
 	// This method does not mutate any captured state; it is ok to call PlanFn
 	// methods concurrently (provided that they don't use a single non-thread-safe
