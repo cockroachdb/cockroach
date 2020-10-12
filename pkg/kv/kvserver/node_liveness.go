@@ -322,6 +322,49 @@ func (nl *NodeLiveness) SetDraining(
 	return errors.New("failed to drain self")
 }
 
+// WaitBeyondNextLivenessExpiry waits until the current expiration
+// deadline on this node's liveness record expires, plus some more.
+//
+// This aims to ensure that when this function returns, other nodes
+// have refreshed their copy of the record and picked up the draining
+// bit.
+func (nl *NodeLiveness) WaitBeyondNextLivenessExpiry(
+	ctx context.Context, reporter func(int, redact.SafeString),
+) error {
+	myID := nl.gossip.NodeID.Get()
+	liveness, ok := nl.GetLiveness(myID)
+	if !ok {
+		// Our liveness record does not exist yet? This is surprising,
+		// but it does mean we have nothing to do here.
+		log.Infof(ctx, "no liveness record on this node, no expiry to wait on")
+		return nil
+	}
+	if !liveness.Draining {
+		// We should have marked the liveness as draining earlier. If it
+		// is back up, that means that the drain has been aborted
+		// somewhere else.
+		return errors.New("liveness record is not draining any more")
+	}
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	// Wait until the record has expired.
+	expiryTime := timeutil.Unix(0, liveness.Expiration.WallTime)
+	toWait := expiryTime.Sub(nl.clock.Now().GoTime())
+	if toWait > 0 {
+		log.Infof(ctx, "waiting %s for the liveness record to expire", toWait)
+		time.Sleep(toWait)
+	}
+
+	// We wait up to 5 seconds past the expiration to give a chance to
+	// other nodes to notice it more before the node truly goes away.
+	log.Infof(ctx, "waiting some more after expiration of the liveness record")
+	time.Sleep(5 * time.Second)
+
+	return nil
+}
+
 // SetMembershipStatus changes the liveness record to reflect the target
 // membership status. It does so idempotently, and may retry internally until it
 // observes its target state durably persisted. It returns whether it was able

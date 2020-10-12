@@ -160,6 +160,13 @@ type Server struct {
 
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
+
+	// gracefulDrainingProgress is set during Drain() call
+	// every time new work is performed to advance a graceful drain.
+	// This is used at the very end of the process to detect that
+	// no work was performed, and the node can wait for other nodes
+	// to learn about the shutdown.
+	gracefulDrainingWork int64
 }
 
 // externalStorageBuilder is a wrapper around the ExternalStorage factory

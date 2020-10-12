@@ -15,6 +15,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -157,6 +158,7 @@ func (s *Server) Drain(
 	var mu syncutil.Mutex
 	reporter := func(howMany int, what redact.SafeString) {
 		if howMany > 0 {
+			atomic.AddInt64(&s.gracefulDrainingWork, int64(howMany))
 			mu.Lock()
 			reports[what] += howMany
 			mu.Unlock()
@@ -178,6 +180,9 @@ func (s *Server) Drain(
 		}
 	}()
 
+	// Reset the work counter used at the very tail of the drain process.
+	atomic.StoreInt64(&s.gracefulDrainingWork, 0)
+
 	if err := s.doDrain(ctx, reporter); err != nil {
 		return 0, "", err
 	}
@@ -186,6 +191,16 @@ func (s *Server) Drain(
 }
 
 func (s *Server) doDrain(ctx context.Context, reporter func(int, redact.SafeString)) error {
+	// In case we are calling this in a loop, wake-up the stores
+	// to initiate the drain sequence. This ensures that
+	// the liveness record can be accessed every time.
+	// (Otherwise, after the first iteration the stores are
+	// draining and don't accept to refresh their leases
+	// on the liveness range.)
+	if err := s.node.SetDraining(false /* drain */, reporter); err != nil {
+		return err
+	}
+
 	// First drain all clients and SQL leases.
 	if err := s.drainClients(ctx, reporter); err != nil {
 		return err
@@ -229,8 +244,39 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 // drainNode initiates the draining mode for the node, which
 // starts draining range leases.
 func (s *Server) drainNode(ctx context.Context, reporter func(int, redact.SafeString)) error {
+	// Mark the node liveness record as draining. This starts telling
+	// range caches on other nodes that this node is going away.
 	if err := s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
 		return err
 	}
-	return s.node.SetDraining(true /* drain */, reporter)
+	if atomic.LoadInt64(&s.gracefulDrainingWork) > 0 {
+		// Wait until some confidence exists that the other nodes have
+		// acknowledged the draining state.
+		//
+		// We use gracefulDrainingWork to only perform this wait but only
+		// the first time drainNode() is called.
+		//
+		// This works because gracefulDrainingWork can only be non-zero after the liveness
+		// record was updated and there may be some client connections
+		// to be closed. The second time around, at this point
+		// the liveness record is already marked as drained and there
+		// is no more client connection, so there is no work performed.
+		if err := s.nodeLiveness.WaitBeyondNextLivenessExpiry(ctx, reporter); err != nil {
+			return err
+		}
+	}
+	// Transfer the range leases away.
+	if err := s.node.SetDraining(true /* drain */, reporter); err != nil {
+		return err
+	}
+
+	if atomic.LoadInt64(&s.gracefulDrainingWork) == 0 {
+		// If there is no more work to do, the process will then proceed to
+		// shut down. Just before doing so however, wait a little bit more
+		// so that any stray range leases gets a chance to see a
+		// NodeNotLeaseHolderError.
+		log.Infof(ctx, "waiting a little more before shutting down the process")
+		time.Sleep(5 * time.Second)
+	}
+	return nil
 }
