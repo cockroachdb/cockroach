@@ -92,6 +92,7 @@ func TestFullClusterBackup(t *testing.T) {
 	// Populate system.users.
 	for i := 0; i < 1000; i++ {
 		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
+		sqlDB.Exec(t, fmt.Sprintf("ALTER USER maxroach%d CREATEROLE", i))
 	}
 	// Populate system.zones.
 	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
@@ -155,6 +156,7 @@ func TestFullClusterBackup(t *testing.T) {
 			sqlbase.CommentsTable.Name,
 			sqlbase.LocationsTable.Name,
 			sqlbase.RoleMembersTable.Name,
+			sqlbase.RoleOptionsTable.Name,
 			sqlbase.SettingsTable.Name,
 			sqlbase.TableStatisticsTable.Name,
 			sqlbase.UITable.Name,
@@ -235,8 +237,8 @@ func TestFullClusterBackup(t *testing.T) {
 		}
 		dbName, tableName := "new_db", "new_table"
 		// N.B. We skip the database ID that was allocated too the temporary
-		// system table and all of the temporary system tables (1 + 8).
-		numIDsToSkip := 9
+		// system table and all of the temporary system tables (1 + 9).
+		numIDsToSkip := 10
 		expectedDBID := maxID + numIDsToSkip + 1
 		expectedTableID := maxID + numIDsToSkip + 2
 		sqlDBRestore.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
