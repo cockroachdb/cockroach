@@ -241,22 +241,97 @@ func (p *planner) canRemoveInterleave(
 	return p.CheckPrivilege(ctx, table, privilege.CREATE)
 }
 
-func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyReference) error {
-	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
-	if err != nil {
-		return err
-	}
-	if table.Dropped() {
+// removeAncestorReferences removes any references to `idx` from `descendentIdx`
+// list of ancestors. `descendentIdx` should be an interleaved descendent of
+// `idx`. `idx` should belong to `tableDesc` and `descendentIdx` should belong
+// to `descendentTable`.
+func (p *planner) removeAncestorReferences(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	idx *descpb.IndexDescriptor,
+	descendentTable *tabledesc.Mutable,
+	descendentIdx *descpb.IndexDescriptor,
+) error {
+
+	if descendentTable.Dropped() {
 		// The referenced table is being dropped. No need to modify it further.
 		return nil
 	}
-	idx, err := table.FindIndexByID(ref.Index)
-	if err != nil {
-		return err
+
+	foundAncestor := false
+	for k, ancestor := range descendentIdx.Interleave.Ancestors {
+		if ancestor.TableID == tableDesc.ID && ancestor.IndexID == idx.ID {
+			if foundAncestor {
+				return errors.AssertionFailedf(
+					"ancestor entry in %s for %s@%s found more than once",
+					tableDesc.Name, tableDesc.Name, idx.Name)
+			}
+			descendentIdx.Interleave.Ancestors = append(descendentIdx.Interleave.Ancestors[:k],
+				descendentIdx.Interleave.Ancestors[k+1:]...)
+			foundAncestor = true
+		}
 	}
-	idx.Interleave.Ancestors = nil
+
 	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, table, descpb.InvalidMutationID, "")
+	return p.writeSchemaChange(ctx, descendentTable, descpb.InvalidMutationID, "")
+}
+
+// removeInterleaveReferences removes interleaved relationships from both the
+// given index's parents and descendents.
+func (p *planner) removeInterleaveReferences(
+	ctx context.Context, tableDesc *tabledesc.Mutable, idx *descpb.IndexDescriptor,
+) error {
+	refToID := func(ref descpb.ForeignKeyReference) string {
+		return fmt.Sprintf("%d-%d", ref.Table, ref.Index)
+	}
+
+	// First remove references from the parents to this index.
+	if len(idx.Interleave.Ancestors) > 0 {
+		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
+			return err
+		}
+	}
+
+	// Then remove references from all descendents to this index.
+
+	// InterleavedBy only stores the IDs of the tables which are direct children
+	// this interleaved index. We need to remove references to (tableDesc, idx)
+	// from all descendants of this table.
+	descendentsToVisit := idx.InterleavedBy
+	seen := make(map[string]struct{})
+	for len(descendentsToVisit) > 0 {
+		descendent := descendentsToVisit[0]
+		descendentsToVisit = descendentsToVisit[1:]
+
+		// Let's detect cycles as a safeguard, but we expect these relationships to
+		// describe a tree since they describe the interleaving of data, and so
+		// should be acyclic.
+		descendentID := refToID(descendent)
+		if _, ok := seen[descendentID]; ok {
+			return errors.AssertionFailedf(
+				"found cycle in InterleavedBy relationships starting from %s@%s (%s already in %v)",
+				tableDesc.Name, idx.Name, descendentID, seen)
+		}
+		seen[descendentID] = struct{}{}
+
+		descendentTable, err := p.Descriptors().GetMutableTableVersionByID(ctx, descendent.Table, p.txn)
+		if err != nil {
+			return err
+		}
+		descendentIdx, err := descendentTable.FindIndexByID(descendent.Index)
+		if err != nil {
+			return err
+		}
+
+		if err := p.removeAncestorReferences(ctx, tableDesc, idx, descendentTable, descendentIdx); err != nil {
+			return err
+		}
+
+		// Add all of this table's children to the queue of descendents to visit.
+		descendentsToVisit = append(descendentsToVisit, descendentIdx.InterleavedBy...)
+	}
+
+	return nil
 }
 
 // dropTableImpl does the work of dropping a table (and everything that depends
@@ -290,15 +365,8 @@ func (p *planner) dropTableImpl(
 
 	// Remove interleave relationships.
 	for _, idx := range tableDesc.AllNonDropIndexes() {
-		if len(idx.Interleave.Ancestors) > 0 {
-			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-				return droppedViews, err
-			}
-		}
-		for _, ref := range idx.InterleavedBy {
-			if err := p.removeInterleave(ctx, ref); err != nil {
-				return droppedViews, err
-			}
+		if err := p.removeInterleaveReferences(ctx, tableDesc, idx); err != nil {
+			return droppedViews, err
 		}
 	}
 
@@ -563,12 +631,18 @@ func removeFKBackReferenceFromTable(
 	return nil
 }
 
+// removeInterleaveBackReference removes references to the given (tableDesc, idx)
+// from the InterleavedBy list of this index's parents.
 func (p *planner) removeInterleaveBackReference(
 	ctx context.Context, tableDesc *tabledesc.Mutable, idx *descpb.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
 	}
+	// Since InterleavedBy only references direct interleaved children, we only
+	// need to remove the reference from the parent table. And since Ancestors is
+	// sorted by far-to-near order, the last Ancestor in the list will be the
+	// direct parent.
 	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
 	var t *tabledesc.Mutable
 	if ancestor.TableID == tableDesc.ID {
