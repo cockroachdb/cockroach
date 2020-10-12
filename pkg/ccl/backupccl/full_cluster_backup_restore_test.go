@@ -92,6 +92,7 @@ func TestFullClusterBackup(t *testing.T) {
 	// Populate system.users.
 	for i := 0; i < 1000; i++ {
 		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
+		sqlDB.Exec(t, fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i))
 	}
 	// Populate system.zones.
 	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
@@ -155,6 +156,7 @@ func TestFullClusterBackup(t *testing.T) {
 			sqlbase.CommentsTable.Name,
 			sqlbase.LocationsTable.Name,
 			sqlbase.RoleMembersTable.Name,
+			sqlbase.RoleOptionsTable.Name,
 			sqlbase.SettingsTable.Name,
 			sqlbase.TableStatisticsTable.Name,
 			sqlbase.UITable.Name,
