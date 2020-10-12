@@ -5435,3 +5435,36 @@ SELECT ST_MemSize(g) FROM ( VALUES
 173
 121
 119
+
+subtest  st_pointinsidecircle
+
+query B
+SELECT ST_PointInsideCircle(point, x, y, radius) FROM ( VALUES
+   ((ST_Point(1,2)),    (0.5::float), (2.0::float), (3.0::float)),
+   ((ST_Point(0,0)),    (3.0::float), (3.0::float), (2.0::float)),
+   ((ST_Point(1,-1)),    (1.5::float), (-2.0::float), (5.0::float)),
+   ((ST_Point(0,0)),    (1.0::float), (1.0::float), (1.0::float)),
+   ((ST_Point(0,0)),    (1.0::float), (1.0::float), (2.0::float)),
+   ((ST_Point(-1,-1)),  (1.0::float), (1.0::float), (1.0::float)),
+   ((ST_Point(-1,-1)),  (1.0::float), (1.0::float), (2.0::float)),
+   ((ST_Point(2.5,-2)), (2.5::float), (-1.5::float), (1.0::float)),
+   ((ST_Point(2.5,-2)), (2.5::float), (-1.0::float), (0.5::float)),
+   ((ST_Point(2.5,-2)), (2.5::float), (-1.5::float), (2.0::float))
+) points_inside_circle(point, x, y, radius)
+----
+true
+false
+true
+false
+true
+false
+false
+true
+false
+true
+
+statement error pq: st_pointinsidecircle\(\): radius of the circle has to be positive
+SELECT ST_PointInsideCircle(ST_Point(1,2), 0.5, 2, -3);
+
+statement error pq: st_pointinsidecircle\(\): first parameter has to be of type Point
+SELECT ST_PointInsideCircle(ST_GeomFromText('LINESTRING (-0.5 0.5, 0.5 0.5)'), 0.5, 2, -3);
