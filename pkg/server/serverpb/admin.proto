@@ -454,7 +454,8 @@ message DecommissionStatusRequest {
 message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  cockroach.kv.kvserver.storagepb.MembershipStatus target_membership = 2;
+  reserved 2;
+  cockroach.kv.kvserver.storagepb.MembershipStatus target_membership = 3;
 }
 
 // DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
