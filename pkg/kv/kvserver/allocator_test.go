@@ -2666,10 +2666,12 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 		analyzed := constraint.AnalyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, existingRepls, zone)
 		candidates := allocateCandidates(
+			context.Background(),
 			sl,
 			analyzed,
 			existingRepls,
 			a.storePool.getLocalitiesByStore(existingRepls),
+			nil, /* isNodeValidForRoutineReplicaTransfer */
 			a.scorerOptions(),
 		)
 		best := candidates.best()
@@ -3690,6 +3692,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			analyzed,
 			existingRepls,
 			a.storePool.getLocalitiesByStore(existingRepls),
+			nil, /* isNodeValidForRoutineReplicaTransfer */
 			a.scorerOptions(),
 		)
 		match := true

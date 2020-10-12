@@ -1213,6 +1213,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			constraint.AnalyzedConstraints{},
 			replicas,
 			existingStoreLocalities,
+			nil, /* isNodeValidForRoutineReplicaTransfer */
 			options)
 		actual := len(targets) > 0
 		if actual != tc.expected {

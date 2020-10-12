@@ -811,3 +811,22 @@ func (sp *StorePool) getNodeLocalityString(nodeID roachpb.NodeID) string {
 	}
 	return locality.str
 }
+
+func (sp *StorePool) isNodeReadyForRoutineReplicaTransfer(
+	ctx context.Context, targetNodeID roachpb.NodeID,
+) bool {
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	now := sp.clock.Now().GoTime()
+
+	liveness := sp.nodeLivenessFn(
+		targetNodeID, now, timeUntilStoreDead)
+	res := liveness == kvserverpb.NodeLivenessStatus_LIVE
+	if res {
+		log.VEventf(ctx, 3,
+			"n%d is a live target, candidate for rebalancing", targetNodeID)
+	} else {
+		log.VEventf(ctx, 3,
+			"not considering non-live node n%d (%s)", targetNodeID, liveness)
+	}
+	return res
+}

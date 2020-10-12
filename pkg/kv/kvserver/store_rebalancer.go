@@ -417,7 +417,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			}
 
 			meanQPS := storeList.candidateQueriesPerSecond.mean
-			if shouldNotMoveTo(ctx, storeMap, replWithStats, candidate.StoreID, meanQPS, minQPS, maxQPS) {
+			if sr.shouldNotMoveTo(ctx, storeMap, replWithStats, candidate.StoreID, meanQPS, minQPS, maxQPS) {
 				continue
 			}
 
@@ -553,7 +553,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			}
 
 			meanQPS := storeList.candidateQueriesPerSecond.mean
-			if shouldNotMoveTo(ctx, storeMap, replWithStats, target.StoreID, meanQPS, minQPS, maxQPS) {
+			if sr.shouldNotMoveTo(ctx, storeMap, replWithStats, target.StoreID, meanQPS, minQPS, maxQPS) {
 				break
 			}
 
@@ -634,7 +634,7 @@ func shouldNotMoveAway(
 	return false
 }
 
-func shouldNotMoveTo(
+func (sr *StoreRebalancer) shouldNotMoveTo(
 	ctx context.Context,
 	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
 	replWithStats replicaWithStats,
@@ -664,6 +664,16 @@ func shouldNotMoveTo(
 		return true
 	}
 
+	// If the target store is on a separate node, we will also care
+	// about node liveness.
+	targetNodeID := storeDesc.Node.NodeID
+	if targetNodeID != sr.rq.store.Ident.NodeID {
+		if !sr.rq.store.cfg.StorePool.isNodeReadyForRoutineReplicaTransfer(ctx, targetNodeID) {
+			log.VEventf(ctx, 3,
+				"refusing to transfer replica to n%d/s%d", targetNodeID, storeDesc.StoreID)
+			return true
+		}
+	}
 	return false
 }
 
