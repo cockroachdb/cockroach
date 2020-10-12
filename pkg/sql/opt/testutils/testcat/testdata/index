@@ -60,3 +60,37 @@ TABLE kv
       ├── k int not null
       └── WHERE
            └── v > 1
+
+exec-ddl
+CREATE TABLE g (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    geog GEOGRAPHY,
+    INVERTED INDEX (a, geog),
+    INVERTED INDEX (a, b, geog)
+)
+----
+
+exec-ddl
+SHOW CREATE g
+----
+TABLE g
+ ├── k int not null
+ ├── a int
+ ├── b int
+ ├── geog geography
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
+ ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INVERTED INDEX secondary
+ │    ├── a int
+ │    ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
+ │    └── k int not null
+ └── INVERTED INDEX secondary
+      ├── a int
+      ├── b int
+      ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
+      └── k int not null
