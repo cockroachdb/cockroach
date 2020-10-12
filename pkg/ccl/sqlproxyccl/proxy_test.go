@@ -55,9 +55,11 @@ openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt -days 365
 		wg.Wait()
 	}
 
+	server := NewServer(*opts)
+
 	go func() {
 		defer wg.Done()
-		_ = Serve(ln, *opts)
+		_ = server.Serve(ln)
 	}()
 
 	return ln.Addr().String(), done
