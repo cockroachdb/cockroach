@@ -1,4 +1,11 @@
-FROM registry.access.redhat.com/ubi8/ubi
+FROM registry.access.redhat.com/ubi8/ubi-minimal AS builder
+
+RUN microdnf update -y \
+    && microdnf install dnf -y \
+    && dnf reinstall tzdata -y
+
+
+FROM registry.access.redhat.com/ubi8/ubi-minimal
 
 # For deployment, we need the following installed (they are installed
 # by default in RedHat UBI standard):
@@ -6,9 +13,12 @@ FROM registry.access.redhat.com/ubi8/ubi
 # ca-certificates - to authenticate TLS connections for telemetry and
 #                   bulk-io with S3/GCS/Azure
 # tzdata - for time zone functions
-RUN yum update --disablerepo=* --enablerepo=ubi-8-appstream --enablerepo=ubi-8-baseos -y && \
-    yum install --disablerepo=* --enablerepo=ubi-8-appstream --enablerepo=ubi-8-baseos hostname -y && \
-    rm -rf /var/cache/yum
+# hostname - used in cockroach k8s manifests
+RUN microdnf update -y \
+    && microdnf install hostname -y \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /usr/share/zoneinfo/ /usr/share/zoneinfo/
 
 # Install GEOS libraries.
 RUN mkdir /usr/local/lib/cockroach
