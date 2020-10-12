@@ -748,7 +748,7 @@ func (h *hashJoiner) initStoredRows() error {
 		)
 		h.storedRows = hrc
 	} else {
-		hrc := rowcontainer.MakeHashMemRowContainer(&h.rows[h.storedSide])
+		hrc := rowcontainer.MakeHashMemRowContainer(&h.rows[h.storedSide], h.MemMonitor)
 		h.storedRows = &hrc
 	}
 	return h.storedRows.Init(
