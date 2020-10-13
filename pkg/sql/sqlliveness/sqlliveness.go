@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // SessionID represents an opaque identifier for a session. This ID should be
@@ -55,7 +55,7 @@ func (s SessionID) UnsafeBytes() []byte {
 
 // Instance represents a SQL tenant server instance and is responsible for
 // maintaining at most once session for this instance and heart beating the
-// current live one if it exists and otherwise creating a new  live one.
+// current live one if it exists and otherwise creating a new live one.
 type Instance interface {
 	Session(context.Context) (Session, error)
 }
@@ -82,17 +82,6 @@ type Reader interface {
 	IsAlive(context.Context, SessionID) (alive bool, err error)
 }
 
-// WaitForActive waits for the sqlliveness subsystem's migration to have been
-// performed.
-func WaitForActive(ctx context.Context, settings *cluster.Settings) {
-	// Use the default retry options which will retry forever with sane backoff.
-	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
-		if IsActive(ctx, settings) {
-			return
-		}
-	}
-}
-
 // IsActive returns whether the sqlliveness subsystem's migration to has been
 // performed.
 func IsActive(ctx context.Context, settings *cluster.Settings) bool {
@@ -101,3 +90,10 @@ func IsActive(ctx context.Context, settings *cluster.Settings) bool {
 		clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
 	)
 }
+
+// NotStartedError can be returned from calls to the sqlliveness subsystem
+// prior to its being started. The sqlliveness subsystem is started after the
+// sqlmigrations it relies on have completed.
+//
+// TODO(ajwerner): Remove this in 21.1 and make such calls assertion failures.
+var NotStartedError = errors.Errorf("sqlliveness subsystem has not yet been started")

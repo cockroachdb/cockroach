@@ -406,18 +406,27 @@ func (r *Registry) NewJob(record Record) *Job {
 // lease.
 func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.Txn) (*Job, error) {
 	j := r.NewJob(record)
+
+	s, err := r.sqlInstance.Session(ctx)
+	if errors.Is(err, sqlliveness.NotStartedError) {
+		if r.startUsingSQLLivenessAdoption(ctx) {
+			err = errors.WithAssertionFailure(err)
+		} else {
+			err = nil
+		}
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting live session")
+	}
 	if !r.startUsingSQLLivenessAdoption(ctx) {
 		// TODO(spaskob): remove in 20.2 as this code path is only needed while
 		// migrating to 20.2 cluster.
-		if err := j.WithTxn(txn).deprecatedInsert(ctx, r.makeJobID(), r.deprecatedNewLease()); err != nil {
+		if err := j.WithTxn(txn).deprecatedInsert(
+			ctx, r.makeJobID(), r.deprecatedNewLease(), s,
+		); err != nil {
 			return nil, err
 		}
 		return j, nil
-	}
-
-	s, err := r.sqlInstance.Session(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "error getting live session")
 	}
 	j.sessionID = s.ID()
 	jobID := r.makeJobID()
@@ -458,7 +467,9 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 	// in the cluster) to adopt this job at a later time.
 	lease := &jobspb.Lease{NodeID: invalidNodeID}
 
-	if err := j.WithTxn(txn).deprecatedInsert(ctx, r.makeJobID(), lease); err != nil {
+	if err := j.WithTxn(txn).deprecatedInsert(
+		ctx, r.makeJobID(), lease, nil,
+	); err != nil {
 		return nil, err
 	}
 	return j, nil
