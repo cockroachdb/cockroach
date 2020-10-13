@@ -12,7 +12,7 @@ package tree
 
 // AlterSchema represents an ALTER SCHEMA statement.
 type AlterSchema struct {
-	Schema string
+	Schema Name
 	Cmd    AlterSchemaCmd
 }
 
@@ -21,7 +21,7 @@ var _ Statement = &AlterSchema{}
 // Format implements the NodeFormatter interface.
 func (node *AlterSchema) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER SCHEMA ")
-	ctx.FormatNameP(&node.Schema)
+	ctx.FormatNode(&node.Schema)
 	ctx.FormatNode(node.Cmd)
 }
 
@@ -35,24 +35,24 @@ func (*AlterSchemaRename) alterSchemaCmd() {}
 
 // AlterSchemaRename represents an ALTER SCHEMA RENAME command.
 type AlterSchemaRename struct {
-	NewName string
+	NewName Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterSchemaRename) Format(ctx *FmtCtx) {
 	ctx.WriteString(" RENAME TO ")
-	ctx.FormatNameP(&node.NewName)
+	ctx.FormatNode(&node.NewName)
 }
 
 func (*AlterSchemaOwner) alterSchemaCmd() {}
 
-// AlterSchemaOwner represents an ALTER SCHEMA RENAME command.
+// AlterSchemaOwner represents an ALTER SCHEMA OWNER TO command.
 type AlterSchemaOwner struct {
-	Owner string
+	Owner Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterSchemaOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatNameP(&node.Owner)
+	ctx.FormatNode(&node.Owner)
 }

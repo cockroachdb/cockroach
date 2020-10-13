@@ -82,7 +82,8 @@ FROM "".information_schema.type_privileges`
 			fmt.Fprintf(&cond, `WHERE database_name IN (%s)`, strings.Join(params, ","))
 		}
 	} else if n.Targets != nil && len(n.Targets.Schemas) > 0 {
-		for _, schema := range n.Targets.Schemas {
+		schemaNames := n.Targets.Schemas.ToStrings()
+		for _, schema := range schemaNames {
 			name := cat.SchemaName{
 				SchemaName:     tree.Name(schema),
 				ExplicitSchema: true,
