@@ -51,14 +51,14 @@ func loadTestData(
 		exists = false
 	}
 
-	eng, err := storage.NewRocksDB(
-		storage.RocksDBConfig{
+	eng, err := storage.NewPebble(
+		ctx,
+		storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Settings: cluster.MakeTestingClusterSettings(),
 				Dir:      dir,
 			},
 		},
-		storage.RocksDBCache{},
 	)
 	if err != nil {
 		return nil, err
@@ -147,6 +147,9 @@ func runIterate(
 		n := 0
 		startTime := hlc.MinTimestamp
 		endTime := hlc.Timestamp{WallTime: int64(loadFactor * numBatches * batchTimeSpan)}
+		if endTime.IsEmpty() {
+			endTime = endTime.Next()
+		}
 		it := makeIterator(eng, startTime, endTime)
 		defer it.Close()
 		for it.SeekGE(storage.MVCCKey{}); ; it.Next() {

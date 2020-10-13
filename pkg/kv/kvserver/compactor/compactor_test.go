@@ -24,9 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -108,15 +106,6 @@ func key(s string) roachpb.Key {
 // TestCompactorThresholds verifies the thresholding logic for the compactor.
 func TestCompactorThresholds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
 
 	fractionUsedThresh := thresholdBytesUsedFraction.Default()*float64(thresholdBytes.Default()) + 1
 	fractionAvailableThresh := thresholdBytesAvailableFraction.Default()*float64(thresholdBytes.Default()) + 1

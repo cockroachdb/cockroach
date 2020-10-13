@@ -540,7 +540,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	txnB1 := txn(kB, ts1)
 	txnC1 := txn(kC, ts1)
 
-	db := NewInMem(ctx, DefaultStorageEngine, roachpb.Attributes{}, 10<<20)
+	db := NewInMem(ctx, roachpb.Attributes{}, 10<<20)
 	defer db.Close()
 
 	// Set up two sstables very specifically:
@@ -572,17 +572,6 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	require.NoError(t, MVCCPut(ctx, db, nil, kA, ts2, vA2, nil))
 	require.NoError(t, MVCCPut(ctx, db, nil, kA, txnA3.WriteTimestamp, vA3, txnA3))
 	require.NoError(t, db.Flush())
-
-	if rocks, ok := db.(*RocksDB); ok {
-		// Double-check that we've created the SSTs we intended to.
-		userProps, err := rocks.GetUserProperties()
-		require.NoError(t, err)
-		require.Len(t, userProps.Sst, 2)
-		require.Equal(t, userProps.Sst[0].TsMin, &ts1)
-		require.Equal(t, userProps.Sst[0].TsMax, &ts1)
-		require.Equal(t, userProps.Sst[1].TsMin, &ts2)
-		require.Equal(t, userProps.Sst[1].TsMax, &ts3)
-	}
 
 	// The kA ts1 intent has been resolved. There's now a new intent on kA, but
 	// the timestamp (ts3) is too new so it should be ignored.
@@ -624,7 +613,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	// regular MVCCPut operation to generate these keys, which we'll later be
 	// copying into manually created sstables.
 	ctx := context.Background()
-	db1 := NewInMem(ctx, DefaultStorageEngine, roachpb.Attributes{}, 10<<20 /* 10 MB */)
+	db1 := NewInMem(ctx, roachpb.Attributes{}, 10<<20)
 	defer db1.Close()
 
 	put := func(key, value string, ts int64, txn *roachpb.Transaction) {
@@ -659,14 +648,12 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	//
 	//   SSTable 2:
 	//     b@2
-	db2 := NewInMem(ctx, DefaultStorageEngine, roachpb.Attributes{}, 10<<20 /* 10 MB */)
+	db2 := NewInMem(ctx, roachpb.Attributes{}, 10<<20)
 	defer db2.Close()
 
 	ingest := func(it Iterator, count int) {
-		sst, err := MakeRocksDBSstFileWriter()
-		if err != nil {
-			t.Fatal(err)
-		}
+		memFile := &MemFile{}
+		sst := MakeIngestionSSTWriter(memFile)
 		defer sst.Close()
 
 		for i := 0; i < count; i++ {
@@ -682,11 +669,10 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			}
 			it.Next()
 		}
-		sstContents, err := sst.Finish()
-		if err != nil {
+		if err := sst.Finish(); err != nil {
 			t.Fatal(err)
 		}
-		if err := db2.WriteFile(`ingest`, sstContents); err != nil {
+		if err := db2.WriteFile(`ingest`, memFile.Data()); err != nil {
 			t.Fatal(err)
 		}
 		if err := db2.IngestExternalFiles(ctx, []string{`ingest`}); err != nil {
