@@ -94,6 +94,10 @@ const (
 	// as either an inline JSON schema, or an external schema URI.
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
+
+	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
+	// schema is being parsed
+	runningStatusImportBundleParseSchema jobs.RunningStatus = "parsing schema on Import Bundle"
 )
 
 var importOptionExpectValues = map[string]sql.KVStringOptValidate{
@@ -343,7 +347,6 @@ func importPlanHook(
 		}
 
 		table := importStmt.Table
-
 		var parentID, parentSchemaID descpb.ID
 		if table != nil {
 			// TODO: As part of work for #34240, we should be operating on
@@ -689,44 +692,13 @@ func importPlanHook(
 			seqVals := make(map[descpb.ID]int64)
 
 			if importStmt.Bundle {
-				store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, files[0], p.User())
-				if err != nil {
-					return err
-				}
-				defer store.Close()
-
-				raw, err := store.ReadFile(ctx, "")
-				if err != nil {
-					return err
-				}
-				defer raw.Close()
-				reader, err := decompressingReader(raw, files[0], format.Compression)
-				if err != nil {
-					return err
-				}
-				defer reader.Close()
-
-				var match string
+				// If we target a single table, populate details with one entry of tableName.
 				if table != nil {
-					match = table.ObjectName.String()
-				}
-
-				fks := fkHandler{skip: skipFKs, allowed: true, resolver: make(fkResolver)}
-				switch format.Format {
-				case roachpb.IOFileFormat_Mysqldump:
-					evalCtx := &p.ExtendedEvalContext().EvalContext
-					tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, match, fks, seqVals)
-				case roachpb.IOFileFormat_PgDump:
-					evalCtx := &p.ExtendedEvalContext().EvalContext
-					tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
-				default:
-					return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
-				}
-				if err != nil {
-					return err
-				}
-				if tableDescs == nil && table != nil {
-					return errors.Errorf("table definition not found for %q", table.ObjectName.String())
+					tableDetails = make([]jobspb.ImportDetails_Table, 1)
+					tableDetails[0] = jobspb.ImportDetails_Table{
+						Name:  table.ObjectName.String(),
+						IsNew: true,
+					}
 				}
 			} else {
 				if table == nil {
@@ -787,12 +759,14 @@ func importPlanHook(
 				return hint
 			}
 
-			tableDetails = make([]jobspb.ImportDetails_Table, len(tableDescs))
-			for i := range tableDescs {
-				tableDetails[i] = jobspb.ImportDetails_Table{
-					Desc:   tableDescs[i].TableDesc(),
-					SeqVal: seqVals[tableDescs[i].ID],
-					IsNew:  true,
+			if tableDescs != nil {
+				tableDetails = make([]jobspb.ImportDetails_Table, len(tableDescs))
+				for i := range tableDescs {
+					tableDetails[i] = jobspb.ImportDetails_Table{
+						Desc:   tableDescs[i].TableDesc(),
+						SeqVal: seqVals[tableDescs[i].ID],
+						IsNew:  true,
+					}
 				}
 			}
 		}
@@ -823,18 +797,20 @@ func importPlanHook(
 		// connExecutor somehow.
 
 		importDetails := jobspb.ImportDetails{
-			URIs:       files,
-			Format:     format,
-			ParentID:   parentID,
-			Tables:     tableDetails,
-			SSTSize:    sstSize,
-			Oversample: oversample,
-			SkipFKs:    skipFKs,
+			URIs:              files,
+			Format:            format,
+			ParentID:          parentID,
+			Tables:            tableDetails,
+			SSTSize:           sstSize,
+			Oversample:        oversample,
+			SkipFKs:           skipFKs,
+			ParseBundleSchema: importStmt.Bundle,
 		}
 
 		// Prepare the protected timestamp record.
 		var spansToProtect []roachpb.Span
 		codec := p.(sql.PlanHookState).ExecCfg().Codec
+
 		for i := range tableDetails {
 			if td := &tableDetails[i]; !td.IsNew {
 				spansToProtect = append(spansToProtect, tableDescs[i].TableSpan(codec))
@@ -844,6 +820,7 @@ func importPlanHook(
 			protectedtsID := uuid.MakeV4()
 			importDetails.ProtectedTimestampRecord = &protectedtsID
 		}
+
 		jr := jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
@@ -1120,7 +1097,6 @@ func (r *importResumer) prepareTableDescsForIngestion(
 
 			importDetails := details
 			importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
-
 			newTablenameToIdx := make(map[string]int, len(importDetails.Tables))
 			var hasExistingTables bool
 			var err error
@@ -1192,12 +1168,122 @@ func (r *importResumer) prepareTableDescsForIngestion(
 	return err
 }
 
+// parseAndCreateBundleTableDescs parses and creates the table
+// descriptors for bundle formats.
+func parseAndCreateBundleTableDescs(
+	ctx context.Context,
+	p sql.PlanHookState,
+	details jobspb.ImportDetails,
+	tableName string,
+	seqVals map[descpb.ID]int64,
+	skipFKs bool,
+	parentID descpb.ID,
+	files []string,
+	format roachpb.IOFileFormat,
+	walltime int64,
+) ([]*tabledesc.Mutable, error) {
+
+	var tableDescs []*tabledesc.Mutable
+	store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, files[0], p.User())
+	if err != nil {
+		return tableDescs, err
+	}
+	defer store.Close()
+
+	raw, err := store.ReadFile(ctx, "")
+	if err != nil {
+		return tableDescs, err
+	}
+	defer raw.Close()
+	reader, err := decompressingReader(raw, files[0], format.Compression)
+	if err != nil {
+		return tableDescs, err
+	}
+	defer reader.Close()
+
+	fks := fkHandler{skip: skipFKs, allowed: true, resolver: make(fkResolver)}
+	switch format.Format {
+	case roachpb.IOFileFormat_Mysqldump:
+		evalCtx := &p.ExtendedEvalContext().EvalContext
+		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals)
+	case roachpb.IOFileFormat_PgDump:
+		evalCtx := &p.ExtendedEvalContext().EvalContext
+		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
+	default:
+		return tableDescs, errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
+	}
+
+	return tableDescs, err
+
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(
 	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
+	seqVals := make(map[descpb.ID]int64)
+	skipFKs := details.SkipFKs
+	parentID := details.ParentID
+	files := details.URIs
+	format := details.Format
+
+	if details.ParseBundleSchema {
+		if err := r.job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return runningStatusImportBundleParseSchema, nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(*r.job.ID()))
+		}
+		// A single table entry in the import job details when importing a bundle format
+		// indicates that we are performing a single table import.
+		// This info is populated during the planning phase.
+		var tableName string
+		if len(details.Tables) > 0 {
+			tableName = details.Tables[0].Name
+		}
+
+		var tableDescs []*tabledesc.Mutable
+		var err error
+		walltime := p.ExecCfg().Clock.Now().WallTime
+
+		if tableDescs, err = parseAndCreateBundleTableDescs(
+			ctx, p, details, tableName, seqVals, skipFKs, parentID, files, format, walltime); err != nil {
+			return err
+		}
+
+		if tableDescs == nil && tableName != "" {
+			return errors.Errorf("table definition not found for %q", tableName)
+		}
+
+		tableDetails := make([]jobspb.ImportDetails_Table, len(tableDescs))
+		for i := range tableDescs {
+			tableDetails[i] = jobspb.ImportDetails_Table{
+				Desc:   tableDescs[i].TableDesc(),
+				SeqVal: seqVals[tableDescs[i].ID],
+				IsNew:  true,
+			}
+		}
+		details.Tables = tableDetails
+
+		for _, tbl := range tableDescs {
+			// For reasons relating to #37691, we disallow user defined types in
+			// the standard IMPORT case.
+			for _, col := range tbl.Columns {
+				if col.Type.UserDefined() {
+					return errors.Newf("IMPORT cannot be used with user defined types; use IMPORT INTO instead")
+				}
+			}
+		}
+
+		// Prevent job from redoing schema parsing and table desc creation
+		// on subsequent resumptions.
+		details.ParseBundleSchema = false
+		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
+			return err
+		}
+	}
+
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
@@ -1269,11 +1355,7 @@ func (r *importResumer) Resume(
 		}
 	}
 
-	walltime := details.Walltime
-	files := details.URIs
-	format := details.Format
-
-	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, walltime, r.testingKnobs.alwaysFlushJobProgress)
+	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, details.Walltime, r.testingKnobs.alwaysFlushJobProgress)
 	if err != nil {
 		return err
 	}

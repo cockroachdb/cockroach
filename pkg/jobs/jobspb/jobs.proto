@@ -214,6 +214,8 @@ message ImportDetails {
   bool prepare_complete = 12;
   bool tables_published = 13;
 
+  bool parse_bundle_schema = 14;
+
   // ProtectedTimestampRecord is the ID of the protected timestamp record
   // corresponding to this job. While the job ought to clean up the record
   // when it enters a terminal state, there may be cases where it cannot or
