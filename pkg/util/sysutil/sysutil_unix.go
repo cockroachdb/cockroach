@@ -75,3 +75,15 @@ func StatAndLinkCount(path string) (os.FileInfo, int64, error) {
 func IsCrossDeviceLinkErrno(errno error) bool {
 	return errno == syscall.EXDEV
 }
+
+// LockFile grabs an exclusive lock on the provided file descriptor.
+func LockFile(fd uintptr) error {
+	return syscall.Flock(int(fd), syscall.LOCK_EX)
+}
+
+// UnlockFile releases a previously-grabbed lock on the provided file
+// descriptor. The same process must haeve called LockFile on this FD
+// previously.
+func UnlockFile(fd uintptr) error {
+	return syscall.Flock(int(fd), syscall.LOCK_UN)
+}
