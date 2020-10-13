@@ -1154,6 +1154,10 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			return err
 		}
 	}
+	// There's nothing to do if the mutation is InvalidMutationID.
+	if sc.mutationID == sqlbase.InvalidMutationID {
+		return nil
+	}
 
 	// Get the other tables whose foreign key backreferences need to be removed.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
@@ -1166,25 +1170,23 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			return err
 		}
 
-		// If this is a real mutation, it should be the first mutation. Assert that.
-		if sc.mutationID != sqlbase.InvalidMutationID {
-			if len(desc.Mutations) == 0 {
-				alreadyReversed = true
-			} else if desc.Mutations[0].MutationID != sc.mutationID {
-				var found bool
-				for i := range desc.Mutations {
-					if found = desc.Mutations[i].MutationID == sc.mutationID; found {
-						break
-					}
+		// If this mutation exists, it should be the first mutation. Assert that.
+		if len(desc.Mutations) == 0 {
+			alreadyReversed = true
+		} else if desc.Mutations[0].MutationID != sc.mutationID {
+			var found bool
+			for i := range desc.Mutations {
+				if found = desc.Mutations[i].MutationID == sc.mutationID; found {
+					break
 				}
-				if alreadyReversed = !found; !alreadyReversed {
-					return errors.AssertionFailedf("expected mutation %d to be the"+
-						" first mutation when reverted, found %d in descriptor %d",
-						sc.mutationID, desc.Mutations[0].MutationID, desc.ID)
-				}
-			} else if desc.Mutations[0].Rollback {
-				alreadyReversed = true
 			}
+			if alreadyReversed = !found; !alreadyReversed {
+				return errors.AssertionFailedf("expected mutation %d to be the"+
+					" first mutation when reverted, found %d in descriptor %d",
+					sc.mutationID, desc.Mutations[0].MutationID, desc.ID)
+			}
+		} else if desc.Mutations[0].Rollback {
+			alreadyReversed = true
 		}
 
 		// Mutation is already reversed, so we don't need to do any more work.
@@ -1239,7 +1241,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				// Only reverse the first set of mutations if they have the
 				// mutation ID we're looking for.
 				if i == 0 {
-					return errDidntUpdateDescriptor
+					return nil
 				}
 				break
 			}
