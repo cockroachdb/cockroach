@@ -136,8 +136,14 @@ func (m *Materializer) Child(nth int, verbose bool) execinfra.OpNode {
 
 // Start is part of the execinfra.RowSource interface.
 func (m *Materializer) Start(ctx context.Context) context.Context {
-	m.input.Init()
-	return m.ProcessorBase.StartInternal(ctx, materializerProcName)
+	ctx = m.ProcessorBase.StartInternal(ctx, materializerProcName)
+	// We can encounter an expected error during Init (e.g. an operator
+	// attempts to allocate a batch, but the memory budget limit has been
+	// reached), so we need to wrap it with a catcher.
+	if err := execerror.CatchVectorizedRuntimeError(m.input.Init); err != nil {
+		m.MoveToDraining(err)
+	}
+	return ctx
 }
 
 // nextAdapter calls next() and saves the returned results in m. For internal

@@ -235,52 +235,44 @@ func (o *Outbox) moveToDraining(ctx context.Context) {
 //    will be called in this case.
 func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
-) (terminatedGracefully bool, _ error) {
-	nextBatch := func() {
-		if o.runnerCtx == nil {
-			o.runnerCtx = ctx
-		}
-		o.batch = o.Input().Next(o.runnerCtx)
+) (terminatedGracefully bool, errToSend error) {
+	if o.runnerCtx == nil {
+		o.runnerCtx = ctx
 	}
-	serializeBatch := func() {
-		o.scratch.buf.Reset()
-		d, err := o.converter.BatchToArrow(o.batch)
-		if err != nil {
-			execerror.VectorizedInternalPanic(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
-		}
-		if _, _, err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
-			execerror.VectorizedInternalPanic(errors.Wrap(err, "Outbox Serialize data error"))
-		}
-	}
-	for {
-		if atomic.LoadUint32(&o.draining) == 1 {
-			return true, nil
-		}
-
-		if err := execerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
-			if log.V(1) {
-				log.Warningf(ctx, "Outbox Next error: %+v", err)
+	errToSend = execerror.CatchVectorizedRuntimeError(func() {
+		o.Input().Init()
+		for {
+			if atomic.LoadUint32(&o.draining) == 1 {
+				terminatedGracefully = true
+				return
 			}
-			return false, err
-		}
-		if o.batch.Length() == 0 {
-			return true, nil
-		}
 
-		if err := execerror.CatchVectorizedRuntimeError(serializeBatch); err != nil {
-			log.Errorf(ctx, "%+v", err)
-			return false, err
-		}
-		o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
+			o.batch = o.Input().Next(o.runnerCtx)
+			if o.batch.Length() == 0 {
+				terminatedGracefully = true
+				return
+			}
 
-		// o.scratch.msg can be reused as soon as Send returns since it returns as
-		// soon as the message is written to the control buffer. The message is
-		// marshaled (bytes are copied) before writing.
-		if err := stream.Send(o.scratch.msg); err != nil {
-			o.handleStreamErr(ctx, "Send (batches)", err, cancelFn)
-			return false, nil
+			o.scratch.buf.Reset()
+			d, err := o.converter.BatchToArrow(o.batch)
+			if err != nil {
+				execerror.VectorizedInternalPanic(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
+			}
+			if _, _, err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
+				execerror.VectorizedInternalPanic(errors.Wrap(err, "Outbox Serialize data error"))
+			}
+			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
+
+			// o.scratch.msg can be reused as soon as Send returns since it returns as
+			// soon as the message is written to the control buffer. The message is
+			// marshaled (bytes are copied) before writing.
+			if err := stream.Send(o.scratch.msg); err != nil {
+				o.handleStreamErr(ctx, "Send (batches)", err, cancelFn)
+				return
+			}
 		}
-	}
+	})
+	return terminatedGracefully, errToSend
 }
 
 // sendMetadata drains the Outbox.metadataSources and sends the metadata over
@@ -309,8 +301,6 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 func (o *Outbox) runWithStream(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) {
-	o.Input().Init()
-
 	waitCh := make(chan struct{})
 	go func() {
 		for {

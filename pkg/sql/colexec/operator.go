@@ -25,6 +25,9 @@ type Operator interface {
 	// Init initializes this operator. Will be called once at operator setup
 	// time. If an operator has an input operator, it's responsible for calling
 	// Init on that input operator as well.
+	//
+	// It might panic with an expected error, so there must be a "root"
+	// component that will catch that panic.
 	// TODO(yuzefovich): we might need to clarify whether it is ok to call
 	// Init() multiple times before the first call to Next(). It is possible to
 	// hit the memory limit during Init(), and a disk-backed operator needs to
@@ -42,6 +45,9 @@ type Operator interface {
 	// Next.
 	// Canceling the provided context results in forceful termination of
 	// execution.
+	//
+	// It might panic with an expected error, so there must be a "root"
+	// component that will catch that panic.
 	Next(context.Context) coldata.Batch
 
 	execinfra.OpNode
