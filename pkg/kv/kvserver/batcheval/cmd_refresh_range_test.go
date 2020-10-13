@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/stretchr/testify/require"
 )
 
 // TestRefreshRangeTimeBoundIterator is a regression test for
@@ -95,20 +94,6 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	}
 	if err := db.Flush(); err != nil {
 		t.Fatal(err)
-	}
-
-	// TODO(peter): Make this work for Pebble as well.
-	if rocksDB, ok := db.(*storage.RocksDB); ok {
-		// Double-check that we've created the SSTs we intended to.
-		userProps, err := rocksDB.GetUserProperties()
-		if err != nil {
-			t.Fatal(err)
-		}
-		require.Len(t, userProps.Sst, 2)
-		require.Equal(t, userProps.Sst[0].TsMin, &ts1)
-		require.Equal(t, userProps.Sst[0].TsMax, &ts4)
-		require.Equal(t, userProps.Sst[1].TsMin, &ts1)
-		require.Equal(t, userProps.Sst[1].TsMax, &ts1)
 	}
 
 	// We should now have a committed value at k@ts1. Read it back to make sure.

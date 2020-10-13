@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1091,15 +1090,6 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
-
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
@@ -1741,14 +1731,6 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 func TestProgressWithDownNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
@@ -1916,14 +1898,6 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 }
 
 func testReplicaAddRemove(t *testing.T, addFirst bool) {
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
 	sc := kvserver.TestStoreConfig(nil)
 	// We're gonna want to validate the state of the store before and after the
 	// replica GC queue does its work, so we disable the replica gc queue here
@@ -3037,15 +3011,6 @@ func TestDecommission(t *testing.T) {
 	// liveness timings.
 	skip.UnderRace(t, "#39807 and #37811")
 
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
-
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,
@@ -4119,69 +4084,6 @@ func TestFailedConfChange(t *testing.T) {
 	}
 }
 
-// TestStoreRangeRemovalCompactionSuggestion verifies that if a replica
-// is removed from a store, a compaction suggestion is made to the
-// compactor queue.
-func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sc := kvserver.TestStoreConfig(nil)
-	mtc := &multiTestContext{storeConfig: &sc}
-
-	ctx := context.Background()
-
-	for i := 0; i < 3; i++ {
-		// Use RocksDB engines because Pebble does not use the compactor queue.
-		eng := storage.NewInMem(ctx, enginepb.EngineTypeRocksDB, roachpb.Attributes{}, 1<<20)
-		defer eng.Close()
-		mtc.engines = append(mtc.engines, eng)
-	}
-
-	defer mtc.Stop()
-	mtc.Start(t, 3)
-
-	const rangeID = roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 1, 2)
-
-	repl, err := mtc.stores[0].GetReplica(rangeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx = repl.AnnotateCtx(ctx)
-
-	deleteStore := mtc.stores[2]
-	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, roachpb.ReplicationTarget{
-		NodeID:  deleteStore.Ident.NodeID,
-		StoreID: deleteStore.Ident.StoreID,
-	})
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err != nil {
-		t.Fatal(err)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		// Function to check compaction metrics indicating a suggestion
-		// was queued or a compaction was processed or skipped.
-		haveCompaction := func(s *kvserver.Store, exp bool) error {
-			queued := s.Compactor().Metrics.BytesQueued.Value()
-			comps := s.Compactor().Metrics.BytesCompacted.Count()
-			skipped := s.Compactor().Metrics.BytesSkipped.Count()
-			if exp != (queued > 0 || comps > 0 || skipped > 0) {
-				return errors.Errorf("%s: expected non-zero compaction metrics? %t; got queued=%d, compactions=%d, skipped=%d",
-					s, exp, queued, comps, skipped)
-			}
-			return nil
-		}
-		// Verify that no compaction metrics are showing non-zero bytes in the
-		// other stores.
-		for _, s := range mtc.stores {
-			if err := haveCompaction(s, s == deleteStore); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
 func TestStoreRangeWaitForApplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4509,14 +4411,6 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
 
 	stopper := stop.NewStopper()
 	ctx := context.Background()
@@ -4798,14 +4692,6 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
 	sc := kvserver.TestStoreConfig(nil)
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.

@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build !stdmalloc
-// +build !short
+// +build amd64 arm64 arm64be ppc64 ppc64le mips64 mips64le s390x sparc64
 
 package storage
 
-// #cgo LDFLAGS: -ljemalloc
-// #cgo dragonfly freebsd LDFLAGS: -lm
-// #cgo linux LDFLAGS: -lrt -lm -lpthread
-import "C"
+const (
+	// MaxArrayLen is a safe maximum length for slices on this architecture.
+	MaxArrayLen = 1<<50 - 1
+)

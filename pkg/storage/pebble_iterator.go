@@ -295,12 +295,29 @@ func (p *pebbleIterator) ComputeStats(
 // Go-only version of IsValidSplitKey. Checks if the specified key is in
 // NoSplitSpans.
 func isValidSplitKey(key roachpb.Key, noSplitSpans []roachpb.Span) bool {
+	if key.Equal(keys.Meta2KeyMax) {
+		// We do not allow splits at Meta2KeyMax. The reason for this is that range
+		// descriptors are stored at RangeMetaKey(range.EndKey), so the new range
+		// that ends at Meta2KeyMax would naturally store its decriptor at
+		// RangeMetaKey(Meta2KeyMax) = Meta1KeyMax. However, Meta1KeyMax already
+		// serves a different role of holding a second copy of the descriptor for
+		// the range that spans the meta2/userspace boundary (see case 3a in
+		// rangeAddressing). If we allowed splits at Meta2KeyMax, the two roles
+		// would overlap. See #1206.
+		return false
+	}
 	for i := range noSplitSpans {
-		if noSplitSpans[i].ContainsKey(key) {
+		if noSplitSpans[i].ProperlyContainsKey(key) {
 			return false
 		}
 	}
 	return true
+}
+
+// IsValidSplitKey returns whether the key is a valid split key. Adapter for
+// the method above, for use from other packages.
+func IsValidSplitKey(key roachpb.Key) bool {
+	return isValidSplitKey(key, keys.NoSplitSpans)
 }
 
 // FindSplitKey implements the Iterator interface.

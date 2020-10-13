@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,11 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build amd64 arm64 arm64be ppc64 ppc64le mips64 mips64le s390x sparc64
-
 package storage
 
-const (
-	// MaxArrayLen is a safe maximum length for slices on this architecture.
-	MaxArrayLen = 1<<50 - 1
-)
+// ThreadStacks returns the stacks for all threads. The stacks are raw
+// addresses, and do not contain symbols. Use addr2line (or atos on Darwin) to
+// symbolize.
+func ThreadStacks() string {
+	// TODO(bilal): This got deleted during the RocksDB/libroach deletion. Bring
+	// this back.
+	return ""
+}

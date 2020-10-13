@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/kr/pretty"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
@@ -616,16 +617,18 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 	stopper := stop.NewStopper()
 	tc := testContext{}
 	if !engineInMem {
-		cfg := storage.RocksDBConfig{
+		cfg := storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Dir:      dir,
 				Settings: cluster.MakeTestingClusterSettings(),
 			},
 		}
+		cfg.Opts = storage.DefaultPebbleOptions()
 		var err error
-		cache := storage.NewRocksDBCache(1 << 20)
-		defer cache.Release()
-		tc.engine, err = storage.NewRocksDB(cfg, cache)
+		cache := pebble.NewCache(1 << 20)
+		defer cache.Unref()
+		cfg.Opts.Cache = cache
+		tc.engine, err = storage.NewPebble(context.Background(), cfg)
 		if err != nil {
 			t.Fatal(err)
 		}

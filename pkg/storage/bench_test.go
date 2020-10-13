@@ -57,7 +57,6 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 		name   string
 		create engineMaker
 	}{
-		{"rocksdb", setupMVCCInMemRocksDB},
 		{"pebble", setupMVCCInMemPebble},
 	}
 
@@ -106,7 +105,6 @@ func BenchmarkExportToSst(b *testing.B) {
 		name   string
 		create engineMaker
 	}{
-		{"rocksdb", setupMVCCRocksDB},
 		{"pebble", setupMVCCPebble},
 	}
 
@@ -172,14 +170,14 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 		exists = false
 	}
 
-	eng, err := NewRocksDB(
-		RocksDBConfig{
+	eng, err := NewPebble(
+		context.Background(),
+		PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Settings: cluster.MakeTestingClusterSettings(),
 				Dir:      dir,
 			},
 		},
-		RocksDBCache{},
 	)
 	if err != nil {
 		return nil, err
@@ -715,46 +713,6 @@ func runMVCCBatchTimeSeries(ctx context.Context, b *testing.B, emk engineMaker, 
 	b.StopTimer()
 }
 
-// runMVCCMerge merges value into numKeys separate keys.
-func runMVCCMerge(
-	ctx context.Context, b *testing.B, emk engineMaker, value *roachpb.Value, numKeys int,
-) {
-	eng := emk(b, fmt.Sprintf("merge_%d", numKeys))
-	defer eng.Close()
-
-	// Precompute keys so we don't waste time formatting them at each iteration.
-	keys := make([]roachpb.Key, numKeys)
-	for i := 0; i < numKeys; i++ {
-		keys[i] = roachpb.Key(fmt.Sprintf("key-%d", i))
-	}
-
-	b.ResetTimer()
-
-	ts := hlc.Timestamp{}
-	// Use parallelism if specified when test is run.
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			ms := enginepb.MVCCStats{}
-			ts.Logical++
-			err := MVCCMerge(ctx, eng, &ms, keys[rand.Intn(numKeys)], ts, *value)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-	b.StopTimer()
-
-	// Read values out to force merge.
-	for _, key := range keys {
-		val, _, err := MVCCGet(ctx, eng, key, hlc.Timestamp{}, MVCCGetOptions{})
-		if err != nil {
-			b.Fatal(err)
-		} else if val == nil {
-			continue
-		}
-	}
-}
-
 // runMVCCGetMergedValue reads merged values for numKeys separate keys and mergesPerKey
 // operands per key.
 func runMVCCGetMergedValue(
@@ -1067,10 +1025,6 @@ func runBatchApplyBatchRepr(
 		}
 		if err := batch.ApplyBatchRepr(repr, false /* sync */); err != nil {
 			b.Fatal(err)
-		}
-		if r, ok := batch.(*rocksDBBatch); ok {
-			// Ensure mutations are flushed for RocksDB indexed batches.
-			r.flushMutations()
 		}
 		batch.Close()
 	}

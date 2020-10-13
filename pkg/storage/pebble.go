@@ -490,6 +490,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save
 	// cfg.FS and cfg.ReadOnly later on.
+	if cfg.Opts == nil {
+		cfg.Opts = DefaultPebbleOptions()
+	}
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
 	if settings := cfg.Settings; settings != nil {
@@ -540,16 +543,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	p.db = db
 
 	return p, nil
-}
-
-func newTeeInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *TeeEngine {
-	// Note that we use the same unmodified directories for both pebble and
-	// rocksdb. This is to make sure the file paths match up, and that we're
-	// able to write to both and ingest from both memory filesystems.
-	pebbleInMem := newPebbleInMem(ctx, attrs, cacheSize, nil /* settings */)
-	rocksDBInMem := newRocksDBInMem(attrs, cacheSize)
-	tee := NewTee(ctx, rocksDBInMem, pebbleInMem)
-	return tee
 }
 
 func newPebbleInMem(

@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
@@ -26,8 +27,8 @@ func TestMultiIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rocksDB := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
-	defer rocksDB.Close()
+	pebble := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
+	defer pebble.Close()
 
 	// Each `input` is turned into an iterator and these are passed to a new
 	// MultiIterator, which is fully iterated (using either NextKey or Next) and
@@ -80,7 +81,7 @@ func TestMultiIterator(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var iters []SimpleIterator
 			for _, input := range test.inputs {
-				batch := rocksDB.NewBatch()
+				batch := pebble.NewBatch()
 				defer batch.Close()
 				for i := 0; ; {
 					if i == len(input) {

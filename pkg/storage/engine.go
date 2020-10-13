@@ -12,8 +12,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -548,62 +546,21 @@ type EncryptionRegistries struct {
 }
 
 // NewEngine creates a new storage engine.
-func NewEngine(
-	engine enginepb.EngineType, cacheSize int64, storageConfig base.StorageConfig,
-) (Engine, error) {
-	switch engine {
-	case enginepb.EngineTypeTeePebbleRocksDB:
-		pebbleConfig := PebbleConfig{
-			StorageConfig: storageConfig,
-			Opts:          DefaultPebbleOptions(),
-		}
-		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
-		defer pebbleConfig.Opts.Cache.Unref()
-
-		pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
-		cache := NewRocksDBCache(cacheSize)
-		defer cache.Release()
-
-		ctx := context.Background()
-		pebbleDB, err := NewPebble(ctx, pebbleConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		rocksDBConfig := RocksDBConfig{StorageConfig: storageConfig}
-		rocksDBConfig.Dir = filepath.Join(rocksDBConfig.Dir, "rocksdb")
-		rocksDB, err := NewRocksDB(rocksDBConfig, cache)
-		if err != nil {
-			return nil, err
-		}
-
-		return NewTee(ctx, rocksDB, pebbleDB), nil
-	case enginepb.EngineTypeDefault:
-		fallthrough
-	case enginepb.EngineTypePebble:
-		pebbleConfig := PebbleConfig{
-			StorageConfig: storageConfig,
-			Opts:          DefaultPebbleOptions(),
-		}
-		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
-		defer pebbleConfig.Opts.Cache.Unref()
-
-		return NewPebble(context.Background(), pebbleConfig)
-	case enginepb.EngineTypeRocksDB:
-		cache := NewRocksDBCache(cacheSize)
-		defer cache.Release()
-
-		return NewRocksDB(
-			RocksDBConfig{StorageConfig: storageConfig},
-			cache)
+func NewEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
+	pebbleConfig := PebbleConfig{
+		StorageConfig: storageConfig,
+		Opts:          DefaultPebbleOptions(),
 	}
-	panic(fmt.Sprintf("unknown engine type: %d", engine))
+	pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
+	defer pebbleConfig.Opts.Cache.Unref()
+
+	return NewPebble(context.Background(), pebbleConfig)
 }
 
 // NewDefaultEngine allocates and returns a new, opened engine with the default configuration.
 // The caller must call the engine's Close method when the engine is no longer needed.
 func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
-	return NewEngine(DefaultStorageEngine, cacheSize, storageConfig)
+	return NewEngine(cacheSize, storageConfig)
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -72,11 +71,7 @@ var stickyInMemEnginesRegistry = &stickyInMemEnginesRegistryImpl{
 // and cache size will be ignored.
 // One must Close() on the sticky engine before another can be fetched.
 func getOrCreateStickyInMemEngine(
-	ctx context.Context,
-	id string,
-	engineType enginepb.EngineType,
-	attrs roachpb.Attributes,
-	cacheSize int64,
+	ctx context.Context, id string, attrs roachpb.Attributes, cacheSize int64,
 ) (storage.Engine, error) {
 	stickyInMemEnginesRegistry.mu.Lock()
 	defer stickyInMemEnginesRegistry.mu.Unlock()
@@ -95,7 +90,7 @@ func getOrCreateStickyInMemEngine(
 	engine := &stickyInMemEngine{
 		id:     id,
 		closed: false,
-		Engine: storage.NewInMem(ctx, engineType, attrs, cacheSize),
+		Engine: storage.NewInMem(ctx, attrs, cacheSize),
 	}
 	stickyInMemEnginesRegistry.entries[id] = engine
 	return engine, nil
