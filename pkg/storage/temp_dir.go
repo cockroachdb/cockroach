@@ -13,6 +13,7 @@ package storage
 import (
 	"bufio"
 	"context"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -20,9 +21,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 const lockFilename = `TEMP_DIR.LOCK`
+
+type lockStruct struct {
+	closer io.Closer
+}
+
+// lockFile sets a lock on the specified file, using flock.
+func lockFile(filename string) (lockStruct, error) {
+	closer, err := vfs.Default.Lock(filename)
+	if err != nil {
+		return lockStruct{}, err
+	}
+	return lockStruct{closer: closer}, nil
+}
+
+// unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
+func unlockFile(lock lockStruct) error {
+	if lock.closer != nil {
+		return lock.closer.Close()
+	}
+	return nil
+}
 
 // CreateTempDir creates a temporary directory with a prefix under the given
 // parentDir and returns the absolute path of the temporary directory.
