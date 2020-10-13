@@ -116,6 +116,14 @@ func TestFormatStatement(t *testing.T) {
 			`ALTER DATABASE _ OWNER TO _`},
 		{`ALTER SCHEMA s OWNER TO o`, tree.FmtAnonymize,
 			`ALTER SCHEMA _ OWNER TO _`},
+
+		// Test ENUM anonymization.
+		{`CREATE TYPE a AS ENUM ('a', 'b', 'c')`, tree.FmtAnonymize,
+			`CREATE TYPE _ AS ENUM (_, _, _)`},
+		{`ALTER TYPE a ADD VALUE 'hi' BEFORE 'hello'`, tree.FmtAnonymize,
+			`ALTER TYPE _ ADD VALUE _ BEFORE _`},
+		{`ALTER TYPE a RENAME VALUE 'value1' TO 'value2'`, tree.FmtAnonymize,
+			`ALTER TYPE _ RENAME VALUE _ TO _`},
 	}
 
 	for i, test := range testData {

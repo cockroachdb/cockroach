@@ -301,7 +301,7 @@ func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 		// If the value was requested to be added before or after an existing
 		// value, then find the index of where it should be inserted.
 		foundIndex := -1
-		existing := node.Placement.ExistingVal
+		existing := string(node.Placement.ExistingVal)
 		for i, member := range desc.EnumMembers {
 			if member.LogicalRepresentation == existing {
 				foundIndex = i
@@ -324,7 +324,7 @@ func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 	// how to decode the physical representation.
 	newPhysicalRep := enum.GenByteStringBetween(getPhysicalRep(pos), getPhysicalRep(pos+1), enum.SpreadSpacing)
 	newMember := descpb.TypeDescriptor_EnumMember{
-		LogicalRepresentation:  node.NewVal,
+		LogicalRepresentation:  string(node.NewVal),
 		PhysicalRepresentation: newPhysicalRep,
 		Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
 	}
