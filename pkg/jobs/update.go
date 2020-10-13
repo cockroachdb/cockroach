@@ -155,7 +155,11 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 		if err := updateFn(txn, md, &ju); err != nil {
 			return err
 		}
-
+		if j.registry.knobs.BeforeUpdate != nil {
+			if err := j.registry.knobs.BeforeUpdate(md, ju.md); err != nil {
+				return err
+			}
+		}
 		if !ju.hasUpdates() {
 			return nil
 		}
