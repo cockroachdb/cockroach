@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"go/build"
 	"io"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -163,7 +164,8 @@ import (
 //      - T for text; also used for various types which get converted
 //        to string (arrays, timestamps, etc.).
 //      - I for integer
-//      - R for floating point or decimal
+//      - F for floating point (matches 15 significant decimal digits)
+//      - R for decimal
 //      - B for boolean
 //      - O for oid
 //
@@ -2444,6 +2446,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	}
 	defer rows.Close()
 
+	// containsFloatType indicates whether at least one column is marked with
+	// 'F' type meaning that there might be a deviation from the expected
+	// results.
+	var containsFloatType bool
 	var actualResultsRaw []string
 	if query.noticetrace {
 		// We have to force close the results for the notice handler from lib/pq
@@ -2497,7 +2503,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 								query.pos, i, val, val,
 							)
 						}
-					case 'R':
+					case 'F', 'R':
+						if colT == 'F' {
+							containsFloatType = true
+						}
 						if valT != reflect.Float64 && valT != reflect.Slice {
 							if *flexTypes && (valT == reflect.Int64) {
 								t.signalIgnoredError(
@@ -2583,7 +2592,11 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			return fmt.Errorf("%s: expected %d results, but found %d", query.pos, query.expectedValues, n)
 		}
 		if query.expectedHash != hash {
-			return fmt.Errorf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
+			var suffix string
+			if containsFloatType {
+				suffix = "\tthis might be due to floating numbers precision deviation"
+			}
+			return fmt.Errorf("%s: expected %s, but found %s%s", query.pos, query.expectedHash, hash, suffix)
 		}
 	}
 
@@ -2613,25 +2626,85 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		return nil
 	}
 
-	if query.checkResults && !reflect.DeepEqual(query.expectedResults, actualResults) {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
-		for _, line := range query.expectedResultsRaw {
-			fmt.Fprintf(&buf, "    %s\n", line)
+	if query.checkResults {
+		resultsMatch := reflect.DeepEqual(query.expectedResults, actualResults)
+		makeError := func() error {
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
+			for _, line := range query.expectedResultsRaw {
+				fmt.Fprintf(&buf, "    %s\n", line)
+			}
+			sortMsg := ""
+			if query.sorter != nil {
+				// We performed an order-insensitive comparison of "actual" vs "expected"
+				// rows by sorting both, but we'll display the error with the expected
+				// rows in the order in which they were put in the file, and the actual
+				// rows in the order in which the query returned them.
+				sortMsg = " -> ignore the following ordering of rows"
+			}
+			fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
+			for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
+				fmt.Fprintf(&buf, "    %s\n", line)
+			}
+			return errors.Newf("%s", buf.String())
 		}
-		sortMsg := ""
-		if query.sorter != nil {
-			// We performed an order-insensitive comparison of "actual" vs "expected"
-			// rows by sorting both, but we'll display the error with the expected
-			// rows in the order in which they were put in the file, and the actual
-			// rows in the order in which the query returned them.
-			sortMsg = " -> ignore the following ordering of rows"
+		if !resultsMatch && containsFloatType {
+			// The results don't match as is, but this might be due to the
+			// precision issues of floats.
+			resultsMatch = true
+			for i, colT := range query.colTypes {
+				expected, actual := query.expectedResults[i], actualResults[i]
+				if colT == 'F' {
+					expFloat, err := strconv.ParseFloat(expected, 64 /* bitSize */)
+					if err != nil {
+						return errors.CombineErrors(makeError(), errors.Wrap(err, "when parsing expected"))
+					}
+					actFloat, err := strconv.ParseFloat(actual, 64 /* bitSize */)
+					if err != nil {
+						return errors.CombineErrors(makeError(), errors.Wrap(err, "when parsing actual"))
+					}
+					// Check that the numbers have the same sign.
+					if expFloat*actFloat < 0 {
+						resultsMatch = false
+					} else {
+						// Check that 15 significant digits match. We do so by
+						// normalizing the numbers to be in [1.0, 10.0) range
+						// and then checking one digit at a time.
+						expFloat = math.Abs(expFloat)
+						actFloat = math.Abs(actFloat)
+						normalize := func(f float64) float64 {
+							for f >= 10 {
+								f = f / 10
+							}
+							for f < 1 {
+								f *= 10
+							}
+							return f
+						}
+						expFloat = normalize(expFloat)
+						actFloat = normalize(actFloat)
+						for i := 0; i < 15; i++ {
+							expDigit := int(expFloat)
+							actDigit := int(actFloat)
+							if expDigit != actDigit {
+								resultsMatch = false
+								break
+							}
+							expFloat -= (expFloat - float64(expDigit)) * 10
+							actFloat -= (actFloat - float64(actDigit)) * 10
+						}
+					}
+				} else {
+					resultsMatch = expected == actual
+				}
+				if !resultsMatch {
+					break
+				}
+			}
 		}
-		fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
-		for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
-			fmt.Fprintf(&buf, "    %s\n", line)
+		if !resultsMatch {
+			return makeError()
 		}
-		return errors.Newf("%s", buf.String())
 	}
 
 	if query.label != "" {
