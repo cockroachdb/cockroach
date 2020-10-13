@@ -16,30 +16,32 @@ func _() {
 	_ = x[createTableAs-5]
 	_ = x[createView-6]
 	_ = x[createEnum-7]
-	_ = x[dropColumn-8]
-	_ = x[dropColumnDefault-9]
-	_ = x[dropColumnNotNull-10]
-	_ = x[dropColumnStored-11]
-	_ = x[dropConstraint-12]
-	_ = x[dropIndex-13]
-	_ = x[dropSequence-14]
-	_ = x[dropTable-15]
-	_ = x[dropView-16]
-	_ = x[renameColumn-17]
-	_ = x[renameIndex-18]
-	_ = x[renameSequence-19]
-	_ = x[renameTable-20]
-	_ = x[renameView-21]
-	_ = x[setColumnDefault-22]
-	_ = x[setColumnNotNull-23]
-	_ = x[setColumnType-24]
-	_ = x[insertRow-25]
-	_ = x[validate-26]
+	_ = x[createSchema-8]
+	_ = x[dropColumn-9]
+	_ = x[dropColumnDefault-10]
+	_ = x[dropColumnNotNull-11]
+	_ = x[dropColumnStored-12]
+	_ = x[dropConstraint-13]
+	_ = x[dropIndex-14]
+	_ = x[dropSequence-15]
+	_ = x[dropTable-16]
+	_ = x[dropView-17]
+	_ = x[dropSchema-18]
+	_ = x[renameColumn-19]
+	_ = x[renameIndex-20]
+	_ = x[renameSequence-21]
+	_ = x[renameTable-22]
+	_ = x[renameView-23]
+	_ = x[setColumnDefault-24]
+	_ = x[setColumnNotNull-25]
+	_ = x[setColumnType-26]
+	_ = x[insertRow-27]
+	_ = x[validate-28]
 }
 
-const _opType_name = "addColumnaddConstraintcreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumdropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypeinsertRowvalidate"
+const _opType_name = "addColumnaddConstraintcreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumcreateSchemadropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewdropSchemarenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypeinsertRowvalidate"
 
-var _opType_index = [...]uint16{0, 9, 22, 33, 47, 58, 71, 81, 91, 101, 118, 135, 151, 165, 174, 186, 195, 203, 215, 226, 240, 251, 261, 277, 293, 306, 315, 323}
+var _opType_index = [...]uint16{0, 9, 22, 33, 47, 58, 71, 81, 91, 103, 113, 130, 147, 163, 177, 186, 198, 207, 215, 225, 237, 248, 262, 273, 283, 299, 315, 328, 337, 345}
 
 func (i opType) String() string {
 	if i < 0 || i >= opType(len(_opType_index)-1) {
