@@ -223,6 +223,10 @@ message ImportDetails {
     (gogoproto.customname) = "ProtectedTimestampRecord",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+
+  string match = 23;
+  bool bundle_schema_parsed = 24;
+  bool is_bundle = 25;
 }
 
 message ImportProgress {
