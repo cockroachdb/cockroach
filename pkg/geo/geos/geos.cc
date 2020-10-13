@@ -116,6 +116,8 @@ typedef CR_GEOS_Geometry (*CR_GEOS_PointOnSurface_r)(CR_GEOS_Handle, CR_GEOS_Geo
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Interpolate_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
 
+typedef CR_GEOS_Geometry (*CR_GEOS_MinimumBoundingCircle_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*, CR_GEOS_Geometry**);
+
 typedef int (*CR_GEOS_Distance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_FrechetDistance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry,
                                          double*);
@@ -218,6 +220,8 @@ struct CR_GEOS {
   CR_GEOS_Intersection_r GEOSIntersection_r;
   CR_GEOS_SymDifference_r GEOSSymDifference_r;
 
+  CR_GEOS_MinimumBoundingCircle_r GEOSMinimumBoundingCircle_r;
+
   CR_GEOS_Interpolate_r GEOSInterpolate_r;
 
   CR_GEOS_Distance_r GEOSDistance_r;
@@ -305,6 +309,7 @@ struct CR_GEOS {
     INIT(GEOSBoundary_r);
     INIT(GEOSDifference_r);
     INIT(GEOSGetCentroid_r);
+    INIT(GEOSMinimumBoundingCircle_r);
     INIT(GEOSConvexHull_r);
     INIT(GEOSSimplify_r);
     INIT(GEOSTopologyPreserveSimplify_r);
@@ -803,6 +808,31 @@ CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* c
       auto srid = lib->GEOSGetSRID_r(handle, geom);
       CR_GEOS_writeGeomToEWKB(lib, handle, centroidGeom, centroidEWKB, srid);
       lib->GEOSGeom_destroy_r(handle, centroidGeom);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_MinimumBoundingCircle(CR_GEOS* lib, CR_GEOS_Slice a, double* radius,
+                                              CR_GEOS_String* centerEWKB, CR_GEOS_String* polygonEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  CR_GEOS_Geometry* centerGeom;
+  *polygonEWKB = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    auto circlePolygonGeom = lib->GEOSMinimumBoundingCircle_r(handle, geom, radius, &centerGeom);
+    if (circlePolygonGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, circlePolygonGeom, polygonEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, circlePolygonGeom);
+    }
+    if (centerGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, centerGeom, centerEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, centerGeom);
     }
     lib->GEOSGeom_destroy_r(handle, geom);
   }
