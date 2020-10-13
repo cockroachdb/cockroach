@@ -41,7 +41,10 @@ import (
 // higher scan throughput of larger batches and the cost of spilling the
 // scanned rows to disk. The spilling cost will probably be dominated by
 // the de-duping cost, since it incurs a read.
-const invertedJoinerBatchSize = 100
+var invertedJoinerBatchSize = util.ConstantWithMetamorphicTestValue(
+	100, /* defaultValue */
+	1,   /* metamorphicValue */
+)
 
 // invertedJoinerState represents the state of the processor.
 type invertedJoinerState int
