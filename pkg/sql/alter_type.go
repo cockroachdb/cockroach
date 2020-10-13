@@ -69,7 +69,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeAddValue:
 		err = params.p.addEnumValue(params.ctx, n, t)
 	case *tree.AlterTypeRenameValue:
-		err = params.p.renameTypeValue(params.ctx, n, t.OldVal, t.NewVal)
+		err = params.p.renameTypeValue(params.ctx, n, string(t.OldVal), string(t.NewVal))
 	case *tree.AlterTypeRename:
 		err = params.p.renameType(params.ctx, n, string(t.NewName))
 	case *tree.AlterTypeSetSchema:
@@ -112,7 +112,7 @@ func (p *planner) addEnumValue(
 	}
 	// See if the value already exists in the enum or not.
 	for _, member := range n.desc.EnumMembers {
-		if member.LogicalRepresentation == node.NewVal {
+		if member.LogicalRepresentation == string(node.NewVal) {
 			if node.IfNotExists {
 				p.SendClientNotice(
 					ctx,

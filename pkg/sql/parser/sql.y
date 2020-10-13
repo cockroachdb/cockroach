@@ -156,6 +156,9 @@ func (u *sqlSymUnion) shardedIndexDef() *tree.ShardedIndexDef {
 func (u *sqlSymUnion) nameList() tree.NameList {
     return u.val.(tree.NameList)
 }
+func (u *sqlSymUnion) enumValueList() tree.EnumValueList {
+    return u.val.(tree.EnumValueList)
+}
 func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
     return u.val.(*tree.UnresolvedName)
 }
@@ -1993,7 +1996,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeAddValue{
-        NewVal: $6,
+        NewVal: tree.EnumValue($6),
         IfNotExists: false,
         Placement: $7.alterTypeAddValuePlacement(),
       },
@@ -2004,7 +2007,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeAddValue{
-        NewVal: $9,
+        NewVal: tree.EnumValue($9),
         IfNotExists: true,
         Placement: $10.alterTypeAddValuePlacement(),
       },
@@ -2015,8 +2018,8 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeRenameValue{
-        OldVal: $6,
-        NewVal: $8,
+        OldVal: tree.EnumValue($6),
+        NewVal: tree.EnumValue($8),
       },
     }
   }
@@ -2062,14 +2065,14 @@ opt_add_val_placement:
   {
     $$.val = &tree.AlterTypeAddValuePlacement{
        Before: true,
-       ExistingVal: $2,
+       ExistingVal: tree.EnumValue($2),
     }
   }
 | AFTER SCONST
   {
     $$.val = &tree.AlterTypeAddValuePlacement{
        Before: false,
-       ExistingVal: $2,
+       ExistingVal: tree.EnumValue($2),
     }
   }
 | /* EMPTY */
@@ -6571,7 +6574,7 @@ create_type_stmt:
     $$.val = &tree.CreateType{
       TypeName: $3.unresolvedObjectName(),
       Variety: tree.Enum,
-      EnumLabels: $7.strs(),
+      EnumLabels: $7.enumValueList(),
     }
   }
 | CREATE TYPE error // SHOW HELP: CREATE TYPE
@@ -6589,21 +6592,21 @@ create_type_stmt:
 opt_enum_val_list:
   enum_val_list
   {
-    $$.val = $1.strs()
+    $$.val = $1.enumValueList()
   }
 | /* EMPTY */
   {
-    $$.val = []string(nil)
+    $$.val = tree.EnumValueList(nil)
   }
 
 enum_val_list:
   SCONST
   {
-    $$.val = []string{$1}
+    $$.val = tree.EnumValueList{tree.EnumValue($1)}
   }
 | enum_val_list ',' SCONST
   {
-    $$.val = append($1.strs(), $3)
+    $$.val = append($1.enumValueList(), tree.EnumValue($3))
   }
 
 // %Help: CREATE INDEX - create a new index
