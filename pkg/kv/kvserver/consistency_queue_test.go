@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/pebble"
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
@@ -566,14 +567,17 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	const sysCountGarbage = 123000
 
 	func() {
-		cache := storage.NewRocksDBCache(1 << 20)
-		defer cache.Release()
-		eng, err := storage.NewRocksDB(storage.RocksDBConfig{
+		cache := pebble.NewCache(1 << 20)
+		defer cache.Unref()
+		opts := storage.DefaultPebbleOptions()
+		opts.Cache = cache
+		eng, err := storage.NewPebble(ctx, storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Dir:       path,
 				MustExist: true,
 			},
-		}, cache)
+			Opts: opts,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}

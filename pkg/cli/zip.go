@@ -546,22 +546,6 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				return err
 			}
 
-			var threadData []byte
-			err = runZipRequestWithTimeout(baseCtx, "requesting threads for node "+id, timeout,
-				func(ctx context.Context) error {
-					threads, err := status.Stacks(ctx, &serverpb.StacksRequest{
-						NodeId: id,
-						Type:   serverpb.StacksType_THREAD_STACKS,
-					})
-					if err == nil {
-						threadData = threads.Data
-					}
-					return err
-				})
-			if err := z.createRawOrError(prefix+"/threads.txt", threadData, err); err != nil {
-				return err
-			}
-
 			var heapData []byte
 			err = runZipRequestWithTimeout(baseCtx, "requesting heap profile for node "+id, timeout,
 				func(ctx context.Context) error {

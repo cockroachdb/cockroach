@@ -303,6 +303,12 @@ func isValidSplitKey(key roachpb.Key, noSplitSpans []roachpb.Span) bool {
 	return true
 }
 
+// IsValidSplitKey returns whether the key is a valid split key. Adapter for
+// the method above, for use from other packages.
+func IsValidSplitKey(key roachpb.Key) bool {
+	return isValidSplitKey(key, keys.NoSplitSpans)
+}
+
 // FindSplitKey implements the Iterator interface.
 func (p *pebbleIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,

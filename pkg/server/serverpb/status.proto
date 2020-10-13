@@ -357,7 +357,6 @@ message LogFileRequest {
 
 enum StacksType {
   GOROUTINE_STACKS = 0;
-  THREAD_STACKS = 1;
 }
 
 message StacksRequest {

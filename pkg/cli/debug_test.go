@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/pebble"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -43,17 +44,17 @@ import (
 
 func createStore(t *testing.T, path string) {
 	t.Helper()
-	cache := storage.NewRocksDBCache(server.DefaultCacheSize)
-	defer cache.Release()
-	db, err := storage.NewRocksDB(
-		storage.RocksDBConfig{
-			StorageConfig: base.StorageConfig{
-				Dir:       path,
-				MustExist: false,
-			},
+	cache := pebble.NewCache(server.DefaultCacheSize)
+	defer cache.Unref()
+	cfg := storage.PebbleConfig{
+		StorageConfig: base.StorageConfig{
+			Dir:       path,
+			MustExist: false,
 		},
-		cache,
-	)
+	}
+	cfg.Opts = storage.DefaultPebbleOptions()
+	cfg.Opts.Cache = cache
+	db, err := storage.NewPebble(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

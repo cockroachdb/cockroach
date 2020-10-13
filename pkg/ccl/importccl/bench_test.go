@@ -10,6 +10,7 @@ package importccl_test
 
 import (
 	"context"
+	"github.com/cockroachdb/pebble"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
@@ -90,16 +91,18 @@ func benchmarkWriteAndLink(b *testing.B, dir string, tables []tableSSTable) {
 	b.SetBytes(bytes)
 
 	ctx := context.Background()
-	cache := storage.NewRocksDBCache(server.DefaultCacheSize)
-	defer cache.Release()
+	cache := pebble.NewCache(server.DefaultCacheSize)
+	defer cache.Unref()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		cfg := storage.RocksDBConfig{
+		cfg := storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
-				Dir: filepath.Join(dir, `rocksdb`, timeutil.Now().String())}}
-		db, err := storage.NewRocksDB(cfg, cache)
+				Dir: filepath.Join(dir, `pebble`, timeutil.Now().String())}}
+		cfg.Opts = storage.DefaultPebbleOptions()
+		cfg.Opts.Cache = cache
+		db, err := storage.NewPebble(context.Background(), cfg)
 		if err != nil {
 			b.Fatal(err)
 		}

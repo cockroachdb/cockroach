@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	storage "github.com/cockroachdb/cockroach/artifacts/go-build220891970/b486"
 	"math"
 	"math/rand"
 	"os"
@@ -172,14 +173,14 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 		exists = false
 	}
 
-	eng, err := NewRocksDB(
-		RocksDBConfig{
+	eng, err := NewPebble(
+		context.Background(),
+		PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Settings: cluster.MakeTestingClusterSettings(),
 				Dir:      dir,
 			},
 		},
-		RocksDBCache{},
 	)
 	if err != nil {
 		return nil, err

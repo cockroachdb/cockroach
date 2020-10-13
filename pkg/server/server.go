@@ -1694,10 +1694,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		fallthrough
 	case enginepb.EngineTypePebble:
 		nodeStartCounter += "pebble."
-	case enginepb.EngineTypeRocksDB:
-		nodeStartCounter += "rocksdb."
-	case enginepb.EngineTypeTeePebbleRocksDB:
-		nodeStartCounter += "pebble+rocksdb."
 	}
 	if s.InitialStart() {
 		nodeStartCounter += "initial-boot"

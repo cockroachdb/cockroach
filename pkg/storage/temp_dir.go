@@ -24,6 +24,20 @@ import (
 
 const lockFilename = `TEMP_DIR.LOCK`
 
+type lockStruct struct{}
+
+// lockFile sets a lock on the specified file using RocksDB's file locking interface.
+//
+// TODO(bilal): Fix this
+func lockFile(filename string) (lockStruct, error) {
+	return lockStruct{}, nil
+}
+
+// unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
+func unlockFile(lock lockStruct) error {
+	return nil
+}
+
 // CreateTempDir creates a temporary directory with a prefix under the given
 // parentDir and returns the absolute path of the temporary directory.
 // It is advised to invoke CleanupTempDirs before creating new temporary
