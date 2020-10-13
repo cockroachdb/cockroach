@@ -27,11 +27,12 @@ filter              ·             ·
 query TTT
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah'
 ----
-·              distribution  local
-·              vectorized    false
-virtual table  ·             ·
-·              table         tables@tables_table_name_idx
-·              spans         [/'blah' - /'blah']
+·                   distribution  local
+·                   vectorized    false
+filter              ·             ·
+ │                  filter        table_name = 'blah'
+ └── virtual table  ·             ·
+·                   table         tables@primary
 
 # Make sure that if we need an ordering on one of the virtual indexes we
 # provide it using a sortNode even though the optimizer expects the virtual
@@ -39,11 +40,14 @@ virtual table  ·             ·
 query TTT
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name > 'blah' ORDER BY table_name
 ----
-·              distribution  local
-·              vectorized    false
-virtual table  ·             ·
-·              table         tables@tables_table_name_idx
-·              spans         [/e'blah\x00' - ]
+·                        distribution  local
+·                        vectorized    false
+sort                     ·             ·
+ │                       order         +table_name
+ └── filter              ·             ·
+      │                  filter        table_name > 'blah'
+      └── virtual table  ·             ·
+·                        table         tables@primary
 
 # Make sure that we properly push down just part of a filter on two columns
 # where only one of them is satisfied by the virtual index.
@@ -53,10 +57,9 @@ EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah' AND ta
 ·                   distribution  local
 ·                   vectorized    false
 filter              ·             ·
- │                  filter        table_type = 'foo'
+ │                  filter        (table_name = 'blah') AND (table_type = 'foo')
  └── virtual table  ·             ·
-·                   table         tables@tables_table_name_idx
-·                   spans         [/'blah' - /'blah']
+·                   table         tables@primary
 
 # Lookup joins into virtual indexes.
 
