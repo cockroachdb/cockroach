@@ -71,7 +71,7 @@ if [ "${disknum}" -eq "0" ]; then
   sudo mkdir -p /mnt/data1
 fi
 
-sudo chmod 777 /mnt/data1
+sudo chmod 777 /mnt/data*
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
 sudo service sshguard stop
 # increase the number of concurrent unauthenticated connections to the sshd

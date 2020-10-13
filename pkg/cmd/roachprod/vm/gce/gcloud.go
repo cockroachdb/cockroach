@@ -188,6 +188,11 @@ type providerOpts struct {
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
 	useSharedUser bool
+
+	// useCompactPPG indicates this cluster should be created with compact
+	// placement polociy group.
+	// https://cloud.google.com/compute/docs/instances/define-instance-placement#gcloud_2
+	useCompactPPG bool
 }
 
 // projectsVal is the implementation for the --gce-projects flag. It populates
@@ -288,6 +293,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
+	flags.BoolVar(&o.useCompactPPG, ProviderName+"-use-compact-placement", false,
+		"If set, create cluster using COMPACT placement policy group.  Only applicable to"+
+			"subset of machine types.  See https://cloud.google.com/compute/docs/instances/define-instance-placement#gcloud_2")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
@@ -380,13 +388,46 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
-		"--maintenance-policy", "MIGRATE",
 		"--scopes", "default,storage-rw",
 		"--image", p.opts.Image,
 		"--image-project", "ubuntu-os-cloud",
 		"--boot-disk-size", "10",
 		"--boot-disk-type", "pd-ssd",
 	}
+
+	labels := fmt.Sprintf("lifetime=%s", opts.Lifetime)
+	var compactPPG string
+	if p.opts.useCompactPPG {
+		if len(zones) > 1 {
+			return errors.New("multiple AZs not supported with compact placement.")
+		}
+		compactPPG = fmt.Sprintf("ppg-%s", opts.ClusterName)
+
+		// Create COLLOCATED placement group for our region zone.
+		pieces := strings.Split(zones[0], "-")
+		region := strings.Join(pieces[:len(pieces)-1], "-")
+		cmd := exec.Command(
+			"gcloud", "compute", "resource-policies", "create",
+			"group-placement", compactPPG,
+			"--collocation", "COLLOCATED",
+			"--region", region,
+			"--vm-count", fmt.Sprintf("%d", len(names)))
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return errors.Wrapf(err, "Command: %s\nOutput: %s", cmd.Args, output)
+		}
+
+		// Add Placement group arguments for the create instance command.
+		labels += ",ppg=" + compactPPG
+		// Must use TERMINATE policy when using compact placement.
+		args = append(args,
+			"--resource-policies", compactPPG,
+			"--no-restart-on-failure",
+			"--maintenance-policy", "TERMINATE")
+	} else {
+		args = append(args, "--maintenance-policy", "MIGRATE")
+	}
+	args = append(args, "--labels", labels)
 
 	if project == defaultProject && p.opts.ServiceAccount == "" {
 		p.opts.ServiceAccount = "21965078311-compute@developer.gserviceaccount.com"
@@ -439,7 +480,6 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if p.opts.MinCPUPlatform != "" {
 		args = append(args, "--min-cpu-platform", p.opts.MinCPUPlatform)
 	}
-	args = append(args, "--labels", fmt.Sprintf("lifetime=%s", opts.Lifetime))
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
