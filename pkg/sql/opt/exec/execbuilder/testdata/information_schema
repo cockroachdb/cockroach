@@ -12,11 +12,12 @@ virtual table  ·                    ·                     (catalog_name, schem
 query TTT
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ----
-·              distribution  local
-·              vectorized    false
-virtual table  ·             ·
-·              table         tables@tables_table_name_idx
-·              spans         [/'foo' - /'foo']
+·                   distribution  local
+·                   vectorized    false
+filter              ·             ·
+ │                  filter        table_name = 'foo'
+ └── virtual table  ·             ·
+·                   table         tables@primary
 
 statement error use of crdb_internal_vtable_pk column not allowed
 SELECT crdb_internal_vtable_pk FROM system.information_schema.schemata

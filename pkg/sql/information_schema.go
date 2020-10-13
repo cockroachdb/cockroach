@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1493,26 +1492,6 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 	schema: vtable.InformationSchemaTables,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, addTablesTableRow(addRow))
-	},
-	indexes: []virtualIndex{
-		{
-			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db *dbdesc.Immutable,
-				addRow func(...tree.Datum) error) (bool, error) {
-				// This index is on the TABLE_NAME column.
-				name := tree.MustBeDString(constraint)
-				flags := tree.ObjectLookupFlags{}
-				flags.DesiredTableDescKind = tree.ResolveAnyTableKind
-				desc, err := resolver.ResolveExistingTableObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)), flags)
-				if err != nil || desc == nil {
-					return false, err
-				}
-				sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, desc.GetParentSchemaID())
-				if err != nil {
-					return false, err
-				}
-				return true, addTablesTableRow(addRow)(db, sc.Name, desc)
-			},
-		},
 	},
 }
 
