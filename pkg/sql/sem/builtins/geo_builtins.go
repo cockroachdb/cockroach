@@ -4835,6 +4835,50 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 		},
 	),
 
+	"st_asencodedpolyline": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0]).Geometry
+				s, err := geo.GeometryToEncodedPolyline(g, 5)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the geometry as an Encoded Polyline.
+This format is used by Google Maps with precision=5 and by Open Source Routing Machine with precision=5 and 6.
+Preserves 5 decimal places.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"precision", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0]).Geometry
+				p := int(tree.MustBeDInt(args[1]))
+				s, err := geo.GeometryToEncodedPolyline(g, p)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the geometry as an Encoded Polyline.
+This format is used by Google Maps with precision=5 and by Open Source Routing Machine with precision=5 and 6.
+Precision specifies how many decimal places will be preserved in Encoded Polyline. Value should be the same on encoding and decoding, or coordinates will be incorrect.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_linefromencodedpolyline": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5405,7 +5449,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	// Unimplemented.
 	//
 
-	"st_asencodedpolyline":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48872}),
 	"st_asgml":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
 	"st_aslatlontext":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
 	"st_assvg":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
