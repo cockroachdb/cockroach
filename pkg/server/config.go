@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -464,22 +463,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		return Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
-
-	var details []string
-
-	var cache storage.RocksDBCache
-	var pebbleCache *pebble.Cache
-	if cfg.StorageEngine == enginepb.EngineTypeDefault ||
-		cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		details = append(details, fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
-		pebbleCache = pebble.NewCache(cfg.CacheSize)
-		defer pebbleCache.Unref()
-	}
-	if cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		details = append(details, fmt.Sprintf("RocksDB cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
-		cache = storage.NewRocksDBCache(cfg.CacheSize)
-		defer cache.Release()
-	}
+	details := []string{fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize))}
+	pebbleCache := pebble.NewCache(cfg.CacheSize)
+	defer pebbleCache.Unref()
 
 	var physicalStores int
 	for _, spec := range cfg.Stores.Specs {
@@ -514,15 +500,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
 			if spec.StickyInMemoryEngineID != "" {
-				e, err := getOrCreateStickyInMemEngine(
-					ctx, spec.StickyInMemoryEngineID, cfg.StorageEngine, spec.Attributes, sizeInBytes,
-				)
+				e, err := getOrCreateStickyInMemEngine(ctx, spec.StickyInMemoryEngineID, spec.Attributes, sizeInBytes)
 				if err != nil {
 					return Engines{}, err
 				}
 				engines = append(engines, e)
 			} else {
-				engines = append(engines, storage.NewInMem(ctx, cfg.StorageEngine, spec.Attributes, sizeInBytes))
+				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, sizeInBytes))
 			}
 		} else {
 			if spec.Size.Percent > 0 {
@@ -540,8 +524,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
-			var eng storage.Engine
-			var err error
 			storageConfig := base.StorageConfig{
 				Attrs:           spec.Attributes,
 				Dir:             spec.Path,
@@ -550,71 +532,23 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				UseFileRegistry: spec.UseFileRegistry,
 				ExtraOptions:    spec.ExtraOptions,
 			}
-			if cfg.StorageEngine == enginepb.EngineTypeDefault || cfg.StorageEngine == enginepb.EngineTypePebble {
-				pebbleConfig := storage.PebbleConfig{
-					StorageConfig: storageConfig,
-					Opts:          storage.DefaultPebbleOptions(),
-				}
-				pebbleConfig.Opts.Cache = pebbleCache
-				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
-				// If the spec contains Pebble options, set those too.
-				if len(spec.PebbleOptions) > 0 {
-					err = pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})
-					if err != nil {
-						return nil, err
-					}
-				}
-				if len(spec.RocksDBOptions) > 0 {
-					return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
-				}
-				eng, err = storage.NewPebble(ctx, pebbleConfig)
-			} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB {
-				rocksDBConfig := storage.RocksDBConfig{
-					StorageConfig:           storageConfig,
-					MaxOpenFiles:            openFileLimitPerStore,
-					WarnLargeBatchThreshold: 500 * time.Millisecond,
-					RocksDBOptions:          spec.RocksDBOptions,
-				}
-				if len(spec.PebbleOptions) > 0 {
-					return nil, errors.Errorf("store %d: using RocksDB storage engine but StoreSpec provides Pebble options", i)
-				}
-				eng, err = storage.NewRocksDB(rocksDBConfig, cache)
-			} else {
-				// cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB
-				pebbleConfig := storage.PebbleConfig{
-					StorageConfig: storageConfig,
-					Opts:          storage.DefaultPebbleOptions(),
-				}
-				pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
-				pebbleConfig.Opts.Cache = pebbleCache
-				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
-				// If the spec contains Pebble options, set those too.
-				if len(spec.PebbleOptions) > 0 {
-					err = pebbleConfig.Opts.Parse(spec.PebbleOptions, nil)
-					if err != nil {
-						return nil, err
-					}
-				}
-				pebbleEng, err := storage.NewPebble(ctx, pebbleConfig)
-				if err != nil {
-					return nil, err
-				}
-
-				rocksDBConfig := storage.RocksDBConfig{
-					StorageConfig:           storageConfig,
-					MaxOpenFiles:            openFileLimitPerStore,
-					WarnLargeBatchThreshold: 500 * time.Millisecond,
-					RocksDBOptions:          spec.RocksDBOptions,
-				}
-				rocksDBConfig.Dir = filepath.Join(rocksDBConfig.Dir, "rocksdb")
-
-				rocksdbEng, err := storage.NewRocksDB(rocksDBConfig, cache)
-				if err != nil {
-					return nil, err
-				}
-
-				eng = storage.NewTee(ctx, rocksdbEng, pebbleEng)
+			pebbleConfig := storage.PebbleConfig{
+				StorageConfig: storageConfig,
+				Opts:          storage.DefaultPebbleOptions(),
 			}
+			pebbleConfig.Opts.Cache = pebbleCache
+			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+			// If the spec contains Pebble options, set those too.
+			if len(spec.PebbleOptions) > 0 {
+				err := pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})
+				if err != nil {
+					return nil, err
+				}
+			}
+			if len(spec.RocksDBOptions) > 0 {
+				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
+			}
+			eng, err := storage.NewPebble(ctx, pebbleConfig)
 			if err != nil {
 				return Engines{}, err
 			}

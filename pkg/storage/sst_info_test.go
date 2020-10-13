@@ -73,6 +73,10 @@ func TestReadAmplification(t *testing.T) {
 	}
 }
 
+func key(s string) MVCCKey {
+	return MakeMVCCMetadataKey([]byte(s))
+}
+
 func createTestSSTableInfos() SSTableInfos {
 	ssti := SSTableInfos{
 		// Level 0.

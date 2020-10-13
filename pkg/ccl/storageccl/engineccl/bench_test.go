@@ -51,14 +51,14 @@ func loadTestData(
 		exists = false
 	}
 
-	eng, err := storage.NewRocksDB(
-		storage.RocksDBConfig{
+	eng, err := storage.NewPebble(
+		ctx,
+		storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Settings: cluster.MakeTestingClusterSettings(),
 				Dir:      dir,
 			},
 		},
-		storage.RocksDBCache{},
 	)
 	if err != nil {
 		return nil, err
