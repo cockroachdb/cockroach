@@ -1042,7 +1042,7 @@ type Mutator interface {
 func MakeSchemaName(ifNotExists bool, schema string, authRole string) *tree.CreateSchema {
 	return &tree.CreateSchema{
 		IfNotExists: ifNotExists,
-		Schema:      schema,
+		Schema:      tree.Name(schema),
 		AuthRole:    authRole,
 	}
 }
@@ -1709,13 +1709,13 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 // be random strings generated from alphabet.
 func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 	numLabels := rng.Intn(6) + 1
-	labels := make([]string, numLabels)
+	labels := make(tree.EnumValueList, numLabels)
 	labelsMap := make(map[string]struct{})
 	i := 0
 	for i < numLabels {
 		s := RandString(rng, rng.Intn(6)+1, alphabet)
 		if _, ok := labelsMap[s]; !ok {
-			labels[i] = s
+			labels[i] = tree.EnumValue(s)
 			labelsMap[s] = struct{}{}
 			i++
 		}

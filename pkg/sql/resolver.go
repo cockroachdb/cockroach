@@ -344,7 +344,8 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			return nil, err
 		}
 		for _, sc := range targets.Schemas {
-			_, resSchema, err := p.ResolveMutableSchemaDescriptor(ctx, curDB.ID, sc, true /* required */)
+			_, resSchema, err := p.ResolveMutableSchemaDescriptor(
+				ctx, curDB.ID, string(sc), true /* required */)
 			if err != nil {
 				return nil, err
 			}

@@ -156,6 +156,9 @@ func (u *sqlSymUnion) shardedIndexDef() *tree.ShardedIndexDef {
 func (u *sqlSymUnion) nameList() tree.NameList {
     return u.val.(tree.NameList)
 }
+func (u *sqlSymUnion) enumValueList() tree.EnumValueList {
+    return u.val.(tree.EnumValueList)
+}
 func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
     return u.val.(*tree.UnresolvedName)
 }
@@ -944,7 +947,6 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name opt_schema_name
-%type <[]string> schema_name_list
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target analyze_target
@@ -1426,7 +1428,7 @@ alter_database_stmt:
 alter_database_owner:
 	ALTER DATABASE database_name OWNER TO role_spec
 	{
-		$$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6}
+		$$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: tree.Name($6)}
 	}
 
 // %Help: ALTER RANGE - change the parameters of a range
@@ -1916,7 +1918,7 @@ alter_table_cmd:
 | OWNER TO role_spec
   {
     $$.val = &tree.AlterTableOwner{
-      Owner: $3,
+      Owner: tree.Name($3),
     }
   }
 
@@ -2012,7 +2014,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeAddValue{
-        NewVal: $6,
+        NewVal: tree.EnumValue($6),
         IfNotExists: false,
         Placement: $7.alterTypeAddValuePlacement(),
       },
@@ -2023,7 +2025,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeAddValue{
-        NewVal: $9,
+        NewVal: tree.EnumValue($9),
         IfNotExists: true,
         Placement: $10.alterTypeAddValuePlacement(),
       },
@@ -2034,8 +2036,8 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeRenameValue{
-        OldVal: $6,
-        NewVal: $8,
+        OldVal: tree.EnumValue($6),
+        NewVal: tree.EnumValue($8),
       },
     }
   }
@@ -2044,7 +2046,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeRename{
-        NewName: $6,
+        NewName: tree.Name($6),
       },
     }
   }
@@ -2053,7 +2055,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeSetSchema{
-        Schema: $6,
+        Schema: tree.Name($6),
       },
     }
   }
@@ -2062,7 +2064,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeOwner{
-        Owner: $6,
+        Owner: tree.Name($6),
       },
     }
   }
@@ -2081,14 +2083,14 @@ opt_add_val_placement:
   {
     $$.val = &tree.AlterTypeAddValuePlacement{
        Before: true,
-       ExistingVal: $2,
+       ExistingVal: tree.EnumValue($2),
     }
   }
 | AFTER SCONST
   {
     $$.val = &tree.AlterTypeAddValuePlacement{
        Before: false,
-       ExistingVal: $2,
+       ExistingVal: tree.EnumValue($2),
     }
   }
 | /* EMPTY */
@@ -3391,33 +3393,23 @@ type_name_list:
 // %Category: DDL
 // %Text: DROP SCHEMA [IF EXISTS] <schema_name> [, ...] [CASCADE | RESTRICT]
 drop_schema_stmt:
-  DROP SCHEMA schema_name_list opt_drop_behavior
+  DROP SCHEMA name_list opt_drop_behavior
   {
     $$.val = &tree.DropSchema{
-      Names: $3.strs(),
+      Names: $3.nameList(),
       IfExists: false,
       DropBehavior: $4.dropBehavior(),
     }
   }
-| DROP SCHEMA IF EXISTS schema_name_list opt_drop_behavior
+| DROP SCHEMA IF EXISTS name_list opt_drop_behavior
   {
     $$.val = &tree.DropSchema{
-      Names: $5.strs(),
+      Names: $5.nameList(),
       IfExists: true,
       DropBehavior: $6.dropBehavior(),
     }
   }
 | DROP SCHEMA error // SHOW HELP: DROP SCHEMA
-
-schema_name_list:
-  schema_name
-  {
-    $$.val = []string{$1}
-  }
-| schema_name_list ',' schema_name
-  {
-    $$.val = append($1.strs(), $3)
-  }
 
 // %Help: DROP ROLE - remove a user
 // %Category: Priv
@@ -3721,12 +3713,12 @@ grant_stmt:
   {
     $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
   }
-| GRANT privileges ON SCHEMA schema_name_list TO name_list
+| GRANT privileges ON SCHEMA name_list TO name_list
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
       Targets: tree.TargetList{
-        Schemas: $5.strs(),
+        Schemas: $5.nameList(),
       },
       Grantees: $7.nameList(),
     }
@@ -3768,12 +3760,12 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
   }
-| REVOKE privileges ON SCHEMA schema_name_list FROM name_list
+| REVOKE privileges ON SCHEMA name_list FROM name_list
   {
     $$.val = &tree.Revoke{
       Privileges: $2.privilegeList(),
       Targets: tree.TargetList{
-        Schemas: $5.strs(),
+        Schemas: $5.nameList(),
       },
       Grantees: $7.nameList(),
     }
@@ -5245,7 +5237,7 @@ targets_roles:
   }
 | SCHEMA name_list
   {
-     $$.val = tree.TargetList{Schemas: $2.nameList().ToStrings()}
+     $$.val = tree.TargetList{Schemas: $2.nameList()}
   }
 | TYPE type_name_list
   {
@@ -5363,27 +5355,27 @@ create_schema_stmt:
   CREATE SCHEMA schema_name
   {
     $$.val = &tree.CreateSchema{
-      Schema: $3,
+      Schema: tree.Name($3),
     }
   }
 | CREATE SCHEMA IF NOT EXISTS schema_name
   {
     $$.val = &tree.CreateSchema{
-      Schema: $6,
+      Schema: tree.Name($6),
       IfNotExists: true,
     }
   }
 | CREATE SCHEMA opt_schema_name AUTHORIZATION role_spec
   {
     $$.val = &tree.CreateSchema{
-      Schema: $3,
+      Schema: tree.Name($3),
       AuthRole: $5,
     }
   }
 | CREATE SCHEMA IF NOT EXISTS opt_schema_name AUTHORIZATION role_spec
   {
     $$.val = &tree.CreateSchema{
-      Schema: $6,
+      Schema: tree.Name($6),
       IfNotExists: true,
       AuthRole: $8,
     }
@@ -5401,18 +5393,18 @@ alter_schema_stmt:
   ALTER SCHEMA schema_name RENAME TO schema_name
   {
     $$.val = &tree.AlterSchema{
-      Schema: $3,
+      Schema: tree.Name($3),
       Cmd: &tree.AlterSchemaRename{
-        NewName: $6,
+        NewName: tree.Name($6),
       },
     }
   }
 | ALTER SCHEMA schema_name OWNER TO role_spec
   {
     $$.val = &tree.AlterSchema{
-      Schema: $3,
+      Schema: tree.Name($3),
       Cmd: &tree.AlterSchemaOwner{
-        Owner: $6,
+        Owner: tree.Name($6),
       },
     }
   }
@@ -6621,7 +6613,7 @@ create_type_stmt:
     $$.val = &tree.CreateType{
       TypeName: $3.unresolvedObjectName(),
       Variety: tree.Enum,
-      EnumLabels: $7.strs(),
+      EnumLabels: $7.enumValueList(),
     }
   }
 | CREATE TYPE error // SHOW HELP: CREATE TYPE
@@ -6639,21 +6631,21 @@ create_type_stmt:
 opt_enum_val_list:
   enum_val_list
   {
-    $$.val = $1.strs()
+    $$.val = $1.enumValueList()
   }
 | /* EMPTY */
   {
-    $$.val = []string(nil)
+    $$.val = tree.EnumValueList(nil)
   }
 
 enum_val_list:
   SCONST
   {
-    $$.val = []string{$1}
+    $$.val = tree.EnumValueList{tree.EnumValue($1)}
   }
 | enum_val_list ',' SCONST
   {
-    $$.val = append($1.strs(), $3)
+    $$.val = append($1.enumValueList(), tree.EnumValue($3))
   }
 
 // %Help: CREATE INDEX - create a new index
@@ -6896,13 +6888,13 @@ alter_table_set_schema_stmt:
   ALTER TABLE relation_expr SET SCHEMA schema_name
    {
      $$.val = &tree.AlterTableSetSchema{
-       Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false,
+       Name: $3.unresolvedObjectName(), Schema: tree.Name($6), IfExists: false,
      }
    }
 | ALTER TABLE IF EXISTS relation_expr SET SCHEMA schema_name
   {
     $$.val = &tree.AlterTableSetSchema{
-      Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true,
+      Name: $5.unresolvedObjectName(), Schema: tree.Name($8), IfExists: true,
     }
   }
 
@@ -6910,14 +6902,14 @@ alter_view_set_schema_stmt:
 	ALTER VIEW relation_expr SET SCHEMA schema_name
 	 {
 		 $$.val = &tree.AlterTableSetSchema{
-			 Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false, IsView: true,
+			 Name: $3.unresolvedObjectName(), Schema: tree.Name($6), IfExists: false, IsView: true,
 		 }
 	 }
 | ALTER MATERIALIZED VIEW relation_expr SET SCHEMA schema_name
 	 {
 		 $$.val = &tree.AlterTableSetSchema{
 			 Name: $4.unresolvedObjectName(),
-			 Schema: $7,
+			 Schema: tree.Name($7),
 			 IfExists: false,
 			 IsView: true,
 			 IsMaterialized: true,
@@ -6926,14 +6918,14 @@ alter_view_set_schema_stmt:
 | ALTER VIEW IF EXISTS relation_expr SET SCHEMA schema_name
 	{
 		$$.val = &tree.AlterTableSetSchema{
-			Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true, IsView: true,
+			Name: $5.unresolvedObjectName(), Schema: tree.Name($8), IfExists: true, IsView: true,
 		}
 	}
 | ALTER MATERIALIZED VIEW IF EXISTS relation_expr SET SCHEMA schema_name
 	{
 		$$.val = &tree.AlterTableSetSchema{
 			Name: $6.unresolvedObjectName(),
-			Schema: $9,
+			Schema: tree.Name($9),
 			IfExists: true,
 			IsView: true,
 			IsMaterialized: true,
@@ -6944,13 +6936,13 @@ alter_sequence_set_schema_stmt:
 	ALTER SEQUENCE relation_expr SET SCHEMA schema_name
 	 {
 		 $$.val = &tree.AlterTableSetSchema{
-			 Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false, IsSequence: true,
+			 Name: $3.unresolvedObjectName(), Schema: tree.Name($6), IfExists: false, IsSequence: true,
 		 }
 	 }
 | ALTER SEQUENCE IF EXISTS relation_expr SET SCHEMA schema_name
 	{
 		$$.val = &tree.AlterTableSetSchema{
-			Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true, IsSequence: true,
+			Name: $5.unresolvedObjectName(), Schema: tree.Name($8), IfExists: true, IsSequence: true,
 		}
 	}
 
