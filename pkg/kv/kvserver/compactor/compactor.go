@@ -297,21 +297,21 @@ func (c *Compactor) fetchSuggestions(
 	err = c.eng.Iterate(
 		keys.LocalStoreSuggestedCompactionsMin,
 		keys.LocalStoreSuggestedCompactionsMax,
-		func(kv storage.MVCCKeyValue) (bool, error) {
+		func(kv storage.MVCCKeyValue) error {
 			var sc kvserverpb.SuggestedCompaction
 			var err error
 			sc.StartKey, sc.EndKey, err = keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
 			if err != nil {
-				return false, errors.Wrapf(err, "failed to decode suggested compaction key")
+				return errors.Wrapf(err, "failed to decode suggested compaction key")
 			}
 			if err := protoutil.Unmarshal(kv.Value, &sc.Compaction); err != nil {
-				return false, err
+				return err
 			}
 
 			dataIter.SetUpperBound(sc.EndKey)
 			dataIter.SeekGE(storage.MakeMVCCMetadataKey(sc.StartKey))
 			if ok, err := dataIter.Valid(); err != nil {
-				return false, err
+				return err
 			} else if ok && dataIter.UnsafeKey().Less(storage.MakeMVCCMetadataKey(sc.EndKey)) {
 				// The suggested compaction span has live keys remaining. This is a
 				// strong indicator that compacting this range will be significantly
@@ -333,7 +333,7 @@ func (c *Compactor) fetchSuggestions(
 				totalBytes += sc.Bytes
 			}
 
-			return false, nil // continue iteration
+			return nil // continue iteration
 		},
 	)
 	if err != nil {
@@ -465,13 +465,13 @@ func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 	if err := c.eng.Iterate(
 		keys.LocalStoreSuggestedCompactionsMin,
 		keys.LocalStoreSuggestedCompactionsMax,
-		func(kv storage.MVCCKeyValue) (bool, error) {
+		func(kv storage.MVCCKeyValue) error {
 			var c kvserverpb.Compaction
 			if err := protoutil.Unmarshal(kv.Value, &c); err != nil {
-				return false, err
+				return err
 			}
 			totalBytes += c.Bytes
-			return false, nil // continue iteration
+			return nil // continue iteration
 		},
 	); err != nil {
 		return 0, err

@@ -582,20 +582,20 @@ func TestCompactorThresholds(t *testing.T) {
 				return we.Iterate(
 					keys.LocalStoreSuggestedCompactionsMin,
 					keys.LocalStoreSuggestedCompactionsMax,
-					func(kv storage.MVCCKeyValue) (bool, error) {
+					func(kv storage.MVCCKeyValue) error {
 						start, end, err := keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
 						if err != nil {
 							t.Fatalf("failed to decode suggested compaction key: %+v", err)
 						}
 						if idx >= len(test.expUncompacted) {
-							return true, fmt.Errorf("found unexpected uncompacted span %s-%s", start, end)
+							return fmt.Errorf("found unexpected uncompacted span %s-%s", start, end)
 						}
 						if !start.Equal(test.expUncompacted[idx].Key) || !end.Equal(test.expUncompacted[idx].EndKey) {
-							return true, fmt.Errorf("found unexpected uncompacted span %s-%s; expected %s-%s",
+							return fmt.Errorf("found unexpected uncompacted span %s-%s; expected %s-%s",
 								start, end, test.expUncompacted[idx].Key, test.expUncompacted[idx].EndKey)
 						}
 						idx++
-						return false, nil // continue iteration
+						return nil // continue iteration
 					},
 				)
 			})

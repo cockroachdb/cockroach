@@ -1059,13 +1059,13 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify Iterate.
 			index := 0
-			if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) (bool, error) {
+			if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) error {
 				if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 					t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 						index, keys[index], vals[index], kv.Key, kv.Value)
 				}
 				index++
-				return false, nil
+				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}

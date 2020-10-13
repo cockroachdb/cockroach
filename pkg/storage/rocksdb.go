@@ -589,7 +589,7 @@ func (r *RocksDB) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
-func (r *RocksDB) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
+func (r *RocksDB) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(r, start, end, f)
 }
 
@@ -709,9 +709,7 @@ func (r *rocksDBReadOnly) GetProto(
 	return dbGetProto(r.parent.rdb, key, msg)
 }
 
-func (r *rocksDBReadOnly) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
-) error {
+func (r *rocksDBReadOnly) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if r.isClosed {
 		panic("using a closed rocksDBReadOnly")
 	}
@@ -1038,9 +1036,7 @@ func (r *rocksDBSnapshot) GetProto(
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair using the snapshot
 // handle.
-func (r *rocksDBSnapshot) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
-) error {
+func (r *rocksDBSnapshot) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(r, start, end, f)
 }
 
@@ -1133,7 +1129,7 @@ func (r *distinctBatch) GetProto(
 	return dbGetProto(r.batch, key, msg)
 }
 
-func (r *distinctBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
+func (r *distinctBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	r.ensureBatch()
 	return iterateOnReader(r, start, end, f)
 }
@@ -1504,7 +1500,7 @@ func (r *rocksDBBatch) GetProto(
 	return dbGetProto(r.batch, key, msg)
 }
 
-func (r *rocksDBBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
+func (r *rocksDBBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if r.writeOnly {
 		panic("write-only batch")
 	}
@@ -2671,9 +2667,7 @@ func (fr *RocksDBSstFileReader) IngestExternalFile(data []byte) error {
 
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair.
-func (fr *RocksDBSstFileReader) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
-) error {
+func (fr *RocksDBSstFileReader) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if fr.rocksDB == nil {
 		return errors.New("cannot call Iterate on a closed reader")
 	}

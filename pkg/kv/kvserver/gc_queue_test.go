@@ -973,16 +973,16 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		meta := &enginepb.MVCCMetadata{}
 		return tc.store.Engine().Iterate(roachpb.KeyMin, roachpb.KeyMax,
-			func(kv storage.MVCCKeyValue) (bool, error) {
+			func(kv storage.MVCCKeyValue) error {
 				if !kv.Key.IsValue() {
 					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
-						return false, err
+						return err
 					}
 					if meta.Txn != nil {
-						return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
+						return errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
 					}
 				}
-				return false, nil
+				return nil
 			})
 	})
 }

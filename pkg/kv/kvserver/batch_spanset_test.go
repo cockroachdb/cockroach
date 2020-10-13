@@ -128,8 +128,8 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 			t.Errorf("GetProto: unexpected error %v", err)
 		}
 		if err := batch.Iterate(insideKey.Key, insideKey2.Key,
-			func(v storage.MVCCKeyValue) (bool, error) {
-				return false, nil
+			func(v storage.MVCCKeyValue) error {
+				return nil
 			},
 		); err != nil {
 			t.Errorf("Iterate: unexpected error %v", err)
@@ -151,8 +151,8 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 			t.Errorf("GetProto: unexpected error %v", err)
 		}
 		if err := batch.Iterate(outsideKey.Key, insideKey2.Key,
-			func(v storage.MVCCKeyValue) (bool, error) {
-				return false, errors.Errorf("unexpected callback: %v", v)
+			func(v storage.MVCCKeyValue) error {
+				return errors.Errorf("unexpected callback: %v", v)
 			},
 		); !isReadSpanErr(err) {
 			t.Errorf("Iterate: unexpected error %v", err)
@@ -169,8 +169,8 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 			t.Errorf("GetProto: unexpected error %v", err)
 		}
 		if err := batch.Iterate(insideKey2.Key, outsideKey4.Key,
-			func(v storage.MVCCKeyValue) (bool, error) {
-				return false, errors.Errorf("unexpected callback: %v", v)
+			func(v storage.MVCCKeyValue) error {
+				return errors.Errorf("unexpected callback: %v", v)
 			},
 		); !isReadSpanErr(err) {
 			t.Errorf("Iterate: unexpected error %v", err)
@@ -371,8 +371,8 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 			t.Errorf("GetProto: unexpected error %v", err)
 		}
 		if err := batch.Iterate(rkey.Key, rkey.Key,
-			func(v storage.MVCCKeyValue) (bool, error) {
-				return false, errors.Errorf("unexpected callback: %v", v)
+			func(v storage.MVCCKeyValue) error {
+				return errors.Errorf("unexpected callback: %v", v)
 			},
 		); !isReadSpanErr(err) {
 			t.Errorf("Iterate: unexpected error %v", err)

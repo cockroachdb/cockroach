@@ -695,9 +695,7 @@ func (p *Pebble) GetProto(
 }
 
 // Iterate implements the Engine interface.
-func (p *Pebble) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
-) error {
+func (p *Pebble) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(p, start, end, f)
 }
 
@@ -1147,7 +1145,7 @@ func (p *pebbleReadOnly) GetProto(
 	return p.parent.GetProto(key, msg)
 }
 
-func (p *pebbleReadOnly) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
+func (p *pebbleReadOnly) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -1297,9 +1295,7 @@ func (p *pebbleSnapshot) GetProto(
 }
 
 // Iterate implements the Reader interface.
-func (p *pebbleSnapshot) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
-) error {
+func (p *pebbleSnapshot) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(p, start, end, f)
 }
 

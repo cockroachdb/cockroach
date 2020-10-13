@@ -143,8 +143,8 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := eng.Iterate(startKey, endKey,
-				func(kv storage.MVCCKeyValue) (bool, error) {
-					return true, errors.New("expected no data in underlying engine")
+				func(kv storage.MVCCKeyValue) error {
+					return errors.New("expected no data in underlying engine")
 				},
 			); err != nil {
 				t.Fatal(err)
