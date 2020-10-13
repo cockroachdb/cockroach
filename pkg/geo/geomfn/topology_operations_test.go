@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -85,6 +86,59 @@ func TestCentroid(t *testing.T) {
 			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).X(), retAsGeomT.(*geom.Point).X(), 2e-10)
 			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).Y(), retAsGeomT.(*geom.Point).Y(), 2e-10)
 			require.Equal(t, expected.SRID(), ret.SRID())
+		})
+	}
+}
+
+func TestMinimumBoundingCircle(t *testing.T) {
+	testCases := []struct {
+		wkt            string
+		expectedRadius float64
+		expectedCoords []float64
+	}{
+		{
+			wkt:            "POLYGON((26426 65078,26531 65242,26075 65136,26096 65427,26426 65078))",
+			expectedRadius: 247.436,
+			expectedCoords: []float64{26284.842, 65267.115},
+		},
+		{
+			wkt:            "GEOMETRYCOLLECTION (POLYGON((1 0, 1 1, 0 1, 0 0, 1 0)), POLYGON((1 1, 2 1, 2 2, 1 2, 1 1)))",
+			expectedRadius: 1.414,
+			expectedCoords: []float64{1, 1},
+		},
+		{
+			wkt:            "GEOMETRYCOLLECTION (POLYGON((0 1.5, 1 3, -1 3, 0 1.5)), POINT(1 0))",
+			expectedRadius: 1.803,
+			expectedCoords: []float64{0, 1.5},
+		},
+		{
+			wkt:            "GEOMETRYCOLLECTION (LINESTRING(0 0, 4 0), POINT(0 4))",
+			expectedRadius: 2.828,
+			expectedCoords: []float64{2, 2},
+		},
+		{
+			wkt:            "POLYGON((2 0, 2 2, 0 2, 0 0, 2 0))",
+			expectedRadius: 1.414,
+			expectedCoords: []float64{1, 1},
+		},
+	}
+
+	for index, tt := range testCases {
+		t.Run(fmt.Sprintf("%d", index), func(t *testing.T) {
+			g, err := geo.ParseGeometry(tt.wkt)
+			require.NoError(t, err)
+
+			_, center, radius, err := MinimumBoundingCircle(g)
+			require.NoError(t, err)
+
+			precision := 1000.0
+			require.Equal(t, tt.expectedRadius, math.Round(radius*precision)/precision)
+
+			geomT, err := center.AsGeomT()
+			require.NoError(t, err)
+			c := geomT.(*geom.Point)
+			centerCoords := []float64{math.Round(precision*c.Coords()[0]) / precision, math.Round(precision*c.Coords()[1]) / precision}
+			require.Equal(t, tt.expectedCoords, centerCoords)
 		})
 	}
 }

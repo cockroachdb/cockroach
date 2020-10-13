@@ -5518,3 +5518,26 @@ _p~iF~ps|U_ulLnnqC_mqNvxq`@
 
 statement error only SRID 4326 is supported
 SELECT ST_AsEncodedPolyline(GeomFromEWKT('SRID=4004;LINESTRING(9.00000001 -1.00009999, 0.00000007 0.00000091)'), 8);
+
+subtest st_minimumboundingradius
+
+query TR
+SELECT ST_AsText(center), round(radius, 2) FROM ST_MinimumBoundingRadius('POLYGON((26426 65078,26531 65242,26075 65136,26096 65427,26426 65078))')
+----
+POINT (26284.841802713268407 65267.114509082544828)  247.44
+
+query TR
+SELECT ST_AsText(center), round(radius, 2) FROM ST_MinimumBoundingRadius('GEOMETRYCOLLECTION (LINESTRING(0 0, 4 0), POINT(0 4))')
+----
+POINT (2 2)  2.83
+
+query TR
+SELECT ST_AsText(center), round(radius, 2) FROM ST_MinimumBoundingRadius('LINESTRING EMPTY')
+----
+POINT EMPTY  0
+
+query TR
+SELECT ST_AsText(center), round(radius, 2) FROM ST_MinimumBoundingRadius('POLYGON((0 2,-2 0,0 -2,2 0,0 2))')
+----
+POINT (0 0)  2
+
