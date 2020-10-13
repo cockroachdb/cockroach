@@ -169,6 +169,10 @@ func (s *Storage) Start(ctx context.Context) {
 // session definitely is not alive.
 func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive bool, err error) {
 	s.mu.Lock()
+	if !s.mu.started {
+		s.mu.Unlock()
+		return false, sqlliveness.NotStartedError
+	}
 	if _, ok := s.mu.deadSessions.Get(sid); ok {
 		s.mu.Unlock()
 		s.metrics.IsAliveCacheHits.Inc(1)
@@ -272,7 +276,6 @@ DELETE FROM sqlliveness WHERE session_id = $1
 func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
-	sqlliveness.WaitForActive(ctx, s.settings)
 	t := s.newTimer()
 	t.Reset(s.gcInterval())
 	for {

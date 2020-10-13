@@ -22,11 +22,13 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -2076,6 +2078,49 @@ func TestJobInTxn(t *testing.T) {
 		require.Error(t, txn.Commit())
 		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
 	})
+}
+
+func TestStartableJobMixedVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		false, /* initializeVersion */
+	)
+	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				DisableAutomaticVersionUpgrade: 1,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	jr := s.JobRegistry().(*jobs.Registry)
+	_, err := sqlDB.Exec("SELECT now()")
+	require.NoError(t, err)
+
+	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{}
+	})
+	var j *jobs.StartableJob
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		j, err = jr.CreateStartableJobWithTxn(ctx, jobs.Record{
+			Details:  jobspb.ImportDetails{},
+			Progress: jobspb.ImportProgress{},
+		}, txn, nil)
+		return err
+	}))
+	_, err = sqlDB.Exec("SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
+	require.NoError(t, err)
+	errCh, err := j.Start(ctx)
+	require.NoError(t, err)
+	require.NoError(t, <-errCh)
 }
 
 // TestStartableJobErrors tests that the StartableJob returns the expected
