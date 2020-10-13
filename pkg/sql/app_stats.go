@@ -162,30 +162,21 @@ func (s stmtKey) String() string {
 // recordStatement always returns a valid stmtID corresponding to the given
 // stmt regardless of whether the statement is actually recorded or not.
 func (a *appStats) recordStatement(
-	stmt *Statement,
-	samplePlanDescription *roachpb.ExplainTreePlanNode,
-	distSQLUsed bool,
-	vectorized bool,
-	implicitTxn bool,
-	automaticRetryCount int,
-	numRows int,
-	err error,
-	parseLat, planLat, runLat, svcLat, ovhLat float64,
-	stats topLevelQueryStats,
+	stmt *Statement, details planDetails, stats topLevelQueryStats,
 ) roachpb.StmtID {
 	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
 	// recorded we don't need to create an entry in the stmts map for it. We do
 	// still need stmtID for transaction level metrics tracking.
 	t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV)
-	if !stmtStatsEnable.Get(&a.st.SV) || (t > 0 && t.Seconds() >= svcLat) {
+	if !stmtStatsEnable.Get(&a.st.SV) || (t > 0 && t.Seconds() >= details.svcLat) {
 		createIfNonExistent = false
 	}
 
 	// Get the statistics object.
 	s, stmtID := a.getStatsForStmt(
-		stmt, implicitTxn,
-		err, createIfNonExistent,
+		stmt, details.implicitTxn,
+		details.err, createIfNonExistent,
 	)
 
 	// This statement was below the latency threshold or sql stats aren't being
@@ -199,29 +190,30 @@ func (a *appStats) recordStatement(
 	// Collect the per-statement statistics.
 	s.mu.Lock()
 	s.mu.data.Count++
-	if err != nil {
-		s.mu.data.SensitiveInfo.LastErr = err.Error()
+	if details.err != nil {
+		s.mu.data.SensitiveInfo.LastErr = details.err.Error()
 	}
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
-	if samplePlanDescription != nil {
-		s.mu.data.SensitiveInfo.MostRecentPlanDescription = *samplePlanDescription
+	if details.samplePlanDescription != nil {
+		s.mu.data.SensitiveInfo.MostRecentPlanDescription = *details.samplePlanDescription
 		s.mu.data.SensitiveInfo.MostRecentPlanTimestamp = timeutil.Now()
 	}
-	if automaticRetryCount == 0 {
+	if details.automaticRetryCount == 0 {
 		s.mu.data.FirstAttemptCount++
-	} else if int64(automaticRetryCount) > s.mu.data.MaxRetries {
-		s.mu.data.MaxRetries = int64(automaticRetryCount)
+	} else if int64(details.automaticRetryCount) > s.mu.data.MaxRetries {
+		s.mu.data.MaxRetries = int64(details.automaticRetryCount)
 	}
-	s.mu.data.NumRows.Record(s.mu.data.Count, float64(numRows))
-	s.mu.data.ParseLat.Record(s.mu.data.Count, parseLat)
-	s.mu.data.PlanLat.Record(s.mu.data.Count, planLat)
-	s.mu.data.RunLat.Record(s.mu.data.Count, runLat)
-	s.mu.data.ServiceLat.Record(s.mu.data.Count, svcLat)
-	s.mu.data.OverheadLat.Record(s.mu.data.Count, ovhLat)
+	s.mu.data.NumRows.Record(s.mu.data.Count, float64(details.numRows))
+	s.mu.data.ParseLat.Record(s.mu.data.Count, details.parseLat)
+	s.mu.data.PlanLat.Record(s.mu.data.Count, details.planLat)
+	s.mu.data.RunLat.Record(s.mu.data.Count, details.runLat)
+	s.mu.data.ServiceLat.Record(s.mu.data.Count, details.svcLat)
+	s.mu.data.OverheadLat.Record(s.mu.data.Count, details.ovhLat)
+	s.mu.data.EstimatedCost.Record(s.mu.data.Count, details.planCost)
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
-	s.mu.vectorized = vectorized
-	s.mu.distSQLUsed = distSQLUsed
+	s.mu.vectorized = details.vectorized
+	s.mu.distSQLUsed = details.distSQLUsed
 	s.mu.Unlock()
 
 	return s.ID

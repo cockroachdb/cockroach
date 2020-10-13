@@ -154,6 +154,7 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.ServiceLat.AlmostEqual(other.ServiceLat, eps) &&
 		s.OverheadLat.AlmostEqual(other.OverheadLat, eps) &&
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
+		s.EstimatedCost.AlmostEqual(other.EstimatedCost, eps) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
 		s.RowsRead.AlmostEqual(other.RowsRead, eps)
 }

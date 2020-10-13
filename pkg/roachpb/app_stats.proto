@@ -86,6 +86,9 @@ message StatementStatistics {
   // RowsRead collects the number of rows read from disk.
   optional NumericStat rows_read = 16 [(gogoproto.nullable) = false];
 
+  // EstimatedCost contains the estimated optimizer cost for the query.
+  optional NumericStat estimated_cost = 17 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 

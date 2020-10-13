@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -195,11 +196,26 @@ func (ex *connExecutor) recordStatementSummary(
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
+	planCost := planner.curPlan.mem.RootExpr().(memo.RelExpr).Cost()
+
 	stmtID := ex.statsCollector.recordStatement(
-		stmt, planner.curPlan.planForStats,
-		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
-		flags.IsSet(planFlagImplicitTxn), automaticRetryCount, rowsAffected, err,
-		parseLat, planLat, runLat, svcLat, execOverhead, stats,
+		stmt,
+		planDetails{
+			samplePlanDescription: planner.curPlan.planForStats,
+			distSQLUsed:           flags.IsDistributed(),
+			vectorized:            flags.IsSet(planFlagVectorized),
+			implicitTxn:           flags.IsSet(planFlagImplicitTxn),
+			automaticRetryCount:   automaticRetryCount,
+			numRows:               rowsAffected,
+			err:                   err,
+			parseLat:              parseLat,
+			planLat:               planLat,
+			runLat:                runLat,
+			svcLat:                svcLat,
+			ovhLat:                execOverhead,
+			planCost:              float64(planCost),
+		},
+		stats,
 	)
 
 	// Do some transaction level accounting for the transaction this statement is

@@ -2262,26 +2262,26 @@ func newSQLStatsCollector(
 	}
 }
 
+type planDetails struct {
+	samplePlanDescription                     *roachpb.ExplainTreePlanNode
+	distSQLUsed                               bool
+	vectorized                                bool
+	implicitTxn                               bool
+	automaticRetryCount                       int
+	numRows                                   int
+	err                                       error
+	parseLat, planLat, runLat, svcLat, ovhLat float64
+
+	planCost float64
+}
+
 // recordStatement records stats for one statement. samplePlanDescription can
 // be nil, as these are only sampled periodically per unique fingerprint. It
 // returns the statement ID of the recorded statement.
 func (s *sqlStatsCollector) recordStatement(
-	stmt *Statement,
-	samplePlanDescription *roachpb.ExplainTreePlanNode,
-	distSQLUsed bool,
-	vectorized bool,
-	implicitTxn bool,
-	automaticRetryCount int,
-	numRows int,
-	err error,
-	parseLat, planLat, runLat, svcLat, ovhLat float64,
-	stats topLevelQueryStats,
+	stmt *Statement, details planDetails, stats topLevelQueryStats,
 ) roachpb.StmtID {
-	return s.appStats.recordStatement(
-		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn,
-		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
-		ovhLat, stats,
-	)
+	return s.appStats.recordStatement(stmt, details, stats)
 }
 
 // recordTransaction records statistics for one transaction.

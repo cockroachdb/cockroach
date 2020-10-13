@@ -60,6 +60,9 @@ export function addStatementStats(a: StatementStatistics, b: StatementStatistics
     run_lat: addNumericStats(a.run_lat, b.run_lat, countA, countB),
     service_lat: addNumericStats(a.service_lat, b.service_lat, countA, countB),
     overhead_lat: addNumericStats(a.overhead_lat, b.overhead_lat, countA, countB),
+    bytes_read: addNumericStats(a.bytes_read, b.bytes_read, countA, countB),
+    rows_read: addNumericStats(a.rows_read, b.rows_read, countA, countB),
+    estimated_cost: addNumericStats(a.estimated_cost, b.estimated_cost, countA, countB),
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
   };
 }
