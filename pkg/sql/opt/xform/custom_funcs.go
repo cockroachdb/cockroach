@@ -207,7 +207,7 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 //      )
 //
 func (c *CustomFuncs) GeneratePartialIndexScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, inputFilters memo.FiltersExpr,
 ) {
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
@@ -216,7 +216,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes|rejectInvertedIndexes)
 	for iter.Next() {
 		pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
-		remainingFilters, ok := c.im.FiltersImplyPredicate(filters, pred)
+		remainingFilters, ok := c.im.FiltersImplyPredicate(inputFilters, pred)
 		if !ok {
 			// The filters do not imply the predicate, so the partial index
 			// cannot be used.
@@ -342,7 +342,10 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	tabMeta := md.TableMeta(scanPrivate.Table)
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes)
 	for iter.Next() {
+		// Reset the filters for every iteration in case they have been reduced
+		// while proving partial predicate implication.
 		filters := explicitFilters
+
 		// If the index is a partial index, check whether or not the filter
 		// implies the predicate.
 		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
@@ -987,7 +990,7 @@ func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 // constrained is that we cannot treat an inverted index in the same way as a
 // regular index, since it does not actually contain the indexed column.
 func (c *CustomFuncs) GenerateInvertedIndexScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, inputFilters memo.FiltersExpr,
 ) {
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
@@ -1002,34 +1005,37 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		var spansToRead invertedexpr.InvertedSpans
 		var constraint *constraint.Constraint
 		var geoOk, nonGeoOk bool
-		remaining := filters
+
+		// Reset the filters for every iteration in case they have been reduced
+		// while proving partial predicate implication.
+		filters := inputFilters
 
 		// If the index is a partial index, check whether or not the filter
 		// implies the predicate.
 		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
 		if isPartialIndex {
 			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
-			remainingFilters, ok := c.im.FiltersImplyPredicate(remaining, pred)
+			remainingFilters, ok := c.im.FiltersImplyPredicate(filters, pred)
 			if !ok {
 				// The filters do not imply the predicate, so the partial index
 				// cannot be used.
 				continue
 			}
-			remaining = remainingFilters
+			filters = remainingFilters
 		}
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
 		spanExpr, pfState, geoOk = invertedidx.TryConstrainGeoIndex(
-			c.e.evalCtx.Context, c.e.f, remaining, scanPrivate.Table, iter.Index(),
+			c.e.evalCtx.Context, c.e.f, filters, scanPrivate.Table, iter.Index(),
 		)
 		if geoOk {
 			// Geo index scans can never be tight, so the remaining filters do
 			// not change.
 			spansToRead = spanExpr.SpansToRead
 		} else {
-			constraint, remaining, nonGeoOk = c.tryConstrainIndex(
-				remaining,
+			constraint, filters, nonGeoOk = c.tryConstrainIndex(
+				filters,
 				nil, /* optionalFilters */
 				scanPrivate.Table,
 				iter.IndexOrdinal(),
@@ -1069,9 +1075,9 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		remaining = sb.addSelectAfterSplit(remaining, pkCols)
+		filters = sb.addSelectAfterSplit(filters, pkCols)
 		sb.addIndexJoin(scanPrivate.Cols)
-		sb.addSelect(remaining)
+		sb.addSelect(filters)
 
 		sb.build(grp)
 	}
@@ -1736,6 +1742,8 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes)
 	for iter.Next() {
+		// Reset the filters for every iteration in case they have been reduced
+		// while proving partial predicate implication.
 		onFilters := on
 
 		// If the secondary index is a partial index, it must be implied by the
