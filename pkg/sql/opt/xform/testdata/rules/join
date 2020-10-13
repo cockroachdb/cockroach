@@ -643,13 +643,16 @@ inner-join-apply
       └── a = column1
 
 opt expect=ReorderJoins format=hide-all
-SELECT *
-FROM abc
-LEFT JOIN stu
-ON a = s
+SELECT * FROM abc
+LEFT JOIN stu ON a = s
+LEFT JOIN small ON a = m
 ----
 left-join (merge)
- ├── scan abc@ab
+ ├── left-join (merge)
+ │    ├── scan abc@ab
+ │    ├── sort
+ │    │    └── scan small
+ │    └── filters (true)
  ├── scan stu
  └── filters (true)
 
@@ -3214,7 +3217,7 @@ project
 
 # We should not generate a lookup semi-join when the index does not cover "s"
 # which is referenced in the remaining filter.
-opt expect=GenerateLookupJoinsWithFilter
+opt expect-not=GenerateLookupJoinsWithFilter
 SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
 ----
 project
@@ -3253,7 +3256,7 @@ project
 
 # We should not generate a lookup anti-join when the index does not cover "s"
 # which is referenced in the remaining filter.
-opt expect=GenerateLookupJoinsWithFilter
+opt expect-not=GenerateLookupJoinsWithFilter
 SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
 ----
 project
@@ -3819,7 +3822,7 @@ project
 
 # It's not possible to generate an inverted join when there is an OR with a
 # non-geospatial function.
-opt expect=GenerateInvertedJoins
+opt expect-not=GenerateInvertedJoins
 SELECT
   n.name, c.boroname
 FROM nyc_census_blocks AS c
