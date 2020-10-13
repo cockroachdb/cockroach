@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -143,34 +142,17 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 
 	var db storage.Engine
 
-	switch storage.DefaultStorageEngine {
-	case enginepb.EngineTypeDefault:
-		fallthrough
-	case enginepb.EngineTypePebble:
-		cfg := storage.PebbleConfig{
-			StorageConfig: storageConfig,
-			Opts:          storage.DefaultPebbleOptions(),
-		}
-		cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
-		defer cfg.Opts.Cache.Unref()
-
-		cfg.Opts.MaxOpenFiles = int(maxOpenFiles)
-		cfg.Opts.ReadOnly = opts.ReadOnly
-
-		db, err = storage.NewPebble(context.Background(), cfg)
-
-	case enginepb.EngineTypeRocksDB:
-		cache := storage.NewRocksDBCache(server.DefaultCacheSize)
-		defer cache.Release()
-
-		cfg := storage.RocksDBConfig{
-			StorageConfig: storageConfig,
-			MaxOpenFiles:  maxOpenFiles,
-			ReadOnly:      opts.ReadOnly,
-		}
-
-		db, err = storage.NewRocksDB(cfg, cache)
+	cfg := storage.PebbleConfig{
+		StorageConfig: storageConfig,
+		Opts:          storage.DefaultPebbleOptions(),
 	}
+	cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
+	defer cfg.Opts.Cache.Unref()
+
+	cfg.Opts.MaxOpenFiles = int(maxOpenFiles)
+	cfg.Opts.ReadOnly = opts.ReadOnly
+
+	db, err = storage.NewPebble(context.Background(), cfg)
 
 	if err != nil {
 		return nil, err
@@ -655,44 +637,12 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugRocksDBCmd = &cobra.Command{
-	Use:   "rocksdb",
-	Short: "run the RocksDB 'ldb' tool",
-	Long: `
-Runs the RocksDB 'ldb' tool, which provides various subcommands for examining
-raw store data. 'cockroach debug rocksdb' accepts the same arguments and flags
-as 'ldb'.
-
-https://github.com/facebook/rocksdb/wiki/Administration-and-Data-Access-Tool#ldb-tool
-`,
-	// LDB does its own flag parsing.
-	// TODO(mberhault): support encrypted stores.
-	DisableFlagParsing: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		storage.RunLDB(args)
-	},
-}
-
 var debugPebbleCmd = &cobra.Command{
 	Use:   "pebble [command]",
 	Short: "run a Pebble introspection tool command",
 	Long: `
 Allows the use of pebble tools, such as to introspect manifests, SSTables, etc.
 `,
-}
-
-var debugSSTDumpCmd = &cobra.Command{
-	Use:   "sst_dump",
-	Short: "run the RocksDB 'sst_dump' tool",
-	Long: `
-Runs the RocksDB 'sst_dump' tool
-`,
-	// sst_dump does its own flag parsing.
-	// TODO(mberhault): support encrypted stores.
-	DisableFlagParsing: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		storage.RunSSTDump(args)
-	},
 }
 
 var debugEnvCmd = &cobra.Command{
@@ -1215,8 +1165,6 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugDecodeKeyCmd,
 	debugDecodeValueCmd,
 	debugDecodeProtoCmd,
-	debugRocksDBCmd,
-	debugSSTDumpCmd,
 	debugGossipValuesCmd,
 	debugTimeSeriesDumpCmd,
 	debugSyncBenchCmd,

@@ -37,24 +37,15 @@ import (
 	"github.com/kr/pretty"
 )
 
-// createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
-// storage capacity.
-func createTestRocksDBEngine() storage.Engine {
-	return storage.NewInMem(context.Background(),
-		enginepb.EngineTypeRocksDB, roachpb.Attributes{}, 1<<20)
-}
-
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() storage.Engine {
-	return storage.NewInMem(context.Background(),
-		enginepb.EngineTypePebble, roachpb.Attributes{}, 1<<20)
+	return storage.NewInMem(context.Background(), roachpb.Attributes{}, 1<<20)
 }
 
 var engineImpls = []struct {
 	name   string
 	create func() storage.Engine
 }{
-	{"rocksdb", createTestRocksDBEngine},
 	{"pebble", createTestPebbleEngine},
 }
 
