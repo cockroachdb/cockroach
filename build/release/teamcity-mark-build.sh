@@ -8,7 +8,7 @@ source "$(dirname "${0}")/teamcity-support.sh"
 mark_build() {
   tc_start_block "Variable Setup"
   build_label=$1
-  release_branch="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^v[0-9]+\.[0-9]+")"
+  release_branch="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
 
   if [[ -z "${DRY_RUN}" ]] ; then
     google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS
