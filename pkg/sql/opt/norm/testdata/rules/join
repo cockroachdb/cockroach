@@ -102,7 +102,7 @@ left-join (cross)
 # contradictions. Doing so can split the filter expressions into two
 # FiltersItems such that they are no longer considered a contradiction, and
 # DetectJoinContradiction does not fire.
-norm expect=DetectJoinContradiction
+norm expect=DetectJoinContradiction expect-not=SimplifyJoinFilters
 SELECT * FROM a LEFT JOIN b ON k<1 AND k>2
 ----
 left-join (cross)
