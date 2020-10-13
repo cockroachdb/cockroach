@@ -210,12 +210,38 @@ const (
 	Domain
 )
 
+// EnumValue represents a single enum value.
+type EnumValue string
+
+// Format implements the NodeFormatter interface.
+func (n *EnumValue) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	if f.HasFlags(FmtAnonymize) {
+		ctx.WriteByte('_')
+	} else {
+		lex.EncodeSQLString(&ctx.Buffer, string(*n))
+	}
+}
+
+// EnumValueList represents a list of enum values.
+type EnumValueList []EnumValue
+
+// Format implements the NodeFormatter interface.
+func (l *EnumValueList) Format(ctx *FmtCtx) {
+	for i := range *l {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(&(*l)[i])
+	}
+}
+
 // CreateType represents a CREATE TYPE statement.
 type CreateType struct {
 	TypeName *UnresolvedObjectName
 	Variety  CreateTypeVariety
 	// EnumLabels is set when this represents a CREATE TYPE ... AS ENUM statement.
-	EnumLabels []string
+	EnumLabels EnumValueList
 }
 
 var _ Statement = &CreateType{}
@@ -223,17 +249,12 @@ var _ Statement = &CreateType{}
 // Format implements the NodeFormatter interface.
 func (node *CreateType) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TYPE ")
-	ctx.WriteString(node.TypeName.String())
+	ctx.FormatNode(node.TypeName)
 	ctx.WriteString(" ")
 	switch node.Variety {
 	case Enum:
 		ctx.WriteString("AS ENUM (")
-		for i := range node.EnumLabels {
-			if i > 0 {
-				ctx.WriteString(", ")
-			}
-			lex.EncodeSQLString(&ctx.Buffer, node.EnumLabels[i])
-		}
+		ctx.FormatNode(&node.EnumLabels)
 		ctx.WriteString(")")
 	}
 }
@@ -1226,7 +1247,7 @@ func (node *CreateTable) HoistConstraints() {
 // CreateSchema represents a CREATE SCHEMA statement.
 type CreateSchema struct {
 	IfNotExists bool
-	Schema      string
+	Schema      Name
 	AuthRole    string
 }
 
@@ -1240,7 +1261,7 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 
 	if node.Schema != "" {
 		ctx.WriteString(" ")
-		ctx.WriteString(node.Schema)
+		ctx.FormatNode(&node.Schema)
 	}
 
 	if node.AuthRole != "" {

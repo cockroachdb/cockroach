@@ -1665,11 +1665,11 @@ CREATE TABLE crdb_internal.create_type_statements (
 		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc *typedesc.Immutable) error {
 			switch typeDesc.Kind {
 			case descpb.TypeDescriptor_ENUM:
-				var enumLabels []string
+				var enumLabels tree.EnumValueList
 				enumLabelsDatum := tree.NewDArray(types.String)
 				for i := range typeDesc.EnumMembers {
 					rep := typeDesc.EnumMembers[i].LogicalRepresentation
-					enumLabels = append(enumLabels, rep)
+					enumLabels = append(enumLabels, tree.EnumValue(rep))
 					if err := enumLabelsDatum.Append(tree.NewDString(rep)); err != nil {
 						return err
 					}
