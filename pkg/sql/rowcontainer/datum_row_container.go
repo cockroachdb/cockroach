@@ -224,6 +224,8 @@ func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums
 		c.numRows++
 		return nil, nil
 	}
+	// Note that it is important that we perform the memory accounting before
+	// actually adding the row.
 	if err := c.memAcc.Grow(ctx, c.rowSize(row)); err != nil {
 		return nil, err
 	}
