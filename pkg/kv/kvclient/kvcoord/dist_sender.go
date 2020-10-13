@@ -1499,7 +1499,7 @@ func (ds *DistSender) sendPartialBatch(
 			{
 				var s redact.StringBuilder
 				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
-				log.Warningf(ctx, "slow range RPC: %v", s)
+				log.Warningf(ctx, "slow range RPC: %v", &s)
 			}
 			// If the RPC wasn't successful, defer the logging of a message once the
 			// RPC is not retried any more.
@@ -1509,7 +1509,7 @@ func (ds *DistSender) sendPartialBatch(
 					ds.metrics.SlowRPCs.Dec(1)
 					var s redact.StringBuilder
 					slowRangeRPCReturnWarningStr(&s, timeutil.Since(tBegin), attempts)
-					log.Warningf(ctx, "slow RPC response: %v", s)
+					log.Warningf(ctx, "slow RPC response: %v", &s)
 				}(tBegin, attempts)
 			}
 			tBegin = time.Time{} // prevent reentering branch for this RPC
