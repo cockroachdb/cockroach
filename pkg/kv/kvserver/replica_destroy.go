@@ -80,7 +80,17 @@ func (r *Replica) preDestroyRaftMuLocked(
 	clearRangeIDLocalOnly bool,
 	mustUseClearRange bool,
 ) error {
-	desc := r.Desc()
+	r.mu.RLock()
+	desc := r.descRLocked()
+	removed := r.mu.destroyStatus.Removed()
+	r.mu.RUnlock()
+
+	// The replica must be marked as destroyed before its data is removed. If
+	// not, we risk new commands being accepted and observing the missing data.
+	if !removed {
+		log.Fatalf(ctx, "replica not marked as destroyed before call to preDestroyRaftMuLocked: %v", r)
+	}
+
 	err := clearRangeData(desc, reader, writer, clearRangeIDLocalOnly, mustUseClearRange)
 	if err != nil {
 		return err

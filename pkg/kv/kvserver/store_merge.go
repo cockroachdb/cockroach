@@ -51,7 +51,9 @@ func (s *Store) MergeRange(
 	// call removeInitializedReplicaRaftMuLocked directly to avoid deadlocking
 	// on the right-hand replica's raftMu.
 	if err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
-		DestroyData: false, // the replica was destroyed when the merge commit applied
+		// The replica was destroyed by the tombstones added to the batch in
+		// runPreApplyTriggersAfterStagingWriteBatch.
+		DestroyData: false,
 	}); err != nil {
 		return errors.Errorf("cannot remove range: %s", err)
 	}
