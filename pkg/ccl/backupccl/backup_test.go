@@ -6479,7 +6479,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		// Check that the restored database still exists, but only contains the new
 		// schema we added.
-		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS FROM d]`, [][]string{
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS FROM d] ORDER BY 1`, [][]string{
 			{"crdb_internal"}, {"information_schema"}, {"new_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"},
 		})
 		sqlDB.CheckQueryResults(t, `SHOW TABLES FROM d`, [][]string{})
@@ -6537,7 +6537,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		// Check that the restored database still exists, but only contains the new
 		// table we added.
-		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS FROM d]`, [][]string{
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS FROM d] ORDER BY 1`, [][]string{
 			{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"},
 		})
 		sqlDB.CheckQueryResults(t, `SELECT schema_name, table_name FROM [SHOW TABLES FROM d]`, [][]string{
@@ -6606,7 +6606,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 		require.NoError(t, g.Wait())
 
 		sqlDB.Exec(t, `USE newdb`)
-		sqlDB.CheckQueryResults(t, `SELECT schema_name from [SHOW SCHEMAS FROM newdb]`, [][]string{
+		sqlDB.CheckQueryResults(t, `SELECT schema_name from [SHOW SCHEMAS FROM newdb] ORDER BY 1`, [][]string{
 			{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"sc"},
 		})
 		sqlDB.CheckQueryResults(t, `SELECT schema_name, table_name FROM [SHOW TABLES FROM sc]`, [][]string{
