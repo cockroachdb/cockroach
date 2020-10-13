@@ -63,6 +63,7 @@ func registerAcceptance(r *testRegistry) {
 			// running. If that branch corresponds to an older release, then upgrading
 			// to head after 19.2 fails.
 			minVersion: "v19.2.0",
+			skip: "Checkpoint command needs to be reimplemented on Pebble",
 			timeout:    30 * time.Minute,
 		},
 	}

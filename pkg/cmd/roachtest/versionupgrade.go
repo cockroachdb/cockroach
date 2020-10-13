@@ -503,7 +503,9 @@ func makeVersionFixtureAndFatal(
 			// TODO(irfansharif): This will need replacement, or a suitable
 			// alternative, for when we strip out rocksdb entirely. This will
 			// fail with an opaque error if building the cockroach binary
-			// without rocksdb (`make buildshort`).
+			// without rocksdb (`make buildshort`). Pebble already supports
+			// checkpointing (see CreateCheckpoint in pebble.go). This just needs
+			// to be exposed to a command line method.
 			c.Run(ctx, c.All(), cockroach, "debug", "rocksdb", "--db={store-dir}",
 				"checkpoint", "--checkpoint_dir={store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within

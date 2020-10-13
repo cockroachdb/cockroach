@@ -22,6 +22,7 @@ func registerInconsistency(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("inconsistency"),
 		Owner:      OwnerKV,
+		Skip:       "Uses RocksDB put command; unskip when that's bypassed",
 		MinVersion: "v19.2.2", // https://github.com/cockroachdb/cockroach/pull/42149 is new in 19.2.2
 		Cluster:    makeClusterSpec(3),
 		Run:        runInconsistency,
