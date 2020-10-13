@@ -500,12 +500,9 @@ func makeVersionFixtureAndFatal(
 			// compatible).
 			name := checkpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, c.All())
-			// TODO(irfansharif): This will need replacement, or a suitable
-			// alternative, for when we strip out rocksdb entirely. This will
-			// fail with an opaque error if building the cockroach binary
-			// without rocksdb (`make buildshort`).
-			c.Run(ctx, c.All(), cockroach, "debug", "rocksdb", "--db={store-dir}",
-				"checkpoint", "--checkpoint_dir={store-dir}/"+name)
+
+			c.Run(ctx, c.All(), cockroach, "debug", "pebble", "db", "checkpoint",
+				"{store-dir}", "{store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within
 			// store-dir, but the rocksdb checkpoint step above does not pick it
 			// up as it isn't recognized by RocksDB. We copy the marker
