@@ -1,3 +1,5 @@
+# LogicTest: !backup-restore
+
 # Some sanity checks for node_txn_stats virtual table.
 
 statement ok

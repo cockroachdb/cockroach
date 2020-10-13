@@ -1,3 +1,5 @@
+# LogicTest: !backup-restore
+
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck
 

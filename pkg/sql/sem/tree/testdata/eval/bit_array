@@ -1,3 +1,5 @@
+# LogicTest: !backup-restore
+
 eval
 B'1001' = B'1001'
 ----

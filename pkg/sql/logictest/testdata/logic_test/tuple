@@ -1,3 +1,5 @@
+# LogicTest: !backup-restore
+
 statement ok
 CREATE TABLE tb(unused INT); INSERT INTO tb VALUES (1)
 
