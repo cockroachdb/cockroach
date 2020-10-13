@@ -159,8 +159,7 @@ information_schema.tables  CREATE TABLE information_schema.tables (
                            table_name STRING NOT NULL,
                            table_type STRING NOT NULL,
                            is_insertable_into STRING NOT NULL,
-                           version INT8 NULL,
-                           INDEX tables_table_name_idx (table_name ASC) STORING (table_catalog, table_schema, table_type, is_insertable_into, version)
+                           version INT8 NULL
 )
 
 query TTBTTTB colnames
@@ -516,6 +515,16 @@ abc
 query T
 SET DATABASE = test; SELECT table_name FROM information_schema.tables WHERE table_schema = 'other_db'
 ----
+
+# Check that tables from other schemas are found
+query TT rowsort
+CREATE SCHEMA myschema;
+CREATE TABLE myschema.abc();
+CREATE TABLE abc();
+SELECT table_schema, table_name FROM information_schema.tables WHERE table_name = 'abc';
+----
+myschema  abc
+public    abc
 
 # Check that filtering works.
 query T
@@ -1082,24 +1091,24 @@ SELECT *
 FROM information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name          table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
-constraint_db       public             541687103_59_1_not_null  constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             c2                       constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             check_a                  constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             primary                  constraint_db  public        t1          PRIMARY KEY      NO             NO
-constraint_db       public             t1_a_key                 constraint_db  public        t1          UNIQUE           NO             NO
-constraint_db       public             541687103_60_2_not_null  constraint_db  public        t2          CHECK            NO             NO
-constraint_db       public             fk                       constraint_db  public        t2          FOREIGN KEY      NO             NO
+constraint_catalog  constraint_schema  constraint_name           table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
+constraint_db       public             3753077756_62_1_not_null  constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             c2                        constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             check_a                   constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             primary                   constraint_db  public        t1          PRIMARY KEY      NO             NO
+constraint_db       public             t1_a_key                  constraint_db  public        t1          UNIQUE           NO             NO
+constraint_db       public             3753077756_63_2_not_null  constraint_db  public        t2          CHECK            NO             NO
+constraint_db       public             fk                        constraint_db  public        t2          FOREIGN KEY      NO             NO
 
 query TTTT colnames
 SELECT *
 FROM information_schema.check_constraints
 ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name          check_clause
-constraint_db       public             541687103_59_1_not_null  p IS NOT NULL
-constraint_db       public             c2                       ((a < 99:::INT8))
-constraint_db       public             check_a                  ((a > 4:::INT8))
+constraint_catalog  constraint_schema  constraint_name           check_clause
+constraint_db       public             3753077756_62_1_not_null  p IS NOT NULL
+constraint_db       public             c2                        ((a < 99:::INT8))
+constraint_db       public             check_a                   ((a > 4:::INT8))
 
 query TTTTTTT colnames
 SELECT *
@@ -1123,10 +1132,10 @@ USING (constraint_catalog, constraint_schema, constraint_name)
 WHERE tc.table_schema in ('public')
 ORDER BY tc.table_schema, tc.table_name, cc.constraint_name
 ----
-table_schema  table_name  constraint_name          check_clause
-public        t1          541687103_59_1_not_null  p IS NOT NULL
-public        t1          c2                       ((a < 99:::INT8))
-public        t1          check_a                  ((a > 4:::INT8))
+table_schema  table_name  constraint_name           check_clause
+public        t1          3753077756_62_1_not_null  p IS NOT NULL
+public        t1          c2                        ((a < 99:::INT8))
+public        t1          check_a                   ((a > 4:::INT8))
 
 statement ok
 DROP DATABASE constraint_db CASCADE
