@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/tracker"
@@ -861,9 +862,11 @@ func TestTruncateLogRecompute(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	cache := storage.NewRocksDBCache(1 << 20)
-	defer cache.Release()
-	eng, err := storage.NewRocksDB(storage.RocksDBConfig{StorageConfig: base.StorageConfig{Dir: dir}}, cache)
+	cache := pebble.NewCache(1 << 20)
+	defer cache.Unref()
+	opts := storage.DefaultPebbleOptions()
+	opts.Cache = cache
+	eng, err := storage.NewPebble(ctx, storage.PebbleConfig{StorageConfig: base.StorageConfig{Dir: dir}, Opts: opts})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,11 +21,6 @@ enum EngineType {
 
   // Denotes the default storage engine. Alias for EngineTypePebble.
   EngineTypeDefault = 0;
-  // Denotes RocksDB as the underlying storage engine type.
-  EngineTypeRocksDB = 1;
   // Denotes Pebble as the underlying storage engine type.
   EngineTypePebble = 2;
-  // Denotes TeePebbleRocksDB as the underlying storage engine type. Only use
-  // for testing purposes.
-  EngineTypeTeePebbleRocksDB = 3;
 }
