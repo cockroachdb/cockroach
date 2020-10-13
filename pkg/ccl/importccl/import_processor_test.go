@@ -548,11 +548,11 @@ type cancellableImportResumer struct {
 }
 
 func (r *cancellableImportResumer) Resume(
-	_ context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	_ context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	r.jobID = *r.wrapped.job.ID()
 	r.jobIDCh <- r.jobID
-	if err := r.wrapped.Resume(r.ctx, phs, resultsCh); err != nil {
+	if err := r.wrapped.Resume(r.ctx, execCtx, resultsCh); err != nil {
 		return err
 	}
 	if r.onSuccessBarrier != nil {
@@ -561,7 +561,7 @@ func (r *cancellableImportResumer) Resume(
 	return errors.New("job succeed, but we're forcing it to be paused")
 }
 
-func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	// This callback is invoked when an error or cancellation occurs
 	// during the import. Since our Resume handler returned an
 	// error (after pausing the job), we need to short-circuits

@@ -981,7 +981,7 @@ func prepareNewTableDescsForIngestion(
 	ctx context.Context,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	importTables []jobspb.ImportDetails_Table,
 	parentID descpb.ID,
 ) ([]*descpb.TableDescriptor, error) {
@@ -1111,7 +1111,7 @@ func prepareExistingTableDescForIngestion(
 // step of import. The descriptors are in an IMPORTING state (offline) on
 // successful completion of this method.
 func (r *importResumer) prepareTableDescsForIngestion(
-	ctx context.Context, p sql.PlanHookState, details jobspb.ImportDetails,
+	ctx context.Context, p sql.JobExecContext, details jobspb.ImportDetails,
 ) error {
 	err := descs.Txn(ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
 		p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(
@@ -1194,10 +1194,10 @@ func (r *importResumer) prepareTableDescsForIngestion(
 
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(
-	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
@@ -1421,10 +1421,10 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // been committed from a import that has failed or been canceled. It does this
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
-func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
-	cfg := phs.(sql.PlanHookState).ExecCfg()
+	cfg := execCtx.(sql.JobExecContext).ExecCfg()
 	lm, ie, db := cfg.LeaseManager, cfg.InternalExecutor, cfg.DB
 	return descs.Txn(ctx, cfg.Settings, lm, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,

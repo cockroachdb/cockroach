@@ -351,7 +351,7 @@ func (r *Registry) deprecatedResume(
 		}
 		// Bookkeeping.
 		payload := job.Payload()
-		phs, cleanup := r.planFn("resume-"+job.taskName(), payload.Username)
+		execCtx, cleanup := r.execCtx("resume-"+job.taskName(), payload.Username)
 		defer cleanup()
 		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
 		var span opentracing.Span
@@ -365,7 +365,7 @@ func (r *Registry) deprecatedResume(
 			if job.Payload().FinalResumeError != nil {
 				finalResumeError = errors.DecodeError(ctx, *job.Payload().FinalResumeError)
 			}
-			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, finalResumeError)
+			err = r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, status, finalResumeError)
 			if err != nil {
 				// TODO (lucy): This needs to distinguish between assertion errors in
 				// the job registry and assertion errors in job execution returned from
@@ -427,7 +427,7 @@ func (j *Job) deprecatedInsert(ctx context.Context, id int64, lease *jobspb.Leas
 			return err
 		}
 		const stmt = `
-INSERT INTO system.jobs (id, status, payload, progress, created_by_type, created_by_id) 
+INSERT INTO system.jobs (id, status, payload, progress, created_by_type, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6)`
 		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
 			id, StatusRunning, payloadBytes, progressBytes, j.createdBy.Name, j.createdBy.ID)
