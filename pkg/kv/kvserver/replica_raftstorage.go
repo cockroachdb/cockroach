@@ -1032,6 +1032,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	keyRanges := getKeyRanges(desc)
 	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
 	for _, sr := range subsumedRepls {
+		// We mark the replica as destroyed so that new commands are not
+		// accepted. This destroy status will be detected after the batch
+		// commits by clearSubsumedReplicaInMemoryData() to finish the removal.
+		sr.mu.Lock()
+		sr.mu.destroyStatus.Set(
+			roachpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
+			destroyReasonRemoved)
+		sr.mu.Unlock()
+
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
@@ -1146,7 +1155,8 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// replicas themselves is protected by their raftMus, which are held from
 		// start to finish.
 		if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, RemoveOptions{
-			DestroyData: false, // data is already destroyed
+			// The data was already destroyed by clearSubsumedReplicaDiskData.
+			DestroyData: false,
 		}); err != nil {
 			return err
 		}
