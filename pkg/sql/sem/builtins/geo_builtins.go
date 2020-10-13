@@ -5539,6 +5539,28 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: tree.VolatilityImmutable,
 		}),
 
+	"st_minimumboundingcircle": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{
+					Name: "geometry",
+					Typ:  types.Geometry,
+				},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geometry := tree.MustBeDGeometry(args[0])
+
+				polygon, _, _, err := geomfn.MinimumBoundingCircle(geometry.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(polygon), nil
+			},
+			Info:       "Returns the smallest circle polygon that can fully contain a geometry. ",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
 	//
 	// Unimplemented.
 	//
@@ -5568,7 +5590,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
 	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
 	"st_linesubstring":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
-	"st_minimumboundingcircle": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
 	"st_node":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
 	"st_orientedenvelope":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
 	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
