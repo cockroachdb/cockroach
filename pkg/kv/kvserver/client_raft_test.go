@@ -4132,7 +4132,7 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		// Use RocksDB engines because Pebble does not use the compactor queue.
-		eng := storage.NewInMem(ctx, enginepb.EngineTypeRocksDB, roachpb.Attributes{}, 1<<20)
+		eng := storage.NewInMem(ctx, roachpb.Attributes{}, 1<<20)
 		defer eng.Close()
 		mtc.engines = append(mtc.engines, eng)
 	}

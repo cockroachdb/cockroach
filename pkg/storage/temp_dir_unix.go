@@ -15,11 +15,11 @@ package storage
 import (
 	"os"
 
-	"github.com/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/errors"
 )
 
-type lockStruct struct{
+type lockStruct struct {
 	file     *os.File
 	filename string
 }

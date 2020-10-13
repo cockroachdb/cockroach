@@ -57,7 +57,6 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 		name   string
 		create engineMaker
 	}{
-		{"rocksdb", setupMVCCInMemRocksDB},
 		{"pebble", setupMVCCInMemPebble},
 	}
 
@@ -106,7 +105,6 @@ func BenchmarkExportToSst(b *testing.B) {
 		name   string
 		create engineMaker
 	}{
-		{"rocksdb", setupMVCCRocksDB},
 		{"pebble", setupMVCCPebble},
 	}
 
@@ -172,14 +170,14 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 		exists = false
 	}
 
-	eng, err := NewRocksDB(
-		RocksDBConfig{
+	eng, err := NewPebble(
+		context.Background(),
+		PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Settings: cluster.MakeTestingClusterSettings(),
 				Dir:      dir,
 			},
 		},
-		RocksDBCache{},
 	)
 	if err != nil {
 		return nil, err
@@ -1067,10 +1065,6 @@ func runBatchApplyBatchRepr(
 		}
 		if err := batch.ApplyBatchRepr(repr, false /* sync */); err != nil {
 			b.Fatal(err)
-		}
-		if r, ok := batch.(*rocksDBBatch); ok {
-			// Ensure mutations are flushed for RocksDB indexed batches.
-			r.flushMutations()
 		}
 		batch.Close()
 	}
