@@ -101,7 +101,11 @@ func registerSQLSmith(r *testRegistry) {
 		// We will enable panic injection on this connection in the vectorized
 		// engine (and will ignore the injected errors) in order to test that
 		// the panic-catching mechanism of error propagation works as expected.
-		setup += "SET testing_vectorize_inject_panics=true;"
+		// TODO(yuzefovich): this setting is only supported on master (i.e.
+		// after 20.2 version), so we need to gate it, yet we can't do so
+		// because 21.1 version hasn't been minted yet. We skip this check for
+		// now.
+		//setup += "SET testing_vectorize_inject_panics=true;"
 
 		conn := c.Conn(ctx, 1)
 		t.Status("executing setup")

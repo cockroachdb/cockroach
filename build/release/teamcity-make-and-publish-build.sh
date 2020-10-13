@@ -9,8 +9,10 @@ export BUILDER_HIDE_GOPATH_SRC=1
 
 build/builder.sh make .buildinfo/tag
 build_name="${TAG_NAME:-$(cat .buildinfo/tag)}"
-release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+")"
-is_custom_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-")"
+
+# On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
+release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
+is_custom_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
 
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET-cockroach-builds}"
