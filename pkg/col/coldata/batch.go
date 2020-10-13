@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -77,9 +78,14 @@ var _ Batch = &MemBatch{}
 // confirmed to be very good using tpchvec/bench benchmark on TPC-H queries
 // (the best number according to that benchmark was 1280, but it was negligibly
 // better, so we decided to keep 1024 as it is a power of 2).
-const defaultBatchSize = 1024
+var defaultBatchSize = int64(util.ConstantWithMetamorphicTestRange(
+	1024, /* defaultValue */
+	// min is set to 3 to match colexec's minBatchSize setting.
+	3, /* min */
+	MaxBatchSize,
+))
 
-var batchSize int64 = defaultBatchSize
+var batchSize = defaultBatchSize
 
 // BatchSize is the maximum number of tuples that fit in a column batch.
 func BatchSize() int {
