@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -954,7 +955,7 @@ func prepareNewTableDescsForIngestion(
 	ctx context.Context,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	importTables []jobspb.ImportDetails_Table,
 	parentID descpb.ID,
 ) ([]*descpb.TableDescriptor, error) {
@@ -1084,7 +1085,7 @@ func prepareExistingTableDescForIngestion(
 // step of import. The descriptors are in an IMPORTING state (offline) on
 // successful completion of this method.
 func (r *importResumer) prepareTableDescsForIngestion(
-	ctx context.Context, p sql.PlanHookState, details jobspb.ImportDetails,
+	ctx context.Context, p sql.JobExecContext, details jobspb.ImportDetails,
 ) error {
 	err := descs.Txn(ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
 		p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(
@@ -1169,7 +1170,7 @@ func (r *importResumer) prepareTableDescsForIngestion(
 // descriptors for bundle formats.
 func parseAndCreateBundleTableDescs(
 	ctx context.Context,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	details jobspb.ImportDetails,
 	seqVals map[descpb.ID]int64,
 	skipFKs bool,
@@ -1177,6 +1178,7 @@ func parseAndCreateBundleTableDescs(
 	files []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
+	owner security.SQLUsername,
 ) ([]*tabledesc.Mutable, error) {
 
 	var tableDescs []*tabledesc.Mutable
@@ -1210,10 +1212,10 @@ func parseAndCreateBundleTableDescs(
 	switch format.Format {
 	case roachpb.IOFileFormat_Mysqldump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
-		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals)
+		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner)
 	case roachpb.IOFileFormat_PgDump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
-		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
+		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID, walltime, fks, int(format.PgDump.MaxRowSize), owner)
 	default:
 		return tableDescs, errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
 	}
@@ -1230,13 +1232,15 @@ func parseAndCreateBundleTableDescs(
 }
 
 func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs interface{}) error {
-	p := phs.(sql.PlanHookState)
+	p := phs.(sql.JobExecContext)
 	seqVals := make(map[descpb.ID]int64)
 	details := r.job.Details().(jobspb.ImportDetails)
 	skipFKs := details.SkipFKs
 	parentID := details.ParentID
 	files := details.URIs
 	format := details.Format
+
+	owner := r.job.Payload().UsernameProto.Decode()
 
 	if details.ParseBundleSchema {
 		if err := r.job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
@@ -1250,7 +1254,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if tableDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, parentID, files, format, walltime); err != nil {
+			ctx, p, details, seqVals, skipFKs, parentID, files, format, walltime, owner); err != nil {
 			return err
 		}
 
@@ -1285,9 +1289,9 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(
-	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 	if err := r.parseBundleSchemaIfNeeded(ctx, p); err != nil {
 		return err
 	}
@@ -1514,10 +1518,10 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // been committed from a import that has failed or been canceled. It does this
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
-func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
-	cfg := phs.(sql.PlanHookState).ExecCfg()
+	cfg := execCtx.(sql.JobExecContext).ExecCfg()
 	lm, ie, db := cfg.LeaseManager, cfg.InternalExecutor, cfg.DB
 	return descs.Txn(ctx, cfg.Settings, lm, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,

@@ -265,27 +265,27 @@ type typeChangeResumer struct {
 
 // Resume implements the jobs.Resumer interface.
 func (t *typeChangeResumer) Resume(
-	ctx context.Context, phs interface{}, _ chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, _ chan<- tree.Datums,
 ) error {
-	p := phs.(*planner)
-	if p.execCfg.TypeSchemaChangerTestingKnobs.TypeSchemaChangeJobNoOp != nil {
-		if p.execCfg.TypeSchemaChangerTestingKnobs.TypeSchemaChangeJobNoOp() {
+	p := execCtx.(JobExecContext)
+	if p.ExecCfg().TypeSchemaChangerTestingKnobs.TypeSchemaChangeJobNoOp != nil {
+		if p.ExecCfg().TypeSchemaChangerTestingKnobs.TypeSchemaChangeJobNoOp() {
 			return nil
 		}
 	}
 	tc := &typeSchemaChanger{
 		typeID:  t.job.Details().(jobspb.TypeSchemaChangeDetails).TypeID,
-		execCfg: p.execCfg,
+		execCfg: p.ExecCfg(),
 	}
 	return tc.execWithRetry(ctx)
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	// If the job failed, just try again to clean up any draining names.
 	tc := &typeSchemaChanger{
 		typeID:  t.job.Details().(jobspb.TypeSchemaChangeDetails).TypeID,
-		execCfg: phs.(*planner).ExecCfg(),
+		execCfg: execCtx.(JobExecContext).ExecCfg(),
 	}
 
 	return drainNamesForDescriptor(

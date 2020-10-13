@@ -219,12 +219,13 @@ func readPostgresCreateTable(
 	ctx context.Context,
 	input io.Reader,
 	evalCtx *tree.EvalContext,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	match string,
 	parentID descpb.ID,
 	walltime int64,
 	fks fkHandler,
 	max int,
+	owner security.SQLUsername,
 ) ([]*tabledesc.Mutable, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
@@ -236,15 +237,10 @@ func readPostgresCreateTable(
 	createSeq := make(map[string]*tree.CreateSequence)
 	tableFKs := make(map[string][]*tree.ForeignKeyConstraintTableDef)
 	ps := newPostgreStream(input, max)
-	params := p.RunParams(ctx)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
 			ret := make([]*tabledesc.Mutable, 0, len(createTbl))
-			owner := security.AdminRoleName()
-			if params.SessionData() != nil {
-				owner = params.SessionData().User()
-			}
 			for name, seq := range createSeq {
 				id := descpb.ID(int(defaultCSVTableID) + len(ret))
 				desc, err := sql.NewSequenceTableDesc(
@@ -257,7 +253,7 @@ func readPostgresCreateTable(
 					hlc.Timestamp{WallTime: walltime},
 					descpb.NewDefaultPrivilegeDescriptor(owner),
 					tree.PersistencePermanent,
-					&params,
+					nil, /* params */
 				)
 				if err != nil {
 					return nil, err

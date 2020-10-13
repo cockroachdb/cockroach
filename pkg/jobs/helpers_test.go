@@ -56,12 +56,12 @@ type OnPauseRequestFunc = onPauseRequestFunc
 var _ PauseRequester = FakeResumer{}
 
 func (d FakeResumer) OnPauseRequest(
-	ctx context.Context, phs interface{}, txn *kv.Txn, details *jobspb.Progress,
+	ctx context.Context, execCtx interface{}, txn *kv.Txn, details *jobspb.Progress,
 ) error {
 	if d.PauseRequest == nil {
 		return nil
 	}
-	return d.PauseRequest(ctx, phs, txn, details)
+	return d.PauseRequest(ctx, execCtx, txn, details)
 }
 
 // Started is a wrapper around the internal function that moves a job to the

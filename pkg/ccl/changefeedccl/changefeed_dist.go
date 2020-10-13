@@ -62,7 +62,7 @@ var changefeedResultTypes = []*types.T{
 // progress of the changefeed's corresponding system job.
 func distChangefeedFlow(
 	ctx context.Context,
-	phs sql.PlanHookState,
+	execCtx sql.JobExecContext,
 	jobID int64,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.Progress,
@@ -99,7 +99,7 @@ func distChangefeedFlow(
 		spansTS = initialHighWater
 	}
 
-	execCfg := phs.ExecCfg()
+	execCfg := execCtx.ExecCfg()
 	trackedSpans, err := fetchSpansForTargets(ctx, execCfg.DB, execCfg.Codec, details.Targets, spansTS)
 	if err != nil {
 		return err
@@ -111,8 +111,8 @@ func distChangefeedFlow(
 	if err != nil {
 		return err
 	}
-	dsp := phs.DistSQLPlanner()
-	evalCtx := phs.ExtendedEvalContext()
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn, true /* distribute */)
 
 	var spanPartitions []sql.SpanPartition
@@ -143,7 +143,7 @@ func distChangefeedFlow(
 		corePlacement[i].Core.ChangeAggregator = &execinfrapb.ChangeAggregatorSpec{
 			Watches:   watches,
 			Feed:      details,
-			UserProto: phs.User().EncodeProto(),
+			UserProto: execCtx.User().EncodeProto(),
 		}
 	}
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
@@ -154,7 +154,7 @@ func distChangefeedFlow(
 		TrackedSpans: trackedSpans,
 		Feed:         details,
 		JobID:        jobID,
-		UserProto:    phs.User().EncodeProto(),
+		UserProto:    execCtx.User().EncodeProto(),
 	}
 
 	p := sql.MakePhysicalPlan(gatewayNodeID)
