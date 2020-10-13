@@ -1169,26 +1169,34 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		// If this is a real mutation, it should be the first mutation. Assert that.
 		if sc.mutationID != sqlbase.InvalidMutationID {
 			if len(desc.Mutations) == 0 {
-				return errors.AssertionFailedf("expected mutation %d to be the"+
-					" first mutation when reverted, found no mutations in descriptor %d",
-					sc.mutationID, desc.ID)
+				alreadyReversed = true
 			} else if desc.Mutations[0].MutationID != sc.mutationID {
-				return errors.AssertionFailedf("expected mutation %d to be the"+
-					" first mutation when reverted, found %d in descriptor %d",
-					sc.mutationID, desc.Mutations[0].MutationID, desc.ID)
+				var found bool
+				for i := range desc.Mutations {
+					if found = desc.Mutations[i].MutationID == sc.mutationID; found {
+						break
+					}
+				}
+				if alreadyReversed = !found; !alreadyReversed {
+					return errors.AssertionFailedf("expected mutation %d to be the"+
+						" first mutation when reverted, found %d in descriptor %d",
+						sc.mutationID, desc.Mutations[0].MutationID, desc.ID)
+				}
+			} else if desc.Mutations[0].Rollback {
+				alreadyReversed = true
 			}
+		}
+
+		// Mutation is already reversed, so we don't need to do any more work.
+		// This can happen if the mutations were already reversed, but before
+		// the rollback completed the job was adopted.
+		if alreadyReversed {
+			return nil
 		}
 
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				break
-			}
-			if mutation.Rollback {
-				// Mutation is already reversed, so we don't need to do any more work.
-				// This can happen if the mutations were already reversed, but before
-				// the rollback completed the job was adopted.
-				alreadyReversed = true
-				return nil
 			}
 			if constraint := mutation.GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
