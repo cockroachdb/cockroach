@@ -5468,3 +5468,15 @@ SELECT ST_PointInsideCircle(ST_Point(1,2), 0.5, 2, -3);
 
 statement error pq: st_pointinsidecircle\(\): first parameter has to be of type Point
 SELECT ST_PointInsideCircle(ST_GeomFromText('LINESTRING (-0.5 0.5, 0.5 0.5)'), 0.5, 2, -3);
+
+
+query TT
+SELECT
+  ST_AsEWKT(ST_LineFromEncodedPolyline('ud}|Hi_juBa~kk@m}t_@'), 5),
+  ST_AsEWKT(ST_LineFromEncodedPolyline('|_cw}Daosrst@udew}D`osrst@', 8), 8)
+----
+SRID=4326;LINESTRING (19.38949 52.09179, 24.74476 59.36716)
+SRID=4326;LINESTRING (9.00000001 -1.00009999, 0 0.000011)
+
+statement error parsing geography error
+SELECT ST_AsEWKT(ST_LineFromEncodedPolyline('NO'), 5)
