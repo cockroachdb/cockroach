@@ -75,9 +75,9 @@ func performGC(
 
 // Resume is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) Resume(
-	ctx context.Context, phs interface{}, _ chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, _ chan<- tree.Datums,
 ) error {
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
 	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {

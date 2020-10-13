@@ -479,9 +479,9 @@ var _ jobs.Resumer = &createStatsResumer{}
 
 // Resume is part of the jobs.Resumer interface.
 func (r *createStatsResumer) Resume(
-	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	p := phs.(*planner)
+	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.CreateStatsDetails)
 	if details.Name == stats.AutoStatsName {
 		// We want to make sure there is only one automatic CREATE STATISTICS job
@@ -509,12 +509,12 @@ func (r *createStatsResumer) Resume(
 		evalCtx.Txn = txn
 
 		if details.AsOf != nil {
-			p.semaCtx.AsOfTimestamp = details.AsOf
-			p.extendedEvalCtx.SetTxnTimestamp(details.AsOf.GoTime())
+			p.SemaCtx().AsOfTimestamp = details.AsOf
+			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
 			txn.SetFixedTimestamp(ctx, *details.AsOf)
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, p, txn, true /* distribute */)
+		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn, true /* distribute */)
 		if err := dsp.planAndRunCreateStats(
 			ctx, evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {
@@ -582,7 +582,7 @@ func (r *createStatsResumer) Resume(
 // pending, running, or paused status that started earlier than this one. If
 // there are, checkRunningJobs returns an error. If job is nil, checkRunningJobs
 // just checks if there are any pending, running, or paused CreateStats jobs.
-func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
+func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) error {
 	var jobID int64
 	if job != nil {
 		jobID = *job.ID()

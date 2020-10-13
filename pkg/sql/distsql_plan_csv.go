@@ -183,7 +183,7 @@ func presplitTableBoundaries(
 // returned.
 func DistIngest(
 	ctx context.Context,
-	phs PlanHookState,
+	execCtx JobExecContext,
 	job *jobs.Job,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	from []string,
@@ -193,15 +193,15 @@ func DistIngest(
 ) (roachpb.BulkOpSummary, error) {
 	ctx = logtags.AddTag(ctx, "import-distsql-ingest", nil)
 
-	dsp := phs.DistSQLPlanner()
-	evalCtx := phs.ExtendedEvalContext()
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
 
-	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
 
-	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime, phs.User())
+	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime, execCtx.User())
 
 	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
 	if err != nil {
@@ -285,7 +285,7 @@ func DistIngest(
 		return nil
 	})
 
-	if err := presplitTableBoundaries(ctx, phs.ExecCfg(), tables); err != nil {
+	if err := presplitTableBoundaries(ctx, execCtx.ExecCfg(), tables); err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
 
