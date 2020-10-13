@@ -1820,6 +1820,14 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_linefromencodedpolyline"></a><code>st_linefromencodedpolyline(encoded_polyline: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from an Encoded Polyline string.</p>
+<p>Returns valid results only if the polyline was encoded with 5 decimal places.</p>
+<p>See <a href="http://developers.google.com/maps/documentation/utilities/polylinealgorithm" rel="nofollow">http://developers.google.com/maps/documentation/utilities/polylinealgorithm</a></p>
+</span></td></tr>
+<tr><td><a name="st_linefromencodedpolyline"></a><code>st_linefromencodedpolyline(encoded_polyline: <a href="string.html">string</a>, precision: int4) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from an Encoded Polyline string.</p>
+<p>Precision specifies how many decimal places will be preserved in Encoded Polyline. Value should be the same on encoding and decoding, or coordinates will be incorrect.</p>
+<p>See <a href="http://developers.google.com/maps/documentation/utilities/polylinealgorithm" rel="nofollow">http://developers.google.com/maps/documentation/utilities/polylinealgorithm</a></p>
+</span></td></tr>
 <tr><td><a name="st_linefrommultipoint"></a><code>st_linefrommultipoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from a MultiPoint geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_linefromtext"></a><code>st_linefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not LineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
