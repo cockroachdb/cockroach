@@ -348,6 +348,7 @@ func (n *Node) start(
 	locality roachpb.Locality,
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
+	bootstrapStoresComplete chan<-bool,
 ) error {
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
@@ -475,6 +476,7 @@ func (n *Node) start(
 			if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
 				log.Fatalf(ctx, "while bootstrapping additional stores: %v", err)
 			}
+			bootstrapStoresComplete <- true
 		})
 	}
 

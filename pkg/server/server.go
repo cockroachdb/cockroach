@@ -1489,6 +1489,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+	bootstrapStoresComplete := make(chan bool)
 	if err := s.node.start(
 		ctx,
 		advAddrU,
@@ -1500,6 +1501,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
 		s.sqlServer.execCfg.DistSQLPlanner.SetNodeInfo,
+		bootstrapStoresComplete,
 	); err != nil {
 		return err
 	}
@@ -1577,6 +1579,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
+
+	// Block until all stores are fully bootstrapped.
+	log.Infof(ctx, "waiting for all stores to be fully bootstrapped")
+	_ = <-bootstrapStoresComplete
 
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
