@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1151,7 +1152,11 @@ func (r *restoreResumer) Resume(
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
-		return err
+		if !build.IsRelease() {
+			return err
+		}
+		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
+		numClusterNodes = 1
 	}
 
 	for _, tenant := range details.Tenants {
