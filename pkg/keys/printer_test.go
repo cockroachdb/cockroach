@@ -59,7 +59,7 @@ func TestPrettyPrint(t *testing.T) {
 		{keys.StoreIdentKey(), "/Local/Store/storeIdent", revertSupportUnknown},
 		{keys.StoreGossipKey(), "/Local/Store/gossipBootstrap", revertSupportUnknown},
 		{keys.StoreClusterVersionKey(), "/Local/Store/clusterVersion", revertSupportUnknown},
-		{keys.StoreNodeTombstoneKey(123), "/Local/Store/nodeTombstone/123", revertSupportUnknown},
+		{keys.StoreNodeTombstoneKey(123), "/Local/Store/nodeTombstone/n123", revertSupportUnknown},
 		{keys.StoreSuggestedCompactionKey(keys.MinKey, roachpb.Key("b")), `/Local/Store/suggestedCompaction/{/Min-"b"}`, revertSupportUnknown},
 		{keys.StoreSuggestedCompactionKey(roachpb.Key("a"), roachpb.Key("b")), `/Local/Store/suggestedCompaction/{"a"-"b"}`, revertSupportUnknown},
 		{keys.StoreSuggestedCompactionKey(roachpb.Key("a"), keys.MaxKey), `/Local/Store/suggestedCompaction/{"a"-/Max}`, revertSupportUnknown},

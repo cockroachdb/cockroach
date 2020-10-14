@@ -206,7 +206,7 @@ func nodeTombstoneKeyPrint(key roachpb.Key) string {
 	if err != nil {
 		return fmt.Sprintf("<invalid: %s>", err)
 	}
-	return fmt.Sprint(nodeID)
+	return fmt.Sprint("n", nodeID)
 }
 
 func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
