@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -563,7 +564,12 @@ func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	stmt := rowenc.RandCreateTable(w.rng, "table", int(atomic.AddInt64(w.seqNum, 1)))
+	tableIdx, err := strconv.Atoi(strings.TrimPrefix(tableName.Table(), "table"))
+	if err != nil {
+		return "", err
+	}
+
+	stmt := rowenc.RandCreateTable(w.rng, "table", tableIdx)
 	stmt.Table = *tableName
 	stmt.IfNotExists = w.rng.Intn(2) == 0
 	return tree.Serialize(stmt), nil
