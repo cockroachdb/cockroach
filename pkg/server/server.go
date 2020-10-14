@@ -289,10 +289,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:      clock,
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
-		OnSendPing: func(req *rpc.PingRequest) error {
+		OnOutgoingPing: func(req *rpc.PingRequest) error {
 			return checkPingFor(ctx, req.TargetNodeID)
 		},
-		OnHandlePing: func(req *rpc.PingRequest) error {
+		OnIncomingPing: func(req *rpc.PingRequest) error {
 			return checkPingFor(ctx, req.OriginNodeID)
 		}}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {

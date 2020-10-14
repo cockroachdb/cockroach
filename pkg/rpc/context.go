@@ -378,15 +378,15 @@ type ContextOptions struct {
 	Clock      *hlc.Clock
 	Stopper    *stop.Stopper
 	Settings   *cluster.Settings
-	// OnHandlePing is called when handling a PingRequest, after
+	// OnIncomingPing is called when handling a PingRequest, after
 	// preliminary checks but before recording clock offset information.
 	//
 	// It can inject an error.
-	OnHandlePing func(*PingRequest) error
-	// OnSendPing intercepts outgoing PingRequests. It may inject an
+	OnIncomingPing func(*PingRequest) error
+	// OnOutgoingPing intercepts outgoing PingRequests. It may inject an
 	// error.
-	OnSendPing func(*PingRequest) error
-	Knobs      ContextTestingKnobs
+	OnOutgoingPing func(*PingRequest) error
+	Knobs          ContextTestingKnobs
 }
 
 func (c ContextOptions) validate() error {
@@ -406,9 +406,9 @@ func (c ContextOptions) validate() error {
 		return errors.New("Settings must be set")
 	}
 
-	// NB: OnSendPing and OnHandlePing default to noops.
+	// NB: OnOutgoingPing and OnIncomingPing default to noops.
 	// This is used both for testing and the cli.
-	_, _ = c.OnSendPing, c.OnHandlePing
+	_, _ = c.OnOutgoingPing, c.OnIncomingPing
 
 	return nil
 }
@@ -1138,7 +1138,7 @@ func (ctx *Context) runHeartbeat(
 	// Permanent errors return an error from this method, which means that
 	// the connection will be removed. Errors are presumed transient by
 	// default, but some - like ClusterID or version mismatches, as well as
-	// PermissionDenied errors injected by OnSendPing, are considered permanent.
+	// PermissionDenied errors injected by OnOutgoingPing, are considered permanent.
 	returnErr := false
 	for {
 		select {
@@ -1163,7 +1163,7 @@ func (ctx *Context) runHeartbeat(
 			}
 
 			interceptor := func(*PingRequest) error { return nil }
-			if fn := ctx.OnSendPing; fn != nil {
+			if fn := ctx.OnOutgoingPing; fn != nil {
 				interceptor = fn
 			}
 
@@ -1274,7 +1274,7 @@ func (ctx *Context) NewHeartbeatService() *HeartbeatService {
 		clusterID:                             &ctx.ClusterID,
 		nodeID:                                &ctx.NodeID,
 		settings:                              ctx.Settings,
-		onHandlePing:                          ctx.OnHandlePing,
+		onHandlePing:                          ctx.OnIncomingPing,
 		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
 	}
 }
