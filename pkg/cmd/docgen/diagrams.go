@@ -642,7 +642,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "delete_stmt",
-		inline: []string{"opt_with_clause", "with_clause", "cte_list", "table_expr_opt_alias_idx", "table_name_opt_idx", "opt_where_clause", "where_clause", "returning_clause", "opt_sort_clause", "opt_limit_clause"},
+		inline: []string{"opt_with_clause", "with_clause", "cte_list", "table_expr_opt_alias_idx", "table_name_opt_idx", "opt_where_clause", "where_clause", "returning_clause", "opt_sort_clause", "opt_limit_clause", "opt_only", "opt_descendant"},
 		replace: map[string]string{
 			"relation_expr": "table_name",
 		},
@@ -651,7 +651,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "with_clause",
-		inline: []string{"cte_list", "common_table_expr", "name_list", "opt_column_list"},
+		inline: []string{"cte_list", "common_table_expr", "name_list", "opt_column_list", "materialize_clause"},
 		replace: map[string]string{
 			"preparable_stmt ')' ) ) )* )": "preparable_stmt ')' ) ) )* ) ( insert_stmt | update_stmt | delete_stmt | upsert_stmt | select_stmt )",
 		},
@@ -728,10 +728,10 @@ var specs = []stmtSpec{
 		replace: map[string]string{"opt_drop_behavior": ""},
 	},
 	{
-		name:   "drop_view",
-		stmt:   "drop_view_stmt",
-		inline: []string{"opt_drop_behavior", "table_name_list"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'VIEW'")},
+		name:    "drop_view",
+		stmt:    "drop_view_stmt",
+		inline:  []string{"opt_drop_behavior", "table_name_list"},
+		nosplit: true,
 	},
 	{
 		name:   "experimental_audit",
@@ -954,6 +954,10 @@ var specs = []stmtSpec{
 		stmt: "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' name | ) 'PRIMARY KEY' '(' ( column_name ( ',' column_name )* ) ')' ( table_constraints | ) ')'"},
 		unlink: []string{"table_name", "column_name", "table_constraints"},
+	},
+	{
+		name: "refresh_materialized_views",
+		stmt: "refresh_stmt",
 	},
 	{
 		name:   "release_savepoint",
@@ -1414,6 +1418,8 @@ var specs = []stmtSpec{
 			"insert_column_list",
 			"insert_column_item",
 			"opt_limit_clause",
+			"opt_only",
+			"opt_descendant",
 		},
 		replace: map[string]string{
 			"relation_expr":      "table_name",

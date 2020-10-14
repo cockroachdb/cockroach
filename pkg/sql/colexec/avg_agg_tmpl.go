@@ -106,8 +106,6 @@ type avg_TYPE_AGGKINDAgg struct {
 
 var _ aggregateFunc = &avg_TYPE_AGGKINDAgg{}
 
-const sizeOfAvg_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(avg_TYPE_AGGKINDAgg{}))
-
 func (a *avg_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -203,9 +201,12 @@ type avg_TYPE_AGGKINDAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avg_TYPE_AGGKINDAggAlloc{}
 
+const sizeOfAvg_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(avg_TYPE_AGGKINDAgg{}))
+const avg_TYPE_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]avg_TYPE_AGGKINDAgg{}))
+
 func (a *avg_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvg_TYPE_AGGKINDAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avg_TYPE_AGGKINDAggSliceOverhead + sizeOfAvg_TYPE_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]avg_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

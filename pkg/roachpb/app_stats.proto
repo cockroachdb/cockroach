@@ -172,7 +172,7 @@ message CollectedTransactionStatistics {
   repeated uint64 statement_ids = 1 [(gogoproto.customname) = "StatementIDs", (gogoproto.casttype) = "StmtID"] ;
   // App is the name of the app which executed the transaction.
   optional string app = 2 [(gogoproto.nullable) = false];
-  optional TransactionStatistics stats = 3[(gogoproto.nullable) = false];
+  optional TransactionStatistics stats = 3 [(gogoproto.nullable) = false];
 }
 
 

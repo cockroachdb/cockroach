@@ -41,6 +41,7 @@ type aggregatorHelper interface {
 	// aggregated). groups is a boolean slice in which 'true' represents a
 	// start of the new aggregation group (when groups is nil, then all tuples
 	// belong to the same group).
+	// Note: inputLen is assumed to be greater than zero.
 	performAggregation(ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, groups []bool)
 }
 

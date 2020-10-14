@@ -76,12 +76,15 @@ type aggregateFunc interface {
 	// Compute computes the aggregation on the input batch.
 	// Note: the implementations should be careful to account for their memory
 	// usage.
+	// Note: inputLen is assumed to be greater than zero.
 	Compute(vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int)
 
 	// Flush flushes the result of aggregation on the last group. It should be
 	// called once after input batches have been Compute()'d. outputIdx is only
 	// used in case of hash aggregation - for ordered aggregation the aggregate
 	// function itself should maintain the output index to write to.
+	// The caller *must* ensure that the memory accounting is done on the
+	// output vector of the aggregate function.
 	// Note: the implementations are free to not account for the memory used
 	// for the result of aggregation of the last group.
 	Flush(outputIdx int)
@@ -313,6 +316,7 @@ func newAggregateFuncsAlloc(
 // countHashAgg was chosen arbitrarily, but it's important that we use a
 // pointer to the aggregate function struct.
 const sizeOfAggregateFunc = int64(unsafe.Sizeof(&countHashAgg{}))
+const aggregateFuncSliceOverhead = int64(unsafe.Sizeof([]aggregateFunc{}))
 
 func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 	if len(a.returnFuncs) == 0 {
@@ -321,7 +325,7 @@ func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 		// of 'allocSize x number of funcs in schema' length. Every
 		// aggFuncAlloc will allocate allocSize of objects on the newAggFunc
 		// call below.
-		a.allocator.AdjustMemoryUsage(sizeOfAggregateFunc * int64(len(a.aggFuncAllocs)) * a.allocSize)
+		a.allocator.AdjustMemoryUsage(aggregateFuncSliceOverhead + sizeOfAggregateFunc*int64(len(a.aggFuncAllocs))*a.allocSize)
 		a.returnFuncs = make([]aggregateFunc, len(a.aggFuncAllocs)*int(a.allocSize))
 	}
 	funcs := a.returnFuncs[:len(a.aggFuncAllocs)]
@@ -385,7 +389,8 @@ func (b *aggBucket) init(
 	b.seen = seen
 }
 
-const sizeOfAggBucket = unsafe.Sizeof(aggBucket{})
+const sizeOfAggBucket = int64(unsafe.Sizeof(aggBucket{}))
+const aggBucketSliceOverhead = int64(unsafe.Sizeof([]aggBucket{}))
 
 // aggBucketAlloc is a utility struct that batches allocations of aggBuckets.
 type aggBucketAlloc struct {
@@ -395,7 +400,7 @@ type aggBucketAlloc struct {
 
 func (a *aggBucketAlloc) newAggBucket() *aggBucket {
 	if len(a.buf) == 0 {
-		a.allocator.AdjustMemoryUsage(int64(hashAggregatorAllocSize * sizeOfAggBucket))
+		a.allocator.AdjustMemoryUsage(aggBucketSliceOverhead + hashAggregatorAllocSize*sizeOfAggBucket)
 		a.buf = make([]aggBucket, hashAggregatorAllocSize)
 	}
 	ret := &a.buf[0]

@@ -68,8 +68,6 @@ type avgInt16HashAgg struct {
 
 var _ aggregateFunc = &avgInt16HashAgg{}
 
-const sizeOfAvgInt16HashAgg = int64(unsafe.Sizeof(avgInt16HashAgg{}))
-
 func (a *avgInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
@@ -159,9 +157,12 @@ type avgInt16HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgInt16HashAggAlloc{}
 
+const sizeOfAvgInt16HashAgg = int64(unsafe.Sizeof(avgInt16HashAgg{}))
+const avgInt16HashAggSliceOverhead = int64(unsafe.Sizeof([]avgInt16HashAgg{}))
+
 func (a *avgInt16HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgInt16HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgInt16HashAggSliceOverhead + sizeOfAvgInt16HashAgg*a.allocSize)
 		a.aggFuncs = make([]avgInt16HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -189,8 +190,6 @@ type avgInt32HashAgg struct {
 }
 
 var _ aggregateFunc = &avgInt32HashAgg{}
-
-const sizeOfAvgInt32HashAgg = int64(unsafe.Sizeof(avgInt32HashAgg{}))
 
 func (a *avgInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -281,9 +280,12 @@ type avgInt32HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgInt32HashAggAlloc{}
 
+const sizeOfAvgInt32HashAgg = int64(unsafe.Sizeof(avgInt32HashAgg{}))
+const avgInt32HashAggSliceOverhead = int64(unsafe.Sizeof([]avgInt32HashAgg{}))
+
 func (a *avgInt32HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgInt32HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgInt32HashAggSliceOverhead + sizeOfAvgInt32HashAgg*a.allocSize)
 		a.aggFuncs = make([]avgInt32HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -311,8 +313,6 @@ type avgInt64HashAgg struct {
 }
 
 var _ aggregateFunc = &avgInt64HashAgg{}
-
-const sizeOfAvgInt64HashAgg = int64(unsafe.Sizeof(avgInt64HashAgg{}))
 
 func (a *avgInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -403,9 +403,12 @@ type avgInt64HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgInt64HashAggAlloc{}
 
+const sizeOfAvgInt64HashAgg = int64(unsafe.Sizeof(avgInt64HashAgg{}))
+const avgInt64HashAggSliceOverhead = int64(unsafe.Sizeof([]avgInt64HashAgg{}))
+
 func (a *avgInt64HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgInt64HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgInt64HashAggSliceOverhead + sizeOfAvgInt64HashAgg*a.allocSize)
 		a.aggFuncs = make([]avgInt64HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -432,8 +435,6 @@ type avgDecimalHashAgg struct {
 }
 
 var _ aggregateFunc = &avgDecimalHashAgg{}
-
-const sizeOfAvgDecimalHashAgg = int64(unsafe.Sizeof(avgDecimalHashAgg{}))
 
 func (a *avgDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -519,9 +520,12 @@ type avgDecimalHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgDecimalHashAggAlloc{}
 
+const sizeOfAvgDecimalHashAgg = int64(unsafe.Sizeof(avgDecimalHashAgg{}))
+const avgDecimalHashAggSliceOverhead = int64(unsafe.Sizeof([]avgDecimalHashAgg{}))
+
 func (a *avgDecimalHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgDecimalHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgDecimalHashAggSliceOverhead + sizeOfAvgDecimalHashAgg*a.allocSize)
 		a.aggFuncs = make([]avgDecimalHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -548,8 +552,6 @@ type avgFloat64HashAgg struct {
 }
 
 var _ aggregateFunc = &avgFloat64HashAgg{}
-
-const sizeOfAvgFloat64HashAgg = int64(unsafe.Sizeof(avgFloat64HashAgg{}))
 
 func (a *avgFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -625,9 +627,12 @@ type avgFloat64HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgFloat64HashAggAlloc{}
 
+const sizeOfAvgFloat64HashAgg = int64(unsafe.Sizeof(avgFloat64HashAgg{}))
+const avgFloat64HashAggSliceOverhead = int64(unsafe.Sizeof([]avgFloat64HashAgg{}))
+
 func (a *avgFloat64HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgFloat64HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgFloat64HashAggSliceOverhead + sizeOfAvgFloat64HashAgg*a.allocSize)
 		a.aggFuncs = make([]avgFloat64HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -654,8 +659,6 @@ type avgIntervalHashAgg struct {
 }
 
 var _ aggregateFunc = &avgIntervalHashAgg{}
-
-const sizeOfAvgIntervalHashAgg = int64(unsafe.Sizeof(avgIntervalHashAgg{}))
 
 func (a *avgIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -721,9 +724,12 @@ type avgIntervalHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgIntervalHashAggAlloc{}
 
+const sizeOfAvgIntervalHashAgg = int64(unsafe.Sizeof(avgIntervalHashAgg{}))
+const avgIntervalHashAggSliceOverhead = int64(unsafe.Sizeof([]avgIntervalHashAgg{}))
+
 func (a *avgIntervalHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgIntervalHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgIntervalHashAggSliceOverhead + sizeOfAvgIntervalHashAgg*a.allocSize)
 		a.aggFuncs = make([]avgIntervalHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

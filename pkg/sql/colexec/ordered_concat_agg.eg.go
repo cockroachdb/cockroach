@@ -16,6 +16,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 )
 
+func newConcatOrderedAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
+	return &concatOrderedAggAlloc{aggAllocBase: aggAllocBase{
+		allocator: allocator,
+		allocSize: allocSize,
+	}}
+}
+
+type concatOrderedAgg struct {
+	orderedAggregateFuncBase
+	allocator *colmem.Allocator
+	// curAgg holds the running total.
+	curAgg []byte
+	// col points to the output vector we are updating.
+	col *coldata.Bytes
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+}
+
 func (a *concatOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -32,12 +53,12 @@ func (a *concatOrderedAgg) Reset() {
 func (a *concatOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			previousAggValMemoryUsage := a.aggValMemoryUsage()
 			groups := a.groups
 			if sel == nil {
 				_ = groups[inputLen-1]
@@ -140,10 +161,10 @@ func (a *concatOrderedAgg) Compute(
 					}
 				}
 			}
-			currentAggValMemoryUsage := a.aggValMemoryUsage()
-			a.allocator.AdjustMemoryUsage(currentAggValMemoryUsage - previousAggValMemoryUsage)
 		},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *concatOrderedAgg) Flush(outputIdx int) {
@@ -151,41 +172,14 @@ func (a *concatOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec}, func() {
-			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(outputIdx)
-			} else {
-				a.col.Set(outputIdx, a.curAgg)
-			}
-			a.allocator.AdjustMemoryUsage(-a.aggValMemoryUsage())
-			// Release the reference to curAgg eagerly.
-			a.curAgg = nil
-		})
-}
-
-func (a *concatOrderedAgg) aggValMemoryUsage() int64 {
-	return int64(len(a.curAgg))
-}
-
-func (a *concatOrderedAggAlloc) newAggFunc() aggregateFunc {
-	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfConcatOrderedAgg * a.allocSize)
-		a.aggFuncs = make([]concatOrderedAgg, a.allocSize)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		a.col.Set(outputIdx, a.curAgg)
 	}
-	f := &a.aggFuncs[0]
-	f.allocator = a.allocator
-	a.aggFuncs = a.aggFuncs[1:]
-	return f
-}
-
-const sizeOfConcatOrderedAgg = int64(unsafe.Sizeof(concatOrderedAgg{}))
-
-func newConcatOrderedAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
-	return &concatOrderedAggAlloc{aggAllocBase: aggAllocBase{
-		allocator: allocator,
-		allocSize: allocSize,
-	}}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	a.curAgg = nil
 }
 
 type concatOrderedAggAlloc struct {
@@ -193,16 +187,18 @@ type concatOrderedAggAlloc struct {
 	aggFuncs []concatOrderedAgg
 }
 
-type concatOrderedAgg struct {
-	orderedAggregateFuncBase
-	allocator *colmem.Allocator
-	// curAgg holds the running total.
-	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+var _ aggregateFuncAlloc = &concatOrderedAggAlloc{}
+
+const sizeOfConcatOrderedAgg = int64(unsafe.Sizeof(concatOrderedAgg{}))
+const concatOrderedAggSliceOverhead = int64(unsafe.Sizeof([]concatOrderedAgg{}))
+
+func (a *concatOrderedAggAlloc) newAggFunc() aggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(concatOrderedAggSliceOverhead + sizeOfConcatOrderedAgg*a.allocSize)
+		a.aggFuncs = make([]concatOrderedAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
 }

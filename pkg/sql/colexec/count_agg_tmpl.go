@@ -50,8 +50,6 @@ type count_COUNTKIND_AGGKINDAgg struct {
 
 var _ aggregateFunc = &count_COUNTKIND_AGGKINDAgg{}
 
-const sizeOfCount_COUNTKIND_AGGKINDAgg = int64(unsafe.Sizeof(count_COUNTKIND_AGGKINDAgg{}))
-
 func (a *count_COUNTKIND_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -150,9 +148,12 @@ type count_COUNTKIND_AGGKINDAggAlloc struct {
 
 var _ aggregateFuncAlloc = &count_COUNTKIND_AGGKINDAggAlloc{}
 
+const sizeOfCount_COUNTKIND_AGGKINDAgg = int64(unsafe.Sizeof(count_COUNTKIND_AGGKINDAgg{}))
+const count_COUNTKIND_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]count_COUNTKIND_AGGKINDAgg{}))
+
 func (a *count_COUNTKIND_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfCount_COUNTKIND_AGGKINDAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(count_COUNTKIND_AGGKINDAggSliceOverhead + sizeOfCount_COUNTKIND_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]count_COUNTKIND_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
