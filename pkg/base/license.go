@@ -11,10 +11,15 @@
 package base
 
 import (
+	"context"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+var ErrIsOSS = errors.New("OSS binaries do not include enterprise features")
 
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
@@ -22,7 +27,16 @@ import (
 //
 // This function is overridden by an init hook in CCL builds.
 var CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, org, feature string) error {
-	return errors.New("OSS binaries do not include enterprise features")
+	return ErrIsOSS
+}
+
+// TimeToLicenseExpiry returns a duration object that measures the time until
+// the currently set enterprise license expires starting from the 3rd argument
+// passed in.
+//
+// This function is overridden by an init hook in CCL builds
+var TimeToLicenseExpiry = func(ctx context.Context, _ *cluster.Settings, _ time.Time) (time.Duration, error) {
+	return 0, ErrIsOSS
 }
 
 // LicenseType returns what type of license the cluster is running with, or
