@@ -146,6 +146,10 @@ func clusterNodeCount(g *gossip.Gossip) int {
 		nodes++
 		return nil
 	})
+	// returning zero will crash.
+	if nodes == 0 {
+		nodes = 1
+	}
 	return nodes
 }
 
