@@ -10,6 +10,7 @@ package utilccl
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"time"
 
@@ -76,6 +77,29 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, featur
 func init() {
 	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
 	base.LicenseType = getLicenseType
+	base.TimeToEnterpriseLicenseExpiry = TimeToEnterpriseLicenseExpiry
+}
+
+// TimeToEnterpriseLicenseExpiry returns a Duration from `asOf` until the current
+// enterprise license expires. If a license does not exist, we return a
+// zero duration.
+func TimeToEnterpriseLicenseExpiry(
+	ctx context.Context, st *cluster.Settings, asOf time.Time,
+) (time.Duration, error) {
+	var lic *licenseccl.License
+	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
+	// license.
+	if str := enterpriseLicense.Get(&st.SV); str != "" {
+		var err error
+		if lic, err = decode(str); err != nil {
+			return 0, err
+		}
+	} else {
+		return 0, nil
+	}
+
+	expiration := timeutil.Unix(lic.ValidUntilUnixSec, 0)
+	return expiration.Sub(asOf), nil
 }
 
 func checkEnterpriseEnabledAt(
