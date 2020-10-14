@@ -44,6 +44,8 @@ var _ rowResultWriter = &RowResultWriter{}
 
 // NewRowResultWriter creates a new RowResultWriter.
 func NewRowResultWriter(rowContainer *rowcontainer.RowContainer) *RowResultWriter {
+	// TODO(yuzefovich): consider using disk-backed row container in some cases
+	// (for example, in case of subqueries and apply-joins).
 	return &RowResultWriter{rowContainer: rowContainer}
 }
 

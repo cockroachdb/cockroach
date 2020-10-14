@@ -83,7 +83,7 @@ func newMergeJoiner(
 
 	if err := m.joinerBase.init(
 		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
-		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
+		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, post, output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{leftSource, rightSource},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {

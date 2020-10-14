@@ -185,7 +185,6 @@ func TestPlanDiagramJoin(t *testing.T) {
 		LeftEqColumns:  []uint32{0, 2},
 		RightEqColumns: []uint32{2, 1},
 		OnExpr:         Expression{Expr: "@1+@2<@6"},
-		MergedColumns:  true,
 	}
 
 	flows[1] = &FlowSpec{
@@ -375,11 +374,11 @@ func TestPlanDiagramJoin(t *testing.T) {
 			"processors":[
 				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["TableA@primary","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["TableA@primary","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/2","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[],"stage":0},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/2","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[],"stage":0},
 				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op/3","details":[]},"outputs":[],"stage":0},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/4","details":["TableA@primary","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/5","details":["TableB@primary","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}],"stage":0},
-				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/6","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2"]},"outputs":[],"stage":0},
+				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/6","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6"]},"outputs":[],"stage":0},
 				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader/7","details":["TableB@primary","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}],"stage":0},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0}
 			],

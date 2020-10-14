@@ -68,7 +68,6 @@ type invertedFilterer struct {
 
 var _ execinfra.Processor = &invertedFilterer{}
 var _ execinfra.RowSource = &invertedFilterer{}
-var _ execinfrapb.MetadataSource = &invertedFilterer{}
 var _ execinfra.OpNode = &invertedFilterer{}
 
 const invertedFiltererProcName = "inverted filterer"
@@ -107,7 +106,7 @@ func newInvertedFilterer(
 			InputsToDrain: []execinfra.RowSource{ifr.input},
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				ifr.close()
-				return ifr.generateMeta(ctx)
+				return nil
 			},
 		},
 	); err != nil {
@@ -332,18 +331,6 @@ func (ifr *invertedFilterer) outputStatsToTrace() {
 			},
 		)
 	}
-}
-
-func (ifr *invertedFilterer) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, ifr.FlowCtx.Txn); tfs != nil {
-		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
-	}
-	return nil
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (ifr *invertedFilterer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return ifr.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

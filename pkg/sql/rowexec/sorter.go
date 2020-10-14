@@ -311,11 +311,6 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 	return true, nil
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (s *sortAllProcessor) ConsumerDone() {
-	s.input.ConsumerDone()
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (s *sortAllProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
@@ -429,11 +424,6 @@ func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
 	s.i = s.rows.NewFinalIterator(ctx)
 	s.i.Rewind()
 	return ctx
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (s *sortTopKProcessor) ConsumerDone() {
-	s.input.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.

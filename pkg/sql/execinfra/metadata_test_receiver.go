@@ -237,11 +237,6 @@ func (mtr *MetadataTestReceiver) Next() (rowenc.EncDatumRow, *execinfrapb.Produc
 	}
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (mtr *MetadataTestReceiver) ConsumerDone() {
-	mtr.input.ConsumerDone()
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (mtr *MetadataTestReceiver) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
