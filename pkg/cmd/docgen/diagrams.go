@@ -436,6 +436,9 @@ var specs = []stmtSpec{
 		unlink:  []string{"variable", "value"},
 	},
 	{
+		name: "analyze_stmt",
+	},
+	{
 		name:   "backup",
 		stmt:   "backup_stmt",
 		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options", "as_of_clause", "opt_with_backup_options"},
