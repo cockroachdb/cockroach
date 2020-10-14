@@ -5468,6 +5468,34 @@ SELECT ST_PointInsideCircle(ST_Point(1,2), 0.5, 2, -3);
 statement error pq: st_pointinsidecircle\(\): first parameter has to be of type Point
 SELECT ST_PointInsideCircle(ST_GeomFromText('LINESTRING (-0.5 0.5, 0.5 0.5)'), 0.5, 2, -3);
 
+subtest st_linelocatepoint
+
+query R
+SELECT round(ST_LineLocatePoint(line, point)::float, 2) FROM ( VALUES
+  ((ST_GeomFromText('LINESTRING (0 2, 2 0)')), (ST_Point(0, 0))),
+  ((ST_GeomFromText('LINESTRING (0 0, 0 2)')), (ST_Point(1, 1))),
+  ((ST_GeomFromText('LINESTRING (-1 -1, 3 3)')), (ST_Point(1, 0))),
+  ((ST_GeomFromText('LINESTRING (0 1, 2 0)')), (ST_Point(0, 0))),
+  ((ST_GeomFromText('LINESTRING (-1 0, 0 1)')), (ST_Point(1, 0))),
+  ((ST_GeomFromText('LINESTRING (0 0, 0 1)')), (ST_Point(1, 0))),
+  ((ST_GeomFromText('LINESTRING (-3 5, 4 -2)')), (ST_Point(-1, -1))),
+  ((ST_GeomFromText('LINESTRING (0 0, 10 10)')), (ST_Point(0, 3))),
+  ((ST_GeomFromText('LINESTRING (-5 7, 1 4)')), (ST_Point(-3, 3)))
+) line_locate_point(line, point)
+----
+0.5
+0.5
+0.37
+0.2
+1
+0
+0.57
+0.15
+0.53
+
+statement error pq: st_linelocatepoint\(\): first parameter has to be of type LineString
+SELECT ST_LineLocatePoint(ST_GeomFromText('GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))'), ST_Point(0, 0));
+
 
 query TT
 SELECT
