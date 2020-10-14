@@ -21,6 +21,7 @@ import "./loginPage.styl";
 import { CockroachLabsLockupIcon, Button, TextInput, PasswordInput } from "src/components";
 import { Text, TextTypes } from "src/components";
 import ErrorCircle from "assets/error-circle.svg";
+import { OIDCLoginConnected } from "src/views/login/oidc";
 
 export interface LoginPageProps {
   loginState: LoginAPIState;
@@ -28,20 +29,6 @@ export interface LoginPageProps {
 }
 
 type Props = LoginPageProps & RouteComponentProps;
-
-const OIDCLoginButton = ({loginState}: {loginState: LoginAPIState}) => {
-  if (loginState.displayOIDCButton) {
-    return (
-      <a href="/oidc/v1/login" >
-        <Button className="submit-button-oidc" disabled={loginState.inProgress} textAlign={"center"}>
-          {loginState.oidcButtonText}
-        </Button>
-      </a>
-    );
-  } else {
-    return null;
-  }
-};
 
 interface PasswordLoginState {
   username?: string;
@@ -82,32 +69,28 @@ class PasswordLoginForm extends React.Component<LoginPageProps, PasswordLoginSta
     const { username, password } = this.state;
     const { loginState } = this.props;
 
-    if (loginState.displayPasswordLogin) {
-      return (
-        <form id="loginForm" onSubmit={this.handleSubmit} className="form-internal" method="post">
-          <TextInput
-            name="username"
-            onChange={this.handleUpdateUsername}
-            placeholder="Username"
-            label="Username"
-            value={username}
-          />
-          <PasswordInput
-            name="password"
-            onChange={this.handleUpdatePassword}
-            placeholder="Password"
-            label="Password"
-            value={password}
-          />
-          <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress}
-                  textAlign={"center"}>
-            {loginState.inProgress ? "Logging in..." : "Log in"}
-          </Button>
-        </form>
-      );
-    } else {
-      return null;
-    }
+    return (
+      <form id="loginForm" onSubmit={this.handleSubmit} className="form-internal" method="post">
+        <TextInput
+          name="username"
+          onChange={this.handleUpdateUsername}
+          placeholder="Username"
+          label="Username"
+          value={username}
+        />
+        <PasswordInput
+          name="password"
+          onChange={this.handleUpdatePassword}
+          placeholder="Password"
+          label="Password"
+          value={password}
+        />
+        <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress}
+                textAlign={"center"}>
+          {loginState.inProgress ? "Logging in..." : "Log in"}
+        </Button>
+      </form>
+    );
   }
 }
 
@@ -162,7 +145,7 @@ export class LoginPage extends React.Component<Props> {
                 <Text textType={TextTypes.Heading2}>Log in to the Admin UI</Text>
                 {this.renderError()}
                 <PasswordLoginForm {...this.props} />
-                <OIDCLoginButton loginState={loginState} />
+                <OIDCLoginConnected loginState={loginState} />
               </div>
             </section>
             <section className="section login-page__info">
