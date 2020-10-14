@@ -240,7 +240,7 @@ func (Cockroach) CertsDir(c *SyncedCluster, index int) string {
 func (Cockroach) NodeURL(c *SyncedCluster, host string, port int) string {
 	url := fmt.Sprintf("'postgres://root@%s:%d", host, port)
 	if c.Secure {
-		url += "?sslcert=certs%2Fnode.crt&sslkey=certs%2Fnode.key&" +
+		url += "?sslcert=certs%2Fclient.root.crt&sslkey=certs%2Fclient.root.key&" +
 			"sslrootcert=certs%2Fca.crt&sslmode=verify-full"
 	} else {
 		url += "?sslmode=disable"
