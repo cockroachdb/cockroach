@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 SET SEARCH_PATH = foo
 

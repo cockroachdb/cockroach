@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, str STRING);
 CREATE TABLE u (l INT PRIMARY KEY, str2 STRING);

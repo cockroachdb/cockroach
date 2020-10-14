@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 query I
 SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series LIMIT 5;
 ----

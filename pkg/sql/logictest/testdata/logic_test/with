@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 CREATE TABLE x(a) AS SELECT generate_series(1, 3)
 

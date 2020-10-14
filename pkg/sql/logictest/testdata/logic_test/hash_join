@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 CREATE TABLE  t1 (k INT PRIMARY KEY, v INT)
 

@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 SET sql_safe_updates = false;
 SET enable_experimental_alter_column_type_general = true;
