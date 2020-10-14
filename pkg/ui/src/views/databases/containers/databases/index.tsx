@@ -101,11 +101,11 @@ class DatabaseTablesList extends React.Component<DatabaseListProps> {
       <DatabaseListNav selected="tables" onChange={this.handleOnNavigationListChange}/>
       <div className="section databases">
         {
-          user.map(n => <DatabaseSummaryTables name={n} key={n} />)
+          user.map(n => <DatabaseSummaryTables name={n} key={n} updateOnLoad={false} />)
         }
         <hr />
         {
-          system.map(n => <DatabaseSummaryTables name={n} key={n} />)
+          system.map(n => <DatabaseSummaryTables name={n} key={n} updateOnLoad={false} />)
         }
         <NonTableSummary />
       </div>
