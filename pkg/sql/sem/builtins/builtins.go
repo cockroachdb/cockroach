@@ -2236,7 +2236,7 @@ may increase either contention or retry errors, or both.`,
 				ctxTime := ctx.GetRelativeParseTime()
 				// From postgres@a166d408eb0b35023c169e765f4664c3b114b52e src/backend/utils/adt/timestamp.c#L1637,
 				// we should support "%a %b %d %H:%M:%S.%%06d %Y %Z".
-				return tree.NewDString(ctxTime.Format("Mon Jan 2 15:04:05.000000 2006 -0700")), nil
+				return tree.NewDString(ctxTime.Format("mon Jan 2 15:04:05.000000 2006 -0700")), nil
 			},
 			Info:       "Returns the current system time on one of the cluster nodes as a string.",
 			Volatility: tree.VolatilityStable,

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,9 +45,10 @@ type physicalCheckOperation struct {
 // physicalCheckRun contains the run-time state for
 // physicalCheckOperation during local execution.
 type physicalCheckRun struct {
-	started  bool
-	rows     *rowcontainer.RowContainer
-	rowIndex int
+	started    bool
+	rows       *rowcontainer.RowContainer
+	rowIndex   int
+	memMonitor *mon.BytesMonitor
 }
 
 func newPhysicalCheckOperation(
@@ -132,12 +134,14 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	o.primaryColIdxs = primaryColIdxs
 	o.columns = columns
 	o.run.started = true
-	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, &physPlan, rowexec.ScrubTypes)
+	rows, memMonitor, err := scrubRunDistSQL(ctx, planCtx, params.p, &physPlan, rowexec.ScrubTypes)
 	if err != nil {
 		rows.Close(ctx)
+		memMonitor.Stop(ctx)
 		return err
 	}
 	o.run.rows = rows
+	o.run.memMonitor = memMonitor
 	return nil
 }
 
@@ -184,5 +188,6 @@ func (o *physicalCheckOperation) Done(ctx context.Context) bool {
 func (o *physicalCheckOperation) Close(ctx context.Context) {
 	if o.run.rows != nil {
 		o.run.rows.Close(ctx)
+		o.run.memMonitor.Stop(ctx)
 	}
 }

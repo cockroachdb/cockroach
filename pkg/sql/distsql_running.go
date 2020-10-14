@@ -262,7 +262,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
 	defer physicalplan.ReleaseSetupFlowRequest(&localReq)
-	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState) //nolint:monitor
+	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, &localReq, recv, localState)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -861,7 +861,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	subqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{}) //nolint:monitor
+	evalCtx.StartChildMonitor(ctx, subqueryMonitor)
 	defer subqueryMonitor.Stop(ctx)
 
 	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
@@ -1153,7 +1153,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	postqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{}) //nolint:monitor
+	evalCtx.StartChildMonitor(ctx, postqueryMonitor)
 	defer postqueryMonitor.Stop(ctx)
 
 	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()

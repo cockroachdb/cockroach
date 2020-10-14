@@ -83,6 +83,7 @@ type joinReader struct {
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
 	// joinReader to wrap the fetcher with a stat collector when necessary.
 	fetcher            rowFetcher
+	fetcherMemMonitor  *mon.BytesMonitor
 	alloc              rowenc.DatumAlloc
 	rowAlloc           rowenc.EncDatumRowAlloc
 	shouldLimitBatches bool
@@ -169,11 +170,12 @@ func newJoinReader(
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
 	jr := &joinReader{
-		desc:             tabledesc.MakeImmutable(spec.Table),
-		maintainOrdering: spec.MaintainOrdering,
-		input:            input,
-		inputTypes:       input.OutputTypes(),
-		lookupCols:       lookupCols,
+		desc:              tabledesc.MakeImmutable(spec.Table),
+		maintainOrdering:  spec.MaintainOrdering,
+		input:             input,
+		inputTypes:        input.OutputTypes(),
+		lookupCols:        lookupCols,
+		fetcherMemMonitor: flowCtx.EvalCtx.NewMonitor(flowCtx.EvalCtx.Ctx(), "joinreader-fetcher-mem", 0 /* limit */),
 	}
 	if readerType != indexJoinReaderType {
 		// TODO(sumeer): When LeftJoinWithPairedJoiner, the lookup columns and the
@@ -276,7 +278,7 @@ func newJoinReader(
 
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		rightCols, false /* isCheck */, jr.EvalCtx.Mon, &jr.alloc, spec.Visibility, spec.LockingStrength, //nolint:monitor
+		rightCols, false /* isCheck */, jr.fetcherMemMonitor, &jr.alloc, spec.Visibility, spec.LockingStrength,
 		spec.LockingWaitPolicy, sysColDescs,
 	)
 
@@ -346,7 +348,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		limit = 1
 	}
 	// Initialize memory monitors and row container for looked up rows.
-	jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joinreader-limited") //nolint:monitor
+	jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx, flowCtx.Cfg, "joinreader-limited")
 	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */

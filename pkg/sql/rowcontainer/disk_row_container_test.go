@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -105,17 +106,10 @@ func TestDiskRowContainer(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
-	evalCtx := tree.MakeTestingEvalContext(st)
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	memMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	evalCtx := tree.MakeTestingEvalContextWithMon(st, memMonitor)
+	defer evalCtx.Stop(ctx)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	t.Run("EncodeDecode", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
@@ -189,7 +183,7 @@ func TestDiskRowContainer(t *testing.T) {
 				// Make another row container that stores all the rows then sort
 				// it to compare equality.
 				var sortedRows MemRowContainer
-				sortedRows.Init(ordering, types, &evalCtx, evalCtx.Mon)
+				sortedRows.Init(ordering, types, &evalCtx, memMonitor)
 				defer sortedRows.Close(ctx)
 				for _, row := range rows {
 					if err := sortedRows.AddRow(ctx, row); err != nil {

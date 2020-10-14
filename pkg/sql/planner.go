@@ -374,22 +374,22 @@ func internalExtendedEvalCtx(
 	plannerMon *mon.BytesMonitor,
 ) extendedEvalContext {
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
-
+	evalCtx := tree.EvalContext{
+		Txn:              txn,
+		SessionData:      sd,
+		TxnReadOnly:      false,
+		TxnImplicit:      true,
+		Settings:         execCfg.Settings,
+		Codec:            execCfg.Codec,
+		Context:          ctx,
+		TestingKnobs:     evalContextTestingKnobs,
+		StmtTimestamp:    stmtTimestamp,
+		TxnTimestamp:     txnTimestamp,
+		InternalExecutor: execCfg.InternalExecutor,
+	}
+	evalCtx.SetMonitor(plannerMon)
 	return extendedEvalContext{
-		EvalContext: tree.EvalContext{
-			Txn:              txn,
-			SessionData:      sd,
-			TxnReadOnly:      false,
-			TxnImplicit:      true,
-			Settings:         execCfg.Settings,
-			Codec:            execCfg.Codec,
-			Context:          ctx,
-			Mon:              plannerMon,
-			TestingKnobs:     evalContextTestingKnobs,
-			StmtTimestamp:    stmtTimestamp,
-			TxnTimestamp:     txnTimestamp,
-			InternalExecutor: execCfg.InternalExecutor,
-		},
+		EvalContext:       evalCtx,
 		SessionMutator:    dataMutator,
 		VirtualSchemas:    execCfg.VirtualSchemas,
 		Tracing:           &SessionTracing{},

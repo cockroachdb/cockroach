@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // expressionCarrier handles visiting sub-expressions.
@@ -119,7 +120,8 @@ type tableWriterBase struct {
 	// corresponding tableWriter.
 	// TODO(yuzefovich): should this be disk-backed container with an in-memory
 	// limit?
-	rows *rowcontainer.RowContainer
+	rows       *rowcontainer.RowContainer
+	memMonitor *mon.BytesMonitor
 }
 
 func (tb *tableWriterBase) init(txn *kv.Txn, tableDesc catalog.TableDescriptor) {
@@ -174,5 +176,9 @@ func (tb *tableWriterBase) close(ctx context.Context) {
 	if tb.rows != nil {
 		tb.rows.Close(ctx)
 		tb.rows = nil
+	}
+	if tb.memMonitor != nil {
+		tb.memMonitor.Stop(ctx)
+		tb.memMonitor = nil
 	}
 }

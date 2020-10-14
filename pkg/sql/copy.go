@@ -70,6 +70,7 @@ type copyMachine struct {
 	// insertedRows keeps track of the total number of rows inserted by the
 	// machine.
 	insertedRows int
+	memMonitor   *mon.BytesMonitor
 	// rowsMemAcc accounts for memory used by `rows`.
 	rowsMemAcc mon.BoundAccount
 	// bufMemAcc accounts for memory used by `buf`; it is kept in sync with
@@ -149,8 +150,9 @@ func newCopyMachine(
 			PGAttributeNum: cols[i].GetPGAttributeNum(),
 		}
 	}
-	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount() //nolint:monitor
-	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()  //nolint:monitor
+	c.memMonitor = c.p.extendedEvalCtx.NewMonitor(ctx, "copy-mem", 0 /* limit */)
+	c.rowsMemAcc = c.memMonitor.MakeBoundAccount()
+	c.bufMemAcc = c.memMonitor.MakeBoundAccount()
 	c.processRows = c.insertRows
 	return c, nil
 }
@@ -176,6 +178,7 @@ type copyTxnOpt struct {
 // run consumes all the copy-in data from the network connection and inserts it
 // in the database.
 func (c *copyMachine) run(ctx context.Context) error {
+	defer c.memMonitor.Stop(ctx)
 	defer c.rowsMemAcc.Close(ctx)
 	defer c.bufMemAcc.Close(ctx)
 

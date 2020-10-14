@@ -589,7 +589,9 @@ CREATE TABLE crdb_internal.jobs (
 		// conn executor. If we did that we would still want to account for the
 		// unmarshalling. Additionally, it's probably a good idea to paginate this
 		// and other virtual table queries but that's a bigger task.
-		ba := p.ExtendedEvalContext().Mon.MakeBoundAccount() //nolint:monitor
+		memMonitor := p.ExtendedEvalContext().NewMonitor(ctx, "crdb-internal-mem", 0 /* limit */)
+		defer memMonitor.Stop(ctx)
+		ba := memMonitor.MakeBoundAccount()
 		defer ba.Close(ctx)
 		var totalMem int64
 		for _, r := range rows {

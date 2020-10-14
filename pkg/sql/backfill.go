@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1906,8 +1905,8 @@ func columnBackfillInTxn(
 	}
 	var columnBackfillerMon *mon.BytesMonitor
 	// This is the planner's memory monitor.
-	if evalCtx.Mon != nil { //nolint:monitor
-		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-column-backfill-mon") //nolint:monitor
+	if evalCtx.HasMonitor() {
+		columnBackfillerMon = evalCtx.NewMonitor(ctx, "local-column-backfill-mon", 0 /* limit */)
 	}
 
 	var backfiller backfill.ColumnBackfiller
@@ -1944,8 +1943,8 @@ func indexBackfillInTxn(
 ) error {
 	var indexBackfillerMon *mon.BytesMonitor
 	// This is the planner's memory monitor.
-	if evalCtx.Mon != nil { //nolint:monitor
-		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-index-backfill-mon") //nolint:monitor
+	if evalCtx.HasMonitor() {
+		indexBackfillerMon = evalCtx.NewMonitor(ctx, "local-index-backfill-mon", 0 /* limit */)
 	}
 
 	var backfiller backfill.IndexBackfiller

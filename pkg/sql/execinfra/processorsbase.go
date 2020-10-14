@@ -918,15 +918,13 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 // overridden to 1 if config.TestingKnobs.ForceDiskSpill is set or
 // config.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
+	ctx context.Context, evalCtx *tree.EvalContext, config *ServerConfig, name string,
 ) *mon.BytesMonitor {
 	limit := GetWorkMemLimit(config)
 	if config.TestingKnobs.ForceDiskSpill {
 		limit = 1
 	}
-	limitedMon := mon.NewMonitorInheritWithLimit(name, limit, parent)
-	limitedMon.Start(ctx, parent, mon.BoundAccount{})
-	return limitedMon
+	return evalCtx.NewMonitor(ctx, name, limit)
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -222,8 +223,9 @@ type vTableLookupJoinNode struct {
 		// row contains the next row to output.
 		row tree.Datums
 		// rows contains the next rows to output, except for row.
-		rows   *rowcontainer.RowContainer
-		keyCtx constraint.KeyContext
+		rows       *rowcontainer.RowContainer
+		memMonitor *mon.BytesMonitor
+		keyCtx     constraint.KeyContext
 
 		// indexKeyDatums is scratch space used to construct the index key to
 		// look up in the vtable.
@@ -241,8 +243,9 @@ var _ rowPusher = &vTableLookupJoinNode{}
 // startExec implements the planNode interface.
 func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
+	v.run.memMonitor = params.EvalContext().NewMonitor(params.ctx, "vtable-lookup-join-mem", 0 /* limit */)
 	v.run.rows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+		v.run.memMonitor.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(v.columns),
 	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
@@ -345,4 +348,5 @@ func (v *vTableLookupJoinNode) Values() tree.Datums {
 func (v *vTableLookupJoinNode) Close(ctx context.Context) {
 	v.input.Close(ctx)
 	v.run.rows.Close(ctx)
+	v.run.memMonitor.Stop(ctx)
 }

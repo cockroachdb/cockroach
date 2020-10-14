@@ -95,7 +95,7 @@ func (ag *aggregatorBase) init(
 	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem") //nolint:monitor
+	memMonitor := flowCtx.EvalCtx.NewMonitor(ctx, "aggregator-mem", 0 /* limit */)
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		input = newInputStatCollector(input)
 		ag.FinishTrace = ag.outputStatsToTrace
@@ -160,7 +160,7 @@ func (ag *aggregatorBase) init(
 	// accounts to be bound to the correct monitor we override it here. Note
 	// that modifying the eval context is acceptable since we have created a
 	// copy in ProcessorBase.Init call above.
-	ag.EvalCtx.Mon = memMonitor //nolint:monitor
+	ag.EvalCtx.SetMonitor(memMonitor)
 	return nil
 }
 

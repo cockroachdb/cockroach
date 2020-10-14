@@ -133,7 +133,8 @@ func TestRowContainerIterators(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	memMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	evalCtx := tree.MakeTestingEvalContextWithMon(st, memMonitor)
 	defer evalCtx.Stop(ctx)
 
 	const numRows = 10
@@ -142,7 +143,7 @@ func TestRowContainerIterators(t *testing.T) {
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	var mc MemRowContainer
-	mc.Init(ordering, rowenc.OneIntCol, evalCtx, evalCtx.Mon)
+	mc.Init(ordering, rowenc.OneIntCol, &evalCtx, memMonitor)
 	defer mc.Close(ctx)
 
 	for _, row := range rows {
@@ -158,7 +159,7 @@ func TestRowContainerIterators(t *testing.T) {
 			func() {
 				i := mc.NewIterator(ctx)
 				defer i.Close()
-				if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+				if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
 					t.Fatalf("rows mismatch on the run number %d: %s", k+1, err)
 				}
 			}()
@@ -171,7 +172,7 @@ func TestRowContainerIterators(t *testing.T) {
 	t.Run("NewFinalIterator", func(t *testing.T) {
 		i := mc.NewFinalIterator(ctx)
 		defer i.Close()
-		if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+		if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
 			t.Fatal(err)
 		}
 		if mc.Len() != 0 {

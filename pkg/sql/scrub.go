@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -464,13 +465,14 @@ func createConstraintCheckOperations(
 	return results, nil
 }
 
-// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If
-// RowContainer is returned, the caller must close it.
+// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If RowContainer
+// is returned, the caller must close it as well as the memory monitor.
 func scrubRunDistSQL(
 	ctx context.Context, planCtx *PlanningCtx, p *planner, plan *PhysicalPlan, columnTypes []*types.T,
-) (*rowcontainer.RowContainer, error) {
+) (*rowcontainer.RowContainer, *mon.BytesMonitor, error) {
 	ci := colinfo.ColTypeInfoFromColTypes(columnTypes)
-	acc := p.extendedEvalCtx.Mon.MakeBoundAccount() //nolint:monitor
+	memMonitor := p.EvalContext().NewMonitor(ctx, "scrub-distsql-mem", 0 /* limit */)
+	acc := memMonitor.MakeBoundAccount()
 	rows := rowcontainer.NewRowContainer(acc, ci)
 	rowResultWriter := NewRowResultWriter(rows)
 	recv := MakeDistSQLReceiver(
@@ -492,11 +494,12 @@ func scrubRunDistSQL(
 		planCtx, p.txn, plan, recv, &evalCtxCopy, nil, /* finishedSetupFn */
 	)()
 	if rowResultWriter.Err() != nil {
-		return rows, rowResultWriter.Err()
+		return rows, memMonitor, rowResultWriter.Err()
 	} else if rows.Len() == 0 {
 		rows.Close(ctx)
-		return nil, nil
+		memMonitor.Stop(ctx)
+		return nil, nil, nil
 	}
 
-	return rows, nil
+	return rows, memMonitor, nil
 }

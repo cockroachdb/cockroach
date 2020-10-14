@@ -87,8 +87,9 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 	if !r.rowsNeeded {
 		return
 	}
+	r.ti.memMonitor = params.EvalContext().NewMonitor(params.ctx, "insert-mem", 0 /* limit */)
 	r.ti.rows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+		r.ti.memMonitor.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 

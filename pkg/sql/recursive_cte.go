@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // recursiveCTENode implements the logic for a recursive CTE:
@@ -46,14 +47,16 @@ type recursiveCTERun struct {
 	// nextRowIdx is the index inside workingRows of the next row to be returned
 	// by the operator.
 	nextRowIdx int
+	memMonitor *mon.BytesMonitor
 
 	initialDone bool
 	done        bool
 }
 
 func (n *recursiveCTENode) startExec(params runParams) error {
+	n.memMonitor = params.EvalContext().NewMonitor(params.ctx, "recursive-cte-mem", 0 /* limit */)
 	n.workingRows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+		n.memMonitor.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.initial, false /* mut */)),
 	)
 	n.nextRowIdx = 0
@@ -102,7 +105,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	defer lastWorkingRows.Close(params.ctx)
 
 	n.workingRows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+		n.memMonitor.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.initial, false /* mut */)),
 	)
 
@@ -133,4 +136,5 @@ func (n *recursiveCTENode) Values() tree.Datums {
 func (n *recursiveCTENode) Close(ctx context.Context) {
 	n.initial.Close(ctx)
 	n.workingRows.Close(ctx)
+	n.memMonitor.Stop(ctx)
 }

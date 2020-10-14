@@ -180,7 +180,6 @@ func FlowVerIsCompatible(
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
 	parentSpan opentracing.Span,
-	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
 	syncFlowConsumer execinfra.RowReceiver,
 	localState LocalState,
@@ -230,7 +229,7 @@ func (ds *ServerImpl) setupFlow(
 		noteworthyMemoryUsageBytes,
 		ds.Settings,
 	)
-	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
+	monitor.Start(ctx, ds.memMonitor, mon.BoundAccount{})
 
 	makeLeaf := func(req *execinfrapb.SetupFlowRequest) (*kv.Txn, error) {
 		tis := req.LeafTxnInputState
@@ -252,7 +251,7 @@ func (ds *ServerImpl) setupFlow(
 	var leafTxn *kv.Txn
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
-		evalCtx.Mon = monitor //nolint:monitor
+		evalCtx.SetMonitor(monitor)
 	} else {
 		if localState.IsLocal {
 			return nil, nil, errors.AssertionFailedf(
@@ -318,7 +317,6 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:      ds.ServerConfig.NodeID,
 			Codec:       ds.ServerConfig.Codec,
 			ReCache:     ds.regexpCache,
-			Mon:         monitor,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:            ctx,
@@ -332,6 +330,7 @@ func (ds *ServerImpl) setupFlow(
 			Txn:                leafTxn,
 			SQLLivenessReader:  ds.ServerConfig.SQLLivenessReader,
 		}
+		evalCtx.SetMonitor(monitor)
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		var haveSequences bool
@@ -477,13 +476,10 @@ func newFlow(
 // Note: the returned context contains a span that must be finished through
 // Flow.Cleanup.
 func (ds *ServerImpl) SetupSyncFlow(
-	ctx context.Context,
-	parentMonitor *mon.BytesMonitor,
-	req *execinfrapb.SetupFlowRequest,
-	output execinfra.RowReceiver,
+	ctx context.Context, req *execinfrapb.SetupFlowRequest, output execinfra.RowReceiver,
 ) (context.Context, flowinfra.Flow, error) {
 	ctx, f, err := ds.setupFlow(
-		ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{},
+		ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), req, output, LocalState{},
 	)
 	if err != nil {
 		return nil, nil, err
@@ -520,13 +516,12 @@ type LocalState struct {
 // It's the same as SetupSyncFlow except it takes the localState.
 func (ds *ServerImpl) SetupLocalSyncFlow(
 	ctx context.Context,
-	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, error) {
 	ctx, f, err := ds.setupFlow(
-		ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
+		ctx, opentracing.SpanFromContext(ctx), req, output, localState,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -547,7 +542,7 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 		return errors.AssertionFailedf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
 	}
 	req := firstMsg.SetupFlowRequest
-	ctx, f, err := ds.SetupSyncFlow(stream.Context(), ds.memMonitor, req, mbox)
+	ctx, f, err := ds.SetupSyncFlow(stream.Context(), req, mbox)
 	if err != nil {
 		return err
 	}
@@ -580,7 +575,7 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
+	ctx, f, err := ds.setupFlow(ctx, parentSpan, req, nil /* syncFlowConsumer */, LocalState{})
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}

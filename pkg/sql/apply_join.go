@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,6 +64,8 @@ type applyJoinNode struct {
 		// rightRows will be populated with the result of the right side of the join
 		// each time it's run.
 		rightRows *rowcontainer.RowContainer
+		// memMonitor is the memory monitor for rightRows.
+		memMonitor *mon.BytesMonitor
 		// curRightRow is the index into rightRows of the current right row being
 		// processed.
 		curRightRow int
@@ -112,8 +115,8 @@ func (a *applyJoinNode) startExec(params runParams) error {
 	// TODO(yuzefovich): at the moment, this memory account is only limited by
 	// the total SQL memory budget, we probably should change that and use a
 	// disk-backed container as well.
-	acc := params.EvalContext().Mon.MakeBoundAccount() //nolint:monitor
-	a.run.rightRows = rowcontainer.NewRowContainer(acc, ci)
+	a.run.memMonitor = params.EvalContext().NewMonitor(params.ctx, "applyjoin-mem", 0 /* limit */)
+	a.run.rightRows = rowcontainer.NewRowContainer(a.run.memMonitor.MakeBoundAccount(), ci)
 	return nil
 }
 
@@ -289,5 +292,8 @@ func (a *applyJoinNode) Close(ctx context.Context) {
 	a.input.plan.Close(ctx)
 	if a.run.rightRows != nil {
 		a.run.rightRows.Close(ctx)
+	}
+	if a.run.memMonitor != nil {
+		a.run.memMonitor.Stop(ctx)
 	}
 }

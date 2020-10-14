@@ -68,8 +68,9 @@ func (d *deleteNode) startExec(params runParams) error {
 	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
 	if d.run.rowsNeeded {
+		d.run.td.memMonitor = params.EvalContext().NewMonitor(params.ctx, "delete-mem", 0 /* limit */)
 		d.run.td.rows = rowcontainer.NewRowContainer(
-			params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+			d.run.td.memMonitor.MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(d.columns))
 	}
 	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())

@@ -80,6 +80,7 @@ func newScrubTableReader(
 
 	tr.tableDesc = tabledesc.MakeImmutable(spec.Table)
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
+	tr.fetcherMemMonitor = flowCtx.EvalCtx.NewMonitor(flowCtx.EvalCtx.Ctx(), "scrub-fetcher-mem", 0 /* limit */)
 
 	if err := tr.Init(
 		tr,
@@ -125,7 +126,7 @@ func newScrubTableReader(
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
 		flowCtx, &fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
-		spec.Reverse, neededColumns, true /* isCheck */, flowCtx.EvalCtx.Mon, &tr.alloc, //nolint:monitor
+		spec.Reverse, neededColumns, true /* isCheck */, tr.fetcherMemMonitor, &tr.alloc,
 		execinfra.ScanVisibilityPublic, spec.LockingStrength, spec.LockingWaitPolicy,
 		nil, /* systemColumns */
 	); err != nil {

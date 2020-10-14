@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -369,12 +370,13 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 // zigzagJoinerInfo contains all the information that needs to be
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
-	fetcher    row.Fetcher
-	alloc      *rowenc.DatumAlloc
-	table      *tabledesc.Immutable
-	index      *descpb.IndexDescriptor
-	indexTypes []*types.T
-	indexDirs  []descpb.IndexDescriptor_Direction
+	fetcher           row.Fetcher
+	fetcherMemMonitor *mon.BytesMonitor
+	alloc             *rowenc.DatumAlloc
+	table             *tabledesc.Immutable
+	index             *descpb.IndexDescriptor
+	indexTypes        []*types.T
+	indexDirs         []descpb.IndexDescriptor_Direction
 
 	// Stores one batch of matches at a time. When all the rows are collected
 	// the cartesian product of the containers will be emitted.
@@ -455,6 +457,7 @@ func (z *zigzagJoiner) setupInfo(
 
 	info.spanBuilder = span.MakeBuilder(flowCtx.Codec(), info.table, info.index)
 
+	info.fetcherMemMonitor = flowCtx.EvalCtx.NewMonitor(z.Ctx, "zigzagjoiner-mem", 0 /* limit */)
 	// Setup the Fetcher.
 	_, _, err := initRowFetcher(
 		flowCtx,
@@ -464,8 +467,8 @@ func (z *zigzagJoiner) setupInfo(
 		info.table.ColumnIdxMap(),
 		false, /* reverse */
 		neededCols,
-		false,               /* check */
-		flowCtx.EvalCtx.Mon, //nolint:monitor
+		false, /* check */
+		info.fetcherMemMonitor,
 		info.alloc,
 		execinfra.ScanVisibilityPublic,
 		// NB: zigzag joins are disabled when a row-level locking clause is
@@ -493,6 +496,7 @@ func (z *zigzagJoiner) close() {
 	if z.InternalClose() {
 		for i := range z.infos {
 			z.infos[i].fetcher.Close(z.Ctx)
+			z.infos[i].fetcherMemMonitor.Stop(z.Ctx)
 		}
 		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}

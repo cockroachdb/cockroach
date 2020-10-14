@@ -124,8 +124,9 @@ func (u *updateNode) startExec(params runParams) error {
 	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
 	if u.run.rowsNeeded {
+		u.run.tu.memMonitor = params.EvalContext().NewMonitor(params.ctx, "update-mem", 0 /* limit */)
 		u.run.tu.rows = rowcontainer.NewRowContainer(
-			params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+			u.run.tu.memMonitor.MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(u.columns),
 		)
 	}

@@ -495,12 +495,10 @@ func (r *createStatsResumer) Resume(
 	evalCtx := p.ExtendedEvalContext()
 
 	ci := colinfo.ColTypeInfoFromColTypes([]*types.T{})
-	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci) //nolint:monitor
-	defer func() {
-		if rows != nil {
-			rows.Close(ctx)
-		}
-	}()
+	memMonitor := evalCtx.NewMonitor(ctx, "create-stats-mem", 0 /* limit */)
+	defer memMonitor.Stop(ctx)
+	rows := rowcontainer.NewRowContainer(memMonitor.MakeBoundAccount(), ci)
+	defer rows.Close(ctx)
 
 	dsp := p.DistSQLPlanner()
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

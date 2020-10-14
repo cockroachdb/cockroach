@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // bufferNode consumes its input one row at a time, stores it in the buffer,
@@ -29,14 +30,16 @@ type bufferNode struct {
 	// processors, but this node is local.
 	bufferedRows       *rowcontainer.RowContainer
 	passThruNextRowIdx int
+	memMonitor         *mon.BytesMonitor
 
 	// label is a string used to describe the node in an EXPLAIN plan.
 	label string
 }
 
 func (n *bufferNode) startExec(params runParams) error {
+	n.memMonitor = params.EvalContext().NewMonitor(params.ctx, "buffer-mem", 0 /* limit */)
 	n.bufferedRows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+		n.memMonitor.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.plan, false /* mut */)),
 	)
 	return nil
@@ -67,6 +70,7 @@ func (n *bufferNode) Values() tree.Datums {
 func (n *bufferNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 	n.bufferedRows.Close(ctx)
+	n.memMonitor.Stop(ctx)
 }
 
 // scanBufferNode behaves like an iterator into the bufferNode it is

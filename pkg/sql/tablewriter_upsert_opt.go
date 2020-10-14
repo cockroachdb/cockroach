@@ -105,8 +105,9 @@ func (tu *optTableUpserter) init(
 	// rows returned from the operation.
 	if tu.rowsNeeded {
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))
+		tu.memMonitor = evalCtx.NewMonitor(ctx, "upsert-mem", 0 /* limit */)
 		tu.rows = rowcontainer.NewRowContainer(
-			evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
+			tu.memMonitor.MakeBoundAccount(),
 			colinfo.ColTypeInfoFromColDescs(tu.returnCols),
 		)
 

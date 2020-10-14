@@ -731,7 +731,7 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
-	memAcc := evalCtx.Mon.MakeBoundAccount()
+	memAcc := evalCtx.mon.MakeBoundAccount()
 	defer memAcc.Close(ctx)
 	var da DatumAlloc
 	for _, c := range testCases {

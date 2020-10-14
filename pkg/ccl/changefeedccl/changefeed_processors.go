@@ -112,7 +112,7 @@ func newChangeAggregatorProcessor(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem") //nolint:monitor
+	memMonitor := flowCtx.EvalCtx.NewMonitor(ctx, "changeagg-mem", 0 /* limit */)
 	ca := &changeAggregator{
 		flowCtx: flowCtx,
 		spec:    spec,
@@ -480,7 +480,7 @@ func newChangeFrontierProcessor(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem") //nolint:monitor
+	memMonitor := flowCtx.EvalCtx.NewMonitor(ctx, "changefntr-mem", 0 /* limit */)
 	cf := &changeFrontier{
 		flowCtx: flowCtx,
 		spec:    spec,

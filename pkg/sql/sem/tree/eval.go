@@ -3260,7 +3260,7 @@ type EvalContext struct {
 
 	TestingKnobs EvalContextTestingKnobs
 
-	Mon *mon.BytesMonitor
+	mon *mon.BytesMonitor
 
 	// SingleDatumAggMemAccount is a memory account that all aggregate builtins
 	// that store a single datum will share to account for the memory needed to
@@ -3301,12 +3301,32 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 		NodeID:      base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
-	ctx.Mon = monitor //nolint:monitor
+	ctx.mon = monitor
 	ctx.Context = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
 	return ctx
+}
+
+func (ctx *EvalContext) SetMonitor(m *mon.BytesMonitor) {
+	ctx.mon = m
+}
+
+func (ctx *EvalContext) HasMonitor() bool {
+	return ctx.mon != nil
+}
+
+func (evalCtx *EvalContext) NewMonitor(
+	ctx context.Context, name string, limit int64,
+) *mon.BytesMonitor {
+	monitor := mon.NewMonitorInheritWithLimit(name, limit, evalCtx.mon)
+	monitor.Start(ctx, evalCtx.mon, mon.BoundAccount{})
+	return monitor
+}
+
+func (evalCtx *EvalContext) StartChildMonitor(ctx context.Context, child *mon.BytesMonitor) {
+	child.Start(ctx, evalCtx.mon, mon.BoundAccount{})
 }
 
 // Copy returns a deep copy of ctx.
@@ -3341,7 +3361,7 @@ func NewTestingEvalContext(st *cluster.Settings) *EvalContext {
 
 // Stop closes out the EvalContext and must be called once it is no longer in use.
 func (ctx *EvalContext) Stop(c context.Context) {
-	ctx.Mon.Stop(c) //nolint:monitor
+	ctx.mon.Stop(c)
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per

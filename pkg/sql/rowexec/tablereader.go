@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
@@ -49,8 +50,9 @@ type tableReader struct {
 
 	// fetcher wraps a row.Fetcher, allowing the tableReader to add a stat
 	// collection layer.
-	fetcher rowFetcher
-	alloc   rowenc.DatumAlloc
+	fetcher           rowFetcher
+	fetcherMemMonitor *mon.BytesMonitor
+	alloc             rowenc.DatumAlloc
 
 	// rowsRead is the number of rows read and is tracked unconditionally.
 	rowsRead int64
@@ -91,6 +93,7 @@ func newTableReader(
 	// just in case.
 	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
+	tr.fetcherMemMonitor = flowCtx.EvalCtx.NewMonitor(flowCtx.EvalCtx.Ctx(), "tablereader-fetcher-mem", 0 /* limit */)
 
 	tableDesc := tabledesc.NewImmutable(spec.Table)
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
@@ -140,7 +143,7 @@ func newTableReader(
 		spec.Reverse,
 		neededColumns,
 		spec.IsCheck,
-		flowCtx.EvalCtx.Mon, //nolint:monitor
+		tr.fetcherMemMonitor,
 		&tr.alloc,
 		spec.Visibility,
 		spec.LockingStrength,
@@ -265,6 +268,7 @@ func (tr *tableReader) close() {
 		if tr.fetcher != nil {
 			tr.fetcher.Close(tr.Ctx)
 		}
+		tr.fetcherMemMonitor.Stop(tr.Ctx)
 	}
 }
 

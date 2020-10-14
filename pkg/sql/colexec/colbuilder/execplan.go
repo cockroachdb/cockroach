@@ -1243,9 +1243,7 @@ func (r *postProcessResult) planPostProcessSpec(
 func (r opResult) createBufferingUnlimitedMemMonitor(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BytesMonitor {
-	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited", //nolint:monitor
-	)
+	bufferingOpUnlimitedMemMonitor := flowCtx.EvalCtx.NewMonitor(ctx, name+"-unlimited", 0 /* limit */)
 	r.OpMonitors = append(r.OpMonitors, bufferingOpUnlimitedMemMonitor)
 	return bufferingOpUnlimitedMemMonitor
 }
@@ -1257,9 +1255,7 @@ func (r opResult) createBufferingUnlimitedMemMonitor(
 func (r opResult) createMemAccountForSpillStrategy(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BoundAccount {
-	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
-		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, name+"-limited", //nolint:monitor
-	)
+	bufferingOpMemMonitor := flowCtx.EvalCtx.NewMonitor(ctx, name+"-limited", execinfra.GetWorkMemLimit(flowCtx.Cfg))
 	r.OpMonitors = append(r.OpMonitors, bufferingOpMemMonitor)
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
 	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)

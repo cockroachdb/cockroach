@@ -80,9 +80,10 @@ type invertedJoiner struct {
 
 	// fetcher wraps the row.Fetcher used to perform scans. This enables the
 	// invertedJoiner to wrap the fetcher with a stat collector when necessary.
-	fetcher  rowFetcher
-	alloc    rowenc.DatumAlloc
-	rowAlloc rowenc.EncDatumRowAlloc
+	fetcher           rowFetcher
+	fetcherMemMonitor *mon.BytesMonitor
+	alloc             rowenc.DatumAlloc
+	rowAlloc          rowenc.EncDatumRowAlloc
 
 	// The row retrieved from the index represents the columns of the table
 	// with the datums corresponding to the columns in the index populated.
@@ -273,11 +274,13 @@ func newInvertedJoiner(
 	for _, colID := range indexColumnIDs {
 		allIndexCols.Add(ij.colIdxMap[colID])
 	}
+	ctx := flowCtx.EvalCtx.Ctx()
+	ij.fetcherMemMonitor = flowCtx.EvalCtx.NewMonitor(ctx, "invertedjoiner-fetcher-mem", 0 /* limit */)
 	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
 	// and so do not need to see in-progress schema changes.
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
-		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic, //nolint:monitor
+		allIndexCols, false /* isCheck */, ij.fetcherMemMonitor, &ij.alloc, execinfra.ScanVisibilityPublic,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
 		nil, /* systemColumns */
 	)
@@ -301,8 +304,7 @@ func newInvertedJoiner(
 	ij.spanBuilder.SetNeededColumns(allIndexCols)
 
 	// Initialize memory monitors and row container for key rows.
-	ctx := flowCtx.EvalCtx.Ctx()
-	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "invertedjoiner-limited") //nolint:monitor
+	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx, flowCtx.Cfg, "invertedjoiner-limited")
 	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "invertedjoiner-disk")
 	ij.keyRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
@@ -687,6 +689,7 @@ func (ij *invertedJoiner) close() {
 		if ij.keyRows != nil {
 			ij.keyRows.Close(ij.Ctx)
 		}
+		ij.fetcherMemMonitor.Stop(ij.Ctx)
 		ij.MemMonitor.Stop(ij.Ctx)
 		if ij.diskMonitor != nil {
 			ij.diskMonitor.Stop(ij.Ctx)

@@ -372,8 +372,10 @@ var aggregates = map[string]builtinDefinition{
 			func(
 				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 			) tree.AggregateFunc {
+				m := evalCtx.NewMonitor(evalCtx.Ctx(), "st_makeline-mem", 0 /* limit */)
 				return &stMakeLineAgg{
-					acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
+					mon: m,
+					acc: m.MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -629,8 +631,10 @@ func makeSTUnionBuiltin() builtinDefinition {
 			func(
 				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 			) tree.AggregateFunc {
+				m := evalCtx.NewMonitor(evalCtx.Ctx(), "st_union-mem", 0 /* limit */)
 				return &stUnionAgg{
-					acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
+					mon: m,
+					acc: m.MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -644,6 +648,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 type stMakeLineAgg struct {
 	flatCoords []float64
 	layout     geom.Layout
+	mon        *mon.BytesMonitor
 	acc        mon.BoundAccount
 }
 
@@ -701,6 +706,7 @@ func (agg *stMakeLineAgg) Reset(ctx context.Context) {
 // Close implements the AggregateFunc interface.
 func (agg *stMakeLineAgg) Close(ctx context.Context) {
 	agg.acc.Close(ctx)
+	agg.mon.Stop(ctx)
 }
 
 // Size implements the AggregateFunc interface.
@@ -712,6 +718,7 @@ type stUnionAgg struct {
 	srid geopb.SRID
 	// TODO(#geo): store the current union object in C memory, to avoid the EWKB round trips.
 	ewkb geopb.EWKB
+	mon  *mon.BytesMonitor
 	acc  mon.BoundAccount
 	set  bool
 }
@@ -773,6 +780,7 @@ func (agg *stUnionAgg) Reset(ctx context.Context) {
 // Close implements the AggregateFunc interface.
 func (agg *stUnionAgg) Close(ctx context.Context) {
 	agg.acc.Close(ctx)
+	agg.mon.Stop(ctx)
 }
 
 // Size implements the AggregateFunc interface.
@@ -781,13 +789,16 @@ func (agg *stUnionAgg) Size() int64 {
 }
 
 type stCollectAgg struct {
+	mon  *mon.BytesMonitor
 	acc  mon.BoundAccount
 	coll geom.T
 }
 
 func newSTCollectAgg(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	m := evalCtx.NewMonitor(evalCtx.Ctx(), "st_collect-mem", 0 /* limit */)
 	return &stCollectAgg{
-		acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
+		mon: m,
+		acc: m.MakeBoundAccount(),
 	}
 }
 
@@ -913,6 +924,7 @@ func (agg *stCollectAgg) Reset(ctx context.Context) {
 // Close implements the AggregateFunc interface.
 func (agg *stCollectAgg) Close(ctx context.Context) {
 	agg.acc.Close(ctx)
+	agg.mon.Stop(ctx)
 }
 
 // Size implements the AggregateFunc interface.
@@ -1064,7 +1076,10 @@ const sizeOfSTExtentAggregate = int64(unsafe.Sizeof(stExtentAgg{}))
 // be closed upon this struct's closure.
 type singleDatumAggregateBase struct {
 	mode singleDatumAggregateBaseMode
-	acc  *mon.BoundAccount
+	// mon is a non-nil monitor that acc is bound to when the struct is in
+	// nonSharedSingleDatumAggregateBaseMode.
+	mon *mon.BytesMonitor
+	acc *mon.BoundAccount
 	// accountedFor indicates how much memory (in bytes) have been registered
 	// with acc.
 	accountedFor int64
@@ -1094,9 +1109,11 @@ const (
 // will be used by the new struct which will operate in "shared" mode.
 func makeSingleDatumAggregateBase(evalCtx *tree.EvalContext) singleDatumAggregateBase {
 	if evalCtx.SingleDatumAggMemAccount == nil {
-		newAcc := evalCtx.Mon.MakeBoundAccount() //nolint:monitor
+		m := evalCtx.NewMonitor(evalCtx.Ctx(), "aggregate-base-mem", 0 /* limit */)
+		newAcc := m.MakeBoundAccount()
 		return singleDatumAggregateBase{
 			mode: nonSharedSingleDatumAggregateBaseMode,
+			mon:  m,
 			acc:  &newAcc,
 		}
 	}
@@ -1137,6 +1154,7 @@ func (b *singleDatumAggregateBase) close(ctx context.Context) {
 		b.accountedFor = 0
 	case nonSharedSingleDatumAggregateBaseMode:
 		b.acc.Close(ctx)
+		b.mon.Stop(ctx)
 	default:
 		panic(errors.Errorf("unexpected singleDatumAggregateBaseMode: %d", b.mode))
 	}
@@ -1215,15 +1233,18 @@ type arrayAggregate struct {
 	// Note that we do not embed singleDatumAggregateBase struct to help with
 	// memory accounting because arrayAggregate stores multiple datums inside
 	// of arr.
+	mon *mon.BytesMonitor
 	acc mon.BoundAccount
 }
 
 func newArrayAggregate(
 	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
+	m := evalCtx.NewMonitor(evalCtx.Ctx(), "array-aggregate-mem", 0 /* limit */)
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
-		acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
+		mon: m,
+		acc: m.MakeBoundAccount(),
 	}
 }
 
@@ -1254,6 +1275,7 @@ func (a *arrayAggregate) Reset(ctx context.Context) {
 // operation.
 func (a *arrayAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
+	a.mon.Stop(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -3362,6 +3384,7 @@ type percentileDiscAggregate struct {
 	// Note that we do not embed singleDatumAggregateBase struct to help with
 	// memory accounting because percentileDiscAggregate stores multiple datums
 	// inside of arr.
+	mon *mon.BytesMonitor
 	acc mon.BoundAccount
 	// We need singleInput to differentiate whether the input was a single
 	// fraction, or an array of fractions.
@@ -3372,9 +3395,11 @@ type percentileDiscAggregate struct {
 func newPercentileDiscAggregate(
 	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
+	m := evalCtx.NewMonitor(evalCtx.Ctx(), "percentile_disc-mem", 0 /* limit */)
 	return &percentileDiscAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
+		mon: m,
+		acc: m.MakeBoundAccount(),
 	}
 }
 
@@ -3448,6 +3473,7 @@ func (a *percentileDiscAggregate) Reset(ctx context.Context) {
 // operation.
 func (a *percentileDiscAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
+	a.mon.Stop(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -3460,6 +3486,7 @@ type percentileContAggregate struct {
 	// Note that we do not embed singleDatumAggregateBase struct to help with
 	// memory accounting because percentileContAggregate stores multiple datums
 	// inside of arr.
+	mon *mon.BytesMonitor
 	acc mon.BoundAccount
 	// We need singleInput to differentiate whether the input was a single
 	// fraction, or an array of fractions.
@@ -3470,9 +3497,11 @@ type percentileContAggregate struct {
 func newPercentileContAggregate(
 	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
+	m := evalCtx.NewMonitor(evalCtx.Ctx(), "percentile_cont-mem", 0 /* limit */)
 	return &percentileContAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Mon.MakeBoundAccount(), //nolint:monitor
+		mon: m,
+		acc: m.MakeBoundAccount(),
 	}
 }
 
@@ -3577,6 +3606,7 @@ func (a *percentileContAggregate) Reset(ctx context.Context) {
 // operation.
 func (a *percentileContAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
+	a.mon.Stop(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.

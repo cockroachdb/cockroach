@@ -130,7 +130,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	aggMemAcc := evalCtx.Mon.MakeBoundAccount()
+	aggMemAcc := evalCtx.mon.MakeBoundAccount()
 	defer aggMemAcc.Close(context.Background())
 	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
 	semaCtx := tree.MakeSemaContext()

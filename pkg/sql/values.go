@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -113,11 +114,13 @@ func (p *planner) Values(
 }
 
 func (p *planner) newContainerValuesNode(columns colinfo.ResultColumns, capacity int) *valuesNode {
+	memMonitor := p.EvalContext().NewMonitor(p.EvalContext().Ctx(), "values-mem", 0 /* limit */)
 	return &valuesNode{
 		columns: columns,
 		valuesRun: valuesRun{
+			memMonitor: memMonitor,
 			rows: rowcontainer.NewRowContainerWithCapacity(
-				p.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+				memMonitor.MakeBoundAccount(),
 				colinfo.ColTypeInfoFromResCols(columns),
 				capacity,
 			),
@@ -127,8 +130,9 @@ func (p *planner) newContainerValuesNode(columns colinfo.ResultColumns, capacity
 
 // valuesRun is the run-time state of a valuesNode during local execution.
 type valuesRun struct {
-	rows    *rowcontainer.RowContainer
-	nextRow int // The index of the next row.
+	rows       *rowcontainer.RowContainer
+	memMonitor *mon.BytesMonitor
+	nextRow    int // The index of the next row.
 }
 
 func (n *valuesNode) startExec(params runParams) error {
@@ -142,8 +146,9 @@ func (n *valuesNode) startExec(params runParams) error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so its expressions need evaluating.
 	// This may run subqueries.
+	n.memMonitor = params.EvalContext().NewMonitor(params.ctx, "values-mem", 0 /* limit */)
 	n.rows = rowcontainer.NewRowContainerWithCapacity(
-		params.extendedEvalCtx.Mon.MakeBoundAccount(), //nolint:monitor
+		n.memMonitor.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(n.columns),
 		len(n.tuples),
 	)
@@ -181,6 +186,10 @@ func (n *valuesNode) Close(ctx context.Context) {
 	if n.rows != nil {
 		n.rows.Close(ctx)
 		n.rows = nil
+	}
+	if n.memMonitor != nil {
+		n.memMonitor.Stop(ctx)
+		n.memMonitor = nil
 	}
 }
 

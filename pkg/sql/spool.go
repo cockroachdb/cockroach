@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // spoolNode ensures that a child planNode is executed to completion
@@ -24,10 +25,11 @@ import (
 // If hardLimit is set, only that number of rows is collected, but
 // the child node is still run to completion.
 type spoolNode struct {
-	source    planNode
-	rows      *rowcontainer.RowContainer
-	hardLimit int64
-	curRowIdx int
+	source     planNode
+	rows       *rowcontainer.RowContainer
+	memMonitor *mon.BytesMonitor
+	hardLimit  int64
+	curRowIdx  int
 }
 
 func (s *spoolNode) startExec(params runParams) error {
@@ -41,8 +43,9 @@ func (s *spoolNode) startExec(params runParams) error {
 		}
 	}
 
+	s.memMonitor = params.EvalContext().NewMonitor(params.ctx, "spool-mem", 0 /* limit */)
 	s.rows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(), //nolint:monitor
+		s.memMonitor.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(planColumns(s.source)),
 	)
 
@@ -102,5 +105,9 @@ func (s *spoolNode) Close(ctx context.Context) {
 	if s.rows != nil {
 		s.rows.Close(ctx)
 		s.rows = nil
+	}
+	if s.memMonitor != nil {
+		s.memMonitor.Stop(ctx)
+		s.memMonitor = nil
 	}
 }
