@@ -150,8 +150,8 @@ export interface LoginAPIState {
   loggedInUser: string;
   error: Error;
   inProgress: boolean;
-  displayPasswordLogin: boolean;
-  displayOIDCButton: boolean;
+  oidcAutoLogin: boolean;
+  oidcLoginEnabled: boolean;
   oidcButtonText: string;
 }
 
@@ -159,8 +159,8 @@ export const emptyLoginState: LoginAPIState = {
   loggedInUser: dataFromServer.LoggedInUser,
   error: null,
   inProgress: false,
-  displayPasswordLogin: dataFromServer.PasswordLoginEnabled,
-  displayOIDCButton: dataFromServer.OIDCLoginEnabled,
+  oidcAutoLogin: dataFromServer.OIDCAutoLogin,
+  oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
   oidcButtonText: dataFromServer.OIDCButtonText,
 };
 
