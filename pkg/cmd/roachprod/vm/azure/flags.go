@@ -26,6 +26,7 @@ type providerOpts struct {
 	operationTimeout time.Duration
 	syncDelete       bool
 	vnetName         string
+	networkDiskType  string
 }
 
 var defaultLocations = []string{
@@ -48,6 +49,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			strings.Join(defaultLocations, ",")))
 	flags.StringVar(&o.vnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
+	flags.StringVar(&o.networkDiskType, ProviderName+"-network-disk-type", "premium-disk",
+		"type of network disk [premium-disk, ultra-disk]. only used if local-ssd is false")
 }
 
 // ConfigureClusterFlags implements vm.ProviderFlags and is a no-op.

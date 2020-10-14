@@ -519,7 +519,9 @@ mounts:
 	// https://github.com/Azure-Samples/azure-sdk-for-go-samples/blob/79e3f3af791c3873d810efe094f9d61e93a6ccaa/compute/vm.go#L41
 	vm = compute.VirtualMachine{
 		Location: group.Location,
-		Tags:     tags,
+		// TODO(arul): Make this an argument instead of hardcoded
+		Zones: to.StringSlicePtr([]string{"2"}),
+		Tags:  tags,
 		VirtualMachineProperties: &compute.VirtualMachineProperties{
 			HardwareProfile: &compute.HardwareProfile{
 				VMSize: compute.VirtualMachineSizeTypes(p.opts.machineType),
@@ -568,15 +570,30 @@ mounts:
 		},
 	}
 	if !opts.SSDOpts.UseLocalSSD {
+		var storageAccType compute.StorageAccountTypes
+		switch p.opts.networkDiskType {
+		case "premium-disk":
+			storageAccType = compute.StorageAccountTypesPremiumLRS
+		case "ultra-disk":
+			storageAccType = compute.StorageAccountTypesUltraSSDLRS
+		default:
+			err = errors.Newf("unsuported network disk type: %s", p.opts.networkDiskType)
+			return
+		}
 		vm.VirtualMachineProperties.StorageProfile.DataDisks = &[]compute.DataDisk{
 			{
 				CreateOption: compute.DiskCreateOptionTypesEmpty,
 				DiskSizeGB:   to.Int32Ptr(100),
 				Lun:          to.Int32Ptr(42),
 				ManagedDisk: &compute.ManagedDiskParameters{
-					StorageAccountType: compute.StorageAccountTypesPremiumLRS,
+					StorageAccountType: storageAccType,
 				},
 			},
+		}
+		if storageAccType == compute.StorageAccountTypesUltraSSDLRS {
+			vm.AdditionalCapabilities = &compute.AdditionalCapabilities{
+				UltraSSDEnabled: to.BoolPtr(true),
+			}
 		}
 	}
 	future, err := client.CreateOrUpdate(ctx, *group.Name, name, vm)
@@ -885,11 +902,15 @@ func (p *Provider) createIP(
 	}
 	future, err := ipc.CreateOrUpdate(ctx, *group.Name, name,
 		network.PublicIPAddress{
-			Name:     to.StringPtr(name),
+			Name: to.StringPtr(name),
+			Sku: &network.PublicIPAddressSku{
+				Name: network.PublicIPAddressSkuNameStandard,
+			},
 			Location: group.Location,
+			Zones:    to.StringSlicePtr([]string{"3"}),
 			PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 				PublicIPAddressVersion:   network.IPv4,
-				PublicIPAllocationMethod: network.Dynamic,
+				PublicIPAllocationMethod: network.Static,
 			},
 		})
 	if err != nil {
