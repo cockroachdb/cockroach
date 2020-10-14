@@ -16,7 +16,14 @@ import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { Bytes } from "src/util/format";
-import { databaseDetails, DatabaseSummaryBase, DatabaseSummaryExplicitData, grants, tableInfos as selectTableInfos } from "src/views/databases/containers/databaseSummary";
+import {
+  databaseDetails,
+  DatabaseSummaryBase,
+  DatabaseSummaryExplicitData,
+  DatabaseSummaryProps,
+  grants,
+  tableInfos as selectTableInfos,
+} from "src/views/databases/containers/databaseSummary";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
@@ -27,6 +34,7 @@ import { SummaryCard } from "src/views/shared/components/summaryCard";
 import { SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import TitleWithIcon from "../../components/titleWithIcon/titleWithIcon";
 import { ReplicatedSizeTooltip } from "src/views/databases/containers/databases/tooltips";
+import { Button } from "src/components";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/tables", (s) => s.localSettings,
@@ -37,14 +45,30 @@ class DatabaseTableListSortedTable extends SortedTable<TableInfo> {}
 // DatabaseSummaryTables displays a summary section describing the tables
 // contained in a single database.
 export class DatabaseSummaryTables extends DatabaseSummaryBase {
+  constructor(props: DatabaseSummaryProps) {
+    super(props);
+
+    this.state = {
+      finishedLoadingTableData: props.tableInfos && props.tableInfos.every(ti => ti.detailsAndStatsLoaded()),
+    };
+  }
+
   totalSize() {
     const tableInfos = this.props.tableInfos;
-    return _.sumBy(tableInfos, (ti) => ti.physicalSize);
+    if (this.state.finishedLoadingTableData) {
+      return _.sumBy(tableInfos, (ti) => ti.physicalSize);
+    } else {
+      return null;
+    }
   }
 
   totalRangeCount() {
     const tableInfos = this.props.tableInfos;
-    return _.sumBy(tableInfos, (ti) => ti.rangeCount);
+    if (this.state.finishedLoadingTableData) {
+      return _.sumBy(tableInfos, (ti) => ti.rangeCount);
+    } else {
+      return null;
+    }
   }
 
   noDatabaseResults = () => (
@@ -62,6 +86,11 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
       <div className="database-summary">
         <div className="database-summary-title">
           <TitleWithIcon src={Stack} title={dbID}/>
+          {this.state.finishedLoadingTableData || numTables === 0 ? null :
+            <Button type="secondary" className="database-summary-load-button" onClick={async () => {
+              await this.loadTableDetails(this.props);
+            }}>Load stats for all tables</Button>
+          }
         </div>
         <div className="l-columns">
           <div className="l-columns__left">
@@ -85,7 +114,7 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
                 },
                 {
                   title: <ReplicatedSizeTooltip tableName={dbID}>{"Replicated Size"}</ReplicatedSizeTooltip>,
-                  cell: (tableInfo) => Bytes(tableInfo.physicalSize),
+                  cell: (tableInfo) => _.isUndefined(tableInfo.physicalSize) ? "" : Bytes(tableInfo.physicalSize),
                   sort: (tableInfo) => tableInfo.physicalSize,
                 },
                 {
