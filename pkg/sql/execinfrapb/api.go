@@ -11,7 +11,6 @@
 package execinfrapb
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -33,29 +32,12 @@ type DistSQLVersion uint32
 // MakeEvalContext serializes some of the fields of a tree.EvalContext into a
 // execinfrapb.EvalContext proto.
 func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
-	var be BytesEncodeFormat
-	switch evalCtx.SessionData.DataConversion.BytesEncodeFormat {
-	case lex.BytesEncodeHex:
-		be = BytesEncodeFormat_HEX
-	case lex.BytesEncodeEscape:
-		be = BytesEncodeFormat_ESCAPE
-	case lex.BytesEncodeBase64:
-		be = BytesEncodeFormat_BASE64
-	default:
-		panic("unknown format")
-	}
 	res := EvalContext{
-		StmtTimestampNanos:    evalCtx.StmtTimestamp.UnixNano(),
-		TxnTimestampNanos:     evalCtx.TxnTimestamp.UnixNano(),
-		Location:              evalCtx.GetLocation().String(),
-		Database:              evalCtx.SessionData.Database,
-		TemporarySchemaName:   evalCtx.SessionData.SearchPath.GetTemporarySchemaName(),
-		User:                  evalCtx.SessionData.User,
-		ApplicationName:       evalCtx.SessionData.ApplicationName,
-		BytesEncodeFormat:     be,
-		ExtraFloatDigits:      int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
-		Vectorize:             int32(evalCtx.SessionData.VectorizeMode),
-		VectorizeInjectPanics: evalCtx.SessionData.TestingVectorizeInjectPanics,
+		SessionData:         evalCtx.SessionData.SessionData,
+		StmtTimestampNanos:  evalCtx.StmtTimestamp.UnixNano(),
+		TxnTimestampNanos:   evalCtx.TxnTimestamp.UnixNano(),
+		Location:            evalCtx.GetLocation().String(),
+		TemporarySchemaName: evalCtx.SessionData.SearchPath.GetTemporarySchemaName(),
 	}
 
 	// Populate the search path. Make sure not to include the implicit pg_catalog,

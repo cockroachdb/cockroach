@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -151,13 +151,13 @@ func (dsp *DistSQLPlanner) setupFlows(
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
 
-	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
-		if !vectorizeThresholdMet && (evalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto || evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOn) {
+	if evalCtx.SessionData.VectorizeMode != sessiondatapb.VectorizeOff {
+		if !vectorizeThresholdMet && (evalCtx.SessionData.VectorizeMode == sessiondatapb.Vectorize201Auto || evalCtx.SessionData.VectorizeMode == sessiondatapb.VectorizeOn) {
 			// Vectorization is not justified for this flow because the expected
 			// amount of data is too small and the overhead of pre-allocating data
 			// structures needed for the vectorized engine is expected to dominate
 			// the execution time.
-			setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+			setupReq.EvalContext.SessionData.VectorizeMode = sessiondatapb.VectorizeOff
 		} else {
 			// Now we check to see whether or not to even try vectorizing the flow.
 			// The goal here is to determine up front whether all of the flows can be
@@ -182,7 +182,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
-					if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeExperimentalAlways {
+					if evalCtx.SessionData.VectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
 						returnVectorizationSetupError = true
 						// If running with VectorizeExperimentalAlways, this check makes sure
 						// that we can still run SET statements (mostly to set vectorize to
@@ -206,7 +206,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 					}
 					// Vectorization is not supported for this flow, so we override the
 					// setting.
-					setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+					setupReq.EvalContext.SessionData.VectorizeMode = sessiondatapb.VectorizeOff
 					break
 				}
 			}

@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -147,10 +147,10 @@ func needHashAggregator(aggSpec *execinfrapb.AggregatorSpec) (bool, error) {
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
-func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
+func isSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
 	core := spec.Core
-	isFullVectorization := mode == sessiondata.VectorizeOn ||
-		mode == sessiondata.VectorizeExperimentalAlways
+	isFullVectorization := mode == sessiondatapb.VectorizeOn ||
+		mode == sessiondatapb.VectorizeExperimentalAlways
 
 	switch {
 	case core.Noop != nil:
@@ -429,9 +429,9 @@ func (r opResult) createAndWrapRowSource(
 	}
 	if spec.Core.JoinReader == nil {
 		switch flowCtx.EvalCtx.SessionData.VectorizeMode {
-		case sessiondata.Vectorize201Auto:
+		case sessiondatapb.Vectorize201Auto:
 			return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=201auto mode")
-		case sessiondata.VectorizeExperimentalAlways:
+		case sessiondatapb.VectorizeExperimentalAlways:
 			return causeToWrap
 		}
 	}
