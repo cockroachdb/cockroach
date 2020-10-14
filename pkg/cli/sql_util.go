@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1154,7 +1155,7 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 		// that we can let the user see and control the result using
 		// `bytea_output`.
 		return lex.EncodeByteArrayToRawBytes(string(t),
-			lex.BytesEncodeEscape, false /* skipHexPrefix */)
+			sessiondatapb.BytesEncodeEscape, false /* skipHexPrefix */)
 
 	case time.Time:
 		// Since we do not know whether the datum is Timestamp or TimestampTZ,

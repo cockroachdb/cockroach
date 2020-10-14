@@ -337,7 +337,7 @@ func (ex *connExecutor) execBind(
 					"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
 		}
 
-		ptCtx := tree.NewParseTimeContext(ex.state.sqlTimestamp.In(ex.sessionData.DataConversion.Location))
+		ptCtx := tree.NewParseTimeContext(ex.state.sqlTimestamp.In(ex.sessionData.GetLocation()))
 
 		for i, arg := range bindCmd.Args {
 			k := tree.PlaceholderIdx(i)

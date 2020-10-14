@@ -15,6 +15,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -520,6 +522,8 @@ type internalClientComm struct {
 	sync func([]resWithPos)
 }
 
+var _ ClientComm = &internalClientComm{}
+
 type resWithPos struct {
 	*bufferedCommandResult
 	pos CmdPos
@@ -531,7 +535,8 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ RowDescOpt,
 	pos CmdPos,
 	_ []pgwirebase.FormatCode,
-	_ sessiondata.DataConversionConfig,
+	_ sessiondatapb.DataConversionConfig,
+	_ *time.Location,
 	_ int,
 	_ string,
 	_ bool,
