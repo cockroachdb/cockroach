@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
 // explainPlanNode implements EXPLAIN (PLAN); it produces the output of
@@ -147,9 +147,9 @@ func explainGetDistributedAndVectorized(
 
 		ctxSessionData := flowCtx.EvalCtx.SessionData
 		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
-		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
+		if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
 			willVectorize = false
-		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeOn) {
+		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondatapb.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOn) {
 			willVectorize = false
 		} else {
 			willVectorize = true

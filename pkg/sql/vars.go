@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -142,7 +142,7 @@ var varGen = map[string]sessionVar{
 		Set: func(
 			_ context.Context, m *sessionDataMutator, s string,
 		) error {
-			mode, ok := lex.BytesEncodeFormatFromString(s)
+			mode, ok := sessiondatapb.BytesEncodeFormatFromString(s)
 			if !ok {
 				return newVarValueError(`bytea_output`, s, "hex", "escape", "base64")
 			}
@@ -150,9 +150,9 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.DataConversion.BytesEncodeFormat.String()
+			return evalCtx.SessionData.DataConversionConfig.BytesEncodeFormat.String()
 		},
-		GlobalDefault: func(sv *settings.Values) string { return lex.BytesEncodeHex.String() },
+		GlobalDefault: func(sv *settings.Values) string { return sessiondatapb.BytesEncodeHex.String() },
 	},
 
 	`client_min_messages`: {
@@ -288,7 +288,7 @@ var varGen = map[string]sessionVar{
 			if i == 4 {
 				telemetry.Inc(sqltelemetry.DefaultIntSize4Counter)
 			}
-			m.SetDefaultIntSize(int(i))
+			m.SetDefaultIntSize(int32(i))
 			return nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
@@ -490,7 +490,7 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`vectorize`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			mode, ok := sessiondata.VectorizeExecModeFromString(s)
+			mode, ok := sessiondatapb.VectorizeExecModeFromString(s)
 			if !ok {
 				return newVarValueError(`vectorize`, s,
 					"off", "201auto", "on", "experimental_always")
@@ -502,7 +502,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData.VectorizeMode.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondata.VectorizeExecMode(
+			return sessiondatapb.VectorizeExecMode(
 				VectorizeClusterMode.Get(sv)).String()
 		},
 	},
@@ -702,11 +702,11 @@ var varGen = map[string]sessionVar{
 				return pgerror.Newf(pgcode.InvalidParameterValue,
 					`%d is outside the valid range for parameter "extra_float_digits" (-15 .. 3)`, i)
 			}
-			m.SetExtraFloatDigits(int(i))
+			m.SetExtraFloatDigits(int32(i))
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return fmt.Sprintf("%d", evalCtx.SessionData.DataConversion.ExtraFloatDigits)
+			return fmt.Sprintf("%d", evalCtx.SessionData.DataConversionConfig.ExtraFloatDigits)
 		},
 		GlobalDefault: func(sv *settings.Values) string { return "0" },
 	},
@@ -952,7 +952,7 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-TIMEZONE
 	`timezone`: {
 		Get: func(evalCtx *extendedEvalContext) string {
-			return sessionDataTimeZoneFormat(evalCtx.SessionData.DataConversion.Location)
+			return sessionDataTimeZoneFormat(evalCtx.SessionData.GetLocation())
 		},
 		GetStringVal:  timeZoneVarGetStringVal,
 		Set:           timeZoneVarSet,

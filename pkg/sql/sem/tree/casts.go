@@ -616,7 +616,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			s = t.BitArray.String()
 		case *DFloat:
 			s = strconv.FormatFloat(float64(*t), 'g',
-				ctx.SessionData.DataConversion.GetFloatPrec(), 64)
+				ctx.SessionData.DataConversionConfig.GetFloatPrec(), 64)
 		case *DBool, *DInt, *DDecimal:
 			s = d.String()
 		case *DTimestamp, *DDate, *DTime, *DTimeTZ, *DGeography, *DGeometry, *DBox2D:
@@ -649,8 +649,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			s = t.Contents
 		case *DBytes:
-			s = lex.EncodeByteArrayToRawBytes(string(*t),
-				ctx.SessionData.DataConversion.BytesEncodeFormat, false /* skipHexPrefix */)
+			s = lex.EncodeByteArrayToRawBytes(
+				string(*t),
+				ctx.SessionData.DataConversionConfig.BytesEncodeFormat,
+				false, /* skipHexPrefix */
+			)
 		case *DOid:
 			s = t.String()
 		case *DJSON:
