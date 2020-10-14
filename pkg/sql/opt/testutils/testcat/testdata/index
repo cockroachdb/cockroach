@@ -94,3 +94,51 @@ TABLE g
       ├── b int
       ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
       └── k int not null
+
+# Test for expression-based index columns.
+exec-ddl
+CREATE TABLE xyz (
+    x INT PRIMARY KEY,
+    y INT,
+    z STRING,
+    INDEX idx1 (lower(z)),
+    INDEX idx2 (lower(z),y),
+    INDEX idx3 ((y+1),lower(z))
+)
+----
+
+exec-ddl
+CREATE INDEX idx4 ON xyz ((x+y), y) STORING (z) WHERE v > 1
+----
+
+exec-ddl
+SHOW CREATE xyz
+----
+TABLE xyz
+ ├── x int not null
+ ├── y int
+ ├── z string
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
+ ├── idx_expr_2 int as (y + 1) stored [hidden] [virtual-computed]
+ ├── idx_expr_3 int as (x + y) stored [hidden] [virtual-computed]
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX idx1
+ │    ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
+ │    └── x int not null
+ ├── INDEX idx2
+ │    ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
+ │    ├── y int
+ │    └── x int not null
+ ├── INDEX idx3
+ │    ├── idx_expr_2 int as (y + 1) stored [hidden] [virtual-computed]
+ │    ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
+ │    └── x int not null
+ └── INDEX idx4
+      ├── idx_expr_3 int as (x + y) stored [hidden] [virtual-computed]
+      ├── y int
+      ├── x int not null
+      ├── z string (storing)
+      └── WHERE
+           └── v > 1
