@@ -42,6 +42,7 @@ interface DatabaseSummaryActions {
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
   refreshTableDetails: typeof refreshTableDetails;
   refreshTableStats: typeof refreshTableStats;
+  updateOnLoad: boolean;
 }
 
 type DatabaseSummaryProps = DatabaseSummaryExplicitData & DatabaseSummaryConnectedData & DatabaseSummaryActions;
@@ -57,19 +58,23 @@ export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {
   // is a performance concern with invalidation periods.
   loadTableDetails(props = this.props) {
     if (props.tableInfos && props.tableInfos.length > 0) {
-      _.each(props.tableInfos, (tblInfo) => {
-        if (_.isUndefined(tblInfo.numColumns)) {
-          props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
-            database: props.name,
-            table: tblInfo.name,
-          }));
-        }
-        if (_.isUndefined(tblInfo.physicalSize)) {
-          props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({
-            database: props.name,
-            table: tblInfo.name,
-          }));
-        }
+      _.each(props.tableInfos, (tblInfo, i) => {
+        // TODO(davidh): this is a stopgap inserted to deal with DBs containing hundreds of tables
+        setTimeout(() => {
+          if (_.isUndefined(tblInfo.numColumns)) {
+            props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
+              database: props.name,
+              table: tblInfo.name,
+            }));
+          }
+          if (_.isUndefined(tblInfo.physicalSize)) {
+            props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({
+              database: props.name,
+              table: tblInfo.name,
+            }));
+          }
+        },
+                   500 * i);
       });
     }
   }
@@ -77,12 +82,16 @@ export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {
   // Refresh when the component is mounted.
   componentDidMount() {
     this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: this.props.name }));
-    this.loadTableDetails();
+    if (this.props.updateOnLoad) {
+      this.loadTableDetails();
+    }
   }
 
   // Refresh when the component receives properties.
   componentDidUpdate() {
-    this.loadTableDetails(this.props);
+    if (this.props.updateOnLoad) {
+      this.loadTableDetails(this.props);
+    }
   }
 
   render(): React.ReactElement<any> {
