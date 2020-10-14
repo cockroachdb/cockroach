@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -44,6 +45,8 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 	switch vec.CanonicalTypeFamily() {
 	case types.BytesFamily:
 		return int64(vec.Bytes().Size())
+	case types.DecimalFamily:
+		return int64(sizeOfDecimals(vec.Decimal()))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return int64(vec.Datum().Size())
 	}
@@ -325,7 +328,17 @@ const (
 	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
 	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
 	sizeOfDatum    = int(unsafe.Sizeof(tree.Datum(nil)))
+	sizeOfDecimal  = unsafe.Sizeof(apd.Decimal{})
 )
+
+func sizeOfDecimals(decimals coldata.Decimals) uintptr {
+	var size uintptr
+	for _, d := range decimals {
+		size += tree.SizeOfDecimal(d)
+	}
+	size += uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
+	return size
+}
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
 // coldata.BatchSize() length.

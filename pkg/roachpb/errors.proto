@@ -504,7 +504,7 @@ message IndeterminateCommitError {
 message ErrorDetail {
   option (gogoproto.equal) = true;
 
-  reserved 22, 25, 29, 30, 33;
+  reserved 15, 19, 20, 21, 22, 23, 24, 25, 29, 30, 33;
   oneof value {
     NotLeaseHolderError not_lease_holder = 1;
     RangeNotFoundError range_not_found = 2;

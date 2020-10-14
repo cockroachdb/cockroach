@@ -34,8 +34,6 @@ type countRowsOrderedAgg struct {
 
 var _ aggregateFunc = &countRowsOrderedAgg{}
 
-const sizeOfCountRowsOrderedAgg = int64(unsafe.Sizeof(countRowsOrderedAgg{}))
-
 func (a *countRowsOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Int64()
@@ -104,9 +102,12 @@ type countRowsOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &countRowsOrderedAggAlloc{}
 
+const sizeOfCountRowsOrderedAgg = int64(unsafe.Sizeof(countRowsOrderedAgg{}))
+const countRowsOrderedAggSliceOverhead = int64(unsafe.Sizeof([]countRowsOrderedAgg{}))
+
 func (a *countRowsOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfCountRowsOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(countRowsOrderedAggSliceOverhead + sizeOfCountRowsOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]countRowsOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -131,8 +132,6 @@ type countOrderedAgg struct {
 }
 
 var _ aggregateFunc = &countOrderedAgg{}
-
-const sizeOfCountOrderedAgg = int64(unsafe.Sizeof(countOrderedAgg{}))
 
 func (a *countOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -236,9 +235,12 @@ type countOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &countOrderedAggAlloc{}
 
+const sizeOfCountOrderedAgg = int64(unsafe.Sizeof(countOrderedAgg{}))
+const countOrderedAggSliceOverhead = int64(unsafe.Sizeof([]countOrderedAgg{}))
+
 func (a *countOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfCountOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(countOrderedAggSliceOverhead + sizeOfCountOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]countOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
