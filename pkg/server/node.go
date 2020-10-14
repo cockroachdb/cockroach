@@ -467,9 +467,15 @@ func (n *Node) start(
 	// TODO(tbg): address https://github.com/cockroachdb/cockroach/issues/39415.
 	// Should be easy enough. Writing the test is probably most of the work.
 	if len(state.newEngines) > 0 {
-		if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
-			return err
-		}
+		// We need to bootstrap additional stores asynchronously because we can't rely on
+		// the KV layer to be available yet. See:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/39415
+		_ = n.stopper.RunAsyncTask(ctx, "bootstrap-stores", func(ctx context.Context) {
+			if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
+				log.Fatalf(ctx, "while bootstrapping additional stores: %v", err)
+			}
+		})
 	}
 
 	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
