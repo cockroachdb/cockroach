@@ -830,6 +830,59 @@ func getTempSystemDBID(details jobspb.RestoreDetails) descpb.ID {
 	return descpb.ID(tempSystemDBID)
 }
 
+// spansForAllRestoreTableIndexes returns non-overlapping spans for every index
+// and table passed in. They would normally overlap if any of them are
+// interleaved.
+func spansForAllRestoreTableIndexes(
+	codec keys.SQLCodec, tables []catalog.TableDescriptor, revs []BackupManifest_DescriptorRevision,
+) []roachpb.Span {
+
+	added := make(map[tableAndIndex]bool, len(tables))
+	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
+	for _, table := range tables {
+		for _, index := range table.AllNonDropIndexes() {
+			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.ID)), false); err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
+			}
+			added[tableAndIndex{tableID: table.GetID(), indexID: index.ID}] = true
+		}
+	}
+	// If there are desc revisions, ensure that we also add any index spans
+	// in them that we didn't already get above e.g. indexes or tables that are
+	// not in latest because they were dropped during the time window in question.
+	for _, rev := range revs {
+		// If the table was dropped during the last interval, it will have
+		// at least 2 revisions, and the first one should have the table in a PUBLIC
+		// state. We want (and do) ignore tables that have been dropped for the
+		// entire interval. DROPPED tables should never later become PUBLIC.
+		// TODO(pbardea): Consider and test the interaction between revision_history
+		// backups and OFFLINE tables.
+		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
+		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
+			tbl := tabledesc.NewImmutable(*rawTbl)
+			for _, idx := range tbl.AllNonDropIndexes() {
+				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
+				if !added[key] {
+					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.ID)), false); err != nil {
+						panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
+					}
+					added[key] = true
+				}
+			}
+		}
+	}
+
+	var spans []roachpb.Span
+	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
+		spans = append(spans, roachpb.Span{
+			Key:    roachpb.Key(r.Range().Start),
+			EndKey: roachpb.Key(r.Range().End),
+		})
+		return false
+	})
+	return spans
+}
+
 // createImportingDescriptors create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingDescriptors(
@@ -878,7 +931,7 @@ func createImportingDescriptors(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	spans = spansForAllTableIndexes(p.ExecCfg().Codec, tables, nil)
+	spans = spansForAllRestoreTableIndexes(p.ExecCfg().Codec, tables, nil)
 
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
