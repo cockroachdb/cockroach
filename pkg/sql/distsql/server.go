@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -259,43 +259,10 @@ func (ds *ServerImpl) setupFlow(
 				"EvalContext expected to be populated when IsLocal is set")
 		}
 
-		location, err := timeutil.TimeZoneStringToLocation(
-			req.EvalContext.Location,
-			timeutil.TimeZoneStringToLocationISO8601Standard,
-		)
+		sd, err := sessiondata.UnmarshalNonLocal(req.EvalContext.SessionData)
 		if err != nil {
 			tracing.FinishSpan(sp)
 			return ctx, nil, err
-		}
-
-		var be lex.BytesEncodeFormat
-		switch req.EvalContext.BytesEncodeFormat {
-		case execinfrapb.BytesEncodeFormat_HEX:
-			be = lex.BytesEncodeHex
-		case execinfrapb.BytesEncodeFormat_ESCAPE:
-			be = lex.BytesEncodeEscape
-		case execinfrapb.BytesEncodeFormat_BASE64:
-			be = lex.BytesEncodeBase64
-		default:
-			return nil, nil, errors.AssertionFailedf("unknown byte encode format: %s",
-				errors.Safe(req.EvalContext.BytesEncodeFormat))
-		}
-		sd := &sessiondata.SessionData{
-			ApplicationName: req.EvalContext.ApplicationName,
-			Database:        req.EvalContext.Database,
-			User:            req.EvalContext.User,
-			SearchPath: sessiondata.MakeSearchPath(
-				req.EvalContext.SearchPath,
-			).WithTemporarySchemaName(
-				req.EvalContext.TemporarySchemaName,
-			).WithUserSchemaName(req.EvalContext.User),
-			SequenceState: sessiondata.NewSequenceState(),
-			DataConversion: sessiondata.DataConversionConfig{
-				Location:          location,
-				BytesEncodeFormat: be,
-				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
-			},
-			VectorizeMode: sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
 		}
 		ie := &lazyInternalExecutor{
 			newInternalExecutor: func() sqlutil.InternalExecutor {
@@ -334,15 +301,6 @@ func (ds *ServerImpl) setupFlow(
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
-		var haveSequences bool
-		for _, seq := range req.EvalContext.SeqState.Seqs {
-			evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
-			haveSequences = true
-		}
-		if haveSequences {
-			evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
-				*req.EvalContext.SeqState.LastSeqIncremented)
-		}
 	}
 
 	// Create the FlowCtx for the flow.
@@ -352,7 +310,7 @@ func (ds *ServerImpl) setupFlow(
 	// have non-nil localState.EvalContext. We don't want to update EvalContext
 	// itself when the vectorize mode needs to be changed because we would need
 	// to restore the original value which can have data races under stress.
-	isVectorized := sessiondata.VectorizeExecMode(req.EvalContext.Vectorize) != sessiondata.VectorizeOff
+	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
 	opt := flowinfra.FuseNormally
 	if localState.IsLocal {

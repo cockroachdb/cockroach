@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -2024,21 +2025,21 @@ func createSchemaChangeEvalCtx(
 
 func newFakeSessionData() *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
-		SearchPath: sessiondata.DefaultSearchPathForUser(security.NodeUser),
-		// The database is not supposed to be needed in schema changes, as there
-		// shouldn't be unqualified identifiers in backfills, and the pure functions
-		// that need it should have already been evaluated.
-		//
-		// TODO(andrei): find a way to assert that this field is indeed not used.
-		// And in fact it is used by `current_schemas()`, which, although is a pure
-		// function, takes arguments which might be impure (so it can't always be
-		// pre-evaluated).
-		Database:      "",
-		SequenceState: sessiondata.NewSequenceState(),
-		DataConversion: sessiondata.DataConversionConfig{
-			Location: time.UTC,
+		SessionData: sessiondatapb.SessionData{
+			// The database is not supposed to be needed in schema changes, as there
+			// shouldn't be unqualified identifiers in backfills, and the pure functions
+			// that need it should have already been evaluated.
+			//
+			// TODO(andrei): find a way to assert that this field is indeed not used.
+			// And in fact it is used by `current_schemas()`, which, although is a pure
+			// function, takes arguments which might be impure (so it can't always be
+			// pre-evaluated).
+			Database: "",
+			User:     security.NodeUser,
 		},
-		User: security.NodeUser,
+		SearchPath:    sessiondata.DefaultSearchPathForUser(security.NodeUser),
+		SequenceState: sessiondata.NewSequenceState(),
+		Location:      time.UTC,
 	}
 	return sd
 }
