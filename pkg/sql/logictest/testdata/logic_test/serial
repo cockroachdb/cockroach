@@ -1,3 +1,4 @@
+# LogicTest: !3node-backup
 subtest serial_rowid
 
 statement ok

@@ -1,7 +1,7 @@
-# 3node-tenant is blocked from running this file because the config runs with
-# a CCL binary, so the expected failures from using follower reads don't occur
-# (we get unauthenticated errors instead).
-# LogicTest: !3node-tenant
+# 3node-tenant and 3node-backup is blocked from running this file because the
+# config runs with a CCL binary, so the expected failures from using follower
+# reads don't occur (we get unauthenticated errors instead).
+# LogicTest: !3node-tenant !3node-backup
 
 # CCL-only statements error out trying to handle the parsed statements.
 

@@ -1,3 +1,4 @@
+# LogicTest: !3node-backup
 # Parallel statement execution was removed in 19.2. See #34789.
 # The RETURNING NOTHING syntax was retained to ensure backward compatibility,
 # even though the runtime semantics of parallel statements were removed. This

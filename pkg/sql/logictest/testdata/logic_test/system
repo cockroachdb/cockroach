@@ -1,4 +1,5 @@
-# LogicTest: !3node-tenant(49854)
+# LogicTest: !3node-tenant(49854) !3node-backup
+
 query TTTTT
 SHOW DATABASES
 ----

@@ -1,7 +1,7 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant !3node-backup
 
-# skip this test in the multi-tenant setting because the timeout seems to get
-# triggered.
+# skip this test in the multi-tenant and backup-restore setting because the
+# timeout seems to get triggered.
 
 # This tests ensures that transactions to perform grants on entities created
 # inside of a transaction do not get blocked and take a very long time.

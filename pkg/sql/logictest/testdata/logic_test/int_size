@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 subtest defaults
 
 query T
