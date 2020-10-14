@@ -891,7 +891,7 @@ ALTER ROLE rolewithcreate WITH NOCREATEROLE
 user root
 
 statement ok
-ALTER USER testuser CREATEROLE
+ALTER USER testuser CREATEROLE CREATELOGIN
 
 user testuser
 
@@ -1200,12 +1200,16 @@ CREATE USER testuser3 LOGIN
 statement error user testuser does not have CREATELOGIN privilege
 CREATE ROLE testrole3 LOGIN
 
-# However it's possible to create a user/role with NOLOGIN.
-statement ok
-CREATE USER testuser4 NOLOGIN
-
-statement ok
+statement error user testuser does not have CREATELOGIN privilege
 CREATE USER testuser2
+
+# CREATE ROLE implies NOLOGIN, which is OK
+statement ok
+CREATE ROLE testuser4
+
+# It's also possible to create a user/role with NOLOGIN.
+statement ok
+CREATE USER testuser2 NOLOGIN
 
 statement error user testuser does not have CREATELOGIN privilege
 ALTER USER testuser2 WITH PASSWORD 'abc'
@@ -1307,6 +1311,12 @@ statement ok
 ALTER USER testuser NOCREATELOGIN
 
 user testuser
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser5
+
+statement ok
+CREATE ROLE testuser6
 
 statement error user testuser does not have CREATELOGIN privilege
 CREATE USER testuser5 WITH PASSWORD 'abc'

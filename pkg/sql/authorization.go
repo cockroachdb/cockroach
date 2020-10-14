@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -317,6 +318,9 @@ func (p *planner) MemberOfWithAdminOption(
 	}
 	tableDesc := objDesc.(catalog.TableDescriptor)
 	tableVersion := tableDesc.GetVersion()
+	if tableDesc.IsUncommittedVersion() {
+		return p.resolveMemberOfWithAdminOption(ctx, member, p.txn)
+	}
 
 	// We loop in case the table version changes while we're looking up memberships.
 	for {
@@ -339,7 +343,7 @@ func (p *planner) MemberOfWithAdminOption(
 		}
 
 		// Lookup memberships outside the lock.
-		memberships, err := p.resolveMemberOfWithAdminOption(ctx, member)
+		memberships, err := p.resolveMemberOfWithAdminOption(ctx, member, nil /* txn */)
 		if err != nil {
 			return nil, err
 		}
@@ -365,7 +369,7 @@ func (p *planner) MemberOfWithAdminOption(
 // we could save detailed memberships (as opposed to fully expanded) and reuse them
 // across users. We may then want to lookup more than just this user.
 func (p *planner) resolveMemberOfWithAdminOption(
-	ctx context.Context, member string,
+	ctx context.Context, member string, txn *kv.Txn,
 ) (map[string]bool, error) {
 	ret := map[string]bool{}
 
@@ -384,7 +388,7 @@ func (p *planner) resolveMemberOfWithAdminOption(
 		visited[m] = struct{}{}
 
 		rows, err := p.ExecCfg().InternalExecutor.Query(
-			ctx, "expand-roles", nil /* txn */, lookupRolesStmt, m,
+			ctx, "expand-roles", txn, lookupRolesStmt, m,
 		)
 		if err != nil {
 			return nil, err

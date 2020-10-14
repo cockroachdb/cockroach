@@ -704,6 +704,9 @@ type restoreResumer struct {
 		// beforePublishingDescriptors is called right before publishing
 		// descriptors, after any data has been restored.
 		beforePublishingDescriptors func() error
+		// afterPublishingDescriptors is called after committing the transaction to
+		// publish new descriptors in the public state.
+		afterPublishingDescriptors func() error
 		// duringSystemTableRestoration is called once for every system table we
 		// restore. It is used to simulate any errors that we may face at this point
 		// of the restore.
@@ -780,18 +783,35 @@ func remapRelevantStatistics(
 func isDatabaseEmpty(
 	ctx context.Context,
 	txn *kv.Txn,
-	dbDesc catalog.DatabaseDescriptor,
+	dbID descpb.ID,
+	allDescs []catalog.Descriptor,
 	ignoredChildren map[descpb.ID]struct{},
 ) (bool, error) {
-	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec, true /* validate */)
-	if err != nil {
-		return false, err
-	}
 	for _, desc := range allDescs {
 		if _, ok := ignoredChildren[desc.GetID()]; ok {
 			continue
 		}
-		if desc.GetParentID() == dbDesc.GetID() {
+		if desc.GetParentID() == dbID {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// isSchemaEmpty is like isDatabaseEmpty for schemas: it returns whether the
+// schema is empty, disregarding the contents of ignoredChildren.
+func isSchemaEmpty(
+	ctx context.Context,
+	txn *kv.Txn,
+	schemaID descpb.ID,
+	allDescs []catalog.Descriptor,
+	ignoredChildren map[descpb.ID]struct{},
+) (bool, error) {
+	for _, desc := range allDescs {
+		if _, ok := ignoredChildren[desc.GetID()]; ok {
+			continue
+		}
+		if desc.GetParentSchemaID() == schemaID {
 			return false, nil
 		}
 	}
@@ -1139,6 +1159,11 @@ func (r *restoreResumer) Resume(
 				return err
 			}
 		}
+		if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
+			if err := fn(); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -1189,6 +1214,11 @@ func (r *restoreResumer) Resume(
 	// Start the schema change jobs we created.
 	for _, newJob := range newDescriptorChangeJobs {
 		if _, err := newJob.Start(ctx); err != nil {
+			return err
+		}
+	}
+	if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
+		if err := fn(); err != nil {
 			return err
 		}
 	}
@@ -1535,27 +1565,6 @@ func (r *restoreResumer) dropDescriptors(
 		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
 	}
 
-	// Drop any schema descriptors that this restore created. Also collect the
-	// descriptors so we can update their parent databases later.
-	// TODO (lucy): It's possible for tables and types to be added under the
-	// schema after it becomes public. To account for this, we need to refrain
-	// from dropping the schema if it has children, like we do for databases.
-	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
-	for i := range details.SchemaDescs {
-		sc := details.SchemaDescs[i]
-		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-			ctx,
-			b,
-			keys.SystemSQLCodec,
-			sc.ParentID,
-			keys.RootNamespaceID,
-			sc.Name,
-			false, /* kvTrace */
-		)
-		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
-		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
-	}
-
 	// Queue a GC job.
 	// Set the drop time as 1 (ns in Unix time), so that the table gets GC'd
 	// immediately.
@@ -1579,11 +1588,9 @@ func (r *restoreResumer) dropDescriptors(
 		return err
 	}
 
-	// Drop the database descriptors that were created at the start of the
-	// restore if they are now empty (i.e. no user created a table in this
-	// database during the restore).
-	var isDBEmpty bool
-	var err error
+	// Drop the database and schema descriptors that were created at the start of
+	// the restore if they are now empty (i.e. no user created a table, etc. in
+	// the database or schema during the restore).
 	ignoredChildDescIDs := make(map[descpb.ID]struct{})
 	for _, table := range details.TableDescs {
 		ignoredChildDescIDs[table.ID] = struct{}{}
@@ -1594,12 +1601,45 @@ func (r *restoreResumer) dropDescriptors(
 	for _, schema := range details.SchemaDescs {
 		ignoredChildDescIDs[schema.ID] = struct{}{}
 	}
+	allDescs, err := descsCol.GetAllDescriptors(ctx, txn, true /* validate */)
+	if err != nil {
+		return err
+	}
 
+	// Delete any schema descriptors that this restore created. Also collect the
+	// descriptors so we can update their parent databases later.
+	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
+	for _, schemaDesc := range details.SchemaDescs {
+		sc := schemadesc.NewMutableExisting(*schemaDesc)
+		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
+		isSchemaEmpty, err := isSchemaEmpty(ctx, txn, sc.GetID(), allDescs, ignoredChildDescIDs)
+		if err != nil {
+			return errors.Wrapf(err, "checking if schema %s is empty during restore cleanup", sc.GetName())
+		}
+
+		if !isSchemaEmpty {
+			log.Warningf(ctx, "preserving schema %s on restore failure because it contains new child objects", sc.GetName())
+			continue
+		}
+		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
+			ctx,
+			b,
+			keys.SystemSQLCodec,
+			sc.ParentID,
+			keys.RootNamespaceID,
+			sc.Name,
+			false, /* kvTrace */
+		)
+		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
+		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc.SchemaDesc())
+	}
+
+	// Delete the database descriptors.
 	deletedDBs := make(map[descpb.ID]struct{})
 	for _, dbDesc := range details.DatabaseDescs {
 		db := dbdesc.NewExistingMutable(*dbDesc)
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
-		isDBEmpty, err = isDatabaseEmpty(ctx, txn, db, ignoredChildDescIDs)
+		isDBEmpty, err := isDatabaseEmpty(ctx, txn, db.GetID(), allDescs, ignoredChildDescIDs)
 		if err != nil {
 			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", db.GetName())
 		}

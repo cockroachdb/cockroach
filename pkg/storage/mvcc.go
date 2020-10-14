@@ -3758,6 +3758,11 @@ func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, er
 			Available: maxSizeBytes,
 		}, nil
 	}
+	var err error
+	// Eval directory if it is a symbolic links.
+	if dir, err = filepath.EvalSymlinks(dir); err != nil {
+		return roachpb.StoreCapacity{}, err
+	}
 	if err := fileSystemUsage.Get(dir); err != nil {
 		return roachpb.StoreCapacity{}, err
 	}
@@ -3776,7 +3781,7 @@ func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, er
 	// Find the total size of all the files in the r.dir and all its
 	// subdirectories.
 	var totalUsedBytes int64
-	if errOuter := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+	if errOuter := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			// This can happen if rocksdb removes files out from under us - just keep
 			// going to get the best estimate we can.

@@ -1038,6 +1038,15 @@ type Mutator interface {
 	Mutate(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
 }
 
+// MakeSchemaName creates a CreateSchema definition
+func MakeSchemaName(ifNotExists bool, schema string, authRole string) *tree.CreateSchema {
+	return &tree.CreateSchema{
+		IfNotExists: ifNotExists,
+		Schema:      tree.Name(schema),
+		AuthRole:    authRole,
+	}
+}
+
 // RandCreateTables creates random table definitions.
 func RandCreateTables(
 	rng *rand.Rand, prefix string, num int, mutators ...Mutator,
@@ -1700,13 +1709,13 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 // be random strings generated from alphabet.
 func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 	numLabels := rng.Intn(6) + 1
-	labels := make([]string, numLabels)
+	labels := make(tree.EnumValueList, numLabels)
 	labelsMap := make(map[string]struct{})
 	i := 0
 	for i < numLabels {
 		s := RandString(rng, rng.Intn(6)+1, alphabet)
 		if _, ok := labelsMap[s]; !ok {
-			labels[i] = s
+			labels[i] = tree.EnumValue(s)
 			labelsMap[s] = struct{}{}
 			i++
 		}

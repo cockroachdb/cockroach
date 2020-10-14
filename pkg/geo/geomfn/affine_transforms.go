@@ -264,7 +264,12 @@ func RotateWithPointOrigin(
 		return g, ErrPointOriginEmpty
 	}
 
-	x, y := t.FlatCoords()[0], t.FlatCoords()[1]
+	return RotateWithXY(g, rotRadians, t.FlatCoords()[0], t.FlatCoords()[1])
+}
+
+// RotateWithXY returns a modified Geometry whose coordinates are rotated
+// around the X and Y by a rotRadians.
+func RotateWithXY(g geo.Geometry, rotRadians, x, y float64) (geo.Geometry, error) {
 	cos, sin := math.Cos(rotRadians), math.Sin(rotRadians)
 	return Affine(
 		g,

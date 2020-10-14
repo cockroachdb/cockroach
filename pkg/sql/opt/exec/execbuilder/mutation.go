@@ -514,14 +514,20 @@ func (b *Builder) tryBuildDeleteRange(del *memo.DeleteExpr) (_ execPlan, ok bool
 	}
 
 	// No other tables interleaved inside this table. We can use the fast path
-	// if this table is not referenced by any foreign keys (because the
-	// integrity of those references must be checked).
-	if tab.InboundForeignKeyCount() > 0 {
+	// if we don't need to buffer the input to the delete operator (for foreign
+	// key checks/cascades).
+	if del.WithID != 0 {
 		return execPlan{}, false, nil
 	}
 
 	ep, err := b.buildDeleteRange(del, nil /* interleavedTables */)
 	if err != nil {
+		return execPlan{}, false, err
+	}
+	if err := b.buildFKChecks(del.Checks); err != nil {
+		return execPlan{}, false, err
+	}
+	if err := b.buildFKCascades(del.WithID, del.FKCascades); err != nil {
 		return execPlan{}, false, err
 	}
 	return ep, true, nil
@@ -666,6 +672,12 @@ func (b *Builder) buildDeleteRange(
 					// match the interleaving hierarchy and a delete range is sufficient.
 					autoCommit = true
 				}
+			}
+			if len(del.Checks) > 0 || len(del.FKCascades) > 0 {
+				// Do not allow autocommit if we have checks or cascades. This does not
+				// apply for the interleaved case, where we decided that the delete
+				// range takes care of all the FKs as well.
+				autoCommit = false
 			}
 		}
 	}

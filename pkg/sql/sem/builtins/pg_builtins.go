@@ -18,12 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/errors"
@@ -1834,6 +1837,31 @@ SELECT description
 			Volatility: tree.VolatilityStable,
 		},
 	),
+
+	// pg_column_size(any) - number of bytes used to store a particular value
+	// (possibly compressed)
+
+	// Database Object Size Functions, see: https://www.postgresql.org/docs/9.4/functions-admin.html
+	"pg_column_size": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.VariadicType{
+				VarType: types.Any,
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var totalSize int
+				for _, arg := range args {
+					encodeTableValue, err := rowenc.EncodeTableValue(nil, descpb.ColumnID(encoding.NoColumnID), arg, nil)
+					if err != nil {
+						return tree.DNull, err
+					}
+					totalSize += len(encodeTableValue)
+				}
+				return tree.NewDInt(tree.DInt(totalSize)), nil
+			},
+			Info:       "Return size in bytes of the column provided as an argument",
+			Volatility: tree.VolatilityImmutable,
+		}),
 }
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {

@@ -21,6 +21,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -69,17 +70,26 @@ var doctorClusterCmd = &cobra.Command{
 Run doctor tool reading system data from a live cluster specified by --url.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runClusterDoctor),
+	RunE: MaybeDecorateGRPCError(
+		func(cmd *cobra.Command, args []string) error {
+			sqlConn, err := makeSQLClient("cockroach doctor", useSystemDb)
+			if err != nil {
+				return errors.Wrap(err, "could not establish connection to cluster")
+			}
+			defer sqlConn.Close()
+			return runClusterDoctor(cmd, args, sqlConn, os.Stdout, cliCtx.cmdTimeout)
+		}),
 }
 
 func wrapExamine(
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
+	out io.Writer,
 ) error {
 	// TODO(spaskob): add --verbose flag.
 	valid, err := doctor.Examine(
-		context.Background(), descTable, namespaceTable, jobsTable, false, os.Stdout)
+		context.Background(), descTable, namespaceTable, jobsTable, false, out)
 	if err != nil {
 		return &cliError{exitCode: 2, cause: errors.Wrap(err, "examine failed")}
 	}
@@ -91,18 +101,19 @@ func wrapExamine(
 }
 
 // runClusterDoctor runs the doctors tool reading data from a live cluster.
-func runClusterDoctor(cmd *cobra.Command, args []string) (retErr error) {
-	sqlConn, err := makeSQLClient("cockroach doctor", useSystemDb)
-	if err != nil {
-		return errors.Wrap(err, "could not establish connection to cluster")
+func runClusterDoctor(
+	_ *cobra.Command, _ []string, sqlConn *sqlConn, out io.Writer, timeout time.Duration,
+) (retErr error) {
+	if timeout != 0 {
+		if err := sqlConn.Exec(fmt.Sprintf(`SET statement_timeout = '%s'`, timeout), nil); err != nil {
+			return err
+		}
 	}
-	defer sqlConn.Close()
-
 	stmt := `
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
 FROM system.descriptor ORDER BY id`
 	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp"
-	_, err = sqlConn.Query(checkColumnExistsStmt, nil)
+	_, err := sqlConn.Query(checkColumnExistsStmt, nil)
 	// On versions before 20.2, the system.descriptor won't have the builtin
 	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
@@ -213,7 +224,7 @@ FROM system.namespace`
 		return err
 	}
 
-	return wrapExamine(descTable, namespaceTable, jobsTable)
+	return wrapExamine(descTable, namespaceTable, jobsTable, out)
 }
 
 // runZipDirDoctor runs the doctors tool reading data from a debug zip dir.
@@ -329,7 +340,7 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
-	return wrapExamine(descTable, namespaceTable, jobsTable)
+	return wrapExamine(descTable, namespaceTable, jobsTable, os.Stdout)
 }
 
 // tableMap applies `fn` to all rows in `in`.

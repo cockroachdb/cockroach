@@ -72,9 +72,9 @@ func TestExportCmd(t *testing.T) {
 
 		var paths []string
 		var kvs []storage.MVCCKeyValue
-		ingestFunc := func(kv storage.MVCCKeyValue) (bool, error) {
+		ingestFunc := func(kv storage.MVCCKeyValue) error {
 			kvs = append(kvs, kv)
-			return false, nil
+			return nil
 		}
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
@@ -368,9 +368,9 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 	}
 
 	var kvs []storage.MVCCKeyValue
-	if err := sst.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
+	if err := sst.Iterate(start, end, func(kv storage.MVCCKeyValue) error {
 		kvs = append(kvs, kv)
-		return false, nil
+		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}

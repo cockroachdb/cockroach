@@ -133,14 +133,14 @@ func runSyncer(
 		return encoding.EncodeUvarintAscending(buf[:0:0], uint64(seq))
 	}
 
-	check := func(kv storage.MVCCKeyValue) (bool, error) {
+	check := func(kv storage.MVCCKeyValue) error {
 		expKey := key()
 		if !bytes.Equal(kv.Key.Key, expKey) {
-			return false, errors.Errorf(
+			return errors.Errorf(
 				"found unexpected key %q (expected %q)", kv.Key.Key, expKey,
 			)
 		}
-		return false, nil // want more
+		return nil // want more
 	}
 
 	fmt.Fprintf(stderr, "verifying existing sequence numbers...")

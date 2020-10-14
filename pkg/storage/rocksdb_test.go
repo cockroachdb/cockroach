@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -828,12 +829,12 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		b.Fatal(err)
 	}
 	count := 0
-	iterateFn := func(kv MVCCKeyValue) (bool, error) {
+	iterateFn := func(kv MVCCKeyValue) error {
 		count++
 		if count >= b.N {
-			return true, nil
+			return iterutil.StopIteration()
 		}
-		return false, nil
+		return nil
 	}
 	for {
 		if err := sst.Iterate(keys.MinKey, keys.MaxKey, iterateFn); err != nil {
