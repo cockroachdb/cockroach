@@ -13,6 +13,8 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -62,6 +64,41 @@ func LineMerge(g geo.Geometry) (geo.Geometry, error) {
 		return geo.Geometry{}, err
 	}
 	return geo.ParseGeometryFromEWKB(ret)
+}
+
+// LineLocatePoint returns a float between 0 and 1 representing the location of the
+// closest point on LineString to the given Point, as a fraction of total 2d line length.
+func LineLocatePoint(line geo.Geometry, point geo.Geometry) (float64, error) {
+	lineT, err := line.AsGeomT()
+	if err != nil {
+		return 0, err
+	}
+	lineString, ok := lineT.(*geom.LineString)
+	if !ok {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"first parameter has to be of type LineString")
+	}
+
+	// compute closest point on line to the given point
+	closestPoint, err := ClosestPoint(line, point)
+	if err != nil {
+		return 0, err
+	}
+	closestT, err := closestPoint.AsGeomT()
+	if err != nil {
+		return 0, err
+	}
+
+	p := closestT.(*geom.Point)
+	if err != nil {
+		return 0, err
+	}
+
+	// build new line segment to the closest point we found
+	lineSegment := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{lineString.Coord(0), p.Coords()})
+
+	// compute fraction of new line segment compared to total line length
+	return lineSegment.Length() / lineString.Length(), nil
 }
 
 // AddPoint adds a point to a LineString at the given 0-based index. -1 appends.

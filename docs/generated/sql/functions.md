@@ -1857,6 +1857,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>Note If the result has zero or one points, it will be returned as a POINT. If it has two or more points, it will be returned as a MULTIPOINT.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_linelocatepoint"></a><code>st_linelocatepoint(line: geometry, point: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a float between 0 and 1 representing the location of the closest point on LineString to the given Point, as a fraction of total 2d line length.</p>
+</span></td></tr>
 <tr><td><a name="st_linemerge"></a><code>st_linemerge(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a LineString or MultiLineString by joining together constituents of a MultiLineString with matching endpoints. If the input is not a MultiLineString or LineString, an empty GeometryCollection is returned.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>

@@ -5445,6 +5445,36 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Info:       "Returns the amount of memory space (in bytes) the geometry takes.",
 			Volatility: tree.VolatilityImmutable,
 		}),
+
+	"st_linelocatepoint": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{
+					Name: "line",
+					Typ:  types.Geometry,
+				},
+				{
+					Name: "point",
+					Typ:  types.Geometry,
+				},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				line := tree.MustBeDGeometry(args[0])
+				p := tree.MustBeDGeometry(args[1])
+
+				// compute fraction of new line segment compared to total line length
+				fraction, err := geomfn.LineLocatePoint(line.Geometry, p.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(fraction)), nil
+			},
+			Info: "Returns a float between 0 and 1 representing the location of the closest point " +
+				"on LineString to the given Point, as a fraction of total 2d line length.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
 	//
 	// Unimplemented.
 	//
@@ -5473,7 +5503,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_length2dspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
 	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
 	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
-	"st_linelocatepoint":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48973}),
 	"st_linesubstring":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
 	"st_minimumboundingcircle": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
 	"st_minimumboundingradius": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
