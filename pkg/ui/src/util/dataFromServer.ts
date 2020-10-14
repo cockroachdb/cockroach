@@ -15,9 +15,9 @@ export interface DataFromServer {
   Tag: string;
   Version: string;
   NodeID: string;
-  PasswordLoginEnabled: boolean;
-  OIDCLoginEnabled:     boolean;
-  OIDCButtonText:       string;
+  OIDCAutoLogin: boolean;
+  OIDCLoginEnabled: boolean;
+  OIDCButtonText: string;
 }
 
 // Tell TypeScript about `window.dataFromServer`, which is set in a script
