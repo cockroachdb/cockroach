@@ -23,12 +23,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/errors"
 )
@@ -235,9 +234,11 @@ func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 // If the skipHexPrefix argument is set, the hexadecimal encoding does not
 // prefix the output with "\x". This is suitable e.g. for the encode()
 // built-in.
-func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix bool) string {
+func EncodeByteArrayToRawBytes(
+	data string, be sessiondatapb.BytesEncodeFormat, skipHexPrefix bool,
+) string {
 	switch be {
-	case BytesEncodeHex:
+	case sessiondatapb.BytesEncodeHex:
 		head := 2
 		if skipHexPrefix {
 			head = 0
@@ -250,7 +251,7 @@ func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix 
 		hex.Encode(res[head:], []byte(data))
 		return string(res)
 
-	case BytesEncodeEscape:
+	case sessiondatapb.BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
 		// CockroachDB's scanner. It only recognizes octal and \\ for the
 		// backslash itself.
@@ -272,7 +273,7 @@ func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix 
 		}
 		return string(res)
 
-	case BytesEncodeBase64:
+	case sessiondatapb.BytesEncodeBase64:
 		return base64.StdEncoding.EncodeToString([]byte(data))
 
 	default:
@@ -285,12 +286,12 @@ func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix 
 // When using the Hex format, the caller is responsible for skipping the
 // "\x" prefix, if any. See DecodeRawBytesToByteArrayAuto() below for
 // an alternative.
-func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error) {
+func DecodeRawBytesToByteArray(data string, be sessiondatapb.BytesEncodeFormat) ([]byte, error) {
 	switch be {
-	case BytesEncodeHex:
+	case sessiondatapb.BytesEncodeHex:
 		return hex.DecodeString(data)
 
-	case BytesEncodeEscape:
+	case sessiondatapb.BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
 		// CockroachDB's scanner. It only recognizes octal and \\ for the
 		// backslash itself.
@@ -329,7 +330,7 @@ func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error
 		}
 		return res, nil
 
-	case BytesEncodeBase64:
+	case sessiondatapb.BytesEncodeBase64:
 		return base64.StdEncoding.DecodeString(data)
 
 	default:
@@ -342,48 +343,7 @@ func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error
 // and escape.
 func DecodeRawBytesToByteArrayAuto(data []byte) ([]byte, error) {
 	if len(data) >= 2 && data[0] == '\\' && (data[1] == 'x' || data[1] == 'X') {
-		return DecodeRawBytesToByteArray(string(data[2:]), BytesEncodeHex)
+		return DecodeRawBytesToByteArray(string(data[2:]), sessiondatapb.BytesEncodeHex)
 	}
-	return DecodeRawBytesToByteArray(string(data), BytesEncodeEscape)
-}
-
-// BytesEncodeFormat controls which format to use for BYTES->STRING
-// conversions.
-type BytesEncodeFormat int
-
-const (
-	// BytesEncodeHex uses the hex format: e'abc\n'::BYTES::STRING -> '\x61626312'.
-	// This is the default, for compatibility with PostgreSQL.
-	BytesEncodeHex BytesEncodeFormat = iota
-	// BytesEncodeEscape uses the escaped format: e'abc\n'::BYTES::STRING -> 'abc\012'.
-	BytesEncodeEscape
-	// BytesEncodeBase64 uses base64 encoding.
-	BytesEncodeBase64
-)
-
-func (f BytesEncodeFormat) String() string {
-	switch f {
-	case BytesEncodeHex:
-		return "hex"
-	case BytesEncodeEscape:
-		return "escape"
-	case BytesEncodeBase64:
-		return "base64"
-	default:
-		return fmt.Sprintf("invalid (%d)", f)
-	}
-}
-
-// BytesEncodeFormatFromString converts a string into a BytesEncodeFormat.
-func BytesEncodeFormatFromString(val string) (_ BytesEncodeFormat, ok bool) {
-	switch strings.ToUpper(val) {
-	case "HEX":
-		return BytesEncodeHex, true
-	case "ESCAPE":
-		return BytesEncodeEscape, true
-	case "BASE64":
-		return BytesEncodeBase64, true
-	default:
-		return -1, false
-	}
+	return DecodeRawBytesToByteArray(string(data), sessiondatapb.BytesEncodeEscape)
 }

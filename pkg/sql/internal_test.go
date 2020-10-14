@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -148,9 +149,11 @@ func TestInternalFullTableScan(t *testing.T) {
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
-			Database:               "db",
+			SessionData: sessiondatapb.SessionData{
+				Database: "db",
+				User:     security.RootUser,
+			},
 			SequenceState:          &sessiondata.SequenceState{},
-			User:                   security.RootUser,
 			DisallowFullTableScans: true,
 		})
 
@@ -277,9 +280,11 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
-			Database:      expDB,
+			SessionData: sessiondatapb.SessionData{
+				Database: expDB,
+				User:     security.RootUser,
+			},
 			SequenceState: &sessiondata.SequenceState{},
-			User:          security.RootUser,
 		})
 
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
@@ -343,10 +348,13 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		)
 		ie.SetSessionData(
 			&sessiondata.SessionData{
-				User:            security.RootUser,
-				Database:        "defaultdb",
-				ApplicationName: "appname_findme",
-				SequenceState:   &sessiondata.SequenceState{},
+				SessionData: sessiondatapb.SessionData{
+					User:            security.RootUser,
+					Database:        "defaultdb",
+					ApplicationName: "appname_findme",
+				},
+				DisallowFullTableScans: true,
+				SequenceState:          &sessiondata.SequenceState{},
 			})
 		testInternalExecutorAppNameInitialization(
 			t, sem,
