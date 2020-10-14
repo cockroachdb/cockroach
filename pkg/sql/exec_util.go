@@ -889,6 +889,8 @@ type BackupRestoreTestingKnobs struct {
 	// AllowImplicitAccess allows implicit access to data sources for non-admin
 	// users. This enables using nodelocal for testing BACKUP/RESTORE permissions.
 	AllowImplicitAccess bool
+
+	CaptureResolvedTableDescSpans func([]roachpb.Span)
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
