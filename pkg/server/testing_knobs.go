@@ -14,6 +14,7 @@ import (
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
@@ -73,6 +74,9 @@ type TestingKnobs struct {
 	// TODO(irfansharif): Update users of this testing knob to use the
 	// appropriate clusterversion.Handle instead.
 	BinaryVersionOverride roachpb.Version
+	// An (additional) callback invoked whenever a
+	// node is permanently removed from the cluster.
+	OnDecommissionedCallback func(kvserverpb.Liveness)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

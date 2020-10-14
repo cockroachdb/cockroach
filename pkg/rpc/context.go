@@ -233,16 +233,7 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
 	s := grpc.NewServer(grpcOpts...)
-	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:                                 ctx.Clock,
-		remoteClockMonitor:                    ctx.RemoteClocks,
-		clusterName:                           ctx.ClusterName(),
-		disableClusterNameVerification:        ctx.Config.DisableClusterNameVerification,
-		clusterID:                             &ctx.ClusterID,
-		nodeID:                                &ctx.NodeID,
-		settings:                              ctx.Settings,
-		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
-	})
+	RegisterHeartbeatServer(s, ctx.NewHeartbeatService())
 	return s
 }
 
@@ -385,6 +376,14 @@ type ContextOptions struct {
 	Clock      *hlc.Clock
 	Stopper    *stop.Stopper
 	Settings   *cluster.Settings
+	// OnHandlePing is called when handling a PingRequest, after
+	// preliminary checks but before recording clock offset information.
+	//
+	// It can inject an error.
+	OnHandlePing func(*PingRequest) error
+	// OnSendPing intercepts outgoing PingRequests. It may inject an
+	// error.
+	OnSendPing func(*PingRequest) error
 	Knobs      ContextTestingKnobs
 }
 
@@ -404,6 +403,11 @@ func (c ContextOptions) validate() error {
 	if c.Settings == nil {
 		return errors.New("Settings must be set")
 	}
+
+	// NB: OnSendPing and OnHandlePing default to noops.
+	// This is used both for testing and the cli.
+	_, _ = c.OnSendPing, c.OnHandlePing
+
 	return nil
 }
 
@@ -1141,18 +1145,28 @@ func (ctx *Context) runHeartbeat(
 			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
 			clusterID := ctx.ClusterID.Get()
 			request := &PingRequest{
-				Addr:           ctx.Config.Addr,
-				MaxOffsetNanos: maxOffsetNanos,
-				ClusterID:      &clusterID,
-				NodeID:         conn.remoteNodeID,
-				ServerVersion:  ctx.Settings.Version.BinaryVersion(),
+				OriginNodeID:         ctx.NodeID.Get(),
+				OriginAddr:           ctx.Config.Addr,
+				OriginMaxOffsetNanos: maxOffsetNanos,
+				ClusterID:            &clusterID,
+				TargetNodeID:         conn.remoteNodeID,
+				ServerVersion:        ctx.Settings.Version.BinaryVersion(),
+			}
+
+			interceptor := func(*PingRequest) error { return nil }
+			if fn := ctx.OnSendPing; fn != nil {
+				interceptor = fn
 			}
 
 			var response *PingResponse
 			sendTime := ctx.Clock.PhysicalTime()
-			ping := func(goCtx context.Context) (err error) {
+			ping := func(goCtx context.Context) error {
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
+				if err := interceptor(request); err != nil {
+					return err
+				}
+				var err error
 				response, err = heartbeatClient.Ping(goCtx, request)
 				return err
 			}
@@ -1224,5 +1238,20 @@ func (ctx *Context) runHeartbeat(
 		}
 
 		heartbeatTimer.Reset(ctx.Config.RPCHeartbeatInterval)
+	}
+}
+
+// NewHeartbeatService returns a HeartbeatService initialized from the Context.
+func (ctx *Context) NewHeartbeatService() *HeartbeatService {
+	return &HeartbeatService{
+		clock:                                 ctx.Clock,
+		remoteClockMonitor:                    ctx.RemoteClocks,
+		clusterName:                           ctx.ClusterName(),
+		disableClusterNameVerification:        ctx.Config.DisableClusterNameVerification,
+		clusterID:                             &ctx.ClusterID,
+		nodeID:                                &ctx.NodeID,
+		settings:                              ctx.Settings,
+		onHandlePing:                          ctx.OnHandlePing,
+		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
 	}
 }
