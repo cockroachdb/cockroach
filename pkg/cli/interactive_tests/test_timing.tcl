@@ -16,7 +16,11 @@ eexpect "network"
 # Ditto with multiple statements on one line
 send "SELECT * FROM vehicles LIMIT 1; CREATE TABLE t(a int);\r"
 eexpect "1 row"
-eexpect "Note: timings for multiple statements on a single line are not supported"
+eexpect "execution"
+eexpect "network"
+eexpect "CREATE"
+eexpect "execution"
+eexpect "network"
 end_test
 
 start_test "Test show_server_execution_times works correctly"

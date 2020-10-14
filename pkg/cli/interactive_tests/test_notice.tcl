@@ -21,8 +21,8 @@ send "SELECT crdb_internal.notice('hello') AS STAGE1;"
 send "SELECT crdb_internal.notice('world') AS STAGE2;\r"
 send "SELECT crdb_internal.notice('warning', 'stay indoors') AS STAGE3;\r"
 eexpect stage1
-eexpect stage2
 eexpect "NOTICE: hello"
+eexpect stage2
 eexpect "NOTICE: world"
 eexpect "WARNING: stay indoors"
 eexpect root@

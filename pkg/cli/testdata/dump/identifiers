@@ -6,6 +6,8 @@ CREATE DATABASE d;
 CREATE TABLE d.";" (";" int, index (";"));
 INSERT INTO d.";" VALUES (1);
 ----
+CREATE DATABASE
+CREATE TABLE
 INSERT 1
 
 dump d

@@ -1300,10 +1300,21 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 		}
 	}
 
-	// Now run the statement/query.
-	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
+	var p parser.Parser
+	var statements parser.Statements
+	statements, c.exitErr = p.Parse(c.concatLines)
 	if c.exitErr != nil {
 		cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+	}
+
+	// Add the `;` (semicolon) after the query, otherwise the unit test
+	// that has expectation using semicolon will fail because the `parser.Parse`
+	// will remove the semicolon
+	for _, statement := range statements {
+		c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(statement.SQL+";"))
+		if c.exitErr != nil {
+			cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
 	}
 
 	// If we are tracing, stop tracing and display the trace. We do
@@ -1545,14 +1556,23 @@ func (c *cliState) runStatements(stmts []string) error {
 			// because we need a different error handling mechanism:
 			// the error, if any, must not be printed to stderr if
 			// we are returning directly.
-			c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(stmt))
+
+			var p parser.Parser
+			var statements parser.Statements
+			statements, c.exitErr = p.Parse(stmt)
 			if c.exitErr != nil {
-				if !sqlCtx.errExit && i < len(stmts)-1 {
-					// Print the error now because we don't get a chance later.
-					cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-				}
-				if sqlCtx.errExit {
-					break
+				break
+			}
+			for _, statement := range statements {
+				c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(statement.SQL))
+				if c.exitErr != nil {
+					if !sqlCtx.errExit && i < len(stmts)-1 {
+						// Print the error now because we don't get a chance later.
+						cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+					}
+					if sqlCtx.errExit {
+						break
+					}
 				}
 			}
 		}

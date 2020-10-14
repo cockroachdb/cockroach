@@ -5,6 +5,9 @@ CREATE SEQUENCE d.s2 INCREMENT 456; -- test another that's been incremented
 SELECT nextval('d.s2'); -- 1
 SELECT nextval('d.s2'); -- 457
 ----
+CREATE DATABASE
+CREATE SEQUENCE
+CREATE SEQUENCE
 nextval
 1
 nextval

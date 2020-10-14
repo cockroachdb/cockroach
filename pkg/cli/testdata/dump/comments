@@ -7,6 +7,10 @@ COMMENT ON TABLE d."t   t" IS 'has '' quotes';
 COMMENT ON INDEX d."t   t"@primary IS 'has '' more '' quotes';
 COMMENT ON COLUMN d."t   t"."x'" IS 'i '' just '' love '' quotes';
 ----
+CREATE DATABASE
+CREATE TABLE
+COMMENT ON TABLE
+COMMENT ON INDEX
 COMMENT ON COLUMN
 
 dump d

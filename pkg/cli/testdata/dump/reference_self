@@ -15,6 +15,8 @@ INSERT INTO d.t VALUES (
 	NULL
 );
 ----
+CREATE DATABASE
+CREATE TABLE
 INSERT 1
 
 dump d t
@@ -70,6 +72,7 @@ sql
 ALTER TABLE d.t RENAME COLUMN next_id TO "'";
 ALTER TABLE d.t RENAME TO "table";
 ----
+ALTER TABLE
 RENAME TABLE
 
 dump d table

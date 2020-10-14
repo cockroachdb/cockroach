@@ -5,6 +5,10 @@ insert into t.f values (42, 69);
 create table t.g (x int, y int);
 insert into t.g values (3, 4)
 ----
+CREATE DATABASE
+CREATE TABLE
+INSERT 1
+CREATE TABLE
 INSERT 1
 
 dump t f g

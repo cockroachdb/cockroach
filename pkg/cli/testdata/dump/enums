@@ -9,6 +9,9 @@ CREATE TABLE d.tt (
 
 INSERT INTO d.tt VALUES ('dump', ARRAY['dump'], 1), ('cli', ARRAY['cli'], 2)
 ----
+CREATE DATABASE
+CREATE TYPE
+CREATE TABLE
 INSERT 2
 
 # Test basic dumping of a database.

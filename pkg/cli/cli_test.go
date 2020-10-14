@@ -431,6 +431,7 @@ func Example_demo() {
 		{`demo`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
 		{`demo`, `--insecure`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
 		{`demo`, `--geo-partitioned-replicas`, `--disable-demo-license`},
+		{`demo`, `-e`, `create table a(a int); select 1`, `--format=table`},
 	}
 	setCLIDefaultsForTests()
 	// We must reset the security asset loader here, otherwise the dummy
@@ -495,6 +496,12 @@ func Example_demo() {
 	// SQLSTATE: 28P01
 	// demo --geo-partitioned-replicas --disable-demo-license
 	// ERROR: enterprise features are needed for this demo (--geo-partitioned-replicas)
+	// demo -e create table a(a int); select 1 --format=table
+	// CREATE TABLE
+	//   ?column?
+	// ------------
+	//          1
+	// (1 row)
 }
 
 func Example_sql() {
@@ -532,6 +539,8 @@ func Example_sql() {
 	// application_name
 	// $ cockroach sql
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
+	// CREATE DATABASE
+	// CREATE TABLE
 	// INSERT 1
 	// sql -e select 3 as "3" -e select * from t.f
 	// 3
@@ -568,6 +577,8 @@ func Example_sql() {
 	// sql -d nonexistent -e select count(*) from "".information_schema.tables limit 0
 	// count
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
+	// CREATE DATABASE
+	// CREATE TABLE
 	// x
 	// sql -e copy t.f from stdin
 	// ERROR: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
@@ -601,6 +612,7 @@ func Example_sql_watch() {
 
 	// Output:
 	// sql -e create table d(x int); insert into d values(3)
+	// CREATE TABLE
 	// INSERT 1
 	// sql --watch .1s -e update d set x=x-1 returning 1/x as dec
 	// dec
@@ -621,6 +633,7 @@ func Example_sql_format() {
 
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
 	// INSERT 1
@@ -801,6 +814,10 @@ func Example_sql_empty_table() {
 
 	// Output:
 	// sql -e create database t;create table t.norows(x int);create table t.nocolsnorows();create table t.nocols(); insert into t.nocols(rowid) values (1),(2),(3);
+	// CREATE DATABASE
+	// CREATE TABLE
+	// CREATE TABLE
+	// CREATE TABLE
 	// INSERT 3
 	// sql --format=tsv -e select * from t.norows
 	// x
@@ -1072,6 +1089,7 @@ func Example_sql_table() {
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql -e insert into t.t values (e'foo', 'printable ASCII')
 	// INSERT 1
@@ -1355,6 +1373,7 @@ func Example_misc_table() {
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql --format=table -e select '  hai' as x
 	//     x
@@ -1944,6 +1963,8 @@ func Example_in_memory() {
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
+	// CREATE DATABASE
+	// CREATE TABLE
 	// INSERT 1
 	// node ls
 	// id
@@ -1965,6 +1986,7 @@ func Example_pretty_print_numerical_strings() {
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql -e insert into t.t values (e'0', 'positive numerical string')
 	// INSERT 1
@@ -2043,6 +2065,8 @@ func Example_dump_no_visible_columns() {
 
 	// Output:
 	// sql -e create table t(x int); set sql_safe_updates=false; alter table t drop x
+	// CREATE TABLE
+	// SET
 	// ALTER TABLE
 	// dump defaultdb
 	// CREATE TABLE public.t (FAMILY "primary" (rowid)
