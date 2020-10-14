@@ -2678,6 +2678,81 @@ func (t *logicTest) success(file string) {
 	}
 }
 
+func (t *logicTest) validateAfterTestCompletion() error {
+	// Close all clients other than "root"
+	for username, c := range t.clients {
+		if username == "root" {
+			continue
+		}
+		delete(t.clients, username)
+		if err := c.Close(); err != nil {
+			t.Fatalf("failed to close connection for user %s: %v", username, err)
+		}
+	}
+	t.setUser("root")
+
+	// Some cleanup to make sure the following validation queries can run
+	// successfully. First we rollback in case the logic test had an uncommitted
+	// txn and second we reset vectorize mode in case it was switched to
+	// `experimental_always`.
+	_, _ = t.db.Exec("ROLLBACK")
+	_, err := t.db.Exec("RESET vectorize")
+	if err != nil {
+		t.Fatal(errors.Wrap(err, "could not reset vectorize mode"))
+	}
+
+	validate := func() (string, error) {
+		rows, err := t.db.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
+		if err != nil {
+			return "", err
+		}
+		defer rows.Close()
+
+		var id int64
+		var db, schema, objName, errStr string
+		invalidObjects := make([]string, 0)
+		for rows.Next() {
+			if err := rows.Scan(&id, &db, &schema, &objName, &errStr); err != nil {
+				return "", err
+			}
+			invalidObjects = append(
+				invalidObjects,
+				fmt.Sprintf("id %d, db %s, schema %s, name %s: %s", id, db, schema, objName, errStr),
+			)
+		}
+		if err := rows.Err(); err != nil {
+			return "", err
+		}
+		return strings.Join(invalidObjects, "\n"), nil
+	}
+
+	invalidObjects, err := validate()
+	if err != nil {
+		return errors.Wrap(err, "running object validation failed")
+	}
+	if invalidObjects != "" {
+		return errors.Errorf("descriptor validation failed:\n%s", invalidObjects)
+	}
+
+	// TODO(lucy): we should really drop all created databases in this test, not
+	// just the one we started with.
+	stmt := "SET sql_safe_updates=false; DROP DATABASE IF EXISTS test CASCADE"
+	if _, err := t.db.Exec(stmt); err != nil {
+		return errors.Wrap(err, "dropping test database failed")
+	}
+
+	invalidObjects, err = validate()
+	if err != nil {
+		return errors.Wrap(err, "running object validation after failed")
+	}
+	if invalidObjects != "" {
+		return errors.Errorf(
+			"descriptor validation failed after dropping test database:\n%s", invalidObjects,
+		)
+	}
+	return nil
+}
+
 func (t *logicTest) runFile(path string, config testClusterConfig) {
 	defer t.close()
 
@@ -2690,6 +2765,10 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 
 	if err := t.processTestFile(path, config); err != nil {
 		t.Fatal(err)
+	}
+
+	if err := t.validateAfterTestCompletion(); err != nil {
+		t.Fatal(errors.Wrap(err, "test was successful but validation upon completion failed"))
 	}
 }
 
