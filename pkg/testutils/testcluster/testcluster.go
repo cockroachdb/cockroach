@@ -241,10 +241,10 @@ func (tc *TestCluster) Start(t testing.TB) {
 
 		if tc.clusterArgs.ParallelStart {
 			go func(i int) {
-				errCh <- tc.StartServer(t, tc.Server(i), tc.serverArgs[i])
+				errCh <- tc.StartServer(tc.Server(i), tc.serverArgs[i])
 			}(i)
 		} else {
-			if err := tc.StartServer(t, tc.Server(i), tc.serverArgs[i]); err != nil {
+			if err := tc.StartServer(tc.Server(i), tc.serverArgs[i]); err != nil {
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
@@ -344,7 +344,7 @@ func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServe
 		t.Fatal(err)
 	}
 
-	if err := tc.StartServer(t, serv, serverArgs); err != nil {
+	if err := tc.StartServer(serv, serverArgs); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -406,13 +406,16 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 // StartServer is the companion method to AddServer, and is responsible for
 // actually starting the server.
 func (tc *TestCluster) StartServer(
-	t testing.TB, server serverutils.TestServerInterface, serverArgs base.TestServerArgs,
+	server serverutils.TestServerInterface, serverArgs base.TestServerArgs,
 ) error {
 	if err := server.Start(); err != nil {
-		t.Fatalf("%+v", err)
+		return err
 	}
 
-	dbConn := serverutils.OpenDBConn(t, server, serverArgs, server.Stopper())
+	dbConn, err := serverutils.OpenDBConnE(server, serverArgs, server.Stopper())
+	if err != nil {
+		return err
+	}
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()

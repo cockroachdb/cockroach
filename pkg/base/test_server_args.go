@@ -153,6 +153,8 @@ type TestClusterArgs struct {
 	// no entry in the map for a particular server, the default ServerArgs are
 	// used.
 	//
+	// These are indexes: the key 0 corresponds to the first node.
+	//
 	// A copy of an entry from this map will be copied to each individual server
 	// and potentially adjusted according to ReplicationMode.
 	ServerArgsPerNode map[int]TestServerArgs
