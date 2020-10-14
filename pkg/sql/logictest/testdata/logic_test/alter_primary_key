@@ -1,3 +1,8 @@
+# LogicTest: !3node-backup
+
+# This test works fine with backup restore except for the SHOW JOBS statement
+# that is finding 2 jobs.
+
 statement ok
 SET experimental_enable_hash_sharded_indexes = true
 

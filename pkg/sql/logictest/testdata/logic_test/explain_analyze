@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v));
 INSERT INTO kv VALUES (1,10), (2,20), (3,30), (4,40);

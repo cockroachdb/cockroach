@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 SET experimental_enable_temp_tables = true;
 

@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck
 

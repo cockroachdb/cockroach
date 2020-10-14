@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 query T
 SELECT aclexplode(NULL)
 ----

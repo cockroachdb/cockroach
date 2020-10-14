@@ -1,4 +1,4 @@
-# LogicTest: !fakedist-spec-planning
+# LogicTest: !fakedist-spec-planning !3node-backup
 
 statement ok
 CREATE TABLE foo (a int)

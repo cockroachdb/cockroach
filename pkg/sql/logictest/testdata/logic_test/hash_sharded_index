@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 SET experimental_enable_hash_sharded_indexes = true
 

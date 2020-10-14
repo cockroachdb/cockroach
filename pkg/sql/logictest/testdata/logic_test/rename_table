@@ -1,4 +1,4 @@
-# LogicTest: !fakedist-metadata
+# LogicTest: !fakedist-metadata !3node-backup
 
 statement error pgcode 42P01 relation "foo" does not exist
 ALTER TABLE foo RENAME TO bar

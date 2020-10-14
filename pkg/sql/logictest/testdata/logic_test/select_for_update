@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 query I
 SELECT 1 FOR UPDATE
 ----

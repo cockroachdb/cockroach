@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant !3node-backup
 
 # Test formatting of keys in output of SPLIT AT
 

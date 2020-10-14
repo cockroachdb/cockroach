@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # As these tests are run for both the system tenant and secondary tenants, we
 # turn on the setting that gates setting zone configs for system tenants.
 statement ok

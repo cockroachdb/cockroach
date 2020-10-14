@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 GRANT CREATE ON DATABASE test TO testuser
 

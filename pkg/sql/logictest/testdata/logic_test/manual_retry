@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 subtest automatic_retry
 
 statement ok

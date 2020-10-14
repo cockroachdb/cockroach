@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # This tests ensures that transactions to perform grants on entities created
 # inside of a transaction do not get blocked and take a very long time.
 

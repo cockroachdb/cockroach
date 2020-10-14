@@ -1,4 +1,4 @@
-# LogicTest: !fakedist-metadata
+# LogicTest: !fakedist-metadata !3node-backup
 
 statement ok
 CREATE TABLE kv (

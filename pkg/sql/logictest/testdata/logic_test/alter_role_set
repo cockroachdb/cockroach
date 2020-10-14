@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 statement ok
 CREATE ROLE test_set_role;
 CREATE DATABASE test_set_db

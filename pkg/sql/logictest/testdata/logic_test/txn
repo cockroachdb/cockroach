@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # Transaction involving schema changes.
 statement ok
 BEGIN TRANSACTION

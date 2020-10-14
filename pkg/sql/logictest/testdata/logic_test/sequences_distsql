@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # Test that sequence functions work in DistSQL queries.
 
 statement ok

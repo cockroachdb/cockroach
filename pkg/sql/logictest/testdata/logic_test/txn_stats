@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # Some sanity checks for node_txn_stats virtual table.
 
 statement ok

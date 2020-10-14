@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # Tests for assignment casts.
 subtest assignment_casts
 

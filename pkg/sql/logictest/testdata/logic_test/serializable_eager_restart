@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # Demonstrates late restarting of a serializable transaction when its
 # commit timestamp has moved forward.
 # TODO(tschottdorf): implement eager restart for CLI.

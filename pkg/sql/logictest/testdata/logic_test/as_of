@@ -1,6 +1,6 @@
 # 3node-tenant is blocked from running this file because the config runs with
 # a CCL binary, so the expected failures from using follower reads don't occur.
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant !3node-backup
 
 statement ok
 CREATE TABLE t (i INT)

@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant !fakedist-spec-planning
+# LogicTest: !3node-tenant !fakedist-spec-planning !3node-backup
 
 subtest check_consistency
 
