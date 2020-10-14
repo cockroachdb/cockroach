@@ -53,7 +53,7 @@ type HeartbeatService struct {
 	clusterName                    string
 	disableClusterNameVerification bool
 
-	onHandlePing func(*PingRequest) error // see ContextOptions.OnHandlePing
+	onHandlePing func(*PingRequest) error // see ContextOptions.OnIncomingPing
 
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
