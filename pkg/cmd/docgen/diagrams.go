@@ -1423,6 +1423,8 @@ var specs = []stmtSpec{
 			"opt_limit_clause",
 			"opt_only",
 			"opt_descendant",
+			"opt_from_list",
+			"from_list",
 		},
 		replace: map[string]string{
 			"relation_expr":      "table_name",
