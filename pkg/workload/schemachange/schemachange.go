@@ -488,7 +488,7 @@ func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(false))
+	columnName, err := w.randColumn(tx, *tableName, w.pctExisting(false))
 	if err != nil {
 		return "", err
 	}
@@ -522,7 +522,7 @@ func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	indexName, err := w.randIndex(tx, tableName.String(), w.pctExisting(false))
+	indexName, err := w.randIndex(tx, *tableName, w.pctExisting(false))
 	if err != nil {
 		return "", err
 	}
@@ -636,7 +636,7 @@ func (w *schemaChangeWorker) dropColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(true))
+	columnName, err := w.randColumn(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -648,7 +648,7 @@ func (w *schemaChangeWorker) dropColumnDefault(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(true))
+	columnName, err := w.randColumn(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -660,7 +660,7 @@ func (w *schemaChangeWorker) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(true))
+	columnName, err := w.randColumn(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -673,7 +673,7 @@ func (w *schemaChangeWorker) dropColumnStored(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(true))
+	columnName, err := w.randColumn(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -699,7 +699,7 @@ func (w *schemaChangeWorker) dropIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	indexName, err := w.randIndex(tx, tableName.String(), w.pctExisting(true))
+	indexName, err := w.randIndex(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -736,12 +736,12 @@ func (w *schemaChangeWorker) renameColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	srcColumnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(true))
+	srcColumnName, err := w.randColumn(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
 
-	destColumnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(false))
+	destColumnName, err := w.randColumn(tx, *tableName, w.pctExisting(false))
 	if err != nil {
 		return "", err
 	}
@@ -756,12 +756,12 @@ func (w *schemaChangeWorker) renameIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	srcIndexName, err := w.randIndex(tx, tableName.String(), w.pctExisting(true))
+	srcIndexName, err := w.randIndex(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
 
-	destIndexName, err := w.randIndex(tx, tableName.String(), w.pctExisting(false))
+	destIndexName, err := w.randIndex(tx, *tableName, w.pctExisting(false))
 	if err != nil {
 		return "", err
 	}
@@ -833,7 +833,7 @@ func (w *schemaChangeWorker) setColumnNotNull(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(true))
+	columnName, err := w.randColumn(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -845,7 +845,7 @@ func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName.String(), w.pctExisting(true))
+	columnName, err := w.randColumn(tx, *tableName, w.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -970,20 +970,20 @@ func (w *schemaChangeWorker) getTableColumns(tx *pgx.Tx, tableName string) ([]co
 }
 
 func (w *schemaChangeWorker) randColumn(
-	tx *pgx.Tx, tableName string, pctExisting int,
+	tx *pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (string, error) {
 	if w.rng.Intn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		return fmt.Sprintf("col%s_%d",
-			strings.TrimPrefix(tableName, "table"), atomic.AddInt64(w.seqNum, 1)), nil
+			strings.TrimPrefix(tableName.Table(), "table"), atomic.AddInt64(w.seqNum, 1)), nil
 	}
 	q := fmt.Sprintf(`
   SELECT column_name
     FROM [SHOW COLUMNS FROM %s]
 ORDER BY random()
    LIMIT 1;
-`, tableName)
+`, tableName.String())
 	var name string
 	if err := tx.QueryRow(q).Scan(&name); err != nil {
 		return "", err
@@ -1007,20 +1007,20 @@ ORDER BY random()
 }
 
 func (w *schemaChangeWorker) randIndex(
-	tx *pgx.Tx, tableName string, pctExisting int,
+	tx *pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (string, error) {
 	if w.rng.Intn(100) >= pctExisting {
 		// We make a unique name for all indices by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		return fmt.Sprintf("index%s_%d",
-			strings.TrimPrefix(tableName, "table"), atomic.AddInt64(w.seqNum, 1)), nil
+			strings.TrimPrefix(tableName.Table(), "table"), atomic.AddInt64(w.seqNum, 1)), nil
 	}
 	q := fmt.Sprintf(`
   SELECT index_name
     FROM [SHOW INDEXES FROM %s]
 ORDER BY random()
    LIMIT 1;
-`, tableName)
+`, tableName.String())
 	var name string
 	if err := tx.QueryRow(q).Scan(&name); err != nil {
 		return "", err
