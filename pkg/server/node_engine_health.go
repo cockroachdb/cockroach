@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -22,7 +23,11 @@ import (
 // startAssertEngineHealth starts a goroutine that periodically verifies that
 // syncing the engines is possible within maxSyncDuration. If not,
 // the process is terminated (with an attempt at a descriptive message).
-func (n *Node) startAssertEngineHealth(ctx context.Context, engines []storage.Engine) {
+func (n *Node) startAssertEngineHealth(
+	ctx context.Context, engines []storage.Engine, settings *cluster.Settings,
+) {
+	maxSyncDuration := storage.MaxSyncDuration.Get(&settings.SV)
+	fatalOnExceeded := storage.MaxSyncDurationFatalOnExceeded.Get(&settings.SV)
 	n.stopper.RunWorker(ctx, func(ctx context.Context) {
 		t := timeutil.NewTimer()
 		t.Reset(0)
@@ -32,7 +37,7 @@ func (n *Node) startAssertEngineHealth(ctx context.Context, engines []storage.En
 			case <-t.C:
 				t.Read = true
 				t.Reset(10 * time.Second)
-				n.assertEngineHealth(ctx, engines, storage.MaxSyncDuration)
+				n.assertEngineHealth(ctx, engines, maxSyncDuration, fatalOnExceeded)
 			case <-n.stopper.ShouldQuiesce():
 				return
 			}
@@ -46,7 +51,7 @@ func guaranteedExitFatal(ctx context.Context, msg string, args ...interface{}) {
 }
 
 func (n *Node) assertEngineHealth(
-	ctx context.Context, engines []storage.Engine, maxDuration time.Duration,
+	ctx context.Context, engines []storage.Engine, maxDuration time.Duration, fatalOnExceeded bool,
 ) {
 	for _, eng := range engines {
 		func() {
@@ -54,7 +59,7 @@ func (n *Node) assertEngineHealth(
 				n.metrics.DiskStalls.Inc(1)
 				stats := "\n" + eng.GetCompactionStats()
 				logger := log.Warningf
-				if storage.MaxSyncDurationFatalOnExceeded {
+				if fatalOnExceeded {
 					logger = guaranteedExitFatal
 				}
 				// NB: the disk-stall-detected roachtest matches on this message.

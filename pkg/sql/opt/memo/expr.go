@@ -635,6 +635,10 @@ func (s *ScanPrivate) IsLocking() bool {
 // UsesPartialIndex returns true if the ScanPrivate indicates a scan over a
 // partial index.
 func (s *ScanPrivate) UsesPartialIndex(md *opt.Metadata) bool {
+	if s.Index == cat.PrimaryIndex {
+		// Primary index is always non-partial; skip making the catalog calls.
+		return false
+	}
 	_, isPartialIndex := md.Table(s.Table).Index(s.Index).Predicate()
 	return isPartialIndex
 }
@@ -916,17 +920,18 @@ type FKCascade struct {
 	Builder CascadeBuilder
 
 	// WithID identifies the buffer for the mutation input in the original
-	// expression tree.
+	// expression tree. 0 if the cascade does not require input.
 	WithID opt.WithID
 
 	// OldValues are column IDs from the mutation input that correspond to the
 	// old values of the modified rows. The list maps 1-to-1 to foreign key
-	// columns.
+	// columns. Empty if the cascade does not require input.
 	OldValues opt.ColList
 
 	// NewValues are column IDs from the mutation input that correspond to the
 	// new values of the modified rows. The list maps 1-to-1 to foreign key columns.
-	// It is empty if the mutation is a deletion.
+	// It is empty if the mutation is a deletion. Empty if the cascade does not
+	// require input.
 	NewValues opt.ColList
 }
 
@@ -946,6 +951,9 @@ type CascadeBuilder interface {
 	//
 	// The method does not mutate any captured state; it is ok to call Build
 	// concurrently (e.g. if the plan it originates from is cached and reused).
+	//
+	// Some cascades (delete fast path) don't require an input binding. In that
+	// case binding is 0, bindingProps is nil, and oldValues/newValues are empty.
 	//
 	// Note: factory is always *norm.Factory; it is an interface{} only to avoid
 	// circular package dependencies.

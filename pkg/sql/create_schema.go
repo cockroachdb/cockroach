@@ -59,7 +59,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	schemaName := n.Schema
+	schemaName := string(n.Schema)
 	if n.Schema == "" {
 		schemaName = n.AuthRole
 	}

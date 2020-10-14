@@ -238,7 +238,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumCreate)
 
 	// Ensure there are no duplicates in the input enum values.
-	seenVals := make(map[string]struct{})
+	seenVals := make(map[tree.EnumValue]struct{})
 	for _, value := range n.EnumLabels {
 		_, ok := seenVals[value]
 		if ok {
@@ -265,7 +265,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	physReps := enum.GenerateNEvenlySpacedBytes(len(n.EnumLabels))
 	for i := range n.EnumLabels {
 		members[i] = descpb.TypeDescriptor_EnumMember{
-			LogicalRepresentation:  n.EnumLabels[i],
+			LogicalRepresentation:  string(n.EnumLabels[i]),
 			PhysicalRepresentation: physReps[i],
 			Capability:             descpb.TypeDescriptor_EnumMember_ALL,
 		}

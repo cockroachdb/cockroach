@@ -32,7 +32,8 @@ import (
 )
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL
-// string from the syntax tree.
+// string from the syntax tree.  If the supplied SQL generates a different string
+// from the sytnax tree, use TestParse2 below.
 func TestParse(t *testing.T) {
 	testData := []struct {
 		sql string
@@ -1412,6 +1413,7 @@ func TestParse(t *testing.T) {
 		{`COPY t (a, b, c) FROM STDIN`},
 		{`COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'`},
 		{`COPY t (a, b, c) FROM STDIN WITH BINARY`},
+		{`COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = 'filename'`},
 
 		{`ALTER TABLE a SPLIT AT VALUES (1)`},
 		{`EXPLAIN ALTER TABLE a SPLIT AT VALUES (1)`},
@@ -2292,6 +2294,8 @@ $function$`,
 
 		{`COPY t (a, b, c) FROM STDIN BINARY`,
 			`COPY t (a, b, c) FROM STDIN WITH BINARY`},
+		{`COPY t (a, b, c) FROM STDIN destination = 'filename' BINARY`,
+			`COPY t (a, b, c) FROM STDIN WITH BINARY destination = 'filename'`},
 
 		// Identifier handling for zone configs.
 
@@ -2638,6 +2642,14 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 
 		{`REASSIGN OWNED BY CURRENT_USER TO foo`, `REASSIGN OWNED BY "current_user" TO foo`},
 		{`REASSIGN OWNED BY SESSION_USER TO foo`, `REASSIGN OWNED BY "session_user" TO foo`},
+
+		// Validate that GRANT and REVOKE can accept optional PRIVILEGES syntax
+		{`GRANT ALL PRIVILEGES ON DATABASE foo TO root`, `GRANT ALL ON DATABASE foo TO root`},
+		{`GRANT ALL PRIVILEGES ON TABLE foo TO root`, `GRANT ALL ON TABLE foo TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA foo TO root`, `GRANT ALL ON SCHEMA foo TO root`},
+		{`REVOKE ALL PRIVILEGES ON DATABASE foo FROM root`, `REVOKE ALL ON DATABASE foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON TABLE foo FROM root`, `REVOKE ALL ON TABLE foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA foo FROM root`, `REVOKE ALL ON SCHEMA foo FROM root`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {

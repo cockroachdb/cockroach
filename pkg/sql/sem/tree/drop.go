@@ -198,7 +198,7 @@ func (node *DropType) Format(ctx *FmtCtx) {
 
 // DropSchema represents a DROP SCHEMA command.
 type DropSchema struct {
-	Names        []string
+	Names        NameList
 	IfExists     bool
 	DropBehavior DropBehavior
 }
@@ -211,12 +211,7 @@ func (node *DropSchema) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	for i := range node.Names {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatNameP(&node.Names[i])
-	}
+	ctx.FormatNode(&node.Names)
 	if node.DropBehavior != DropDefault {
 		ctx.WriteString(" ")
 		ctx.WriteString(node.DropBehavior.String())

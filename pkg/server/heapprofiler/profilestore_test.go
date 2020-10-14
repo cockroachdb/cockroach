@@ -24,12 +24,20 @@ import (
 )
 
 func TestMakeFileName(t *testing.T) {
-	ts := time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC)
-
 	store := dumpstore.NewStore("mydir", nil, nil)
 	joy := newProfileStore(store, HeapFileNamePrefix, ".test", nil)
+
+	ts := time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC)
 	assert.Equal(t,
 		filepath.Join("mydir", "memprof.2020-06-15T13_19_19.543.123456.test"),
+		joy.makeNewFileName(ts, 123456))
+
+	// Also check when the millisecond part is zero. This verifies that
+	// the .999 format is not used, which would cause the millisecond
+	// part to be (erronously) omitted.
+	ts = time.Date(2020, 6, 15, 13, 19, 19, 00000000, time.UTC)
+	assert.Equal(t,
+		filepath.Join("mydir", "memprof.2020-06-15T13_19_19.000.123456.test"),
 		joy.makeNewFileName(ts, 123456))
 }
 

@@ -52,8 +52,14 @@ const flushInterval = time.Second
 const syncInterval = 30
 
 // maxSyncDuration is set to a conservative value since this is a new mechanism.
-// In practice, even a fraction of that would indicate a problem.
-var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_LOG_MAX_SYNC_DURATION", 30*time.Second)
+// In practice, even a fraction of that would indicate a problem. This metric's
+// default should ideally match its sister metric in the storage engine, set by
+// COCKROACH_ENGINE_MAX_SYNC_DURATION.
+var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_LOG_MAX_SYNC_DURATION", 60*time.Second)
+
+// syncWarnDuration is the threshold after which a slow disk warning is written
+// to the log and to stderr.
+const syncWarnDuration = 10 * time.Second
 
 // flushDaemon periodically flushes and syncs the log file buffers.
 // This manages both the primary and secondary loggers.
@@ -159,6 +165,14 @@ func (l *loggerT) flushAndSyncLocked(doSync bool) {
 		)
 	})
 	defer t.Stop()
+	// If we can't sync within this duration, print a warning to the log and to
+	// stderr.
+	t2 := time.AfterFunc(syncWarnDuration, func() {
+		Shoutf(context.Background(), Severity_WARNING,
+			"disk slowness detected: unable to sync log files within %s", syncWarnDuration,
+		)
+	})
+	defer t2.Stop()
 
 	_ = l.mu.file.Flush() // ignore error
 	if doSync {

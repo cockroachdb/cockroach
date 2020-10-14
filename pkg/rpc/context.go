@@ -45,10 +45,12 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	encodingproto "google.golang.org/grpc/encoding/proto"
 	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 func init() {
@@ -233,16 +235,7 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
 	s := grpc.NewServer(grpcOpts...)
-	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:                                 ctx.Clock,
-		remoteClockMonitor:                    ctx.RemoteClocks,
-		clusterName:                           ctx.ClusterName(),
-		disableClusterNameVerification:        ctx.Config.DisableClusterNameVerification,
-		clusterID:                             &ctx.ClusterID,
-		nodeID:                                &ctx.NodeID,
-		settings:                              ctx.Settings,
-		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
-	})
+	RegisterHeartbeatServer(s, ctx.NewHeartbeatService())
 	return s
 }
 
@@ -385,7 +378,15 @@ type ContextOptions struct {
 	Clock      *hlc.Clock
 	Stopper    *stop.Stopper
 	Settings   *cluster.Settings
-	Knobs      ContextTestingKnobs
+	// OnIncomingPing is called when handling a PingRequest, after
+	// preliminary checks but before recording clock offset information.
+	//
+	// It can inject an error.
+	OnIncomingPing func(*PingRequest) error
+	// OnOutgoingPing intercepts outgoing PingRequests. It may inject an
+	// error.
+	OnOutgoingPing func(*PingRequest) error
+	Knobs          ContextTestingKnobs
 }
 
 func (c ContextOptions) validate() error {
@@ -404,6 +405,11 @@ func (c ContextOptions) validate() error {
 	if c.Settings == nil {
 		return errors.New("Settings must be set")
 	}
+
+	// NB: OnOutgoingPing and OnIncomingPing default to noops.
+	// This is used both for testing and the cli.
+	_, _ = c.OnOutgoingPing, c.OnIncomingPing
+
 	return nil
 }
 
@@ -730,6 +736,14 @@ func (ctx *Context) grpcDialOptions(
 	if ctx.rpcCompression {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	}
+
+	// GRPC uses the HTTPS_PROXY environment variable by default[1]. This is
+	// surprising, and likely undesirable for CRDB because it turns the proxy
+	// into an availability risk and a throughput bottleneck. We disable the use
+	// of proxies by default.
+	//
+	// [1]: https://github.com/grpc/grpc-go/blob/c0736608/Documentation/proxy.md
+	dialOpts = append(dialOpts, grpc.WithNoProxy())
 
 	var unaryInterceptors []grpc.UnaryClientInterceptor
 	var streamInterceptors []grpc.StreamClientInterceptor
@@ -1119,6 +1133,13 @@ func (ctx *Context) runHeartbeat(
 	// Give the first iteration a wait-free heartbeat attempt.
 	heartbeatTimer.Reset(0)
 	everSucceeded := false
+	// Both transient and permanent errors can arise here. Transient errors
+	// set the `heartbeatResult.err` field but retain the connection.
+	// Permanent errors return an error from this method, which means that
+	// the connection will be removed. Errors are presumed transient by
+	// default, but some - like ClusterID or version mismatches, as well as
+	// PermissionDenied errors injected by OnOutgoingPing, are considered permanent.
+	returnErr := false
 	for {
 		select {
 		case <-redialChan:
@@ -1133,18 +1154,29 @@ func (ctx *Context) runHeartbeat(
 			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
 			clusterID := ctx.ClusterID.Get()
 			request := &PingRequest{
-				Addr:           ctx.Config.Addr,
-				MaxOffsetNanos: maxOffsetNanos,
-				ClusterID:      &clusterID,
-				NodeID:         conn.remoteNodeID,
-				ServerVersion:  ctx.Settings.Version.BinaryVersion(),
+				OriginNodeID:         ctx.NodeID.Get(),
+				OriginAddr:           ctx.Config.Addr,
+				OriginMaxOffsetNanos: maxOffsetNanos,
+				ClusterID:            &clusterID,
+				TargetNodeID:         conn.remoteNodeID,
+				ServerVersion:        ctx.Settings.Version.BinaryVersion(),
+			}
+
+			interceptor := func(*PingRequest) error { return nil }
+			if fn := ctx.OnOutgoingPing; fn != nil {
+				interceptor = fn
 			}
 
 			var response *PingResponse
 			sendTime := ctx.Clock.PhysicalTime()
-			ping := func(goCtx context.Context) (err error) {
+			ping := func(goCtx context.Context) error {
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
+				if err := interceptor(request); err != nil {
+					returnErr = true
+					return err
+				}
+				var err error
 				response, err = heartbeatClient.Ping(goCtx, request)
 				return err
 			}
@@ -1155,9 +1187,13 @@ func (ctx *Context) runHeartbeat(
 				err = ping(goCtx)
 			}
 
+			if s, ok := grpcstatus.FromError(errors.UnwrapAll(err)); ok && s.Code() == codes.PermissionDenied {
+				returnErr = true
+			}
+
 			if err == nil {
 				// We verify the cluster name on the initiator side (instead
-				// of the hearbeat service side, as done for the cluster ID
+				// of the heartbeat service side, as done for the cluster ID
 				// and node ID checks) so that the operator who is starting a
 				// new node in a cluster and mistakenly joins the wrong
 				// cluster gets a chance to see the error message on their
@@ -1166,6 +1202,9 @@ func (ctx *Context) runHeartbeat(
 					err = errors.Wrap(
 						checkClusterName(ctx.Config.ClusterName, response.ClusterName),
 						"cluster name check failed on ping response")
+					if err != nil {
+						returnErr = true
+					}
 				}
 			}
 
@@ -1173,6 +1212,9 @@ func (ctx *Context) runHeartbeat(
 				err = errors.Wrap(
 					checkVersion(goCtx, ctx.Settings, response.ServerVersion),
 					"version compatibility check failed on ping response")
+				if err != nil {
+					returnErr = true
+				}
 			}
 
 			if err == nil {
@@ -1210,11 +1252,29 @@ func (ctx *Context) runHeartbeat(
 			state = updateHeartbeatState(&ctx.metrics, state, hr.state())
 			conn.heartbeatResult.Store(hr)
 			setInitialHeartbeatDone()
+			if returnErr {
+				return err
+			}
 			return nil
 		}); err != nil {
 			return err
 		}
 
 		heartbeatTimer.Reset(ctx.Config.RPCHeartbeatInterval)
+	}
+}
+
+// NewHeartbeatService returns a HeartbeatService initialized from the Context.
+func (ctx *Context) NewHeartbeatService() *HeartbeatService {
+	return &HeartbeatService{
+		clock:                                 ctx.Clock,
+		remoteClockMonitor:                    ctx.RemoteClocks,
+		clusterName:                           ctx.ClusterName(),
+		disableClusterNameVerification:        ctx.Config.DisableClusterNameVerification,
+		clusterID:                             &ctx.ClusterID,
+		nodeID:                                &ctx.NodeID,
+		settings:                              ctx.Settings,
+		onHandlePing:                          ctx.OnIncomingPing,
+		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
 	}
 }

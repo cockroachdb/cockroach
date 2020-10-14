@@ -476,7 +476,9 @@ func (n *Node) start(
 			if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
 				log.Fatalf(ctx, "while bootstrapping additional stores: %v", err)
 			}
+			log.Infof(ctx, "sending message to bootstrapStoresComplete channel")
 			bootstrapStoresComplete <- true
+			log.Infof(ctx, "message to bootstrapStoresComplete channel sent")
 		})
 	}
 
