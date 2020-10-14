@@ -16,20 +16,38 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
 // SessionData contains session parameters. They are all user-configurable.
 // A SQL Session changes fields in SessionData through sql.sessionDataMutator.
 type SessionData struct {
-	// ApplicationName is the name of the application running the
-	// current session. This can be used for logging and per-application
-	// statistics.
-	ApplicationName string
-	// Database indicates the "current" database for the purpose of
-	// resolving names. See searchAndQualifyDatabase() for details.
-	Database string
+	// SessionData contains session parameters that are easily serializable and
+	// are required to be propagated to the remote nodes for the correct
+	// execution of DistSQL flows.
+	sessiondatapb.SessionData
+	// LocalOnlySessionData contains session parameters that don't need to be
+	// propagated to the remote nodes.
+	LocalOnlySessionData
+
+	// All session parameters below must be propagated to the remote nodes but
+	// are not easily serializable. They require custom serialization and
+	// deserialization via execinfrapb.EvalContext.
+	//
+	// Location indicates the current time zone.
+	Location *time.Location
+	// SearchPath is a list of namespaces to search builtins in.
+	SearchPath SearchPath
+	// SequenceState gives access to the SQL sequences that have been manipulated
+	// by the session.
+	SequenceState *SequenceState
+}
+
+// LocalOnlySessionData contains session parameters that only influence the
+// execution on the gateway node and don't need to be propagated to the remote
+// nodes.
+type LocalOnlySessionData struct {
 	// DefaultTxnPriority indicates the default priority of newly created
 	// transactions.
 	// NOTE: we'd prefer to use tree.UserPriority here, but doing so would
@@ -61,8 +79,6 @@ type SessionData struct {
 	OptimizerUseMultiColStats bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
-	// SearchPath is a list of namespaces to search builtins in.
-	SearchPath SearchPath
 	// DatabaseIDToTempSchemaID stores the temp schema ID for every database that
 	// has created a temporary schema. The mapping is from descpb.ID -> desscpb.ID,
 	// but cannot be stored as such due to package dependencies.
@@ -77,8 +93,6 @@ type SessionData struct {
 	// idle in a transaction before the session is canceled.
 	// If set to 0, there is no timeout.
 	IdleInTransactionSessionTimeout time.Duration
-	// User is the name of the user logged into the session.
-	User string
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
@@ -96,31 +110,15 @@ type SessionData struct {
 	// RequireExplicitPrimaryKeys indicates whether CREATE TABLE statements should
 	// error out if no primary key is provided.
 	RequireExplicitPrimaryKeys bool
-	// SequenceState gives access to the SQL sequences that have been manipulated
-	// by the session.
-	SequenceState *SequenceState
-	// DataConversion gives access to the data conversion configuration.
-	DataConversion DataConversionConfig
-	// VectorizeMode indicates which kinds of queries to use vectorized execution
-	// engine for.
-	VectorizeMode VectorizeExecMode
 	// VectorizeRowCountThreshold indicates the row count above which the
 	// vectorized execution engine will be used if possible.
 	VectorizeRowCountThreshold uint64
-	// TestingVectorizeInjectPanics indicates whether random panics are
-	// injected into the vectorized flow execution. The goal of such behavior
-	// is making sure that errors that are propagated as panics in the
-	// vectorized engine are caught in all scenarios.
-	TestingVectorizeInjectPanics bool
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic
 	// identifier `cockroach_restart` in order use a restartable
 	// transaction.
 	ForceSavepointRestart bool
-	// DefaultIntSize specifies the size in bits or bytes (preferred)
-	// of how a "naked" INT type should be parsed.
-	DefaultIntSize int
 	// ResultsBufferSize specifies the size at which the pgwire results buffer
 	// will self-flush.
 	ResultsBufferSize int64
@@ -150,11 +148,15 @@ type SessionData struct {
 	// AlterColumnTypeGeneralEnabled is true if ALTER TABLE ... ALTER COLUMN ...
 	// TYPE x may be used for general conversions requiring online schema change/
 	AlterColumnTypeGeneralEnabled bool
-
 	// SynchronousCommit is a dummy setting for the synchronous_commit var.
 	SynchronousCommit bool
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
+	///////////////////////////////////////////////////////////////////////////
+	// WARNING: consider whether a session parameter you're adding needs to  //
+	// be propagated to the remote nodes. If so, consider adding it to       //
+	// sessiondatapb.SessionData (if possible) or execinfrapb.EvalContext.   //
+	///////////////////////////////////////////////////////////////////////////
 }
 
 // IsTemporarySchemaID returns true if the given ID refers to any of the temp
@@ -174,56 +176,6 @@ func (s *SessionData) IsTemporarySchemaID(ID uint32) bool {
 func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
 	schemaID, found := s.DatabaseIDToTempSchemaID[dbID]
 	return schemaID, found
-}
-
-// DataConversionConfig contains the parameters that influence
-// the conversion between SQL data types and strings/byte arrays.
-type DataConversionConfig struct {
-	// Location indicates the current time zone.
-	Location *time.Location
-
-	// BytesEncodeFormat indicates how to encode byte arrays when converting
-	// to string.
-	BytesEncodeFormat lex.BytesEncodeFormat
-
-	// ExtraFloatDigits indicates the number of digits beyond the
-	// standard number to use for float conversions.
-	// This must be set to a value between -15 and 3, inclusive.
-	ExtraFloatDigits int
-}
-
-// GetFloatPrec computes a precision suitable for a call to
-// strconv.FormatFloat() or for use with '%.*g' in a printf-like
-// function.
-func (c *DataConversionConfig) GetFloatPrec() int {
-	// The user-settable parameter ExtraFloatDigits indicates the number
-	// of digits to be used to format the float value. PostgreSQL
-	// combines this with %g.
-	// The formula is <type>_DIG + extra_float_digits,
-	// where <type> is either FLT (float4) or DBL (float8).
-
-	// Also the value "3" in PostgreSQL is special and meant to mean
-	// "all the precision needed to reproduce the float exactly". The Go
-	// formatter uses the special value -1 for this and activates a
-	// separate path in the formatter. We compare >= 3 here
-	// just in case the value is not gated properly in the implementation
-	// of SET.
-	if c.ExtraFloatDigits >= 3 {
-		return -1
-	}
-
-	// CockroachDB only implements float8 at this time and Go does not
-	// expose DBL_DIG, so we use the standard literal constant for
-	// 64bit floats.
-	const StdDoubleDigits = 15
-
-	nDigits := StdDoubleDigits + c.ExtraFloatDigits
-	if nDigits < 1 {
-		// Ensure the value is clamped at 1: printf %g does not allow
-		// values lower than 1. PostgreSQL does this too.
-		nDigits = 1
-	}
-	return nDigits
 }
 
 // ExperimentalDistSQLPlanningMode controls if and when the opt-driven DistSQL
@@ -321,66 +273,6 @@ func DistSQLExecModeFromString(val string) (_ DistSQLExecMode, ok bool) {
 	default:
 		return 0, false
 	}
-}
-
-// VectorizeExecMode controls if an when the Executor executes queries using the
-// columnar execution engine.
-// WARNING: When adding a VectorizeExecMode, note that nodes at previous
-// versions might interpret the integer value differently. To avoid this, only
-// append to the list or bump the minimum required distsql version (maybe also
-// take advantage of that to reorder the list as you see fit).
-type VectorizeExecMode int64
-
-const (
-	// VectorizeOff means that columnar execution is disabled.
-	VectorizeOff VectorizeExecMode = iota
-	// Vectorize201Auto means that that any supported queries that use only
-	// streaming operators (i.e. those that do not require any buffering) will
-	// be run using the columnar execution. If any part of a query is not
-	// supported by the vectorized execution engine, the whole query will fall
-	// back to row execution.
-	// This is the default setting in 20.1.
-	Vectorize201Auto
-	// VectorizeOn means that any supported queries will be run using the
-	// columnar execution.
-	VectorizeOn
-	// VectorizeExperimentalAlways means that we attempt to vectorize all
-	// queries; unsupported queries will fail. Mostly used for testing.
-	VectorizeExperimentalAlways
-)
-
-func (m VectorizeExecMode) String() string {
-	switch m {
-	case VectorizeOff:
-		return "off"
-	case Vectorize201Auto:
-		return "201auto"
-	case VectorizeOn:
-		return "on"
-	case VectorizeExperimentalAlways:
-		return "experimental_always"
-	default:
-		return fmt.Sprintf("invalid (%d)", m)
-	}
-}
-
-// VectorizeExecModeFromString converts a string into a VectorizeExecMode. False
-// is returned if the conversion was unsuccessful.
-func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
-	var m VectorizeExecMode
-	switch strings.ToUpper(val) {
-	case "OFF":
-		m = VectorizeOff
-	case "201AUTO":
-		m = Vectorize201Auto
-	case "ON":
-		m = VectorizeOn
-	case "EXPERIMENTAL_ALWAYS":
-		m = VectorizeExperimentalAlways
-	default:
-		return 0, false
-	}
-	return m, true
 }
 
 // SerialNormalizationMode controls if and when the Executor uses DistSQL.

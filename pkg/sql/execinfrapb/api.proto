@@ -23,6 +23,7 @@ import "google/protobuf/timestamp.proto";
 import "roachpb/data.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors.proto";
+import "sql/sessiondatapb/session_data.proto";
 
 message SetupFlowRequest {
   reserved 1, 2;
@@ -66,24 +67,20 @@ message EvalContext {
   reserved 3;
   // The name of the location according to whose current timezone we're going to
   // parse timestamps. Used to init EvalContext.Location.
+  // Note that the current serialization of the time.Location objects as
+  // strings has many drawbacks which could lead to unstable computation on the
+  // remote nodes. See #36864 and
+  // https://github.com/cockroachdb/cockroach/pull/55377#issuecomment-707794695
+  // for more details.
   optional string location = 4 [(gogoproto.nullable) = false];
-  optional string database = 5 [(gogoproto.nullable) = false];
+  reserved 5;
   repeated string search_path = 6;
-  optional string user = 7 [(gogoproto.nullable) = false];
+  reserved 7;
   optional SequenceState seq_state = 8 [(gogoproto.nullable) = false];
-  optional string application_name = 9 [(gogoproto.nullable) = false];
-  optional BytesEncodeFormat bytes_encode_format = 10 [(gogoproto.nullable) = false];
-  optional int32 extra_float_digits = 11 [(gogoproto.nullable) = false];
-  optional int32 vectorize = 12 [(gogoproto.nullable) = false];
+  reserved 9, 10, 11, 12;
   optional string temporary_schema_name = 13 [(gogoproto.nullable) = false];
-  optional bool vectorize_inject_panics = 14 [(gogoproto.nullable) = false];
-}
-
-// BytesEncodeFormat is the configuration for bytes to string conversions.
-enum BytesEncodeFormat {
-  HEX = 0;
-  ESCAPE = 1;
-  BASE64 = 2;
+  reserved 14;
+  optional sessiondatapb.SessionData session_data = 15 [(gogoproto.nullable) = false];
 }
 
 // SequenceState is used to marshall the sessiondata.SequenceState struct.

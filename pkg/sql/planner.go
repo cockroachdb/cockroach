@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -262,13 +263,13 @@ func newInternalPlanner(
 	ctx := logtags.AddTag(context.Background(), opName, "")
 
 	sd := &sessiondata.SessionData{
-		SearchPath:    sessiondata.DefaultSearchPathForUser(user),
-		User:          user,
-		Database:      "system",
-		SequenceState: sessiondata.NewSequenceState(),
-		DataConversion: sessiondata.DataConversionConfig{
-			Location: time.UTC,
+		SessionData: sessiondatapb.SessionData{
+			Database: "system",
+			User:     user,
 		},
+		SearchPath:    sessiondata.DefaultSearchPathForUser(user),
+		SequenceState: sessiondata.NewSequenceState(),
+		Location:      time.UTC,
 	}
 	// The table collection used by the internal planner does not rely on the
 	// deprecatedDatabaseCache and there are no subscribers to the

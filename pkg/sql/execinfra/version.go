@@ -39,17 +39,22 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 38
+const Version execinfrapb.DistSQLVersion = 39
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 37
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 39
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 39 (MinAcceptedVersion: 39)
+  - Many parameters from sessiondata.SessionData object were pulled into a
+    protobuf struct for easier propagation to the remote nodes during the
+    execution.
 
 - Version: 38 (MinAcceptedVersion: 38)
   - A paired joiner approach for inverted joins was added, for left

@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1148,7 +1148,8 @@ func (c *conn) bufferRow(
 	ctx context.Context,
 	row tree.Datums,
 	formatCodes []pgwirebase.FormatCode,
-	conv sessiondata.DataConversionConfig,
+	conv sessiondatapb.DataConversionConfig,
+	sessionLoc *time.Location,
 	types []*types.T,
 ) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
@@ -1160,9 +1161,9 @@ func (c *conn) bufferRow(
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
-			c.msgBuilder.writeTextDatum(ctx, col, conv, types[i])
+			c.msgBuilder.writeTextDatum(ctx, col, conv, sessionLoc, types[i])
 		case pgwirebase.FormatBinary:
-			c.msgBuilder.writeBinaryDatum(ctx, col, conv.Location, types[i])
+			c.msgBuilder.writeBinaryDatum(ctx, col, sessionLoc, types[i])
 		default:
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
@@ -1433,12 +1434,13 @@ func (c *conn) CreateStatementResult(
 	descOpt sql.RowDescOpt,
 	pos sql.CmdPos,
 	formatCodes []pgwirebase.FormatCode,
-	conv sessiondata.DataConversionConfig,
+	conv sessiondatapb.DataConversionConfig,
+	location *time.Location,
 	limit int,
 	portalName string,
 	implicitTxn bool,
 ) sql.CommandResult {
-	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, limit, portalName, implicitTxn)
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, limit, portalName, implicitTxn)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.
