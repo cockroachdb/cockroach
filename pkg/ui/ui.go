@@ -93,7 +93,7 @@ type indexHTMLArgs struct {
 	Tag                  string
 	Version              string
 	NodeID               string
-	PasswordLoginEnabled bool
+	OIDCAutoLogin        bool
 	OIDCLoginEnabled     bool
 	OIDCButtonText       string
 }
@@ -104,6 +104,7 @@ type indexHTMLArgs struct {
 // since that's where all the OIDC configuration is centralized.
 type OIDCUIConf struct {
 	ButtonText string
+	AutoLogin  bool
 	Enabled    bool
 }
 
@@ -163,7 +164,7 @@ func Handler(cfg Config) http.Handler {
 			Tag:                  buildInfo.Tag,
 			Version:              build.VersionPrefix(),
 			NodeID:               cfg.NodeID.String(),
-			PasswordLoginEnabled: true,
+			OIDCAutoLogin:        oidcConf.AutoLogin,
 			OIDCLoginEnabled:     oidcConf.Enabled,
 			OIDCButtonText:       oidcConf.ButtonText,
 		}); err != nil {

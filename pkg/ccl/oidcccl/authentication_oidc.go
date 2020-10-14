@@ -137,6 +137,7 @@ type oidcAuthenticationConf struct {
 	claimJSONKey   string
 	principalRegex *regexp.Regexp
 	buttonText     string
+	autoLogin      bool
 }
 
 // GetUIConf is used to extract certain parts of the OIDC
@@ -147,6 +148,7 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 	return ui.OIDCUIConf{
 		ButtonText: s.conf.buttonText,
 		Enabled:    s.enabled,
+		AutoLogin:  s.conf.autoLogin,
 	}
 }
 
@@ -170,6 +172,7 @@ func reloadConfigLocked(
 		// The success of this line is guaranteed by the validation of the setting
 		principalRegex: regexp.MustCompile(OIDCPrincipalRegex.Get(&st.SV)),
 		buttonText:     OIDCButtonText.Get(&st.SV),
+		autoLogin:      OIDCAutoLogin.Get(&st.SV),
 	}
 
 	if !server.conf.enabled && conf.enabled {
@@ -477,6 +480,13 @@ var ConfigureOIDC = func(
 		)
 	})
 	OIDCButtonText.SetOnChange(&st.SV, func() {
+		reloadConfig(
+			ambientCtx.AnnotateCtx(context.Background()),
+			oidcAuthentication,
+			st,
+		)
+	})
+	OIDCAutoLogin.SetOnChange(&st.SV, func() {
 		reloadConfig(
 			ambientCtx.AnnotateCtx(context.Background()),
 			oidcAuthentication,
