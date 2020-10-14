@@ -264,7 +264,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:      clock,
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
-	}
+		OnSendPing: func(req *rpc.PingRequest) error {
+			// TODO(tbg): hook this up to a check for decommissioned nodes.
+			return nil
+		},
+		OnHandlePing: func(req *rpc.PingRequest) error {
+			// TODO(tbg): hook this up to a check for decommissioned nodes.
+			return nil
+		}}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
 		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs
@@ -378,16 +385,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 
-	nodeLiveness := kvserver.NewNodeLiveness(
-		cfg.AmbientCtx,
-		clock,
-		db,
-		g,
-		nlActive,
-		nlRenewal,
-		st,
-		cfg.HistogramWindowInterval(),
-	)
+	nodeLiveness := kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+		AmbientCtx:              cfg.AmbientCtx,
+		Clock:                   clock,
+		DB:                      db,
+		Gossip:                  g,
+		LivenessThreshold:       nlActive,
+		RenewalDuration:         nlRenewal,
+		Settings:                st,
+		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
+			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
+				knobs.OnDecommissionedCallback(liveness)
+			}
+		},
+	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
 	storePool := kvserver.NewStorePool(
@@ -1586,13 +1598,17 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, s.engines, func(ctx context.Context) {
-		now := s.clock.Now()
-		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
-			return s.WriteLastUpTimestamp(ctx, now)
-		}); err != nil {
-			log.Warningf(ctx, "writing last up timestamp: %v", err)
-		}
+	s.nodeLiveness.Start(ctx, kvserver.NodeLivenessStartOptions{
+		Stopper: s.stopper,
+		Engines: s.engines,
+		OnSelfLive: func(ctx context.Context) {
+			now := s.clock.Now()
+			if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
+				return s.WriteLastUpTimestamp(ctx, now)
+			}); err != nil {
+				log.Warningf(ctx, "writing last up timestamp: %v", err)
+			}
+		},
 	})
 
 	// Begin recording status summaries.

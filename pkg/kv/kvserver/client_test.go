@@ -906,10 +906,11 @@ func (m *multiTestContext) addStore(idx int) {
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	m.populateDB(idx, cfg.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
-	m.nodeLivenesses[idx] = kvserver.NewNodeLiveness(
-		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
-		nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
-	)
+	m.nodeLivenesses[idx] = kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+		AmbientCtx: ambient, Clock: m.clocks[idx], DB: m.dbs[idx], Gossip: m.gossips[idx],
+		LivenessThreshold: nlActive, RenewalDuration: nlRenewal, Settings: cfg.Settings,
+		HistogramWindowInterval: metric.TestSampleInterval,
+	})
 	m.populateStorePool(idx, cfg, m.nodeLivenesses[idx])
 	cfg.DB = m.dbs[idx]
 	cfg.NodeLiveness = m.nodeLivenesses[idx]
@@ -1018,15 +1019,19 @@ func (m *multiTestContext) addStore(idx int) {
 			m.t.Fatal(err)
 		}
 	}
-	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, m.engines[idx:idx+1], func(ctx context.Context) {
-		now := clock.Now()
-		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
-		ran.Do(func() {
-			close(ran.ch)
-		})
-	})
+	m.nodeLivenesses[idx].Start(ctx,
+		kvserver.NodeLivenessStartOptions{
+			Stopper: stopper,
+			Engines: m.engines[idx : idx+1],
+			OnSelfLive: func(ctx context.Context) {
+				now := clock.Now()
+				if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+					log.Warningf(ctx, "%v", err)
+				}
+				ran.Do(func() {
+					close(ran.ch)
+				})
+			}})
 
 	store.WaitForInit()
 
@@ -1095,10 +1100,11 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	cfg := m.makeStoreConfig(i)
 	m.populateDB(i, m.storeConfig.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
-	m.nodeLivenesses[i] = kvserver.NewNodeLiveness(
-		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i],
-		m.gossips[i], nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
-	)
+	m.nodeLivenesses[i] = kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+		AmbientCtx: log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, Clock: m.clocks[i], DB: m.dbs[i],
+		Gossip: m.gossips[i], LivenessThreshold: nlActive, RenewalDuration: nlRenewal, Settings: cfg.Settings,
+		HistogramWindowInterval: metric.TestSampleInterval,
+	})
 	m.populateStorePool(i, cfg, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
@@ -1115,11 +1121,15 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.DefaultClass).Reset()
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.SystemClass).Reset()
 	m.mu.Unlock()
-	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, m.engines[i:i+1], func(ctx context.Context) {
-		now := m.clocks[i].Now()
-		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
+	cfg.NodeLiveness.Start(ctx, kvserver.NodeLivenessStartOptions{
+		Stopper: stopper,
+		Engines: m.engines[i : i+1],
+		OnSelfLive: func(ctx context.Context) {
+			now := m.clocks[i].Now()
+			if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+				log.Warningf(ctx, "%v", err)
+			}
+		},
 	})
 }
 

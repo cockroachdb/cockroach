@@ -162,16 +162,16 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	cfg.Gossip = ltc.Gossip
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
-	cfg.NodeLiveness = kvserver.NewNodeLiveness(
-		cfg.AmbientCtx,
-		cfg.Clock,
-		cfg.DB,
-		cfg.Gossip,
-		active,
-		renewal,
-		cfg.Settings,
-		cfg.HistogramWindowInterval,
-	)
+	cfg.NodeLiveness = kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+		AmbientCtx:              cfg.AmbientCtx,
+		Clock:                   cfg.Clock,
+		DB:                      cfg.DB,
+		Gossip:                  cfg.Gossip,
+		LivenessThreshold:       active,
+		RenewalDuration:         renewal,
+		Settings:                cfg.Settings,
+		HistogramWindowInterval: cfg.HistogramWindowInterval,
+	})
 	kvserver.TimeUntilStoreDead.Override(&cfg.Settings.SV, kvserver.TestTimeUntilStoreDead)
 	cfg.StorePool = kvserver.NewStorePool(
 		cfg.AmbientCtx,
@@ -229,7 +229,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	if !ltc.DisableLivenessHeartbeat {
-		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.stopper, []storage.Engine{ltc.Eng}, nil /* alive */)
+		cfg.NodeLiveness.Start(ctx,
+			kvserver.NodeLivenessStartOptions{Stopper: ltc.stopper, Engines: []storage.Engine{ltc.Eng}})
 	}
 
 	if err := ltc.Store.Start(ctx, ltc.stopper); err != nil {
