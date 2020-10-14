@@ -257,6 +257,31 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
+	engines, err := cfg.CreateEngines(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create engines")
+	}
+	stopper.AddCloser(&engines)
+
+	nodeTombStorage := &nodeTombstoneStorage{engs: engines}
+	checkPingFor := func(ctx context.Context, nodeID roachpb.NodeID) error {
+		ts, err := nodeTombStorage.IsDecommissioned(ctx, nodeID)
+		if err != nil {
+			// An error here means something very basic is not working. Better to terminate
+			// than to limp along.
+			log.Fatalf(ctx, "unable to read decommissioned status for n%d: %v", nodeID, err)
+		}
+		if !ts.IsZero() {
+			// The node was decommissioned.
+			return grpcstatus.Errorf(codes.PermissionDenied,
+				"n%d was permanently removed from the cluster at %s; it is not allowed to rejoin the cluster",
+				nodeID, ts,
+			)
+		}
+		// The common case - target node is not decommissioned.
+		return nil
+	}
+
 	rpcCtxOpts := rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: cfg.AmbientCtx,
@@ -264,13 +289,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:      clock,
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
-		OnSendPing: func(req *rpc.PingRequest) error {
-			// TODO(tbg): hook this up to a check for decommissioned nodes.
-			return nil
+		OnOutgoingPing: func(req *rpc.PingRequest) error {
+			return checkPingFor(ctx, req.TargetNodeID)
 		},
-		OnHandlePing: func(req *rpc.PingRequest) error {
-			// TODO(tbg): hook this up to a check for decommissioned nodes.
-			return nil
+		OnIncomingPing: func(req *rpc.PingRequest) error {
+			return checkPingFor(ctx, req.OriginNodeID)
 		}}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
@@ -397,6 +420,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
 			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
 				knobs.OnDecommissionedCallback(liveness)
+			}
+			if err := nodeTombStorage.SetDecommissioned(
+				ctx, liveness.NodeID, timeutil.Unix(0, liveness.Expiration.WallTime).UTC(),
+			); err != nil {
+				log.Fatalf(ctx, "unable to add tombstone for n%d: %s", liveness.NodeID, err)
 			}
 		},
 	})
@@ -607,12 +635,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
 	node.InitLogger(sqlServer.execCfg)
-
-	engines, err := cfg.CreateEngines(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create engines")
-	}
-	stopper.AddCloser(&engines)
 
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,

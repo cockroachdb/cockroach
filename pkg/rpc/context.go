@@ -45,10 +45,12 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	encodingproto "google.golang.org/grpc/encoding/proto"
 	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 func init() {
@@ -376,15 +378,15 @@ type ContextOptions struct {
 	Clock      *hlc.Clock
 	Stopper    *stop.Stopper
 	Settings   *cluster.Settings
-	// OnHandlePing is called when handling a PingRequest, after
+	// OnIncomingPing is called when handling a PingRequest, after
 	// preliminary checks but before recording clock offset information.
 	//
 	// It can inject an error.
-	OnHandlePing func(*PingRequest) error
-	// OnSendPing intercepts outgoing PingRequests. It may inject an
+	OnIncomingPing func(*PingRequest) error
+	// OnOutgoingPing intercepts outgoing PingRequests. It may inject an
 	// error.
-	OnSendPing func(*PingRequest) error
-	Knobs      ContextTestingKnobs
+	OnOutgoingPing func(*PingRequest) error
+	Knobs          ContextTestingKnobs
 }
 
 func (c ContextOptions) validate() error {
@@ -404,9 +406,9 @@ func (c ContextOptions) validate() error {
 		return errors.New("Settings must be set")
 	}
 
-	// NB: OnSendPing and OnHandlePing default to noops.
+	// NB: OnOutgoingPing and OnIncomingPing default to noops.
 	// This is used both for testing and the cli.
-	_, _ = c.OnSendPing, c.OnHandlePing
+	_, _ = c.OnOutgoingPing, c.OnIncomingPing
 
 	return nil
 }
@@ -1131,6 +1133,13 @@ func (ctx *Context) runHeartbeat(
 	// Give the first iteration a wait-free heartbeat attempt.
 	heartbeatTimer.Reset(0)
 	everSucceeded := false
+	// Both transient and permanent errors can arise here. Transient errors
+	// set the `heartbeatResult.err` field but retain the connection.
+	// Permanent errors return an error from this method, which means that
+	// the connection will be removed. Errors are presumed transient by
+	// default, but some - like ClusterID or version mismatches, as well as
+	// PermissionDenied errors injected by OnOutgoingPing, are considered permanent.
+	returnErr := false
 	for {
 		select {
 		case <-redialChan:
@@ -1154,7 +1163,7 @@ func (ctx *Context) runHeartbeat(
 			}
 
 			interceptor := func(*PingRequest) error { return nil }
-			if fn := ctx.OnSendPing; fn != nil {
+			if fn := ctx.OnOutgoingPing; fn != nil {
 				interceptor = fn
 			}
 
@@ -1164,6 +1173,7 @@ func (ctx *Context) runHeartbeat(
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
 				if err := interceptor(request); err != nil {
+					returnErr = true
 					return err
 				}
 				var err error
@@ -1177,9 +1187,13 @@ func (ctx *Context) runHeartbeat(
 				err = ping(goCtx)
 			}
 
+			if s, ok := grpcstatus.FromError(errors.UnwrapAll(err)); ok && s.Code() == codes.PermissionDenied {
+				returnErr = true
+			}
+
 			if err == nil {
 				// We verify the cluster name on the initiator side (instead
-				// of the hearbeat service side, as done for the cluster ID
+				// of the heartbeat service side, as done for the cluster ID
 				// and node ID checks) so that the operator who is starting a
 				// new node in a cluster and mistakenly joins the wrong
 				// cluster gets a chance to see the error message on their
@@ -1188,6 +1202,9 @@ func (ctx *Context) runHeartbeat(
 					err = errors.Wrap(
 						checkClusterName(ctx.Config.ClusterName, response.ClusterName),
 						"cluster name check failed on ping response")
+					if err != nil {
+						returnErr = true
+					}
 				}
 			}
 
@@ -1195,6 +1212,9 @@ func (ctx *Context) runHeartbeat(
 				err = errors.Wrap(
 					checkVersion(goCtx, ctx.Settings, response.ServerVersion),
 					"version compatibility check failed on ping response")
+				if err != nil {
+					returnErr = true
+				}
 			}
 
 			if err == nil {
@@ -1232,6 +1252,9 @@ func (ctx *Context) runHeartbeat(
 			state = updateHeartbeatState(&ctx.metrics, state, hr.state())
 			conn.heartbeatResult.Store(hr)
 			setInitialHeartbeatDone()
+			if returnErr {
+				return err
+			}
 			return nil
 		}); err != nil {
 			return err
@@ -1251,7 +1274,7 @@ func (ctx *Context) NewHeartbeatService() *HeartbeatService {
 		clusterID:                             &ctx.ClusterID,
 		nodeID:                                &ctx.NodeID,
 		settings:                              ctx.Settings,
-		onHandlePing:                          ctx.OnHandlePing,
+		onHandlePing:                          ctx.OnIncomingPing,
 		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
 	}
 }

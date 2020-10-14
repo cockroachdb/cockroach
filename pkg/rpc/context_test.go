@@ -162,7 +162,7 @@ func TestHeartbeatCB(t *testing.T) {
 	})
 }
 
-// TestPingInterceptors checks that OnSendPing and OnHandlePing can inject errors.
+// TestPingInterceptors checks that OnOutgoingPing and OnIncomingPing can inject errors.
 func TestPingInterceptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -181,13 +181,13 @@ func TestPingInterceptors(t *testing.T) {
 		Clock:      hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
 		Stopper:    stop.NewStopper(),
 		Settings:   cluster.MakeTestingClusterSettings(),
-		OnSendPing: func(req *PingRequest) error {
+		OnOutgoingPing: func(req *PingRequest) error {
 			if req.TargetNodeID == blockedTargetNodeID {
 				return errBoomSend
 			}
 			return nil
 		},
-		OnHandlePing: func(req *PingRequest) error {
+		OnIncomingPing: func(req *PingRequest) error {
 			if req.OriginNodeID == blockedOriginNodeID {
 				return errBoomRecv
 			}

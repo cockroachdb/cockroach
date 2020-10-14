@@ -175,6 +175,9 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
+	// localStoreNodeTombstoneSuffix stores key value pairs that map
+	// nodeIDs to time of removal from cluster.
+	localStoreNodeTombstoneSuffix = []byte("ntmb")
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value
