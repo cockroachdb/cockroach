@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -51,7 +52,7 @@ import (
 // column on the right side. But the DatumsToInvertedExpr hook allows us to
 // convert any left side value into a SpanExpression for the join, so we
 // utilize that to simplify the test. The SpanExpressions are defined below.
-const numRows = 99
+const invertedJoinerNumRows = 99
 
 // For each integer d provided by the left side, this expression converter
 // constructs an intersection of d/10 and d%10. As mentioned earlier, the
@@ -217,7 +218,7 @@ func TestInvertedJoiner(t *testing.T) {
 	}
 	sqlutils.CreateTable(t, sqlDB, "t",
 		"a INT, b INT ARRAY, c JSONB, PRIMARY KEY (a), INVERTED INDEX bi (b), INVERTED INDEX ci(c)",
-		numRows,
+		invertedJoinerNumRows,
 		sqlutils.ToRowFn(aFn, bFn, cFn))
 	const biIndex = 1
 	const ciIndex = 2
@@ -545,6 +546,71 @@ func TestInvertedJoiner(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestInvertedJoinerDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	aFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row))
+	}
+	bFn := func(row int) tree.Datum {
+		arr := tree.NewDArray(types.Int)
+		arr.Array = tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))}
+		return arr
+	}
+	sqlutils.CreateTable(t, sqlDB, "t",
+		"a INT, b INT ARRAY, INVERTED INDEX bi (b)",
+		invertedJoinerNumRows,
+		sqlutils.ToRowFn(aFn, bFn))
+	const biIndex = 1
+	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+
+	tracer := tracing.NewTracer()
+	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test flow ctx")
+	defer sp.Finish()
+	st := cluster.MakeTestingClusterSettings()
+	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	flowCtx := execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: diskMonitor,
+		},
+		Txn: leafTxn,
+	}
+
+	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
+		return newInvertedJoiner(
+			&flowCtx,
+			0, /* processorID */
+			&execinfrapb.InvertedJoinerSpec{
+				Table:        *td.TableDesc(),
+				IndexIdx:     biIndex,
+				InvertedExpr: execinfrapb.Expression{},
+				Type:         descpb.InnerJoin,
+			},
+			arrayIntersectionExpr{t: t},
+			distsqlutils.NewRowBuffer(rowenc.TwoIntCols, nil /* rows */, distsqlutils.RowBufferArgs{}),
+			&execinfrapb.PostProcessSpec{},
+			out,
+		)
+	})
 }
 
 // TODO(sumeer):
