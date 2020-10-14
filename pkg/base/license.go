@@ -11,6 +11,9 @@
 package base
 
 import (
+	"context"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -23,6 +26,10 @@ import (
 // This function is overridden by an init hook in CCL builds.
 var CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, org, feature string) error {
 	return errors.New("OSS binaries do not include enterprise features")
+}
+
+var TimeToLicenseExpiry = func(ctx context.Context, _ *cluster.Settings) (time.Duration, error) {
+	return 0, errors.New("OSS binaries do not include enterprise features")
 }
 
 // LicenseType returns what type of license the cluster is running with, or

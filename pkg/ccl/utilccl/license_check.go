@@ -10,6 +10,7 @@ package utilccl
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -76,6 +78,28 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, featur
 func init() {
 	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
 	base.LicenseType = getLicenseType
+	base.TimeToLicenseExpiry = TimeToLicenseExpiry
+}
+
+func TimeToLicenseExpiry(ctx context.Context, st *cluster.Settings) (time.Duration, error) {
+	var lic *licenseccl.License
+	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
+	// license.
+	// TODO(davidh): perhaps above comment is extremely important if this is recomputed often.
+	if str := enterpriseLicense.Get(&st.SV); str != "" {
+		var err error
+		if lic, err = decode(str); err != nil {
+			return 0, err
+		}
+	}
+
+	if lic == nil {
+		return 0, errors.New("unable to compute expiry")
+	}
+
+	log.Infof(ctx, "Computing expiry until: %d", lic.ValidUntilUnixSec)
+	expiration := timeutil.Unix(lic.ValidUntilUnixSec, 0)
+	return timeutil.Until(expiration), nil
 }
 
 func checkEnterpriseEnabledAt(

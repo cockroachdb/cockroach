@@ -1466,20 +1466,44 @@ func (s *statusServer) RaftDebug(
 
 type varsHandler struct {
 	metricSource metricMarshaler
+	st           *cluster.Settings
 }
 
 func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
 	err := h.metricSource.PrintAsText(w)
 	if err != nil {
-		log.Errorf(r.Context(), "%v", err)
+		log.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+
+	h.appendLicenseExpiryMetric(ctx, w)
 	telemetry.Inc(telemetryPrometheusVars)
 }
 
+// appendLicenseExpiryMetric computes the seconds until the enterprise licence
+// expires on this clusters. the license expiry metric is computed on-demand
+// since it's not regularly computed as part of running the cluster unless
+// enterprise features are accessed.
+func (h varsHandler) appendLicenseExpiryMetric(ctx context.Context, w io.Writer) {
+	durationToExpiry, err := base.TimeToLicenseExpiry(ctx, h.st)
+	var secondsToExpiry int64
+	if durationToExpiry > 0 {
+		secondsToExpiry = int64(durationToExpiry / time.Second)
+	}
+	if err != nil {
+		log.Errorf(ctx, "%v", err)
+	}
+	_, err = w.Write([]byte(string(fmt.Sprintf("seconds_til_license_expiry %d\n", secondsToExpiry))))
+	if err != nil {
+		log.Errorf(ctx, "%v", err)
+	}
+}
+
 func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
-	varsHandler{s.metricSource}.handleVars(w, r)
+	varsHandler{s.metricSource, s.st}.handleVars(w, r)
 }
 
 // Ranges returns range info for the specified node.
