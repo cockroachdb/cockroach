@@ -24,6 +24,17 @@ func TestCCLLogic(t *testing.T) {
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, testdataGlob)
 }
 
+// TestBackupRestoreLogic runs all non-CCL logic test files under the
+// 3node-backup configuration, which randomly runs a backup and restore between
+// logic test statements to ensure that we can always take a backup and restore
+// the data correctly. Test files that blocklist the 3node-backup configuration
+// (i.e. "# LogicTest: !3node-backup") are not run.
+func TestBackupRestoreLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "3node-backup",
+		true /* runCCLConfigs */, logictestPkg+testdataGlob)
+}
+
 // TestTenantLogic runs all non-CCL logic test files under the 3node-tenant
 // configuration, which constructs a secondary tenant and runs the test within
 // that secondary tenant's sandbox. Test files that blocklist the 3node-tenant
