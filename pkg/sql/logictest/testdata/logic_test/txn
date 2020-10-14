@@ -704,7 +704,7 @@ COMMIT
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
-query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 query T

@@ -75,16 +75,16 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	// Check that the requested combination of password options is
-	// compatible with the user's own CREATELOGIN privilege.
-	if err := p.checkPasswordOptionConstraints(ctx, roleOptions, true /* newUser */); err != nil {
-		return nil, err
-	}
-
 	// Using CREATE ROLE syntax enables NOLOGIN by default.
 	if isRole && !roleOptions.Contains(roleoption.LOGIN) && !roleOptions.Contains(roleoption.NOLOGIN) {
 		roleOptions = append(roleOptions,
 			roleoption.RoleOption{Option: roleoption.NOLOGIN, HasValue: false})
+	}
+
+	// Check that the requested combination of password options is
+	// compatible with the user's own CREATELOGIN privilege.
+	if err := p.checkPasswordOptionConstraints(ctx, roleOptions, true /* newUser */); err != nil {
+		return nil, err
 	}
 
 	ua, err := p.getUserAuthInfo(ctx, nameE, opName)

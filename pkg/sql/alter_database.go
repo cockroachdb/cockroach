@@ -33,7 +33,8 @@ func (p *planner) AlterDatabaseOwner(
 	}
 	privs := dbDesc.GetPrivileges()
 
-	if err := p.checkCanAlterToNewOwner(ctx, dbDesc, n.Owner); err != nil {
+	newOwner := string(n.Owner)
+	if err := p.checkCanAlterToNewOwner(ctx, dbDesc, newOwner); err != nil {
 		return nil, err
 	}
 
@@ -43,14 +44,14 @@ func (p *planner) AlterDatabaseOwner(
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if n.Owner == privs.Owner {
+	if newOwner == privs.Owner {
 		return nil, nil
 	}
 	return &alterDatabaseOwnerNode{n: n, desc: dbDesc}, nil
 }
 
 func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
-	n.desc.GetPrivileges().SetOwner(n.n.Owner)
+	n.desc.GetPrivileges().SetOwner(string(n.n.Owner))
 	return params.p.writeNonDropDatabaseChange(
 		params.ctx,
 		n.desc,

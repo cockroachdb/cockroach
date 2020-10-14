@@ -146,9 +146,7 @@ func (t *TeeEngine) GetProto(
 }
 
 // Iterate implements the Engine interface.
-func (t *TeeEngine) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
-) error {
+func (t *TeeEngine) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(t, start, end, f)
 }
 
@@ -842,9 +840,7 @@ func (t *TeeEngineReader) GetProto(
 }
 
 // Iterate implements the Reader interface.
-func (t *TeeEngineReader) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
-) error {
+func (t *TeeEngineReader) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(t, start, end, f)
 }
 
@@ -944,9 +940,7 @@ func (t *TeeEngineBatch) GetProto(
 }
 
 // Iterate implements the Batch interface.
-func (t *TeeEngineBatch) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
-) error {
+func (t *TeeEngineBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(t, start, end, f)
 }
 

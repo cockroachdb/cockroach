@@ -109,6 +109,11 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1._L_TYP()
 	col2 := vec2._R_TYP()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		_SET_PROJECTION(true)
 	} else {
@@ -156,8 +161,13 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	}
+	// _outNulls has been updated from within the _ASSIGN function to include
+	// any NULLs that resulted from the projection.
+	// If _HAS_NULLS is true, union _outNulls with the set of input Nulls.
+	// If _HAS_NULLS is false, then there are no input Nulls. _outNulls is
+	// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	// {{if _HAS_NULLS}}
-	projVec.SetNulls(col1Nulls.Or(col2Nulls))
+	projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	// {{end}}
 	// {{end}}
 	// {{end}}

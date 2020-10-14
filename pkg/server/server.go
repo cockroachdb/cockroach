@@ -257,6 +257,31 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
+	engines, err := cfg.CreateEngines(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create engines")
+	}
+	stopper.AddCloser(&engines)
+
+	nodeTombStorage := &nodeTombstoneStorage{engs: engines}
+	checkPingFor := func(ctx context.Context, nodeID roachpb.NodeID) error {
+		ts, err := nodeTombStorage.IsDecommissioned(ctx, nodeID)
+		if err != nil {
+			// An error here means something very basic is not working. Better to terminate
+			// than to limp along.
+			log.Fatalf(ctx, "unable to read decommissioned status for n%d: %v", nodeID, err)
+		}
+		if !ts.IsZero() {
+			// The node was decommissioned.
+			return grpcstatus.Errorf(codes.PermissionDenied,
+				"n%d was permanently removed from the cluster at %s; it is not allowed to rejoin the cluster",
+				nodeID, ts,
+			)
+		}
+		// The common case - target node is not decommissioned.
+		return nil
+	}
+
 	rpcCtxOpts := rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: cfg.AmbientCtx,
@@ -264,7 +289,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:      clock,
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
-	}
+		OnOutgoingPing: func(req *rpc.PingRequest) error {
+			return checkPingFor(ctx, req.TargetNodeID)
+		},
+		OnIncomingPing: func(req *rpc.PingRequest) error {
+			return checkPingFor(ctx, req.OriginNodeID)
+		}}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
 		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs
@@ -378,16 +408,26 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 
-	nodeLiveness := kvserver.NewNodeLiveness(
-		cfg.AmbientCtx,
-		clock,
-		db,
-		g,
-		nlActive,
-		nlRenewal,
-		st,
-		cfg.HistogramWindowInterval(),
-	)
+	nodeLiveness := kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+		AmbientCtx:              cfg.AmbientCtx,
+		Clock:                   clock,
+		DB:                      db,
+		Gossip:                  g,
+		LivenessThreshold:       nlActive,
+		RenewalDuration:         nlRenewal,
+		Settings:                st,
+		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
+			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
+				knobs.OnDecommissionedCallback(liveness)
+			}
+			if err := nodeTombStorage.SetDecommissioned(
+				ctx, liveness.NodeID, timeutil.Unix(0, liveness.Expiration.WallTime).UTC(),
+			); err != nil {
+				log.Fatalf(ctx, "unable to add tombstone for n%d: %s", liveness.NodeID, err)
+			}
+		},
+	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
 	storePool := kvserver.NewStorePool(
@@ -595,12 +635,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
 	node.InitLogger(sqlServer.execCfg)
-
-	engines, err := cfg.CreateEngines(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create engines")
-	}
-	stopper.AddCloser(&engines)
 
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
@@ -1171,7 +1205,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
 
-	s.node.startAssertEngineHealth(ctx, s.engines)
+	// Pebble does its own engine health checks, that call back into an event
+	// handler registered in storage/pebble.go when a slow disk event is
+	// detected. Starting a separate routine for Pebble is unnecessary.
+	if s.engines[0].Type() != enginepb.EngineTypePebble {
+		s.node.startAssertEngineHealth(ctx, s.engines, s.cfg.Settings)
+	}
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
@@ -1489,8 +1528,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
-	bootstrapStoresComplete := make(chan bool)
-	if err := s.node.start(
+	err, waitForBootstrapNewStores := s.node.start(
 		ctx,
 		advAddrU,
 		advSQLAddrU,
@@ -1501,8 +1539,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
 		s.sqlServer.execCfg.DistSQLPlanner.SetNodeInfo,
-		bootstrapStoresComplete,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -1566,7 +1604,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
+	// After setting modeOperational, we can block until all stores are fully
+	// bootstrapped.
 	s.grpc.setMode(modeOperational)
+
+	// Block until all stores are fully bootstrapped.
+	log.Infof(ctx, "waiting for all stores to be fully bootstrapped")
+	waitForBootstrapNewStores()
+	log.Infof(ctx, "all stores fully bootstrapped")
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
@@ -1580,20 +1625,20 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	log.Event(ctx, "accepting connections")
 
-	// Block until all stores are fully bootstrapped.
-	log.Infof(ctx, "waiting for all stores to be fully bootstrapped")
-	_ = <-bootstrapStoresComplete
-
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, s.engines, func(ctx context.Context) {
-		now := s.clock.Now()
-		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
-			return s.WriteLastUpTimestamp(ctx, now)
-		}); err != nil {
-			log.Warningf(ctx, "writing last up timestamp: %v", err)
-		}
+	s.nodeLiveness.Start(ctx, kvserver.NodeLivenessStartOptions{
+		Stopper: s.stopper,
+		Engines: s.engines,
+		OnSelfLive: func(ctx context.Context) {
+			now := s.clock.Now()
+			if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
+				return s.WriteLastUpTimestamp(ctx, now)
+			}); err != nil {
+				log.Warningf(ctx, "writing last up timestamp: %v", err)
+			}
+		},
 	})
 
 	// Begin recording status summaries.

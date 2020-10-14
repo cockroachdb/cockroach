@@ -13,7 +13,7 @@ package tree
 // AlterDatabaseOwner represents a ALTER DATABASE OWNER TO statement.
 type AlterDatabaseOwner struct {
 	Name  Name
-	Owner string
+	Owner Name
 }
 
 // Format implements the NodeFormatter interface.
@@ -21,5 +21,5 @@ func (node *AlterDatabaseOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatNameP(&node.Owner)
+	ctx.FormatNode(&node.Owner)
 }

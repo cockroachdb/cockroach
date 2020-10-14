@@ -842,6 +842,58 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	}
 }
 
+// Test schema changes that require a backfill on only some watched tables within a changefeed.
+func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		t.Run(`add column with default`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `CREATE TABLE no_def_change (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (1)`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2)`)
+			sqlDB.Exec(t, `INSERT INTO no_def_change VALUES (3)`)
+			combinedFeed := feed(t, f, `CREATE CHANGEFEED FOR add_column_def, no_def_change WITH updated`)
+			defer closeFeed(t, combinedFeed)
+			assertPayloadsStripTs(t, combinedFeed, []string{
+				`add_column_def: [1]->{"after": {"a": 1}}`,
+				`add_column_def: [2]->{"after": {"a": 2}}`,
+				`no_def_change: [3]->{"after": {"a": 3}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
+			ts := fetchDescVersionModificationTime(t, db, f, `add_column_def`, 4)
+			// Schema change backfill
+			assertPayloadsStripTs(t, combinedFeed, []string{
+				`add_column_def: [1]->{"after": {"a": 1}}`,
+				`add_column_def: [2]->{"after": {"a": 2}}`,
+			})
+			// Changefeed level backfill
+			assertPayloads(t, combinedFeed, []string{
+				fmt.Sprintf(`add_column_def: [1]->{"after": {"a": 1, "b": "d"}, "updated": "%s"}`,
+					ts.AsOfSystemTime()),
+				fmt.Sprintf(`add_column_def: [2]->{"after": {"a": 2, "b": "d"}, "updated": "%s"}`,
+					ts.AsOfSystemTime()),
+			})
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	log.Flush()
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
+		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
+	}
+}
+
 // fetchDescVersionModificationTime fetches the `ModificationTime` of the specified
 // `version` of `tableName`'s table descriptor.
 func fetchDescVersionModificationTime(

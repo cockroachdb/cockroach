@@ -83,19 +83,19 @@ func slurpSSTablesLatestKey(
 		if err := sst.IngestExternalFile(fileContents); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := sst.Iterate(start.Key, end.Key, func(kv storage.MVCCKeyValue) (bool, error) {
+		if err := sst.Iterate(start.Key, end.Key, func(kv storage.MVCCKeyValue) error {
 			var ok bool
 			kv.Key.Key, ok = kr.rewriteKey(kv.Key.Key)
 			if !ok {
-				return true, errors.Errorf("could not rewrite key: %s", kv.Key.Key)
+				return errors.Errorf("could not rewrite key: %s", kv.Key.Key)
 			}
 			v := roachpb.Value{RawBytes: kv.Value}
 			v.ClearChecksum()
 			v.InitChecksum(kv.Key.Key)
 			if err := batch.Put(kv.Key, v.RawBytes); err != nil {
-				return true, err
+				return err
 			}
-			return false, nil
+			return nil
 		}); err != nil {
 			t.Fatalf("%+v", err)
 		}

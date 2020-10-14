@@ -20,17 +20,18 @@ import (
 func TestDepAllowlist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// We want workload to be lightweight. If you need to add a package to this
-	// set of deps, run it by danhhz first.
+	// We want workload to be lightweight.
 	buildutil.VerifyTransitiveAllowlist(t, "github.com/cockroachdb/cockroach/pkg/workload",
 		[]string{
 			`github.com/cockroachdb/cockroach/pkg/build`,
 			`github.com/cockroachdb/cockroach/pkg/col/coldata`,
 			`github.com/cockroachdb/cockroach/pkg/col/typeconv`,
+			`github.com/cockroachdb/cockroach/pkg/docs`,
 			`github.com/cockroachdb/cockroach/pkg/geo/geopb`,
 			`github.com/cockroachdb/cockroach/pkg/sql/lex`,
 			`github.com/cockroachdb/cockroach/pkg/sql/oidext`,
 			`github.com/cockroachdb/cockroach/pkg/sql/types`,
+			`github.com/cockroachdb/cockroach/pkg/util`,
 			`github.com/cockroachdb/cockroach/pkg/util/arith`,
 			`github.com/cockroachdb/cockroach/pkg/util/bufalloc`,
 			`github.com/cockroachdb/cockroach/pkg/util/duration`,

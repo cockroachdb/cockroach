@@ -264,8 +264,13 @@ func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst 
 			f.copyAndReplaceDefaultFiltersExpr(t.On, replace),
 		)
 
+	case *memo.FiltersExpr:
+		newVal := f.copyAndReplaceDefaultFiltersExpr(*t, replace)
+		return &newVal
+
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 	}
-	panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 }
 
 func (f *Factory) copyAndReplaceDefaultFiltersExpr(src memo.FiltersExpr, replace ReplaceFunc) (dst memo.FiltersExpr) {
@@ -528,8 +533,9 @@ func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst 
 			f.invokeReplace(t.Input, replace).(opt.ScalarExpr),
 		)
 
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 	}
-	panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 }
 
 // invokeReplace wraps the user-provided replace function. See comments for
@@ -649,8 +655,9 @@ func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst 
 			f.invokeReplace(t.Main, replace).(memo.RelExpr),
 		)
 
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 	}
-	panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 }
 
 // invokeReplace wraps the user-provided replace function. See comments for
@@ -882,8 +889,17 @@ func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst 
 			f.copyAndReplaceDefaultScalarListExpr(t.Rows, replace),
 		)
 
+	case *memo.ProjectionsExpr:
+		newVal := f.copyAndReplaceDefaultProjectionsExpr(*t, replace)
+		return &newVal
+
+	case *memo.ScalarListExpr:
+		newVal := f.copyAndReplaceDefaultScalarListExpr(*t, replace)
+		return &newVal
+
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 	}
-	panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 }
 
 func (f *Factory) copyAndReplaceDefaultProjectionsExpr(src memo.ProjectionsExpr, replace ReplaceFunc) (dst memo.ProjectionsExpr) {
@@ -1055,8 +1071,9 @@ func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst 
 			f.invokeReplace(t.And, replace).(opt.ScalarExpr),
 		)
 
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 	}
-	panic(errors.AssertionFailedf("unhandled op %s", errors.Safe(src.Op())))
 }
 
 // invokeReplace wraps the user-provided replace function. See comments for

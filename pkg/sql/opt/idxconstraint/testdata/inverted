@@ -96,3 +96,80 @@ index-constraints vars=(int[]) inverted-index=@1
 ----
 [ - ]
 Remaining filter: NULL
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1->'a' = 'true'
+----
+[/'{"a": true}' - /'{"a": true}']
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1->'a' = 'false'
+----
+[/'{"a": false}' - /'{"a": false}']
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1->'a' = 'null'
+----
+[/'{"a": null}' - /'{"a": null}']
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1->'a' = '1'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1->'a' = '"b"'
+----
+[/'{"a": "b"}' - /'{"a": "b"}']
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1->'0' = 'true'
+----
+[/'{"0": true}' - /'{"0": true}']
+
+# Do not create a constraint when the var is not an indexed column.
+index-constraints vars=(jsonb,jsonb) inverted-index=@2
+@1->'a' = '1'
+----
+[ - ]
+Remaining filter: (@1->'a') = '1'
+
+# Do not create a constraint when the fetch key is not a constant.
+index-constraints vars=(jsonb,string) inverted-index=@1
+@1->@2 = '1'
+----
+[ - ]
+Remaining filter: (@1->@2) = '1'
+
+# Do not create a constraint when the fetch key is an integer.
+index-constraints vars=(jsonb) inverted-index=@1
+@1->0 = '1'
+----
+[ - ]
+Remaining filter: (@1->0) = '1'
+
+# Do not create a constraint when the RHS of the equality is not a constant.
+# Note: @2 is wrapped in a function to avoid normalizing @2 to the RHS of the
+# equality. This normalization would result in an expression that fails to match
+# the j->'key' = 'val' pattern that is required for building this type of
+# inverted index constraint. Therefore, the wrapping function ensures that the
+# code path of a non-const RHS is tested.
+index-constraints vars=(jsonb,string) inverted-index=@1
+@1->'a' = lower(@2)::JSONB
+----
+[ - ]
+Remaining filter: (@1->'a') = lower(@2)::JSONB
+
+# Do not create a constraint when the RHS of the equality is a JSON array.
+index-constraints vars=(jsonb) inverted-index=@1
+@1->'a' = '[1]'
+----
+[ - ]
+Remaining filter: (@1->'a') = '[1]'
+
+# Do not create a constraint when the RHS of the equality is a JSON object.
+index-constraints vars=(jsonb) inverted-index=@1
+@1->'a' = '{"x": 1}'
+----
+[ - ]
+Remaining filter: (@1->'a') = '{"x": 1}'

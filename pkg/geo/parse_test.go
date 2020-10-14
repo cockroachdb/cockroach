@@ -688,3 +688,171 @@ func TestParseHash(t *testing.T) {
 		})
 	}
 }
+
+func TestGeometryToEncodedPolyline(t *testing.T) {
+	for _, tc := range []struct {
+		desc           string
+		geomString     string
+		p              int
+		expectedOutput string
+	}{
+		{
+			"two points, precision 1",
+			"SRID=4326;LINESTRING(6.0 7.0, 4.1 2)",
+			1,
+			"kCwBbBd@",
+		},
+		{
+			"two points, negative value included, precision 8",
+			"SRID=4326;LINESTRING(9.00000001 -1.00009999, 0.00000007 0.00000091)",
+			8,
+			"|_cw}Daosrst@secw}Drnsrst@",
+		},
+		{
+			"four points, negative value included, precision 4",
+			"SRID=4326;LINESTRING(-8.65 77.23, 180.0 180.0, 41.35 95.6, 856.2344 843.9999)",
+			4,
+			"wkcn@f}gDgfv}@gqcrB~lor@f_ssA}dxgMwujpN",
+		},
+		{
+			"two points, decimal places to be rounded, precision 5",
+			"SRID=4326;LINESTRING(19.38949 52.09179, 24.74476 59.36716)",
+			5,
+			"ud}|Hi_juBa~kk@m}t_@",
+		},
+		{
+			"two points, decimal places rounded to integers, precision 0",
+			"SRID=4326;LINESTRING(1.555 2.77, 3.555 4.055)",
+			0,
+			"ECAC",
+		},
+		{
+			"three points, negative value included, precision 5",
+			"SRID=4326;LINESTRING(-120.2 38.5,-120.95 40.7,-126.453 43.252)",
+			5,
+			"_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			g, err := ParseGeometry(tc.geomString)
+			require.NoError(t, err)
+			encodedPolyline, err := GeometryToEncodedPolyline(g, tc.p)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOutput, encodedPolyline)
+		})
+	}
+
+	t.Run("SRID different than 4326 or missing", func(t *testing.T) {
+		g, err := ParseGeometry("LINESTRING(6.0 7.0, 4.1 2)")
+		require.NoError(t, err)
+		_, err = GeometryToEncodedPolyline(g, 5)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "SRID 4326 is supported")
+	})
+}
+
+func TestParseEncodedPolyline(t *testing.T) {
+	testCases := []struct {
+		desc         string
+		a            string
+		p            int
+		expectedLine string
+	}{
+		{
+			"EncodedPolyline of three points, including negative values, precision 5",
+			"_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+			5,
+			"SRID=4326;LINESTRING(-120.2 38.5, -120.95 40.7, -126.453 43.252)",
+		},
+		{
+			"EncodedPolyline of three points, including negative values, precision 6",
+			"_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+			6,
+			"SRID=4326;LINESTRING(-12.02 3.85,-12.095 4.07,-12.6453 4.3252)",
+		},
+		{
+			"EncodedPolyline of two points, including negative values, precision 5",
+			"_p~iF~ps|U_ulLnnqC",
+			5,
+			"SRID=4326;LINESTRING(-120.2 38.5,-120.95 40.7)",
+		},
+		{
+			"EncodedPolyline of two points, precision 3",
+			"??_ibE_ibE",
+			3,
+			"SRID=4326;LINESTRING(0 0, 100 100)",
+		},
+		{
+			"EncodedPolyline of four points, including negative values, precision 4",
+			"wkcn@f}gDgfv}@gqcrB~lor@f_ssA}dxgMwujpN",
+			4,
+			"SRID=4326;LINESTRING(-8.65 77.23, 180.0 180.0, 41.35 95.6, 856.2344 843.9999)",
+		},
+		{
+			"EncodedPolyline of three points, precision 1",
+			"_ibE?_ibE?~reK?",
+			1,
+			"SRID=4326;LINESTRING(0 10000, 0 20000, 0 0)",
+		},
+		{
+			"EncodedPolyline of two points, small decimal values, precision 8",
+			"vybw}D_osrst@o~dw}D~nsrst@",
+			8,
+			"SRID=4326;LINESTRING(9 -1.000099,0 0.000011)",
+		},
+		{
+			"EncodedPolyline of two points, precision 5",
+			"ud}|Hi_juBa~kk@m}t_@",
+			5,
+			"SRID=4326;LINESTRING(19.38949 52.09179, 24.74476 59.36716)",
+		},
+		{
+			"EncodedPolyline of two points, malformed point, precision 1",
+			"_ibE_ibE?",
+			1,
+			"SRID=4326;LINESTRING(10000 10000,10000 10000)",
+		},
+		{
+			"EncodedPolyline of three points, malformed point, precision 1",
+			"_ibE?_ibE??",
+			1,
+			"SRID=4326;LINESTRING(0 10000, 0 20000, 0 20000)",
+		},
+		{
+			"EncodedPolyline of three points, precision 1",
+			"_ibE?_ibE???",
+			1,
+			"SRID=4326;LINESTRING(0 10000, 0 20000, 0 20000)",
+		},
+		{
+			"EncodedPolyline of two points, integer values, precision 0",
+			"CACC",
+			0,
+			"SRID=4326;LINESTRING(1 2, 3 4)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			expectedGeo, err := ParseGeometry(tc.expectedLine)
+			require.NoError(t, err)
+			geo, err := ParseEncodedPolyline(tc.a, tc.p)
+			require.NoError(t, err)
+			require.Equal(t, expectedGeo, geo)
+		})
+	}
+
+	t.Run("polyline that cannot be parsed to geometry", func(t *testing.T) {
+		_, err := ParseEncodedPolyline("CA", 0)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "geography error")
+	})
+
+	t.Run("empty string", func(t *testing.T) {
+		g, err := ParseEncodedPolyline("", 0)
+		require.NoError(t, err)
+		geomt, err := g.AsGeomT()
+		require.NoError(t, err)
+		require.Len(t, geomt.FlatCoords(), 0)
+	})
+}
