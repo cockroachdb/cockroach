@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -1173,8 +1174,8 @@ func extractRangeFromEntries(logEntries [][]byte) (string, error) {
 			return "", err
 		}
 
-		firstIndex = string(firstAndLastLogEntries[0].Index)
-		lastIndex = string(firstAndLastLogEntries[1].Index)
+		firstIndex = strconv.FormatUint(firstAndLastLogEntries[0].Index, 10)
+		lastIndex = strconv.FormatUint(firstAndLastLogEntries[1].Index, 10)
 	}
 	return fmt.Sprintf("[%s, %s]", firstIndex, lastIndex), nil
 }
