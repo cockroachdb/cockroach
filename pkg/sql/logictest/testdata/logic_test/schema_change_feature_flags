@@ -1,3 +1,5 @@
+# LogicTest: !3node-backup
+
 # Test all feature flags when set to off in SQL package.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE;

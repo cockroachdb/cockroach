@@ -13,6 +13,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -22,6 +23,18 @@ const logictestPkg = "../../sql/logictest/"
 func TestCCLLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, testdataGlob)
+}
+
+// TestBackupRestoreLogic runs all non-CCL logic test files under the
+// 3node-backup configuration, which randomly runs a backup and restore between
+// logic test statements to ensure that we can always take a backup and restore
+// the data correctly. Test files that blocklist the 3node-backup configuration
+// (i.e. "# LogicTest: !3node-backup") are not run.
+func TestBackupRestoreLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderStress(t, "times out under stress")
+	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "3node-backup",
+		true /* runCCLConfigs */, logictestPkg+testdataGlob)
 }
 
 // TestTenantLogic runs all non-CCL logic test files under the 3node-tenant

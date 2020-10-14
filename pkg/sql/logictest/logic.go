@@ -461,6 +461,9 @@ type testClusterConfig struct {
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
 	localities map[int]roachpb.Locality
+	// backupRestoreProbability will periodically backup the cluster and restore
+	// it's state to a new cluster at random points during a logic test.
+	backupRestoreProbability float32
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -654,6 +657,18 @@ var logicTestConfigs = []testClusterConfig{
 				},
 			},
 		},
+	},
+	{
+		// 3node-backup is a config that periodically performs a cluster backup,
+		// and restores that backup into a new cluster before continuing the test.
+		// This config can only be run with a CCL binary, so is a noop if run
+		// through the normal logictest command.
+		// To run a logic test with this config as a directive, run:
+		//  make test PKG=./pkg/ccl/logictestccl TESTS=TestBackupRestoreLogic//<test_name>
+		name:                     "3node-backup",
+		numNodes:                 3,
+		backupRestoreProbability: 0.01,
+		isCCLConfig:              true,
 	},
 }
 
@@ -1058,6 +1073,11 @@ type logicTest struct {
 	subtestT *testing.T
 	rng      *rand.Rand
 	cfg      testClusterConfig
+	// serverArgs are the parameters used to create a cluster for this test.
+	// They are persisted since a cluster can be recreated throughout the
+	// lifetime of the test and we should create all clusters with the same
+	// arguments.
+	serverArgs *TestServerArgs
 	// cluster is the test cluster against which we are testing. This cluster
 	// may be reset during the lifetime of the test.
 	cluster serverutils.TestClusterInterface
@@ -1567,12 +1587,25 @@ func (t *logicTest) shutdownCluster() {
 	t.db = nil
 }
 
+// resetCluster cleans up the current cluster, and creates a fresh one.
+func (t *logicTest) resetCluster() {
+	t.shutdownCluster()
+	if t.serverArgs == nil {
+		// We expect the server args to be persisted to the test during test
+		// setup.
+		t.Fatal("resetting the cluster before server args were set")
+	}
+	serverArgs := *t.serverArgs
+	t.newCluster(serverArgs)
+}
+
 // setup creates the initial cluster for the logic test and populates the
 // relevant fields on logicTest. It is expected to be called only once, and
 // before processing any test files - unless a mock logicTest is created (see
 // parallelTest.processTestFile).
 func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	t.cfg = cfg
+	t.serverArgs = &serverArgs
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
@@ -1734,6 +1767,9 @@ type subtestDetails struct {
 }
 
 func (t *logicTest) processTestFile(path string, config testClusterConfig) error {
+	rng, seed := randutil.NewPseudoRand()
+	t.outf("rng seed: %d\n", seed)
+
 	subtests, err := fetchSubtests(path)
 	if err != nil {
 		return err
@@ -1751,7 +1787,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		// If subtest has no name, then it is not a subtest, so just run the lines
 		// in the overall test. Note that this can only happen in the first subtest.
 		if len(subtest.name) == 0 {
-			if err := t.processSubtest(subtest, path, config); err != nil {
+			if err := t.processSubtest(subtest, path, config, rng); err != nil {
 				return err
 			}
 		} else {
@@ -1761,7 +1797,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 				defer func() {
 					t.subtestT = nil
 				}()
-				if err := t.processSubtest(subtest, path, config); err != nil {
+				if err := t.processSubtest(subtest, path, config, rng); err != nil {
 					t.Error(err)
 				}
 			})
@@ -1782,6 +1818,113 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		}
 		fmt.Fprint(file, data)
 	}
+
+	return nil
+}
+
+// maybeBackupRestore will randomly issue a cluster backup, create a new
+// cluster, and restore that backup to the cluster before continuing the test.
+// The probability of executing a backup and restore is specified in the
+// testClusterConfig.
+func (t *logicTest) maybeBackupRestore(rng *rand.Rand, config testClusterConfig) error {
+	if config.backupRestoreProbability != 0 && !config.isCCLConfig {
+		return errors.Newf("logic test config %s specifies a backup restore probability but is not CCL",
+			config.name)
+	}
+
+	// We decide if we want to take a backup here based on a probability
+	// specified in the logic test config.
+	if rng.Float32() > config.backupRestoreProbability {
+		return nil
+	}
+
+	// Backups that run in a transaction must be DETACHED. For now, if happen to
+	// chose to take a backup while we're in the middle of a transaction, we will
+	// just not. We could perhaps make this smarter and perform the backup after
+	// the transaction is close.
+	//
+	// Let's test if we're in a transaction. If we are then return early.
+	if _, err := t.db.Exec("SET TRANSACTION PRIORITY NORMAL;"); !testutils.IsError(err, "there is no transaction in progress") {
+		return nil
+	}
+
+	// To restore the same state in for the logic test, we need to restore the
+	// data and the session state. The session state includes things like session
+	// variables that are set for every session that is open.
+	//
+	// TODO(pbardea): A better approach might be to wipe the cluster once we have
+	// a command that enables this. That way all of the session data will not be
+	// lost in the process of creating a new cluster.
+	oldUser := t.user
+	users := make([]string, 0, len(t.clients))
+	sessionVars := make(map[string]map[string]string, len(t.clients))
+	for user := range t.clients {
+		t.setUser(user)
+		users = append(users, user)
+
+		existingSessionVars, err := t.db.Query("SHOW ALL")
+		if err != nil {
+			// We might get an error depending on the state of the test. Let's just
+			// ignore it.
+			// BEFOREMERGE: Add a comment here about when this is the case.
+			continue
+		}
+
+		userSessionVars := make(map[string]string)
+		for existingSessionVars.Next() {
+			var key, value string
+			if err := existingSessionVars.Scan(&key, &value); err != nil {
+				return errors.Wrap(err, "scanning session variables")
+			}
+			userSessionVars[key] = value
+		}
+		sessionVars[user] = userSessionVars
+	}
+
+	backupLocation := fmt.Sprintf("nodelocal://1/logic-test-backup-%s",
+		strconv.FormatInt(timeutil.Now().UnixNano(), 10))
+
+	// Perform the backup and restore as root.
+	t.setUser(security.RootUser)
+	if _, err := t.db.Exec("BACKUP TO $1", backupLocation); err != nil {
+		return errors.Wrap(err, "backing up cluster")
+	}
+
+	// Create a new cluster. Perhaps this can be updated to just wipe the exiting
+	// cluster once we have the ability to easily wipe a cluster through SQL.
+	t.resetCluster()
+
+	// Run the restore as root.
+	t.setUser(security.RootUser)
+	if _, err := t.db.Exec("RESTORE FROM $1", backupLocation); err != nil {
+		return errors.Wrap(err, "restoring cluster")
+	}
+
+	// Restore the session state that was in the old cluster.
+
+	// Create new connections for the existing users, and restore the session
+	// variables that we collected.
+	for _, user := range users {
+		// Call setUser for every user to create the connection for that user.
+		t.setUser(user)
+
+		// We now attempt to restore restore the session variables that were set on
+		// the backing up cluster. These are not included in the backup restore and
+		// so have to be restored manually.
+		for key, value := range sessionVars[user] {
+			// First try setting the cluster setting as a string.
+			if _, err := t.db.Exec(fmt.Sprintf("SET %s='%s'", key, value)); err != nil {
+				// If it fails, try setting the value as an int.
+				if _, err := t.db.Exec(fmt.Sprintf("SET %s=%s", key, value)); err != nil {
+					// Some cluster settings can't be set at all, so ignore these errors.
+					// If a setting that we needed could not be restored, we expect the
+					// logic test to fail and let us know.
+					continue
+				}
+			}
+		}
+	}
+	t.setUser(oldUser)
 
 	return nil
 }
@@ -1835,7 +1978,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 }
 
 func (t *logicTest) processSubtest(
-	subtest subtestDetails, path string, config testClusterConfig,
+	subtest subtestDetails, path string, config testClusterConfig, rng *rand.Rand,
 ) error {
 	defer t.traceStop()
 
@@ -1865,6 +2008,9 @@ func (t *logicTest) processSubtest(
 			return errors.Errorf("%s:%d: no expected error provided",
 				path, s.line+subtest.lineLineIndexIntoFile,
 			)
+		}
+		if err := t.maybeBackupRestore(rng, config); err != nil {
+			return err
 		}
 		switch cmd {
 		case "repeat":
