@@ -10,12 +10,15 @@ package oidcccl
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -34,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -66,9 +70,7 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	testCertsContext := newRPCContext(plainHTTPCfg)
 
 	client, err := testCertsContext.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	resp, err := client.Get(s.AdminURL() + "/oidc/v1/login")
 	if err != nil {
@@ -183,21 +185,7 @@ func TestOIDCEnabled(t *testing.T) {
 	testCertsContext := newRPCContext(plainHTTPCfg)
 
 	client, err := testCertsContext.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Add `oidc_state` cookie to our client
-	cookies, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatalf("unable to create cookiejar: %v", err)
-	}
-	adminURL, err := url.Parse(s.AdminURL())
-	if err != nil {
-		t.Fatalf("unable to parse admin url: %v", err)
-	}
-	cookies.SetCookies(adminURL, []*http.Cookie{{Name: "oidc_state", Value: "blahblah"}})
-	client.Jar = cookies
+	require.NoError(t, err)
 
 	// Don't follow redirects so we can inspect the 302
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -214,10 +202,11 @@ func TestOIDCEnabled(t *testing.T) {
 		if resp.StatusCode != 302 {
 			t.Fatalf("expected 302 status code but got: %d", resp.StatusCode)
 		}
-		authURL, err := url.Parse(resp.Header.Get("Location"))
-		if err != nil {
-			t.Fatal(err)
+		if resp.Cookies()[0].Name != secretCookieName {
+			t.Fatal("Missing cookie")
 		}
+		authURL, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
 		if authURL.Query().Get("client_id") != "fake_client_id" {
 			t.Fatal("expected fake client_id", authURL)
 		}
@@ -225,22 +214,76 @@ func TestOIDCEnabled(t *testing.T) {
 		if authURL.Query().Get("redirect_uri") != expectedRedirectURL {
 			t.Fatal("expected fake redirect_url", authURL)
 		}
+
+		state, err := decodeOIDCState(authURL.Query().Get("state"))
+		require.NoError(t, err)
+		// If we use hmac.Sum with the Message, it gets prepended to the hash.
+		if strings.Contains(string(state.TokenMAC), string(state.Token)) {
+			t.Fatal("HMAC generated incorrectly.")
+		}
+
+		key, err := base64.URLEncoding.DecodeString(resp.Cookies()[0].Value)
+		require.NoError(t, err)
+		mac := hmac.New(sha256.New, key)
+		mac.Write(state.Token)
+		if !hmac.Equal(mac.Sum(nil), state.TokenMAC) {
+			t.Fatal("HMAC hash doesn't match TokenMAC")
+		}
 	})
+}
+
+func TestKeyAndSignedTokenIsValid(t *testing.T) {
+	kastValid, err := newKeyAndSignedToken(32, 32)
+	require.NoError(t, err)
+	kastModifiedCookie, err := newKeyAndSignedToken(32, 32)
+	require.NoError(t, err)
+	kastModifiedCookie.secretKeyCookie.Value = kastModifiedCookie.secretKeyCookie.Value + "Z"
+	kastModifiedTokenPayload, err := newKeyAndSignedToken(32, 32)
+	require.NoError(t, err)
+	kastModifiedTokenPayload.signedTokenEncoded = kastModifiedCookie.signedTokenEncoded + "Z"
+	kastEmptyCookie, err := newKeyAndSignedToken(32, 32)
+	require.NoError(t, err)
+	kastEmptyCookie.secretKeyCookie.Value = ""
+	kastEmptyToken, err := newKeyAndSignedToken(32, 32)
+	require.NoError(t, err)
+	kastEmptyToken.signedTokenEncoded = ""
+
+	for _, tc := range []struct {
+		desc        string
+		kast        *keyAndSignedToken
+		expectValid bool
+		expectErr   bool
+	}{
+		{"randomly generated cookie and token", kastValid, true, false},
+		{"bad cookie value and token", kastModifiedCookie, false, true},
+		{"valid cookie value and bad token", kastModifiedTokenPayload, false, true},
+		{"empty cookie, valid token", kastEmptyCookie, false, false},
+		{"valid cookie, empty token", kastEmptyToken, false, false},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			valid, err := tc.kast.validate()
+			if tc.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			require.Equal(t, tc.expectValid, valid)
+		})
+	}
 }
 
 func TestOIDCStateEncodeDecode(t *testing.T) {
 	testString := "abc-123-@~~" // This string produces discrepancy when base46 URL is used vs Std
-	encoded, err := encodeOIDCState(serverpb.OIDCState{Secret: []byte(testString), NodeID: 3})
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	encoded, err := encodeOIDCState(serverpb.OIDCState{
+		Token:    []byte(testString),
+		TokenMAC: []byte(testString),
+	})
+	require.NoError(t, err)
 	state, err := decodeOIDCState(encoded)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if string(state.Secret) != testString || state.NodeID != 3 {
+	if string(state.Token) != testString || string(state.TokenMAC) != testString {
 		t.Fatal("state didn't match when decoded")
 	}
 }

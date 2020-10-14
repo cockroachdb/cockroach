@@ -9,52 +9,91 @@
 package oidcccl
 
 import (
+	"crypto/hmac"
+	crypto_rand "crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// stateValidator will be embedded in the OIDC server and concurrent access will be managed by the
-// mutex in there.
-type stateValidator struct {
-	states *cache.UnorderedCache
+// keyAndSignedToken is a container for the two cryptographically bound values that we use to
+// ensure that OIDC auth requests and callback are secure. This struct holds a `secretKeyCookie` which
+// is an HMAC key encoded into an HTTP cookie, and a `signedTokenEncoded` string which is an
+// encoded protobuf object containing a random token and the HMAC hash for that token encoded
+// using the key in the cookie.
+type keyAndSignedToken struct {
+	secretKeyCookie    *http.Cookie
+	signedTokenEncoded string
 }
 
-// Hold elements in state cache with max TTL of an hour or 5000 elements. This helps ensure that
-// old state variables get cleaned out if OAuth never succeeds, and that the cache doesn't grow
-// past a certain size and cause storage problems on a node.
-// Successfully "used" state variables are cleared out as soon as the OAuth callback is triggered
-// so the storage would only grow with "bad" login attempts.
-const size = 5000
-const maxTTLSeconds = 60 * 60
-
-func newStateValidator() *stateValidator {
-	return &stateValidator{
-		states: cache.NewUnorderedCache(cache.Config{
-			Policy: cache.CacheLRU,
-			ShouldEvict: func(s int, key, value interface{}) bool {
-				return timeutil.Now().Unix()-value.(int64) > maxTTLSeconds || s > size
-			},
-		}),
+// newKeyAndSignedToken creates an instance of `keyAndSignedToken` by randomly generating a key
+// and a message of the requested sizes and encoding them into the datatypes we need in order to
+// proceed with a secure OIDC auth request.
+func newKeyAndSignedToken(keySize int, tokenSize int) (*keyAndSignedToken, error) {
+	secretKey := make([]byte, keySize)
+	if _, err := crypto_rand.Read(secretKey); err != nil {
+		return nil, err
 	}
-}
 
-func (s *stateValidator) add(state string) {
-	s.states.Add(state, timeutil.Now().UnixNano())
-}
-
-// validateAndClear will check that the given state is in our cache and if so, will also remove it
-// this ensures that every state is "consumed" once as part of validation and can't be reused.
-func (s *stateValidator) validateAndClear(state string) error {
-	if _, ok := s.states.Get(state); !ok {
-		return errors.New("state validator: unknown state")
+	token := make([]byte, tokenSize)
+	if _, err := crypto_rand.Read(token); err != nil {
+		return nil, err
 	}
-	s.states.Del(state)
-	return nil
+
+	mac := hmac.New(sha256.New, secretKey)
+	_, err := mac.Write(token)
+	if err != nil {
+		return nil, err
+	}
+
+	signedTokenEncoded, err := encodeOIDCState(serverpb.OIDCState{
+		Token:    token,
+		TokenMAC: mac.Sum(nil),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	secretKeyCookie := http.Cookie{
+		Name:     secretCookieName,
+		Value:    base64.URLEncoding.EncodeToString(secretKey),
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+
+	return &keyAndSignedToken{
+		&secretKeyCookie,
+		signedTokenEncoded,
+	}, nil
+}
+
+// validate checks the validity of the keyAndSignedToken instance by decoded the protobuf from the
+// string type, decoding the HMAC key from the cookie, and recomputing the HMAC to sure that it
+// matches the `TokenMAC` field in the protobuf. It returns the result of the equality check from
+// the HMAC library.
+func (kast *keyAndSignedToken) validate() (bool, error) {
+	key, err := base64.URLEncoding.DecodeString(kast.secretKeyCookie.Value)
+	if err != nil {
+		return false, err
+	}
+	mac := hmac.New(sha256.New, key)
+
+	signedToken, err := decodeOIDCState(kast.signedTokenEncoded)
+	if err != nil {
+		return false, err
+	}
+
+	_, err = mac.Write(signedToken.Token)
+	if err != nil {
+		return false, err
+	}
+
+	return hmac.Equal(signedToken.TokenMAC, mac.Sum(nil)), nil
 }
 
 func encodeOIDCState(statePb serverpb.OIDCState) (string, error) {
