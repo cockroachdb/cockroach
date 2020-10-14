@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -2031,4 +2032,52 @@ func TestJobStatusResponse(t *testing.T) {
 	require.Equal(t, *job.ID(), response.Job.Id)
 	require.Equal(t, job.Payload(), *response.Job.Payload)
 	require.Equal(t, job.Progress(), *response.Job.Progress)
+}
+
+func TestLicenseExpiryMetricNoLicense(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.Background())
+
+	for _, tc := range []struct {
+		name       string
+		expected   string
+		expiryFunc func(context.Context, *cluster.Settings, time.Time) (time.Duration, error)
+	}{
+		{"No License", "seconds_until_enterprise_license_expiry 0\n", nil},
+		{"Valid 1 second License", "seconds_until_enterprise_license_expiry 1\n", func(
+			_ context.Context, _ *cluster.Settings, _ time.Time,
+		) (time.Duration, error) {
+			return time.Second, nil
+		}},
+		{"Valid Long License", "seconds_until_enterprise_license_expiry 1603926294\n", func(
+			_ context.Context, _ *cluster.Settings, _ time.Time,
+		) (time.Duration, error) {
+			return timeutil.Unix(1603926294, 0).Sub(timeutil.Unix(0, 0)), nil
+		}},
+		{"Valid Long Past License", "seconds_until_enterprise_license_expiry -1603926294\n", func(
+			_ context.Context, _ *cluster.Settings, _ time.Time,
+		) (time.Duration, error) {
+			return timeutil.Unix(0, 0).Sub(timeutil.Unix(1603926294, 0)), nil
+		}},
+		{"Error License", "", func(
+			_ context.Context, _ *cluster.Settings, _ time.Time,
+		) (time.Duration, error) {
+			return 0, errors.New("bad license")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vh := varsHandler{ts.status.metricSource, ts.status.st}
+			if tc.expiryFunc != nil {
+				base.TimeToEnterpriseLicenseExpiry = tc.expiryFunc
+			}
+
+			buf := new(bytes.Buffer)
+			vh.appendLicenseExpiryMetric(context.Background(), buf)
+
+			require.Equal(t, tc.expected, buf.String())
+		})
+	}
 }
