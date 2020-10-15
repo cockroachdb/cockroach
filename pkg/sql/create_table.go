@@ -81,7 +81,6 @@ type createTableRun struct {
 // minimumTypeUsageVersions defines the minimum version needed for a new
 // data type.
 var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
-	types.TimeTZFamily:    clusterversion.VersionTimeTZType,
 	types.GeographyFamily: clusterversion.VersionGeospatialType,
 	types.GeometryFamily:  clusterversion.VersionGeospatialType,
 	types.Box2DFamily:     clusterversion.VersionBox2DType,
@@ -95,21 +94,6 @@ func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) (bool
 		t = t.ArrayContents()
 	}
 
-	switch t.Family() {
-	case types.TimeFamily, types.TimestampFamily, types.TimestampTZFamily, types.TimeTZFamily:
-		if t.Precision() != 6 && !v.IsActive(clusterversion.VersionTimePrecision) {
-			return false, nil
-		}
-	case types.IntervalFamily:
-		itm, err := t.IntervalTypeMetadata()
-		if err != nil {
-			return false, err
-		}
-		if (t.Precision() != 6 || itm.DurationField != types.IntervalDurationField{}) &&
-			!v.IsActive(clusterversion.VersionTimePrecision) {
-			return false, nil
-		}
-	}
 	minVersion, ok := minimumTypeUsageVersions[t.Family()]
 	if !ok {
 		return true, nil
