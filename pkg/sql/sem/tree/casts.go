@@ -1077,22 +1077,30 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DString:
 			s := string(*v)
 
-			switch t.Oid() {
-			case oid.T_oid:
-				i, err := ParseDInt(strings.TrimSpace(s))
+			// If it is an integer in string form, convert it as an int.
+			if val, err := ParseDInt(strings.TrimSpace(s)); err == nil {
+				tmpOid := NewDOid(*val)
+				oid, err := queryOid(ctx, t, tmpOid)
 				if err != nil {
-					return nil, err
+					oid = tmpOid
+					oid.semanticType = t
 				}
-				return &DOid{semanticType: t, DInt: *i}, nil
+				return oid, nil
+			}
+
+			switch t.Oid() {
 			case oid.T_regproc, oid.T_regprocedure:
 				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
 				// Postgres only does this when the cast is ::regprocedure, but we're
 				// going to always do it.
 				// We additionally do not yet implement disambiguation based on type
 				// parameters: we return the match iff there is exactly one.
-				s = pgSignatureRegexp.ReplaceAllString(formatIdentifierForOidFamilyCast(s), "$1")
-				// Resolve function name.
-				substrs := strings.Split(s, ".")
+				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
+
+				substrs, err := splitIdentifierList(s)
+				if err != nil {
+					return nil, err
+				}
 				if len(substrs) > 3 {
 					// A fully qualified function name in pg's dialect can contain
 					// at most 3 parts: db.schema.funname.
@@ -1111,7 +1119,6 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				}
 				return queryOid(ctx, t, NewDString(funcDef.Name))
 			case oid.T_regtype:
-				s = formatIdentifierForOidFamilyCast(s)
 				parsedTyp, err := ctx.Planner.ParseType(s)
 				if err == nil {
 					return &DOid{
@@ -1120,10 +1127,21 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 						name:         parsedTyp.SQLStandardName(),
 					}, nil
 				}
+
 				// Fall back to searching pg_type, since we don't provide syntax for
 				// every postgres type that we understand OIDs for.
+				// Note this section does *not* work if there is a schema in front of the
+				// type, e.g. "pg_catalog"."int4" (if int4 was not defined).
+
+				// Trim whitespace and unwrap outer quotes if necessary.
+				// This is required to mimic postgres.
+				s = strings.TrimSpace(s)
+				if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
+					s = s[1 : len(s)-1]
+				}
 				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
+
 				dOid, missingTypeErr := queryOid(ctx, t, NewDString(s))
 				if missingTypeErr == nil {
 					return dOid, missingTypeErr
@@ -1199,20 +1217,6 @@ func castStringToRegClassTableName(s string) (TableName, error) {
 		return TableName{}, err
 	}
 	return u.ToTableName(), nil
-}
-
-// formatIdentifierForOidFamilyCast cleans the identifier by removing whitespace and removing
-// surrounding quotes.
-// TODO(#sql-features): this does not work for split types, e.g.
-// "asdf"."asdf" is incorrectly handled.
-func formatIdentifierForOidFamilyCast(s string) string {
-	s = strings.TrimSpace(s)
-	// Trim whitespace and unwrap outer quotes if necessary.
-	// This is required to mimic postgres.
-	if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
-		s = s[1 : len(s)-1]
-	}
-	return s
 }
 
 // splitIdentifierList splits identifiers to individual components, lower
