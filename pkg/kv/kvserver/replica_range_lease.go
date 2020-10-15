@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/opentracing/opentracing-go"
+	"go.etcd.io/etcd/raft"
 )
 
 var leaseStatusLogLimiter = log.Every(5 * time.Second)
@@ -583,6 +584,15 @@ func (r *Replica) leaseStatus(
 	return status
 }
 
+// currentLeaseStatus returns the status of the current lease for a current
+// timestamp.
+func (r *Replica) currentLeaseStatus(ctx context.Context) kvserverpb.LeaseStatus {
+	timestamp := r.store.Clock().Now()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.leaseStatus(ctx, *r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+}
+
 // requiresExpiringLeaseRLocked returns whether this range uses an
 // expiration-based lease; false if epoch-based. Ranges located before or
 // including the node liveness table must use expiration leases to avoid
@@ -616,8 +626,14 @@ func (r *Replica) requestLeaseLocked(
 		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(
 			newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc)))
 	}
-	if r.store.IsDraining() {
-		// We've retired from active duty.
+	// If we're draining, we'd rather not take any new leases (since we're also
+	// trying to move leases away elsewhere). But if we're the leader, we don't
+	// really have a choice and we take the lease - there might not be any other
+	// replica available to take this lease (perhaps they're all draining).
+	if r.store.IsDraining() && (r.raftBasicStatusRLocked().RaftState != raft.StateLeader) {
+		// TODO(andrei): If we start refusing to take leases on followers elsewhere,
+		// this code can go away.
+		log.VEventf(ctx, 2, "refusing to take the lease because we're draining")
 		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(
 			newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc)))
 	}
