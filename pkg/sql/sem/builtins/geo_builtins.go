@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	"context"
 	gojson "encoding/json"
 	"fmt"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geotransform"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -356,6 +358,56 @@ func fitMaxDecimalDigitsToBounds(maxDecimalDigits int) int {
 	}
 	return maxDecimalDigits
 }
+
+func makeMinimumBoundGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	geometry := tree.MustBeDGeometry(args[0])
+
+	_, center, radius, err := geomfn.MinimumBoundingCircle(geometry.Geometry)
+	if err != nil {
+		return nil, err
+	}
+	return &minimumBoundRadiusGen{
+		center: center,
+		radius: radius,
+		next:   true,
+	}, nil
+}
+
+var minimumBoundingRadiusReturnType = types.MakeLabeledTuple(
+	[]*types.T{types.Geometry, types.Float},
+	[]string{"center", "radius"},
+)
+
+type minimumBoundRadiusGen struct {
+	center geo.Geometry
+	radius float64
+	next   bool
+}
+
+func (m *minimumBoundRadiusGen) ResolvedType() *types.T {
+	return minimumBoundingRadiusReturnType
+}
+
+func (m *minimumBoundRadiusGen) Start(ctx context.Context, txn *kv.Txn) error {
+	return nil
+}
+
+func (m *minimumBoundRadiusGen) Next(ctx context.Context) (bool, error) {
+	if m.next {
+		m.next = false
+		return true, nil
+	}
+	return false, nil
+}
+
+func (m *minimumBoundRadiusGen) Values() (tree.Datums, error) {
+	return []tree.Datum{tree.NewDGeometry(m.center),
+		tree.NewDFloat(tree.DFloat(m.radius))}, nil
+}
+
+func (m *minimumBoundRadiusGen) Close() {}
 
 var geoBuiltins = map[string]builtinDefinition{
 	//
@@ -5475,6 +5527,18 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: tree.VolatilityImmutable,
 		}),
 
+	"st_minimumboundingradius": makeBuiltin(genProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}},
+			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return nil, newUnsuitableUseOfGeneratorError()
+			},
+			Generator:  makeMinimumBoundGenerator,
+			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
 	//
 	// Unimplemented.
 	//
@@ -5505,7 +5569,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
 	"st_linesubstring":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
 	"st_minimumboundingcircle": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
-	"st_minimumboundingradius": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
 	"st_node":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
 	"st_orientedenvelope":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
 	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),

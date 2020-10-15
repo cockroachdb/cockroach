@@ -417,6 +417,23 @@ func Centroid(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// MinimumBoundingCircle returns minimum bounding circle of an EWKB
+func MinimumBoundingCircle(ewkb geopb.EWKB) (geopb.EWKB, geopb.EWKB, float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	var centerEWKB C.CR_GEOS_String
+	var polygonEWKB C.CR_GEOS_String
+	var radius C.double
+
+	if err := statusToError(C.CR_GEOS_MinimumBoundingCircle(g, goToCSlice(ewkb), &radius, &centerEWKB, &polygonEWKB)); err != nil {
+		return nil, nil, 0, err
+	}
+	return cStringToSafeGoBytes(polygonEWKB), cStringToSafeGoBytes(centerEWKB), float64(radius), nil
+
+}
+
 // ConvexHull returns an EWKB which returns the convex hull of the given EWKB.
 func ConvexHull(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	g, err := ensureInitInternal()
