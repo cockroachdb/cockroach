@@ -599,7 +599,16 @@ func NewColOperator(
 		if core.MetadataTestReceiver != nil {
 			return result, errors.Newf("core.MetadataTestReceiver is not supported")
 		}
-
+		// We do not wrap Change{Aggregator,Frontier} because these processors
+		// are very row-oriented and the Columnarizer might block indefinitely
+		// while buffering coldata.BatchSize() tuples to emit as a single
+		// batch.
+		if core.ChangeAggregator != nil {
+			return result, errors.Newf("core.ChangeAggregator is not supported")
+		}
+		if core.ChangeFrontier != nil {
+			return result, errors.Newf("core.ChangeFrontier is not supported")
+		}
 		log.VEventf(ctx, 1, "planning a wrapped processor because %s", err.Error())
 
 		inputTypes := make([][]types.T, len(spec.Input))
