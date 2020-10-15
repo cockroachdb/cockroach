@@ -75,7 +75,7 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 - For filing bugs, suggesting improvements, or requesting new features, help us out by
   [opening an issue](https://github.com/cockroachdb/cockroach/issues/new).
 
-## Building from source
+## Building from Source
 
 See [our wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181338446/Getting+and+building+from+source) for more details.
 
