@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -42,6 +43,18 @@ const (
 	oidcCallbackPath         = "/oidc/v1/callback"
 	genericCallbackHTTPError = "OIDC: unable to complete authentication"
 	genericLoginHTTPError    = "OIDC: unable to initiate authentication"
+	counterPrefix            = "auth.oidc."
+	beginAuthCounterName     = counterPrefix + "begin_auth"
+	beginCallbackCounterName = counterPrefix + "begin_callback"
+	loginSuccessCounterName  = counterPrefix + "login_success"
+	enableCounterName        = counterPrefix + "enable"
+)
+
+var (
+	beginAuthUseCounter     = telemetry.GetCounterOnce(beginAuthCounterName)
+	beginCallbackUseCounter = telemetry.GetCounterOnce(beginCallbackCounterName)
+	loginSuccessUseCounter  = telemetry.GetCounterOnce(loginSuccessCounterName)
+	enableUseCounter        = telemetry.GetCounterOnce(enableCounterName)
 )
 
 // oidcAuthenticationServer is an implementation of the OpenID Connect authentication code flow
@@ -159,6 +172,10 @@ func reloadConfigLocked(
 		buttonText:     OIDCButtonText.Get(&st.SV),
 	}
 
+	if !server.conf.enabled && conf.enabled {
+		telemetry.Inc(enableUseCounter)
+	}
+
 	server.initialized = false
 	server.conf = conf
 	server.stateValidator = newStateValidator()
@@ -234,6 +251,10 @@ var ConfigureOIDC = func(
 			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
 			return
 		}
+
+		// We trigger telemetry on this endpoint only when we pass through the enabled gate to maintain
+		// a useful signal.
+		telemetry.Inc(beginCallbackUseCounter)
 
 		state := r.URL.Query().Get(stateKey)
 
@@ -344,6 +365,8 @@ var ConfigureOIDC = func(
 
 		http.SetCookie(w, cookie)
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+
+		telemetry.Inc(loginSuccessUseCounter)
 	})
 
 	mux.HandleFunc(oidcLoginPath, func(w http.ResponseWriter, r *http.Request) {
@@ -360,6 +383,8 @@ var ConfigureOIDC = func(
 			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
 			return
 		}
+
+		telemetry.Inc(beginAuthUseCounter)
 
 		size := 16
 		state := make([]byte, size)
