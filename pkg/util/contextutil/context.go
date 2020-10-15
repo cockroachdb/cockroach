@@ -96,6 +96,11 @@ var _ errors.Formatter = (*TimeoutError)(nil)
 // that people looking for net.Error attributes will still find them.
 var _ net.Error = (*TimeoutError)(nil)
 
+// Operation returns the name of the operation that timed out.
+func (t *TimeoutError) Operation() string {
+	return t.operation
+}
+
 func (t *TimeoutError) Error() string { return fmt.Sprintf("%v", t) }
 
 // Format implements fmt.Formatter.
