@@ -1970,7 +1970,7 @@ bit
 boolean
 bytea
 bpchar
-bpchar
+"char"
 date
 numeric
 double precision
