@@ -37,6 +37,26 @@ func Centroid(g geo.Geometry) (geo.Geometry, error) {
 	return geo.ParseGeometryFromEWKB(centroidEWKB)
 }
 
+// MinimumBoundingCircle returns minimum bounding circle of an EWKB
+func MinimumBoundingCircle(g geo.Geometry) (geo.Geometry, geo.Geometry, float64, error) {
+	polygonEWKB, centroidEWKB, radius, err := geos.MinimumBoundingCircle(g.EWKB())
+	if err != nil {
+		return geo.Geometry{}, geo.Geometry{}, 0, err
+	}
+
+	polygon, err := geo.ParseGeometryFromEWKB(polygonEWKB)
+	if err != nil {
+		return geo.Geometry{}, geo.Geometry{}, 0, err
+	}
+
+	centroid, err := geo.ParseGeometryFromEWKB(centroidEWKB)
+	if err != nil {
+		return geo.Geometry{}, geo.Geometry{}, 0, err
+	}
+
+	return polygon, centroid, radius, nil
+}
+
 // ClipByRect clips a given Geometry by the given BoundingBox.
 func ClipByRect(g geo.Geometry, b geo.CartesianBoundingBox) (geo.Geometry, error) {
 	if g.Empty() {
