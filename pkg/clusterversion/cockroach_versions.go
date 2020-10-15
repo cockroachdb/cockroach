@@ -33,12 +33,8 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
-	VersionStart19_2
-	VersionLearnerReplicas
-	VersionTopLevelForeignKeys
 	VersionAtomicChangeReplicasTrigger
 	VersionAtomicChangeReplicas
-	VersionTableDescModificationTimeFromMVCC
 	VersionPartitionedBackup
 	Version19_2
 	VersionStart20_1
@@ -50,7 +46,6 @@ const (
 	VersionPrimaryKeyChanges
 	VersionAuthLocalAndTrustRejectMethods
 	VersionPrimaryKeyColumnsOutOfFamilyZero
-	VersionRootPassword
 	VersionNoExplicitForeignKeyIndexIDs
 	VersionHashShardedIndexes
 	VersionCreateRolePrivilege
@@ -111,37 +106,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 1},
 	},
 	{
-		// VersionStart19_2 demarcates work towards CockroachDB v19.2.
-		Key:     VersionStart19_2,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 1},
-	},
-	{
-		// VersionLearnerReplicas is https://github.com/cockroachdb/cockroach/pull/38149.
-		Key:     VersionLearnerReplicas,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 6},
-	},
-	{
-		// VersionTopLevelForeignKeys is https://github.com/cockroachdb/cockroach/pull/39173.
-		//
-		// It represents an upgrade to the table descriptor format in which foreign
-		// key references are pulled out of the index descriptors where they
-		// originally were kept, and rewritten into a top level field on the index's
-		// parent table descriptors. During a mixed-version state, the database will
-		// write old-style table descriptors at all system boundaries, but upgrade
-		// all old-style table descriptors into the new format upon read. Once the
-		// upgrade is finalized, the database will write the upgraded format, but
-		// continue to upgrade old-style descriptors on-demand.
-		//
-		// This version is also used for the new foreign key schema changes which
-		// are run in the schema changer, requiring new types of mutations on the
-		// table descriptor. The same version is used for both of these changes
-		// because the changes are intertwined, and it slightly simplifies some of
-		// the logic to assume that either neither or both sets of changes can be
-		// active.
-		Key:     VersionTopLevelForeignKeys,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 7},
-	},
-	{
 		// VersionAtomicChangeReplicasTrigger is https://github.com/cockroachdb/cockroach/pull/39485.
 		//
 		// It enables use of updated fields in ChangeReplicasTrigger that will
@@ -159,18 +123,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// 'false').
 		Key:     VersionAtomicChangeReplicas,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
-	},
-	{
-		// VersionTableDescModificationTimeFromMVCC is https://github.com/cockroachdb/cockroach/pull/40581
-		//
-		// It represents an upgrade to the table descriptor format in which
-		// CreateAsOfTime and ModifiedTime are set to zero when new versions of
-		// table descriptors are written. This removes the need to fix the commit
-		// timestamp for transactions which update table descriptors. The value
-		// is then populated by the reading client with the MVCC timestamp of the
-		// row which contained the serialized table descriptor.
-		Key:     VersionTableDescModificationTimeFromMVCC,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 10},
 	},
 	{
 		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
@@ -290,17 +242,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// primary key changes that move primary key columns to different families.
 		Key:     VersionPrimaryKeyColumnsOutOfFamilyZero,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 9},
-	},
-	{
-		// VersionRootPassword enables setting a password for the `root`
-		// user from SQL. Even though introducing a password for the root
-		// user in 20.1 does not prevent 19.2 nodes from using the root
-		// account, we need a cluster setting: the 19.2 nodes do not even
-		// *check* the password, so setting a pw in a hybrid 20.1/19.2
-		// cluster would yield different client auth successes in
-		// different nodes (which is poor UX).
-		Key:     VersionRootPassword,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 10},
 	},
 	{
 		// VersionNoExplicitForeignKeyIndexIDs is https://github.com/cockroachdb/cockroach/pull/43332.
