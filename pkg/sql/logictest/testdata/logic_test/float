@@ -132,3 +132,10 @@ DROP TABLE vals
 
 statement ok
 RESET extra_float_digits
+
+# Test that floating point numbers are compared with 15 decimal digits
+# precision.
+query FFF
+SELECT -0.1234567890123456, 123456789012345.6, 1234567.890123456
+----
+-0.1234567890123457 123456789012345.7 1234567.890123457

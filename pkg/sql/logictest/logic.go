@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"go/build"
 	"io"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -163,7 +164,9 @@ import (
 //      - T for text; also used for various types which get converted
 //        to string (arrays, timestamps, etc.).
 //      - I for integer
-//      - R for floating point or decimal
+//      - F for floating point (matches 15 significant decimal digits,
+//        https://www.postgresql.org/docs/9.0/datatype-numeric.html)
+//      - R for decimal
 //      - B for boolean
 //      - O for oid
 //
@@ -2497,11 +2500,11 @@ func (t *logicTest) execQuery(query logicQuery) error {
 								query.pos, i, val, val,
 							)
 						}
-					case 'R':
+					case 'F', 'R':
 						if valT != reflect.Float64 && valT != reflect.Slice {
 							if *flexTypes && (valT == reflect.Int64) {
 								t.signalIgnoredError(
-									fmt.Errorf("result type mismatch: expected R, got %T", val), query.pos, query.sql,
+									fmt.Errorf("result type mismatch: expected F or R, got %T", val), query.pos, query.sql,
 								)
 								return nil
 							}
@@ -2583,7 +2586,14 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			return fmt.Errorf("%s: expected %d results, but found %d", query.pos, query.expectedValues, n)
 		}
 		if query.expectedHash != hash {
-			return fmt.Errorf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
+			var suffix string
+			for _, colT := range query.colTypes {
+				if colT == 'F' {
+					suffix = "\tthis might be due to floating numbers precision deviation"
+					break
+				}
+			}
+			return fmt.Errorf("%s: expected %s, but found %s%s", query.pos, query.expectedHash, hash, suffix)
 		}
 	}
 
@@ -2613,25 +2623,47 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		return nil
 	}
 
-	if query.checkResults && !reflect.DeepEqual(query.expectedResults, actualResults) {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
-		for _, line := range query.expectedResultsRaw {
-			fmt.Fprintf(&buf, "    %s\n", line)
+	if query.checkResults {
+		makeError := func() error {
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
+			for _, line := range query.expectedResultsRaw {
+				fmt.Fprintf(&buf, "    %s\n", line)
+			}
+			sortMsg := ""
+			if query.sorter != nil {
+				// We performed an order-insensitive comparison of "actual" vs "expected"
+				// rows by sorting both, but we'll display the error with the expected
+				// rows in the order in which they were put in the file, and the actual
+				// rows in the order in which the query returned them.
+				sortMsg = " -> ignore the following ordering of rows"
+			}
+			fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
+			for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
+				fmt.Fprintf(&buf, "    %s\n", line)
+			}
+			return errors.Newf("%s", buf.String())
 		}
-		sortMsg := ""
-		if query.sorter != nil {
-			// We performed an order-insensitive comparison of "actual" vs "expected"
-			// rows by sorting both, but we'll display the error with the expected
-			// rows in the order in which they were put in the file, and the actual
-			// rows in the order in which the query returned them.
-			sortMsg = " -> ignore the following ordering of rows"
+		if len(query.expectedResults) == 0 || len(actualResults) == 0 {
+			if len(query.expectedResults) != len(actualResults) {
+				return makeError()
+			}
+		} else {
+			for i, colT := range query.colTypes {
+				expected, actual := query.expectedResults[i], actualResults[i]
+				resultMatches := expected == actual
+				if !resultMatches && colT == 'F' {
+					var err error
+					resultMatches, err = floatsMatch(expected, actual)
+					if err != nil {
+						return errors.CombineErrors(makeError(), err)
+					}
+				}
+				if !resultMatches {
+					return makeError()
+				}
+			}
 		}
-		fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
-		for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
-			fmt.Fprintf(&buf, "    %s\n", line)
-		}
-		return errors.Newf("%s", buf.String())
 	}
 
 	if query.label != "" {
@@ -2646,6 +2678,70 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	t.finishOne("OK")
 	return nil
+}
+
+// floatsMatch returns whether two floating point numbers represented as
+// strings have matching 15 significant decimal digits (this is the precision
+// that Postgres supports for 'double precision' type).
+func floatsMatch(expectedString, actualString string) (bool, error) {
+	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+	if err != nil {
+		return false, errors.Wrap(err, "when parsing expected")
+	}
+	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
+	if err != nil {
+		return false, errors.Wrap(err, "when parsing actual")
+	}
+	// Check special values - NaN, +Inf, -Inf, 0.
+	if math.IsNaN(expected) || math.IsNaN(actual) {
+		return math.IsNaN(expected) == math.IsNaN(actual), nil
+	}
+	if math.IsInf(expected, 0 /* sign */) || math.IsInf(actual, 0 /* sign */) {
+		bothNegativeInf := math.IsInf(expected, -1 /* sign */) == math.IsInf(actual, -1 /* sign */)
+		bothPositiveInf := math.IsInf(expected, 1 /* sign */) == math.IsInf(actual, 1 /* sign */)
+		return bothNegativeInf || bothPositiveInf, nil
+	}
+	if expected == 0 || actual == 0 {
+		return expected == actual, nil
+	}
+	// Check that the numbers have the same sign.
+	if expected*actual < 0 {
+		return false, nil
+	}
+	expected = math.Abs(expected)
+	actual = math.Abs(actual)
+	// Check that 15 significant digits match. We do so by normalizing the
+	// numbers and then checking one digit at a time.
+	//
+	// normalize converts f to base * 10**power representation where base is in
+	// [1.0, 10.0) range.
+	normalize := func(f float64) (base float64, power int) {
+		for f >= 10 {
+			f = f / 10
+			power++
+		}
+		for f < 1 {
+			f *= 10
+			power--
+		}
+		return f, power
+	}
+	var expPower, actPower int
+	expected, expPower = normalize(expected)
+	actual, actPower = normalize(actual)
+	if expPower != actPower {
+		return false, nil
+	}
+	for i := 0; i < 15; i++ {
+		expDigit := int(expected)
+		actDigit := int(actual)
+		if expDigit != actDigit {
+			return false, nil
+		}
+		expected -= (expected - float64(expDigit)) * 10
+		actual -= (actual - float64(actDigit)) * 10
+	}
+	return true, nil
 }
 
 func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
