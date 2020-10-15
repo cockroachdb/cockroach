@@ -27,6 +27,7 @@ type metadataForwarder interface {
 
 type planNodeToRowSource struct {
 	execinfra.ProcessorBase
+	execinfra.StreamingProcessor
 
 	started bool
 

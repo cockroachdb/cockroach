@@ -51,7 +51,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	c, err := NewColumnarizer(ctx, testAllocator, flowCtx, 0, input)
+	c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 
 	const errMsg = "artificial error"
 	rb.Push(nil, &execinfrapb.ProducerMetadata{Err: errors.New(errMsg)})
-	c, err := NewColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, rb)
+	c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, rb)
 	require.NoError(t, err)
 
 	c.Init()
@@ -125,7 +125,7 @@ func BenchmarkColumnarize(b *testing.B) {
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 
-	c, err := NewColumnarizer(ctx, testAllocator, flowCtx, 0, input)
+	c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0, input)
 	if err != nil {
 		b.Fatal(err)
 	}

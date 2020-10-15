@@ -93,9 +93,16 @@ func wrapRowSources(
 		return nil, releasables, err
 	}
 
-	op, err := colexec.NewColumnarizer(
-		ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
-	)
+	var op *colexec.Columnarizer
+	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
+		op, err = colexec.NewStreamingColumnarizer(
+			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+		)
+	} else {
+		op, err = colexec.NewBufferingColumnarizer(
+			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+		)
+	}
 	return op, releasables, err
 }
 
@@ -330,19 +337,17 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 		// such processor probably will not benefit from the vectorization.
 		return errLocalPlanNodeWrap
 	case spec.Core.ChangeAggregator != nil:
-		// We do not wrap ChangeAggregator because this processor is very
-		// row-oriented and the Columnarizer might block indefinitely while
-		// buffering coldata.BatchSize() tuples to emit as a single batch.
+		// Currently, there is an issue with cleaning up the changefeed flows
+		// (#55408), so we fallback to the row-by-row engine.
 		return errChangeAggregatorWrap
 	case spec.Core.ChangeFrontier != nil:
-		// We do not wrap ChangeFrontier because this processor is very
-		// row-oriented and the Columnarizer might block indefinitely while
-		// buffering coldata.BatchSize() tuples to emit as a single batch.
+		// Currently, there is an issue with cleaning up the changefeed flows
+		// (#55408), so we fallback to the row-by-row engine.
 		return errChangeFrontierWrap
 	case spec.Core.Ordinality != nil:
 	case spec.Core.BulkRowWriter != nil:
 	case spec.Core.InvertedFilterer != nil:
-		// We do not wrap InvertedFilterer because that processor just happen
+		// We do not wrap InvertedFilterer because that processor just happens
 		// to work due to the inverted data not being decoded by
 		// rowexec.tableReader which the ColBatchScan will attempt to do and
 		// will fail. The inverted column is not of the same type as the
