@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -293,9 +294,22 @@ func handleOpError(err error) error {
 }
 
 var (
-	errRunInTxnFatalSentinel = errors.New("fatal error when running txn")
-	errRunInTxnRbkSentinel   = errors.New("txn needs to rollback")
+	errRunInTxnFatalSentinel = errors.New("Fatal error when running txn")
+	errRunInTxnRbkSentinel   = errors.New("Txn needs to rollback")
 )
+
+type histBin int
+
+const (
+	operationOk histBin = iota
+	txnOk
+	txnCommitError
+	txnRollback
+)
+
+func (d histBin) String() string {
+	return [...]string{"opOk", "txnOk", "txnCmtErr", "txnRbk"}[d]
+}
 
 func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx, opsNum int) (string, error) {
 	var log strings.Builder
@@ -303,7 +317,7 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx, opsNum int) (string, error) {
 		op, noops, expectedErrorCode, err := w.randOp(tx)
 		if err != nil {
 			return noops, errors.Mark(
-				errors.Wrap(err, "could not generate a random operation"),
+				errors.Wrap(err, "Could not generate a random operation"),
 				errRunInTxnFatalSentinel,
 			)
 		}
@@ -313,19 +327,42 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx, opsNum int) (string, error) {
 		}
 		log.WriteString(fmt.Sprintf("  %s;\n", op))
 		if !w.dryRun {
-			histBin := "opOk"
-			start := timeutil.Now()
+			startOp := timeutil.Now()
 			if _, err = tx.Exec(op); err != nil {
-				histBin = "txnRbk"
-				log.WriteString(fmt.Sprintf("***FAIL: %v\n", err))
-				log.WriteString("ROLLBACK;\n")
+
+				if expectedErrorCode != nil {
+					if pgErr := (pgx.PgError{}); !errors.As(err, &pgErr) || errors.As(err, &pgErr) && pgErr.Code != expectedErrorCode.String() {
+						log.WriteString(fmt.Sprintf("Expected SQLSTATE %s, but got %v\n", expectedErrorCode.String(), err))
+						return log.String(), errors.Mark(
+							errors.Wrap(err, "***UNEXPECTED ERROR"),
+							errRunInTxnFatalSentinel,
+						)
+					}
+				}
+				// else {
+				// TODO(jayshrivastava): Once all operations support returning an expectedErrorCode, return a fatal error here
+				//}
+				w.recordInHist(timeutil.Since(startOp), txnRollback)
+				log.WriteString(fmt.Sprintf("ROLLBACK; %v\n", err))
 				return log.String(), errors.Mark(err, errRunInTxnRbkSentinel)
 			}
-			elapsed := timeutil.Since(start)
-			w.hists.Get(histBin).Record(elapsed)
+
+			if expectedErrorCode != nil {
+				log.WriteString(fmt.Sprintf("Expected SQLSTATE %s, but got no errors", expectedErrorCode.String()))
+				return log.String(), errors.Mark(
+					errors.Errorf("***UNEXPECTED SUCCESS"),
+					errRunInTxnFatalSentinel,
+				)
+			}
+
+			w.recordInHist(timeutil.Since(startOp), operationOk)
 		}
 	}
 	return log.String(), nil
+}
+
+func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
+	w.hists.Get(bin.String()).Record(elapsed)
 }
 
 func (w *schemaChangeWorker) run(_ context.Context) error {
@@ -336,7 +373,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	opsNum := 1 + w.rng.Intn(w.maxOpsPerWorker)
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
-	start := timeutil.Now()
+	startTxn := timeutil.Now()
 	logs, err := w.runInTxn(tx, opsNum)
 	logs = "BEGIN\n" + logs
 	defer func() {
@@ -354,6 +391,8 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 		case errors.Is(err, errRunInTxnFatalSentinel):
 			return err
 		case errors.Is(err, errRunInTxnRbkSentinel):
+			// TODO(jayshrivastava): Once all operations support returning an expectedErrorCode,
+			// we can safely return nil here (for expected rollbacks only) and delete handleOpError()
 			if seriousErr := handleOpError(err); seriousErr != nil {
 				return seriousErr
 			}
@@ -364,13 +403,13 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	}
 
 	// If there were no errors commit the txn.
-	histBin := "txnOk"
+	bin := txnOk
 	cmtErrMsg := ""
 	if err = tx.Commit(); err != nil {
-		histBin = "txnCmtErr"
+		bin = txnCommitError
 		cmtErrMsg = fmt.Sprintf("***FAIL: %v", err)
 	}
-	w.hists.Get(histBin).Record(timeutil.Since(start))
+	w.recordInHist(timeutil.Since(startTxn), bin)
 	logs = logs + fmt.Sprintf("COMMIT;  %s\n", cmtErrMsg)
 	return nil
 }
