@@ -927,11 +927,11 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 
 // Next is part of the RowSource interface.
 func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if err := z.maybeFetchInitialRow(); err != nil {
-		z.MoveToDraining(err)
-	}
-
 	for z.State == execinfra.StateRunning {
+		if err := z.maybeFetchInitialRow(); err != nil {
+			z.MoveToDraining(err)
+			break
+		}
 		row, err := z.nextRow(z.Ctx, z.FlowCtx.Txn)
 		if err != nil {
 			z.MoveToDraining(err)
