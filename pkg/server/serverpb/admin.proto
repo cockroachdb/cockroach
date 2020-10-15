@@ -343,23 +343,12 @@ message ClusterResponse {
   bool enterprise_enabled = 3;
 }
 
-// DrainRequest requests the server to enter the specified draining mode. The
-// server first deactivates all the modes specified in 'off' and then activates
-// all those in 'on'.
+// DrainRequest instructs the receiving node to drain.
 message DrainRequest {
-  // deprecated_probe_indicator works as follows:
-  // - if nil, it indicates that the request is a probe only and
-  //   the server should not actually drain. This indicator
-  //   is supported for pre-20.1 RPC clients which do not know
-  //   about the skip_drain field below.
-  // - if non-nil, it must be exactly equal to the slice [0, 1].
-  //   Other values result in an error. When non-nil,
-  //   it implies do_drain = true regardless of the value of the
-  //   other field (pre-20.1 clients don't populate the other field).
-  //
-  // This field will be removed in 20.2 in favor of
-  // do_drain below.
-  repeated int32 deprecated_probe_indicator = 1;
+  // pre_201_marker represents a field that clients stopped using in 20.1. It's
+  // maintained to reject requests from such clients, since they're not setting
+  // other required fields.
+  repeated int32 pre201_marker= 1;
   reserved 2;
   // When true, terminates the process after the server has started draining.
   // Setting both shutdown and do_drain to false causes
@@ -376,15 +365,6 @@ message DrainRequest {
 
 // DrainResponse is the response to a successful DrainRequest.
 message DrainResponse {
-  // deprecated_drain_status works as follows:
-  // - if the server is NOT currently draining,
-  //   it will be set to an empty or nil slice.
-  // - a non-nil slice indicates the server is currently
-  //   draining.
-  //
-  // This field exists for the benefit of 19.x clients
-  // and will be removed in 20.2.
-  repeated int32 deprecated_drain_status = 1;
   // is_draining is set to true iff the server is currently draining.
   // This is set to true in response to a request where skip_drain
   // is false; but it can also be set to true in response
@@ -438,6 +418,8 @@ message DrainResponse {
   // The field is only populated if do_drain is true in the
   // request.
   string drain_remaining_description = 4;
+
+  reserved 1;
 }
 
 // DecommissionStatusRequest requests the decommissioning status for the

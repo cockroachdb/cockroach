@@ -13,7 +13,6 @@ package server
 import (
 	"context"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -28,18 +27,6 @@ import (
 )
 
 var (
-	// DeprecatedDrainParameter the special value that must be
-	// passed in DrainRequest.DeprecatedProbeIndicator to signal the
-	// drain request is not a probe.
-	// This variable is also used in the v20.1 "quit" client
-	// to provide a valid input to the request sent to
-	// v19.1 nodes.
-	//
-	// TODO(knz): Remove this in v20.2 and whenever the "quit" command
-	// is not meant to work with 19.x servers any more, whichever comes
-	// later.
-	DeprecatedDrainParameter = []int32{0, 1}
-
 	queryWait = settings.RegisterPublicDurationSetting(
 		"server.shutdown.query_wait",
 		"the server will wait for at least this amount of time for active queries to finish",
@@ -61,15 +48,12 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
 
-	doDrain := req.DoDrain
-	if len(req.DeprecatedProbeIndicator) > 0 {
-		// Pre-20.1 behavior.
-		// TODO(knz): Remove this condition in 20.2.
-		doDrain = true
-		if !reflect.DeepEqual(req.DeprecatedProbeIndicator, DeprecatedDrainParameter) {
-			return status.Errorf(codes.InvalidArgument, "Invalid drain request parameter.")
-		}
+	if len(req.Pre201Marker) > 0 {
+		return status.Errorf(codes.InvalidArgument,
+			"Drain request coming from unsupported client version older than 20.1.")
 	}
+
+	doDrain := req.DoDrain
 
 	log.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
 
@@ -84,7 +68,6 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		res.DrainRemainingDescription = info.StripMarkers()
 	}
 	if s.server.isDraining() {
-		res.DeprecatedDrainStatus = DeprecatedDrainParameter
 		res.IsDraining = true
 	}
 
