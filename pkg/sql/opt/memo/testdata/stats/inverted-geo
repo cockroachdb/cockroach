@@ -534,3 +534,25 @@ project
       │              └── fd: (3)-->(5)
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# Tests for multi-column inverted spatial indexes.
+
+exec-ddl
+CREATE TABLE m (
+  k INT PRIMARY KEY,
+  a INT,
+  g GEOMETRY,
+  INVERTED INDEX (a, g)
+)
+----
+
+# The stats builder should not panic during a SELECT on a table with a
+# multi-column inverted index.
+opt
+SELECT * FROM m
+----
+scan m
+ ├── columns: k:1(int!null) a:2(int) g:3(geometry)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
