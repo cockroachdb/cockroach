@@ -24,6 +24,7 @@ import { TableInfo } from "src/views/databases/data/tableInfo";
 // on a DatabaseSummary component.
 export interface DatabaseSummaryExplicitData {
   name: string;
+  updateOnLoad?: boolean;
 }
 
 // DatabaseSummaryConnectedData describes properties which are applied to a
@@ -45,14 +46,26 @@ interface DatabaseSummaryActions {
   updateOnLoad: boolean;
 }
 
-type DatabaseSummaryProps = DatabaseSummaryExplicitData & DatabaseSummaryConnectedData & DatabaseSummaryActions;
+export type DatabaseSummaryProps = DatabaseSummaryExplicitData & DatabaseSummaryConnectedData & DatabaseSummaryActions;
+
+export interface DatabaseSummaryState {
+  isExpanded: boolean;
+}
 
 // DatabaseSummaryBase implements common lifecycle methods for DatabaseSummary
 // components, which differ primarily by their render() method.
 // TODO(mrtracy): We need to find a better abstraction for the common
 // "refresh-on-mount-or-receiveProps" we have in many of our connected
 // components; that would allow us to avoid this inheritance.
-export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {}> {
+export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, DatabaseSummaryState> {
+  static defaultProps: Partial<DatabaseSummaryProps> = {
+    updateOnLoad: true,
+  };
+
+  state = {
+    isExpanded: false,
+  };
+
   // loadTableDetails loads data for each table which have no info in the store.
   // TODO(mrtracy): Should this be refreshing data always? Not sure if there
   // is a performance concern with invalidation periods.

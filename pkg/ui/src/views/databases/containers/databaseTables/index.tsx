@@ -16,7 +16,13 @@ import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { Bytes } from "src/util/format";
-import { databaseDetails, DatabaseSummaryBase, DatabaseSummaryExplicitData, grants, tableInfos as selectTableInfos } from "src/views/databases/containers/databaseSummary";
+import {
+  databaseDetails,
+  DatabaseSummaryBase,
+  DatabaseSummaryExplicitData,
+  grants,
+  tableInfos as selectTableInfos,
+} from "src/views/databases/containers/databaseSummary";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
@@ -27,7 +33,8 @@ import { SummaryCard } from "src/views/shared/components/summaryCard";
 import { SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import TitleWithIcon from "../../components/titleWithIcon/titleWithIcon";
 import { ReplicatedSizeTooltip } from "src/views/databases/containers/databases/tooltips";
-import { Button } from "oss/src/components";
+import { Anchor } from "src/components";
+import { Icon } from "antd";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/tables", (s) => s.localSettings,
@@ -54,18 +61,36 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
     </>
   )
 
+  handleOnTitleClick = () => {
+    const nextStateIsExpanded = !this.state.isExpanded;
+    this.setState({ isExpanded: nextStateIsExpanded });
+    if (nextStateIsExpanded) {
+      this.loadTableDetails(this.props);
+    }
+  }
+
   render() {
     const { tableInfos, dbResponse, sortSetting } = this.props;
+    const { isExpanded } = this.state;
     const dbID = this.props.name;
     const loading = dbResponse ? !!dbResponse.inFlight : true;
     const numTables = tableInfos && tableInfos.length || 0;
+    const isLoadingTableInfos = tableInfos?.some(ti => !ti.id);
     return (
-      <div className="database-summary">
+      <div className={`database-summary database-summary--${isExpanded ? "expanded" : "collapsed"}`}>
         <div className="database-summary-title">
-          <TitleWithIcon src={Stack} title={dbID}/>
-          <Button type="secondary" className="database-summary-load-button" onClick={() => this.loadTableDetails(this.props)}>Load stats for all tables</Button>
+          <Anchor
+            onClick={this.handleOnTitleClick}
+            className="database-summary__title-anchor"
+          >
+            <TitleWithIcon src={Stack} title={dbID}/>
+            <Icon
+              className="database-summary__title-anchor--toggle-icon"
+              type={isExpanded ? "caret-down" : "caret-right"}
+            />
+          </Anchor>
         </div>
-        <div className="l-columns">
+        <div className={`l-columns database-summary__body--${isExpanded ? "expanded" : "collapsed"}`} >
           <div className="l-columns__left">
             <DatabaseTableListSortedTable
               data={tableInfos}
@@ -106,7 +131,7 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
                   sort: (tableInfo) => tableInfo.numIndices,
                 },
               ]}
-              loading={loading}
+              loading={loading || isLoadingTableInfos}
               renderNoResult={loading ? undefined : this.noDatabaseResults()}
           />
           </div>
