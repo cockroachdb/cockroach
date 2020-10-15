@@ -16,18 +16,16 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"google.golang.org/grpc"
 )
 
 // TestDrain tests the Drain RPC.
@@ -105,8 +103,7 @@ func newTestDrainContext(t *testing.T) *testDrainContext {
 
 	// We'll have the RPC talk to the first node.
 	var err error
-	tc.c, tc.connCloser, err = getAdminClientForServer(context.Background(),
-		tc.tc, 0 /* serverIdx */)
+	tc.c, tc.connCloser, err = getAdminClientForServer(tc.tc.Server(0))
 	if err != nil {
 		tc.Close()
 		t.Fatal(err)
@@ -160,7 +157,7 @@ func (t *testDrainContext) sendShutdown() *serverpb.DrainResponse {
 		// It's possible we're getting "connection reset by peer" or some
 		// gRPC initialization failure because the server is shutting
 		// down. Tolerate that.
-		t.Logf("RPC error: %v", err)
+		log.Infof(context.Background(), "RPC error: %v", err)
 	}
 	return resp
 }
@@ -198,23 +195,12 @@ func (t *testDrainContext) getDrainResponse(
 }
 
 func getAdminClientForServer(
-	ctx context.Context, tc *testcluster.TestCluster, serverIdx int,
+	s serverutils.TestServerInterface,
 ) (c serverpb.AdminClient, closer func(), err error) {
-	stopper := stop.NewStopper() // stopper for the client.
-	// Retrieve some parameters to initialize the client RPC context.
-	cfg := tc.Server(0).RPCContext().Config
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: execCfg.Settings.Tracer},
-		Config:     cfg,
-		Clock:      execCfg.Clock,
-		Stopper:    stopper,
-		Settings:   execCfg.Settings,
-	})
-	conn, err := rpcContext.GRPCUnvalidatedDial(tc.Server(serverIdx).ServingRPCAddr()).Connect(ctx)
+	conn, err := grpc.Dial(s.ServingRPCAddr(), grpc.WithInsecure())
 	if err != nil {
 		return nil, nil, err
 	}
-	return serverpb.NewAdminClient(conn), func() { stopper.Stop(ctx) }, nil
+	client := serverpb.NewAdminClient(conn)
+	return client, func() { _ = conn.Close() }, nil
 }
