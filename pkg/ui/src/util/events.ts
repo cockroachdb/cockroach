@@ -83,6 +83,10 @@ export function getEventDescription(e: Event$Properties): string {
       return `Zone Config Removed: User ${info.User} removed the zone config for ${info.Target}`;
     case eventTypes.CREATE_STATISTICS:
       return `Table statistics refreshed for ${info.TableName}`;
+    case eventTypes.GRANT_PRIVILEGE:
+      return `Privileges granted: User ${info.User} granted ${info.Privileges} to ${info.Grantees} on ${info.Target}`;
+    case eventTypes.REVOKE_PRIVILEGE:
+      return `Privileges revoked: User ${info.User} revoked ${info.Privileges} from ${info.Grantees} on ${info.Target}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
   }
@@ -105,6 +109,8 @@ export interface EventInfo {
   Target?: string;
   Config?: string;
   Statement?: string;
+  Grantees?: string;
+  Privileges?: string;
   // The following are three names for the same key (it was renamed twice).
   // All ar included for backwards compatibility.
   DroppedTables?: string[];

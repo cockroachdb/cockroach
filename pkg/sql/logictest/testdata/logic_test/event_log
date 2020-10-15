@@ -490,3 +490,47 @@ SELECT "eventType", "reportingID", info::JSONB->>'ViewName'
 ----
 create_view  1  test.public.v
 drop_view    1  test.public.v
+
+
+# Change privileges
+##################
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b (id INT PRIMARY KEY)
+
+statement ok
+CREATE USER u
+
+statement ok
+CREATE USER v
+
+statement ok
+GRANT INSERT ON TABLE a,b TO u
+
+statement ok
+REVOKE UPDATE ON TABLE a FROM u,v
+
+query ITT
+SELECT "reportingID", "info", "eventType"
+FROM system.eventlog
+WHERE "eventType" = 'grant_privilege'
+OR "eventType" = 'revoke_privilege'
+ORDER BY "eventType"
+----
+1 {"Target":"TABLE a, b","User":"root","Grantees":"u","Privileges":"INSERT"} grant_privilege
+1 {"Target":"TABLE a","User":"root","Grantees":"u,v","Privileges":"UPDATE"} revoke_privilege
+
+statement ok
+DROP TABLE a
+
+statement ok
+DROP TABLE b
+
+statement ok
+DROP USER u
+
+statement ok
+DROP USER v
