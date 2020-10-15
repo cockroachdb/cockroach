@@ -137,8 +137,8 @@ func doDrainNoTimeout(
 		// Send a drain request with the drain bit set and the shutdown bit
 		// unset.
 		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
-			DeprecatedProbeIndicator: server.DeprecatedDrainParameter,
-			DoDrain:                  true,
+			DoDrain:  true,
+			Shutdown: false,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "\n") // finish the line started above.
