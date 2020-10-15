@@ -166,6 +166,9 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TYPE(), vec.Nulls()
+	// {{if eq .LTyp.String "Bytes"}}
+	oldCurAggSize := len(a.curAgg)
+	// {{end}}
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
@@ -196,6 +199,9 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		},
 	)
+	// {{if eq .LTyp.String "Bytes"}}
+	a.allocator.AdjustMemoryUsage(int64(len(a.curAgg) - oldCurAggSize))
+	// {{end}}
 }
 
 func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {
