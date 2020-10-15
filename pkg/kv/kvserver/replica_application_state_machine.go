@@ -652,6 +652,15 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// its unlock method in cmd.splitMergeUnlock.
 		rhsRepl.raftMu.AssertHeld()
 
+		// We mark the replica as destroyed so that new commands are not
+		// accepted. This destroy status will be detected after the batch
+		// commits by handleMergeResult() to finish the removal.
+		rhsRepl.mu.Lock()
+		rhsRepl.mu.destroyStatus.Set(
+			roachpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
+			destroyReasonRemoved)
+		rhsRepl.mu.Unlock()
+
 		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
 		// extra safeguard against creating new replicas of the RHS. This isn't
 		// required for correctness, since the merge protocol should guarantee that
@@ -726,11 +735,11 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		!b.r.store.TestingKnobs().DisableEagerReplicaRemoval {
 
 		// We mark the replica as destroyed so that new commands are not
-		// accepted. This destroy status will be detected after the batch commits
-		// by Replica.handleChangeReplicasTrigger() to finish the removal.
+		// accepted. This destroy status will be detected after the batch
+		// commits by handleChangeReplicasResult() to finish the removal.
 		//
-		// NB: we must be holding the raftMu here because we're in the
-		// midst of application.
+		// NB: we must be holding the raftMu here because we're in the midst of
+		// application.
 		b.r.mu.Lock()
 		b.r.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
