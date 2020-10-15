@@ -978,10 +978,19 @@ func init() {
 	DecimalOne.SetInt64(1)
 }
 
-// ReType ensures that the given numeric expression evaluates
+// ReType ensures that the given expression evaluates
 // to the requested type, inserting a cast if necessary.
 func ReType(expr TypedExpr, wantedType *types.T) TypedExpr {
-	if wantedType.Family() == types.AnyFamily || expr.ResolvedType().Identical(wantedType) {
+	resolvedType := expr.ResolvedType()
+	if wantedType.Family() == types.AnyFamily || resolvedType.Identical(wantedType) {
+		return expr
+	}
+	// Casting to an "any" tuple is not allowed because there is no way to define
+	// the volatility in LookupCastVolatility.
+	if wantedType.Family() == types.TupleFamily &&
+		len(wantedType.TupleContents()) > 0 &&
+		wantedType.TupleContents()[0].Family() == types.AnyFamily &&
+		resolvedType.Family() == types.TupleFamily {
 		return expr
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}
