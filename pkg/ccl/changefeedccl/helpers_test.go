@@ -236,6 +236,11 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) f
 		// TODO(dan): This is still needed to speed up table_history, that should be
 		// moved to RangeFeed as well.
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+		// Change a couple of settings related to the vectorized engine in
+		// order to ensure that changefeeds work as expected with them (note
+		// that we'll still use the row-by-row engine, see #55605).
+		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.vectorize=on`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold=0`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 
 		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
