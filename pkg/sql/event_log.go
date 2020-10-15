@@ -117,6 +117,13 @@ const (
 	// EventLogCreateStatistics is recorded when statistics are collected for a
 	// table.
 	EventLogCreateStatistics EventLogType = "create_statistics"
+
+	// EventLogGrantPrivilege is recorded when privileges are added to a user
+	// for a database object.
+	EventLogGrantPrivilege EventLogType = "grant_privilege"
+	// EventLogRevokePrivilege is recorded when privileges are removed from a
+	// user for a database object.
+	EventLogRevokePrivilege EventLogType = "revoke_privilege"
 )
 
 // EventLogSetClusterSettingDetail is the json details for a settings change.
