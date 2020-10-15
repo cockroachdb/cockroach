@@ -13,13 +13,11 @@ package server_test
 import (
 	"context"
 	"io"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,24 +34,12 @@ import (
 func TestDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	doTestDrain(t, true /* newInterface */)
-}
-
-// TestDrainLegacy tests the Drain RPC using the pre-20.1 probe signaling.
-// TODO(knz): Remove this test when compatibility with pre-20.1 nodes
-// is dropped.
-func TestDrainLegacy(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	doTestDrain(t, false /* newInterface */)
+	doTestDrain(t)
 }
 
 // doTestDrain runs the drain test.
-// The parameter newInterface indicates whether to use the pre-20.1
-// protocol based on "drain modes" or the post-20.1 protocol
-// using discrete fields on the request object.
-func doTestDrain(tt *testing.T, newInterface bool) {
-	t := newTestDrainContext(tt, newInterface)
+func doTestDrain(tt *testing.T) {
+	t := newTestDrainContext(tt)
 	defer t.Close()
 
 	// Issue a probe. We're not draining yet, so the probe should
@@ -100,16 +86,14 @@ func doTestDrain(tt *testing.T, newInterface bool) {
 
 type testDrainContext struct {
 	*testing.T
-	tc           *testcluster.TestCluster
-	newInterface bool
-	c            serverpb.AdminClient
-	connCloser   func()
+	tc         *testcluster.TestCluster
+	c          serverpb.AdminClient
+	connCloser func()
 }
 
-func newTestDrainContext(t *testing.T, newInterface bool) *testDrainContext {
+func newTestDrainContext(t *testing.T) *testDrainContext {
 	tc := &testDrainContext{
-		T:            t,
-		newInterface: newInterface,
+		T: t,
 		tc: testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			// We need to start the cluster insecure in order to not
 			// care about TLS settings for the RPC client connection.
@@ -151,11 +135,7 @@ func (t *testDrainContext) drainRequest(drain, shutdown bool) *serverpb.DrainRes
 	req := &serverpb.DrainRequest{Shutdown: shutdown}
 
 	if drain {
-		if t.newInterface {
-			req.DoDrain = true
-		} else {
-			req.DeprecatedProbeIndicator = server.DeprecatedDrainParameter
-		}
+		req.DoDrain = true
 	}
 
 	drainStream, err := t.c.Drain(context.Background(), req)
@@ -188,18 +168,6 @@ func (t *testDrainContext) sendShutdown() *serverpb.DrainResponse {
 func (t *testDrainContext) assertDraining(resp *serverpb.DrainResponse, drain bool) {
 	if resp.IsDraining != drain {
 		t.Fatalf("expected draining %v, got %v", drain, resp.IsDraining)
-	}
-	// Check that the deprecated status field is compatible with expectation.
-	// TODO(knz): Remove this test when compatibility with pre-20.1 nodes
-	// is dropped.
-	if drain {
-		if !reflect.DeepEqual(resp.DeprecatedDrainStatus, server.DeprecatedDrainParameter) {
-			t.Fatalf("expected compat drain status, got %# v", pretty.Formatter(resp))
-		}
-	} else {
-		if len(resp.DeprecatedDrainStatus) > 0 {
-			t.Fatalf("expected no compat drain status, got %# v", pretty.Formatter(resp))
-		}
 	}
 }
 
