@@ -1936,11 +1936,9 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	inputCols := input.Relational().OutputCols
 	var pkCols opt.ColList
 
-	// TODO(mgartner): Use partial indexes for geolookup joins when the
-	// predicate is implied by the on filter.
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectNonInvertedIndexes|rejectPartialIndexes)
-	iter.ForEach(func(index cat.Index, _ memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.init(c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
+	iter.ForEach(func(index cat.Index, on memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		// Check whether the filter can constrain the index.
 		invertedExpr := invertedidx.TryJoinGeoIndex(
 			c.e.evalCtx.Context, c.e.f, on, scanPrivate.Table, index, inputCols,
