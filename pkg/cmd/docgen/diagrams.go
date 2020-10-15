@@ -528,9 +528,24 @@ var specs = []stmtSpec{
 		name:   "create_as_constraint_def",
 		inline: []string{"create_as_constraint_elem"},
 	},
-	{name: "cancel_query", stmt: "cancel_queries_stmt", replace: map[string]string{"a_expr": "query_id"}, unlink: []string{"query_id"}},
-	{name: "cancel_session", stmt: "cancel_sessions_stmt", replace: map[string]string{"a_expr": "session_id"}, unlink: []string{"session_id"}},
-	{name: "create_database_stmt", inline: []string{"opt_encoding_clause"}, replace: map[string]string{"'SCONST'": "encoding"}, unlink: []string{"name", "encoding"}},
+	{
+		name:    "cancel_query",
+		stmt:    "cancel_queries_stmt",
+		replace: map[string]string{"a_expr": "query_id"},
+		unlink:  []string{"query_id"},
+	},
+	{
+		name:    "cancel_session",
+		stmt:    "cancel_sessions_stmt",
+		replace: map[string]string{"a_expr": "session_id"},
+		unlink:  []string{"session_id"},
+	},
+	{
+		name:    "create_database_stmt",
+		inline:  []string{"opt_encoding_clause", "opt_connection_limit", "opt_equal"},
+		replace: map[string]string{"'SCONST'": "encoding"},
+		unlink:  []string{"name", "encoding"},
+	},
 	{
 		name:   "create_changefeed_stmt",
 		inline: []string{"changefeed_targets", "single_table_pattern_list", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
