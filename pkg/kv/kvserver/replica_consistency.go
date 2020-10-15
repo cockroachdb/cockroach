@@ -159,7 +159,7 @@ func (r *Replica) CheckConsistency(
 		}
 
 		if isQueue {
-			log.Errorf(ctx, "%v", buf.RedactableString())
+			log.Errorf(ctx, "%v", &buf)
 		}
 		res.Detail += buf.String()
 	} else {
