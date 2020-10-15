@@ -334,6 +334,47 @@ func initArrayElementConcatenation() {
 			Volatility: VolatilityImmutable,
 		})
 	}
+
+	BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		LeftType:     types.Oid,
+		RightType:    types.MakeArray(types.Int),
+		ReturnType:   types.MakeArray(types.Oid),
+		NullableArgs: true,
+		Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			result := NewDArray(types.Oid)
+			result.Append(left)
+			if right != DNull {
+				for _, e := range MustBeDArray(right).Array {
+					o := MakeDOid(MustBeDInt(e))
+					if err := result.Append(&o); err != nil {
+						return nil, err
+					}
+				}
+			}
+			return result, nil
+		},
+		Volatility: VolatilityImmutable,
+	})
+	BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		LeftType:     types.MakeArray(types.Int),
+		RightType:    types.Oid,
+		ReturnType:   types.MakeArray(types.Oid),
+		NullableArgs: true,
+		Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			result := NewDArray(types.Oid)
+			if left != DNull {
+				for _, e := range MustBeDArray(left).Array {
+					o := MakeDOid(MustBeDInt(e))
+					if err := result.Append(&o); err != nil {
+						return nil, err
+					}
+				}
+			}
+			result.Append(right)
+			return result, nil
+		},
+		Volatility: VolatilityImmutable,
+	})
 }
 
 // ConcatArrays concatenates two arrays.
@@ -417,9 +458,42 @@ func initArrayToArrayConcatenation() {
 	}
 }
 
+// initNonArrayToNonArrayConcatenation initializes string + nonarrayelement
+// and nonarrayelement + string concatenation.
+func initNonArrayToNonArrayConcatenation() {
+	addConcat := func(leftType, rightType *types.T) {
+		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+			LeftType:     leftType,
+			RightType:    rightType,
+			ReturnType:   types.String,
+			NullableArgs: false,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				if _, ok := left.(*DString); ok {
+					return NewDString(string(MustBeDString(left)) + right.String()), nil
+				}
+				if _, ok := right.(*DString); ok {
+					return NewDString(left.String() + string(MustBeDString(right))), nil
+				}
+				return nil, errors.New("neither LHS or RHS matched DString")
+			},
+			Volatility: VolatilityImmutable,
+		})
+	}
+	// We allow tuple + string concatenation, as well as any scalar types.
+	for _, t := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
+		// Do not re-add String+String or String+Bytes, as they already exist
+		// and have predefined correct behavior.
+		if t != types.String && t != types.Bytes {
+			addConcat(t, types.String)
+			addConcat(types.String, t)
+		}
+	}
+}
+
 func init() {
 	initArrayElementConcatenation()
 	initArrayToArrayConcatenation()
+	initNonArrayToNonArrayConcatenation()
 }
 
 func init() {
