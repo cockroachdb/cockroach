@@ -26,8 +26,8 @@ type VersionKey int
 //
 // To delete a version.
 //   - Remove its associated runtime checks.
-//   - If the version is not the latest one, delete the constant, comment out
-//     its stanza, and say "Removed." above the versionsSingleton.
+//   - If the version is not the latest one, delete the constant and remove its
+//     entry in the versionsSingleton.
 //
 //go:generate stringer -type=VersionKey
 const (
@@ -105,100 +105,6 @@ const (
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions([]keyedVersion{
-	//{
-	// Removed
-	// VersionUnreplicatedRaftTruncatedState is https://github.com/cockroachdb/cockroach/pull/34660.
-	// When active, it moves the truncated state into unreplicated keyspace
-	// on log truncations.
-	//
-	// The migration works as follows:
-	//
-	// 1. at any log position, the replicas of a Range either use the new
-	// (unreplicated) key or the old one, and exactly one of them exists.
-	//
-	// 2. When a log truncation evaluates under the new cluster version,
-	// it initiates the migration by deleting the old key. Under the old cluster
-	// version, it behaves like today, updating the replicated truncated state.
-	//
-	// 3. The deletion signals new code downstream of Raft and triggers a write
-	// to the new, unreplicated, key (atomic with the deletion of the old key).
-	//
-	// 4. Future log truncations don't write any replicated data any more, but
-	// (like before) send along the TruncatedState which is written downstream
-	// of Raft atomically with the deletion of the log entries. This actually
-	// uses the same code as 3.
-	// What's new is that the truncated state needs to be verified before
-	// replacing a previous one. If replicas disagree about their truncated
-	// state, it's possible for replica X at FirstIndex=100 to apply a
-	// truncated state update that sets FirstIndex to, say, 50 (proposed by a
-	// replica with a "longer" historical log). In that case, the truncated
-	// state update must be ignored (this is straightforward downstream-of-Raft
-	// code).
-	//
-	// 5. When a split trigger evaluates, it seeds the RHS with the legacy
-	// key iff the LHS uses the legacy key, and the unreplicated key otherwise.
-	// This makes sure that the invariant that all replicas agree on the
-	// state of the migration is upheld.
-	//
-	// 6. When a snapshot is applied, the receiver is told whether the snapshot
-	// contains a legacy key. If not, it writes the truncated state (which is
-	// part of the snapshot metadata) in its unreplicated version. Otherwise
-	// it doesn't have to do anything (the range will migrate later).
-	//
-	// The following diagram visualizes the above. Note that it abuses sequence
-	// diagrams to get a nice layout; the vertical lines belonging to NewState
-	// and OldState don't imply any particular ordering of operations.
-	//
-	// ┌────────┐                            ┌────────┐
-	// │OldState│                            │NewState│
-	// └───┬────┘                            └───┬────┘
-	//     │                        Bootstrap under old version
-	//     │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-	//     │                                     │
-	//     │                                     │     Bootstrap under new version
-	//     │                                     │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-	//     │                                     │
-	//     │─ ─ ┐
-	//     │    | Log truncation under old version
-	//     │< ─ ┘
-	//     │                                     │
-	//     │─ ─ ┐                                │
-	//     │    | Snapshot                       │
-	//     │< ─ ┘                                │
-	//     │                                     │
-	//     │                                     │─ ─ ┐
-	//     │                                     │    | Snapshot
-	//     │                                     │< ─ ┘
-	//     │                                     │
-	//     │   Log truncation under new version  │
-	//     │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─>│
-	//     │                                     │
-	//     │                                     │─ ─ ┐
-	//     │                                     │    | Log truncation under new version
-	//     │                                     │< ─ ┘
-	//     │                                     │
-	//     │                                     │─ ─ ┐
-	//     │                                     │    | Log truncation under old version
-	//     │                                     │< ─ ┘ (necessarily running new binary)
-	//
-	// Source: http://www.plantuml.com/plantuml/uml/ and the following input:
-	//
-	// @startuml
-	// scale 600 width
-	//
-	// OldState <--] : Bootstrap under old version
-	// NewState <--] : Bootstrap under new version
-	// OldState --> OldState : Log truncation under old version
-	// OldState --> OldState : Snapshot
-	// NewState --> NewState : Snapshot
-	// OldState --> NewState : Log truncation under new version
-	// NewState --> NewState : Log truncation under new version
-	// NewState --> NewState : Log truncation under old version\n(necessarily running new binary)
-	// @enduml
-
-	//Key:     VersionUnreplicatedRaftTruncatedState,
-	//Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 6},
-	//},
 	{
 		// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch releases.
 		Key:     Version19_1,
@@ -209,30 +115,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionStart19_2,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 1},
 	},
-	// Removed.
-	// {
-	// 	// VersionQueryTxnTimestamp is https://github.com/cockroachdb/cockroach/pull/36307.
-	// 	Key:     VersionQueryTxnTimestamp,
-	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 2},
-	// },
-	// Removed.
-	// {
-	// 	// VersionStickyBit is https://github.com/cockroachdb/cockroach/pull/37506.
-	// 	Key:     VersionStickyBit,
-	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 3},
-	// },
-	// Removed.
-	// {
-	// 	// VersionParallelCommits is https://github.com/cockroachdb/cockroach/pull/37777.
-	// 	Key:     VersionParallelCommits,
-	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 4},
-	// },
-	// Removed.
-	// {
-	// 	// VersionGenerationComparable is https://github.com/cockroachdb/cockroach/pull/38334.
-	// 	Key:     VersionGenerationComparable,
-	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 5},
-	// },
 	{
 		// VersionLearnerReplicas is https://github.com/cockroachdb/cockroach/pull/38149.
 		Key:     VersionLearnerReplicas,
