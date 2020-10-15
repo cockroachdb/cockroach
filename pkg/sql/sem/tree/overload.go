@@ -803,6 +803,49 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
+	// After the previous heuristic, in a binary expression, in the case of one of the arguments being untyped
+	// NULL, we prefer overloads where we infer the type of the NULL to be a STRING. This is used
+	// to choose INT || NULL::STRING over INT || NULL::INT[].
+	if inBinOp && len(s.exprs) == 2 {
+		if ok, typedExprs, fns, err := filterAttempt(ctx, semaCtx, &s, func() {
+			var err error
+			left := s.typedExprs[0]
+			if left == nil {
+				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.Any)
+				if err != nil {
+					return
+				}
+			}
+			right := s.typedExprs[1]
+			if right == nil {
+				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.Any)
+				if err != nil {
+					return
+				}
+			}
+			leftType := left.ResolvedType()
+			rightType := right.ResolvedType()
+			leftIsNull := leftType.Family() == types.UnknownFamily
+			rightIsNull := rightType.Family() == types.UnknownFamily
+			oneIsNull := (leftIsNull || rightIsNull) && !(leftIsNull && rightIsNull)
+			if oneIsNull {
+				if leftIsNull {
+					leftType = types.String
+				}
+				if rightIsNull {
+					rightType = types.String
+				}
+				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
+					func(o overloadImpl) bool {
+						return o.params().GetAt(0).Equivalent(leftType) &&
+							o.params().GetAt(1).Equivalent(rightType)
+					})
+			}
+		}); ok {
+			return typedExprs, fns, err
+		}
+	}
+
 	// The final heuristic is to defer to preferred candidates, if available.
 	if ok, typedExprs, fns, err := filterAttempt(ctx, semaCtx, &s, func() {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs, func(o overloadImpl) bool {

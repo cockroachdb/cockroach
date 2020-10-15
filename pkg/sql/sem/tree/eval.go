@@ -419,9 +419,48 @@ func initArrayToArrayConcatenation() {
 	}
 }
 
+// initNonArrayToNonArrayConcatenation initializes string + nonarrayelement
+// and nonarrayelement + string concatenation.
+func initNonArrayToNonArrayConcatenation() {
+	addConcat := func(leftType, rightType *types.T, volatility Volatility) {
+		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+			LeftType:     leftType,
+			RightType:    rightType,
+			ReturnType:   types.String,
+			NullableArgs: false,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				if _, ok := left.(*DString); ok {
+					return NewDString(string(MustBeDString(left)) + AsStringWithFlags(right, FmtPgwireText)), nil
+				}
+				if _, ok := right.(*DString); ok {
+					return NewDString(AsStringWithFlags(left, FmtPgwireText) + string(MustBeDString(right))), nil
+				}
+				return nil, errors.New("neither LHS or RHS matched DString")
+			},
+			Volatility: volatility,
+		})
+	}
+	fromTypeToVolatility := make(map[types.Family]Volatility)
+	for _, cast := range validCasts {
+		if cast.to == types.StringFamily {
+			fromTypeToVolatility[cast.from] = cast.volatility
+		}
+	}
+	// We allow tuple + string concatenation, as well as any scalar types.
+	for _, t := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
+		// Do not re-add String+String or String+Bytes, as they already exist
+		// and have predefined correct behavior.
+		if t != types.String && t != types.Bytes {
+			addConcat(t, types.String, fromTypeToVolatility[t.Family()])
+			addConcat(types.String, t, fromTypeToVolatility[t.Family()])
+		}
+	}
+}
+
 func init() {
 	initArrayElementConcatenation()
 	initArrayToArrayConcatenation()
+	initNonArrayToNonArrayConcatenation()
 }
 
 func init() {

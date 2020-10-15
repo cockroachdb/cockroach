@@ -268,7 +268,7 @@ project
 
 # Array Element Concat
 build
-SELECT x || arr AS r, arr || x AS s, x || NULL AS t, NULL || x AS u FROM unusual
+SELECT x || arr AS r, arr || x AS s, x || NULL::int[] AS t, NULL::int[] || x AS u FROM unusual
 ----
 project
  ├── columns: r:4(int[]) s:5(int[]) t:6(int[]) u:7(int[])

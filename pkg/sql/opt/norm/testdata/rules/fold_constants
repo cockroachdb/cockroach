@@ -54,15 +54,17 @@ SELECT
     -- These shouldn't be folded because AllowNullArgs is true for concat with arrays.
     arr::decimal[] || null AS va, null || arr::string[] AS vb,
 
-    -- Scalars concatenated with nulls match array overloads, and shouldn't be folded.
-    -- In other words, the only overload for decimal concatenation is an array overload.
-    i::decimal || null AS wa, null || i::float AS wb
+    -- Concatenation with null arrays should not be folded.
+    i::decimal || null::decimal[] AS wa, null::float[] || i::float AS wb,
+    -- Scalars concatenated with nulls match string concatenation, and are folded.
+    i::decimal || null AS xa,
+    null || i::float AS xb
 FROM a
 ----
 project
- ├── columns: ra:8 rb:9 sa:10 sb:11 ta:12 tb:13 ua:14 ub:15 va:16 vb:17 wa:18 wb:19
+ ├── columns: ra:8 rb:9 sa:10 sb:11 ta:12 tb:13 ua:14 ub:15 va:16 vb:17 wa:18 wb:19 xa:20 xb:20
  ├── immutable
- ├── fd: ()-->(8-15)
+ ├── fd: ()-->(8-15,20)
  ├── scan a
  │    └── columns: i:2 arr:6
  └── projections
@@ -77,7 +79,8 @@ project
       ├── arr:6::DECIMAL[] || CAST(NULL AS DECIMAL[]) [as=va:16, outer=(6), immutable]
       ├── CAST(NULL AS STRING[]) || arr:6::STRING[] [as=vb:17, outer=(6), immutable]
       ├── i:2::DECIMAL || CAST(NULL AS DECIMAL[]) [as=wa:18, outer=(2), immutable]
-      └── CAST(NULL AS FLOAT8[]) || i:2::FLOAT8 [as=wb:19, outer=(2), immutable]
+      ├── CAST(NULL AS FLOAT8[]) || i:2::FLOAT8 [as=wb:19, outer=(2), immutable]
+      └── NULL [as=xa:20]
 
 norm
 SELECT
