@@ -1220,7 +1220,8 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 	// until they're all gone, up to the configured timeout.
 	transferTimeout := raftLeadershipTransferWait.Get(&s.cfg.Settings.SV)
 
-	if err := contextutil.RunWithTimeout(ctx, "wait for raft leadership transfer", transferTimeout,
+	drainLeasesOp := "transfer range leases"
+	if err := contextutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
 		func(ctx context.Context) error {
 			opts := retry.Options{
 				InitialBackoff: 10 * time.Millisecond,
@@ -1251,9 +1252,16 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 			// err, take it into account here.
 			return errors.CombineErrors(err, ctx.Err())
 		}); err != nil {
-		// You expect this message when shutting down a server in an unhealthy
-		// cluster. If we see it on healthy ones, there's likely something to fix.
-		log.Warningf(ctx, "unable to drain cleanly within %s, service might briefly deteriorate: %+v", transferTimeout, err)
+		if tErr, ok := err.(*contextutil.TimeoutError); ok && tErr.Operation() == drainLeasesOp {
+			// You expect this message when shutting down a server in an unhealthy
+			// cluster, or when draining all nodes with replicas for some range at the
+			// same time. If we see it on healthy ones, there's likely something to fix.
+			log.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
+				"service might briefly deteriorate if the node is terminated: %s",
+				transferTimeout, raftLeadershipTransferWaitKey, tErr.Cause())
+		} else {
+			log.Warningf(ctx, "drain error: %+v", err)
+		}
 	}
 }
 
