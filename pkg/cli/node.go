@@ -608,7 +608,7 @@ configurable via cluster settings.`,
 	RunE: MaybeDecorateGRPCError(runDrain),
 }
 
-// runNodeDrain calls the Drain RPC without the flag to stop the
+// runDrain calls the Drain RPC without the flag to stop the
 // server process.
 func runDrain(cmd *cobra.Command, args []string) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
