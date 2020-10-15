@@ -197,6 +197,10 @@ func registerBinOpOutputTypes() {
 		}
 	}
 
+	binOpOutputTypes[tree.JSONFetchValPath] = map[typePair]*types.T{
+		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
+	}
+
 	binOpOutputTypes[tree.JSONFetchVal] = map[typePair]*types.T{
 		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.BytesFamily, anyWidth}: types.Any,
 	}
