@@ -119,6 +119,11 @@ type TestClusterInterface interface {
 	// ReplicationMode returns the ReplicationMode that the test cluster was
 	// configured with.
 	ReplicationMode() base.TestClusterReplicationMode
+
+	// ScratchRange returns the start key of a span of keyspace suitable for use
+	// as kv scratch space (it doesn't overlap system spans or SQL tables). The
+	// range is lazily split off on the first call to ScratchRange.
+	ScratchRange(t testing.TB) roachpb.Key
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim
