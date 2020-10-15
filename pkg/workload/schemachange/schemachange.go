@@ -300,7 +300,7 @@ var (
 func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx, opsNum int) (string, error) {
 	var log strings.Builder
 	for i := 0; i < opsNum; i++ {
-		op, noops, err := w.randOp(tx)
+		op, noops, expectedErrorCode, err := w.randOp(tx)
 		if err != nil {
 			return noops, errors.Mark(
 				errors.Wrap(err, "could not generate a random operation"),
@@ -380,15 +380,16 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
+func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, *pgcode.Code, error) {
 	var log strings.Builder
 	for {
 		var stmt string
+		var expectedErrorCode *pgcode.Code
 		var err error
 		op := opType(w.ops.Int())
 		switch op {
 		case addColumn:
-			stmt, err = w.addColumn(tx)
+			stmt, expectedErrorCode, err = w.addColumn(tx)
 
 		case addConstraint:
 			stmt, err = w.addConstraint(tx)
@@ -480,22 +481,32 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 			log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
 			continue
 		}
-		return stmt, log.String(), err
+		return stmt, log.String(), expectedErrorCode, err
 	}
 }
 
-func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
+func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, *pgcode.Code, error) {
+
 	tableName, err := w.randTable(tx, w.pctExisting(true), "")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", nil, err
+	}
+	if !tableExists {
+		return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN "%s" STRING`, tableName, "IrrelevantColumnName"), &pgcode.UndefinedTable, nil
+	}
+
 	columnName, err := w.randColumn(tx, *tableName, w.pctExisting(false))
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
+
 	typ, err := w.randType(tx, w.pctExisting(true))
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	def := &tree.ColumnTableDef{
@@ -503,7 +514,37 @@ func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
 		Type: typ,
 	}
 	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
-	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
+
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	typeExists, typErr := typeExists(tx, typ)
+	if err != nil || typErr != nil {
+		return "", nil, err
+	}
+
+	var errCode *pgcode.Code
+	if columnExists {
+		if !typeExists {
+			errCode = &pgcode.UndefinedObject
+		} else if def.Nullable.Nullability == tree.NotNull {
+			colContainsNull, err := colContainsNull(tx, tableName, columnName)
+			if err != nil {
+				return "", nil, err
+			}
+			if colContainsNull {
+				errCode = &pgcode.NotNullViolation
+			} else {
+				errCode = &pgcode.DuplicateColumn
+			}
+		} else {
+			errCode = &pgcode.DuplicateColumn
+		}
+	} else {
+		if !typeExists {
+			errCode = &pgcode.UndefinedObject
+		}
+	}
+
+	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), errCode, nil
 }
 
 func (w *schemaChangeWorker) addConstraint(tx *pgx.Tx) (string, error) {
