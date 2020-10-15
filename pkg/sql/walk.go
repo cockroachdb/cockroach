@@ -394,6 +394,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&max1RowNode{}):                 "max1row",
 	reflect.TypeOf(&ordinalityNode{}):              "ordinality",
 	reflect.TypeOf(&projectSetNode{}):              "project set",
+	reflect.TypeOf(&reassignOwnedByNode{}):         "reassign owned by",
 	reflect.TypeOf(&recursiveCTENode{}):            "recursive cte",
 	reflect.TypeOf(&refreshMaterializedViewNode{}): "refresh materialized view",
 	reflect.TypeOf(&relocateNode{}):                "relocate",

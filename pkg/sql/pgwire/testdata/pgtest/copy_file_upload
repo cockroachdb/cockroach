@@ -12,10 +12,17 @@ CopyDone
 
 # We expect an error here because file uploads aren't enabled in the
 # test server. This test is here to verify that there wasn't a panic.
-until
+until crdb_only
 ErrorResponse
 ReadyForQuery
 ----
 {"Type":"CopyInResponse","ColumnFormatCodes":[0]}
 {"Type":"ErrorResponse","Code":"XXUUU"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42601"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

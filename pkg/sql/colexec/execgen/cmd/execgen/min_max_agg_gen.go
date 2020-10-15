@@ -11,13 +11,11 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type minMaxTmplInfo struct {
@@ -38,24 +36,13 @@ func (a minMaxTmplInfo) AggNameTitle() string {
 	return strings.Title(a.Agg)
 }
 
-func (a minMaxTmplInfo) CopyValMaybeCast(dest, src string) string {
-	switch a.lastArgTypeOverload.CanonicalTypeFamily {
-	case types.IntFamily:
-		// Minimum and maximum on integers always return INT8, so we need to
-		// make sure to perform the cast because 'dest' is of int64 type.
-		return fmt.Sprintf("%s = int64(%s)", dest, src)
-	default:
-		return copyVal(a.lastArgTypeOverload.CanonicalTypeFamily, dest, src)
-	}
-}
-
 // Avoid unused warning for functions which are only used in templates.
 var _ = minMaxTmplInfo{}.AggNameTitle()
-var _ = minMaxTmplInfo{}.CopyValMaybeCast
 
 const minMaxAggTmpl = "pkg/sql/colexec/min_max_agg_tmpl.go"
 
 func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
+	// TODO(yuzefovich): clean up this file as per comments in #54080.
 	r := strings.NewReplacer(
 		"_AGG_TITLE", "{{.AggNameTitle}}",
 		"_AGG", "{{.Agg}}",
@@ -69,9 +56,6 @@ func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
-
-	copyValMaybeCast := makeFunctionRegex("_COPYVAL_MAYBE_CAST", 2)
-	s = copyValMaybeCast.ReplaceAllString(s, makeTemplateFunctionCall("CopyValMaybeCast", 2))
 
 	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
 	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4}}`)
@@ -95,14 +79,6 @@ func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 				retGoTypeSlice := widthOv.GoTypeSliceName()
 				retGoType := widthOv.GoType
 				retVecMethod := widthOv.VecMethod
-				if ov.CanonicalTypeFamily == types.IntFamily {
-					// Minimum and maximum on integers always return INT8, so
-					// we need to override the return type parameters from the
-					// default ones.
-					retGoTypeSlice = goTypeSliceName(types.IntFamily, anyWidth)
-					retGoType = toPhysicalRepresentation(types.IntFamily, anyWidth)
-					retVecMethod = toVecMethod(types.IntFamily, anyWidth)
-				}
 				tmplInfos = append(tmplInfos, minMaxTmplInfo{
 					lastArgWidthOverload: widthOv,
 					Agg:                  agg,

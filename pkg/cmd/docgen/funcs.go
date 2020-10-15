@@ -196,7 +196,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 			}
 			args := fn.Types.String()
 
-			retType := fn.FixedReturnType()
+			retType := fn.InferReturnTypeFromInputArgTypes(fn.Types.Types())
 			ret := retType.String()
 
 			cat := props.Category

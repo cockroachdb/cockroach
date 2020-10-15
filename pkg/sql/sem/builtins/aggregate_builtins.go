@@ -209,28 +209,18 @@ var aggregates = map[string]builtinDefinition{
 		func(t *types.T) tree.Overload {
 			info := "Identifies the maximum selected value."
 			vol := tree.VolatilityImmutable
-			// If t is an ambiguous type (like AnyCollatedString), then our aggregate
-			// does not have a fixed return type.
-			if t.IsAmbiguous() {
-				return makeAggOverloadWithReturnType(
-					[]*types.T{t}, tree.FirstNonNullReturnType(), newMaxAggregate, info, vol,
-				)
-			}
-			return makeAggOverload([]*types.T{t}, t, newMaxAggregate, info, vol)
+			return makeAggOverloadWithReturnType(
+				[]*types.T{t}, tree.IdentityReturnType(0), newMaxAggregate, info, vol,
+			)
 		}),
 
 	"min": collectOverloads(aggProps(), allMaxMinAggregateTypes,
 		func(t *types.T) tree.Overload {
 			info := "Identifies the minimum selected value."
 			vol := tree.VolatilityImmutable
-			// If t is an ambiguous type (like AnyCollatedString), then our aggregate
-			// does not have a fixed return type.
-			if t.IsAmbiguous() {
-				return makeAggOverloadWithReturnType(
-					[]*types.T{t}, tree.FirstNonNullReturnType(), newMinAggregate, info, vol,
-				)
-			}
-			return makeAggOverload([]*types.T{t}, t, newMinAggregate, info, vol)
+			return makeAggOverloadWithReturnType(
+				[]*types.T{t}, tree.IdentityReturnType(0), newMinAggregate, info, vol,
+			)
 		}),
 
 	"string_agg": makeBuiltin(aggPropsNullableArgs(),

@@ -102,7 +102,32 @@ func (b Overload) FixedReturnType() *types.T {
 	if b.ReturnType == nil {
 		return nil
 	}
-	return returnTypeToFixedType(b.ReturnType)
+	return returnTypeToFixedType(b.ReturnType, nil)
+}
+
+// InferReturnTypeFromInputArgTypes returns the type that the function returns,
+// inferring the type based on the function's inputTypes if necessary.
+func (b Overload) InferReturnTypeFromInputArgTypes(inputTypes []*types.T) *types.T {
+	retTyp := b.FixedReturnType()
+	// If the output type of the function depends on its inputs, then
+	// the output of FixedReturnType will be ambiguous. In the ambiguous
+	// cases, use the information about the input types to construct the
+	// appropriate output type. The tree.ReturnTyper interface is
+	// []tree.TypedExpr -> *types.T, so construct the []tree.TypedExpr
+	// from the types that we know are the inputs. Note that we don't
+	// try to create datums of each input type, and instead use this
+	// "TypedDummy" construct. This is because some types don't have resident
+	// members (like an ENUM with no values), and we shouldn't error out
+	// trying to infer the return type in those cases.
+	if retTyp.IsAmbiguous() {
+		args := make([]TypedExpr, len(inputTypes))
+		for i, t := range inputTypes {
+			args[i] = &TypedDummy{Typ: t}
+		}
+		// Evaluate ReturnType with the fake input set of arguments.
+		retTyp = returnTypeToFixedType(b.ReturnType, args)
+	}
+	return retTyp
 }
 
 // Signature returns a human-readable signature.
@@ -409,8 +434,8 @@ func FirstNonNullReturnType() ReturnTyper {
 	}
 }
 
-func returnTypeToFixedType(s ReturnTyper) *types.T {
-	if t := s(nil); t != UnknownReturnType {
+func returnTypeToFixedType(s ReturnTyper, inputTyps []TypedExpr) *types.T {
+	if t := s(inputTyps); t != UnknownReturnType {
 		return t
 	}
 	return types.Any
@@ -936,15 +961,17 @@ func formatCandidates(prefix string, candidates []overloadImpl) string {
 		buf.WriteByte('(')
 		params := candidate.params()
 		tLen := params.Length()
+		inputTyps := make([]TypedExpr, tLen)
 		for i := 0; i < tLen; i++ {
 			t := params.GetAt(i)
+			inputTyps[i] = &TypedDummy{Typ: t}
 			if i > 0 {
 				buf.WriteString(", ")
 			}
 			buf.WriteString(t.String())
 		}
 		buf.WriteString(") -> ")
-		buf.WriteString(returnTypeToFixedType(candidate.returnType()).String())
+		buf.WriteString(returnTypeToFixedType(candidate.returnType(), inputTyps).String())
 		if candidate.preferred() {
 			buf.WriteString(" [preferred]")
 		}
