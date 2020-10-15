@@ -42,12 +42,16 @@ send
 Query {"String": "DISCARD ALL"}
 ----
 
-until
+until crdb_only ignore=ParameterStatus
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"application_name","Value":""}
-{"Type":"ParameterStatus","Name":"TimeZone","Value":"UTC"}
 {"Type":"CommandComplete","CommandTag":"DISCARD"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only ignore=ParameterStatus
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DISCARD ALL"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Send a simple query in the middle of extended protocol, which is apparently
