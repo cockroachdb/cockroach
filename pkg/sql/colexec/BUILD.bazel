@@ -132,7 +132,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/typeconv",
-        "//pkg/server/telemetry",
+        "//pkg/server/telemetry",  # keep
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",
@@ -148,7 +148,7 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
-        "//pkg/sql/sqltelemetry",
+        "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
         "//pkg/util/cancelchecker",
         "//pkg/util/duration",

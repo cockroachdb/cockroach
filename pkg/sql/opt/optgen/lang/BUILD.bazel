@@ -7,8 +7,8 @@ go_library(
         "data_type.go",
         "doc.go",
         "expr.go",
-        "expr.og.go",
-        "operator.og.go",
+        "expr.og.go",  # keep
+        "operator.og.go",  # keep
         "operator_string.go",
         "parser.go",
         "scanner.go",

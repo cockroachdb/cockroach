@@ -14,9 +14,9 @@ go_library(
         "table_meta.go",
         "telemetry.go",
         "view_dependencies.go",
-        ":gen_operator.og.go",
-        ":gen_rule_name.og.go",
-        ":gen_rule_name_string.go",
+        ":gen_operator.og.go",  # keep
+        ":gen_rule_name.og.go",  # keep
+        ":gen_rule_name_string.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt",
     visibility = ["//visibility:public"],

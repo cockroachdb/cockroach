@@ -2,6 +2,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "coldata",
+    # TODO(irfansharif): The dependency tree for vec.eg.go need fleshing out.
+    # It's generated using execgen+templates, from another package.
     srcs = [
         "batch.go",
         "bytes.go",
@@ -9,7 +11,7 @@ go_library(
         "native_types.go",
         "nulls.go",
         "testutils.go",
-        "vec.eg.go",
+        "vec.eg.go",  # keep
         "vec.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/col/coldata",
