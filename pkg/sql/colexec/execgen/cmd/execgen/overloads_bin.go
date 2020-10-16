@@ -203,6 +203,10 @@ func registerBinOpOutputTypes() {
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		binOpOutputTypes[tree.JSONFetchVal][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.Any
 	}
+
+	binOpOutputTypes[tree.JSONFetchValPath] = map[typePair]*types.T{
+		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
+	}
 }
 
 func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
