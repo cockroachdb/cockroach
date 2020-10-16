@@ -15,10 +15,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,13 +42,7 @@ func Txn(
 	db *kv.DB,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
 ) error {
-	descsCol := NewCollection(ctx, settings, leaseMgr, nil /* hydratedTables */)
-	// Add an empty database cache for mixed-version cases.
-	//
-	// TODO(ajwerner): Remove in 21.1.
-	if descsCol.databaseLeasingUnsupported {
-		descsCol.databaseCache = database.NewCache(leaseMgr.Codec(), &config.SystemConfig{})
-	}
+	descsCol := NewCollection(settings, leaseMgr, nil /* hydratedTables */)
 	for {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			defer descsCol.ReleaseAll(ctx)

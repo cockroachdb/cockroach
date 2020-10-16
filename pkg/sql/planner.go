@@ -275,8 +275,7 @@ func newInternalPlanner(
 	// deprecatedDatabaseCache, so we can leave it uninitialized.
 	// Furthermore, we're not concerned about the efficiency of querying tables
 	// with user-defined types, hence the nil hydratedTables.
-	tables := descs.NewCollection(ctx, execCfg.Settings, execCfg.LeaseManager,
-		nil /* hydratedTables */)
+	tables := descs.NewCollection(execCfg.Settings, execCfg.LeaseManager, nil /* hydratedTables */)
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{

@@ -15,11 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,32 +53,13 @@ func (p *planner) renameDatabase(
 	}
 	b.CPut(newKey, descID, nil)
 
-	if p.Descriptors().DatabaseLeasingUnsupported() {
-		descKey := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
-		descDesc := desc.DescriptorProto()
-
-		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-			log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
-		}
-		b.Put(descKey, descDesc)
-		err := catalogkv.RemoveDatabaseNamespaceEntry(
-			ctx, p.txn, p.ExecCfg().Codec, oldName, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		)
-		if err != nil {
-			return err
-		}
-
-		p.Descriptors().AddUncommittedDatabaseDeprecated(oldName, descID, descs.DBDropped)
-		p.Descriptors().AddUncommittedDatabaseDeprecated(newName, descID, descs.DBCreated)
-	} else {
-		desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
-			ParentID:       keys.RootNamespaceID,
-			ParentSchemaID: keys.RootNamespaceID,
-			Name:           oldName,
-		})
-		if err := p.writeNonDropDatabaseChange(ctx, desc, stmt); err != nil {
-			return err
-		}
+	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
+		ParentID:       keys.RootNamespaceID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           oldName,
+	})
+	if err := p.writeNonDropDatabaseChange(ctx, desc, stmt); err != nil {
+		return err
 	}
 
 	return p.txn.Run(ctx, b)
@@ -108,9 +87,6 @@ func (p *planner) writeNonDropDatabaseChange(
 func (p *planner) writeDatabaseChangeToBatch(
 	ctx context.Context, desc *dbdesc.Mutable, b *kv.Batch,
 ) error {
-	if p.Descriptors().DatabaseLeasingUnsupported() {
-		log.Fatal(ctx, "invalid attempted write of database descriptor")
-	}
 	if err := desc.Validate(); err != nil {
 		return err
 	}
