@@ -631,6 +631,9 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 
 	// Add storing columns.
 	for _, name := range def.Storing {
+		if def.Inverted {
+			panic("inverted indexes don't support stored columns")
+		}
 		// Only add storing columns that weren't added as part of adding implicit
 		// key columns.
 		found := false
