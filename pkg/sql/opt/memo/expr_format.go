@@ -1300,7 +1300,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *InvertedJoinPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
-		fmt.Fprintf(f.Buffer, " %s@%s", tab.Name(), tab.Index(t.Index).Name())
+		partialStr := ""
+		if _, isPartial := tab.Index(t.Index).Predicate(); isPartial {
+			partialStr = ",partial"
+		}
+		fmt.Fprintf(f.Buffer, " %s@%s%s", tab.Name(), tab.Index(t.Index).Name(), partialStr)
 
 	case *ValuesPrivate:
 		fmt.Fprintf(f.Buffer, " id=v%d", t.ID)
