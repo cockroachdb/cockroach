@@ -234,6 +234,12 @@ func (t *Tracer) StartSpan(
 
 	var parentType opentracing.SpanReferenceType
 	var parentCtx spanContext
+
+	// Note that the logic around here doesn't support spans with multiple
+	// references. Luckily, we don't have such cases.
+	if len(sso.References) > 1 {
+		panic("multiple references are unsupported")
+	}
 	for _, r := range sso.References {
 		if r.Type != opentracing.ChildOfRef && r.Type != opentracing.FollowsFromRef {
 			continue
@@ -245,8 +251,6 @@ func (t *Tracer) StartSpan(
 			continue
 		}
 		parentType = r.Type
-		// Note that the logic around here doesn't support spans with multiple
-		// references. Luckily, we don't have such cases.
 		parentCtx = *r.ReferencedContext.(*spanContext)
 		break
 	}
