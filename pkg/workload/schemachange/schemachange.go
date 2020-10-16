@@ -395,7 +395,7 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, *pgcode.Code, e
 			stmt, err = w.addConstraint(tx)
 
 		case createIndex:
-			stmt, err = w.createIndex(tx)
+			stmt, expectedErrorCode, err = w.createIndex(tx)
 
 		case createSequence:
 			stmt, err = w.createSequence(tx)
@@ -553,20 +553,34 @@ func (w *schemaChangeWorker) addConstraint(tx *pgx.Tx) (string, error) {
 	return "", nil
 }
 
-func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
+func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, *pgcode.Code, error) {
 	tableName, err := w.randTable(tx, w.pctExisting(true), "")
 	if err != nil {
-		return "", err
+		return "", nil, err
+	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", nil, err
+	}
+	if !tableExists {
+		return tree.Serialize(&tree.CreateIndex{
+			Name:        tree.Name("IrrelevantIndexName"),
+			Table:       *tableName,
+			Unique:      w.rng.Intn(2) == 0,
+			Inverted:    w.rng.Intn(2) == 0,
+			IfNotExists: w.rng.Intn(2) == 0,
+			Columns:     make(tree.IndexElemList, 1),
+		}), &pgcode.UndefinedTable, nil
 	}
 
 	columnNames, err := w.tableColumnsShuffled(tx, tableName.String())
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	indexName, err := w.randIndex(tx, *tableName, w.pctExisting(false))
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	def := &tree.CreateIndex{
@@ -591,7 +605,7 @@ func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
 		}
 	}
 
-	return tree.Serialize(def), nil
+	return tree.Serialize(def), nil, nil
 }
 
 func (w *schemaChangeWorker) createSequence(tx *pgx.Tx) (string, error) {
