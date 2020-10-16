@@ -234,48 +234,6 @@
     $private
 )
 
-# GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
-# Scan table) where the prefix column(s) of both indexes is/are fixed to
-# constant values in the filters. See comments in GenerateZigzagJoin and
-# distsqlrun/zigzagjoiner.go for more details on when a zigzag join can be
-# planned.
-#
-# Zigzag joins are prohibited when the source Scan operator has been configured
-# with a row-level locking mode. This is mostly out of convenience so that these
-# row-level locking modes don't need to added to the ZigzagJoin operator. There
-# doesn't seem to be a strong reason to support this, but if one comes up, it
-# should be possible to lift this restriction.
-[GenerateZigzagJoins, Explore]
-(Select
-    (Scan $scan:*) & (IsCanonicalScan $scan) & ^(IsLocking $scan)
-    $filters:*
-)
-=>
-(GenerateZigzagJoins $scan $filters)
-
-# GenerateInvertedIndexZigzagJoins creates ZigzagJoin operators for inverted
-# indexes that can be constrained with two or more distinct constant values.
-# Inverted indexes contain one row for each path-to-leaf in a JSON value, so one
-# row in the primary index could generate multiple inverted index keys. This
-# property can be exploited by zigzag joining on the same inverted index, fixed
-# at any two of the JSON paths we are querying for.
-#
-# Zigzag joins are prohibited when the source Scan operator has been configured
-# with a row-level locking mode. This is mostly out of convenience so that these
-# row-level locking modes don't need to added to the ZigzagJoin operator. There
-# doesn't seem to be a strong reason to support this, but if one comes up, it
-# should be possible to lift this restriction.
-[GenerateInvertedIndexZigzagJoins, Explore]
-(Select
-    (Scan $scan:*) &
-        (IsCanonicalScan $scan) &
-        ^(IsLocking $scan) &
-        (HasInvertedIndexes $scan)
-    $filters:*
-)
-=>
-(GenerateInvertedIndexZigzagJoins $scan $filters)
-
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged
 # with the ON condition (this is correct for inner, left, and semi/anti join).
