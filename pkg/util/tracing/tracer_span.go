@@ -727,9 +727,13 @@ func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error
 }
 
 // IsBlackHoleSpan returns true if events for this span are just dropped. This
-// is the case when tracing is disabled and we're not recording. Tracing clients
-// can use this method to figure out if they can short-circuit some
+// is the case when the span is not recording and no external tracer is configured.
+// Tracing clients can use this method to figure out if they can short-circuit some
 // tracing-related work that would be discarded anyway.
+//
+// The child of a blackhole span is a non-recordable blackhole span[*]. These incur
+// only minimal overhead. It is therefore not worth it to call this method to avoid
+// starting spans.
 func IsBlackHoleSpan(s opentracing.Span) bool {
 	sp := s.(*span)
 	return sp.isBlackHole()
@@ -737,6 +741,9 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 
 // IsNoopContext returns true if the span context is from a "no-op" span. If
 // this is true, any span derived from this context will be a "black hole span".
+//
+// You should never need to care about this method. It is exported for technical
+// rasons.
 func IsNoopContext(spanCtx opentracing.SpanContext) bool {
 	sc := spanCtx.(*spanContext)
 	return sc.isNoop()
