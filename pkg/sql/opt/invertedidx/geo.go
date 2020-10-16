@@ -1041,7 +1041,7 @@ func (g *geoDatumsToInvertedExpr) Convert(
 
 		case *geoInvertedExpr:
 			if t.spanExpr != nil {
-				return t.spanExpr, nil
+				return t.spanExpr.Copy(), nil
 			}
 			d, err := t.nonIndexParam.Eval(g.evalCtx)
 			if err != nil {

@@ -83,6 +83,9 @@ func (u UnknownExpression) SetNotTight()  { u.tight = false }
 func (u UnknownExpression) String() string {
 	return fmt.Sprintf("unknown expression: tight=%t", u.tight)
 }
+func (u UnknownExpression) Copy() InvertedExpression {
+	return UnknownExpression{tight: u.tight}
+}
 
 // Makes a (shallow) copy of the root node of the expression identified
 // by name, since calls to And() and Or() can modify that root node, and
