@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
 )
 
 // rangeCacheKey is the key type used to store and sort values in the
@@ -661,7 +660,7 @@ func (rdc *RangeDescriptorCache) tryLookup(
 			// callers waiting for its result, and using the flight's leader's
 			// cancelation doesn't make sense.
 			ctx = logtags.WithTags(context.Background(), logtags.FromContext(ctx))
-			ctx = opentracing.ContextWithSpan(ctx, reqSpan)
+			ctx = tracing.ContextWithSpan(ctx, reqSpan)
 
 			// Since we don't inherit any other cancelation, let's put in a generous
 			// timeout as some protection against unavailable meta ranges.

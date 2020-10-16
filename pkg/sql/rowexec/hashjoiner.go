@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // hashJoinerInitialBufferSize controls the size of the initial buffering phase
@@ -192,7 +191,7 @@ func newHashJoiner(
 	}
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
-	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		h.leftSource = newInputStatCollector(h.leftSource)
 		h.rightSource = newInputStatCollector(h.rightSource)
 		h.FinishTrace = h.outputStatsToTrace
@@ -804,7 +803,7 @@ func (h *hashJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(h.Ctx); sp != nil {
+	if sp := tracing.SpanFromContext(h.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&HashJoinerStats{

@@ -28,11 +28,10 @@ func TestRecordingString(t *testing.T) {
 	tr2 := NewTracer()
 
 	root := tr.StartSpan("root", Recordable)
-	rootSp := root.(*Span)
 	StartRecording(root, SnowballRecording)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 1"))
 	// Hackily fix the timing on the first log message, so that we can check it later.
-	rootSp.crdb.mu.recording.recordedLogs[0].Timestamp = rootSp.crdb.startTime.Add(time.Millisecond)
+	root.crdb.mu.recording.recordedLogs[0].Timestamp = root.crdb.startTime.Add(time.Millisecond)
 	// Sleep a bit so that everything that comes afterwards has higher timestamps
 	// than the one we just assigned. Otherwise the sorting will be screwed up.
 	time.Sleep(10 * time.Millisecond)
@@ -53,7 +52,7 @@ func TestRecordingString(t *testing.T) {
 
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 3"))
 
-	ch2 := tr.StartChildSpan("local child", root.(*Span).SpanContext(), nil /* logTags */, false /* recordable */, false /* separateRecording */)
+	ch2 := tr.StartChildSpan("local child", root.SpanContext(), nil /* logTags */, false /* recordable */, false /* separateRecording */)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 4"))
 	ch2.LogFields(otlog.String(tracingpb.LogMessageField, "local child 1"))
 	ch2.Finish()
