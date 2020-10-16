@@ -305,6 +305,9 @@ func StopRecording(os opentracing.Span) {
 }
 
 func (s *Span) disableRecording() {
+	if s.isNoop() {
+		panic("can't disable recording a noop Span")
+	}
 	s.crdb.disableRecording()
 }
 
@@ -328,8 +331,8 @@ func (s *crdbSpan) disableRecording() {
 // In other words, this tests if the Span is our custom type, and not a noopSpan
 // or anything else.
 func IsRecordable(os opentracing.Span) bool {
-	_, isCockroachSpan := os.(*Span)
-	return isCockroachSpan
+	sp, isCockroachSpan := os.(*Span)
+	return isCockroachSpan && !sp.isNoop()
 }
 
 // Recording represents a group of RecordedSpans, as returned by GetRecording.
