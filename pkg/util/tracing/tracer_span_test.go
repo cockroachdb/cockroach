@@ -53,7 +53,7 @@ func TestRecordingString(t *testing.T) {
 
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 3"))
 
-	ch2 := tr.StartChildSpan("local child", root.(*Span).SpanContext(), nil /* logTags */, false /* separateRecording */)
+	ch2 := tr.StartChildSpan("local child", root.(*Span).SpanContext(), nil /* logTags */, false /* recordable */, false /* separateRecording */)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 4"))
 	ch2.LogFields(otlog.String(tracingpb.LogMessageField, "local child 1"))
 	ch2.Finish()

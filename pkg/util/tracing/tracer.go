@@ -259,15 +259,20 @@ func (t *Tracer) StartSpan(
 		operationName, parentCtx, parentType, recordable, logTags, false /* separateRecording */)
 }
 
-// RecordableOpt specifies whether a root Span should be recordable.
+// RecordableOpt specifies whether a Span should be recordable.
+//
+// By default, spans derived from a *recording* (on top of recordable) span
+// are recordable (and recording). Otherwise, they are non-recordable.
 type RecordableOpt bool
 
 const (
-	// RecordableSpan means that the root Span will be recordable. This means that
+	// RecordableSpan means that a Span will be recordable. This means that
 	// a real Span will be created (and so it carries a cost).
 	RecordableSpan RecordableOpt = true
-	// NonRecordableSpan means that the root Span will not be recordable. This
-	// means that the static noop Span might be returned.
+	// NonRecordableSpan means that a Span will not be recordable. Using this
+	// option when possible can improve performance.
+	//
+	// TODO(tbg): with always-on tracing, it won't matter.
 	NonRecordableSpan RecordableOpt = false
 )
 
@@ -287,7 +292,7 @@ func (t *Tracer) AlwaysTrace() bool {
 func (t *Tracer) StartRootSpan(
 	opName string, logTags *logtags.Buffer, recordable RecordableOpt,
 ) opentracing.Span {
-	return t.StartChildSpan(opName, SpanContext{}, logTags, false /* separateRecording */)
+	return t.StartChildSpan(opName, SpanContext{}, logTags, recordable, false /* separateRecording */)
 }
 
 // StartChildSpan creates a child Span of the given parent Span. This is
@@ -309,13 +314,17 @@ func (t *Tracer) StartRootSpan(
 // TODO(tbg): I don't think we need separateRecording because children can consume
 // and (atomically) clear their recording to avoid it getting consumed twice.
 func (t *Tracer) StartChildSpan(
-	opName string, parentContext SpanContext, logTags *logtags.Buffer, separateRecording bool,
+	opName string,
+	parentContext SpanContext,
+	logTags *logtags.Buffer,
+	recordable RecordableOpt,
+	separateRecording bool,
 ) opentracing.Span {
 	return t.startSpanGeneric(
 		opName,
 		parentContext,
 		opentracing.ChildOfRef,
-		false, /* recordable */
+		recordable,
 		logTags,
 		separateRecording,
 	)
@@ -612,7 +621,7 @@ func childSpan(
 		ns := tr.noopSpan
 		return opentracing.ContextWithSpan(ctx, ns), ns
 	}
-	newSpan := tr.StartChildSpan(opName, sp.SpanContext(), logtags.FromContext(ctx), separateRecording)
+	newSpan := tr.StartChildSpan(opName, sp.SpanContext(), logtags.FromContext(ctx), NonRecordableSpan, separateRecording)
 	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 }
 
