@@ -65,7 +65,6 @@ func (diagnostics *stmtDiagnostics) toProto() serverpb.StatementDiagnostics {
 func (s *statusServer) CreateStatementDiagnosticsReport(
 	ctx context.Context, req *serverpb.CreateStatementDiagnosticsReportRequest,
 ) (*serverpb.CreateStatementDiagnosticsReportResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
@@ -90,7 +89,6 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 func (s *statusServer) StatementDiagnosticsRequests(
 	ctx context.Context, req *serverpb.StatementDiagnosticsReportsRequest,
 ) (*serverpb.StatementDiagnosticsReportsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
@@ -159,7 +157,6 @@ func (s *statusServer) StatementDiagnosticsRequests(
 func (s *statusServer) StatementDiagnostics(
 	ctx context.Context, req *serverpb.StatementDiagnosticsRequest,
 ) (*serverpb.StatementDiagnosticsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {

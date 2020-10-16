@@ -11,12 +11,15 @@
 package security
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 const (
@@ -182,6 +185,16 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 
 		return nil, nil
 	}
+}
+
+// DecorateContext adds a logging tag with the given user.
+func DecorateContext(ctx context.Context, username string) context.Context {
+	if username == RootUser || username == NodeUser {
+		ctx = logtags.AddTag(ctx, "user", log.Safe(username))
+	} else {
+		ctx = logtags.AddTag(ctx, "user", username)
+	}
+	return ctx
 }
 
 // ErrPasswordUserAuthFailed is the error template for failed password auth

@@ -25,7 +25,6 @@ import (
 func (s *statusServer) Statements(
 	ctx context.Context, req *serverpb.StatementsRequest,
 ) (*serverpb.StatementsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {

@@ -679,6 +679,7 @@ func (s *Server) ClusterSettings() *cluster.Settings {
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
 func (s *Server) AnnotateCtx(ctx context.Context) context.Context {
+	ctx = decorateContextFromWebMetadata(ctx)
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
@@ -2238,8 +2239,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}()
 		w = gzw
 	}
+	ctx := r.Context()
+	ctx = logtags.AddTag(ctx, "client", r.RemoteAddr)
+	r = r.WithContext(ctx)
+	if log.V(1) || httpRequestLog.Get(&s.cfg.Settings.SV) {
+		log.Infof(ctx, "HTTP %s: %s", log.Safe(r.Method), r.URL)
+	}
 	s.mux.ServeHTTP(w, r)
 }
+
+var httpRequestLog = settings.RegisterPublicBoolSetting(
+	"server.log_web_requests.enabled",
+	"if set, log all HTTP requests on every node",
+	false)
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
 // It is empty for an in-memory temp storage.
