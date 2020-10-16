@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 #include "stack_trace.h"
+#include "libroach.h"
 
 #if defined(OS_LINUX) && defined(__GLIBC__)
 
@@ -26,6 +27,7 @@
 #include <unistd.h>
 #include <atomic>
 #include <memory>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -331,3 +333,16 @@ std::string DumpThreadStacks() {
 }
 
 #endif // !defined(OS_LINUX) || !defined(__GLIBC__)
+
+// ToDBString converts a std::string to a DBString.
+inline DBString ToDBString(const std::string& s) {
+  DBString result;
+  result.len = s.size();
+  result.data = static_cast<char*>(malloc(result.len));
+  memcpy(result.data, s.data(), s.size());
+  return result;
+}
+
+DBString DBDumpThreadStacks() {
+  return ToDBString(DumpThreadStacks());
+}
