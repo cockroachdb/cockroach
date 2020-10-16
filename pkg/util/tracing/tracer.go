@@ -256,7 +256,7 @@ func (t *Tracer) StartSpan(
 	}
 
 	return t.startSpanGeneric(
-		operationName, parentCtx, parentType, recordable, logTags, false /* separateRecording */)
+		operationName, parentCtx, parentType, recordable, logTags, false /* separateRecording */, sso.Tags)
 }
 
 // RecordableOpt specifies whether a Span should be recordable.
@@ -327,6 +327,7 @@ func (t *Tracer) StartChildSpan(
 		recordable,
 		logTags,
 		separateRecording,
+		nil, /* tags */
 	)
 }
 
@@ -345,6 +346,7 @@ func (t *Tracer) startSpanGeneric(
 	recordable RecordableOpt,
 	logTags *logtags.Buffer,
 	separateRecording bool,
+	tags map[string]interface{},
 ) opentracing.Span {
 	// If tracing is disabled, avoid overhead and return a noop Span.
 	if !t.AlwaysTrace() &&
@@ -364,6 +366,7 @@ func (t *Tracer) startSpanGeneric(
 		},
 	}
 	s.crdb.mu.duration = -1 // unfinished
+	s.crdb.mu.tags = tags
 
 	// Copy baggage from parent.
 	//
