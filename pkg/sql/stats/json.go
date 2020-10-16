@@ -31,6 +31,7 @@ type JSONStatistic struct {
 	RowCount      uint64   `json:"row_count"`
 	DistinctCount uint64   `json:"distinct_count"`
 	NullCount     uint64   `json:"null_count"`
+	DataSize      uint64   `json:"data_size"`
 	// HistogramColumnType is the string representation of the column type for the
 	// histogram (or unset if there is no histogram). Parsable with
 	// tree.ParseType.

@@ -157,7 +157,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// The sampler outputs the original columns plus a rank column, four
 	// sketch columns, and two inverted histogram columns.
-	outTypes := make([]*types.T, 0, len(p.ResultTypes)+5)
+	outTypes := make([]*types.T, 0, len(p.ResultTypes)+7)
 	outTypes = append(outTypes, p.ResultTypes...)
 	// An INT column for the rank of each row.
 	outTypes = append(outTypes, types.Int)
@@ -174,6 +174,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	outTypes = append(outTypes, types.Int)
 	// A BYTES column with the inverted index key datum.
 	outTypes = append(outTypes, types.Bytes)
+	// An INT column with the data size datum.
+	outTypes = append(outTypes, types.Int)
 
 	p.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{Sampler: sampler},

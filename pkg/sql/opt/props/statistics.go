@@ -55,6 +55,10 @@ type Statistics struct {
 	// a true row count they would be pretty much the same thing.
 	RowCount float64
 
+	// DataSize is the estimated size in bytes of each of the rows returned by
+	// the expression.
+	DataSize float64
+
 	// ColStats is a collection of statistics that pertain to columns in an
 	// expression or table. It is keyed by a set of one or more columns over which
 	// the statistic is defined.
@@ -70,6 +74,7 @@ type Statistics struct {
 func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
+		s.DataSize = 0
 		s.Selectivity = 0
 		s.Available = true
 		return true
@@ -82,6 +87,7 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Available = other.Available
 	s.RowCount = other.RowCount
+	s.DataSize = other.DataSize
 	s.ColStats.CopyFrom(&other.ColStats)
 	s.Selectivity = other.Selectivity
 }
@@ -93,6 +99,7 @@ func (s *Statistics) CopyFrom(other *Statistics) {
 // counts, and histograms.
 func (s *Statistics) ApplySelectivity(selectivity float64) {
 	s.RowCount *= selectivity
+	s.DataSize *= selectivity
 	s.Selectivity *= selectivity
 }
 
@@ -103,6 +110,7 @@ func (s *Statistics) ApplySelectivity(selectivity float64) {
 func (s *Statistics) UnionWith(other *Statistics) {
 	s.Available = s.Available && other.Available
 	s.RowCount += other.RowCount
+	s.DataSize += other.DataSize
 	s.Selectivity += other.Selectivity
 }
 
@@ -110,6 +118,7 @@ func (s *Statistics) String() string {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
+	fmt.Fprintf(&buf, ", io_bytes=%.9g", s.DataSize)
 	colStats := make(ColumnStatistics, s.ColStats.Count())
 	for i := 0; i < s.ColStats.Count(); i++ {
 		colStats[i] = s.ColStats.Get(i)
@@ -144,7 +153,7 @@ func (s *Statistics) String() string {
 // maintaining statistics on a few columns and column sets that are frequently
 // used in predicates, group by columns, etc.
 //
-// ColumnStatistiscs can be copied by value.
+// ColumnStatistics can be copied by value.
 type ColumnStatistic struct {
 	// Cols is the set of columns whose data are summarized by this
 	// ColumnStatistic struct. The ColSet is never modified in-place.
@@ -158,6 +167,9 @@ type ColumnStatistic struct {
 	// columns for this expression. For multi-column stats, this null
 	// count tracks only the rows in which all columns in the set are null.
 	NullCount float64
+
+	// DataSize is the size of the data in the columns in this statistic.
+	DataSize float64
 
 	// Histogram is only used when the size of Cols is one. It contains
 	// the approximate distribution of values for that column, represented

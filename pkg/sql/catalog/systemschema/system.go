@@ -982,11 +982,12 @@ var (
 			{Name: "distinctCount", ID: 7, Type: types.Int},
 			{Name: "nullCount", ID: 8, Type: types.Int},
 			{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
+			{Name: "dataSize", ID: 10, Type: types.Int, Nullable: true},
 		},
-		NextColumnID: 10,
+		NextColumnID: 11,
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
-				Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
+				Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram_dataSize",
 				ID:   0,
 				ColumnNames: []string{
 					"tableID",
@@ -998,8 +999,9 @@ var (
 					"distinctCount",
 					"nullCount",
 					"histogram",
+					"dataSize",
 				},
-				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			},
 		},
 		NextFamilyID: 1,

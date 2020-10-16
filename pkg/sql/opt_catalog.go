@@ -1367,6 +1367,11 @@ func (os *optTableStat) NullCount() uint64 {
 	return os.stat.NullCount
 }
 
+// DataSize is part of the cat.TableStatistic interface.
+func (os *optTableStat) DataSize() uint64 {
+	return os.stat.DataSize
+}
+
 // Histogram is part of the cat.TableStatistic interface.
 func (os *optTableStat) Histogram() []cat.HistogramBucket {
 	return os.stat.Histogram

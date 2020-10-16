@@ -67,6 +67,7 @@ type sampleAggregator struct {
 	sketchCol    int
 	invColIdxCol int
 	invIdxKeyCol int
+	dataSizeCol  int
 
 	// The sample aggregator tracks sketches and reservoirs for inverted
 	// index keys, mapped by column index.
@@ -110,7 +111,7 @@ func newSampleAggregator(
 	// The processor will disable histogram collection if this limit is not
 	// enough.
 	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sample-aggregator-mem")
-	rankCol := len(input.OutputTypes()) - 7
+	rankCol := len(input.OutputTypes()) - 8
 	s := &sampleAggregator{
 		spec:         spec,
 		input:        input,
@@ -127,6 +128,7 @@ func newSampleAggregator(
 		sketchCol:    rankCol + 4,
 		invColIdxCol: rankCol + 5,
 		invIdxKeyCol: rankCol + 6,
+		dataSizeCol:  rankCol + 7,
 		invSr:        make(map[uint32]*stats.SampleReservoir, len(spec.InvertedSketches)),
 		invSketch:    make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
 	}
@@ -346,6 +348,12 @@ func (s *sampleAggregator) processSketchRow(
 	}
 	sketch.numNulls += numNulls
 
+	dataSize, err := row[s.dataSizeCol].GetInt()
+	if err != nil {
+		return err
+	}
+	sketch.totalDataSize += dataSize
+
 	// Decode the sketch.
 	if err := row[s.sketchCol].EnsureDecoded(s.inTypes[s.sketchCol], da); err != nil {
 		return err
@@ -474,6 +482,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				si.numRows,
 				distinctCount,
 				si.numNulls,
+				si.totalDataSize,
 				histogram,
 			); err != nil {
 				return err
