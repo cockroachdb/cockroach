@@ -4,8 +4,10 @@ go_library(
     name = "schemachange",
     srcs = [
         "deck.go",
+        "operation_generator.go",
         "optype_string.go",
         "schemachange.go",
+        "type_resolver.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
     visibility = ["//visibility:public"],
