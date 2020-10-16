@@ -570,9 +570,8 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
     s_order_cnt  integer,
     s_remote_cnt integer,
     s_data       varchar(50),
-		primary key (s_w_id, s_i_id),
-    index stock_item_fk_idx (s_i_id))
-  `)
+    primary key (s_w_id, s_i_id)
+)`)
 
 	require.NoError(b, err)
 
