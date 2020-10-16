@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "engineccl",
+    # keep
     srcs = [
         "batch_repr.go",
         "ctr_stream.go",
@@ -10,7 +11,6 @@ go_library(
         "pebble_key_manager.go",
         "rocksdb.go",
         "rocksdb_jemalloc.go",
-        "zcgo_flags.go",
     ],
     cdeps = [
         "@cockroach//:libroach",

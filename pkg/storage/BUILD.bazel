@@ -35,7 +35,6 @@ go_library(
         "temp_dir.go",
         "temp_engine.go",
         "version.go",
-        "zcgo_flags.go",
     ],
     cdeps = [
         "@cockroach//:libroach",
