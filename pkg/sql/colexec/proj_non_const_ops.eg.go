@@ -29892,6 +29892,146 @@ func (p projJSONFetchValDatumInt64Op) Init() {
 	p.input.Init()
 }
 
+type projJSONFetchValPathDatumDatumOp struct {
+	projOpBase
+}
+
+func (p projJSONFetchValPathDatumDatumOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `overloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the projection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	batch := p.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Datum()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Datum()
+		col2 := vec2.Datum()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						if _res == tree.DNull {
+							_outNulls.SetNull(i)
+						}
+						projCol.Set(i, _res)
+
+					}
+				}
+			} else {
+				col1 = col1.Slice(0, n)
+				colLen := col1.Len()
+				_ = projCol.Get(colLen - 1)
+				_ = col2.Get(colLen - 1)
+				for i := 0; i < n; i++ {
+					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						if _res == tree.DNull {
+							_outNulls.SetNull(i)
+						}
+						projCol.Set(i, _res)
+
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
+					projCol.Set(i, _res)
+
+				}
+			} else {
+				col1 = col1.Slice(0, n)
+				colLen := col1.Len()
+				_ = projCol.Get(colLen - 1)
+				_ = col2.Get(colLen - 1)
+				for i := 0; i < n; i++ {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
+					projCol.Set(i, _res)
+
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		}
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
+	return batch
+}
+
+func (p projJSONFetchValPathDatumDatumOp) Init() {
+	p.input.Init()
+}
+
 type projEQBoolBoolOp struct {
 	projOpBase
 }
@@ -61439,6 +61579,22 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							return &projJSONFetchValDatumInt64Op{projOpBase: projOpBase}, nil
+						}
+					}
+				}
+			}
+		case tree.JSONFetchValPath:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			case typeconv.DatumVecCanonicalTypeFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case typeconv.DatumVecCanonicalTypeFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &projJSONFetchValPathDatumDatumOp{projOpBase: projOpBase}, nil
 						}
 					}
 				}
