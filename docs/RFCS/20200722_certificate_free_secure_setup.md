@@ -2,7 +2,7 @@
 - Status: draft
 - Start Date: 2020-07-22
 - Authors: @aaron-crl
-- RFC PR: (#51991)
+- RFC PR: ([#51991](https://github.com/cockroachdb/cockroach/pull/51991))
 - Cockroach Issue: (one or more # from the issue tracker)
 
 # Summary
@@ -27,11 +27,11 @@ It will also help with orchestration in both our customers deployments and our o
 All subsequent goals are expected to be met for manual, kubernetes, and CLI launchable configurations. We should avoid solutions that create UX regressions when compared to the existing `--insecure` configurations of these wherever possible.
 
 ### 1 Initial startup path
-Create a process by which _n_ nodes may be started in a secure fashion. This means that:
+Create a process by which _n_ nodes may be started in a secure fashion. Any solution must satisfy the following list of requirements:
 * All nodes have distinct node-to-node trust based on a node CA
 * Nodes rely on a distinct user CA for access to the cluster
 * Node user-facing services have a distinct CA
-* A valid administrative certificate (traditionally "root" in CockroachDB) has been emitted
+* A valid administrative certificate (traditionally "root" in CockroachDB) or analog has been emitted
 * A valid user certificate may optionally be emitted
 
 ### 2 Add/Remove nodes
@@ -59,9 +59,10 @@ Existing roachers deploying with the default secure mode will find that they hav
 It may also be worth adding a startup option that generates a non-`root` _user_ and _generated password_ to facilitate local testing and development.
 
 ## Starting a Cluster
-Starting a cluster has two tasks in addition to starting the base nodes.
+Initialization must complete the following two tasks in addition to starting the base nodes:
 * Generating and propagating cluster trust primitives
 * Providing means to access the new cluster 
+(These are currently achieved through the manual configuration of node and root certificates, we seek to automate this)
 
 Below are two potential solutions:
 
@@ -141,10 +142,12 @@ On existing node:
         - The host will:
             - Look up the token associated with this `token-uuid`
             - Generate an HMAC using the `server-challenge` and the `shared-secret` contained in the `join-token` with the specified `token-uuid`
-            - Return this HMAC via the existing TLS connection. The server will also return it's own plaintext `node-challenge` for node validation in a later step.**
+            - Return this HMAC via the existing TLS connection. The server will also return it's own plaintext `node-challenge` for node validation in a later step.
 - Once the node has validated the server it will perform the same form of HMAC using the `shared-secret` and the server's `node-challenge`. It will present this HMAC to the server as proof that it posesses a valid join token.
-- The server will then generate a new node certificate for the joining node and return it as part of a provisioning bundle. The bundle will also include the internode CA (public and private keys), the user certificate CA (if present) and any other initialization information.
+- The server will then generate a new node certificate for the joining node and return it as part of a provisioning bundle. The bundle will also include the internode CA (public and private keys), the user certificate CAs (if present) and any other initialization information.
 - The server will mark the `join-token` as consumed in the cluster registry to avoid reuse.
+- the joining node writes the credentials to its local private storage, for use after a restart
+- the joining node needs to close the TLS conn it negotiated the credentials over, since that TLS conn was using a self-signed transient cert; then re-open the connection using the provided credentials. This will actually perform the join at the KV layer.
 - The joining node may then use its valid node certificate and gossip to align itself with the rest of the cluster.
 
 ** Before checking for `token-uuid` presence in the `join-token`'s table the system checks expiration for all unexpired `join-token`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintainence. This check should also probably be atomic to avoid potential pruning races. This pruning process should probably also log and remove expired tokens to keep the table small. 
