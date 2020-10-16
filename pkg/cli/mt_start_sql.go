@@ -103,6 +103,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		clusterName,
 		serverCfg.BaseConfig,
 		serverCfg.SQLConfig,
+		server.StartAuthConnLogger(ctx, stopper),
 	)
 	if err != nil {
 		return err

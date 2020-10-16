@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -290,6 +291,11 @@ func (s *authenticationServer) UserLogout(
 		return nil, err
 	}
 
+	// Emit an audit log message if requested by configuration.
+	if logWebSessionAuth.Get(&s.server.st.SV) {
+		s.server.authLogger.Logf(ctx, "session %d logged out", sessionID)
+	}
+
 	// Send back a header which will cause the browser to destroy the cookie.
 	// See https://tools.ietf.org/search/rfc6265, page 7.
 	cookie := makeCookieWithValue("", false /* forHTTPSOnly */)
@@ -457,6 +463,13 @@ RETURNING id
 
 	// Extract integer value from single datum.
 	id = int64(*row[0].(*tree.DInt))
+
+	// Emit an audit log message if requested by configuration.
+	if logWebSessionAuth.Get(&s.server.st.SV) {
+		ctx = security.DecorateContext(ctx, username)
+		log.Infof(ctx, "WOO\n%s", debug.Stack())
+		s.server.authLogger.Logf(ctx, "web session %d logged in, expires at %s", id, expiration)
+	}
 
 	return id, secret, nil
 }

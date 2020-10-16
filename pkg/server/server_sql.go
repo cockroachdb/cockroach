@@ -200,6 +200,9 @@ type sqlServerArgs struct {
 
 	// Used to list sessions and cancel sessions/queries.
 	sqlStatusServer serverpb.SQLStatusServer
+
+	// authLogger is the conn/authn logger.
+	authLogger *log.SecondaryLogger
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
@@ -459,6 +462,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
+		AuthLogger:              cfg.authLogger,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
@@ -493,20 +497,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			true /* enableGc */, false /* forceSyncWrites */, true, /* enableMsgCount */
 		),
 
-		// Note: the auth logger uses sync writes because we don't want an
-		// attacker to easily "erase their traces" after an attack by
-		// crashing the server before it has a chance to write the last
-		// few log lines to disk.
-		//
-		// TODO(knz): We could worry about disk I/O activity incurred by
-		// logging here in case a malicious user spams the server with
-		// (failing) connection attempts to cause a DoS failure; this
-		// would be a good reason to invest into a syslog sink for logs.
-		AuthLogger: log.NewSecondaryLogger(
-			loggerCtx, nil /* dirName */, "auth",
-			true /* enableGc */, true /* forceSyncWrites */, true, /* enableMsgCount */
-		),
-
 		// AuditLogger syncs to disk for the same reason as AuthLogger.
 		AuditLogger: log.NewSecondaryLogger(
 			loggerCtx, cfg.AuditLogDirName, "sql-audit",
@@ -532,7 +522,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	cfg.stopper.AddCloser(execCfg.AuditLogger)
 	cfg.stopper.AddCloser(execCfg.SlowQueryLogger)
 	cfg.stopper.AddCloser(execCfg.SlowInternalQueryLogger)
-	cfg.stopper.AddCloser(execCfg.AuthLogger)
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
