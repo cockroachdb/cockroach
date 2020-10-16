@@ -76,7 +76,6 @@ go_library(
     # TODO(irfansharif): This needs to glob out all eg.go files + :generate basically.
     # keep
     srcs = [
-        "panic_injector.go",
         "aggregate_funcs.go",
         "aggregators_util.go",
         "bool_vec_to_sel.go",
@@ -111,6 +110,7 @@ go_library(
         "operator.go",
         "ordered_aggregator.go",
         "ordinality.go",
+        "panic_injector.go",
         "parallel_unordered_synchronizer.go",
         "partially_ordered_distinct.go",
         "partitioner.go",

@@ -14,8 +14,8 @@ go_library(
     ],
     cgo = True,
     clinkopts = [
-        "-L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/cryptopp -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/protobuf -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/jemalloc/lib -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/snappy -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/libedit/src/.libs -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/rocksdb -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/libroach -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/proj/lib",
         "-ljemalloc",
+        "-L/Users/otan/go/native/x86_64-apple-darwin19.6.0/cryptopp -L/Users/otan/go/native/x86_64-apple-darwin19.6.0/protobuf -L/Users/otan/go/native/x86_64-apple-darwin19.6.0/jemalloc/lib -L/Users/otan/go/native/x86_64-apple-darwin19.6.0/snappy -L/Users/otan/go/native/x86_64-apple-darwin19.6.0/libedit/src/.libs -L/Users/otan/go/native/x86_64-apple-darwin19.6.0/rocksdb -L/Users/otan/go/native/x86_64-apple-darwin19.6.0/libroach -L/Users/otan/go/native/x86_64-apple-darwin19.6.0/proj/lib",
     ] + select({
         "@io_bazel_rules_go//go/platform:android": [
             "-lrt -lm -lpthread",
@@ -33,7 +33,7 @@ go_library(
     }),
     cppopts = [
         "-DJEMALLOC_NO_DEMANGLE",
-        "-I/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/jemalloc/include",
+        "-I/Users/otan/go/native/x86_64-apple-darwin19.6.0/jemalloc/include",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/status",
     visibility = ["//visibility:public"],
