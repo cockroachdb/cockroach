@@ -28,7 +28,7 @@ func TestRecordingString(t *testing.T) {
 	tr2 := NewTracer()
 
 	root := tr.StartSpan("root", Recordable)
-	rootSp := root.(*span)
+	rootSp := root.(*Span)
 	StartRecording(root, SnowballRecording)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 1"))
 	// Hackily fix the timing on the first log message, so that we can check it later.
@@ -65,17 +65,17 @@ func TestRecordingString(t *testing.T) {
 	// Sanity check that the recording looks like we want. Note that this is not
 	// its String() representation; this just list all the spans in order.
 	err = TestingCheckRecordedSpans(rec, `
-span root:
+Span root:
 	tags: sb=1
 	event: root 1
 	event: root 2
 	event: root 3
 	event: root 4
 	event: root 5
-span remote child:
+Span remote child:
 	tags: sb=1
 	event: remote child 1
-span local child:
+Span local child:
 	tags: sb=1
 	event: local child 1
 `)
@@ -157,19 +157,19 @@ func TestRecordingInRecording(t *testing.T) {
 
 	rootRec := GetRecording(root)
 	require.NoError(t, TestingCheckRecordedSpans(rootRec, `
-span root:
+Span root:
 	tags: sb=1
-span child:
+Span child:
 	tags: sb=1
-span grandchild:
+Span grandchild:
 	tags: sb=1
 `))
 
 	childRec := GetRecording(child)
 	require.NoError(t, TestingCheckRecordedSpans(childRec, `
-span child:
+Span child:
 	tags: sb=1
-span grandchild:
+Span grandchild:
 	tags: sb=1
 `))
 
