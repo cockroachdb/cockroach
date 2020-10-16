@@ -9,15 +9,18 @@
 package cliccl
 
 import (
+	"context"
 	"crypto/tls"
 	"io/ioutil"
 	"net"
 	"strings"
 
+	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 var sqlProxyListenAddr, sqlProxyTargetAddr string
@@ -131,7 +134,14 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 		return err
 	}
 	defer func() { _ = ln.Close() }()
-	return sqlproxyccl.Serve(ln, sqlproxyccl.Options{
+
+	// Multiplex the listen address to give easy access to metrics from this
+	// command.
+	mux := cmux.New(ln)
+	httpLn := mux.Match(cmux.HTTP1Fast())
+	proxyLn := mux.Match(cmux.Any())
+
+	server := sqlproxyccl.NewServer(sqlproxyccl.Options{
 		IncomingTLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{cer},
 		},
@@ -150,4 +160,20 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 			return "", errors.Errorf("client failed to pass '%s' via database or options", magic)
 		},
 	})
+
+	group, ctx := errgroup.WithContext(context.Background())
+
+	group.Go(func() error {
+		return server.ServeHTTP(ctx, httpLn)
+	})
+
+	group.Go(func() error {
+		return server.Serve(proxyLn)
+	})
+
+	group.Go(func() error {
+		return mux.Serve()
+	})
+
+	return group.Wait()
 }
