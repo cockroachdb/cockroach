@@ -10,11 +10,36 @@
 
 package storage
 
+import "unsafe"
+
+// #cgo CPPFLAGS: -I../../c-deps/libroach/include
+// #cgo LDFLAGS: -lroach
+//
+// #include <stdlib.h>
+// #include <libroach.h>
+import "C"
+
+func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
+	if s.data == nil {
+		return nil
+	}
+	// Interpret the C pointer as a pointer to a Go array, then slice.
+	return (*[MaxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+}
+
+func cStringToGoString(s C.DBString) string {
+	if s.data == nil {
+		return ""
+	}
+	// Reinterpret the string as a slice, then cast to string which does a copy.
+	result := string(cSliceToUnsafeGoBytes(C.DBSlice{s.data, s.len}))
+	C.free(unsafe.Pointer(s.data))
+	return result
+}
+
 // ThreadStacks returns the stacks for all threads. The stacks are raw
 // addresses, and do not contain symbols. Use addr2line (or atos on Darwin) to
 // symbolize.
 func ThreadStacks() string {
-	// TODO(bilal): This got deleted during the RocksDB/libroach deletion. Bring
-	// this back.
-	return ""
+	return cStringToGoString(C.DBDumpThreadStacks())
 }

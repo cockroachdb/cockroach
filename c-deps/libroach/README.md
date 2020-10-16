@@ -14,9 +14,3 @@ If you use a package manager, make sure it uses clang-format from LLVM 5.0 (`cla
 To use, do one of:
 * run `make c-deps-fmt` from the `cockroachdb/cockroach` repo
 * add `clang-format -i <filename>` as a save hook in your editor.
-
-## Testing
-
-Run `make check-libroach` from the repository root. We use [gtest].
-
-[gtest]: https://github.com/google/googletest
