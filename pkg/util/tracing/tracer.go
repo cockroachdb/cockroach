@@ -372,12 +372,8 @@ func (t *Tracer) startSpanGeneric(
 
 	// We use the shadowTr from the parent context over that of our
 	// tracer because the tracer's might have changed and be incompatible.
-	shadowTr := parentContext.shadowTr
-	if shadowTr == nil {
-		shadowTr = t.getShadowTracer()
-	}
-
-	if shadowTr != nil {
+	shadowTr := t.getShadowTracer()
+	if shadowTr != nil && (parentContext.shadowTr == nil || shadowTr == parentContext.shadowTr) {
 		linkShadowSpan(s, shadowTr, parentContext.shadowCtx, parentType)
 	}
 
