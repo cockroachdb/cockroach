@@ -62,7 +62,7 @@ func (l *Liveness) Compare(o Liveness) int {
 	return 0
 }
 
-func (l *Liveness) String() string {
+func (l Liveness) String() string {
 	var extra string
 	if l.Draining || l.Membership.Decommissioning() || l.Membership.Decommissioned() {
 		extra = fmt.Sprintf(" drain:%t membership:%s", l.Draining, l.Membership.String())
