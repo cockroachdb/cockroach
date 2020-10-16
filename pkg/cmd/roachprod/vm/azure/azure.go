@@ -790,6 +790,66 @@ func (p *Provider) createVNet(
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
+	sgp := network.NewSecurityGroupsClient(*sub.SubscriptionID)
+	if sgp.Authorizer, err = p.getAuthorizer(); err != nil {
+		return
+	}
+	fut, err := sgp.CreateOrUpdate(ctx, *group.Name, "SSH", network.SecurityGroup{
+		SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
+			DefaultSecurityRules: &[]network.SecurityRule{
+				{
+					Name: to.StringPtr("SSH"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(300),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("22"),
+					},
+				},
+				{
+					Name: to.StringPtr("HTTP"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(320),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("80"),
+					},
+				},
+				{
+					Name: to.StringPtr("HTTPS"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(340),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("443"),
+					},
+				},
+			},
+		},
+		Location: group.Location,
+	})
+	if err != nil {
+		return
+	}
+	if err = fut.WaitForCompletionRef(ctx, sgp.Client); err != nil {
+		return
+	}
+	securityGroup, err := fut.Result(sgp)
+	if err != nil {
+		return
+	}
 	vnet = network.VirtualNetwork{
 		Name:     group.Name,
 		Location: group.Location,
@@ -801,7 +861,8 @@ func (p *Provider) createVNet(
 				{
 					Name: group.Name,
 					SubnetPropertiesFormat: &network.SubnetPropertiesFormat{
-						AddressPrefix: to.StringPtr(fmt.Sprintf("10.%d.0.0/18", prefix)),
+						AddressPrefix:        to.StringPtr(fmt.Sprintf("10.%d.0.0/18", prefix)),
+						NetworkSecurityGroup: &securityGroup,
 					},
 				},
 			},
