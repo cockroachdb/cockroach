@@ -114,7 +114,6 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	// Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
 	// See #34416.
-	phyAccessor := p.PhysicalSchemaAccessor()
 	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	// DDL statements bypass the cache.
 	lookupFlags.AvoidCached = true
@@ -123,7 +122,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 	for _, schema := range schemas {
-		tbNames, err := phyAccessor.GetObjectNames(
+		tbNames, err := catalogkv.GetObjectNames(
 			ctx,
 			p.txn,
 			p.ExecCfg().Codec,
@@ -139,26 +138,15 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		}
 		lookupFlags.Required = false
 		for i := range tbNames {
-			objDesc, err := phyAccessor.GetObjectDesc(
-				ctx,
-				p.txn,
-				p.ExecCfg().Settings,
-				p.ExecCfg().Codec,
-				tbNames[i].Catalog(),
-				tbNames[i].Schema(),
-				tbNames[i].Table(),
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: lookupFlags,
-					DesiredObjectKind: tree.TableObject,
-				},
+			tbDesc, err := p.Descriptors().GetTableVersion(
+				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
 			)
 			if err != nil {
 				return err
 			}
-			if objDesc == nil {
+			if tbDesc == nil {
 				continue
 			}
-			tbDesc := objDesc.(catalog.TableDescriptor)
 
 			if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
 				dependentDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, dependedOn.ID)

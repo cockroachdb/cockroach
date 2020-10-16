@@ -1337,11 +1337,7 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 }
 
 func newSchemaInterface(descsCol *descs.Collection, vs catalog.VirtualSchemas) *schemaInterface {
-	sc := &schemaInterface{
-		physical: accessors.NewCachedAccessor(descsCol),
-	}
-	sc.logical = accessors.NewLogicalAccessor(sc.physical, vs)
-	return sc
+	return &schemaInterface{logical: accessors.NewLogicalAccessor(descsCol, vs)}
 }
 
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
