@@ -47,7 +47,7 @@ var Subdomain = func() string {
 const gceLocalSSDStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
-mount_opts="discard,defaults"
+mount_opts="defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
 # ignore the boot disk: /dev/disk/by-id/google-persistent-disk-0.

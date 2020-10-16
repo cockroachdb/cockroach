@@ -39,7 +39,7 @@ set -x
 sudo apt-get update
 sudo apt-get install -qy --no-install-recommends mdadm
 
-mount_opts="discard,defaults"
+mount_opts="defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
 use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
@@ -71,7 +71,7 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "use_multiple_disks" ]; then
     disknum=$((disknum + 1 ))
     echo "Creating ${mountpoint}"
     mkdir -p ${mountpoint}
-    mkfs.ext4 -E nodiscard ${disk}
+    mkfs.ext4 -F ${disk}
     mount -o ${mount_opts} ${disk} ${mountpoint}
     chmod 777 ${mountpoint}
     echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
@@ -82,7 +82,7 @@ else
   mkdir -p ${mountpoint}
   raiddisk="/dev/md0"
   mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
-  mkfs.ext4 -E nodiscard ${raiddisk}
+  mkfs.ext4 -F ${raiddisk}
   mount -o ${mount_opts} ${raiddisk} ${mountpoint}
   chmod 777 ${mountpoint}
   echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab

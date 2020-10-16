@@ -421,6 +421,9 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			"auto-delete=yes",
 		}
 		args = append(args, "--create-disk", strings.Join(pdProps, ","))
+		// Enable DISCARD commands for persistent disks, as is advised in:
+		// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.
+		extraMountOpts = "discard"
 	}
 
 	// Create GCE startup script file.
