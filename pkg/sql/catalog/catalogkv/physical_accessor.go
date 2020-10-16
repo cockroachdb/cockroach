@@ -31,17 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// UncachedPhysicalAccessor implements direct access to sql object descriptors
-// stored in system tables without any kind of caching.
-type UncachedPhysicalAccessor struct {
-	// Used to avoid allocations.
-	tn tree.TableName
-}
-
-var _ catalog.Accessor = UncachedPhysicalAccessor{}
-
-// GetDatabaseDesc implements the Accessor interface.
-func (a UncachedPhysicalAccessor) GetDatabaseDesc(
+// GetDatabaseDesc reads a database descriptor from the store.
+func GetDatabaseDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
@@ -94,8 +85,8 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	return db, nil
 }
 
-// GetSchema implements the Accessor interface.
-func (a UncachedPhysicalAccessor) GetSchema(
+// GetSchema reads a schema descriptor from the store.
+func GetSchema(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
@@ -162,8 +153,8 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}, nil
 }
 
-// GetObjectNames implements the Accessor interface.
-func (a UncachedPhysicalAccessor) GetObjectNames(
+// GetObjectNames returns the names of all objects in a database and schema.
+func GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
@@ -171,7 +162,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
-	ok, schema, err := a.GetSchema(ctx, txn, codec, dbDesc.GetID(), scName, flags.CommonLookupFlags)
+	ok, schema, err := GetSchema(ctx, txn, codec, dbDesc.GetID(), scName, flags.CommonLookupFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -255,8 +246,8 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	return tableNames, nil
 }
 
-// GetObjectDesc implements the Accessor interface.
-func (a UncachedPhysicalAccessor) GetObjectDesc(
+// GetObjectDesc reads an object descriptor from the store.
+func GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
@@ -271,7 +262,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		return nil, err
 	}
 
-	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName,
+	ok, schema, err := GetSchema(ctx, txn, codec, dbID, scName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -283,8 +274,8 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 	if !ok {
 		if flags.Required {
-			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&a.tn))
+			tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
+			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&tn))
 		}
 		return nil, nil
 	}
@@ -303,8 +294,8 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		if !found {
 			// KV name resolution failed.
 			if flags.Required {
-				a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-				return nil, sqlerrors.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
+				tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
+				return nil, sqlerrors.NewUndefinedObjectError(&tn, flags.DesiredObjectKind)
 			}
 			return nil, nil
 		}
@@ -338,8 +329,8 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 	if desc.GetName() != object {
 		if flags.Required {
-			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-			return nil, sqlerrors.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
+			tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
+			return nil, sqlerrors.NewUndefinedObjectError(&tn, flags.DesiredObjectKind)
 		}
 		return nil, nil
 	}

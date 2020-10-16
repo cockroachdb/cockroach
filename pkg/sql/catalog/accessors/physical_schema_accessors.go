@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,18 +42,14 @@ import (
 
 // NewCachedAccessor constructs a new cached accessor using a physical accessor
 // and a descs.Collection.
-func NewCachedAccessor(
-	physicalAccessor catalog.Accessor, descsCol *descs.Collection,
-) *CachedPhysicalAccessor {
+func NewCachedAccessor(descsCol *descs.Collection) *CachedPhysicalAccessor {
 	return &CachedPhysicalAccessor{
-		Accessor: physicalAccessor,
-		tc:       descsCol,
+		tc: descsCol,
 	}
 }
 
 // CachedPhysicalAccessor adds a cache on top of any Accessor.
 type CachedPhysicalAccessor struct {
-	catalog.Accessor
 	tc *descs.Collection
 	// Used to avoid allocations.
 	tableName tree.TableName
@@ -138,4 +135,16 @@ func (a *CachedPhysicalAccessor) GetObjectDesc(
 	default:
 		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}
+}
+
+// GetObjectNames implements the Accessor interface.
+func (a *CachedPhysicalAccessor) GetObjectNames(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	db catalog.DatabaseDescriptor,
+	scName string,
+	flags tree.DatabaseListFlags,
+) (tree.TableNames, error) {
+	return catalogkv.GetObjectNames(ctx, txn, codec, db, scName, flags)
 }

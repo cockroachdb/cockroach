@@ -159,8 +159,7 @@ func getTemporaryObjectNames(
 	if err != nil {
 		return nil, err
 	}
-	a := catalogkv.UncachedPhysicalAccessor{}
-	return a.GetObjectNames(
+	return catalogkv.GetObjectNames(
 		ctx,
 		txn,
 		codec,
@@ -226,7 +225,6 @@ func cleanupSchemaObjects(
 	if err != nil {
 		return err
 	}
-	a := catalogkv.UncachedPhysicalAccessor{}
 
 	// We construct the database ID -> temp Schema ID map here so that the
 	// drop statements executed by the internal executor can resolve the temporary
@@ -241,7 +239,7 @@ func cleanupSchemaObjects(
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for _, tbName := range tbNames {
-		objDesc, err := a.GetObjectDesc(
+		objDesc, err := catalogkv.GetObjectDesc(
 			ctx,
 			txn,
 			settings,

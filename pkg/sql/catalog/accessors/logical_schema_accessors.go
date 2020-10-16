@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -91,7 +92,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	}
 
 	// Fallthrough.
-	return l.Accessor.GetObjectNames(ctx, txn, codec, dbDesc, scName, flags)
+	return catalogkv.GetObjectNames(ctx, txn, codec, dbDesc, scName, flags)
 }
 
 // GetObjectDesc implements the ObjectAccessor interface.

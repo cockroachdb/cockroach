@@ -121,7 +121,7 @@ func TestingGetDatabaseDescriptor(
 ) (db *dbdesc.Immutable) {
 	ctx := context.TODO()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		desc, err := UncachedPhysicalAccessor{}.GetDatabaseDesc(
+		desc, err := GetDatabaseDesc(
 			ctx, txn, codec, database, tree.DatabaseLookupFlags{
 				Required:       true,
 				AvoidCached:    true,
@@ -146,7 +146,7 @@ func TestingGetSchemaDescriptor(
 ) (schema *schemadesc.Immutable) {
 	ctx := context.TODO()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		_, schemaMeta, err := UncachedPhysicalAccessor{}.GetSchema(
+		_, schemaMeta, err := GetSchema(
 			ctx, txn, codec, dbID, schemaName, tree.SchemaLookupFlags{
 				Required:       true,
 				AvoidCached:    true,
@@ -184,7 +184,7 @@ func testingGetObjectDescriptor(
 		lookupFlags.IncludeDropped = true
 		lookupFlags.DesiredObjectKind = kind
 		lookupFlags.RequireMutable = mutable
-		desc, err = UncachedPhysicalAccessor{}.GetObjectDesc(ctx,
+		desc, err = GetObjectDesc(ctx,
 			txn, cluster.MakeTestingClusterSettings(), codec,
 			database, schema, object, lookupFlags)
 		if err != nil {

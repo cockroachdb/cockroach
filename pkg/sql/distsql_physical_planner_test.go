@@ -162,7 +162,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 				// Split the table at a random row.
 				var tableDesc *tabledesc.Immutable
 				require.NoError(t, cdb.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					desc, err := catalogkv.UncachedPhysicalAccessor{}.GetObjectDesc(ctx,
+					desc, err := catalogkv.GetObjectDesc(ctx,
 						txn, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec,
 						"test", "public", "t",
 						tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind))
