@@ -199,14 +199,18 @@ var aggregates = map[string]builtinDefinition{
 
 	"max": collectOverloads(aggProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
-			return makeAggOverload([]*types.T{t}, t, newMaxAggregate,
-				"Identifies the maximum selected value.")
+			info := "Identifies the maximum selected value."
+			return makeAggOverloadWithReturnType(
+				[]*types.T{t}, tree.IdentityReturnType(0), newMaxAggregate, info,
+			)
 		}),
 
 	"min": collectOverloads(aggProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
-			return makeAggOverload([]*types.T{t}, t, newMinAggregate,
-				"Identifies the minimum selected value.")
+			info := "Identifies the minimum selected value."
+			return makeAggOverloadWithReturnType(
+				[]*types.T{t}, tree.IdentityReturnType(0), newMinAggregate, info,
+			)
 		}),
 
 	"string_agg": makeBuiltin(aggPropsNullableArgs(),

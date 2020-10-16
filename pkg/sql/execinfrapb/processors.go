@@ -66,8 +66,7 @@ func GetAggregateInfo(
 			constructAgg := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
 				return b.AggregateFunc(datumTypes, evalCtx, arguments)
 			}
-
-			colTyp := b.FixedReturnType()
+			colTyp := b.InferReturnTypeFromInputArgTypes(datumTypes)
 			return constructAgg, colTyp, nil
 		}
 	}
@@ -174,7 +173,8 @@ func GetWindowFunctionInfo(
 			constructAgg := func(evalCtx *tree.EvalContext) tree.WindowFunc {
 				return b.WindowFunc(datumTypes, evalCtx)
 			}
-			return constructAgg, b.FixedReturnType(), nil
+			colTyp := b.InferReturnTypeFromInputArgTypes(datumTypes)
+			return constructAgg, colTyp, nil
 		}
 	}
 	return nil, nil, errors.Errorf(
