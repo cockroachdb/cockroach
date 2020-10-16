@@ -206,7 +206,7 @@ func (ds *ServerImpl) setupFlow(
 		//  If that field is unset, we might still want to create a child span if
 		//  this flow is run synchronously.
 		sp = ds.Tracer.(*tracing.Tracer).StartChildSpan(
-			opName, parentSpan.(*tracing.Span).SpanContext(), logtags.FromContext(ctx),
+			opName, parentSpan.(*tracing.Span).SpanContext(), logtags.FromContext(ctx), tracing.NonRecordableSpan,
 			false /* separateRecording */)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
