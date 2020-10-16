@@ -361,6 +361,11 @@ func (r *avroRecordStream) readNative() {
 		if len(r.buf) > 0 {
 			r.row, remaining, decodeErr = r.decode()
 		}
+		// If we've already read all we can (either to eof or to max size), then
+		// any error during decoding should just be returned as an error.
+		if decodeErr != nil && (r.eof || len(r.buf) > r.maxBufSize) {
+			break
+		}
 	}
 
 	if decodeErr != nil {
