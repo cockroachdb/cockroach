@@ -22,20 +22,20 @@ func TestTracerRecording(t *testing.T) {
 	tr := NewTracer()
 
 	noop1 := tr.StartSpan("noop")
-	if !noop1.(*Span).isNoop() {
+	if !noop1.isNoop() {
 		t.Error("expected noop Span")
 	}
 	noop1.LogKV("hello", "void")
 
 	noop2 := tr.StartSpan("noop2", opentracing.ChildOf(noop1.Context()))
-	if !noop2.(*Span).isNoop() {
+	if !noop2.isNoop() {
 		t.Error("expected noop child Span")
 	}
 	noop2.Finish()
 	noop1.Finish()
 
 	s1 := tr.StartSpan("a", Recordable)
-	if s1.(*Span).isNoop() {
+	if s1.isNoop() {
 		t.Error("Recordable (but not recording) Span should not be noop")
 	}
 	if !IsBlackHoleSpan(s1) {
@@ -44,7 +44,7 @@ func TestTracerRecording(t *testing.T) {
 
 	// Unless recording is actually started, child spans are still noop.
 	noop3 := tr.StartSpan("noop3", opentracing.ChildOf(s1.Context()))
-	if !noop3.(*Span).isNoop() {
+	if !noop3.isNoop() {
 		t.Error("expected noop child Span")
 	}
 	noop3.Finish()
@@ -131,7 +131,7 @@ func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
 	sp1 := tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 := tr.StartChildSpan("child", sp1.(*Span).SpanContext(), nil /* logTags */, false /* recordable */, false /*separateRecording*/)
+	sp2 := tr.StartChildSpan("child", sp1.SpanContext(), nil /* logTags */, false /* recordable */, false /*separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
@@ -143,7 +143,7 @@ func TestStartChildSpan(t *testing.T) {
 
 	sp1 = tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 = tr.StartChildSpan("child", sp1.(*Span).SpanContext(), nil /* logTags */, false /* recordable */, true /*separateRecording*/)
+	sp2 = tr.StartChildSpan("child", sp1.SpanContext(), nil /* logTags */, false /* recordable */, true /*separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
@@ -160,7 +160,7 @@ func TestStartChildSpan(t *testing.T) {
 	sp1 = tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
 	sp2 = tr.StartChildSpan(
-		"child", sp1.(*Span).SpanContext(), logtags.SingleTagBuffer("key", "val"), false /* recordable */, false, /*separateRecording*/
+		"child", sp1.SpanContext(), logtags.SingleTagBuffer("key", "val"), false /* recordable */, false, /*separateRecording*/
 	)
 	sp2.Finish()
 	sp1.Finish()
@@ -180,7 +180,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that noop spans become noop spans on the remote side.
 
 	noop1 := tr.StartSpan("noop")
-	if !noop1.(*Span).isNoop() {
+	if !noop1.isNoop() {
 		t.Fatalf("expected noop Span: %+v", noop1)
 	}
 	carrier := make(opentracing.HTTPHeadersCarrier)
@@ -195,11 +195,11 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !wireContext.(*SpanContext).isNoop() {
+	if !wireContext.isNoop() {
 		t.Errorf("expected noop context: %v", wireContext)
 	}
 	noop2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
-	if !noop2.(*Span).isNoop() {
+	if !noop2.isNoop() {
 		t.Fatalf("expected noop Span: %+v", noop2)
 	}
 	noop1.Finish()
@@ -223,8 +223,8 @@ func TestTracerInjectExtract(t *testing.T) {
 	s2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
 
 	// Compare TraceIDs
-	trace1 := s1.Context().(*SpanContext).TraceID
-	trace2 := s2.Context().(*SpanContext).TraceID
+	trace1 := s1.Context().TraceID
+	trace2 := s2.Context().TraceID
 	if trace1 != trace2 {
 		t.Errorf("TraceID doesn't match: parent %d child %d", trace1, trace2)
 	}
@@ -277,7 +277,7 @@ func TestLightstepContext(t *testing.T) {
 		UseGRPC:        true,
 	})
 	tr.setShadowTracer(lightStepManager{}, lsTr)
-	s := tr.StartSpan("test").(*Span)
+	s := tr.StartSpan("test")
 
 	const testBaggageKey = "test-baggage"
 	const testBaggageVal = "test-val"
@@ -294,12 +294,14 @@ func TestLightstepContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext)).(*Span)
+	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext))
 	s2Ctx := s2.ot.shadowSpan.Context()
 
 	// Verify that the baggage is correct in both the tracer context and in the
 	// lightstep context.
-	for i, spanCtx := range []opentracing.SpanContext{s2.Context(), s2Ctx} {
+	for i, spanCtx := range []interface {
+		ForeachBaggageItem(func(string, string) bool)
+	}{s2.Context(), s2Ctx} {
 		baggage := make(map[string]string)
 		spanCtx.ForeachBaggageItem(func(k, v string) bool {
 			baggage[k] = v

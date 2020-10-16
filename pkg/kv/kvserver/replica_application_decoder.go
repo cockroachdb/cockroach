@@ -151,7 +151,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			} else {
 				cmd.sp = d.r.AmbientContext.Tracer.StartSpan(
 					"raft application", opentracing.FollowsFrom(spanCtx))
-				cmd.ctx = opentracing.ContextWithSpan(ctx, cmd.sp)
+				cmd.ctx = tracing.ContextWithSpan(ctx, cmd.sp)
 			}
 		} else {
 			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(ctx, opName)

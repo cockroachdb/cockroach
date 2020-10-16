@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/opentracing/opentracing-go"
 )
 
 var errNoInboundStreamConnection = errors.New("no inbound stream connection")
@@ -246,7 +246,7 @@ func (fr *FlowRegistry) RegisterFlow(
 				// The span in the context might be finished by the time this runs. In
 				// principle, we could ForkCtxSpan() beforehand, but we don't want to
 				// create the extra span every time.
-				timeoutCtx := opentracing.ContextWithSpan(ctx, nil)
+				timeoutCtx := tracing.ContextWithSpan(ctx, nil)
 				log.Errorf(
 					timeoutCtx,
 					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",

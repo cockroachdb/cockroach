@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/trace"
 )
 
@@ -69,7 +68,7 @@ func TestTrace(t *testing.T) {
 	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
+	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
 	VEvent(ctxWithSpan, noLogV(), "test2")
 	VErrEvent(ctxWithSpan, noLogV(), "testerr")
@@ -98,7 +97,7 @@ func TestTraceWithTags(t *testing.T) {
 	tracer := tracing.NewTracer()
 	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
-	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
+	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
 
 	Event(ctxWithSpan, "test1")
@@ -186,7 +185,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	ctxWithBoth := opentracing.ContextWithSpan(ctxWithEventLog, sp)
+	ctxWithBoth := tracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.
 	Event(ctxWithBoth, "test3")
 	VEventf(ctxWithBoth, noLogV(), "test4")

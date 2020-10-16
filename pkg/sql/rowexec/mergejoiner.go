@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // mergeJoiner performs merge join, it has two input row sources with the same
@@ -75,7 +74,7 @@ func newMergeJoiner(
 		rightSource: rightSource,
 	}
 
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		m.leftSource = newInputStatCollector(m.leftSource)
 		m.rightSource = newInputStatCollector(m.rightSource)
 		m.FinishTrace = m.outputStatsToTrace
@@ -295,7 +294,7 @@ func (m *mergeJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(m.Ctx); sp != nil {
+	if sp := tracing.SpanFromContext(m.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&MergeJoinerStats{

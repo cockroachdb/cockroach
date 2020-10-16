@@ -24,6 +24,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
-        "//vendor/github.com/opentracing/opentracing-go",
+        "//pkg/util/tracing",
     ],
 )

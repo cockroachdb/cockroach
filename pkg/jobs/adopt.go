@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // claimJobs places a claim with the given SessionID to job rows that are
@@ -237,7 +237,7 @@ func (r *Registry) runJob(
 	phs, cleanup := r.planFn("resume-"+taskName, username)
 	defer cleanup()
 	spanName := fmt.Sprintf(`%s-%d`, typ, *job.ID())
-	var span opentracing.Span
+	var span *tracing.Span
 	ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
 	defer span.Finish()
 

@@ -192,7 +192,6 @@ go_library(
         "//vendor/github.com/lib/pq/oid",
         "//vendor/github.com/mattn/go-isatty",
         "//vendor/github.com/olekukonko/tablewriter",
-        "//vendor/github.com/opentracing/opentracing-go",
         "//vendor/github.com/spf13/cobra",
         "//vendor/github.com/spf13/cobra/doc",
         "//vendor/github.com/spf13/pflag",

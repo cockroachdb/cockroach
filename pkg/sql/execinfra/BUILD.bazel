@@ -59,7 +59,6 @@ go_library(
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/marusama/semaphore",
-        "//vendor/github.com/opentracing/opentracing-go",
         "//vendor/google.golang.org/grpc",
     ],
 )

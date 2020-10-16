@@ -156,7 +156,6 @@ go_library(
         "//vendor/github.com/grpc-ecosystem/grpc-gateway/utilities",
         "//vendor/github.com/marusama/semaphore",
         "//vendor/github.com/mitchellh/reflectwalk",
-        "//vendor/github.com/opentracing/opentracing-go",
         "//vendor/github.com/shirou/gopsutil/cpu",
         "//vendor/github.com/shirou/gopsutil/host",
         "//vendor/github.com/shirou/gopsutil/load",

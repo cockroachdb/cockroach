@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/opentracing/opentracing-go"
 )
 
 // RoundTripBenchTestCase is a struct that holds the name of a benchmark test
@@ -45,7 +44,7 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 		b.Run(tc.name, func(b *testing.B) {
 			var stmtToKvBatchRequests sync.Map
 
-			beforePlan := func(sp opentracing.Span, stmt string) {
+			beforePlan := func(sp *tracing.Span, stmt string) {
 				if _, ok := stmtToKvBatchRequests.Load(stmt); ok {
 					sp.Finish()
 					trace := tracing.GetRecording(sp)

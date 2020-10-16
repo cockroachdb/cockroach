@@ -369,7 +369,6 @@ go_test(
         "//vendor/github.com/kr/pretty",
         "//vendor/github.com/lib/pq",
         "//vendor/github.com/olekukonko/tablewriter",
-        "//vendor/github.com/opentracing/opentracing-go",
         "//vendor/github.com/stretchr/testify/assert",
         "//vendor/github.com/stretchr/testify/require",
         "//vendor/go.etcd.io/etcd/raft",
