@@ -552,6 +552,9 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
   return u.val.(tree.RefreshDataOption)
 }
+func (u *sqlSymUnion) survive() tree.Survive {
+    return u.val.(tree.Survive)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -573,7 +576,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
+%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
 %token <str> BACKUP BACKUPS BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
@@ -599,7 +602,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
 
-%token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
+%token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL FUNCTION
 
@@ -645,7 +648,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> QUERIES QUERY
 
 %token <str> RANGE RANGES READ REAL REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
-%token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
+%token <str> REGCLASS REGION REGIONS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
@@ -656,7 +659,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
-%token <str> SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
+%token <str> SURVIVE SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
@@ -730,6 +733,9 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 // ALTER DATABASE
 %type <tree.Statement> alter_rename_database_stmt
 %type <tree.Statement> alter_database_to_schema_stmt
+%type <tree.Statement> alter_database_add_region_stmt
+%type <tree.Statement> alter_database_drop_region_stmt
+%type <tree.Statement> alter_database_survive_stmt
 %type <tree.Statement> alter_zone_database_stmt
 %type <tree.Statement> alter_database_owner
 
@@ -860,6 +866,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_ranges_stmt
 %type <tree.Statement> show_range_for_row_stmt
+%type <tree.Statement> show_regions_stmt
 %type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_schemas_stmt
 %type <tree.Statement> show_sequences_stmt
@@ -924,6 +931,8 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.ValidationBehavior> opt_validate_behavior
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+%type <tree.NameList> opt_create_database_regions_name_list
+%type <tree.Survive> survive_clause opt_survive_clause
 %type <int32> opt_connection_limit
 
 %type <tree.IsolationLevel> transaction_iso_level
@@ -1106,6 +1115,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
+%type <str> region_or_regions
 
 %type <str> unreserved_keyword type_func_name_keyword type_func_name_no_crdb_extra_keyword type_func_name_crdb_extra_keyword
 %type <str> col_name_keyword reserved_keyword cockroachdb_extra_reserved_keyword extra_var_value
@@ -1412,12 +1422,18 @@ alter_sequence_options_stmt:
 // ALTER DATABASE <name> RENAME TO <newname>
 // ALTER DATABASE <name> OWNER TO <newowner>
 // ALTER DATABASE <name> CONVERT TO SCHEMA WITH PARENT <name>
+// ALTER DATABASE <name> ADD REGIONS <regions>
+// ALTER DATABASE <name> DROP REGIONS <regions>
+// ALTER DATABASE <name> SURVIVE <failure type>
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
-|  alter_zone_database_stmt
-|  alter_database_owner
+| alter_zone_database_stmt
+| alter_database_owner
 | alter_database_to_schema_stmt
+| alter_database_add_region_stmt
+| alter_database_drop_region_stmt
+| alter_database_survive_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1427,6 +1443,37 @@ alter_database_owner:
 	{
 		$$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6}
 	}
+
+alter_database_add_region_stmt:
+  ALTER DATABASE database_name ADD region_or_regions name_list
+  {
+    $$.val = &tree.AlterDatabaseAddRegion{
+      Name: tree.Name($3),
+      Regions: $6.nameList(),
+    }
+  }
+
+alter_database_drop_region_stmt:
+  ALTER DATABASE database_name DROP region_or_regions name_list
+  {
+    $$.val = &tree.AlterDatabaseDropRegion{
+      Name: tree.Name($3),
+      Regions: $6.nameList(),
+    }
+  }
+
+alter_database_survive_stmt:
+  ALTER DATABASE database_name survive_clause
+  {
+    $$.val = &tree.AlterDatabaseSurvive{
+      Name: tree.Name($3),
+      Survive: $4.survive(),
+    }
+  }
+
+region_or_regions:
+  REGION
+| REGIONS
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL
@@ -4229,7 +4276,7 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES,
+// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES, SHOW REGIONS,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES
@@ -4252,6 +4299,7 @@ show_stmt:
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_range_for_row_stmt
+| show_regions_stmt         // EXTEND WITH HELP: SHOW REGIONS
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
 | show_savepoint_stmt       // EXTEND WITH HELP: SHOW SAVEPOINT
 | show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
@@ -5027,6 +5075,23 @@ show_ranges_stmt:
     $$.val = &tree.ShowRanges{DatabaseName: tree.Name($5)}
   }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
+
+// %Help: SHOW REGIONS - shows regions
+// %Category: DDL
+// %Text:
+// SHOW REGIONS
+// SHOW REGIONS FOR DATABASE <database>
+show_regions_stmt:
+  SHOW REGIONS
+  {
+    $$.val = &tree.ShowRegions{}
+  }
+| SHOW REGIONS FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowRegions{
+      Database: tree.Name($5),
+    }
+  }
 
 show_fingerprints_stmt:
   SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
@@ -7313,7 +7378,7 @@ transaction_deferrable_mode:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
+  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_create_database_regions_name_list opt_survive_clause
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
@@ -7322,9 +7387,11 @@ create_database_stmt:
       Collate: $7,
       CType: $8,
       ConnectionLimit: $9.int32(),
+      Regions: $10.nameList(),
+      Survive: $11.survive(),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
+| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_create_database_regions_name_list opt_survive_clause
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
@@ -7334,9 +7401,42 @@ create_database_stmt:
       Collate: $10,
       CType: $11,
       ConnectionLimit: $12.int32(),
+      Regions: $13.nameList(),
+      Survive: $14.survive(),
     }
   }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
+
+opt_create_database_regions_name_list:
+  region_or_regions opt_equal name_list
+  {
+    $$.val = $3.nameList()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.NameList(nil)
+  }
+
+survive_clause:
+  SURVIVE REGION FAILURE
+  {
+    $$.val = tree.SurviveRegionFailure
+  }
+| SURVIVE AVAILABILITY ZONE FAILURE
+  {
+    $$.val = tree.SurviveAvailabilityZoneFailure
+  }
+| SURVIVE DEFAULT
+  {
+    $$.val = tree.SurviveDefault
+  }
+
+opt_survive_clause:
+  survive_clause
+| /* EMPTY */
+  {
+    $$.val = tree.SurviveDefault
+  }
 
 opt_template_clause:
   TEMPLATE opt_equal non_reserved_word_or_sconst
@@ -11530,6 +11630,7 @@ unreserved_keyword:
 | AT
 | ATTRIBUTE
 | AUTOMATIC
+| AVAILABILITY
 | BACKUP
 | BACKUPS
 | BEFORE
@@ -11603,6 +11704,7 @@ unreserved_keyword:
 | EXPLAIN
 | EXPORT
 | EXTENSION
+| FAILURE
 | FILES
 | FILTER
 | FIRST
@@ -11745,6 +11847,8 @@ unreserved_keyword:
 | RECURSIVE
 | REF
 | REFRESH
+| REGION
+| REGIONS
 | REINDEX
 | RELEASE
 | RENAME
@@ -11804,6 +11908,7 @@ unreserved_keyword:
 | STORING
 | STRICT
 | SUBSCRIPTION
+| SURVIVE
 | SYNTAX
 | SYSTEM
 | TABLES
