@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -162,7 +162,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 				// Split the table at a random row.
 				var tableDesc *tabledesc.Immutable
 				require.NoError(t, cdb.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					desc, err := catalogkv.GetObjectDesc(ctx,
+					desc, err := descs.GetObjectDesc(ctx,
 						txn, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec,
 						"test", "public", "t",
 						tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind))

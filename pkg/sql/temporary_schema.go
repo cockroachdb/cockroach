@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -159,7 +160,7 @@ func getTemporaryObjectNames(
 	if err != nil {
 		return nil, err
 	}
-	return catalogkv.GetObjectNames(
+	return descs.GetObjectNames(
 		ctx,
 		txn,
 		codec,
@@ -239,7 +240,7 @@ func cleanupSchemaObjects(
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for _, tbName := range tbNames {
-		objDesc, err := catalogkv.GetObjectDesc(
+		objDesc, err := descs.GetObjectDesc(
 			ctx,
 			txn,
 			settings,

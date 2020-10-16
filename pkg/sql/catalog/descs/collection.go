@@ -273,7 +273,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 		return db, nil
 	}
 
-	db, err := catalogkv.GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
+	db, err := GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
 	if err != nil || db == nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 		return mut, nil
 	}
 
-	obj, err := catalogkv.GetObjectDesc(
+	obj, err := GetObjectDesc(
 		ctx,
 		txn,
 		tc.settings,
@@ -393,7 +393,7 @@ func (tc *Collection) getMutableUserDefinedSchemaDescriptor(
 		return schema, nil
 	}
 
-	found, schema, err := catalogkv.GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+	found, schema, err := GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
 	if err != nil || !found {
 		return nil, err
 	}
@@ -404,7 +404,7 @@ func (tc *Collection) getUserDefinedSchemaVersion(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
 ) (*schemadesc.Immutable, error) {
 	readFromStore := func() (*schemadesc.Immutable, error) {
-		exists, schema, err := catalogkv.GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+		exists, schema, err := GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
 		if err != nil || !exists || schema.Kind != catalog.SchemaUserDefined {
 			return nil, err
 		}
@@ -519,7 +519,7 @@ func (tc *Collection) ResolveSchema(
 			}
 		}
 
-		exists, resolved, err := catalogkv.GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+		exists, resolved, err := GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
 		if err != nil || !exists {
 			return exists, catalog.ResolvedSchema{}, err
 		}
@@ -563,7 +563,7 @@ func (tc *Collection) GetDatabaseVersion(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (*dbdesc.Immutable, error) {
 	readFromStore := func() (*dbdesc.Immutable, error) {
-		desc, err := catalogkv.GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
+		desc, err := GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
 		if err != nil || desc == nil {
 			return nil, err
 		}
@@ -649,7 +649,7 @@ func (tc *Collection) getObjectVersion(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
 	readObjectFromStore := func() (catalog.Descriptor, error) {
-		return catalogkv.GetObjectDesc(
+		return GetObjectDesc(
 			ctx,
 			txn,
 			tc.settings,
