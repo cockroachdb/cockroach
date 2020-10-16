@@ -905,7 +905,7 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 		return false, nil
 	}
 
-	r.maybeTransferRaftLeadershipLocked(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
 
 	// For followers, we update lastUpdateTimes when we step a message from them
 	// into the local Raft group. The leader won't hit that path, so we update
