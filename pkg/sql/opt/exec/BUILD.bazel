@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "exec",
-    # keep
     srcs = [
         "factory.go",
         ":gen_factory.og.go",  # keep

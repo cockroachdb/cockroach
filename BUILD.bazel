@@ -12,6 +12,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude c-deps/protobuf
 # gazelle:exclude **/zcgo_flags.go
 # gazelle:exclude **/zcgo_flags_*.go
+# gazelle:exclude **/*.og.go
+# gazelle:exclude **/*.eg.go
 # gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/internal //vendor/github.com/grpc-ecosystem/grpc-gateway/internal
 
 gazelle(

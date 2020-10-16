@@ -74,7 +74,6 @@ generate(
 go_library(
     name = "colexec",
     # TODO(irfansharif): This needs to glob out all eg.go files + :generate basically.
-    # keep
     srcs = [
         "aggregate_funcs.go",
         "aggregators_util.go",
