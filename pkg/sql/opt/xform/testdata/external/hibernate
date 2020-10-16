@@ -57,13 +57,13 @@ project
  ├── columns: phone_id1_2_0_:1!null person_i2_2_0_:2!null formula159_0_:14 id1_1_1_:4!null number2_1_1_:5 since3_1_1_:6 type4_1_1_:7
  ├── key: (4)
  ├── fd: ()-->(1), (4)-->(5-7), (2)==(4), (4)==(2), (2)-->(14)
- ├── inner-join (lookup phone)
+ ├── inner-join (lookup a10)
  │    ├── columns: phone_id:1!null person_id:2!null unidirecti1_.id:4!null unidirecti1_.number:5 unidirecti1_.since:6 unidirecti1_.type:7 a10.id:9!null a10.since:11
  │    ├── key columns: [2] = [9]
  │    ├── lookup columns are key
  │    ├── key: (9)
  │    ├── fd: ()-->(1), (4)-->(5-7), (2)==(4,9), (4)==(2,9), (9)-->(11), (9)==(2,4)
- │    ├── inner-join (lookup phone)
+ │    ├── inner-join (lookup unidirecti1_)
  │    │    ├── columns: phone_id:1!null person_id:2!null unidirecti1_.id:4!null unidirecti1_.number:5 unidirecti1_.since:6 unidirecti1_.type:7
  │    │    ├── key columns: [2] = [4]
  │    │    ├── lookup columns are key
@@ -186,7 +186,7 @@ inner-join (hash)
  │    ├── columns: addresses2_.person_id:14!null addresses:15 addresses_key:16!null
  │    ├── key: (14,16)
  │    └── fd: (14,16)-->(15)
- ├── inner-join (lookup person)
+ ├── inner-join (lookup person1_)
  │    ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 phone0_.person_id:4!null person1_.id:7!null address:8 createdon:9 name:10 nickname:11 version:12!null
  │    ├── key columns: [4] = [7]
  │    ├── lookup columns are key
@@ -196,7 +196,7 @@ inner-join (hash)
  │    │    ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 phone0_.person_id:4
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
- │    │    └── inner-join (lookup phone)
+ │    │    └── inner-join (lookup phone0_)
  │    │         ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 phone0_.person_id:4 phone_id:21!null
  │    │         ├── key columns: [21] = [1]
  │    │         ├── lookup columns are key
@@ -245,7 +245,7 @@ project
       ├── fd: (1)-->(2-4), (4)==(7,14), (7)==(4,14), (14)==(4,7)
       ├── scan addresses2_
       │    └── columns: addresses2_.person_id:14!null
-      ├── inner-join (lookup person)
+      ├── inner-join (lookup person1_)
       │    ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 phone0_.person_id:4!null person1_.id:7!null
       │    ├── key columns: [4] = [7]
       │    ├── lookup columns are key
@@ -255,7 +255,7 @@ project
       │    │    ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 phone0_.person_id:4
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
-      │    │    └── inner-join (lookup phone)
+      │    │    └── inner-join (lookup phone0_)
       │    │         ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 phone0_.person_id:4 phone_id:21!null
       │    │         ├── key columns: [21] = [1]
       │    │         ├── lookup columns are key
@@ -314,7 +314,7 @@ inner-join (cross)
  │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-6)
- │    └── inner-join (lookup person)
+ │    └── inner-join (lookup person0_)
  │         ├── columns: person0_.id:1!null address:2!null createdon:3 person0_.name:4 nickname:5 person0_.version:6!null person_id:15!null
  │         ├── key columns: [15] = [1]
  │         ├── lookup columns are key
@@ -983,7 +983,7 @@ project
  ├── immutable, has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- └── inner-join (lookup person)
+ └── inner-join (lookup person0_)
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:11!null
       ├── key columns: [11] = [1]
       ├── lookup columns are key
@@ -1033,7 +1033,7 @@ project
  ├── immutable, has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- └── inner-join (lookup person)
+ └── inner-join (lookup person0_)
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:11!null
       ├── key columns: [11] = [1]
       ├── lookup columns are key
@@ -1082,7 +1082,7 @@ project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- └── inner-join (lookup person)
+ └── inner-join (lookup person0_)
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:11!null
       ├── key columns: [11] = [1]
       ├── lookup columns are key
@@ -1157,7 +1157,7 @@ project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- └── inner-join (lookup person)
+ └── inner-join (lookup person0_)
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:11!null
       ├── key columns: [11] = [1]
       ├── lookup columns are key
@@ -1221,7 +1221,7 @@ project
       │    │    │    │    └── columns: phones1_.person_id:17 phones1_.order_id:18
       │    │    │    └── filters
       │    │    │         └── phones1_.order_id:18 IS NOT NULL [outer=(18), constraints=(/18: (/NULL - ]; tight)]
-      │    │    ├── inner-join (lookup person)
+      │    │    ├── inner-join (lookup person0_)
       │    │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones2_.id:8!null phones2_.phone_type:10!null phones2_.person_id:11!null phones2_.order_id:12
       │    │    │    ├── key columns: [11] = [1]
       │    │    │    ├── lookup columns are key
@@ -1315,7 +1315,7 @@ project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- └── inner-join (lookup person)
+ └── inner-join (lookup person0_)
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:11!null
       ├── key columns: [11] = [1]
       ├── lookup columns are key
@@ -1382,7 +1382,7 @@ project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- └── inner-join (lookup person)
+ └── inner-join (lookup person0_)
       ├── columns: id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:8!null
       ├── key columns: [8] = [1]
       ├── lookup columns are key
@@ -1696,13 +1696,13 @@ project
  ├── columns: newspape1_23_0_:1!null news_new2_23_0_:2!null formula140_0_:12 news_id1_21_1_:4!null detail2_21_1_:5 title3_21_1_:6
  ├── key: (4)
  ├── fd: ()-->(1), (4)-->(5,6,12), (2)==(4), (4)==(2)
- ├── left-join (lookup news)
+ ├── left-join (lookup a0)
  │    ├── columns: newspaper_id:1!null news_news_id:2!null news1_.news_id:4!null news1_.detail:5 news1_.title:6 a0.news_id:8 a0.title:10
  │    ├── key columns: [2] = [8]
  │    ├── lookup columns are key
  │    ├── key: (4)
  │    ├── fd: ()-->(1), (4)-->(5,6,8,10), (2)==(4), (4)==(2), (8)-->(10)
- │    ├── inner-join (lookup news)
+ │    ├── inner-join (lookup news1_)
  │    │    ├── columns: newspaper_id:1!null news_news_id:2!null news1_.news_id:4!null news1_.detail:5 news1_.title:6
  │    │    ├── key columns: [2] = [4]
  │    │    ├── lookup columns are key
@@ -1776,25 +1776,25 @@ project
  ├── columns: generati1_2_0_:1!null ref_id2_2_0_:2!null formula131_0_:24 formula132_0_:25 formula133_0_:26 id1_0_1_:4!null age2_0_1_:5 culture3_0_1_:6 descript4_0_1_:7
  ├── key: (4)
  ├── fd: ()-->(1), (4)-->(5-7,24-26), (2)==(4), (4)==(2)
- ├── left-join (lookup generationgroup)
+ ├── left-join (lookup a13)
  │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:4!null generation1_.age:5 generation1_.culture:6 generation1_.description:7 a13.id:9 a13.age:10 a15.id:14 a15.culture:16 a13.id:19 a13.description:22
  │    ├── key columns: [2] = [19]
  │    ├── lookup columns are key
  │    ├── key: (4)
  │    ├── fd: ()-->(1), (4)-->(5-7,9,10,14,16,19,22), (2)==(4), (4)==(2), (9)-->(10), (14)-->(16), (19)-->(22)
- │    ├── left-join (lookup generationgroup)
+ │    ├── left-join (lookup a15)
  │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:4!null generation1_.age:5 generation1_.culture:6 generation1_.description:7 a13.id:9 a13.age:10 a15.id:14 a15.culture:16
  │    │    ├── key columns: [2] = [14]
  │    │    ├── lookup columns are key
  │    │    ├── key: (4)
  │    │    ├── fd: ()-->(1), (4)-->(5-7,9,10,14,16), (2)==(4), (4)==(2), (9)-->(10), (14)-->(16)
- │    │    ├── left-join (lookup generationgroup)
+ │    │    ├── left-join (lookup a13)
  │    │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:4!null generation1_.age:5 generation1_.culture:6 generation1_.description:7 a13.id:9 a13.age:10
  │    │    │    ├── key columns: [2] = [9]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── key: (4)
  │    │    │    ├── fd: ()-->(1), (4)-->(5-7,9,10), (2)==(4), (4)==(2), (9)-->(10)
- │    │    │    ├── inner-join (lookup generationgroup)
+ │    │    │    ├── inner-join (lookup generation1_)
  │    │    │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:4!null generation1_.age:5 generation1_.culture:6 generation1_.description:7
  │    │    │    │    ├── key columns: [2] = [4]
  │    │    │    │    ├── lookup columns are key

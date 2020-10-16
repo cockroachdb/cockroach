@@ -1182,7 +1182,7 @@ values
            │         │    ├── cardinality: [0 - 100]
            │         │    ├── key: (5,10-12)
            │         │    ├── fd: ()-->(4), (1)==(10), (10)==(1), (2)==(11), (11)==(2), (3)==(12), (12)==(3)
-           │         │    ├── inner-join (lookup transactions)
+           │         │    ├── inner-join (lookup t)
            │         │    │    ├── columns: d.dealerid:1!null d.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null t.dealerid:10!null t.isbuy:11!null date:12!null
            │         │    │    ├── key columns: [1 2 3] = [10 11 12]
            │         │    │    ├── lookup columns are key
@@ -1470,7 +1470,7 @@ update ci
       │    ├── grouping columns: ci.cardid:17!null
       │    ├── key: (17)
       │    ├── fd: ()-->(16), (17)-->(16,18-24,26,27,34), (24)-->(17-23), (17)==(26), (26)==(17)
-      │    ├── left-join (lookup inventorydetails)
+      │    ├── left-join (lookup id)
       │    │    ├── columns: ci.dealerid:16!null ci.cardid:17!null buyprice:18!null sellprice:19!null discount:20!null desiredinventory:21!null actualinventory:22!null maxinventory:23!null ci.version:24!null c:26!null q:27!null id.dealerid:28 id.cardid:29 quantity:31
       │    │    ├── key columns: [39 17] = [28 29]
       │    │    ├── fd: ()-->(16), (17)-->(18-24,26,27), (24)-->(17-23), (17)==(26), (26)==(17)
@@ -1485,7 +1485,7 @@ update ci
       │    │    │    │    ├── cardinality: [0 - 2]
       │    │    │    │    ├── key: (17)
       │    │    │    │    ├── fd: ()-->(16), (17)-->(16,18-24,26,27), (24)-->(17-23), (17)==(26), (26)==(17)
-      │    │    │    │    ├── inner-join (lookup cardsinfo)
+      │    │    │    │    ├── inner-join (lookup ci)
       │    │    │    │    │    ├── columns: ci.dealerid:16!null ci.cardid:17!null buyprice:18!null sellprice:19!null discount:20!null desiredinventory:21!null actualinventory:22!null maxinventory:23!null ci.version:24!null c:26!null q:27!null
       │    │    │    │    │    ├── key columns: [37 26] = [16 17]
       │    │    │    │    │    ├── lookup columns are key

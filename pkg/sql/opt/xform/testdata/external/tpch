@@ -845,7 +845,7 @@ sort
       │    │    │    │    │    │    │    ├── key columns: [55] = [49]
       │    │    │    │    │    │    │    ├── key: (46)
       │    │    │    │    │    │    │    ├── fd: ()-->(66), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49)
-      │    │    │    │    │    │    │    ├── inner-join (lookup nation@n_rk)
+      │    │    │    │    │    │    │    ├── inner-join (lookup n1@n_rk)
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:55!null n1.n_regionkey:57!null r_regionkey:65!null r_name:66!null
       │    │    │    │    │    │    │    │    ├── key columns: [65] = [57]
       │    │    │    │    │    │    │    │    ├── key: (55)
@@ -2320,20 +2320,20 @@ limit
  │         │    ├── key columns: [9] = [26]
  │         │    ├── lookup columns are key
  │         │    ├── fd: ()-->(28,37), (1)-->(2,4), (9)==(26), (26)==(9), (1)==(11), (11)==(1), (4)==(36), (36)==(4)
- │         │    ├── anti-join (lookup lineitem)
+ │         │    ├── anti-join (lookup l3)
  │         │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
  │         │    │    ├── key columns: [9] = [58]
  │         │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
- │         │    │    ├── semi-join (lookup lineitem)
+ │         │    │    ├── semi-join (lookup l2)
  │         │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
  │         │    │    │    ├── key columns: [9] = [41]
  │         │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
- │         │    │    │    ├── inner-join (lookup lineitem)
+ │         │    │    │    ├── inner-join (lookup l1)
  │         │    │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
  │         │    │    │    │    ├── key columns: [9 12] = [9 12]
  │         │    │    │    │    ├── lookup columns are key
  │         │    │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
- │         │    │    │    │    ├── inner-join (lookup lineitem@l_sk)
+ │         │    │    │    │    ├── inner-join (lookup l1@l_sk)
  │         │    │    │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_linenumber:12!null n_nationkey:36!null n_name:37!null
  │         │    │    │    │    │    ├── key columns: [1] = [11]
  │         │    │    │    │    │    ├── key: (9,12)

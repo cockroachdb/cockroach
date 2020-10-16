@@ -124,7 +124,7 @@ sort
       │    │    │    │    │    │    │    ├── stats: [rows=30000, distinct(46)=27672.3293, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=0.996222107, null(66)=0]
       │    │    │    │    │    │    │    ├── key: (46)
       │    │    │    │    │    │    │    ├── fd: ()-->(66), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49)
-      │    │    │    │    │    │    │    ├── inner-join (lookup nation@n_rk)
+      │    │    │    │    │    │    │    ├── inner-join (lookup n1@n_rk)
       │    │    │    │    │    │    │    │    ├── save-table-name: q8_lookup_join_11
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:55(int!null) n1.n_regionkey:57(int!null) r_regionkey:65(int!null) r_name:66(char!null)
       │    │    │    │    │    │    │    │    ├── key columns: [65] = [57]

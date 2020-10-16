@@ -198,7 +198,7 @@ insert new_order
  │    └── (2000, 100, 10)
  └── f-k-checks
       └── f-k-checks-item: new_order(no_w_id,no_d_id,no_o_id) -> order(o_w_id,o_d_id,o_id)
-           └── anti-join (lookup order)
+           └── anti-join (lookup "order")
                 ├── columns: column3:8!null column2:9!null column1:10!null
                 ├── key columns: [8 9 10] = [13 12 11]
                 ├── lookup columns are key
@@ -390,7 +390,7 @@ insert order_line
  │         └── CAST(NULL AS TIMESTAMP) [as=column21:21]
  └── f-k-checks
       ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
-      │    └── anti-join (lookup order)
+      │    └── anti-join (lookup "order")
       │         ├── columns: column3:23!null column2:24!null column1:25!null
       │         ├── key columns: [23 24 25] = [28 27 26]
       │         ├── lookup columns are key
