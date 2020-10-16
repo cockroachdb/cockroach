@@ -34,7 +34,7 @@ var maxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
 	128<<20, // 128MiB
 )
 
-const cpuProfTimeFormat = "2006-01-02T15_04_05.999"
+const cpuProfTimeFormat = "2006-01-02T15_04_05.000"
 const cpuProfFileNamePrefix = "cpuprof."
 
 type cpuProfiler struct{}

@@ -61,9 +61,9 @@ func TestHeuristic(t *testing.T) {
 				{220, 100, 500}, // trigger since N has doubled since last dump
 			},
 			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000120",
-				"goroutine_dump.2019-01-01T00_01_20.double_since_last_dump.000000250",
-				"goroutine_dump.2019-01-01T00_03_40.double_since_last_dump.000000500",
+				"goroutine_dump.2019-01-01T00_00_20.000.double_since_last_dump.000000120",
+				"goroutine_dump.2019-01-01T00_01_20.000.double_since_last_dump.000000250",
+				"goroutine_dump.2019-01-01T00_03_40.000.double_since_last_dump.000000500",
 			},
 		},
 		{
@@ -84,12 +84,12 @@ func TestHeuristic(t *testing.T) {
 				{220, 100, 500}, // not trigger since N has not doubled since last dump
 			},
 			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000110",
-				"goroutine_dump.2019-01-01T00_01_40.double_since_last_dump.000000220",
-				"goroutine_dump.2019-01-01T00_03_20.double_since_last_dump.000000450",
+				"goroutine_dump.2019-01-01T00_00_20.000.double_since_last_dump.000000110",
+				"goroutine_dump.2019-01-01T00_01_40.000.double_since_last_dump.000000220",
+				"goroutine_dump.2019-01-01T00_03_20.000.double_since_last_dump.000000450",
 			},
 			dumpsToFail: []string{
-				"goroutine_dump.2019-01-01T00_01_20.double_since_last_dump.000000230",
+				"goroutine_dump.2019-01-01T00_01_20.000.double_since_last_dump.000000230",
 			},
 		},
 		{
@@ -109,9 +109,9 @@ func TestHeuristic(t *testing.T) {
 				{220, 200, 500}, // trigger since N has doubled since last dump
 			},
 			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000120",
-				"goroutine_dump.2019-01-01T00_01_30.double_since_last_dump.000000210",
-				"goroutine_dump.2019-01-01T00_03_40.double_since_last_dump.000000500",
+				"goroutine_dump.2019-01-01T00_00_20.000.double_since_last_dump.000000120",
+				"goroutine_dump.2019-01-01T00_01_30.000.double_since_last_dump.000000210",
+				"goroutine_dump.2019-01-01T00_03_40.000.double_since_last_dump.000000500",
 			},
 		},
 		{
