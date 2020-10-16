@@ -141,7 +141,6 @@ CREATE TABLE stock
     s_remote_cnt integer,
     s_data       varchar(50),
     primary key (s_w_id, s_i_id),
-    index stock_item_fk_idx (s_i_id),
     foreign key (s_w_id) references warehouse (w_id),
     foreign key (s_i_id) references item (i_id)
 ) interleave in parent warehouse (s_w_id)
