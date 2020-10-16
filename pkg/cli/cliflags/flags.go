@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/kr/text"
 )
@@ -1105,7 +1106,7 @@ availability zone to 3.
 
 	DemoGeoPartitionedReplicas = FlagInfo{
 		Name: "geo-partitioned-replicas",
-		Description: `
+		Description: fmt.Sprintf(`
 When used with the Movr dataset, create a 9 node cluster and automatically apply
 the geo-partitioned replicas topology across 3 virtual regions named us-east1,
 us-west1, and europe-west1. This command will fail with an error if an
@@ -1113,9 +1114,9 @@ enterprise license could not be acquired, or if the Movr dataset is not used.
 More information about the geo-partitioned replicas topology can be found at:
 <PRE>
 
-https://www.cockroachlabs.com/docs/v19.1/topology-geo-partitioned-replicas.html
+%s
 </PRE>
-		`,
+		`, docs.URL("topology-geo-partitioned-replicas.html")),
 	}
 
 	DemoNoLicense = FlagInfo{
