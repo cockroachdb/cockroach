@@ -226,7 +226,7 @@ project
       │    ├── grouping columns: t.public.kv.v:2 column6:6
       │    └── project
       │         ├── columns: column6:6 t.public.kv.v:2
-      │         ├── scan t.public.kv
+      │         ├── scan kv
       │         │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.w:3 t.public.kv.s:4 t.public.kv.crdb_internal_mvcc_timestamp:5
       │         └── projections
       │              └── t.public.kv.k:1 * t.public.kv.w:3 [as=column6:6]
@@ -248,7 +248,7 @@ select
  │    ├── grouping columns: column7:7
  │    ├── project
  │    │    ├── columns: column7:7 t.public.kv.s:4
- │    │    ├── scan t.public.kv
+ │    │    ├── scan kv
  │    │    │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.w:3 t.public.kv.s:4 t.public.kv.crdb_internal_mvcc_timestamp:5
  │    │    └── projections
  │    │         └── upper(t.public.kv.s:4) [as=column7:7]

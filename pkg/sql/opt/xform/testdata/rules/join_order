@@ -457,7 +457,7 @@ inner-join (cross)
  │    │    ├── fd: (9)-->(10), (12)-->(13)
  │    │    ├── prune: (9,10,12,13)
  │    │    ├── interesting orderings: (+9) (+12)
- │    │    ├── scan t.public.cy
+ │    │    ├── scan cy
  │    │    │    ├── columns: t.public.cy.c:9(int!null) t.public.cy.y:10(int)
  │    │    │    ├── stats: [rows=1000]
  │    │    │    ├── cost: 1044.02
@@ -466,7 +466,7 @@ inner-join (cross)
  │    │    │    ├── prune: (9,10)
  │    │    │    ├── interesting orderings: (+9)
  │    │    │    └── unfiltered-cols: (9-11)
- │    │    ├── scan t.public.dz
+ │    │    ├── scan dz
  │    │    │    ├── columns: t.public.dz.d:12(int!null) t.public.dz.z:13(int)
  │    │    │    ├── stats: [rows=1000]
  │    │    │    ├── cost: 1044.02
@@ -476,7 +476,7 @@ inner-join (cross)
  │    │    │    ├── interesting orderings: (+12)
  │    │    │    └── unfiltered-cols: (12-14)
  │    │    └── filters (true)
- │    ├── scan t.public.bx
+ │    ├── scan bx
  │    │    ├── columns: t.public.bx.b:6(int!null) t.public.bx.x:7(int)
  │    │    ├── stats: [rows=1000]
  │    │    ├── cost: 1044.02
@@ -486,7 +486,7 @@ inner-join (cross)
  │    │    ├── interesting orderings: (+6)
  │    │    └── unfiltered-cols: (6-8)
  │    └── filters (true)
- ├── scan t.public.abc
+ ├── scan abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.abc.d:4(int)
  │    ├── constraint: /1: [/1 - /1]
  │    ├── cardinality: [0 - 1]
@@ -750,7 +750,7 @@ project
  │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    │    ├── key: (5)
  │    │    ├── fd: ()-->(3,11), (1)==(5), (5)==(1)
- │    │    ├── scan a2
+ │    │    ├── scan a
  │    │    │    ├── columns: a2.id:3!null
  │    │    │    ├── constraint: /3: [/1 - /1]
  │    │    │    ├── cardinality: [0 - 1]
@@ -774,7 +774,7 @@ project
  │    │    │    │    │    ├── fd: (1)-->(11)
  │    │    │    │    │    ├── left-join (cross)
  │    │    │    │    │    │    ├── columns: a1.id:1!null bool:11
- │    │    │    │    │    │    ├── scan a1
+ │    │    │    │    │    │    ├── scan a
  │    │    │    │    │    │    │    ├── columns: a1.id:1!null
  │    │    │    │    │    │    │    └── key: (1)
  │    │    │    │    │    │    ├── project
@@ -792,7 +792,7 @@ project
  │    │    │    │         └── bool:11 [outer=(11), constraints=(/11: [/true - /true]; tight), fd=()-->(11)]
  │    │    │    └── filters (true)
  │    │    └── filters (true)
- │    ├── scan a4
+ │    ├── scan a
  │    │    ├── columns: a4.id:7!null
  │    │    ├── constraint: /7: [/1 - /1]
  │    │    ├── cardinality: [0 - 1]
@@ -2170,17 +2170,17 @@ WHERE EXISTS (SELECT * FROM abc AS a5 WHERE a2.c = a5.c)
 --------------------------------------------------------------------------------
 ----Join Tree #1----
 semi-join (hash)
- ├── scan a2
- ├── scan a5
+ ├── scan abc
+ ├── scan abc
  └── filters
       └── a2.c = a5.c
 
 ----Vertexes----
 A:
-scan a2
+scan abc
 
 B:
-scan a5
+scan abc
 
 ----Edges----
 a2.c = a5.c [semi]
@@ -2192,19 +2192,19 @@ Joins Considered: 1
 --------------------------------------------------------------------------------
 ----Join Tree #2----
 inner-join (hash)
- ├── scan a2
+ ├── scan abc
  ├── distinct-on
- │    └── scan a5
+ │    └── scan abc
  └── filters
       └── a2.c = a5.c
 
 ----Vertexes----
 A:
-scan a2
+scan abc
 
 B:
 distinct-on
- └── scan a5
+ └── scan abc
 
 ----Edges----
 a2.c = a5.c [inner]
@@ -2217,10 +2217,10 @@ Joins Considered: 2
 --------------------------------------------------------------------------------
 ----Join Tree #3----
 inner-join (hash)
- ├── scan a1
+ ├── scan abc
  ├── semi-join (hash)
- │    ├── scan a2
- │    ├── scan a5
+ │    ├── scan abc
+ │    ├── scan abc
  │    └── filters
  │         └── a2.c = a5.c
  └── filters
@@ -2228,13 +2228,13 @@ inner-join (hash)
 
 ----Vertexes----
 C:
-scan a1
+scan abc
 
 A:
-scan a2
+scan abc
 
 B:
-scan a5
+scan abc
 
 ----Edges----
 a2.c = a5.c [semi]
@@ -2255,25 +2255,25 @@ Joins Considered: 6
 ----Join Tree #4----
 inner-join (hash)
  ├── inner-join (hash)
- │    ├── scan a1
- │    ├── scan a2
+ │    ├── scan abc
+ │    ├── scan abc
  │    └── filters
  │         └── a1.a = a2.a
  ├── distinct-on
- │    └── scan a5
+ │    └── scan abc
  └── filters
       └── a2.c = a5.c
 
 ----Vertexes----
 C:
-scan a1
+scan abc
 
 A:
-scan a2
+scan abc
 
 B:
 distinct-on
- └── scan a5
+ └── scan abc
 
 ----Edges----
 a1.a = a2.a [inner]
@@ -2296,31 +2296,31 @@ Joins Considered: 8
 ----Join Tree #5----
 inner-join (hash)
  ├── inner-join (hash)
- │    ├── scan a1
+ │    ├── scan abc
  │    ├── semi-join (hash)
- │    │    ├── scan a2
- │    │    ├── scan a5
+ │    │    ├── scan abc
+ │    │    ├── scan abc
  │    │    └── filters
  │    │         └── a2.c = a5.c
  │    └── filters
  │         └── a1.a = a2.a
- ├── scan a3
+ ├── scan abc
  └── filters
       └── a2.b = a3.b
 
 ----Vertexes----
 C:
-scan a1
+scan abc
 
 A:
 semi-join (hash)
- ├── scan a2
- ├── scan a5
+ ├── scan abc
+ ├── scan abc
  └── filters
       └── a2.c = a5.c
 
 D:
-scan a3
+scan abc
 
 ----Edges----
 a1.a = a2.a [inner]
@@ -2344,38 +2344,38 @@ Joins Considered: 8
 inner-join (hash)
  ├── inner-join (hash)
  │    ├── inner-join (hash)
- │    │    ├── scan a1
+ │    │    ├── scan abc
  │    │    ├── semi-join (hash)
- │    │    │    ├── scan a2
- │    │    │    ├── scan a5
+ │    │    │    ├── scan abc
+ │    │    │    ├── scan abc
  │    │    │    └── filters
  │    │    │         └── a2.c = a5.c
  │    │    └── filters
  │    │         └── a1.a = a2.a
- │    ├── scan a3
+ │    ├── scan abc
  │    └── filters
  │         └── a2.b = a3.b
- ├── scan a4
+ ├── scan abc
  └── filters
       └── a3.a = a4.a
 
 ----Vertexes----
 C:
 inner-join (hash)
- ├── scan a1
+ ├── scan abc
  ├── semi-join (hash)
- │    ├── scan a2
- │    ├── scan a5
+ │    ├── scan abc
+ │    ├── scan abc
  │    └── filters
  │         └── a2.c = a5.c
  └── filters
       └── a1.a = a2.a
 
 D:
-scan a3
+scan abc
 
 E:
-scan a4
+scan abc
 
 ----Edges----
 a2.b = a3.b [inner]
@@ -2400,16 +2400,16 @@ inner-join (hash)
  ├── project
  │    └── inner-join (hash)
  │         ├── inner-join (merge)
- │         │    ├── scan a1
- │         │    ├── scan a2
+ │         │    ├── scan abc
+ │         │    ├── scan abc
  │         │    └── filters (true)
  │         ├── distinct-on
- │         │    └── scan a5
+ │         │    └── scan abc
  │         └── filters
  │              └── a2.c = a5.c
  ├── inner-join (merge)
- │    ├── scan a3
- │    ├── scan a4
+ │    ├── scan abc
+ │    ├── scan abc
  │    └── filters (true)
  └── filters
       └── a2.b = a3.b

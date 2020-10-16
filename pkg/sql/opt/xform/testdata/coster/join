@@ -303,7 +303,7 @@ limit
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-13), (15)-->(16-24), (2)==(15), (15)==(2)
  │    │    ├── limit hint: 100.00
- │    │    ├── scan t
+ │    │    ├── scan transaction
  │    │    │    ├── columns: t.id:1!null sender_id:2 receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
  │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0]
  │    │    │    ├── cost: 508.02

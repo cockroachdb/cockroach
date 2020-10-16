@@ -15,7 +15,7 @@ explain
  ├── mode: opt, verbose
  ├── stats: [rows=10]
  ├── cost: 1054.03
- └── scan t.public.abc
+ └── scan abc
       ├── columns: t.public.abc.a:1(int)
       ├── stats: [rows=1000]
       ├── cost: 1054.02
@@ -35,7 +35,7 @@ explain
  ├── mode: verbose
  ├── stats: [rows=10]
  ├── cost: 1054.03
- └── scan t.public.abc
+ └── scan abc
       ├── columns: t.public.abc.a:1(int)
       ├── stats: [rows=1000]
       ├── cost: 1054.02
@@ -55,7 +55,7 @@ explain
  ├── mode: opt
  ├── stats: [rows=10]
  ├── cost: 1054.03
- └── scan t.public.abc
+ └── scan abc
       ├── columns: t.public.abc.a:1(int)
       ├── stats: [rows=1000]
       ├── cost: 1054.02
@@ -88,7 +88,7 @@ explain
       ├── cost: 1283.34569
       ├── ordering: +2
       ├── interesting orderings: (+1,+2)
-      └── scan t.public.abc
+      └── scan abc
            ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
            ├── stats: [rows=1000]
            ├── cost: 1064.02
@@ -107,7 +107,7 @@ explain
  ├── mode: distsql
  ├── stats: [rows=10]
  ├── cost: 1054.03
- └── scan t.public.abc
+ └── scan abc
       ├── columns: t.public.abc.a:1(int)
       ├── stats: [rows=1000]
       ├── cost: 1054.02

@@ -100,11 +100,11 @@ project
  │    │    │    └── inner-join (hash)
  │    │    │         ├── columns: t.oid:1 t.typname:2!null t.typnamespace:3!null t.typtype:7 t.typbasetype:25 n.oid:34!null nspname:35!null
  │    │    │         ├── fd: (3)==(34), (34)==(3)
- │    │    │         ├── scan t
+ │    │    │         ├── scan pg_type
  │    │    │         │    └── columns: t.oid:1 t.typname:2!null t.typnamespace:3 t.typtype:7 t.typbasetype:25
  │    │    │         ├── select
  │    │    │         │    ├── columns: n.oid:34 nspname:35!null
- │    │    │         │    ├── scan n
+ │    │    │         │    ├── scan pg_namespace
  │    │    │         │    │    └── columns: n.oid:34 nspname:35!null
  │    │    │         │    └── filters
  │    │    │         │         └── nspname:35 != 'pg_catalog' [outer=(35), constraints=(/35: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]

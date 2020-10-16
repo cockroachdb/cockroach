@@ -1041,6 +1041,29 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	}
 }
 
+// formatIndex outputs the specified index into the context's buffer with the
+// format:
+//
+//   table_alias@index_name
+//
+// If the reverse is true, ",rev" is appended. If the index is a partial index,
+// ",partial" is appended.
+func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, reverse bool) {
+	// Don't output the index name if it's the primary index.
+	tab := f.Memo.Metadata().Table(tabID)
+	if idxOrd == cat.PrimaryIndex {
+		fmt.Fprintf(f.Buffer, " %s", tab.Name())
+	} else {
+		fmt.Fprintf(f.Buffer, " %s@%s", tab.Name(), tab.Index(idxOrd).Name())
+	}
+	if reverse {
+		f.Buffer.WriteString(",rev")
+	}
+	if _, isPartial := tab.Index(idxOrd).Predicate(); isPartial {
+		f.Buffer.WriteString(",partial")
+	}
+}
+
 // formatArbiters constructs a new treeprinter child containing the
 // specified list of arbiter indexes.
 func (f *ExprFmtCtx) formatArbiters(
@@ -1246,19 +1269,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %d", *t)
 
 	case *ScanPrivate:
-		// Don't output name of index if it's the primary index.
-		tab := f.Memo.metadata.Table(t.Table)
-		if t.Index == cat.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
-		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tableAlias(f, t.Table), tab.Index(t.Index).Name())
-		}
-		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
-			f.Buffer.WriteString(",rev")
-		}
-		if t.UsesPartialIndex(f.Memo.Metadata()) {
-			f.Buffer.WriteString(",partial")
-		}
+		f.formatIndex(t.Table, t.Index, ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering))
 
 	case *SequenceSelectPrivate:
 		seq := f.Memo.metadata.Sequence(t.Sequence)
@@ -1287,39 +1298,17 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", col.Alias)
 
 	case *LookupJoinPrivate:
-		tab := f.Memo.metadata.Table(t.Table)
-		if t.Index == cat.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, " %s", tab.Name())
-		} else {
-			partialStr := ""
-			if _, isPartial := tab.Index(t.Index).Predicate(); isPartial {
-				partialStr = ",partial"
-			}
-			fmt.Fprintf(f.Buffer, " %s@%s%s", tab.Name(), tab.Index(t.Index).Name(), partialStr)
-		}
+		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
 	case *InvertedJoinPrivate:
-		tab := f.Memo.metadata.Table(t.Table)
-		partialStr := ""
-		if _, isPartial := tab.Index(t.Index).Predicate(); isPartial {
-			partialStr = ",partial"
-		}
-		fmt.Fprintf(f.Buffer, " %s@%s%s", tab.Name(), tab.Index(t.Index).Name(), partialStr)
+		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
 	case *ValuesPrivate:
 		fmt.Fprintf(f.Buffer, " id=v%d", t.ID)
 
 	case *ZigzagJoinPrivate:
-		leftTab := f.Memo.metadata.Table(t.LeftTable)
-		rightTab := f.Memo.metadata.Table(t.RightTable)
-		fmt.Fprintf(f.Buffer, " %s", leftTab.Name())
-		if t.LeftIndex != cat.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, "@%s", leftTab.Index(t.LeftIndex).Name())
-		}
-		fmt.Fprintf(f.Buffer, " %s", rightTab.Name())
-		if t.RightIndex != cat.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, "@%s", rightTab.Index(t.RightIndex).Name())
-		}
+		f.formatIndex(t.LeftTable, t.LeftIndex, false /* reverse */)
+		f.formatIndex(t.RightTable, t.RightIndex, false /* reverse */)
 
 	case *MergeJoinPrivate:
 		fmt.Fprintf(f.Buffer, " %s,%s,%s", t.JoinType, t.LeftEq, t.RightEq)
@@ -1346,12 +1335,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		f.Buffer.WriteString(t.Metadata.String())
 
 	case *AlterTableSplitPrivate:
-		tab := f.Memo.metadata.Table(t.Table)
-		if t.Index == cat.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
-		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tableAlias(f, t.Table), tab.Index(t.Index).Name())
-		}
+		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
 	case *AlterTableRelocatePrivate:
 		FormatPrivate(f, &t.AlterTableSplitPrivate, nil)

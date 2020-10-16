@@ -226,7 +226,7 @@ SELECT t.kv.k FROM kv
 ----
 project
  ├── columns: k:1!null
- └── scan t.public.kv
+ └── scan kv
       └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.crdb_internal_mvcc_timestamp:3
 
 # Check that tuple type includes labels.

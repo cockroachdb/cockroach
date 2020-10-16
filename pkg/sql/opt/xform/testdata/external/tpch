@@ -725,11 +725,11 @@ sort
       │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:45!null n1.n_name:46!null n2.n_nationkey:50!null n2.n_name:51!null
       │    │    │    │    │    │    │    ├── key: (45,50)
       │    │    │    │    │    │    │    ├── fd: (45)-->(46), (50)-->(51)
-      │    │    │    │    │    │    │    ├── scan n1
+      │    │    │    │    │    │    │    ├── scan nation
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:45!null n1.n_name:46!null
       │    │    │    │    │    │    │    │    ├── key: (45)
       │    │    │    │    │    │    │    │    └── fd: (45)-->(46)
-      │    │    │    │    │    │    │    ├── scan n2
+      │    │    │    │    │    │    │    ├── scan nation
       │    │    │    │    │    │    │    │    ├── columns: n2.n_nationkey:50!null n2.n_name:51!null
       │    │    │    │    │    │    │    │    ├── key: (50)
       │    │    │    │    │    │    │    │    └── fd: (50)-->(51)
@@ -895,7 +895,7 @@ sort
       │    │    │    │    │    │         └── o_custkey:37 = c_custkey:46 [outer=(37,46), constraints=(/37: (/NULL - ]; /46: (/NULL - ]), fd=(37)==(46), (46)==(37)]
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── s_suppkey:11 = l_suppkey:21 [outer=(11,21), constraints=(/11: (/NULL - ]; /21: (/NULL - ]), fd=(11)==(21), (21)==(11)]
-      │    │    │    │    ├── scan n2
+      │    │    │    │    ├── scan nation
       │    │    │    │    │    ├── columns: n2.n_nationkey:60!null n2.n_name:61!null
       │    │    │    │    │    ├── key: (60)
       │    │    │    │    │    └── fd: (60)-->(61)

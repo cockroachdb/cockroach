@@ -21,14 +21,14 @@ inner-join (hash)
  ├── fd: (1)==(6), (6)==(1)
  ├── prune: (2,3,7,8)
  ├── interesting orderings: (+1,+2)
- ├── scan t.public.abc
+ ├── scan abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1074.02
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2)
  │    └── unfiltered-cols: (1-5)
- ├── scan t.public.def
+ ├── scan def
  │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
  │    ├── cost: 1074.02
@@ -51,7 +51,7 @@ left-join (lookup abc@ab)
  ├── key columns: [6] = [6]
  ├── stats: [rows=3333.33333, distinct(6)=100, null(6)=33.3333333]
  ├── cost: 41664.04
- ├── scan t.public.def
+ ├── scan def
  │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
  │    ├── cost: 1064.02
@@ -89,7 +89,7 @@ inner-join (merge)
  │    ├── ordering: +1
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2)
- │    └── scan t.public.abc
+ │    └── scan abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │         ├── cost: 1074.02
@@ -101,7 +101,7 @@ inner-join (merge)
  │    ├── cost: 1293.34569
  │    ├── ordering: +6
  │    ├── prune: (6-8)
- │    └── scan t.public.def
+ │    └── scan def
  │         ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │         ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
  │         ├── cost: 1074.02
@@ -131,7 +131,7 @@ inner-join-apply
  │    ├── stats: [rows=1000]
  │    ├── cost: 1183.68784
  │    ├── interesting orderings: (+1,+2)
- │    └── scan t.public.abc
+ │    └── scan abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │         ├── stats: [rows=1000]
  │         ├── cost: 1074.02
@@ -143,7 +143,7 @@ inner-join-apply
  │    ├── stats: [rows=333.333333, distinct(1)=1, null(1)=0]
  │    ├── cost: 1084.04
  │    ├── prune: (8)
- │    ├── scan t.public.def
+ │    ├── scan def
  │    │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │    │    ├── stats: [rows=1000]
  │    │    ├── cost: 1074.02
@@ -178,7 +178,7 @@ index-join abc
  ├── stats: [rows=10]
  ├── cost: 75.02
  ├── interesting orderings: (+1)
- └── scan t.public.abc@ab
+ └── scan abc@ab
       ├── columns: t.public.abc.a:1(int)
       ├── limit: 10
       ├── stats: [rows=10]

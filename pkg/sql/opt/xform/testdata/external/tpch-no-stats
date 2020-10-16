@@ -727,7 +727,7 @@ group-by
  │         │    │    │    │    ├── key: (1)
  │         │    │    │    │    ├── fd: (1)-->(4)
  │         │    │    │    │    └── ordering: +4
- │         │    │    │    ├── scan n1
+ │         │    │    │    ├── scan nation
  │         │    │    │    │    ├── columns: n1.n_nationkey:45!null n1.n_name:46!null
  │         │    │    │    │    ├── key: (45)
  │         │    │    │    │    ├── fd: (45)-->(46)
@@ -746,7 +746,7 @@ group-by
  │         │    │    │    ├── key: (36)
  │         │    │    │    ├── fd: (36)-->(39)
  │         │    │    │    └── ordering: +39
- │         │    │    ├── scan n2
+ │         │    │    ├── scan nation
  │         │    │    │    ├── columns: n2.n_nationkey:50!null n2.n_name:51!null
  │         │    │    │    ├── key: (50)
  │         │    │    │    ├── fd: (50)-->(51)
@@ -2288,7 +2288,7 @@ limit
  │         │    │    │    │    │    │         └── o_orderstatus:28 = 'F' [outer=(28), constraints=(/28: [/'F' - /'F']; tight), fd=()-->(28)]
  │         │    │    │    │    │    └── filters
  │         │    │    │    │    │         └── l1.l_receiptdate:21 > l1.l_commitdate:20 [outer=(20,21), constraints=(/20: (/NULL - ]; /21: (/NULL - ])]
- │         │    │    │    │    ├── scan l2@l_sk
+ │         │    │    │    │    ├── scan lineitem@l_sk
  │         │    │    │    │    │    └── columns: l2.l_orderkey:41!null l2.l_suppkey:43!null
  │         │    │    │    │    └── filters
  │         │    │    │    │         ├── l2.l_orderkey:41 = l1.l_orderkey:9 [outer=(9,41), constraints=(/9: (/NULL - ]; /41: (/NULL - ]), fd=(9)==(41), (41)==(9)]

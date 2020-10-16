@@ -5,7 +5,7 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
 expr
 (Scan [ (Table "abc") (Cols "a") ])
 ----
-scan t.public.abc
+scan abc
  ├── columns: t.public.abc.a:1(int)
  ├── stats: [rows=1000]
  ├── cost: 1054.02
@@ -15,7 +15,7 @@ scan t.public.abc
 expr
 (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
 ----
-scan t.public.abc@ab
+scan abc@ab
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  ├── stats: [rows=1000]
  ├── cost: 1054.02
@@ -29,7 +29,7 @@ expr
   (OrderingChoice "+a,+b")
 )
 ----
-scan t.public.abc@ab
+scan abc@ab
  ├── columns: a:1(int) b:2(int)
  ├── stats: [rows=1000]
  ├── cost: 1054.02
@@ -50,7 +50,7 @@ select
  ├── fd: ()-->(1)
  ├── prune: (2,3)
  ├── interesting orderings: (+1,+2)
- ├── scan t.public.abc
+ ├── scan abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1074.02

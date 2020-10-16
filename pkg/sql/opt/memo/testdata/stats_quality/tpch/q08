@@ -202,7 +202,7 @@ sort
       │    │    │    │    │    │         └── o_custkey:37 = c_custkey:46 [type=bool, outer=(37,46), constraints=(/37: (/NULL - ]; /46: (/NULL - ]), fd=(37)==(46), (46)==(37)]
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── s_suppkey:11 = l_suppkey:21 [type=bool, outer=(11,21), constraints=(/11: (/NULL - ]; /21: (/NULL - ]), fd=(11)==(21), (21)==(11)]
-      │    │    │    │    ├── scan n2
+      │    │    │    │    ├── scan nation
       │    │    │    │    │    ├── save-table-name: q8_scan_19
       │    │    │    │    │    ├── columns: n2.n_nationkey:60(int!null) n2.n_name:61(char!null)
       │    │    │    │    │    ├── stats: [rows=25, distinct(60)=25, null(60)=0, distinct(61)=25, null(61)=0]

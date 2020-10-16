@@ -190,9 +190,9 @@ project
  │    │    │         │    │    ├── columns: i.inhrelid:41!null i.inhparent:42!null c2.oid:45!null c2.relname:46!null c2.relnamespace:47!null
  │    │    │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    │         │    │    ├── fd: (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42)
- │    │    │         │    │    ├── scan i
+ │    │    │         │    │    ├── scan pg_inherits
  │    │    │         │    │    │    └── columns: i.inhrelid:41!null i.inhparent:42!null
- │    │    │         │    │    ├── scan c2@pg_class_relname_nsp_index
+ │    │    │         │    │    ├── scan pg_class@pg_class_relname_nsp_index
  │    │    │         │    │    │    ├── columns: c2.oid:45!null c2.relname:46!null c2.relnamespace:47!null
  │    │    │         │    │    │    ├── key: (45)
  │    │    │         │    │    │    └── fd: (45)-->(46,47), (46,47)-->(45)
@@ -212,7 +212,7 @@ project
  │    │    │         │    │    │    │    ├── columns: indexrelid:78!null indrelid:79!null indisclustered:85!null
  │    │    │         │    │    │    │    ├── key: (78)
  │    │    │         │    │    │    │    ├── fd: ()-->(85), (78)-->(79)
- │    │    │         │    │    │    │    ├── scan ind
+ │    │    │         │    │    │    │    ├── scan pg_index
  │    │    │         │    │    │    │    │    ├── columns: indexrelid:78!null indrelid:79!null indisclustered:85!null
  │    │    │         │    │    │    │    │    ├── key: (78)
  │    │    │         │    │    │    │    │    └── fd: (78)-->(79,85)
@@ -245,13 +245,13 @@ project
  │    │    │         │    │    │    │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27
  │    │    │         │    │    │    │    │    │    │    │    ├── key: (1)
  │    │    │         │    │    │    │    │    │    │    │    ├── fd: (1)-->(2,3,5,8,10,13,15,17,20,22,23,26,27), (2,3)-->(1,5,8,10,13,15,17,20,22,23,26,27)
- │    │    │         │    │    │    │    │    │    │    │    ├── scan c
+ │    │    │         │    │    │    │    │    │    │    │    ├── scan pg_class
  │    │    │         │    │    │    │    │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27
  │    │    │         │    │    │    │    │    │    │    │    │    ├── key: (1)
  │    │    │         │    │    │    │    │    │    │    │    │    └── fd: (1)-->(2,3,5,8,10,13,15,17,20,22,23,26,27), (2,3)-->(1,5,8,10,13,15,17,20,22,23,26,27)
  │    │    │         │    │    │    │    │    │    │    │    └── filters
  │    │    │         │    │    │    │    │    │    │    │         └── (c.relkind:17 = 'r') OR (c.relkind:17 = 'f') [outer=(17), constraints=(/17: [/'f' - /'f'] [/'r' - /'r']; tight)]
- │    │    │         │    │    │    │    │    │    │    ├── scan n@pg_namespace_nspname_index
+ │    │    │         │    │    │    │    │    │    │    ├── scan pg_namespace@pg_namespace_nspname_index
  │    │    │         │    │    │    │    │    │    │    │    ├── columns: n.oid:29!null n.nspname:30!null
  │    │    │         │    │    │    │    │    │    │    │    ├── constraint: /30: [/'public' - /'public']
  │    │    │         │    │    │    │    │    │    │    │    ├── cardinality: [0 - 1]

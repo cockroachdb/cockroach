@@ -17,7 +17,7 @@ limit
  ├── cost: 25.13
  ├── prune: (2)
  ├── interesting orderings: (+1,+2)
- ├── scan t.public.abc@ab
+ ├── scan abc@ab
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 25.02
@@ -48,7 +48,7 @@ limit
  │    ├── ordering: +1
  │    ├── limit hint: 10.00
  │    ├── interesting orderings: (+1,+2)
- │    └── scan t.public.abc
+ │    └── scan abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │         ├── stats: [rows=1000]
  │         ├── cost: 1064.02

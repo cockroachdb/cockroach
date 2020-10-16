@@ -631,7 +631,7 @@ with &2 (cte)
  │                   │    ├── prune: (6)
  │                   │    └── cte-uses
  │                   │         └── &1: count=1 used-columns=(5)
- │                   ├── scan t.public.parent
+ │                   ├── scan parent
  │                   │    ├── columns: t.public.parent.p:7(int!null)
  │                   │    ├── stats: [rows=1000, distinct(7)=1000, null(7)=0]
  │                   │    ├── cost: 1024.02

@@ -87,9 +87,9 @@ project
  ├── columns: x:1!null y:2 z:3 x:5!null y:6
  └── inner-join (cross)
       ├── columns: db1.public.a.x:1!null db1.public.a.y:2 db1.public.a.z:3 db1.public.a.crdb_internal_mvcc_timestamp:4 db2.public.a.x:5!null db2.public.a.y:6 db2.public.a.crdb_internal_mvcc_timestamp:7
-      ├── scan db1.public.a
+      ├── scan a
       │    └── columns: db1.public.a.x:1!null db1.public.a.y:2 db1.public.a.z:3 db1.public.a.crdb_internal_mvcc_timestamp:4
-      ├── scan db2.public.a
+      ├── scan a
       │    └── columns: db2.public.a.x:5!null db2.public.a.y:6 db2.public.a.crdb_internal_mvcc_timestamp:7
       └── filters (true)
 
@@ -106,11 +106,11 @@ project
  ├── columns: x:1!null y:2 x:4!null y:5
  └── inner-join (cross)
       ├── columns: t.public.a.x:1!null t.public.a.y:2 t.public.a.crdb_internal_mvcc_timestamp:3 t.public.a.x:4!null t.public.a.y:5
-      ├── scan t.public.a
+      ├── scan a
       │    └── columns: t.public.a.x:1!null t.public.a.y:2 t.public.a.crdb_internal_mvcc_timestamp:3
       ├── project
       │    ├── columns: t.public.a.x:4!null t.public.a.y:5
-      │    └── scan t.public.a
+      │    └── scan a
       │         └── columns: t.public.a.x:4!null t.public.a.y:5 t.public.a.crdb_internal_mvcc_timestamp:6
       └── filters (true)
 
@@ -126,9 +126,9 @@ project
  ├── columns: x:1!null y:2 x:4!null y:5
  └── inner-join (cross)
       ├── columns: t.public.a.x:1!null t.public.a.y:2 t.public.a.crdb_internal_mvcc_timestamp:3 t.public.a.x:4!null t.public.a.y:5 t.public.a.crdb_internal_mvcc_timestamp:6
-      ├── scan t.public.a
+      ├── scan a
       │    └── columns: t.public.a.x:1!null t.public.a.y:2 t.public.a.crdb_internal_mvcc_timestamp:3
-      ├── scan t.public.a
+      ├── scan a
       │    └── columns: t.public.a.x:4!null t.public.a.y:5 t.public.a.crdb_internal_mvcc_timestamp:6
       └── filters (true)
 

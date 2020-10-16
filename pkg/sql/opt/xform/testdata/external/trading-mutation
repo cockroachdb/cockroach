@@ -1200,7 +1200,7 @@ values
            │         │    │    │    ├── fd: ()-->(4)
            │         │    │    │    ├── ordering: -3 opt(4) [actual: -3]
            │         │    │    │    ├── limit hint: 1100.00
-           │         │    │    │    └── scan d@detailscardidindex
+           │         │    │    │    └── scan transactiondetails@detailscardidindex
            │         │    │    │         ├── columns: d.dealerid:1!null d.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
            │         │    │    │         ├── constraint: /1/2/4/3/5
            │         │    │    │         │    ├── [/1/false/19483/'2020-02-28 00:00:00+00:00' - /1/false/19483/'2020-03-01 00:00:00+00:00']

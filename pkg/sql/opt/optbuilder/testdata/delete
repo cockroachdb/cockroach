@@ -94,7 +94,7 @@ delete foo
       │    ├── limit hint: 10.00
       │    └── select
       │         ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
-      │         ├── scan foo
+      │         ├── scan abcde
       │         │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │         │    └── computed column expressions
       │         │         ├── d:11
@@ -333,7 +333,7 @@ project
  │    ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  │    └── select
  │         ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
- │         ├── scan foo
+ │         ├── scan abcde
  │         │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │         │    └── computed column expressions
  │         │         ├── d:11
