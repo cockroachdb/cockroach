@@ -773,7 +773,7 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 	s.crdb.mu.Lock()
 	s.crdb.mu.duration = finishTime.Sub(s.crdb.startTime)
 	s.crdb.mu.Unlock()
-	if s.ot.shadowTr != nil {
+	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.Finish()
 	}
 	if s.netTr != nil {
@@ -823,7 +823,7 @@ func (s *span) SpanContext() SpanContext {
 		span:     s,
 		Baggage:  baggageCopy,
 	}
-	if s.ot.shadowTr != nil {
+	if s.ot.shadowSpan != nil {
 		sc.shadowTr = s.ot.shadowTr
 		sc.shadowCtx = s.ot.shadowSpan.Context()
 	}
@@ -836,7 +836,7 @@ func (s *span) SpanContext() SpanContext {
 
 // SetOperationName is part of the opentracing.Span interface.
 func (s *span) SetOperationName(operationName string) opentracing.Span {
-	if s.ot.shadowTr != nil {
+	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetOperationName(operationName)
 	}
 	s.crdb.operation = operationName
@@ -856,7 +856,7 @@ func (s *crdbSpan) setTagLocked(key string, value interface{}) {
 }
 
 func (s *span) setTagInner(key string, value interface{}, locked bool) opentracing.Span {
-	if s.ot.shadowTr != nil {
+	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetTag(key, value)
 	}
 	if s.netTr != nil {
@@ -873,7 +873,7 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 
 // LogFields is part of the opentracing.Span interface.
 func (s *span) LogFields(fields ...otlog.Field) {
-	if s.ot.shadowTr != nil {
+	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.LogFields(fields...)
 	}
 	if s.netTr != nil {
@@ -924,7 +924,7 @@ func (s *span) LogKV(alternatingKeyValues ...interface{}) {
 // SetBaggageItem is part of the opentracing.Span interface.
 func (s *span) SetBaggageItem(restrictedKey, value string) opentracing.Span {
 	s.crdb.SetBaggageItemAndTag(restrictedKey, value)
-	if s.ot.shadowTr != nil {
+	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetBaggageItem(restrictedKey, value)
 		s.ot.shadowSpan.SetTag(restrictedKey, value)
 	}
