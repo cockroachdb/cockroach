@@ -163,8 +163,8 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		// recording because we don't currently have a good way to ask for a
 		// separate recording for the child such that it's also guaranteed that we
 		// don't get a noopSpan.
-		var sp opentracing.Span
-		if parentSp := opentracing.SpanFromContext(params.ctx); parentSp != nil &&
+		var sp *tracing.Span
+		if parentSp := tracing.SpanFromContext(params.ctx); parentSp != nil &&
 			!tracing.IsRecording(parentSp) {
 			tracer := parentSp.Tracer()
 			sp = tracer.StartSpan(
@@ -178,7 +178,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 				tracing.LogTagsFromCtx(params.ctx))
 		}
 		tracing.StartRecording(sp, tracing.SnowballRecording)
-		ctx := opentracing.ContextWithSpan(params.ctx, sp)
+		ctx := tracing.ContextWithSpan(params.ctx, sp)
 		planCtx.ctx = ctx
 		// Make a copy of the evalContext with the recording span in it; we can't
 		// change the original.

@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func init() {
@@ -215,7 +214,7 @@ func V(level Level) bool {
 // }
 //
 func ExpensiveLogEnabled(ctx context.Context, level Level) bool {
-	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if tracing.IsRecording(sp) {
 			return true
 		}

@@ -15,7 +15,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/opentracing/opentracing-go",
     ],
 )
 

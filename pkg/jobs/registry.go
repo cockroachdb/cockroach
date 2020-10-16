@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 const defaultLeniencySetting = 60 * time.Second
@@ -510,7 +509,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 	resumerCtx, cancel := r.makeCtx()
 	_, span := tracing.ForkCtxSpan(ctx, "job")
 	if span != nil {
-		resumerCtx = opentracing.ContextWithSpan(resumerCtx, span)
+		resumerCtx = tracing.ContextWithSpan(resumerCtx, span)
 	}
 
 	if r.startUsingSQLLivenessAdoption(ctx) {

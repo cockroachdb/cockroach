@@ -179,7 +179,7 @@ func FlowVerIsCompatible(
 // must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
-	parentSpan opentracing.Span,
+	parentSpan *tracing.Span,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
 	syncFlowConsumer execinfra.RowReceiver,
@@ -195,9 +195,9 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	const opName = "flow"
-	var sp opentracing.Span
+	var sp *tracing.Span
 	if parentSpan == nil {
-		sp = ds.Tracer.(*tracing.Tracer).StartRootSpan(
+		sp = ds.Tracer.StartRootSpan(
 			opName, logtags.FromContext(ctx), tracing.NonRecordableSpan)
 	} else if localState.IsLocal {
 		// If we're a local flow, we don't need a "follows from" relationship: we're
@@ -205,8 +205,8 @@ func (ds *ServerImpl) setupFlow(
 		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
 		//  If that field is unset, we might still want to create a child span if
 		//  this flow is run synchronously.
-		sp = ds.Tracer.(*tracing.Tracer).StartChildSpan(
-			opName, parentSpan.(*tracing.Span).SpanContext(), logtags.FromContext(ctx), tracing.NonRecordableSpan,
+		sp = ds.Tracer.StartChildSpan(
+			opName, parentSpan.SpanContext(), logtags.FromContext(ctx), tracing.NonRecordableSpan,
 			false /* separateRecording */)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
@@ -220,7 +220,7 @@ func (ds *ServerImpl) setupFlow(
 		)
 	}
 	// sp will be Finish()ed by Flow.Cleanup().
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	// The monitor opened here is closed in Flow.Cleanup().
 	monitor := mon.NewMonitor(
@@ -330,7 +330,7 @@ func (ds *ServerImpl) setupFlow(
 		// and finish the span manually.
 		monitor.Stop(ctx)
 		tracing.FinishSpan(sp)
-		ctx = opentracing.ContextWithSpan(ctx, nil)
+		ctx = tracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
 	}
 	if !f.IsLocal() {
@@ -441,7 +441,7 @@ func (ds *ServerImpl) SetupSyncFlow(
 	output execinfra.RowReceiver,
 ) (context.Context, flowinfra.Flow, error) {
 	ctx, f, err := ds.setupFlow(
-		ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{},
+		ds.AnnotateCtx(ctx), tracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{},
 	)
 	if err != nil {
 		return nil, nil, err
@@ -484,7 +484,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, error) {
 	ctx, f, err := ds.setupFlow(
-		ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
+		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -533,7 +533,7 @@ func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
-	parentSpan := opentracing.SpanFromContext(ctx)
+	parentSpan := tracing.SpanFromContext(ctx)
 
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -588,7 +587,7 @@ func TestTraceDistSQL(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WithStatementTrace: func(sp opentracing.Span, stmt string) {
+					WithStatementTrace: func(sp *tracing.Span, stmt string) {
 						if stmt == countStmt {
 							recCh <- tracing.GetRecording(sp)
 						}

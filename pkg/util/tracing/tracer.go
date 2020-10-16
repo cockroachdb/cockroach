@@ -107,8 +107,6 @@ type Tracer struct {
 	shadowTracer unsafe.Pointer
 }
 
-var _ opentracing.Tracer = &Tracer{}
-
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
 // and collects essentially nothing; use Configure() to enable various tracing
 // backends.
@@ -198,15 +196,13 @@ var Recordable opentracing.StartSpanOption = recordableOption{}
 // because they don't have to use the StartSpanOption interface and so a bunch
 // of allocations are avoided. However, we need to implement this standard
 // StartSpan() too because grpc integrates with a generic opentracing.Tracer.
-func (t *Tracer) StartSpan(
-	operationName string, opts ...opentracing.StartSpanOption,
-) opentracing.Span {
+func (t *Tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOption) *Span {
 	// Fast paths to avoid the allocation of StartSpanOptions below when tracing
 	// is disabled: if we have no options or a single SpanReference (the common
 	// case) with a noop context, return a noop Span now.
 	if len(opts) == 1 {
 		if o, ok := opts[0].(opentracing.SpanReference); ok {
-			if IsNoopContext(o.ReferencedContext) {
+			if IsNoopContext(o.ReferencedContext.(*SpanContext)) {
 				return t.noopSpan
 			}
 		}
@@ -247,7 +243,7 @@ func (t *Tracer) StartSpan(
 		if r.ReferencedContext == nil {
 			continue
 		}
-		if IsNoopContext(r.ReferencedContext) {
+		if IsNoopContext(r.ReferencedContext.(*SpanContext)) {
 			continue
 		}
 		parentType = r.Type
@@ -291,7 +287,7 @@ func (t *Tracer) AlwaysTrace() bool {
 // logTags can be nil.
 func (t *Tracer) StartRootSpan(
 	opName string, logTags *logtags.Buffer, recordable RecordableOpt,
-) opentracing.Span {
+) *Span {
 	return t.StartChildSpan(opName, SpanContext{}, logTags, recordable, false /* separateRecording */)
 }
 
@@ -319,7 +315,7 @@ func (t *Tracer) StartChildSpan(
 	logTags *logtags.Buffer,
 	recordable RecordableOpt,
 	separateRecording bool,
-) opentracing.Span {
+) *Span {
 	return t.startSpanGeneric(
 		opName,
 		parentContext,
@@ -347,7 +343,7 @@ func (t *Tracer) startSpanGeneric(
 	logTags *logtags.Buffer,
 	separateRecording bool,
 	tags map[string]interface{},
-) opentracing.Span {
+) *Span {
 	// If tracing is disabled, avoid overhead and return a noop Span.
 	if !t.AlwaysTrace() &&
 		parentContext.TraceID == 0 &&
@@ -367,11 +363,27 @@ func (t *Tracer) startSpanGeneric(
 	}
 	s.crdb.mu.duration = -1 // unfinished
 
+	traceID := parentContext.TraceID
+	if traceID == 0 {
+		traceID = uint64(rand.Int63())
+	}
+	s.crdb.TraceID = traceID
+	s.crdb.SpanID = uint64(rand.Int63())
+
 	// We use the shadowTr from the parent context over that of our
 	// tracer because the tracer's might have changed and be incompatible.
 	shadowTr := t.getShadowTracer()
 	if shadowTr != nil && (parentContext.shadowTr == nil || shadowTr == parentContext.shadowTr) {
 		linkShadowSpan(s, shadowTr, parentContext.shadowCtx, parentType)
+	}
+
+	// Start recording if necessary.
+	if parentContext.recordingType != NoRecording {
+		var p *crdbSpan
+		if parentContext.span != nil {
+			p = &parentContext.span.crdb
+		}
+		s.crdb.enableRecording(p, parentContext.recordingType, separateRecording)
 	}
 
 	if t.useNetTrace() {
@@ -400,22 +412,6 @@ func (t *Tracer) startSpanGeneric(
 		s.SetBaggageItem(k, v)
 	}
 
-	traceID := parentContext.TraceID
-	if traceID == 0 {
-		traceID = uint64(rand.Int63())
-	}
-	s.crdb.TraceID = traceID
-	s.crdb.SpanID = uint64(rand.Int63())
-
-	// Start recording if necessary.
-	if parentContext.recordingType != NoRecording {
-		var p *crdbSpan
-		if parentContext.span != nil {
-			p = &parentContext.span.crdb
-		}
-		s.crdb.enableRecording(p, parentContext.recordingType, separateRecording)
-	}
-
 	return s
 }
 
@@ -432,7 +428,7 @@ func (fn textMapWriterFn) Set(key, val string) {
 func (t *Tracer) Inject(
 	osc opentracing.SpanContext, format interface{}, carrier interface{},
 ) error {
-	if IsNoopContext(osc) {
+	if IsNoopContext(osc.(*SpanContext)) {
 		// Fast path when tracing is disabled. Extract will accept an empty map as a
 		// noop context.
 		return nil
@@ -487,7 +483,7 @@ var noopSpanContext = &SpanContext{}
 // Extract is part of the opentracing.Tracer interface.
 // It always returns a valid context, even in error cases (this is assumed by the
 // grpc-opentracing interceptor).
-func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
+func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanContext, error) {
 	// We only support the HTTPHeaders/TextMap format.
 	if format != opentracing.HTTPHeaders && format != opentracing.TextMap {
 		return noopSpanContext, opentracing.ErrUnsupportedFormat
@@ -564,7 +560,7 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 
 // FinishSpan closes the given Span (if not nil). It is a convenience wrapper
 // for Span.Finish() which tolerates nil spans.
-func FinishSpan(span opentracing.Span) {
+func FinishSpan(span *Span) {
 	if span != nil {
 		span.Finish()
 	}
@@ -578,19 +574,19 @@ func FinishSpan(span opentracing.Span) {
 // closed via FinishSpan.
 //
 // See also ChildSpan() for a "parent-child relationship".
-func ForkCtxSpan(ctx context.Context, opName string) (context.Context, opentracing.Span) {
-	if sp := opentracing.SpanFromContext(ctx); sp != nil {
-		if sp.(*Span).isNoop() {
+func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
+	if sp := SpanFromContext(ctx); sp != nil {
+		if sp.isNoop() {
 			// Optimization: avoid ContextWithSpan call if tracing is disabled.
 			return ctx, sp
 		}
 		tr := sp.Tracer()
 		if IsBlackHoleSpan(sp) {
-			ns := tr.(*Tracer).noopSpan
-			return opentracing.ContextWithSpan(ctx, ns), ns
+			ns := tr.noopSpan
+			return ContextWithSpan(ctx, ns), ns
 		}
 		newSpan := tr.StartSpan(opName, opentracing.FollowsFrom(sp.Context()), LogTagsFromCtx(ctx))
-		return opentracing.ContextWithSpan(ctx, newSpan), newSpan
+		return ContextWithSpan(ctx, newSpan), newSpan
 	}
 	return ctx, nil
 }
@@ -601,37 +597,31 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, opentraci
 //
 // Returns the new context and the new Span (if any). The Span should be
 // closed via FinishSpan.
-func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing.Span) {
+func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	return childSpan(ctx, opName, false /* separateRecording */)
 }
 
 // ChildSpanSeparateRecording is like ChildSpan but the new Span has separate
 // recording (see StartChildSpan).
-func ChildSpanSeparateRecording(
-	ctx context.Context, opName string,
-) (context.Context, opentracing.Span) {
+func ChildSpanSeparateRecording(ctx context.Context, opName string) (context.Context, *Span) {
 	return childSpan(ctx, opName, true /* separateRecording */)
 }
 
 func childSpan(
 	ctx context.Context, opName string, separateRecording bool,
-) (context.Context, opentracing.Span) {
-	otSpan := opentracing.SpanFromContext(ctx)
-	if otSpan == nil {
-		return ctx, nil
-	}
-	sp := otSpan.(*Span)
-	if sp.isNoop() {
+) (context.Context, *Span) {
+	sp := SpanFromContext(ctx)
+	if sp == nil || sp.isNoop() {
 		// Optimization: avoid ContextWithSpan call if tracing is disabled.
 		return ctx, sp
 	}
-	tr := sp.Tracer().(*Tracer)
+	tr := sp.Tracer()
 	if IsBlackHoleSpan(sp) {
 		ns := tr.noopSpan
-		return opentracing.ContextWithSpan(ctx, ns), ns
+		return ContextWithSpan(ctx, ns), ns
 	}
 	newSpan := tr.StartChildSpan(opName, sp.SpanContext(), logtags.FromContext(ctx), NonRecordableSpan, separateRecording)
-	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
+	return ContextWithSpan(ctx, newSpan), newSpan
 }
 
 // EnsureContext checks whether the given context.Context contains a Span. If
@@ -641,12 +631,10 @@ func childSpan(
 //
 // Note that, if there's already a Span in the context, this method does nothing
 // even if the current context's log tags are different from that Span's tags.
-func EnsureContext(
-	ctx context.Context, tracer opentracing.Tracer, opName string,
-) (context.Context, func()) {
-	if opentracing.SpanFromContext(ctx) == nil {
-		sp := tracer.(*Tracer).StartRootSpan(opName, logtags.FromContext(ctx), NonRecordableSpan)
-		return opentracing.ContextWithSpan(ctx, sp), sp.Finish
+func EnsureContext(ctx context.Context, tracer *Tracer, opName string) (context.Context, func()) {
+	if SpanFromContext(ctx) == nil {
+		sp := tracer.StartRootSpan(opName, logtags.FromContext(ctx), NonRecordableSpan)
+		return ContextWithSpan(ctx, sp), sp.Finish
 	}
 	return ctx, func() {}
 }
@@ -656,14 +644,28 @@ func EnsureContext(
 // trace.
 //
 // The caller is responsible for closing the Span (via Span.Finish).
-func EnsureChildSpan(
-	ctx context.Context, tracer opentracing.Tracer, name string,
-) (context.Context, opentracing.Span) {
-	if opentracing.SpanFromContext(ctx) == nil {
-		sp := tracer.(*Tracer).StartRootSpan(name, logtags.FromContext(ctx), NonRecordableSpan)
-		return opentracing.ContextWithSpan(ctx, sp), sp
+func EnsureChildSpan(ctx context.Context, tracer *Tracer, name string) (context.Context, *Span) {
+	if SpanFromContext(ctx) == nil {
+		sp := tracer.StartRootSpan(name, logtags.FromContext(ctx), NonRecordableSpan)
+		return ContextWithSpan(ctx, sp), sp
 	}
 	return ChildSpan(ctx, name)
+}
+
+type activeSpanKey struct{}
+
+// SpanFromContext returns the *Span contained in the Context, if any.
+func SpanFromContext(ctx context.Context) *Span {
+	val := ctx.Value(activeSpanKey{})
+	if sp, ok := val.(*Span); ok {
+		return sp
+	}
+	return nil
+}
+
+// ContextWithSpan returns a Context wrapping the supplied Span.
+func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
+	return context.WithValue(ctx, activeSpanKey{}, sp)
 }
 
 // StartSnowballTrace takes in a context and returns a derived one with a
@@ -673,10 +675,10 @@ func EnsureChildSpan(
 //
 // TODO(andrei): remove this method once EXPLAIN(TRACE) is gone.
 func StartSnowballTrace(
-	ctx context.Context, tracer opentracing.Tracer, opName string,
-) (context.Context, opentracing.Span) {
-	var span opentracing.Span
-	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+	ctx context.Context, tracer *Tracer, opName string,
+) (context.Context, *Span) {
+	var span *Span
+	if parentSpan := SpanFromContext(ctx); parentSpan != nil {
 		span = parentSpan.Tracer().StartSpan(
 			opName, opentracing.ChildOf(parentSpan.Context()), Recordable, LogTagsFromCtx(ctx),
 		)
@@ -684,7 +686,7 @@ func StartSnowballTrace(
 		span = tracer.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
 	}
 	StartRecording(span, SnowballRecording)
-	return opentracing.ContextWithSpan(ctx, span), span
+	return ContextWithSpan(ctx, span), span
 }
 
 // TestingCheckRecordedSpans checks whether a recording looks like an expected
@@ -782,7 +784,7 @@ func ContextWithRecordingSpan(
 	sp := tr.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
 	StartRecording(sp, SnowballRecording)
 	ctx, cancelCtx := context.WithCancel(ctx)
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	ctx = ContextWithSpan(ctx, sp)
 
 	getRecording = func() Recording {
 		return GetRecording(sp)

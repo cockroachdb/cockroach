@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // invertedFilterState represents the state of the processor.
@@ -126,7 +125,7 @@ func newInvertedFilterer(
 		ifr.diskMonitor,
 	)
 
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		ifr.input = newInputStatCollector(ifr.input)
 		ifr.FinishTrace = ifr.outputStatsToTrace
 	}
@@ -321,7 +320,7 @@ func (ifr *invertedFilterer) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(ifr.Ctx); sp != nil {
+	if sp := tracing.SpanFromContext(ifr.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&InvertedFiltererStats{

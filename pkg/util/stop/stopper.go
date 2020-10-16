@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func init() {
@@ -216,7 +215,7 @@ func (s *Stopper) RunWorker(ctx context.Context, f func(context.Context)) {
 		// Remove any associated span; we need to ensure this because the
 		// worker may run longer than the caller which presumably closes
 		// any spans it has created.
-		ctx = opentracing.ContextWithSpan(ctx, nil)
+		ctx = tracing.ContextWithSpan(ctx, nil)
 		defer s.Recover(ctx)
 		defer s.stop.Done()
 		f(ctx)

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // A sample aggregator processor aggregates results from multiple sampler
@@ -383,10 +382,10 @@ func (s *sampleAggregator) sampleRow(
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// Turn off tracing so these writes don't affect the results of EXPLAIN
 	// ANALYZE.
-	if span := opentracing.SpanFromContext(ctx); span != nil && tracing.IsRecording(span) {
+	if span := tracing.SpanFromContext(ctx); span != nil && tracing.IsRecording(span) {
 		// TODO(rytaft): this also hides writes in this function from SQL session
 		// traces.
-		ctx = opentracing.ContextWithSpan(ctx, nil)
+		ctx = tracing.ContextWithSpan(ctx, nil)
 	}
 
 	// TODO(andrei): This method would benefit from a session interface on the

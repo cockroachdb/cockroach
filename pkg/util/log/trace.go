@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/trace"
 )
@@ -52,7 +51,7 @@ func embedCtxEventLog(ctx context.Context, el *ctxEventLog) context.Context {
 // logging and event calls to go to the EventLog. The current context must not
 // have an existing open span.
 func withEventLogInternal(ctx context.Context, eventLog trace.EventLog) context.Context {
-	if opentracing.SpanFromContext(ctx) != nil {
+	if tracing.SpanFromContext(ctx) != nil {
 		panic("event log under span")
 	}
 	return embedCtxEventLog(ctx, &ctxEventLog{eventLog: eventLog})
@@ -90,8 +89,8 @@ func FinishEventLog(ctx context.Context) {
 // getSpanOrEventLog returns the current Span. If there is no Span, it returns
 // the current ctxEventLog. If neither (or the Span is "black hole"), returns
 // false.
-func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, bool) {
-	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+func getSpanOrEventLog(ctx context.Context) (*tracing.Span, *ctxEventLog, bool) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if tracing.IsBlackHoleSpan(sp) {
 			return nil, nil, false
 		}
@@ -110,7 +109,7 @@ func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, boo
 // message as input after introduction of redaction markers.  This
 // means the message may or may not contain markers already depending
 // of the configuration of --redactable-logs.
-func eventInternal(sp opentracing.Span, el *ctxEventLog, isErr bool, entry Entry) {
+func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry Entry) {
 	var msg string
 	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
 		// Shortcut.

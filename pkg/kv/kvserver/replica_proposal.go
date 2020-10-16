@@ -58,7 +58,7 @@ type ProposalData struct {
 
 	// An optional tracing span bound to the proposal. Will be cleaned
 	// up when the proposal finishes.
-	sp opentracing.Span
+	sp *tracing.Span
 
 	// idKey uniquely identifies this proposal.
 	// TODO(andreimatei): idKey is legacy at this point: We could easily key
@@ -890,7 +890,7 @@ func (r *Replica) requestToProposal(
 
 // getTraceData extracts the SpanContext of the current span.
 func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
-	sp := opentracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
 		return nil
 	}

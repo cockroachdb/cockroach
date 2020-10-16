@@ -27,7 +27,6 @@ go_library(
         "//pkg/util/tracing",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/opentracing/opentracing-go",
     ],
 )
 
@@ -60,6 +59,5 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/tracing",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/opentracing/opentracing-go",
     ],
 )
