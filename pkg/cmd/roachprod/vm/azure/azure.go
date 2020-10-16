@@ -459,7 +459,7 @@ final_message: "roachprod init completed"
 			fmt.Sprintf("chown -R %s /data1", remoteUser),
 		}
 		if opts.SSDOpts.NoExt4Barrier {
-			cmds = append(cmds, "mount -o remount,nobarrier,discard /mnt/data")
+			cmds = append(cmds, "mount -o remount,nobarrier /mnt/data")
 		}
 	} else {
 		// We define lun42 explicitly in the data disk request below.
