@@ -106,7 +106,6 @@ CREATE TABLE no_explicit_primary_key
 # GeneratePartialIndexScans
 # --------------------------------------------------
 
-
 exec-ddl
 CREATE INDEX idx ON p (i) STORING (f, s) WHERE s = 'foo'
 ----
@@ -966,6 +965,385 @@ select
  └── filters
       └── (k:1 + u:2) = 1 [outer=(1,2), immutable]
 
+exec-ddl
+CREATE TABLE kifs
+(
+    k INT PRIMARY KEY,
+    i INT,
+    f FLOAT,
+    s STRING,
+    j JSON,
+    INDEX s_idx (s) STORING (i, f),
+    INDEX si_idx (s DESC, i DESC) STORING (j)
+)
+----
+
+# Constrain the kifs@si_idx so that an index join is generated.
+exploretrace rule=GenerateConstrainedScans
+SELECT s, i, f FROM kifs WHERE s='foo' ORDER BY s, k, i
+----
+----
+================================================================================
+GenerateConstrainedScans
+================================================================================
+Source expression:
+  select
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
+   ├── key: (1)
+   ├── fd: ()-->(4), (1)-->(2,3)
+   ├── ordering: +1 opt(4) [actual: +1]
+   ├── scan kifs@s_idx
+   │    ├── columns: k:1!null i:2 f:3 s:4
+   │    ├── key: (1)
+   │    ├── fd: (1)-->(2-4)
+   │    └── ordering: +1 opt(4) [actual: +4,+1]
+   └── filters
+        └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+New expression 1 of 2:
+  scan kifs@s_idx
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
+   ├── constraint: /4/1: [/'foo' - /'foo']
+   ├── key: (1)
+   ├── fd: ()-->(4), (1)-->(2,3)
+   └── ordering: +1 opt(4) [actual: +1]
+
+New expression 2 of 2:
+  sort
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
+   ├── key: (1)
+   ├── fd: ()-->(4), (1)-->(2,3)
+   ├── ordering: +1 opt(4) [actual: +1]
+   └── index-join kifs
+        ├── columns: k:1!null i:2 f:3 s:4!null
+        ├── key: (1)
+        ├── fd: ()-->(4), (1)-->(2,3)
+        └── scan kifs@si_idx
+             ├── columns: k:1!null i:2 s:4!null
+             ├── constraint: /-4/-2/1: [/'foo' - /'foo']
+             ├── key: (1)
+             └── fd: ()-->(4), (1)-->(2)
+----
+----
+
+memo
+SELECT s, i, f FROM kifs WHERE s='foo' ORDER BY s DESC, i
+----
+memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
+ ├── G1: (select G2 G3) (scan kifs@s_idx,cols=(2-4),constrained) (index-join G4 kifs,cols=(2-4))
+ │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 15.58
+ │    └── []
+ │         ├── best: (scan kifs@s_idx,cols=(2-4),constrained)
+ │         └── cost: 14.71
+ ├── G2: (scan kifs,cols=(2-4)) (scan kifs@s_idx,cols=(2-4))
+ │    ├── [ordering: +2 opt(4)]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1293.35
+ │    └── []
+ │         ├── best: (scan kifs@s_idx,cols=(2-4))
+ │         └── cost: 1074.02
+ ├── G3: (filters G5)
+ ├── G4: (scan kifs@si_idx,cols=(1,2,4),constrained)
+ │    ├── [ordering: +2 opt(4)]
+ │    │    ├── best: (scan kifs@si_idx,rev,cols=(1,2,4),constrained)
+ │    │    └── cost: 15.04
+ │    └── []
+ │         ├── best: (scan kifs@si_idx,cols=(1,2,4),constrained)
+ │         └── cost: 14.71
+ ├── G5: (eq G6 G7)
+ ├── G6: (variable s)
+ └── G7: (const 'foo')
+
+memo
+SELECT j FROM kifs WHERE s = 'foo'
+----
+memo (optimized, ~7KB, required=[presentation: j:5])
+ ├── G1: (project G2 G3 j)
+ │    └── [presentation: j:5]
+ │         ├── best: (project G2 G3 j)
+ │         └── cost: 14.72
+ ├── G2: (select G4 G5) (index-join G6 kifs,cols=(4,5)) (scan kifs@si_idx,cols=(4,5),constrained)
+ │    └── []
+ │         ├── best: (scan kifs@si_idx,cols=(4,5),constrained)
+ │         └── cost: 14.61
+ ├── G3: (projections)
+ ├── G4: (scan kifs,cols=(4,5)) (scan kifs@si_idx,cols=(4,5))
+ │    └── []
+ │         ├── best: (scan kifs@si_idx,cols=(4,5))
+ │         └── cost: 1064.02
+ ├── G5: (filters G7)
+ ├── G6: (scan kifs@s_idx,cols=(1,4),constrained)
+ │    └── []
+ │         ├── best: (scan kifs@s_idx,cols=(1,4),constrained)
+ │         └── cost: 14.61
+ ├── G7: (eq G8 G9)
+ ├── G8: (variable s)
+ └── G9: (const 'foo')
+
+memo
+SELECT i, k FROM kifs WHERE s >= 'foo'
+----
+memo (optimized, ~6KB, required=[presentation: i:2,k:1])
+ ├── G1: (project G2 G3 k i)
+ │    └── [presentation: i:2,k:1]
+ │         ├── best: (project G2 G3 k i)
+ │         └── cost: 364.02
+ ├── G2: (select G4 G5) (scan kifs@s_idx,cols=(1,2,4),constrained) (scan kifs@si_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan kifs@s_idx,cols=(1,2,4),constrained)
+ │         └── cost: 360.68
+ ├── G3: (projections)
+ ├── G4: (scan kifs,cols=(1,2,4)) (scan kifs@s_idx,cols=(1,2,4)) (scan kifs@si_idx,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan kifs@s_idx,cols=(1,2,4))
+ │         └── cost: 1074.02
+ ├── G5: (filters G6)
+ ├── G6: (ge G7 G8)
+ ├── G7: (variable s)
+ └── G8: (const 'foo')
+
+# Collated strings are treated properly.
+exec-ddl
+CREATE TABLE x (s STRING COLLATE en_u_ks_level1 PRIMARY KEY)
+----
+
+opt
+SELECT s FROM x WHERE s < 'hello' COLLATE en_u_ks_level1
+----
+scan x
+ ├── columns: s:1!null
+ ├── constraint: /1: [ - /'hello' COLLATE en_u_ks_level1)
+ └── key: (1)
+
+opt
+SELECT s FROM x WHERE s = 'hello' COLLATE en_u_ks_level1
+----
+scan x
+ ├── columns: s:1!null
+ ├── constraint: /1: [/'hello' COLLATE en_u_ks_level1 - /'hello' COLLATE en_u_ks_level1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Can't generate spans for other collations.
+opt
+SELECT s FROM x WHERE s COLLATE en = 'hello' COLLATE en
+----
+select
+ ├── columns: s:1!null
+ ├── key: (1)
+ ├── scan x
+ │    ├── columns: s:1!null
+ │    └── key: (1)
+ └── filters
+      └── s:1 COLLATE en = 'hello' COLLATE en [outer=(1)]
+
+# Realistic example where using constraints as filters help.
+# An even more realistic example would have a creation timestamp instead of a
+# seq_num integer, but that makes the plans much more cluttered.
+exec-ddl
+CREATE TABLE "orders" (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  total DECIMAL NOT NULL,
+  seq_num INT NOT NULL,
+  PRIMARY KEY (region, id),
+  UNIQUE INDEX orders_by_seq_num (region, seq_num, id) STORING (total),
+  CHECK (region IN ('us-east1', 'us-west1', 'europe-west2'))
+)
+----
+
+exec-ddl
+ALTER TABLE "orders" INJECT STATISTICS '[
+  {
+    "columns": ["region"],
+    "distinct_count": 3,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["id"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["total"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["seq_num"],
+    "distinct_count": 50,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]'
+----
+
+opt
+SELECT sum(total) FROM orders WHERE seq_num >= 10 AND seq_num < 20
+----
+scalar-group-by
+ ├── columns: sum:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan orders@orders_by_seq_num
+ │    ├── columns: total:3!null seq_num:4!null
+ │    └── constraint: /1/4/2
+ │         ├── [/'europe-west2'/10 - /'europe-west2'/19]
+ │         ├── [/'us-east1'/10 - /'us-east1'/19]
+ │         └── [/'us-west1'/10 - /'us-west1'/19]
+ └── aggregations
+      └── sum [as=sum:6, outer=(3)]
+           └── total:3
+
+exec-ddl
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT NOT NULL,
+  z STRING NOT NULL,
+  CHECK (x < 10 AND x > 1),
+  CHECK (y < 10 AND y > 1),
+  CHECK (z in ('first', 'second')),
+  INDEX secondary (y, x),
+  INDEX tertiary (z, y, x))
+----
+
+opt
+SELECT x, y  FROM xyz WHERE x > 5
+----
+select
+ ├── columns: x:1!null y:2!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan xyz@tertiary
+ │    ├── columns: x:1!null y:2!null
+ │    ├── constraint: /3/2/1
+ │    │    ├── [/'first'/2/6 - /'first'/9/9]
+ │    │    └── [/'second'/2/6 - /'second'/9/9]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
+#  would be used here. But it isn't the plan being picked. Curious.
+opt
+SELECT * FROM xyz WHERE x > 5
+----
+select
+ ├── columns: x:1!null y:2!null z:3!null
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan xyz@tertiary
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── constraint: /3/2/1
+ │    │    ├── [/'first'/2/6 - /'first'/9/9]
+ │    │    └── [/'second'/2/6 - /'second'/9/9]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# Check constraint used only for the non nullable column. Constraints on x are ignored.
+exec-ddl
+CREATE TABLE xy (
+  x INT,
+  y INT NOT NULL,
+  CHECK (x < 10 AND x > 1),
+  CHECK (y < 10 AND y > 1),
+  INDEX secondary (y, x))
+----
+
+opt
+SELECT x, y FROM xy WHERE x > 5
+----
+select
+ ├── columns: x:1!null y:2!null
+ ├── scan xy@secondary
+ │    ├── columns: x:1 y:2!null
+ │    └── constraint: /2/1/3: [/2/6 - /9]
+ └── filters
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# Check constraints that can evaluate to NULL are ignored.
+exec-ddl
+CREATE TABLE null_constraint (
+  y INT NOT NULL,
+  CHECK (y IN (1, 2, NULL)),
+  INDEX index_1 (y))
+----
+
+opt
+SELECT y FROM null_constraint WHERE y > 0
+----
+scan null_constraint@index_1
+ ├── columns: y:1!null
+ └── constraint: /1/2: [/1 - ]
+
+exec-ddl
+CREATE TABLE null_constraint_2 (
+  y INT NOT NULL,
+  CHECK ((y IN (1, 2, NULL)) AND (y > 10)),
+  CHECK (y < 15),
+  INDEX index_1 (y))
+----
+
+opt
+SELECT y FROM null_constraint_2 WHERE y > 0
+----
+scan null_constraint_2@index_1
+ ├── columns: y:1!null
+ └── constraint: /1/2: [/1 - /14]
+
+# Unvalidated constraints are ignored.
+exec-ddl
+CREATE TABLE check_constraint_validity (
+ a int NOT NULL,
+ INDEX secondary (a),
+ CONSTRAINT "check:unvalidated" CHECK (a < 10),
+ CONSTRAINT "check:validated" CHECK (a < 20))
+----
+
+opt
+SELECT * FROM check_constraint_validity WHERE a > 6
+----
+scan check_constraint_validity@secondary
+ ├── columns: a:1!null
+ └── constraint: /1/2: [/7 - /19]
+
+# Test that we can constrain indexes using the results of now().
+exec-ddl
+CREATE TABLE with_time_index (k INT PRIMARY KEY, time TIMESTAMP, INDEX(time))
+----
+
+opt
+SELECT * FROM with_time_index WHERE time > now() - INTERVAL '1 hour'
+----
+scan with_time_index@secondary
+ ├── columns: k:1!null time:2!null
+ ├── constraint: /2/1: [/'2017-05-10 12:00:00.000001' - ]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM with_time_index WHERE time >= 'today'
+----
+scan with_time_index@secondary
+ ├── columns: k:1!null time:2!null
+ ├── constraint: /2/1: [/'2017-05-10 00:00:00' - ]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
 # Constrained partial index scan.
 
 exec-ddl
@@ -1283,31 +1661,6 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G8: (variable j)
  └── G9: (const '{"a": "b"}')
 
-# Query only the primary key with a remaining filter. 2+ paths in containment
-# query should favor zigzag joins.
-opt
-SELECT k FROM b WHERE j @> '{"a": "b", "c": "d"}'
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── inner-join (lookup b)
-      ├── columns: k:1!null j:4!null
-      ├── key columns: [1] = [1]
-      ├── lookup columns are key
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(4)
-      ├── inner-join (zigzag b@inv_idx b@inv_idx)
-      │    ├── columns: k:1!null
-      │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [4] = ['{"a": "b"}']
-      │    ├── right fixed columns: [4] = ['{"c": "d"}']
-      │    └── filters (true)
-      └── filters
-           └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
-
 # Query requiring an index join with no remaining filter.
 opt
 SELECT u, k FROM b WHERE j @> '{"a": "b"}'
@@ -1352,46 +1705,6 @@ index-join b
       ├── columns: k:1!null
       ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
       └── key: (1)
-
-# Query requiring a zigzag join with a remaining filter.
-# TODO(itsbilal): remove filter from index join if zigzag join covers it.
-opt
-SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
-----
-inner-join (lookup b)
- ├── columns: j:4!null k:1!null
- ├── key columns: [1] = [1]
- ├── lookup columns are key
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(4)
- ├── inner-join (zigzag b@inv_idx b@inv_idx)
- │    ├── columns: k:1!null
- │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [4] = ['{"a": "b"}']
- │    ├── right fixed columns: [4] = ['{"c": "d"}']
- │    └── filters (true)
- └── filters
-      └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
-
-opt
-SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
-----
-inner-join (lookup b)
- ├── columns: k:1!null u:2 v:3 j:4!null
- ├── key columns: [1] = [1]
- ├── lookup columns are key
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── inner-join (zigzag b@inv_idx b@inv_idx)
- │    ├── columns: k:1!null
- │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [4] = ['{"a": {"b": "c"}}']
- │    ├── right fixed columns: [4] = ['{"a": {"d": "e"}}']
- │    └── filters (true)
- └── filters
-      └── j:4 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT * FROM b WHERE j @> '{}'
@@ -1483,6 +1796,19 @@ select
  └── filters
       └── j:4 @> '{"a": []}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
+opt
+SELECT * FROM b WHERE j @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
+----
+index-join b
+ ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ └── scan b@inv_idx
+      ├── columns: k:1!null
+      ├── constraint: /4/1: [/'{"a": [[{"b": {"c": [{"d": "e"}]}}]]}' - /'{"a": [[{"b": {"c": [{"d": "e"}]}}]]}']
+      └── key: (1)
+
 # GenerateInvertedIndexScans propagates row-level locking information.
 opt
 SELECT k FROM b WHERE j @> '{"a": "b"}' FOR UPDATE
@@ -1510,29 +1836,6 @@ project
       ├── columns: k:1!null
       ├── constraint: /2/1: [/ARRAY[1] - /ARRAY[1]]
       └── key: (1)
-
-opt
-SELECT k FROM c WHERE a @> ARRAY[1,3,1,5]
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── inner-join (lookup c)
-      ├── columns: k:1!null a:2!null
-      ├── key columns: [1] = [1]
-      ├── lookup columns are key
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2)
-      ├── inner-join (zigzag c@inv_idx c@inv_idx)
-      │    ├── columns: k:1!null
-      │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [2] = [ARRAY[1]]
-      │    ├── right fixed columns: [2] = [ARRAY[3]]
-      │    └── filters (true)
-      └── filters
-           └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 opt
 SELECT k FROM c WHERE a @> ARRAY[]::INT[]
@@ -2600,6 +2903,1011 @@ memo (optimized, ~6KB, required=[presentation: k:1,s:2,j:3])
 exec-ddl
 DROP INDEX idx
 ----
+
+# --------------------------------------------------
+# GenerateZigzagJoins
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE pqr
+(
+    p INT PRIMARY KEY,
+    q INT,
+    r INT,
+    s STRING,
+    t STRING,
+    INDEX q (q),
+    INDEX r (r),
+    INDEX s (s) STORING (r),
+    INDEX rs (r,s),
+    INDEX ts (t,s)
+)
+----
+
+exec-ddl
+CREATE TABLE zz (
+    a INT8 PRIMARY KEY,
+    b INT8 NULL,
+    c INT8 NULL,
+    INDEX idx_b (b ASC),
+    CONSTRAINT idx_c UNIQUE (c)
+)
+----
+
+exec-ddl
+CREATE TABLE zz_redundant (
+    a INT8 PRIMARY KEY,
+    b INT8 NULL,
+    c INT8 NULL,
+    INDEX idx_u (b ASC, c ASC),
+    INDEX idx_v (b ASC, c ASC)
+)
+----
+
+# Simple zigzag case - where all requested columns are in the indexes being
+# joined.
+opt
+SELECT q,r FROM pqr WHERE q = 1 AND r = 2
+----
+inner-join (zigzag pqr@q pqr@r)
+ ├── columns: q:2!null r:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [2]
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+
+opt
+SELECT q,r FROM pqr WHERE q = 1 AND r IS NULL
+----
+inner-join (zigzag pqr@q pqr@r)
+ ├── columns: q:2!null r:3
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [NULL]
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── r:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
+memo
+SELECT q,r FROM pqr WHERE q = 1 AND r = 2
+----
+memo (optimized, ~13KB, required=[presentation: q:2,r:3])
+ ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
+ │    └── [presentation: q:2,r:3]
+ │         ├── best: (zigzag-join G3 pqr@q pqr@r)
+ │         └── cost: 1.93
+ ├── G2: (scan pqr,cols=(2,3))
+ │    └── []
+ │         ├── best: (scan pqr,cols=(2,3))
+ │         └── cost: 1074.02
+ ├── G3: (filters G9 G10)
+ ├── G4: (index-join G11 pqr,cols=(2,3))
+ │    └── []
+ │         ├── best: (index-join G11 pqr,cols=(2,3))
+ │         └── cost: 75.12
+ ├── G5: (filters G10)
+ ├── G6: (index-join G12 pqr,cols=(2,3))
+ │    └── []
+ │         ├── best: (index-join G12 pqr,cols=(2,3))
+ │         └── cost: 75.12
+ ├── G7: (filters G9)
+ ├── G8: (index-join G13 pqr,cols=(2,3))
+ │    └── []
+ │         ├── best: (index-join G13 pqr,cols=(2,3))
+ │         └── cost: 75.22
+ ├── G9: (eq G14 G15)
+ ├── G10: (eq G16 G17)
+ ├── G11: (scan pqr@q,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@q,cols=(1,2),constrained)
+ │         └── cost: 14.41
+ ├── G12: (scan pqr@r,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@r,cols=(1,3),constrained)
+ │         └── cost: 14.41
+ ├── G13: (scan pqr@rs,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
+ │         └── cost: 14.51
+ ├── G14: (variable q)
+ ├── G15: (const 1)
+ ├── G16: (variable r)
+ └── G17: (const 2)
+
+# Case where the fixed columns are extracted from a complicated expression.
+opt
+SELECT q,r FROM pqr WHERE q = 1 AND ((r < 1 AND r > 1) OR (r >= 2 AND r <= 2))
+----
+inner-join (zigzag pqr@q pqr@r)
+ ├── columns: q:2!null r:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [2]
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── ((r:3 < 1) AND (r:3 > 1)) OR ((r:3 >= 2) AND (r:3 <= 2)) [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+
+# Nested zigzag case - zigzag join needs to be wrapped in a lookup join to
+# satisfy required columns.
+opt
+SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
+----
+inner-join (lookup pqr)
+ ├── columns: q:2!null r:3!null s:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── fd: ()-->(2,3)
+ ├── inner-join (zigzag pqr@q pqr@r)
+ │    ├── columns: p:1!null q:2!null r:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [1]
+ │    ├── right fixed columns: [3] = [2]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+ └── filters (true)
+
+memo
+SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
+----
+memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
+ ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
+ │    └── [presentation: q:2,r:3,s:4]
+ │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
+ │         └── cost: 7.48
+ ├── G2: (scan pqr,cols=(2-4))
+ │    └── []
+ │         ├── best: (scan pqr,cols=(2-4))
+ │         └── cost: 1084.02
+ ├── G3: (filters G11 G12)
+ ├── G4: (index-join G13 pqr,cols=(2-4))
+ │    └── []
+ │         ├── best: (index-join G13 pqr,cols=(2-4))
+ │         └── cost: 75.22
+ ├── G5: (filters G12)
+ ├── G6: (index-join G14 pqr,cols=(2-4))
+ │    └── []
+ │         ├── best: (index-join G14 pqr,cols=(2-4))
+ │         └── cost: 75.22
+ ├── G7: (filters G11)
+ ├── G8: (index-join G15 pqr,cols=(2-4))
+ │    └── []
+ │         ├── best: (index-join G15 pqr,cols=(2-4))
+ │         └── cost: 75.32
+ ├── G9: (zigzag-join G3 pqr@q pqr@r)
+ │    └── []
+ │         ├── best: (zigzag-join G3 pqr@q pqr@r)
+ │         └── cost: 1.94
+ ├── G10: (filters)
+ ├── G11: (eq G16 G17)
+ ├── G12: (eq G18 G19)
+ ├── G13: (scan pqr@q,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@q,cols=(1,2),constrained)
+ │         └── cost: 14.41
+ ├── G14: (scan pqr@r,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@r,cols=(1,3),constrained)
+ │         └── cost: 14.41
+ ├── G15: (scan pqr@rs,cols=(1,3,4),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
+ │         └── cost: 14.61
+ ├── G16: (variable q)
+ ├── G17: (const 1)
+ ├── G18: (variable r)
+ └── G19: (const 2)
+
+# Zigzag with fixed columns of different types.
+opt
+SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
+----
+inner-join (zigzag pqr@q pqr@s)
+ ├── columns: q:2!null s:4!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [4] = ['foo']
+ ├── fd: ()-->(2,4)
+ └── filters
+      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+memo
+SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
+----
+memo (optimized, ~11KB, required=[presentation: q:2,s:4])
+ ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
+ │    └── [presentation: q:2,s:4]
+ │         ├── best: (zigzag-join G3 pqr@q pqr@s)
+ │         └── cost: 1.94
+ ├── G2: (scan pqr,cols=(2,4))
+ │    └── []
+ │         ├── best: (scan pqr,cols=(2,4))
+ │         └── cost: 1074.02
+ ├── G3: (filters G8 G9)
+ ├── G4: (index-join G10 pqr,cols=(2,4))
+ │    └── []
+ │         ├── best: (index-join G10 pqr,cols=(2,4))
+ │         └── cost: 75.12
+ ├── G5: (filters G9)
+ ├── G6: (index-join G11 pqr,cols=(2,4))
+ │    └── []
+ │         ├── best: (index-join G11 pqr,cols=(2,4))
+ │         └── cost: 75.22
+ ├── G7: (filters G8)
+ ├── G8: (eq G12 G13)
+ ├── G9: (eq G14 G15)
+ ├── G10: (scan pqr@q,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@q,cols=(1,2),constrained)
+ │         └── cost: 14.41
+ ├── G11: (scan pqr@s,cols=(1,4),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@s,cols=(1,4),constrained)
+ │         └── cost: 14.51
+ ├── G12: (variable q)
+ ├── G13: (const 1)
+ ├── G14: (variable s)
+ └── G15: (const 'foo')
+
+# Zigzag with implicit equality column in addition to primary key:
+# indexes on (r,s) and (t,s) should be chosen even though s is not being fixed
+# in the ON clause.
+opt
+SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
+----
+inner-join (zigzag pqr@rs pqr@ts)
+ ├── columns: r:3!null t:5!null
+ ├── eq columns: [4 1] = [4 1]
+ ├── left fixed columns: [3] = [1]
+ ├── right fixed columns: [5] = ['foo']
+ ├── fd: ()-->(3,5)
+ └── filters
+      ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+      └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+
+memo
+SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
+----
+memo (optimized, ~13KB, required=[presentation: r:3,t:5])
+ ├── G1: (select G2 G3) (select G4 G5) (select G6 G5) (select G7 G8) (zigzag-join G3 pqr@rs pqr@ts)
+ │    └── [presentation: r:3,t:5]
+ │         ├── best: (zigzag-join G3 pqr@rs pqr@ts)
+ │         └── cost: 1.95
+ ├── G2: (scan pqr,cols=(3,5))
+ │    └── []
+ │         ├── best: (scan pqr,cols=(3,5))
+ │         └── cost: 1074.02
+ ├── G3: (filters G9 G10)
+ ├── G4: (index-join G11 pqr,cols=(3,5))
+ │    └── []
+ │         ├── best: (index-join G11 pqr,cols=(3,5))
+ │         └── cost: 75.12
+ ├── G5: (filters G10)
+ ├── G6: (index-join G12 pqr,cols=(3,5))
+ │    └── []
+ │         ├── best: (index-join G12 pqr,cols=(3,5))
+ │         └── cost: 75.22
+ ├── G7: (index-join G13 pqr,cols=(3,5))
+ │    └── []
+ │         ├── best: (index-join G13 pqr,cols=(3,5))
+ │         └── cost: 75.22
+ ├── G8: (filters G9)
+ ├── G9: (eq G14 G15)
+ ├── G10: (eq G16 G17)
+ ├── G11: (scan pqr@r,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@r,cols=(1,3),constrained)
+ │         └── cost: 14.41
+ ├── G12: (scan pqr@rs,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
+ │         └── cost: 14.51
+ ├── G13: (scan pqr@ts,cols=(1,5),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
+ │         └── cost: 14.51
+ ├── G14: (variable r)
+ ├── G15: (const 1)
+ ├── G16: (variable t)
+ └── G17: (const 'foo')
+
+# Zigzag with choice between indexes for multiple equality predicates.
+opt
+SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
+----
+inner-join (zigzag pqr@q pqr@s)
+ ├── columns: p:1!null q:2!null r:3!null s:4!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [4] = ['foo']
+ ├── key: (1)
+ ├── fd: ()-->(2-4)
+ └── filters
+      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Tests for zigzag joins over partial indexes.
+
+exec-ddl
+CREATE TABLE zz_partial (
+    k INT PRIMARY KEY,
+    i INT,
+    j INT,
+    b1 BOOL,
+    b2 BOOL,
+    s STRING
+)
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i) WHERE b1
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j) WHERE b2
+----
+
+# Generate a zigzag join over two partial indexes.
+opt expect=GenerateZigzagJoins
+SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20 AND b2
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── inner-join (lookup zz_partial)
+      ├── columns: k:1!null i:2!null j:3!null b1:4!null b2:5!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── key: (1)
+      ├── fd: ()-->(2-5)
+      ├── inner-join (zigzag zz_partial@i zz_partial@j)
+      │    ├── columns: k:1!null i:2!null j:3!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [10]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── filters (true)
+
+# Don't generate a zigzag join when the first index predicate is not implied.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20 AND b2
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── select
+      │         ├── scan zz_partial@j,partial
+      │         └── filters
+      │              └── j = 20
+      └── filters
+           └── i = 10
+
+# Don't generate a zigzag join when the second index predicate is not implied.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── select
+      │         ├── scan zz_partial@i,partial
+      │         └── filters
+      │              └── i = 10
+      └── filters
+           └── j = 20
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j)
+----
+
+# Generate a zigzag join over one partial and one non-partial index.
+opt expect=GenerateZigzagJoins
+SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── inner-join (lookup zz_partial)
+      ├── columns: k:1!null i:2!null j:3!null b1:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── key: (1)
+      ├── fd: ()-->(2-4)
+      ├── inner-join (zigzag zz_partial@i zz_partial@j)
+      │    ├── columns: k:1!null i:2!null j:3!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [10]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── filters (true)
+
+# Don't generate a zigzag join when the partial index predicate is not implied.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── scan zz_partial@j
+      │         └── constraint: /3/1: [/20 - /20]
+      └── filters
+           └── i = 10
+
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i) WHERE i = 10
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j)
+----
+
+# Don't generate a zigzag join when the expression that fixes the left columns
+# is removed during partial index implication of the left index.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── scan zz_partial@i,partial
+      └── filters
+           └── j = 20
+
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i)
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j) WHERE j = 20
+----
+
+# Don't generate a zigzag join when the expression that fixes the right columns
+# is removed during partial index implication of the right index.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20
+----
+project
+ └── select
+      ├── index-join zz_partial
+      │    └── scan zz_partial@j,partial
+      └── filters
+           └── i = 10
+
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX zz_partial_s ON zz_partial (s)
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j) WHERE s = 'foo'
+----
+
+# Don't generate a zigzag join when the expression that fixes the left columns
+# is removed during partial index implication of the right index.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE s = 'foo' AND j = 20
+----
+project
+ └── scan zz_partial@j,partial
+      └── constraint: /3/1: [/20 - /20]
+
+exec-ddl
+DROP INDEX zz_partial_s
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i) WHERE s = 'foo'
+----
+
+exec-ddl
+CREATE INDEX zz_partial_s ON zz_partial (s)
+----
+
+# Don't generate a zigzag join when the expression that fixes the right columns
+# is removed during partial index implication of the left index.
+opt expect-not=GenerateZigzagJoins format=hide-all
+SELECT k FROM zz_partial WHERE i = 10 AND s = 'foo'
+----
+project
+ └── scan zz_partial@i,partial
+      └── constraint: /2/1: [/10 - /10]
+
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX zz_partial_s
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i)
+----
+
+exec-ddl
+CREATE INDEX b1 ON zz_partial (b1) WHERE s = 'foo'
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j)
+----
+
+# The filters should be reset during each iteration over the left and right
+# indexes if they are reduced while proving partial index implication. In this
+# test, (s = 'foo') must be applied after the zigzag join.
+opt expect=GenerateZigzagJoins
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20 AND b1 AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── inner-join (lookup zz_partial)
+      ├── columns: k:1!null i:2!null j:3!null b1:4!null s:6!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── key: (1)
+      ├── fd: ()-->(2-4,6)
+      ├── inner-join (zigzag zz_partial@i zz_partial@j)
+      │    ├── columns: k:1!null i:2!null j:3!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [10]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── filters
+           ├── b1:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+           └── s:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
+
+# Don't generate a zigzag which has the PK as its equality columns against
+# nullable unique indexes where the primary key is not part of the indexed
+# columns.
+
+# Regression test for #36051: prior to fixing this, we would try to use the PK
+# as the equality column here, but it's not actually part of the key so we
+# can't zigzag on it.
+opt expect-not=GenerateZigzagJoins
+SELECT * FROM zz WHERE b IS NULL AND c = 2
+----
+select
+ ├── columns: a:1!null b:2 c:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── index-join zz
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-3)
+ │    └── scan zz@idx_c
+ │         ├── columns: a:1!null c:3!null
+ │         ├── constraint: /3: [/2 - /2]
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         └── fd: ()-->(1,3)
+ └── filters
+      └── b:2 IS NULL [outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
+
+memo
+SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
+----
+memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
+ ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
+ │    └── [presentation: p:1,q:2,r:3,s:4]
+ │         ├── best: (zigzag-join G3 pqr@q pqr@s)
+ │         └── cost: 1.95
+ ├── G2: (scan pqr,cols=(1-4))
+ │    └── []
+ │         ├── best: (scan pqr,cols=(1-4))
+ │         └── cost: 1094.02
+ ├── G3: (filters G14 G15 G16)
+ ├── G4: (index-join G17 pqr,cols=(1-4))
+ │    └── []
+ │         ├── best: (index-join G17 pqr,cols=(1-4))
+ │         └── cost: 75.22
+ ├── G5: (filters G15 G16)
+ ├── G6: (index-join G18 pqr,cols=(1-4))
+ │    └── []
+ │         ├── best: (index-join G18 pqr,cols=(1-4))
+ │         └── cost: 75.22
+ ├── G7: (filters G14 G16)
+ ├── G8: (index-join G19 pqr,cols=(1-4))
+ │    └── []
+ │         ├── best: (index-join G19 pqr,cols=(1-4))
+ │         └── cost: 21.76
+ ├── G9: (filters G14)
+ ├── G10: (index-join G20 pqr,cols=(1-4))
+ │    └── []
+ │         ├── best: (index-join G20 pqr,cols=(1-4))
+ │         └── cost: 10.51
+ ├── G11: (zigzag-join G21 pqr@q pqr@r)
+ │    └── []
+ │         ├── best: (zigzag-join G21 pqr@q pqr@r)
+ │         └── cost: 1.94
+ ├── G12: (filters G16)
+ ├── G13: (zigzag-join G5 pqr@r pqr@s)
+ │    └── []
+ │         ├── best: (zigzag-join G5 pqr@r pqr@s)
+ │         └── cost: 1.95
+ ├── G14: (eq G22 G23)
+ ├── G15: (eq G24 G23)
+ ├── G16: (eq G25 G26)
+ ├── G17: (scan pqr@q,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@q,cols=(1,2),constrained)
+ │         └── cost: 14.41
+ ├── G18: (scan pqr@r,cols=(1,3),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@r,cols=(1,3),constrained)
+ │         └── cost: 14.41
+ ├── G19: (select G27 G28)
+ │    └── []
+ │         ├── best: (select G27 G28)
+ │         └── cost: 14.73
+ ├── G20: (scan pqr@rs,cols=(1,3,4),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
+ │         └── cost: 4.98
+ ├── G21: (filters G14 G15)
+ ├── G22: (variable q)
+ ├── G23: (const 1)
+ ├── G24: (variable r)
+ ├── G25: (variable s)
+ ├── G26: (const 'foo')
+ ├── G27: (scan pqr@s,cols=(1,3,4),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@s,cols=(1,3,4),constrained)
+ │         └── cost: 14.61
+ └── G28: (filters G15)
+
+# Zigzag joins cannot be planned for indexes where equality columns do not
+# immediately follow fixed columns. Here, the only index on t is (t,s,p) and
+# s is not a fixed or equal column, so a zigzag join shouldn't be planned.
+opt
+SELECT q,t FROM pqr WHERE q = 1 AND t = 'foo'
+----
+select
+ ├── columns: q:2!null t:5!null
+ ├── fd: ()-->(2,5)
+ ├── index-join pqr
+ │    ├── columns: q:2 t:5
+ │    ├── fd: ()-->(2)
+ │    └── scan pqr@q
+ │         ├── columns: p:1!null q:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+
+memo
+SELECT q,t FROM pqr WHERE q = 1 AND t = 'foo'
+----
+memo (optimized, ~9KB, required=[presentation: q:2,t:5])
+ ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
+ │    └── [presentation: q:2,t:5]
+ │         ├── best: (select G4 G5)
+ │         └── cost: 75.24
+ ├── G2: (scan pqr,cols=(2,5))
+ │    └── []
+ │         ├── best: (scan pqr,cols=(2,5))
+ │         └── cost: 1074.02
+ ├── G3: (filters G8 G9)
+ ├── G4: (index-join G10 pqr,cols=(2,5))
+ │    └── []
+ │         ├── best: (index-join G10 pqr,cols=(2,5))
+ │         └── cost: 75.12
+ ├── G5: (filters G9)
+ ├── G6: (index-join G11 pqr,cols=(2,5))
+ │    └── []
+ │         ├── best: (index-join G11 pqr,cols=(2,5))
+ │         └── cost: 75.22
+ ├── G7: (filters G8)
+ ├── G8: (eq G12 G13)
+ ├── G9: (eq G14 G15)
+ ├── G10: (scan pqr@q,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@q,cols=(1,2),constrained)
+ │         └── cost: 14.41
+ ├── G11: (scan pqr@ts,cols=(1,5),constrained)
+ │    └── []
+ │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
+ │         └── cost: 14.51
+ ├── G12: (variable q)
+ ├── G13: (const 1)
+ ├── G14: (variable t)
+ └── G15: (const 'foo')
+
+# Don't zigzag on two identical indexes.
+memo
+SELECT c FROM zz_redundant WHERE b = 1
+----
+memo (optimized, ~6KB, required=[presentation: c:3])
+ ├── G1: (project G2 G3 c)
+ │    └── [presentation: c:3]
+ │         ├── best: (project G2 G3 c)
+ │         └── cost: 14.62
+ ├── G2: (select G4 G5) (scan zz_redundant@idx_u,cols=(2,3),constrained) (scan zz_redundant@idx_v,cols=(2,3),constrained)
+ │    └── []
+ │         ├── best: (scan zz_redundant@idx_u,cols=(2,3),constrained)
+ │         └── cost: 14.51
+ ├── G3: (projections)
+ ├── G4: (scan zz_redundant,cols=(2,3)) (scan zz_redundant@idx_u,cols=(2,3)) (scan zz_redundant@idx_v,cols=(2,3))
+ │    └── []
+ │         ├── best: (scan zz_redundant,cols=(2,3))
+ │         └── cost: 1054.02
+ ├── G5: (filters G6)
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable b)
+ └── G8: (const 1)
+
+# GenerateZigzagJoins is disabled in the presence of a row-level locking clause.
+opt
+SELECT q,r FROM pqr WHERE q = 1 AND r = 2 FOR UPDATE
+----
+select
+ ├── columns: q:2!null r:3!null
+ ├── volatile
+ ├── fd: ()-->(2,3)
+ ├── index-join pqr
+ │    ├── columns: q:2 r:3
+ │    ├── volatile
+ │    ├── fd: ()-->(2)
+ │    └── scan pqr@q
+ │         ├── columns: p:1!null q:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── locking: for-update
+ │         ├── volatile
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+
+# --------------------------------------------------
+# GenerateInvertedIndexZigzagJoins
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE t5 (
+    a INT PRIMARY KEY,
+    b JSONB,
+    c INT,
+    INVERTED INDEX b_idx(b)
+)
+----
+
+# Query only the primary key with a remaining filter. 2+ paths in containment
+# query should favor zigzag joins.
+opt
+SELECT k FROM b WHERE j @> '{"a": "b", "c": "d"}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup b)
+      ├── columns: k:1!null j:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── inner-join (zigzag b@inv_idx b@inv_idx)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [4] = ['{"a": "b"}']
+      │    ├── right fixed columns: [4] = ['{"c": "d"}']
+      │    └── filters (true)
+      └── filters
+           └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Query requiring a zigzag join with a remaining filter.
+# TODO(itsbilal): remove filter from index join if zigzag join covers it.
+opt
+SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
+----
+inner-join (lookup b)
+ ├── columns: j:4!null k:1!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ ├── inner-join (zigzag b@inv_idx b@inv_idx)
+ │    ├── columns: k:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [4] = ['{"a": "b"}']
+ │    ├── right fixed columns: [4] = ['{"c": "d"}']
+ │    └── filters (true)
+ └── filters
+      └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+opt
+SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+inner-join (lookup b)
+ ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── inner-join (zigzag b@inv_idx b@inv_idx)
+ │    ├── columns: k:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [4] = ['{"a": {"b": "c"}}']
+ │    ├── right fixed columns: [4] = ['{"a": {"d": "e"}}']
+ │    └── filters (true)
+ └── filters
+      └── j:4 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+opt
+SELECT k FROM c WHERE a @> ARRAY[1,3,1,5]
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup c)
+      ├── columns: k:1!null a:2!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── inner-join (zigzag c@inv_idx c@inv_idx)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [ARRAY[1]]
+      │    ├── right fixed columns: [2] = [ARRAY[3]]
+      │    └── filters (true)
+      └── filters
+           └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# Two paths. Should generate a zigzag join.
+opt
+SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}'
+----
+inner-join (lookup t5)
+ ├── columns: b:2!null a:1!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (zigzag t5@b_idx t5@b_idx)
+ │    ├── columns: a:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = ['{"a": 1}']
+ │    ├── right fixed columns: [2] = ['{"c": 2}']
+ │    └── filters (true)
+ └── filters
+      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+memo
+SELECT a FROM t5 WHERE b @> '{"a":1, "c":2}'
+----
+memo (optimized, ~14KB, required=[presentation: a:1])
+ ├── G1: (project G2 G3 a)
+ │    └── [presentation: a:1]
+ │         ├── best: (project G2 G3 a)
+ │         └── cost: 100.53
+ ├── G2: (select G4 G5) (select G6 G5) (lookup-join G7 G5 t5,keyCols=[1],outCols=(1,2))
+ │    └── []
+ │         ├── best: (lookup-join G7 G5 t5,keyCols=[1],outCols=(1,2))
+ │         └── cost: 100.40
+ ├── G3: (projections)
+ ├── G4: (scan t5,cols=(1,2))
+ │    └── []
+ │         ├── best: (scan t5,cols=(1,2))
+ │         └── cost: 1054.02
+ ├── G5: (filters G8)
+ ├── G6: (index-join G9 t5,cols=(1,2))
+ │    └── []
+ │         ├── best: (index-join G9 t5,cols=(1,2))
+ │         └── cost: 782.82
+ ├── G7: (zigzag-join G10 t5@b_idx t5@b_idx)
+ │    └── []
+ │         ├── best: (zigzag-join G10 t5@b_idx t5@b_idx)
+ │         └── cost: 25.69
+ ├── G8: (contains G11 G12)
+ ├── G9: (scan t5@b_idx,cols=(1),constrained)
+ │    └── []
+ │         ├── best: (scan t5@b_idx,cols=(1),constrained)
+ │         └── cost: 117.31
+ ├── G10: (filters)
+ ├── G11: (variable b)
+ └── G12: (const '{"a": 1, "c": 2}')
+
+# Three or more paths. Should generate zigzag joins.
+opt
+SELECT b,a FROM t5 WHERE b @> '{"a":[{"b":"c", "d":3}, 5]}'
+----
+inner-join (lookup t5)
+ ├── columns: b:2!null a:1!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (zigzag t5@b_idx t5@b_idx)
+ │    ├── columns: a:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = ['{"a": [{"b": "c"}]}']
+ │    ├── right fixed columns: [2] = ['{"a": [{"d": 3}]}']
+ │    └── filters (true)
+ └── filters
+      └── b:2 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# GenerateInvertedIndexZigzagJoins is disabled in the presence of a row-level
+# locking clause.
+opt expect-not=GenerateInvertedIndexZigzagJoins
+SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}' FOR UPDATE
+----
+select
+ ├── columns: b:2!null a:1!null
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t5
+ │    ├── columns: a:1!null b:2
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t5@b_idx
+ │         ├── columns: a:1!null
+ │         ├── constraint: /2/1: [/'{"a": 1}' - /'{"a": 1}']
+ │         ├── locking: for-update
+ │         ├── volatile
+ │         └── key: (1)
+ └── filters
+      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 # --------------------------------------------------
 # SplitDisjunction
@@ -3813,7 +5121,6 @@ scalar-group-by
  │                   └── v:3
  └── aggregations
       └── count-rows [as=count_rows:6]
-
 
 # Multi-column primary key.
 opt expect=SplitDisjunctionAddKey
