@@ -364,7 +364,7 @@ func (sf *ScanFlags) Empty() bool {
 //
 // The zero value indicates that any join is allowed and there are no special
 // preferences.
-type JoinFlags uint8
+type JoinFlags uint16
 
 // Each flag indicates if a certain type of join is disallowed.
 const (
@@ -389,6 +389,14 @@ const (
 	// table is on the right side.
 	DisallowLookupJoinIntoRight
 
+	// DisallowInvertedJoinIntoLeft corresponds to an inverted join where the
+	// inverted index is on the left side.
+	DisallowInvertedJoinIntoLeft
+
+	// DisallowInvertedJoinIntoRight corresponds to an inverted join where the
+	// inverted index is on the right side.
+	DisallowInvertedJoinIntoRight
+
 	// PreferLookupJoinIntoLeft reduces the cost of a lookup join where the lookup
 	// table is on the left side.
 	PreferLookupJoinIntoLeft
@@ -403,7 +411,9 @@ const (
 		DisallowHashJoinStoreRight |
 		DisallowMergeJoin |
 		DisallowLookupJoinIntoLeft |
-		DisallowLookupJoinIntoRight)
+		DisallowLookupJoinIntoRight |
+		DisallowInvertedJoinIntoLeft |
+		DisallowInvertedJoinIntoRight)
 
 	// AllowOnlyHashJoinStoreRight has all "disallow" flags set except
 	// DisallowHashJoinStoreRight.
@@ -413,16 +423,22 @@ const (
 	// DisallowLookupJoinIntoRight.
 	AllowOnlyLookupJoinIntoRight JoinFlags = disallowAll ^ DisallowLookupJoinIntoRight
 
+	// AllowOnlyInvertedJoinIntoRight has all "disallow" flags set except
+	// DisallowInvertedJoinIntoRight.
+	AllowOnlyInvertedJoinIntoRight JoinFlags = disallowAll ^ DisallowInvertedJoinIntoRight
+
 	// AllowOnlyMergeJoin has all "disallow" flags set except DisallowMergeJoin.
 	AllowOnlyMergeJoin JoinFlags = disallowAll ^ DisallowMergeJoin
 )
 
 var joinFlagStr = map[JoinFlags]string{
-	DisallowHashJoinStoreLeft:   "hash join (store left side)",
-	DisallowHashJoinStoreRight:  "hash join (store right side)",
-	DisallowMergeJoin:           "merge join",
-	DisallowLookupJoinIntoLeft:  "lookup join (into left side)",
-	DisallowLookupJoinIntoRight: "lookup join (into right side)",
+	DisallowHashJoinStoreLeft:     "hash join (store left side)",
+	DisallowHashJoinStoreRight:    "hash join (store right side)",
+	DisallowMergeJoin:             "merge join",
+	DisallowLookupJoinIntoLeft:    "lookup join (into left side)",
+	DisallowLookupJoinIntoRight:   "lookup join (into right side)",
+	DisallowInvertedJoinIntoLeft:  "inverted join (into left side)",
+	DisallowInvertedJoinIntoRight: "inverted join (into right side)",
 
 	PreferLookupJoinIntoLeft:  "lookup join (into left side)",
 	PreferLookupJoinIntoRight: "lookup join (into right side)",
@@ -454,6 +470,8 @@ func (jf JoinFlags) String() string {
 		b.WriteString("force hash join (store right side)")
 	case AllowOnlyLookupJoinIntoRight:
 		b.WriteString("force lookup join (into right side)")
+	case AllowOnlyInvertedJoinIntoRight:
+		b.WriteString("force inverted join (into right side)")
 	case AllowOnlyMergeJoin:
 		b.WriteString("force merge join")
 

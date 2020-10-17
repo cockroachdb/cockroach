@@ -1929,7 +1929,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
+	if joinPrivate.Flags.Has(memo.DisallowInvertedJoinIntoRight) {
 		return
 	}
 

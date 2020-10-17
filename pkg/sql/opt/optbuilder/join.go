@@ -69,6 +69,15 @@ func (b *Builder) buildJoin(
 			))
 		}
 
+	case tree.AstInverted:
+		telemetry.Inc(sqltelemetry.InvertedJoinHintUseCounter)
+		flags = memo.AllowOnlyInvertedJoinIntoRight
+		if joinType != descpb.InnerJoin && joinType != descpb.LeftOuterJoin {
+			panic(pgerror.Newf(pgcode.Syntax,
+				"%s can only be used with INNER or LEFT joins", tree.AstInverted,
+			))
+		}
+
 	case tree.AstMerge:
 		telemetry.Inc(sqltelemetry.MergeJoinHintUseCounter)
 		flags = memo.AllowOnlyMergeJoin

@@ -2522,6 +2522,7 @@ opt_join_hint ::=
 	'HASH'
 	| 'MERGE'
 	| 'LOOKUP'
+	| 'INVERTED'
 	| 
 
 join_type ::=
