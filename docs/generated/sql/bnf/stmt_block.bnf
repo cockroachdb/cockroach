@@ -1278,8 +1278,8 @@ create_index_stmt ::=
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
 
 create_schema_stmt ::=
-	'CREATE' 'SCHEMA' schema_name
-	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' schema_name
+	'CREATE' 'SCHEMA' qualifiable_schema_name
+	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' qualifiable_schema_name
 	| 'CREATE' 'SCHEMA' opt_schema_name 'AUTHORIZATION' role_spec
 	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' opt_schema_name 'AUTHORIZATION' role_spec
 
@@ -1775,8 +1775,13 @@ opt_partition_by ::=
 	partition_by
 	| 
 
+qualifiable_schema_name ::=
+	name
+	| name '.' name
+
 opt_schema_name ::=
-	opt_name
+	qualifiable_schema_name
+	| 
 
 opt_persistence_temp_table ::=
 	opt_temp

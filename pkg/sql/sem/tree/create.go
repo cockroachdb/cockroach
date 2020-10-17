@@ -1321,7 +1321,7 @@ func (node *CreateTable) HoistConstraints() {
 // CreateSchema represents a CREATE SCHEMA statement.
 type CreateSchema struct {
 	IfNotExists bool
-	Schema      Name
+	Schema      ObjectNamePrefix
 	AuthRole    string
 }
 
@@ -1333,7 +1333,7 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 		ctx.WriteString(" IF NOT EXISTS")
 	}
 
-	if node.Schema != "" {
+	if node.Schema.ExplicitSchema {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.Schema)
 	}
