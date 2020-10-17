@@ -1005,7 +1005,7 @@ var _ tree.AggregateFunc = &stExtentAgg{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
-const sizeOfCorrAggregate = int64(unsafe.Sizeof(corrAggregate{}))
+const sizeOfRegressionAccumulatorBase = int64(unsafe.Sizeof(regressionAccumulatorBase{}))
 const sizeOfCountAggregate = int64(unsafe.Sizeof(countAggregate{}))
 const sizeOfCountRowsAggregate = int64(unsafe.Sizeof(countRowsAggregate{}))
 const sizeOfMaxAggregate = int64(unsafe.Sizeof(maxAggregate{}))
@@ -1726,38 +1726,32 @@ func (a *boolOrAggregate) Size() int64 {
 	return sizeOfBoolOrAggregate
 }
 
-// corrAggregate represents SQL:2003 correlation coefficient.
+// regressionAccumulatorBase is a base struct for the aggregate functions for statistics.
+// It represents a transition datatype for these functions.
+// Ported from Postgresql (see https://github.com/postgres/postgres/blob/bc1fbc960bf5efbb692f4d1bf91bf9bc6390425a/src/backend/utils/adt/float.c#L3277).
 //
-// n   be count of rows.
-// sx  be the sum of the column of values of <independent variable expression>
-// sx2 be the sum of the squares of values in the <independent variable expression> column
-// sy  be the sum of the column of values of <dependent variable expression>
-// sy2 be the sum of the squares of values in the <dependent variable expression> column
-// sxy be the sum of the row-wise products of the value in the <independent variable expression>
-//     column times the value in the <dependent variable expression> column.
+// The Youngs-Cramer algorithm is used to reduce rounding errors in the aggregate final functions.
 //
-// result:
-//   1) If n*sx2 equals sx*sx, then the result is the null value.
-//   2) If n*sy2 equals sy*sy, then the result is the null value.
-//   3) Otherwise, the resut is SQRT(POWER(n*sxy-sx*sy,2) / ((n*sx2-sx*sx)*(n*sy2-sy*sy))).
-//      If the exponent of the approximate mathematical result of the operation is not within
-//      the implementation-defined exponent range for the result data type, then the result
-//      is the null value.
-type corrAggregate struct {
-	n   int
+// Note that Y is the first argument to all these aggregates!
+//
+// It might seem attractive to optimize this by having multiple accumulator
+// functions that only calculate the sums actually needed.  But on most
+// modern machines, a couple of extra floating-point multiplies will be
+// insignificant compared to the other per-tuple overhead, so I've chosen
+// to minimize code space instead.
+type regressionAccumulatorBase struct {
+	n   float64
 	sx  float64
-	sx2 float64
+	sxx float64
 	sy  float64
-	sy2 float64
+	syy float64
 	sxy float64
 }
 
-func newCorrAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &corrAggregate{}
-}
-
 // Add implements tree.AggregateFunc interface.
-func (a *corrAggregate) Add(_ context.Context, datumY tree.Datum, otherArgs ...tree.Datum) error {
+func (a *regressionAccumulatorBase) Add(
+	_ context.Context, datumY tree.Datum, otherArgs ...tree.Datum,
+) error {
 	if datumY == tree.DNull {
 		return nil
 	}
@@ -1777,77 +1771,95 @@ func (a *corrAggregate) Add(_ context.Context, datumY tree.Datum, otherArgs ...t
 		return err
 	}
 
-	a.n++
-	a.sx += x
-	a.sy += y
-	a.sx2 += x * x
-	a.sy2 += y * y
-	a.sxy += x * y
+	return a.add(y, x)
+}
 
-	if math.IsInf(a.sx, 0) ||
-		math.IsInf(a.sx2, 0) ||
-		math.IsInf(a.sy, 0) ||
-		math.IsInf(a.sy2, 0) ||
-		math.IsInf(a.sxy, 0) {
-		return tree.ErrFloatOutOfRange
+// Reset implements tree.AggregateFunc interface.
+func (a *regressionAccumulatorBase) Reset(context.Context) {
+	*a = regressionAccumulatorBase{}
+}
+
+// Close implements tree.AggregateFunc interface.
+func (a *regressionAccumulatorBase) Close(context.Context) {}
+
+// Size implements tree.AggregateFunc interface.
+func (a *regressionAccumulatorBase) Size() int64 {
+	return sizeOfRegressionAccumulatorBase
+}
+
+func (a *regressionAccumulatorBase) add(y float64, x float64) error {
+	n := a.n
+	sx := a.sx
+	sxx := a.sxx
+	sy := a.sy
+	syy := a.syy
+	sxy := a.sxy
+
+	// Use the Youngs-Cramer algorithm to incorporate the new values into the
+	// transition values.
+	n++
+	sx += x
+	sy += y
+
+	if a.n > 0 {
+		tmpX := x*n - sx
+		tmpY := y*n - sy
+		scale := 1.0 / (n * a.n)
+		sxx += tmpX * tmpX * scale
+		syy += tmpY * tmpY * scale
+		sxy += tmpX * tmpY * scale
+
+		// Overflow check.  We only report an overflow error when finite
+		// inputs lead to infinite results.  Note also that sxx, syy and Sxy
+		// should be NaN if any of the relevant inputs are infinite, so we
+		// intentionally prevent them from becoming infinite.
+		if math.IsInf(sx, 0) || math.IsInf(sxx, 0) || math.IsInf(sy, 0) || math.IsInf(syy, 0) || math.IsInf(sxy, 0) {
+			if ((math.IsInf(sx, 0) || math.IsInf(sxx, 0)) &&
+				!math.IsInf(a.sx, 0) && !math.IsInf(x, 0)) ||
+				((math.IsInf(sy, 0) || math.IsInf(syy, 0)) &&
+					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) ||
+				(math.IsInf(sxy, 0) &&
+					!math.IsInf(a.sx, 0) && !math.IsInf(x, 0) &&
+					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) {
+				return tree.ErrFloatOutOfRange
+			}
+
+			if math.IsInf(sxx, 0) {
+				sxx = math.NaN()
+			}
+			if math.IsInf(syy, 0) {
+				syy = math.NaN()
+			}
+			if math.IsInf(sxy, 0) {
+				sxy = math.NaN()
+			}
+		}
+	} else {
+		// At the first input, we normally can leave Sxx et al as 0.  However,
+		// if the first input is Inf or NaN, we'd better force the dependent
+		// sums to NaN; otherwise we will falsely report variance zero when
+		// there are no more inputs.
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			a.sxx = math.NaN()
+			a.sxy = math.NaN()
+		}
+		if math.IsNaN(y) || math.IsInf(y, 0) {
+			a.syy = math.NaN()
+			a.sxy = math.NaN()
+		}
 	}
+
+	a.n = n
+	a.sx = sx
+	a.sy = sy
+	a.sxx = sxx
+	a.syy = syy
+	a.sxy = sxy
 
 	return nil
 }
 
-// Result implements tree.AggregateFunc interface.
-func (a *corrAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
-		return tree.DNull, nil
-	}
-
-	if a.sx2 == 0 || a.sy2 == 0 {
-		return tree.DNull, nil
-	}
-
-	floatN := float64(a.n)
-
-	numeratorX := floatN*a.sx2 - a.sx*a.sx
-	if math.IsInf(numeratorX, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
-
-	numeratorY := floatN*a.sy2 - a.sy*a.sy
-	if math.IsInf(numeratorY, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
-
-	numeratorXY := floatN*a.sxy - a.sx*a.sy
-	if math.IsInf(numeratorXY, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
-
-	if numeratorX <= 0 || numeratorY <= 0 {
-		return tree.DNull, nil
-	}
-
-	return tree.NewDFloat(tree.DFloat(numeratorXY / math.Sqrt(numeratorX*numeratorY))), nil
-}
-
-// Reset implements tree.AggregateFunc interface.
-func (a *corrAggregate) Reset(context.Context) {
-	a.n = 0
-	a.sx = 0
-	a.sx2 = 0
-	a.sy = 0
-	a.sy2 = 0
-	a.sxy = 0
-}
-
-// Close implements tree.AggregateFunc interface.
-func (a *corrAggregate) Close(context.Context) {}
-
-// Size implements tree.AggregateFunc interface.
-func (a *corrAggregate) Size() int64 {
-	return sizeOfCorrAggregate
-}
-
-func (a *corrAggregate) float64Val(datum tree.Datum) (float64, error) {
+func (a *regressionAccumulatorBase) float64Val(datum tree.Datum) (float64, error) {
 	switch val := datum.(type) {
 	case *tree.DFloat:
 		return float64(*val), nil
@@ -1856,6 +1868,27 @@ func (a *corrAggregate) float64Val(datum tree.Datum) (float64, error) {
 	default:
 		return 0, fmt.Errorf("invalid type %v", val)
 	}
+}
+
+// corrAggregate represents SQL:2003 correlation coefficient.
+type corrAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newCorrAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &corrAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *corrAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	if a.sxx == 0 || a.syy == 0 {
+		return tree.DNull, nil
+	}
+	return tree.NewDFloat(tree.DFloat(a.sxy / math.Sqrt(a.sxx*a.syy))), nil
 }
 
 type countAggregate struct {
