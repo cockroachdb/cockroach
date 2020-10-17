@@ -487,32 +487,11 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	// Add the geoConfig if applicable.
 	notNullIndex := true
 	for i, colDef := range def.Columns {
-		ordinal := tt.FindOrdinal(string(colDef.Column))
-		colType := tt.Columns[ordinal].DatumType()
-		isLastCol := i == len(def.Columns)-1
-		if !def.Inverted && !colinfo.ColumnTypeIsIndexable(colType) {
-			panic(fmt.Errorf("column %s of type %s is not indexable", colDef.Column, colType))
-		}
-		if def.Inverted && !isLastCol && colinfo.ColumnTypeIsInvertedIndexable(colType) {
-			panic(fmt.Errorf(
-				"column %s of type %s is not allowed as a non-terminal column of an inverted index",
-				colDef.Column,
-				colType,
-			))
-		}
-		if def.Inverted && isLastCol {
-			if !colinfo.ColumnTypeIsInvertedIndexable(colType) {
-				panic(fmt.Errorf(
-					"column %s of type %s is not allowed as the last column of an inverted index",
-					colDef.Column,
-					colType,
-				))
-			}
-
+		isLastIndexCol := i == len(def.Columns)-1
+		if def.Inverted && isLastIndexCol {
 			idx.invertedOrd = i
 		}
-
-		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, keyCol, isLastCol)
+		col := idx.addColumn(tt, colDef, keyCol, isLastIndexCol)
 
 		if typ == primaryIndex && col.IsNullable() {
 			// Reinitialize the column to make it non-nullable.
@@ -543,7 +522,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			notNullIndex = false
 		}
 
-		if isLastCol && def.Inverted {
+		if isLastIndexCol && def.Inverted {
 			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
@@ -607,24 +586,25 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		}
 
 		if !found {
-			name := string(pkCol.ColName())
-			ordinal := tt.FindOrdinal(name)
-
+			elem := tree.IndexElem{
+				Column:    pkCol.ColName(),
+				Direction: tree.Ascending,
+			}
 			if typ == uniqueIndex {
 				// If unique index has no NULL columns, then the implicit columns
 				// are added as storing columns. Otherwise, they become part of the
 				// strict key, since they're needed to ensure uniqueness (but they
 				// are not part of the lax key).
 				if notNullIndex {
-					idx.addColumnByOrdinal(tt, ordinal, tree.Ascending, nonKeyCol)
+					idx.addColumn(tt, elem, nonKeyCol, false /* isLastIndexCol */)
 				} else {
-					idx.addColumnByOrdinal(tt, ordinal, tree.Ascending, strictKeyCol)
+					idx.addColumn(tt, elem, strictKeyCol, false /* isLastIndexCol */)
 				}
 			} else {
 				// Implicit columns are always added to the key for a non-unique
 				// index. In addition, there is no separate lax key, so the lax
 				// key column count = key column count.
-				idx.addColumnByOrdinal(tt, ordinal, tree.Ascending, keyCol)
+				idx.addColumn(tt, elem, keyCol, false /* isLastIndexCol */)
 			}
 		}
 	}
@@ -643,8 +623,11 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			}
 		}
 		if !found {
-			ordinal := tt.FindOrdinal(string(name))
-			idx.addColumnByOrdinal(tt, ordinal, tree.Ascending, nonKeyCol)
+			elem := tree.IndexElem{
+				Column:    name,
+				Direction: tree.Ascending,
+			}
+			idx.addColumn(tt, elem, nonKeyCol, false /* isLastIndexCol */)
 		}
 	}
 
@@ -694,22 +677,36 @@ func (tt *Table) addFamily(def *tree.FamilyTableDef) {
 	tt.Families = append(tt.Families, family)
 }
 
+// addColumn adds a column to the index. If necessary, creates a virtual column
+// (for inverted and expression-based indexes).
+//
+// isLastIndexCol indicates if this is the last explicit column in the index as
+// specified in the schema; it is used to indicate the inverted column if the
+// index is inverted.
 func (ti *Index) addColumn(
-	tt *Table, name string, direction tree.Direction, colType colType, isLastCol bool,
+	tt *Table, elem tree.IndexElem, colType colType, isLastIndexCol bool,
 ) *cat.Column {
-	ordinal := tt.FindOrdinal(name)
-	if ti.Inverted && isLastCol {
-		// The last column of an inverted index is special: the index key
-		// does not contain values from the column itself, but contains inverted
-		// index entries derived from that column. Create a virtual column to be
-		// able to refer to it separately.
+	if elem.Expr != nil {
+		if ti.Inverted && isLastIndexCol {
+			panic("expression-based inverted column not supported")
+		}
+		col := columnForIndexElemExpr(tt, elem.Expr)
+		return ti.addColumnByOrdinal(tt, col.Ordinal(), elem.Direction, colType)
+	}
+
+	ordinal := tt.FindOrdinal(string(elem.Column))
+	if ti.Inverted && isLastIndexCol {
+		// The last column of an inverted index is special: the index key does not
+		// contain values from the column itself, but contains inverted index
+		// entries derived from that column. Create a virtual column to be able to
+		// refer to it separately.
 		var col cat.Column
 		// TODO(radu,mjibson): update this when the corresponding type in the real
 		// catalog is fixed (see sql.newOptTable).
 		typ := tt.Columns[ordinal].DatumType()
 		col.InitVirtualInverted(
 			len(tt.Columns),
-			tree.Name(name+"_inverted_key"),
+			elem.Column+"_inverted_key",
 			typ,
 			false,   /* nullable */
 			ordinal, /* invertedSourceColumnOrdinal */
@@ -718,13 +715,65 @@ func (ti *Index) addColumn(
 		ordinal = col.Ordinal()
 	}
 
-	return ti.addColumnByOrdinal(tt, ordinal, direction, colType)
+	return ti.addColumnByOrdinal(tt, ordinal, elem.Direction, colType)
+}
+
+// columnForIndexElemExpr returns a VirtualComputed table column that can be
+// used as an index column when the index element is an expression. If an
+// existing VirtualComputed column with the same expression exists, it is
+// reused. Otherwise, a new column is added to the table.
+func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
+	exprStr := serializeTableDefExpr(expr)
+	// Find an existing virtual computed column with the same expression.
+	for _, col := range tt.Columns {
+		if col.Kind() == cat.VirtualComputed &&
+			col.ComputedExprStr() == exprStr {
+			return col
+		}
+	}
+	// Add a new virtual computed column with a unique name.
+	var name tree.Name
+	for n, done := 1, false; !done; n++ {
+		done = true
+		name = tree.Name(fmt.Sprintf("idx_expr_%d", n))
+		for _, col := range tt.Columns {
+			if col.ColName() == name {
+				done = false
+				break
+			}
+		}
+	}
+
+	typ := typeCheckTableExpr(expr, tt.Columns)
+	var col cat.Column
+	col.InitVirtualComputed(
+		len(tt.Columns),
+		name,
+		typ,
+		true, /* nullable */
+		exprStr,
+	)
+	tt.Columns = append(tt.Columns, col)
+	return col
 }
 
 func (ti *Index) addColumnByOrdinal(
 	tt *Table, ord int, direction tree.Direction, colType colType,
 ) *cat.Column {
 	col := tt.Column(ord)
+	if colType == keyCol || colType == strictKeyCol {
+		typ := col.DatumType()
+		if col.Kind() == cat.VirtualInverted {
+			if !colinfo.ColumnTypeIsInvertedIndexable(typ) {
+				panic(fmt.Errorf(
+					"column %s of type %s is not allowed as the last column of an inverted index",
+					col.ColName(), typ,
+				))
+			}
+		} else if !colinfo.ColumnTypeIsIndexable(typ) {
+			panic(fmt.Errorf("column %s of type %s is not indexable", col.ColName(), typ))
+		}
+	}
 	idxCol := cat.IndexColumn{
 		Column:     col,
 		Descending: direction == tree.Descending,
