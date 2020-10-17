@@ -10,10 +10,10 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRRRRRBBTII
-SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1), var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
+query IIIIRRRRRRRRBBTIIR
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1), var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1), corr(1, 1) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Regression test for #29695
 query T
@@ -42,10 +42,10 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 ----
 NULL NULL NULL NULL
 
-query IIIIRRRRRRBBT
-SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
+query IIIIRRRRRRBBTR
+SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes), corr(v,k) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT array_agg(v) FROM kv
@@ -63,10 +63,10 @@ SELECT jsonb_agg(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRRRBBT
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1), var_pop(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
+query IIIIRRRRRRBBTR
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1), var_pop(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 2)
 ----
-1  1  1  1  1  1  NULL  0  NULL  0  true  true  01
+1  1  1  1  1  1  NULL  0  NULL  0  true  true  01  NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -1325,17 +1325,17 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (4.0,  100.0,    4,  100),
   (NULL,  NULL, NULL, NULL)
 
-query RRRR
+query FFFF
 SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(y, int_x)::decimal, corr(int_y, x)::decimal FROM statistics_agg_test
 ----
-0.933007822647968 0.933007822647968 0.933007822647968 0.933007822647968
+0.9330078226479681  0.9330078226479681  0.9330078226479681  0.9330078226479681
 
-query R
+query F
 SELECT corr(DISTINCT y, x)::decimal FROM statistics_agg_test
 ----
 0.9326733179802503
 
-query R
+query F
 SELECT CAST(corr(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 30) AS decimal) FROM statistics_agg_test
 ----
 0.9326733179802503
