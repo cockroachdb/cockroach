@@ -95,12 +95,13 @@ func NewUniquenessConstraintViolationError(
 			"duplicate key value: decoding err=%s", err)
 	}
 
-	return pgerror.Newf(pgcode.UniqueViolation,
+	error := pgerror.Newf(pgcode.UniqueViolation,
 		"duplicate key value (%s)=(%s) violates unique constraint %q",
 		strings.Join(names, ","),
 		strings.Join(values, ","),
 		index.Name,
 	)
+	return pgerror.WithConstraintName(error, index.Name)
 }
 
 // NewLockNotAvailableError creates an error that represents an inability to
