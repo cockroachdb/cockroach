@@ -69,6 +69,19 @@ func (b *Builder) buildJoin(
 			))
 		}
 
+	case tree.AstInverted:
+		telemetry.Inc(sqltelemetry.InvertedJoinHintUseCounter)
+		flags = memo.AllowOnlyInvertedJoinIntoRight
+		if joinType != descpb.InnerJoin && joinType != descpb.LeftOuterJoin {
+			// At this point in the code there are no semi or anti joins, because we
+			// only have the original AST from the parser. Semi and anti joins don't
+			// exist until we build the memo and apply normalization rules to convert
+			// EXISTS and NOT EXISTS to joins.
+			panic(pgerror.Newf(pgcode.Syntax,
+				"%s can only be used with INNER or LEFT joins", tree.AstInverted,
+			))
+		}
+
 	case tree.AstMerge:
 		telemetry.Inc(sqltelemetry.MergeJoinHintUseCounter)
 		flags = memo.AllowOnlyMergeJoin
