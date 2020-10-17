@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -175,13 +175,17 @@ func getTemporaryObjectNames(
 func cleanupSessionTempObjects(
 	ctx context.Context,
 	settings *cluster.Settings,
+	leaseMgr *lease.Manager,
 	db *kv.DB,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
 	sessionID ClusterWideID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	// TODO (lucy): It's kind of unreasonable to expect a lease manager here when
+	// the temp object cleaner doesn't use leased descriptors. Do we need
+	// something with a smaller API than descs.Collection?
+	return descs.Txn(ctx, settings, leaseMgr, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		dbIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, codec)
@@ -193,6 +197,7 @@ func cleanupSessionTempObjects(
 				ctx,
 				settings,
 				txn,
+				descsCol,
 				codec,
 				ie,
 				id,
@@ -217,6 +222,7 @@ func cleanupSchemaObjects(
 	ctx context.Context,
 	settings *cluster.Settings,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
 	dbID descpb.ID,
@@ -240,22 +246,12 @@ func cleanupSchemaObjects(
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for _, tbName := range tbNames {
-		objDesc, err := descs.GetObjectDesc(
-			ctx,
-			txn,
-			settings,
-			codec,
-			tbName.Catalog(),
-			tbName.Schema(),
-			tbName.Object(),
-			tree.ObjectLookupFlagsWithRequired(),
-		)
+		flags := tree.ObjectLookupFlagsWithRequired()
+		flags.AvoidCached = true
+		desc, err := descsCol.GetTableVersion(ctx, txn, &tbName, flags)
 		if err != nil {
 			return err
 		}
-		// TODO(ajwerner): Deal with temporary types or ensure that they cannot
-		// exist.
-		desc := objDesc.(*tabledesc.Immutable)
 
 		tblDescsByID[desc.ID] = desc
 		tblNamesByID[desc.ID] = tbName
@@ -305,6 +301,7 @@ func cleanupSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
+					// TODO !!! remove these catalogkv usages
 					dTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, d.ID)
 					if err != nil {
 						return err
@@ -402,6 +399,7 @@ type TemporaryObjectCleaner struct {
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc
 	testingKnobs           ExecutorTestingKnobs
 	metrics                *temporaryObjectCleanerMetrics
+	leaseMgr               *lease.Manager
 }
 
 // temporaryObjectCleanerMetrics are the metrics for TemporaryObjectCleaner
@@ -428,6 +426,7 @@ func NewTemporaryObjectCleaner(
 	statusServer serverpb.SQLStatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
+	leaseMgr *lease.Manager,
 ) *TemporaryObjectCleaner {
 	metrics := makeTemporaryObjectCleanerMetrics()
 	registry.AddMetricStruct(metrics)
@@ -440,6 +439,7 @@ func NewTemporaryObjectCleaner(
 		isMeta1LeaseholderFunc:           isMeta1LeaseholderFunc,
 		testingKnobs:                     testingKnobs,
 		metrics:                          metrics,
+		leaseMgr:                         leaseMgr,
 	}
 }
 
@@ -565,6 +565,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 				return cleanupSessionTempObjects(
 					ctx,
 					c.settings,
+					c.leaseMgr,
 					c.db,
 					c.codec,
 					ie,

@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// GetDatabaseDesc reads a database descriptor from the store.
-func GetDatabaseDesc(
+// getDatabaseDesc reads a database descriptor from the store.
+func getDatabaseDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
@@ -86,8 +86,8 @@ func GetDatabaseDesc(
 	return db, nil
 }
 
-// GetSchema reads a schema descriptor from the store.
-func GetSchema(
+// getSchema reads a schema descriptor from the store.
+func getSchema(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
@@ -163,7 +163,7 @@ func GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
-	ok, schema, err := GetSchema(ctx, txn, codec, dbDesc.GetID(), scName, flags.CommonLookupFlags)
+	ok, schema, err := getSchema(ctx, txn, codec, dbDesc.GetID(), scName, flags.CommonLookupFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -247,8 +247,8 @@ func GetObjectNames(
 	return tableNames, nil
 }
 
-// GetObjectDesc reads an object descriptor from the store.
-func GetObjectDesc(
+// getObjectDesc reads an object descriptor from the store.
+func getObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
@@ -263,7 +263,7 @@ func GetObjectDesc(
 		return nil, err
 	}
 
-	ok, schema, err := GetSchema(ctx, txn, codec, dbID, scName,
+	ok, schema, err := getSchema(ctx, txn, codec, dbID, scName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
