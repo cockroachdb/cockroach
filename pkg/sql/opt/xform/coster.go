@@ -681,6 +681,9 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 }
 
 func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
+	if join.MergeJoinPrivate.Flags.Has(memo.DisallowMergeJoin) {
+		return hugeCost
+	}
 	leftRowCount := join.Left.Relational().Stats.RowCount
 	rightRowCount := join.Right.Relational().Stats.RowCount
 
@@ -719,6 +722,9 @@ func (c *coster) computeIndexJoinCost(
 func (c *coster) computeLookupJoinCost(
 	join *memo.LookupJoinExpr, required *physical.Required,
 ) memo.Cost {
+	if join.LookupJoinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
+		return hugeCost
+	}
 	return c.computeIndexLookupJoinCost(
 		join,
 		required,
@@ -815,6 +821,9 @@ func (c *coster) computeIndexLookupJoinCost(
 func (c *coster) computeInvertedJoinCost(
 	join *memo.InvertedJoinExpr, required *physical.Required,
 ) memo.Cost {
+	if join.InvertedJoinPrivate.Flags.Has(memo.DisallowInvertedJoinIntoRight) {
+		return hugeCost
+	}
 	lookupCount := join.Input.Relational().Stats.RowCount
 
 	// Take into account that the "internal" row count is higher, according to
