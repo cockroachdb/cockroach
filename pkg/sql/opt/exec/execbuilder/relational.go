@@ -886,6 +886,8 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		hint := tree.AstLookup
 		if !f.Has(memo.DisallowMergeJoin) {
 			hint = tree.AstMerge
+		} else if !f.Has(memo.DisallowInvertedJoinIntoLeft) || !f.Has(memo.DisallowInvertedJoinIntoRight) {
+			hint = tree.AstInverted
 		}
 
 		return execPlan{}, errors.Errorf(
