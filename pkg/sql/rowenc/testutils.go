@@ -1045,8 +1045,11 @@ func MakeSchemaName(
 ) *tree.CreateSchema {
 	return &tree.CreateSchema{
 		IfNotExists: ifNotExists,
-		Schema:      tree.Name(schema),
-		AuthRole:    authRole,
+		Schema: tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(schema),
+			ExplicitSchema: true,
+		},
+		AuthRole: authRole,
 	}
 }
 
