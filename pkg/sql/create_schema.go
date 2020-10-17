@@ -44,8 +44,12 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaCreate)
+	dbName := p.CurrentDatabase()
+	if n.Schema.ExplicitCatalog {
+		dbName = n.Schema.Catalog()
+	}
 
-	db, err := p.ResolveMutableDatabaseDescriptor(params.ctx, p.CurrentDatabase(), true /* required */)
+	db, err := p.ResolveMutableDatabaseDescriptor(params.ctx, dbName, true /* required */)
 	if err != nil {
 		return err
 	}
@@ -59,9 +63,11 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	schemaName := string(n.Schema)
-	if n.Schema == "" {
+	var schemaName string
+	if !n.Schema.ExplicitSchema {
 		schemaName = n.AuthRole.Normalized()
+	} else {
+		schemaName = n.Schema.Schema()
 	}
 
 	// Ensure there aren't any name collisions.
