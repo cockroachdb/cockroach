@@ -8,10 +8,11 @@ go_library(
         "flags.go",
         "output.go",
         "result_columns.go",
-        ":gen_explain_factory.og.go",  # keep
+        ":gen-explain-factory",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain",
     visibility = ["//visibility:public"],
+    # Pin the dependencies used in auto-generated code.
     deps = [
         "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
@@ -50,8 +51,9 @@ go_test(
     ],
 )
 
+# Define a generator for factory explanation code.
 genrule(
-    name = "gen_explain_factory.og.go",
+    name = "gen-explain-factory",
     srcs = [
         "//pkg/sql/opt:ops",
         "//pkg/sql/opt/exec:defs",

@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# This is used through bazel when generating sql.go. Look at BUILD.bazel for
+# usage.
+
 set -euo pipefail
 
 awk '/func.*sqlSymUnion/ {print $(NF - 1)}' $1 | \

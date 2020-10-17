@@ -4,10 +4,11 @@ go_library(
     name = "exec",
     srcs = [
         "factory.go",
-        ":gen_factory.og.go",  # keep
+        ":gen-factory",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec",
     visibility = ["//visibility:public"],
+    # Pin the dependencies required in the auto-generated code.
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",  # keep
@@ -21,14 +22,17 @@ go_library(
     ],
 )
 
+# Define a file group for all the factory definitions.
 rules = filegroup(
     name = "defs",
     srcs = ["factory.opt"],
     visibility = ["//visibility:public"],
 )
 
+# Define the generator for the expression tree creation and normalization
+# functions.
 genrule(
-    name = "gen_factory.og.go",
+    name = "gen-factory",
     srcs = [
         "//pkg/sql/opt:ops",
         ":defs",

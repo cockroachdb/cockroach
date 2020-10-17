@@ -1,8 +1,10 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 # TODO(irfansharif): The dependency tree for vec_to_datum.eg.go needs
-# sorting out. It depends on execgen+templates from elsewhere.
-
+# sorting out. It depends on execgen+templates from elsewhere. Look towards
+# colexec for how this should be done. For now we just lazily depend on the
+# already generated+checked in file.
+#
 # keep
 go_library(
     name = "colconv",

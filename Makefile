@@ -321,6 +321,7 @@ endif
 vendor_rebuild: bin/.submodules-initialized
 	$(GO_INSTALL) -v github.com/goware/modvendor
 	./build/vendor_rebuild.sh
+	bazel run //:gazelle
 
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
 # modifies its target before failing, the target's timestamp will make it appear

@@ -2,6 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "parser",
+    # We intentionally elide sql.go here (that's done through an exclude
+    # directive in the top-level BUILD.bazel) and instead list the generation
+    # that constructs sql.go on the fly. We pin it lest gazelle removes it
+    # during BUILD file re-generation.
     srcs = [
         "help.go",
         "help_messages.go",
@@ -13,6 +17,8 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/parser",
     visibility = ["//visibility:public"],
+    # We pin some go dependencies that are present in auto-generated code, but
+    # are not visible to bazel/gazelle when generating BUILD files.
     deps = [
         "//pkg/docs",
         "//pkg/geo/geopb",  # keep
@@ -64,6 +70,7 @@ sh_binary(
     data = ["sql-gen.sh"],
 )
 
+# Define the target to auto-generate sql.go from the grammar file.
 genrule(
     name = "sql-goyacc",
     srcs = [

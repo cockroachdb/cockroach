@@ -18,7 +18,7 @@ go_library(
         "multiplicity_builder.go",
         "statistics_builder.go",
         "typing.go",
-        ":gen_expr.og.go",  # keep
+        ":gen-expr",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/memo",
     visibility = ["//visibility:public"],
@@ -87,8 +87,9 @@ go_test(
     ],
 )
 
+# Define a gerator for expression definitions and functions.
 genrule(
-    name = "gen_expr.og.go",
+    name = "gen-expr",
     srcs = ["//pkg/sql/opt:ops"],
     outs = ["expr.og.go"],
     cmd = """

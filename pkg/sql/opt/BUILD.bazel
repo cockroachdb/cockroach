@@ -14,9 +14,9 @@ go_library(
         "table_meta.go",
         "telemetry.go",
         "view_dependencies.go",
-        ":gen_operator.og.go",  # keep
-        ":gen_rule_name.og.go",  # keep
-        ":gen_rule_name_string.go",  # keep
+        ":gen-operator",  # keep
+        ":gen-rulenames",  # keep
+        ":gen-rulenames-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt",
     visibility = ["//visibility:public"],
@@ -57,14 +57,16 @@ go_test(
     ],
 )
 
+# Define a file group for all the operator definitions.
 ops = filegroup(
     name = "ops",
     srcs = glob(["ops/*.opt"]),
     visibility = ["//visibility:public"],
 )
 
+# Define the generator for the operator definitions and functions.
 genrule(
-    name = "gen_operator.og.go",
+    name = "gen-operator",
     srcs = [":ops"],
     outs = ["operator.og.go"],
     cmd = """
@@ -73,8 +75,9 @@ genrule(
     tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
 )
 
+# Define the generator for the enumeration of rulenames.
 genrule(
-    name = "gen_rule_name.og.go",
+    name = "gen-rulenames",
     srcs = [
         ":ops",
         "//pkg/sql/opt/xform:rules",
@@ -88,28 +91,23 @@ genrule(
     tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
 )
 
-ops = filegroup(
-    name = "test",
-    srcs = ["rule_name.go"],
-)
-
-# https://github.com/bazelbuild/rules_go/issues/2604 for the gosdk stuff
-# TODO(irfansharif): This doesn't work when the og.go file is specified, I
-# don't think stringer works across files in multiple directories.
+# Define the generator for the stringification of rulenames.
 #
-# We manually copy it into the gen directory and stringer there. Ew.
+# NB: Stringer doesn't support running stringer across files in multiple
+# directories. To work around this, we manually copy one of the source files
+# over into the location of the other, and run stringer there instead. Ew.
 genrule(
-    name = "gen_rule_name_string.go",
+    name = "gen-rulenames-stringer",
     srcs = [
         "rule_name.go",
-        "rule_name.og.go",
+        ":gen-rulenames",
     ],
     outs = ["rule_name_string.go"],
     cmd = """
-      cp $(location rule_name.go) `dirname $(location rule_name.og.go)`/rule_name.go
+      cp $(location rule_name.go) `dirname $(location :gen-rulenames)`/rule_name.go
       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
-          -type=RuleName `dirname $(location rule_name.og.go)`/rule_name.go $(location rule_name.og.go)
+      -type=RuleName `dirname $(location :gen-rulenames)`/rule_name.go $(location :gen-rulenames)
     """,
     tools = [
         "@go_sdk//:bin/go",

@@ -13,7 +13,7 @@ go_library(
         "optimizer.go",
         "physical_props.go",
         "scan_index_iter.go",
-        ":gen_explorer.og.go",  # keep
+        ":gen-explorer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/xform",
     visibility = ["//visibility:public"],
@@ -76,14 +76,16 @@ go_test(
     ],
 )
 
+# Define a filegroup for all xform rules.
 rules = filegroup(
     name = "rules",
     srcs = glob(["rules/*.opt"]),
     visibility = ["//visibility:public"],
 )
 
+# Define a generator for expression tree exploration rules.
 genrule(
-    name = "gen_explorer.og.go",
+    name = "gen-explorer",
     srcs = [
         "//pkg/sql/opt:ops",
         ":rules",

@@ -25,7 +25,7 @@ go_library(
         "set_funcs.go",
         "window_funcs.go",
         "with_funcs.go",
-        ":gen_factory.og.go",  # keep
+        ":gen-factory",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/norm",
     visibility = ["//visibility:public"],
@@ -81,14 +81,16 @@ go_test(
     ],
 )
 
+# Define a file group for all the normalization rules.
 rules = filegroup(
     name = "rules",
     srcs = glob(["rules/*.opt"]),
     visibility = ["//visibility:public"],
 )
 
+# Define a generator for expression tree creation and normalization functions.
 genrule(
-    name = "gen_factory.og.go",
+    name = "gen-factory",
     srcs = [
         "//pkg/sql/opt:ops",
         ":rules",

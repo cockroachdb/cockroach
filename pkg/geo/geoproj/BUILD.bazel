@@ -7,6 +7,10 @@ go_library(
         "proj.cc",
         "proj.h",
     ],
+    # Depend on libproj. All the necessary linker+include directive are
+    # automatically generated through usage of go_library, so we pin
+    # clinkopts/cppopts to not let gazelle look towards the cgo directives when
+    # autogenerating them.
     cdeps = ["@cockroach//:libproj"],
     cgo = True,
     # keep
