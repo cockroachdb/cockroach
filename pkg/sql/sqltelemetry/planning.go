@@ -57,6 +57,10 @@ var MergeJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.merge-joi
 // lookup join via a query hint.
 var LookupJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.lookup-join")
 
+// InvertedJoinHintUseCounter is to be incremented whenever a query specifies an
+// inverted join via a query hint.
+var InvertedJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.inverted-join")
+
 // IndexHintUseCounter is to be incremented whenever a query specifies an index
 // hint. Incremented whenever one of the more specific variants below is
 // incremented.
