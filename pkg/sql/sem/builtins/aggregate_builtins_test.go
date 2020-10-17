@@ -34,16 +34,25 @@ import (
 func testAggregateResultDeepCopy(
 	t *testing.T,
 	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	vals []tree.Datum,
+	firstArgs []tree.Datum,
+	otherArgs ...[]tree.Datum,
 ) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	aggImpl := aggFunc([]*types.T{vals[0].ResolvedType()}, evalCtx, nil)
+	argTypes := []*types.T{firstArgs[0].ResolvedType()}
+	otherArgs = flattenArgs(otherArgs...)
+	if len(otherArgs) == 0 {
+		otherArgs = make([][]tree.Datum, len(firstArgs))
+	}
+	for i := range otherArgs[0] {
+		argTypes = append(argTypes, otherArgs[0][i].ResolvedType())
+	}
+	aggImpl := aggFunc(argTypes, evalCtx, nil)
 	defer aggImpl.Close(context.Background())
-	runningDatums := make([]tree.Datum, len(vals))
-	runningStrings := make([]string, len(vals))
-	for i := range vals {
-		if err := aggImpl.Add(context.Background(), vals[i]); err != nil {
+	runningDatums := make([]tree.Datum, len(firstArgs))
+	runningStrings := make([]string, len(firstArgs))
+	for i := range firstArgs {
+		if err := aggImpl.Add(context.Background(), firstArgs[i], otherArgs[i]...); err != nil {
 			t.Fatal(err)
 		}
 		res, err := aggImpl.Result()
@@ -53,7 +62,7 @@ func testAggregateResultDeepCopy(
 		runningDatums[i] = res
 		runningStrings[i] = res.String()
 	}
-	finalStrings := make([]string, len(vals))
+	finalStrings := make([]string, len(firstArgs))
 	for i, d := range runningDatums {
 		finalStrings[i] = d.String()
 	}
@@ -61,6 +70,21 @@ func testAggregateResultDeepCopy(
 		t.Errorf("Aggregate result mutated during future accumulation: initial results were %v,"+
 			" later results were %v", runningStrings, finalStrings)
 	}
+}
+
+func flattenArgs(args ...[]tree.Datum) [][]tree.Datum {
+	if len(args) == 0 {
+		return nil
+	}
+	res := make([][]tree.Datum, len(args[0]))
+
+	for i := range args {
+		for j := range args[i] {
+			res[j] = append(res[j], args[i][j])
+		}
+	}
+
+	return res
 }
 
 func TestAvgIntResultDeepCopy(t *testing.T) {
@@ -275,6 +299,39 @@ func TestStdDevPopFloatResultDeepCopy(t *testing.T) {
 func TestStdDevPopDecimalResultDeepCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newDecimalStdDevPopAggregate, makeDecimalTestDatum(10))
+}
+
+func TestCorrFloatFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newCorrAggregate, makeFloatTestDatum(10), makeFloatTestDatum(10))
+}
+
+func TestCorrIntIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeIntTestDatum(10))
+}
+
+func TestCorrFloatIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newCorrAggregate, makeFloatTestDatum(10), makeIntTestDatum(10))
+}
+
+func TestCorrIntFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeFloatTestDatum(10))
+}
+
+func TestCorrNullResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Run("all null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newCorrAggregate, makeNullTestDatum(10), makeNullTestDatum(10))
+	})
+	t.Run("with first arg null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newCorrAggregate, makeTestWithNullDatum(10, makeIntTestDatum), makeIntTestDatum(10))
+	})
+	t.Run("with other arg null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeTestWithNullDatum(10, makeIntTestDatum))
+	})
 }
 
 // makeNullTestDatum will create an array of only DNull
