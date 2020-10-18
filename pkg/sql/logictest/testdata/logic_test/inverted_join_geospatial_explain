@@ -469,11 +469,11 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 326700 (missing stats)
+│ estimated row count: 9801 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (lk, geom1, rk1, rk2, geom)
-    │ estimated row count: 326700 (missing stats)
+    │ estimated row count: 9801 (missing stats)
     │ table: rtable@primary
     │ equality: (rk1, rk2) = (rk1,rk2)
     │ equality cols are key
@@ -503,11 +503,11 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 326700 (missing stats)
+│ estimated row count: 9801 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (lk, geom1, rk1, rk2, geom)
-    │ estimated row count: 326700 (missing stats)
+    │ estimated row count: 9801 (missing stats)
     │ table: rtable@primary
     │ equality: (rk1, rk2) = (rk1,rk2)
     │ equality cols are key
@@ -537,11 +537,11 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 326700 (missing stats)
+│ estimated row count: 9801 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (lk, geom1, rk1, rk2, geom)
-    │ estimated row count: 326700 (missing stats)
+    │ estimated row count: 9801 (missing stats)
     │ table: rtable@primary
     │ equality: (rk1, rk2) = (rk1,rk2)
     │ equality cols are key
