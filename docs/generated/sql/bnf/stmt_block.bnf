@@ -1378,8 +1378,8 @@ drop_sequence_stmt ::=
 	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name_list opt_drop_behavior
 
 drop_schema_stmt ::=
-	'DROP' 'SCHEMA' name_list opt_drop_behavior
-	| 'DROP' 'SCHEMA' 'IF' 'EXISTS' name_list opt_drop_behavior
+	'DROP' 'SCHEMA' schema_name_list opt_drop_behavior
+	| 'DROP' 'SCHEMA' 'IF' 'EXISTS' schema_name_list opt_drop_behavior
 
 drop_type_stmt ::=
 	'DROP' 'TYPE' type_name_list opt_drop_behavior
@@ -1859,6 +1859,9 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
+
+schema_name_list ::=
+	( qualifiable_schema_name ) ( ( ',' qualifiable_schema_name ) )*
 
 kv_option ::=
 	name '=' string_or_placeholder

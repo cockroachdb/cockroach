@@ -287,6 +287,49 @@ CREATE SCHEMA IF NOT EXISTS create_schemas.schema2 AUTHORIZATION root;
 statement error pq: cannot create schemas in the system database
 CREATE SCHEMA system.schema3;
 
+subtest drop_schemas_with_database_prefixes
+
+# Test that empty schemas from different databases can be dropped
+statement ok
+CREATE DATABASE scdrop4_db;
+CREATE DATABASE scdrop6_db;
+CREATE SCHEMA scdrop4_db.scdrop4;
+CREATE SCHEMA scdrop5;
+CREATE SCHEMA scdrop6_db.scdrop6;
+
+statement ok
+DROP SCHEMA scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6;
+
+# Test that non-empty schemas from different databases can be dropped with cascade
+statement ok
+CREATE SCHEMA scdrop4_db.scdrop4;
+CREATE SCHEMA scdrop5;
+CREATE SCHEMA scdrop6_db.scdrop6;
+CREATE TABLE scdrop4_db.scdrop4.scdrop4_t1 (x INT);
+CREATE TABLE scdrop5.scdrop5_t1 (x INT);
+CREATE TABLE scdrop6_db.scdrop6.scdrop6_t1 (x INT);
+CREATE VIEW scdrop4_db.scdrop4.scdrop4_v1 AS SELECT x FROM scdrop4_db.scdrop4.scdrop4_t1;
+CREATE VIEW scdrop5.scdrop5_v1 AS SELECT x FROM scdrop5.scdrop5_t1;
+CREATE VIEW scdrop6_db.scdrop6.scdrop6_v1 AS SELECT x FROM scdrop6_db.scdrop6.scdrop6_t1;
+
+statement error pq: schema "scdrop4" is not empty and CASCADE was not specified
+DROP SCHEMA scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6 RESTRICT;
+
+statement ok
+DROP SCHEMA IF EXISTS scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6 CASCADE;
+
+statement ok
+DROP SCHEMA IF EXISTS scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6 CASCADE;
+
+statement error pq: unknown schema "scdrop4"
+DROP SCHEMA scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6 CASCADE;
+
+query T
+SELECT schema_name FROM scdrop4_db.information_schema.schemata WHERE schema_name = 'scdrop4_db';
+
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'scdrop%'
+
 subtest drop_database
 
 # Ensure that user defined schemas are dropped when dropping the parent database.

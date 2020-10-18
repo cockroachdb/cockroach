@@ -31,20 +31,14 @@ import (
 )
 
 type dropSchemaNode struct {
-	n  *tree.DropSchema
-	db *dbdesc.Mutable
-	d  *dropCascadeState
+	n *tree.DropSchema
+	d *dropCascadeState
 }
 
 // Use to satisfy the linter.
 var _ planNode = &dropSchemaNode{n: nil}
 
 func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode, error) {
-	db, err := p.ResolveMutableDatabaseDescriptor(ctx, p.CurrentDatabase(), true /* required */)
-	if err != nil {
-		return nil, err
-	}
-
 	isAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
@@ -53,7 +47,18 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 	d := newDropCascadeState()
 
 	// Collect all schemas to be deleted.
-	for _, scName := range n.Names.ToStrings() {
+	for _, schema := range n.Names {
+		dbName := p.CurrentDatabase()
+		if schema.ExplicitCatalog {
+			dbName = schema.Catalog()
+		}
+		scName := schema.Schema()
+
+		db, err := p.ResolveMutableDatabaseDescriptor(ctx, dbName, true /* required */)
+		if err != nil {
+			return nil, err
+		}
+
 		found, sc, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, scName, false /* required */)
 		if err != nil {
 			return nil, err
@@ -89,13 +94,14 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		default:
 			return nil, errors.AssertionFailedf("unknown schema kind %d", sc.Kind)
 		}
+
 	}
 
-	if err := d.resolveCollectedObjects(ctx, p, db); err != nil {
+	if err := d.resolveCollectedObjects(ctx, p, nil); err != nil {
 		return nil, err
 	}
 
-	return &dropSchemaNode{n: n, d: d, db: db}, nil
+	return &dropSchemaNode{n: n, d: d}, nil
 }
 
 func (n *dropSchemaNode) startExec(params runParams) error {
@@ -112,20 +118,26 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	// Queue the job to actually drop the schema.
 	schemaIDs := make([]descpb.ID, len(n.d.schemasToDelete))
 	for i := range n.d.schemasToDelete {
-		sc := n.d.schemasToDelete[i]
+		sc := n.d.schemasToDelete[i].schema
 		schemaIDs[i] = sc.ID
+		db := n.d.schemasToDelete[i].dbDesc
+
 		mutDesc := sc.Desc.(*schemadesc.Mutable)
-		if err := p.dropSchemaImpl(ctx, n.db, mutDesc); err != nil {
+		if err := p.dropSchemaImpl(ctx, db, mutDesc); err != nil {
 			return err
 		}
 	}
 
 	// Write out the change to the database.
-	if err := p.writeNonDropDatabaseChange(
-		ctx, n.db,
-		fmt.Sprintf("updating parent database %s for %s", n.db.GetName(), tree.AsStringWithFQNames(n.n, params.Ann())),
-	); err != nil {
-		return err
+	for i := range n.d.schemasToDelete {
+		sc := n.d.schemasToDelete[i].schema
+		db := n.d.schemasToDelete[i].dbDesc
+		if err := p.writeNonDropDatabaseChange(
+			ctx, db,
+			fmt.Sprintf("updating parent database %s for %s", db.GetName(), sc.Name),
+		); err != nil {
+			return err
+		}
 	}
 
 	// Create the job to drop the schema.
@@ -140,7 +152,8 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 
 	// Log Drop Schema event. This is an auditable log event and is recorded
 	// in the same transaction as table descriptor update.
-	for _, sc := range n.d.schemasToDelete {
+	for _, schemaToDelete := range n.d.schemasToDelete {
+		sc := schemaToDelete.schema
 		if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 			ctx,
 			p.txn,
