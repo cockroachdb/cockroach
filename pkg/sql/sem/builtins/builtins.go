@@ -4092,11 +4092,6 @@ may increase either contention or retry errors, or both.`,
 					return tree.DZero, nil
 				}
 				arr := tree.MustBeDArray(arg)
-				if !arr.HasNonNulls {
-					// Inverted indexes on arrays don't contain entries for null array
-					// elements.
-					return tree.DZero, nil
-				}
 				keys, err := rowenc.EncodeInvertedIndexTableKeys(arr, nil)
 				if err != nil {
 					return nil, err
