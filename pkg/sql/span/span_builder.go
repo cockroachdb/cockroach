@@ -421,12 +421,17 @@ func (s *Builder) SpansFromInvertedSpans(
 func (s *Builder) generateInvertedSpanKey(
 	enc []byte, scratchRow rowenc.EncDatumRow,
 ) (roachpb.Key, error) {
-	// Pretend that the encoded inverted val is an EncDatum. This isn't always
-	// true, since JSON inverted columns use a custom encoding. But since we
-	// are providing an already encoded Datum, the following will eventually
-	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
-	encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
-	scratchRow[len(scratchRow)-1] = encDatum
-	span, _, err := s.SpanFromEncDatums(scratchRow, len(scratchRow))
+	prefixLen := len(scratchRow) - 1
+	scratchRow = scratchRow[:prefixLen]
+	if len(enc) > 0 {
+		// Pretend that the encoded inverted val is an EncDatum. This isn't always
+		// true, since JSON inverted columns use a custom encoding. But since we
+		// are providing an already encoded Datum, the following will eventually
+		// fall through to EncDatum.Encode() which will reuse the encoded bytes.
+		encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
+		scratchRow = append(scratchRow, encDatum)
+		prefixLen++
+	}
+	span, _, err := s.SpanFromEncDatums(scratchRow, prefixLen)
 	return span.Key, err
 }
