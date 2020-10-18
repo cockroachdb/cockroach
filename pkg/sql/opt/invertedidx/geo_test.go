@@ -11,7 +11,6 @@
 package invertedidx_test
 
 import (
-	"context"
 	"math"
 	"strconv"
 	"testing"
@@ -22,15 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -285,17 +281,14 @@ func TestTryJoinGeoIndex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Logf("test case: %v", tc)
-		filters, err := buildFilters(tc.filters, &semaCtx, evalCtx, &f)
-		if err != nil {
-			t.Fatal(err)
-		}
+		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, tc.filters)
 
 		var inputCols opt.ColSet
 		for i, n := 0, md.Table(tab1).ColumnCount(); i < n; i++ {
 			inputCols.Add(tab1.ColumnID(i))
 		}
 
-		actInvertedExpr := invertedidx.TryJoinGeoIndex(
+		actInvertedExpr := invertedidx.TryJoinInvertedIndex(
 			evalCtx.Context, &f, filters, tab2, md.Table(tab2).Index(tc.indexOrd), inputCols,
 		)
 
@@ -310,11 +303,7 @@ func TestTryJoinGeoIndex(t *testing.T) {
 			t.Fatalf("expected <nil>, got %v", actInvertedExpr)
 		}
 
-		expInvertedExpr, err := buildScalar(tc.invertedExpr, &semaCtx, evalCtx, &f)
-		if err != nil {
-			t.Fatal(err)
-		}
-
+		expInvertedExpr := testutils.BuildScalar(t, &f, &semaCtx, evalCtx, tc.invertedExpr)
 		if actInvertedExpr.String() != expInvertedExpr.String() {
 			t.Errorf("expected %v, got %v", expInvertedExpr, actInvertedExpr)
 		}
@@ -496,10 +485,7 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Logf("test case: %v", tc)
-		filters, err := buildFilters(tc.filters, &semaCtx, evalCtx, &f)
-		if err != nil {
-			t.Fatal(err)
-		}
+		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, tc.filters)
 
 		// We're not testing that the correct SpanExpression is returned here;
 		// that is tested elsewhere. This is just testing that we are constraining
@@ -515,49 +501,13 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 				require.Nil(t, pfState)
 			} else {
 				require.NotNil(t, pfState)
-				pfExpr, err := buildScalar(tc.preFilterExpr, &semaCtx, evalCtx, &f)
-				require.NoError(t, err)
+				pfExpr := testutils.BuildScalar(t, &f, &semaCtx, evalCtx, tc.preFilterExpr)
 				require.Equal(t, pfExpr.String(), pfState.Expr.String())
 				require.Equal(t, tc.preFilterCol, pfState.Col)
 				require.Equal(t, tc.preFilterTypeFamily, pfState.Typ.Family())
 			}
 		}
 	}
-}
-
-func buildScalar(
-	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
-) (opt.ScalarExpr, error) {
-	expr, err := parser.ParseExpr(input)
-	if err != nil {
-		return nil, errors.Newf("falsed to parse %s: %v", input, err)
-	}
-
-	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
-	if err := b.Build(expr); err != nil {
-		return nil, err
-	}
-
-	return f.Memo().RootExpr().(opt.ScalarExpr), nil
-}
-
-func buildFilters(
-	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
-) (memo.FiltersExpr, error) {
-	if input == "" {
-		return memo.TrueFilter, nil
-	}
-	root, err := buildScalar(input, semaCtx, evalCtx, f)
-	if err != nil {
-		return nil, err
-	}
-	if _, ok := root.(*memo.TrueExpr); ok {
-		return memo.TrueFilter, nil
-	}
-	filters := memo.FiltersExpr{f.ConstructFiltersItem(root)}
-	filters = f.CustomFuncs().SimplifyFilters(filters)
-	filters = f.CustomFuncs().ConsolidateFilters(filters)
-	return filters, nil
 }
 
 func TestPreFilterer(t *testing.T) {
