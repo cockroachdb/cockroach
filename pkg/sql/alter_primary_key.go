@@ -233,14 +233,16 @@ func (p *planner) AlterPrimaryKey(
 	// * don't store or index all columns in the new primary key.
 	shouldRewriteIndex := func(idx *descpb.IndexDescriptor) bool {
 		shouldRewrite := false
-		for _,exColID:=range idx.ExtraColumnIDs{
-			if col, err := tableDesc.FindColumnByID(exColID);err!=nil{
-				break;
-			}else if col.Hidden && tableDesc.PrimaryIndex.ContainsColumnID(col.ID){
-				shouldRewrite=true;
-				break;
+		
+		for _, exColID := range idx.ExtraColumnIDs {
+			if col, err := tableDesc.FindColumnByID(exColID); err != nil {
+				break
+			} else if col.Hidden && tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
+				shouldRewrite = true
+				break
 			}
 		}
+		
 		for _, colID := range newPrimaryIndexDesc.ColumnIDs {
 			if !idx.ContainsColumnID(colID) {
 				shouldRewrite = true
