@@ -328,13 +328,18 @@ func (ij *invertedJoiner) SetBatchSize(batchSize int) {
 }
 
 func (ij *invertedJoiner) generateSpan(enc []byte) (roachpb.Span, error) {
-	// Pretend that the encoded inverted val is an EncDatum. This isn't always
-	// true, since JSON inverted columns use a custom encoding. But since we
-	// are providing an already encoded Datum, the following will eventually
-	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
-	encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
-	ij.invertedColRow = append(ij.invertedColRow[:0], encDatum)
-	span, _, err := ij.spanBuilder.SpanFromEncDatums(ij.invertedColRow, 1 /* prefixLen */)
+	ij.invertedColRow = ij.invertedColRow[:0]
+	prefixLen := 0
+	if len(enc) > 0 {
+		// Pretend that the encoded inverted val is an EncDatum. This isn't always
+		// true, since JSON inverted columns use a custom encoding. But since we
+		// are providing an already encoded Datum, the following will eventually
+		// fall through to EncDatum.Encode() which will reuse the encoded bytes.
+		encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
+		ij.invertedColRow = append(ij.invertedColRow, encDatum)
+		prefixLen = 1
+	}
+	span, _, err := ij.spanBuilder.SpanFromEncDatums(ij.invertedColRow, prefixLen)
 	return span, err
 }
 
