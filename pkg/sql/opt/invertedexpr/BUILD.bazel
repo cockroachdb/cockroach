@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "expression.go",
         "geo_expression.go",
+        "json_array_expression.go",
         "span_expression.pb.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr",
@@ -12,8 +13,10 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/opt",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/treeprinter",

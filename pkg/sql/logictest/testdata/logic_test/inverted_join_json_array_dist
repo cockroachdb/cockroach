@@ -1,0 +1,222 @@
+# LogicTest: 5node-default-configs !5node-metadata
+
+statement ok
+CREATE TABLE json_tab (
+  a INT PRIMARY KEY,
+  b JSONB
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON json_tab(b)
+
+statement ok
+CREATE TABLE array_tab (
+  a INT PRIMARY KEY,
+  b INT[]
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON array_tab(b)
+
+statement ok
+INSERT INTO json_tab VALUES
+  (1, '{"a": "b"}'),
+  (2, '[1,2,3,4, "foo"]'),
+  (3, '{"a": {"b": "c"}}'),
+  (4, '{"a": {"b": [1]}}'),
+  (5, '{"a": {"b": [1, [2]]}}'),
+  (6, '{"a": {"b": [[2]]}}'),
+  (7, '{"a": "b", "c": "d"}'),
+  (8, '{"a": {"b":true}}'),
+  (9, '{"a": {"b":false}}'),
+  (10, '"a"'),
+  (11, 'null'),
+  (12, 'true'),
+  (13, 'false'),
+  (14, '1'),
+  (15, '1.23'),
+  (16, '[{"a": {"b": [1, [2]]}}, "d"]'),
+  (17, '{}'),
+  (18, '[]'),
+  (19, '["a", "a"]'),
+  (20, '[{"a": "a"}, {"a": "a"}]'),
+  (21, '[[[["a"]]], [[["a"]]]]'),
+  (22, '[1,2,3,1]'),
+  (23, '{"a": 123.123}'),
+  (24, '{"a": 123.123000}'),
+  (25, '{"a": [{}]}'),
+  (26, '[[], {}]'),
+  (27, '[true, false, null, 1.23, "a"]'),
+  (28, '{"a": {}}'),
+  (29, NULL),
+  (30, '{"a": []}'),
+  (31, '{"a": {"b": "c", "d": "e"}, "f": "g"}'),
+  (32, '{"a": [1]}'),
+  (33, '[1, "bar"]')
+
+statement ok
+ALTER TABLE json_tab SPLIT AT VALUES (10), (20)
+
+statement ok
+ALTER TABLE json_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10), (ARRAY[3], 20)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE json_tab] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /10      {1}       1
+/10        /20      {2}       2
+/20        NULL     {3}       3
+
+# This query performs an inverted join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElF1v0zAUhu_5Fda5AuYusZPuI1cZLIii0o5kEqARTWlzmFK6ODjJNDT1v6MkpV9q7EzAdhnbb9_Hp4_8APnPOTgQeEPv7SUp5Zy888cfyZX35WJ4NhiRl-eD4DL4NHxFlkdeNwdmuUivi2jifhfiOknvyFlAZoyu1utvTj6_93yPzNjhhLjfStO0kMz44YSM_XPPJ2--VlsRrdaiECikIsZRdIs5OFfAgAIHChaEFDIpppjnQlZbD_XBQXwPjkkhSbOyqJZDClMhEZwHKJJijuDAZTSZo49RjNIwgUKMRZTM659f3SCTyW0kfwGFIIvS3CE9g5kQLiiIslj_dF5ENwgOW9Du9YP0DmWB8QeRpCgNq4VgOUOgq4B3n0ni2quhudUgxmXhENeiLqMubwXkjwGswJbjOdKOZyjEjzIjM5GkRKQOcat_aDwibn_Naa04K0ha0fZbUa3HoAZCFiiN021Mlx1Qlx9sttpNcWur3dq6LhMyRonxni7rAMLFHryR6InMYHwr0obQ30Jg3R1mXR02mNkzeFeNNQQ7GttPr7EGcEPj4-fWWIO61JiZ_9hj3l0i3lkibvY6GqSp3zGo__QGaQA3DDp5boM0qH8MYv_xJdxT62OeiTTHTg-cWT2RGN9g86zmopRTvJBiWtc0n-M6Vy_EmBfNLms-BmmzVQFuhpkyzNVhrgxb6rClDNtbYbYbttV31lT3lekjdfhIGT5Wh4-V4RN1-ORvJnaqnpip0UQjmc4ytWZM4xlTi7Z783Dx4ncAAAD__1YTsEg=
+
+# This query performs a cross join followed by a filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM json_tab@primary AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9Fv0z4Qx99_f4V1Tz-Yu8ROt6E8ebCgFZVmJJUAjQi5zWmkyuJgOxKo6v-OkqCNVG1JaB99d19_7uvzrcF8z8GHOJgGb-ak0jl5G4XvyX3w6W56PZmR_28m8Tz-MH1Bfpe8bAtWRhVfrVyIUmePUv8k1zFZMfoUb86cfLwNooCs2PmCiC-V63pIVvx8QcLoJojI6891StI6JhOgUKgUZ_IRDfj3wIACBwoeJBRKrZZojNJ1at0UTtIf4LsUsqKsbB1OKCyVRvDXYDObI_gwl4scI5QpascFCilameXN9dsOgEJcysL4ZOQwF5INBVXZ56uNlQ8IPtvQf8N7J8HzvfhnalUonaLGtENMauXfSnZ4uJXm2zuVFaidy66FcEYEf5qrGAOFsLI-EYwKToVHxXivD2_IM8ZKW9TOVRcv2BkV3tlexLiDYP0nxfpOymHuyOF9_8qADsan6qD7XXj_DnjvDrg76vkAA_AXJ8HvX5Yd-AhNqQqD20uz82a33hRMH7DdPKMqvcQ7rZYNpj2Gja4JpGhsm-XtYVI0qeZ9_hSzAWK-LeYHxV5H7G6LvYPiV4fF42M8Xxzj-fIY8tUgcrL571cAAAD__04vVU0=
+
+# This query performs an inverted join with an additional filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2
+WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUk19P2zwUxu_fT3F03gvaYZrYafnjq8DItKKuZQ3SNkGF3MZD6UqcOQliqvrdpySlNIi44WLSdunj8_NznpM8S0x-LpCj7w2891eQ6QV8GI8-wbX39XJw2h9C67zvX_mfB21Yt7wrG-aJim5TMXW_K3UbRg9w6sOckk29ODP48tEbe9BqzWlnCu5NZtuOhDnrTNtwOjyHan1veYPiBjksV6u99lMH6wgoGmbA7DaMxufeGM6-wZx2BMnfEhMkGKlADsW9TJBfI0WCDCcEY61mMkmUzsvLoqkfPCK3CYZRnKV5eUJwprREvsQ0TBcSOV6J6UKOpQiktmwkGMhUhIvi6Y3vWIf3Qv9Cgn4sooTDgUVtnKwIqix9fjpJxZ1ETlekuXw_epA6lcGFCiOpLVYzwXrzSDaA9xhraLndzUZdtt7iVq2yZc75hT8anrWR4ChLObgOcSlxWa0T9hYnuYP1Hrs79zhQ6kcWw1yFEaiIg5t_xtEQWm7v2ZDzZKjX1FDuhuS2erWenLd48pVOpbYOq35cuk9ctr-t2i2Fa1W7tarPYkoHUsvgFS1nHyerV8YbqgMVW8cVom6CXmUC2jwUtGkoLGofWPTE-r9hMnbM8CIZzl-cjB1OtpLR-2eSscPTOhlHfzAZr6iOZRKrKJGN_ng7j4wM7mQZs0RleiYvtZoVMuVxVHBFIZBJWt7S8tCPyqt8wG2YGmFmhpkRdsywY4S7FZi-hLtG-MSs3DPCh2b40AgfmeEjI3xsho_ftLDJ6r_fAQAA__-NdN5s
+
+# This query performs a cross join followed by a filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM json_tab@primary AS j1, json_tab AS j2
+WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U2Fv2jAQ_b5fcbp9KKyGxA7tNH8KHalKxUiXIG1TiSZDrC4ojZmdSJsQ_31K2OiCgJFV_ejze_fe8_lWaL6nyDH0Rt77CRQ6hevA_wD33ue7UX84htZgGE7Cj6M2_Ia82QAWRmVfczFzlzp5FPon9ENYULKtV2cGn268wINWa0G7M3CnhW07EhasO2tDfzyAev1sNUUxRQ6r9fqs_QfBugIqwByY3QY_GHgBXH2BBe0KUvYSERLMVCzH4lEa5PdIkSBDgg5GBJdazaUxSpdXqwo4jH8gtwkm2bLIy3JEcK60RL7CPMlTiRwnYpbKQIpYastGgrHMRZJW7XezI8FwKTLDoWNRG6M1QVXkT61NLh4kcrom_yfPGskTvE7SXGoOLtv_tJzz29AfXx10yg46fTJYZErHUsu4Zi4qmf-C7Il7I8y3W5VkUlsX9bT-GNzeNodbvoVf5BxcSlxGXIe4vYM5nCYvHiqdS21d1uVd55y49HyrWuqRSvugaq-mSk-fMz11zha1OxZ9Z70-8a818OA08sBe4Lux0832TjbL7M7LLsYep4E0S5UZubsgezvb5VbI-EFutsyoQs_lnVbzSmZz9CteVYilyTe3bHMYZtVVNfe_ybQBme2S2VGyUyPbu2TnKPntcXLvOZkvnpP5shE5Wr_6FQAA__-LEU4w
+
+# This query performs a left inverted join with an additional filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM json_tab AS j2 LEFT INVERTED JOIN json_tab AS j1
+ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzklVFv4jgQx9_vU4zmpXA1ECdAqZ_SHqmUikt6kFvtqkVVIG4VlsZZJ1StEN99FUILQcVJ1X1qH23Pf2b88_zlJSa_5shwZA2sfzxYyDlcDN1_4dr6fjU4sx2o9e2RN_pvUIdNyN95wCwR0W3qT-BsBDMdBtaFB7bzzRp6Vh8uXdspRlBwHajVZrQ5AfNmoWkGh5nenNThzOlDcf9oeYP-DTJYrlZH9ZcIvenDOmAKulYHd9i3hnD-A2a06ZMslz9GgpEIuOM_8ATZNVIkqCNBA8cEYymmPEmEzI6W60A7eEKmEQyjeJFm22OCUyE5siWmYTrnyNDzJ3M-5H7AZUtDggFP_XC-Tv9yQTOW4YMvn5HgKPajhEGjRTUcrwiKRbpNnaT-PUdGV6R6eTt65DLlwaUIIy5bRrED7znmLGfv_u9ZwzV4JNvO7oS4DaNHJK-JrKdYQs1sv9I29Q3hnb3CCzDGLkeuc15Hgq4DJt0-A2PMdrweErwLZZLCTIQRhBHEfih50MiWmWiRMjApMXViGsTsHCSjv4dMRmTzLt13Utm-10CIn4s471tEDEwjv2TN7L4BqFsOKOFTEQXVQHQPgjDeA2IkZMpl67QIwTSOiUmPD5ZoHyyxzSxkwCUPDiV-oxdHNETconpBcqiFTqEFWt2HtKoPW1RrtPSqVizpYM-K7S9kxRIyO1Y8-dxWLAGxsSLVPuJFvboR9MpG0LVGRReUlN9zQecLuaCEzI4Lep_bBSUgXlxA_9SP9EaNIU9iESW80kejZV8VD-55_r0lYiGn_EqK6bpMvnTXuvVGwJM0P6X5wo7yo6zBXTFVinW1WFeKDbXYUIrbBTHdF7fVdy4p3VGqu2pxVyk-UYtPlOKeWtz7CLFTNTGtZExKhqxsytRjRkvmjKoHbf_m49VfvwMAAP__HTRo-Q==
+
+# This query performs a semi inverted join with an additional filter.
+# TODO(rytaft): A better plan would use an inner inverted join followed by a
+#  semi lookup join. Adjust the costing so that plan is chosen instead.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM json_tab AS j2 WHERE EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+)
+ORDER BY j2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUk99u2kwQxe-_pxjNdxFoN7HXhiTslZPiqkQUUojUVAmKDN4mpsTr7q6jRIh3r2xT_jUsoKKqvfR4fjPnjH3GqL6PkGHXb_rvriCVI3jfaX-EG__6snnWaEGp3uhedT81yzBteVM0DJWI73TQh7MuDB34_MHv-OBfZ81Qer3V-yrEXRQ_5QidIqXSkB71wbtNbdvlMHSO-mU4a9VhuX4wvsXgFhmMJ5OD8s8O5yiAvGEAjl0uQ7tT9ztw_iUbE_SQYCxC3goeuUJ2gxQJOtgjmEgx4EoJmZXHeVMjfEZmE4ziJNVZuUdwICRHNkYd6RFHhldBf8Q7PAi5tGwkGHIdRKN89MxiIqPHQL4gwW4SxIrBoUVt7E0IilTPRysd3HNkdEK2X9-In7jUPLwQUcyl5axRMD0ykhngPycSSl5ldkzPmR5wobZ0YMbYRbfdOi8jwXaqGXiUeA7x3LVOnF2cZA6md6xsvGNTiG9pAkMRxSBiBp6biWpByau-Yqi6i6G1btxd3NQjpaN4oK3jZS9e9r-1ZcglD7OFK9vmA_ov8BCoh1_o3mSuqLJW0XyOKHatznlbDFor-3Qn2XNJ1b1LaolDkWR5WWxft_54aT3dPrp02-ha1D60aM36f8v8btCwkl_3L87vBicL-a3-A_nd4GYWhJM_ll-6z_zW9p7fV7Z1uEpErPhW0bQzvTy854U_JVI54JdSDPI1xWM75_JCyJUu3tLioREXrzKBizA1wo4Zdoywa4bdVZguwpUlmO4GU9tMV4y6q2a4aj73hnsfG-kTM3xihE_N8KkRrpnh2u98LDO86WNR8_-9-rV6k_9-BAAA__9MCKhZ
+
+# This query performs an anti inverted join with an additional filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+)
+ORDER BY j2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzkld9T2kAQx9_7V-zsi9AekrsA4j0Fa5zGoYmFdGpHGSeQ0wnFXHoJjg7D_94JoUKoJHH6po93t5_98d3dZIHx7xlyHJp987MLczWDs4HzFa7My4t-z7KhdmoN3eG3fh3WJh8zg2ksw5vEG0NvCFMGP76YAxNsxwXzMgWg9rK5cSvlTRA-rDC6xmq1KT0cg3E91zRdwJQdjuvQs08hf3-wuEbvGjkslsuD-l8LdujBymACTKvXwRmcmgM4-Zm68UZIMJS-sL17ESO_QooEGRLUcUQwUnIi4liq9GmxMrT8R-QawSCM5kl6PSI4kUogX2ASJDOBHF1vPBMD4flCNTUk6IvEC2Yr989lRiq499QTEhxGXhhzaDSphqMlQTlPNq7jxLsTyOmSVA9vhQ9CJcI_l0EoVFPPZ-A-RYJD3zxzwfnumgM4dywbCe42AMmzI_MxUlAzWs9CG2wt7tZdTnzO-fnQsU_qSNCxwaCbDnDOLdvtIsHbQMUJTGUQQhBC5AVK-I30mELzhINBicGIoROjvVcZ9hplUkXWfensVaVnu9Y_omza1Zfy1zzK0pYhB0PPaqwZnRf06ZTrE4uJDP1SHfYqoO9VYFO4VL5Qws_XbNBPOFq-IJMtGzJqHues90Vv5aLT6otBqy5Gk2qNJqu6GyUZ7OxG6x3tRokyW7tx9EZ3g1WfTlZ5OpnWqDiaJeF3RrP9jkazRJmt0ey-0dEs-XENRBzJMBaVPsla-k0X_p3I_gGxnKuJuFBysgqTHZ0Vt7rwRZxkrzQ7WGH2lCa4DdNCmBXDrBDWczDdhfXitLXi0K1Cul0MtwvhTjHc-Z-ijwrhbnHkbiF8XAwfvyrt0fLDnwAAAP__TMTMFw==
+
+statement ok
+INSERT INTO array_tab VALUES
+  (1, '{}'),
+  (2, '{1}'),
+  (3, '{1, 2}'),
+  (4, '{1, 3}'),
+  (5, '{1, 2, 3, 4}')
+
+statement ok
+ALTER TABLE array_tab SPLIT AT VALUES (3), (3)
+
+statement ok
+ALTER TABLE array_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 3), (ARRAY[3], 5)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE array_tab] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /3       {1}       1
+/3         NULL     {3}       3
+
+# This query performs an inverted join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk11v0zAUhu_5Fda5AuouzUc_yJUHC6KotCOpBGhEk9scpkAXB8eZNlX978hJ1Y-pcdsLtMsc-_H76PTtEoq_C_AhCkbBhykp5YJ8DCdfyE3w_Xp0ORyT11fDaBp9Hb0h6ytv6wtcSv50q_iM_RLiNs0eyGVEuE23B9XAId8-BWFAuH0xI-xn2em4SLhzMSOT8CoIyfsf-ohTPeMxUMhEgmN-jwX4N2ADBRdiCrkUcywKIfV4WV0aJo_gdyikWV4qPY4pzIVE8JegUrVA8GHKZwsMkScorQ5QSFDxdFE9vfXPZXrP5RNQiHKeFT5pWy7EKwqiVNunC8XvEHx7RU-PH2YPKBUmn0WaobScJoP1BoFuiOAxl4R5m40xzU5K5RPmUmZT5jQaOucYarP1frzj-xkJ8afMyW-RZkRkPmH695mMCetuRd2NqLakWrfb6Oqe4xoJqVBavX1PZrcoc1q7qV4d3JjqNaZuw4RMUGJyIMttQbw6oDcWbZFbgz2iyaC7Z2CfXmL75BJbbvvEEh-Jf1Zi9wVKfMRwp8TdFy_xEdd1ifv_scQHUkMscpEVeFI5O7rdmNxh_Y8oRCnneC3FvIqpPycVVw0SLFR9atcfw6w-0oK7sG2EHTPsGGHXDLtG2NuD7eewZ4TfmZO7RrhnhntGuG-G-0Z4YIYHZy0sXr36FwAA__9gwadr
+
+# This query performs a cross join followed by a filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM array_tab@primary AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJysklFv0zAQgN_5FdY9AfOW2O54yJMHC1pRaUZSCdCIkNucRqQsDrYjMVX97ygOoqS0pWV9zN199-V8twT7vYIIsngSv5mR1lTkbZq8J3fxp9vJ1XhKnl-Ps1n2YfKC_Cp52RcoY9TjV6fmsjHlgzKP5CojitF1wgc4-XgTpzFR7GJO5Jc2DAUSxS_mJEmv45S8_tylFO1iKgcKtS5wqh7QQnQHDCgIyCk0Ri_QWm268NIXjYsfEIUUyrppXRfOKSy0QYiW4EpXIUQwU_MKU1QFmiAECgU6VVa-9V__DxSyRtU2IueBgHxFQbdu3do6dY8QsRX9Pz0_iZ7v1K-tba1NgQaLgTHvyH-VbJnhRtlv73RZowlGwxGSKZH8905ll01aFxHJqORUCipHO-cQxzxjpo1DE1wO9ZKdUSnOdipGAwU7fFPs4E0F4vzAQzlCL06i330oW_Qp2kbXFjcPZmvnsLsSLO6xvzqrW7PAW6MXXtN_Jp7zgQKt67O8_xjXPuXf50-YHQHzTZjvhcUADjdhsRd-tR8ePWXmy6NmzlfPfgYAAP__cRjYUg==
+
+# This query performs an inverted join with an additional filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM array_tab@primary AS a2
+INNER INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUk0Fv2kAQhe_9FaPpIdBsMGvjhO5paXElR9SkBlWNUhQteBu5JV53bUeJEP-9sqEJpPECUg_t0bPzzbw3el5g9nOODEfewHs_hkLP4UM4_AhX3peLQc8PoNH3R-PRp0ET1i1vVg1Ca_FwnYspT3V8K_QD9EYgbPCDwAvBDz574djrw_nQDzZ6vyl1HSd3VS-FYQCNhqCtKfCvRbvtSBB2a9qEXtCH7frRgi6Pmr9f7JaA6mEGbhOGYd8L4d0lCNoSpBwhJkgwUZEMxK3MkF0hRYIOTgimWs1klildlhdVkx_dI2sTjJO0yMvyhOBMaYlsgXmczyUyHIvpXIZSRFJbbSQYyVzE82r0H4dAgqNUJBmDE8vByZKgKvKn0VkubiQyuiT7r_eTO6lzGZ2rOJHasusUrM-L5JHw7lMNDd55vCS311fcqPXCsHd5RRljfjDuTppIcFjkDDgl3Ca83oR9iIlS_PqEnd0nHCj1o0jhu4oTUAkD7pSqAmhw9wUv7t5eCHdr7TiH2BkpnUttnW5b4c4x4fS4dkWndsXTZKUjqWVUN_gFLYE6UanV3SLqFLhbCuj-uad7595yTqyO9XrP7O-Q8Cz7zr-Z_R0mNrLv_g_Z32Fnnf2zv5X9F1aEMktVksm9Mt0ufwoZ3cjVj5SpQs_khVazas3qc1hxVSGSWb56pasPP1k9lQI3YWqEbTNsG2HHDDtGuLMF0-dwxwi_NW92jfCpGT41wmdm-MwId81w96CDTZavfgUAAP__gPjVgw==
+
+# This query performs a cross join followed by a filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT * FROM array_tab@primary AS a1, array_tab AS a2
+WHERE a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy0UmGP0kAQ_e6vmIwf7vD2aLctxuynovRyGISzJdELNmahk7NJr8XdbeKF8N9Ni4JFQKrx487Mm_fe7Fuh_pqhwCgYBW-mUKoMbsLJO5gFH-9G_eEYLgfDaBq9H3Xgx8iLzYBUSj59NnLuL1X6KNUT9COQnO0adcGBD7dBGMDlpeTdOfifStt2CaTTnXegPx5As36x4uuLzs-O05VQNxbQ68AkHAQhvL4HybuSVStkjAzzIqGxfCSNYoYcGboYM1yqYkFaF6oqr-qhYfINhc0wzZelqcoxw0WhCMUKTWoyQoFTOc8oJJmQsmxkmJCRaVav_s0wMoyWMtcCri0X4zXDojS71drIB0LB1-zv6J1W9Axv0syQEuA722v2w7B_P-NCiOF4-io-qtE5qnEnrcwLlZCipCErrpB_Gjlg9FbqL2-LNCdleU2fkzH43taBX11hUhoBPme-w3yX-d5RH26bW0eFMqSsXpPed6-Yz6-2rBUfq7mPsnoNVn7-D_Ozf9hyry3Pen5myFpIcNtI-F8hO6AxJL0sck37YTu42a4SRskDbRKri1It6E4Vi5pm85zUuLqQkDabrrN5DPO6VR_xVzBvAXb2wc5JsNsA2_tg9yT45Wmw9y-ee608x-tn3wMAAP__GED9SQ==
+
+# This query performs a left inverted join with an additional filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a1.*, a2.* FROM array_tab@primary AS a2
+LEFT INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzkk19v2koQxd_vpxjNSyAsf9YGwvXTci-O5Iia1LhVo9SKFryJ3BKvu7ajRIjvXtmmBJKwgYe-tI87M2fO-GedJaY_Fmjh1B7b__uQqwWce5MPcG1_uRwPHRdqI2fqTz-O67Ae4bR1SoAbrdNqkivFn24yPmOJiu65eoLhFLgBY_vcB8f9bHu-PYKLieNujd5KeRPFD-UohYkLtRqnrRmwr3mnY4pi_awOQ3cEu_WTJV2d1H91jBaHsjGHXh0m3sj24L-r4kJeXsgDJBjLULj8XqRoXSNFgiYGBBMl5yJNpSrKy3LICR_R6hCM4iTPinJAcC6VQGuJWZQtBFro89lCeIKHQrU7SDAUGY8W5epXHJDgNOFxakGzbWKwIijz7Hl1mvE7gRZdkcPtnfhBqEyEFzKKhWobuxf4T4mwKu6TT77tldCR4CvsSDab7MdEQY11N4SZsaa7VRt63vDqmlqW5bj-IKgjwYkLjG7grztI8DZSaQbfZBRDFEPCIyXCZvEsNHlmAaOEGYSZhPX2MjGOYVKwWP-R7rE8nv_UWMrveVIdLmMLmFl9ZI3130DT16FJxVzG4WEM-nsZmMcwmEqVCdXu734_MxuE0cbG1SSsS0rvva7dva7PZlKFQonwhRdtEGY2MFi9cZ4rmzJpD3YU-y7o7VxAD48jPTiObbN5YBzfsX8RR_OviOM7TLbi2Ptj4_gOg3Ucz35jHN9w9USayDgVB8WsU-RUhHeiynYqczUXl0rOS5vqOSl1ZSEUaVZ1afVw4qpVHLgtplqxoRcbWrGpF5tacXdHTF-Ku1rxv3rnnlbc14v7WvGZXnymFQ_04sFRwILVPz8DAAD__5NyLgU=
+
+# This query performs a semi inverted join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a2.* FROM array_tab@primary AS a2 WHERE EXISTS (
+  SELECT * FROM array_tab@foo_inv AS a1
+  WHERE a1.b @> a2.b
+)
+ORDER BY a2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUkkFP204Qxe__TzGaE_y7IbGdpJJPpsWoRiGhdqRSUQtt4gG5Dbvu7hqBonz3au0IMCROuLXHmZ3fvnmjt0T9e4E-JuEo_DyFUi3gNJ6cw1V4eTE6jsZwcBIl0-Tr6BDWI9w9-r-e4Urxx2vDZ0Gh8juuHuE4Ae7Cty9hHEJ4aUE4WGNvmBspr3NxXzHOmuHO0QyCH2Wv55EVmh3CJD4JY_j03ZY8RYZCZjTmd6TRv0IHGXqYMiyUnJPWUtn2shqKsgf0ewxzUZTGtlOGc6kI_SWa3CwIfZzy2YJi4hmpbg8ZZmR4vqi-fuMOGSYFF9qHTtfDdMVQlub5a234LaHvrNj-8pG4J2UoO5O5INV1t22wvhWyJyJ8KBQE_adjBZa9yZU28FPmAnIBBc8VZR1bIsNJaXwIHBa4LPBYMNhqwH2PAbv4-nz95vLTx4J8GIWnU0jC8wjOJtEY2carjqT8VRb13lL4EHh23zEEw6Y9TXMpsp3-tjrztjp7NiRVRoqyppfA-YDpaoP9sezIojtsTG9T7zfUnf1z6eydy67X2TOXO-Rf5dL7-3K5w8CLXA7-4VxucBaTLqTQtFfmeja0lN1SHXItSzWnCyXnlUxdTiquamSkTf3q1EUk6ie74EvYaYXddththb0G7LyGvVb4Y7tyvxUetMODVnjYDg_f5Tld_fcnAAD__9D2czw=
+
+# This query performs an anti inverted join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a2.* FROM array_tab@primary AS a2 WHERE NOT EXISTS (
+  SELECT * FROM array_tab@foo_inv AS a1
+  WHERE a1.b @> a2.b
+)
+ORDER BY a2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUks9O20AQh-99itGcoN2Q2E5SySenxahGqU0dV6WiFtrEA3Ibdt1dGxFFeXdkOyKYECccOe6fb2a-0W-J-v8cbZy4Y_drBIWaw1kYfIcr9_JiPPJ8ODr1JtHkx_gY1l-4efKx_sOV4ovrnE-dTKV3XC1gNAFuwq9vbuiCH0TgXpYwHK3RLe5GyutU3Fecsea4cTIF50_R61lUNpseQxCeuiF8-V0eeYwMhUzI53ek0b5CAxlaGDPMlJyR1lKV18vqk5c8oN1jmIqsyMvrmOFMKkJ7iXmazwltjPh0TiHxhFS3hwwTynk6r0pvGSLDScaFtqHTtTBeMZRFvimtc35LaBsrdnh7T9yTyik5l6kg1TWbE0SLjGwYu2cRBD8jN4TzwPOR4dYOkT1Vch8yBU7_aYlOWfMmVTqHvzIVkArIeKoo6ZRHZBgUuQ2OwRyTORZzBjvFzLeIlULrtfZ3So38yNt22mx7LOW_IqvnlsIGxyrn9cEZNvU0zaRI9vrtNLN2mm2EpEpIUdJ0cYxPGK9e0fdlR2bdYeP3ru79Rnfj8LwaB-e1a3UOzOue9i_yar2fvO4Re5bXwTvO6ytmIelMCk0HZbFXhpmSW6rDr2WhZnSh5KxqUx-DiqsuEtJ5_WrUB0_UT-WAz2GjFTbbYbMVthqw8RK2WuHP7Z37rfCgHR60wsN2ePgm53j14TEAAP__MAmBdQ==

@@ -1209,7 +1209,7 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 	}
 
-	if join.Op() == opt.InvertedJoinOp || hasGeoIndexJoinCond(h.filters) {
+	if join.Op() == opt.InvertedJoinOp || hasInvertedJoinCond(h.filters) {
 		s.ApplySelectivity(sb.selectivityFromInvertedJoinCondition(join, s))
 	}
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, join, s))
@@ -2688,14 +2688,14 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		return withoutOn.Relational().Stats.RowCount
 
 	case *InvertedJoinExpr:
-		var lookupJoinPrivate *InvertedJoinPrivate
+		var invertedJoinPrivate *InvertedJoinPrivate
 		switch t.JoinType {
 		case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 			// The number of rows processed for semi and anti joins is closer to the
 			// number of output rows for an equivalent inner join.
 			copy := t.InvertedJoinPrivate
 			copy.JoinType = semiAntiJoinToInnerJoin(t.JoinType)
-			lookupJoinPrivate = &copy
+			invertedJoinPrivate = &copy
 
 		default:
 			if t.On.IsTrue() {
@@ -2703,12 +2703,12 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 				// equals the number of output rows.
 				return e.Relational().Stats.RowCount
 			}
-			lookupJoinPrivate = &t.InvertedJoinPrivate
+			invertedJoinPrivate = &t.InvertedJoinPrivate
 		}
 
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
-		withoutOn := e.Memo().MemoizeInvertedJoin(t.Input, nil /* on */, lookupJoinPrivate)
+		withoutOn := e.Memo().MemoizeInvertedJoin(t.Input, nil /* on */, invertedJoinPrivate)
 		return withoutOn.Relational().Stats.RowCount
 
 	case *MergeJoinExpr:
@@ -2977,9 +2977,8 @@ func (sb *statisticsBuilder) applyFilter(
 			return
 		}
 
-		// Special case: The current conjunct is an index-accelerated geospatial
-		// join condition.
-		if isGeoIndexJoinCond(conjunct.Condition) {
+		// Special case: The current conjunct is an inverted join condition.
+		if isInvertedJoinCond(conjunct.Condition) {
 			// We'll handle this case later.
 			return
 		}
@@ -3955,14 +3954,20 @@ func isEqualityWithTwoVars(cond opt.ScalarExpr) bool {
 	return false
 }
 
-// isGeoIndexJoinCond returns true if the given condition is an index-
-// accelerated geospatial function with two variable arguments.
-func isGeoIndexJoinCond(cond opt.ScalarExpr) bool {
-	if fn, ok := cond.(*FunctionExpr); ok {
-		if _, ok := geoindex.RelationshipMap[fn.Name]; ok && len(fn.Args) >= 2 {
-			return fn.Args[0].Op() == opt.VariableOp && fn.Args[1].Op() == opt.VariableOp
+// isInvertedJoinCond returns true if the given condition is either an index-
+// accelerated geospatial function, a bounding box operation, or a contains
+// operation with two variable arguments.
+func isInvertedJoinCond(cond opt.ScalarExpr) bool {
+	switch t := cond.(type) {
+	case *FunctionExpr:
+		if _, ok := geoindex.RelationshipMap[t.Name]; ok && len(t.Args) >= 2 {
+			return t.Args[0].Op() == opt.VariableOp && t.Args[1].Op() == opt.VariableOp
 		}
+
+	case *BBoxIntersectsExpr, *BBoxCoversExpr, *ContainsExpr:
+		return t.Child(0).Op() == opt.VariableOp && t.Child(1).Op() == opt.VariableOp
 	}
+
 	return false
 }
 
@@ -3979,9 +3984,9 @@ func isGeoIndexScanCond(cond opt.ScalarExpr) bool {
 	return false
 }
 
-func hasGeoIndexJoinCond(filters FiltersExpr) bool {
+func hasInvertedJoinCond(filters FiltersExpr) bool {
 	for i := range filters {
-		if isGeoIndexJoinCond(filters[i].Condition) {
+		if isInvertedJoinCond(filters[i].Condition) {
 			return true
 		}
 	}
