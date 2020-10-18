@@ -503,6 +503,9 @@ func appendEncDatumsToKey(
 	alloc *DatumAlloc,
 ) (_ roachpb.Key, containsNull bool, _ error) {
 	for i, val := range values {
+		if val.IsUnset() {
+			continue
+		}
 		encoding := descpb.DatumEncoding_ASCENDING_KEY
 		if dirs[i] == descpb.IndexDescriptor_DESC {
 			encoding = descpb.DatumEncoding_DESCENDING_KEY
