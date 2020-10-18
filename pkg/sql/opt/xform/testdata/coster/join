@@ -125,7 +125,7 @@ inner-join (hash)
 opt
 SELECT * FROM g AS g1 INNER INVERTED JOIN g AS g2 ON ST_Contains(g1.geom, g2.geom)
 ----
-inner-join (lookup g)
+inner-join (lookup g [as=g2])
  ├── columns: k:1!null geom:2!null k:5!null geom:6!null
  ├── key columns: [5] = [5]
  ├── lookup columns are key
@@ -134,7 +134,7 @@ inner-join (lookup g)
  ├── cost: 1101844.05
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
- ├── inner-join (inverted-lookup g@secondary)
+ ├── inner-join (inverted-lookup g@secondary [as=g2])
  │    ├── columns: g1.k:1!null g1.geom:2 g2.k:5!null
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
@@ -143,7 +143,7 @@ inner-join (lookup g)
  │    ├── cost: 41444.03
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2)
- │    ├── scan g1
+ │    ├── scan g [as=g1]
  │    │    ├── columns: g1.k:1!null g1.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1044.02
@@ -166,13 +166,13 @@ inner-join (cross)
  ├── cost: 1e+100
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
- ├── scan g1
+ ├── scan g [as=g1]
  │    ├── columns: g1.k:1!null g1.geom:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1044.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- ├── scan g2
+ ├── scan g [as=g2]
  │    ├── columns: g2.k:5!null g2.geom:6
  │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0]
  │    ├── cost: 1044.02
