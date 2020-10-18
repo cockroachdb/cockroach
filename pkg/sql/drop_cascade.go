@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -26,7 +27,7 @@ import (
 )
 
 type dropCascadeState struct {
-	schemasToDelete []*catalog.ResolvedSchema
+	schemasToDelete []schemaWithDbDesc
 
 	objectNamesToDelete []tree.ObjectName
 
@@ -35,6 +36,11 @@ type dropCascadeState struct {
 	typesToDelete           []*typedesc.Mutable
 
 	droppedNames []string
+}
+
+type schemaWithDbDesc struct {
+	schema *catalog.ResolvedSchema
+	dbDesc *dbdesc.Mutable
 }
 
 func newDropCascadeState() *dropCascadeState {
@@ -47,7 +53,7 @@ func newDropCascadeState() *dropCascadeState {
 }
 
 func (d *dropCascadeState) collectObjectsInSchema(
-	ctx context.Context, p *planner, db catalog.DatabaseDescriptor, schema *catalog.ResolvedSchema,
+	ctx context.Context, p *planner, db *dbdesc.Mutable, schema *catalog.ResolvedSchema,
 ) error {
 	names, err := resolver.GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, db, schema.Name, true /* explicitPrefix */)
 	if err != nil {
@@ -56,12 +62,15 @@ func (d *dropCascadeState) collectObjectsInSchema(
 	for i := range names {
 		d.objectNamesToDelete = append(d.objectNamesToDelete, &names[i])
 	}
-	d.schemasToDelete = append(d.schemasToDelete, schema)
+	d.schemasToDelete = append(d.schemasToDelete, schemaWithDbDesc{schema: schema, dbDesc: db})
 	return nil
 }
 
+// This resolves objects for DROP SCHEMA and DROP DATABASE ops.
+// db is used to generate a useful error message in the case
+// of DROP DATABASE; otherwise, db is nil.
 func (d *dropCascadeState) resolveCollectedObjects(
-	ctx context.Context, p *planner, db catalog.DatabaseDescriptor,
+	ctx context.Context, p *planner, db *dbdesc.Mutable,
 ) error {
 	d.td = make([]toDelete, 0, len(d.objectNamesToDelete))
 	// Resolve each of the collected names.
@@ -95,12 +104,14 @@ func (d *dropCascadeState) resolveCollectedObjects(
 					objName.Object(),
 				)
 			}
-			if tbDesc.State == descpb.DescriptorState_OFFLINE {
-				dbName := db.GetName()
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"cannot drop a database with OFFLINE tables, ensure %s is"+
-						" dropped or made public before dropping database %s",
-					objName.FQString(), tree.AsString((*tree.Name)(&dbName)))
+			if db != nil {
+				if tbDesc.State == descpb.DescriptorState_OFFLINE {
+					dbName := db.GetName()
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"cannot drop a database with OFFLINE tables, ensure %s is"+
+							" dropped or made public before dropping database %s",
+						objName.FQString(), tree.AsString((*tree.Name)(&dbName)))
+				}
 			}
 			checkOwnership := true
 			// If the object we are trying to drop as part of this DROP DATABASE

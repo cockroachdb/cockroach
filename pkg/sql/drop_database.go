@@ -121,7 +121,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	p := params.p
 
 	var schemasIDsToDelete []descpb.ID
-	for _, schemaToDelete := range n.d.schemasToDelete {
+	for _, schemaWithDbDesc := range n.d.schemasToDelete {
+		schemaToDelete := schemaWithDbDesc.schema
 		switch schemaToDelete.Kind {
 		case catalog.SchemaTemporary, catalog.SchemaPublic:
 			// The public schema and temporary schemas are cleaned up by just removing
