@@ -1214,7 +1214,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			if index.Unique{
 				shouldExtraColumn:=false;
 				for _,colID:=range index.ColumnIDs{
-					if col,err:=desc.FindColumnByID(colID);err!=nil{
+					if col,err:=desc.FindColumnByID(colID);err==nil{
 						if col.Nullable{
 							shouldExtraColumn=true;
 							break;
