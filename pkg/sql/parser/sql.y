@@ -572,6 +572,9 @@ func (u *sqlSymUnion) survive() tree.Survive {
 func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
 	return u.val.(tree.ObjectNamePrefix)
 }
+func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
+    return u.val.(tree.ObjectNamePrefixList)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -977,6 +980,7 @@ func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name
+%type <tree.ObjectNamePrefixList> schema_name_list
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target analyze_target
@@ -3493,18 +3497,18 @@ type_name_list:
 // %Category: DDL
 // %Text: DROP SCHEMA [IF EXISTS] <schema_name> [, ...] [CASCADE | RESTRICT]
 drop_schema_stmt:
-  DROP SCHEMA name_list opt_drop_behavior
+  DROP SCHEMA schema_name_list opt_drop_behavior
   {
     $$.val = &tree.DropSchema{
-      Names: $3.nameList(),
+      Names: $3.objectNamePrefixList(),
       IfExists: false,
       DropBehavior: $4.dropBehavior(),
     }
   }
-| DROP SCHEMA IF EXISTS name_list opt_drop_behavior
+| DROP SCHEMA IF EXISTS schema_name_list opt_drop_behavior
   {
     $$.val = &tree.DropSchema{
-      Names: $5.nameList(),
+      Names: $5.objectNamePrefixList(),
       IfExists: true,
       DropBehavior: $6.dropBehavior(),
     }
@@ -11608,6 +11612,17 @@ qualifiable_schema_name:
 	{
 		$$.val = tree.ObjectNamePrefix{CatalogName: tree.Name($1), SchemaName: tree.Name($3), ExplicitCatalog: true, ExplicitSchema: true}
 	}
+
+schema_name_list:
+  qualifiable_schema_name
+  {
+    $$.val = tree.ObjectNamePrefixList{$1.objectNamePrefix()}
+  }
+| schema_name_list ',' qualifiable_schema_name
+  {
+    $$.val = append($1.objectNamePrefixList(), $3.objectNamePrefix())
+  }
+
 
 opt_schema_name:
 	qualifiable_schema_name

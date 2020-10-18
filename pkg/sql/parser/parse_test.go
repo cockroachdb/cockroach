@@ -416,6 +416,17 @@ func TestParse(t *testing.T) {
 		{`DROP SCHEMA IF EXISTS a, b RESTRICT`},
 		{`DROP SCHEMA a RESTRICT`},
 
+		{`DROP SCHEMA a.a`},
+		{`DROP SCHEMA a.a, b.b, c.c`},
+		{`DROP SCHEMA a, b.b, c`},
+		{`DROP SCHEMA IF EXISTS a.a, b.b, c.c`},
+		{`DROP SCHEMA IF EXISTS a, b, c.c`},
+		{`DROP SCHEMA IF EXISTS a.a, b.b CASCADE`},
+		{`DROP SCHEMA IF EXISTS a.a, b CASCADE`},
+		{`DROP SCHEMA IF EXISTS a.a, b.c RESTRICT`},
+		{`DROP SCHEMA IF EXISTS a, b.b RESTRICT`},
+		{`DROP SCHEMA a.a RESTRICT`},
+
 		{`DROP TYPE a`},
 		{`DROP TYPE a, b, c`},
 		{`DROP TYPE db.sc.a, sc.a`},
