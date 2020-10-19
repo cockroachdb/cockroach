@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -36,7 +37,7 @@ import (
 
 type callbackRemoteComponentCreator struct {
 	newOutboxFn func(*colmem.Allocator, colexecbase.Operator, []*types.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
-	newInboxFn  func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInboxFn  func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID, latency int64) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
@@ -50,9 +51,13 @@ func (c callbackRemoteComponentCreator) newOutbox(
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	ctx context.Context,
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	latency int64,
 ) (*colrpc.Inbox, error) {
-	return c.newInboxFn(allocator, typs, streamID)
+	return c.newInboxFn(allocator, typs, streamID, latency)
 }
 
 func intCols(numCols int) []*types.T {
@@ -204,8 +209,8 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
 			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */)
 		},
-		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
-			inbox, err := colrpc.NewInbox(context.Background(), allocator, typs, streamID)
+		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID, latency int64) (*colrpc.Inbox, error) {
+			inbox, err := colrpc.NewInbox(context.Background(), allocator, typs, streamID, 0 /* latency */)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
 		},
@@ -215,7 +220,15 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
-	f := &flowinfra.FlowBase{FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx, NodeID: base.TestingIDContainer}}
+	f := &flowinfra.FlowBase{
+		FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx,
+			NodeID: base.TestingIDContainer,
+			Cfg: &execinfra.ServerConfig{
+				LatencyGetter: &serverpb.LatencyGetter{
+					NodesStatusServer: &serverpb.OptionalNodesStatusServer{},
+				},
+			}},
+	}
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
 		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{},

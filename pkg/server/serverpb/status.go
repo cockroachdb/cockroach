@@ -12,8 +12,11 @@ package serverpb
 
 import (
 	context "context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // SQLStatusServer is a smaller version of the serverpb.StatusInterface which
@@ -60,4 +63,50 @@ func (s *OptionalNodesStatusServer) OptionalNodesStatusServer(
 		return nil, err
 	}
 	return v.(NodesStatusServer), nil
+}
+
+// LatencyGetter stores the map of latencies obtained from the NodesStatusServer.
+// These latencies are displayed on the streams of EXPLAIN ANALYZE diagrams.
+// This struct is put here to avoid import cycles.
+type LatencyGetter struct {
+	latencyMap        map[roachpb.NodeID]map[roachpb.NodeID]int64
+	lastUpdatedTime   time.Time
+	NodesStatusServer *OptionalNodesStatusServer
+}
+
+const updateThreshold = 5 * time.Second
+
+// GetLatency is a helper function that updates the latencies between nodes
+// if the time since the last update exceeds the updateThreshold. This function
+// returns the latency between the origin node and the target node.
+func (lg *LatencyGetter) GetLatency(
+	ctx context.Context, originNodeID roachpb.NodeID, targetNodeID roachpb.NodeID,
+) int64 {
+	if timeutil.Since(lg.lastUpdatedTime) < updateThreshold {
+		return lg.latencyMap[originNodeID][targetNodeID]
+	}
+	// Update latencies in latencyMap.
+	ss, err := lg.NodesStatusServer.OptionalNodesStatusServer(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+	if err != nil {
+		// When latency is 0, it is not shown on EXPLAIN ANALYZE diagrams.
+		return 0
+	}
+	if lg.latencyMap == nil {
+		lg.latencyMap = make(map[roachpb.NodeID]map[roachpb.NodeID]int64)
+	}
+	response, _ := ss.Nodes(ctx, &NodesRequest{})
+	for _, sendingNode := range response.Nodes {
+		sendingNodeID := sendingNode.Desc.NodeID
+		if lg.latencyMap[sendingNodeID] == nil {
+			lg.latencyMap[sendingNodeID] = make(map[roachpb.NodeID]int64)
+		}
+		for _, receivingNode := range response.Nodes {
+			receivingNodeID := receivingNode.Desc.NodeID
+			if sendingNodeID != receivingNodeID {
+				lg.latencyMap[sendingNodeID][receivingNodeID] = sendingNode.Activity[receivingNodeID].Latency
+			}
+		}
+	}
+	lg.lastUpdatedTime = timeutil.Now()
+	return lg.latencyMap[originNodeID][targetNodeID]
 }
