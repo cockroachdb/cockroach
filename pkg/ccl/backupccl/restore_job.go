@@ -999,7 +999,7 @@ func (r *restoreResumer) Resume(
 		return errors.Wrap(err, "inserting table statistics")
 	}
 
-	if err := r.publishTables(ctx); err != nil {
+	if err := r.publishTables(ctx, details); err != nil {
 		return err
 	}
 
@@ -1068,8 +1068,7 @@ func (r *restoreResumer) insertStats(ctx context.Context) error {
 }
 
 // publishTables updates the RESTORED tables status from OFFLINE to PUBLIC.
-func (r *restoreResumer) publishTables(ctx context.Context) error {
-	details := r.job.Details().(jobspb.RestoreDetails)
+func (r *restoreResumer) publishTables(ctx context.Context, details jobspb.RestoreDetails) error {
 	if details.TablesPublished {
 		return nil
 	}
