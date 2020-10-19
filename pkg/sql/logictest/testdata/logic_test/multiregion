@@ -1,0 +1,17 @@
+statement error implementation pending
+CREATE DATABASE new_db REGION "us-west-1"
+
+statement error implementation pending
+CREATE DATABASE new_db SURVIVE AVAILABILITY ZONE FAILURE
+
+statement ok
+CREATE DATABASE new_db
+
+statement error implementation pending
+ALTER DATABASE new_db ADD REGION "us-west-1"
+
+statement error implementation pending
+ALTER DATABASE new_db DROP REGION "us-west-1"
+
+statement error implementation pending
+SHOW REGIONS

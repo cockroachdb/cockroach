@@ -278,6 +278,20 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowRegions represents a SHOW REGIONS statement
+type ShowRegions struct {
+	Database Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowRegions) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW REGIONS")
+	if node.Database != "" {
+		ctx.WriteString(" FROM DATABASE ")
+		node.Database.Format(ctx)
+	}
+}
+
 // ShowSessions represents a SHOW SESSIONS statement
 type ShowSessions struct {
 	All     bool

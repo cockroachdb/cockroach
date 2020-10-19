@@ -211,6 +211,7 @@ show_stmt ::=
 	| show_queries_stmt
 	| show_ranges_stmt
 	| show_range_for_row_stmt
+	| show_regions_stmt
 	| show_roles_stmt
 	| show_savepoint_stmt
 	| show_schemas_stmt
@@ -646,6 +647,10 @@ show_range_for_row_stmt ::=
 	'SHOW' 'RANGE' 'FROM' 'TABLE' table_name 'FOR' 'ROW' '(' expr_list ')'
 	| 'SHOW' 'RANGE' 'FROM' 'INDEX' table_index_name 'FOR' 'ROW' '(' expr_list ')'
 
+show_regions_stmt ::=
+	'SHOW' 'REGIONS'
+	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
+
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
 
@@ -757,6 +762,7 @@ unreserved_keyword ::=
 	| 'AT'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
+	| 'AVAILABILITY'
 	| 'BACKUP'
 	| 'BACKUPS'
 	| 'BEFORE'
@@ -830,6 +836,7 @@ unreserved_keyword ::=
 	| 'EXPLAIN'
 	| 'EXPORT'
 	| 'EXTENSION'
+	| 'FAILURE'
 	| 'FILES'
 	| 'FILTER'
 	| 'FIRST'
@@ -973,6 +980,8 @@ unreserved_keyword ::=
 	| 'RECURSIVE'
 	| 'REF'
 	| 'REFRESH'
+	| 'REGION'
+	| 'REGIONS'
 	| 'REINDEX'
 	| 'RELEASE'
 	| 'RENAME'
@@ -1032,6 +1041,7 @@ unreserved_keyword ::=
 	| 'STORING'
 	| 'STRICT'
 	| 'SUBSCRIPTION'
+	| 'SURVIVE'
 	| 'SYNTAX'
 	| 'SYSTEM'
 	| 'TABLES'
@@ -1211,6 +1221,9 @@ alter_database_stmt ::=
 	| alter_zone_database_stmt
 	| alter_database_owner
 	| alter_database_to_schema_stmt
+	| alter_database_add_region_stmt
+	| alter_database_drop_region_stmt
+	| alter_database_survive_stmt
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
@@ -1255,8 +1268,8 @@ create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
 
 create_database_stmt ::=
-	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
-	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_regions_list opt_survive_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_regions_list opt_survive_clause
 
 create_index_stmt ::=
 	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
@@ -1628,6 +1641,15 @@ alter_database_owner ::=
 alter_database_to_schema_stmt ::=
 	'ALTER' 'DATABASE' database_name 'CONVERT' 'TO' 'SCHEMA' 'WITH' 'PARENT' database_name
 
+alter_database_add_region_stmt ::=
+	'ALTER' 'DATABASE' database_name 'ADD' region_or_regions name_list
+
+alter_database_drop_region_stmt ::=
+	'ALTER' 'DATABASE' database_name 'DROP' region_or_regions name_list
+
+alter_database_survive_stmt ::=
+	'ALTER' 'DATABASE' database_name survive_clause
+
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
 
@@ -1713,6 +1735,14 @@ opt_lc_ctype_clause ::=
 
 opt_connection_limit ::=
 	'CONNECTION' 'LIMIT' opt_equal signed_iconst
+	| 
+
+opt_regions_list ::=
+	region_or_regions opt_equal name_list
+	| 
+
+opt_survive_clause ::=
+	survive_clause
 	| 
 
 opt_unique ::=
@@ -2052,6 +2082,15 @@ alter_index_cmds ::=
 
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
+
+region_or_regions ::=
+	'REGION'
+	| 'REGIONS'
+
+survive_clause ::=
+	'SURVIVE' 'REGION' 'FAILURE'
+	| 'SURVIVE' 'AVAILABILITY' 'ZONE' 'FAILURE'
+	| 'SURVIVE' 'DEFAULT'
 
 role_option ::=
 	'CREATEROLE'
