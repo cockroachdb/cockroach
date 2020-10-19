@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -65,7 +66,8 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
 			privDesc.Grant(grantee, n.Privileges)
 		},
-		grantOn: grantOn,
+		grantOn:      grantOn,
+		eventLogType: EventLogGrantPrivilege,
 	}, nil
 }
 
@@ -106,7 +108,8 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
 			privDesc.Revoke(grantee, n.Privileges, grantOn)
 		},
-		grantOn: grantOn,
+		grantOn:      grantOn,
+		eventLogType: EventLogRevokePrivilege,
 	}, nil
 }
 
@@ -116,6 +119,7 @@ type changePrivilegesNode struct {
 	desiredprivs    privilege.List
 	changePrivilege func(*descpb.PrivilegeDescriptor, string)
 	grantOn         privilege.ObjectType
+	eventLogType    EventLogType
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -239,7 +243,29 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	}
 
 	// Now update the descriptors transactionally.
-	return p.txn.Run(ctx, b)
+	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	// Record this index alteration in the event log. This is an auditable log
+	// event and is recorded in the same transaction as the table descriptor
+	// update.
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	n.targets.Format(fmtCtx)
+	targets := fmtCtx.CloseAndGetString()
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		n.eventLogType,
+		0, /* no target */
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			Target     string
+			User       string
+			Grantees   string
+			Privileges string
+		}{targets, p.SessionData().User, strings.Join(n.grantees.ToStrings(), ","), n.desiredprivs.String()},
+	)
 }
 
 func (*changePrivilegesNode) Next(runParams) (bool, error) { return false, nil }
