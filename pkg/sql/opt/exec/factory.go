@@ -234,10 +234,6 @@ type Cascade struct {
 	) (Plan, error)
 }
 
-// InsertFastPathMaxRows is the maximum number of rows for which we can use the
-// insert fast path.
-const InsertFastPathMaxRows = 10000
-
 // InsertFastPathFKCheck contains information about a foreign key check to be
 // performed by the insert fast-path (see ConstructInsertFastPath). It
 // identifies the index into which we can perform the lookup.

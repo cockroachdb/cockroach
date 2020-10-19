@@ -369,7 +369,7 @@ define Insert {
 
 # InsertFastPath implements a special (but very common) case of insert,
 # satisfying the following conditions:
-#  - the input is Values with at most InsertFastPathMaxRows, and there are no
+#  - the input is Values with at most mutations.MaxBatchSize, and there are no
 #    subqueries;
 #  - there are no other mutations in the statement, and the output of the
 #    insert is not processed through side-effecting expressions.
