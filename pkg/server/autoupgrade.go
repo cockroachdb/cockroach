@@ -24,8 +24,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// startAttemptUpgrade attempts to upgrade cluster version.
-func (s *Server) startAttemptUpgrade(ctx context.Context) {
+// startAutoUpgrade attempts to auto upgrade cluster version to the binary's
+// current version.
+func (s *Server) startAutoUpgrade(ctx context.Context) {
 	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 	if err := s.stopper.RunAsyncTask(ctx, "auto-upgrade", func(ctx context.Context) {
 		defer cancel()

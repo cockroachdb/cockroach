@@ -1772,7 +1772,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Attempt to upgrade cluster version now that the sql server has been
 	// started. At this point we know that all sqlmigrations have successfully
 	// been run so it is safe to upgrade to the binary's current version.
-	s.startAttemptUpgrade(ctx)
+	s.startAutoUpgrade(ctx)
 
 	log.Event(ctx, "server initialized")
 	return nil
