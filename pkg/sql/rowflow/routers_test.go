@@ -751,12 +751,6 @@ func TestRouterDiskSpill(t *testing.T) {
 	const numRows = 200
 	const numCols = 1
 
-	var (
-		rowChan execinfra.RowChannel
-		rb      routerBase
-		wg      sync.WaitGroup
-	)
-
 	// Enable stats recording.
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("root", tracing.Recordable)
@@ -773,7 +767,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	defer tempEngine.Close()
 	// monitor is the custom memory monitor used in this test. The increment is
 	// set to 1 for fine-grained memory allocations and the limit is set to half
-	// the number of rows that wil eventually be added to the underlying
+	// the number of rows that will eventually be added to the underlying
 	// rowContainer. This is a bytes value that will ensure we fall back to disk
 	// but use memory for at least a couple of rows.
 	monitor := mon.NewMonitorWithLimit(
@@ -798,106 +792,142 @@ func TestRouterDiskSpill(t *testing.T) {
 	}
 	alloc := &rowenc.DatumAlloc{}
 
-	var spec execinfrapb.OutputRouterSpec
-	spec.Streams = make([]execinfrapb.StreamEndpointSpec, 1)
-	// Initialize the RowChannel with the minimal buffer size so as to block
-	// writes to the channel (after the first one).
-	rowChan.InitWithBufSizeAndNumSenders(rowenc.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
-	rb.setupStreams(&spec, []execinfra.RowReceiver{&rowChan})
-	rb.init(ctx, &flowCtx, rowenc.OneIntCol)
-	rb.Start(ctx, &wg, nil /* ctxCancel */)
-
-	rows := rowenc.MakeIntRows(numRows, numCols)
-	// output is the sole router output in this test.
-	output := &rb.outputs[0]
-	errChan := make(chan error)
-
-	go func() {
-		for _, row := range rows {
-			output.mu.Lock()
-			err := output.addRowLocked(ctx, row)
-			output.mu.Unlock()
-			if err != nil {
-				errChan <- err
-			}
+	extraMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer extraMemMonitor.Stop(ctx)
+	// memErrorWhenConsumingRows indicates whether we expect an OOM error to
+	// occur when we're consuming rows from the row channel. By default, it
+	// will occur because routerOutput derives a memory monitor for the row
+	// buffer from evalCtx.Mon which has a limit, and we're going to consume
+	// rows after the spilling has occurred (meaning that evalCtx.Mon reached
+	// its limit). In order for this to not happen we will create a separate
+	// memory account.
+	for _, memErrorWhenConsumingRows := range []bool{false, true} {
+		var (
+			rowChan execinfra.RowChannel
+			rb      routerBase
+			wg      sync.WaitGroup
+			spec    execinfrapb.OutputRouterSpec
+		)
+		spec.Streams = make([]execinfrapb.StreamEndpointSpec, 1)
+		// Initialize the RowChannel with the minimal buffer size so as to block
+		// writes to the channel (after the first one).
+		rowChan.InitWithBufSizeAndNumSenders(rowenc.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+		rb.setupStreams(&spec, []execinfra.RowReceiver{&rowChan})
+		rb.init(ctx, &flowCtx, rowenc.OneIntCol)
+		// output is the sole router output in this test.
+		output := &rb.outputs[0]
+		if !memErrorWhenConsumingRows {
+			separateAcc := extraMemMonitor.MakeBoundAccount()
+			// NOTE: we need to close the memory account that routerBase
+			// created in init for the output since we're overriding it.
+			output.rowBufToPushFromAcc.Close(ctx)
+			output.rowBufToPushFromAcc = &separateAcc
 		}
-		rb.ProducerDone()
-		wg.Wait()
-		close(errChan)
-	}()
+		rb.Start(ctx, &wg, nil /* ctxCancel */)
 
-	testutils.SucceedsSoon(t, func() error {
-		output.mu.Lock()
-		spilled := output.mu.rowContainer.Spilled()
-		output.mu.Unlock()
-		if !spilled {
-			return errors.New("did not spill to disk")
-		}
-		return nil
-	})
+		rows := rowenc.MakeIntRows(numRows, numCols)
+		errChan := make(chan error)
 
-	metaSeen := false
-	for i := 0; ; i++ {
-		row, meta := rowChan.Next()
-		if meta != nil {
-			// Check that router output stats were recorded as expected.
-			if metaSeen {
-				t.Fatal("expected only one meta, encountered multiple")
-			}
-			metaSeen = true
-			if len(meta.TraceData) != 1 {
-				t.Fatalf("expected one recorded span, found %d", len(meta.TraceData))
-			}
-			span := meta.TraceData[0]
-			getIntTagValue := func(key string) int {
-				strValue, ok := span.Tags[key]
-				if !ok {
-					t.Errorf("missing tag: %s", key)
-				}
-				intValue, err := strconv.Atoi(strValue)
+		go func() {
+			for _, row := range rows {
+				output.mu.Lock()
+				err := output.addRowLocked(ctx, row)
+				output.mu.Unlock()
 				if err != nil {
-					t.Error(err)
+					errChan <- err
 				}
-				return intValue
 			}
-			rowsRouted := getIntTagValue("cockroach.stat.routeroutput.rows_routed")
-			memMax := getIntTagValue("cockroach.stat.routeroutput.mem.max")
-			diskMax := getIntTagValue("cockroach.stat.routeroutput.disk.max")
-			if rowsRouted != numRows {
-				t.Errorf("expected %d rows routed, got %d", numRows, rowsRouted)
-			}
-			if memMax <= 0 {
-				t.Errorf("expected memMax > 0, got %d", memMax)
-			}
-			if diskMax <= 0 {
-				t.Errorf("expected memMax > 0, got %d", diskMax)
-			}
-			continue
-		}
-		if row == nil {
-			break
-		}
-		// Verify correct order (should be the order in which we added rows).
-		for j, c := range row {
-			if cmp, err := c.Compare(types.Int, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
-				t.Fatal(err)
-			} else if cmp != 0 {
-				t.Fatalf(
-					"order violated on row %d, expected %v got %v",
-					i,
-					rows[i].String(rowenc.OneIntCol),
-					row.String(rowenc.OneIntCol),
-				)
-			}
-		}
-	}
-	if !metaSeen {
-		t.Error("expected trace metadata, found none")
-	}
+			rb.ProducerDone()
+			wg.Wait()
+			close(errChan)
+		}()
 
-	// Make sure the goroutine adding rows is done.
-	if err := <-errChan; err != nil {
-		t.Fatal(err)
+		testutils.SucceedsSoon(t, func() error {
+			output.mu.Lock()
+			spilled := output.mu.rowContainer.Spilled()
+			output.mu.Unlock()
+			if !spilled {
+				return errors.New("did not spill to disk")
+			}
+			return nil
+		})
+
+		errMetaSeen := false
+		traceMetaSeen := false
+		for i := 0; ; i++ {
+			row, meta := rowChan.Next()
+			if meta != nil {
+				if memErrorWhenConsumingRows {
+					if meta.Err != nil {
+						errMetaSeen = true
+					}
+				} else {
+					// Check that router output stats were recorded as expected.
+					if traceMetaSeen {
+						t.Fatal("expected only one trace meta, encountered multiple")
+					}
+					if len(meta.TraceData) != 1 {
+						t.Fatalf("expected one recorded span, found %d", len(meta.TraceData))
+					}
+					traceMetaSeen = true
+					span := meta.TraceData[0]
+					getIntTagValue := func(key string) int {
+						strValue, ok := span.Tags[key]
+						if !ok {
+							t.Errorf("missing tag: %s", key)
+						}
+						intValue, err := strconv.Atoi(strValue)
+						if err != nil {
+							t.Error(err)
+						}
+						return intValue
+					}
+					rowsRouted := getIntTagValue("cockroach.stat.routeroutput.rows_routed")
+					memMax := getIntTagValue("cockroach.stat.routeroutput.mem.max")
+					diskMax := getIntTagValue("cockroach.stat.routeroutput.disk.max")
+					if rowsRouted != numRows {
+						t.Errorf("expected %d rows routed, got %d", numRows, rowsRouted)
+					}
+					if memMax <= 0 {
+						t.Errorf("expected memMax > 0, got %d", memMax)
+					}
+					if diskMax <= 0 {
+						t.Errorf("expected diskMax > 0, got %d", diskMax)
+					}
+				}
+				continue
+			}
+			if row == nil {
+				break
+			}
+			// Verify correct order (should be the order in which we added rows).
+			for j, c := range row {
+				if cmp, err := c.Compare(types.Int, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
+					t.Fatal(err)
+				} else if cmp != 0 {
+					t.Fatalf(
+						"order violated on row %d, expected %v got %v",
+						i,
+						rows[i].String(rowenc.OneIntCol),
+						row.String(rowenc.OneIntCol),
+					)
+				}
+			}
+		}
+		if memErrorWhenConsumingRows {
+			if !errMetaSeen {
+				t.Fatalf("expected memory error when consuming rows")
+			}
+		} else {
+			if !traceMetaSeen {
+				t.Error("expected trace metadata, found none")
+			}
+		}
+
+		// Make sure the goroutine adding rows is done.
+		if err := <-errChan; err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
