@@ -26,11 +26,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// The NetworkReader interface only exists to avoid an import cycle with
+// with the colrpc file. This interface should only be implemented by the inbox.
+type NetworkReader interface {
+	GetLatency() int64
+}
+
 // VectorizedStatsCollector collects VectorizedStats on Operators.
 //
-// If two Operators are connected (i.e. one is an input to another), the
-// corresponding VectorizedStatsCollectors are also "connected" by sharing a
-// StopWatch.
+// TODO(cathymw): refactor this class into a base and specialized stats
+// collectors.
 type VectorizedStatsCollector struct {
 	colexecbase.Operator
 	NonExplainable
@@ -51,6 +56,8 @@ type VectorizedStatsCollector struct {
 
 	memMonitors  []*mon.BytesMonitor
 	diskMonitors []*mon.BytesMonitor
+
+	networkReader NetworkReader
 }
 
 var _ colexecbase.Operator = &VectorizedStatsCollector{}
@@ -69,6 +76,7 @@ func NewVectorizedStatsCollector(
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
 	inputStatsCollectors []*VectorizedStatsCollector,
+	networkReader NetworkReader,
 ) *VectorizedStatsCollector {
 	if inputWatch == nil {
 		colexecerror.InternalError(errors.AssertionFailedf("input watch for VectorizedStatsCollector is nil"))
@@ -89,13 +97,14 @@ func NewVectorizedStatsCollector(
 	}
 	return &VectorizedStatsCollector{
 		Operator:             op,
-		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime},
+		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime, OnStream: networkReader != nil},
 		idTagKey:             idTagKey,
 		ioReader:             ioReader,
 		stopwatch:            inputWatch,
 		memMonitors:          memMonitors,
 		diskMonitors:         diskMonitors,
 		childStatsCollectors: inputStatsCollectors,
+		networkReader:        networkReader,
 	}
 }
 
@@ -138,6 +147,9 @@ func (vsc *VectorizedStatsCollector) finalizeStats() {
 		// themselves).
 		vsc.RowsRead = vsc.ioReader.GetRowsRead()
 	}
+	if vsc.networkReader != nil {
+		vsc.NetworkLatency = vsc.networkReader.GetLatency()
+	}
 }
 
 // OutputStats outputs the vectorized stats collected by vsc into ctx.
@@ -163,6 +175,7 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		vsc.MaxAllocatedDisk = 0
 		vsc.NumBatches = 0
 		vsc.BytesRead = 0
+		vsc.NetworkLatency = 0
 	}
 	tracing.SetSpanStats(span, &vsc.VectorizedStats)
 	span.Finish()

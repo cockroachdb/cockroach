@@ -266,6 +266,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							execinfrapb.StreamID(id),
 							cancelFn,
 							0, /* connectionTimeout */
+							0, /* latency */
 						)
 						wg.Done()
 					}(id)

@@ -66,6 +66,13 @@ type Outbox struct {
 	// A copy of Run's caller ctx, with no StreamID tag.
 	// Used to pass a clean context to the input.Next.
 	runnerCtx context.Context
+
+	// latency contains the network latency from the Outbox node to the Inbox
+	// node.
+	latency int64
+	// latencySent represents whether the Outbox has sent latency to the Inbox
+	// yet.
+	latencySent bool
 }
 
 // NewOutbox creates a new Outbox.
@@ -129,10 +136,12 @@ func (o *Outbox) Run(
 	streamID execinfrapb.StreamID,
 	cancelFn context.CancelFunc,
 	connectionTimeout time.Duration,
+	latency int64,
 ) {
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
 	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
+	o.latency = latency
 
 	var stream execinfrapb.DistSQL_FlowStreamClient
 	if err := func() error {
@@ -252,6 +261,11 @@ func (o *Outbox) sendBatches(
 				colexecerror.InternalError(errors.Wrap(err, "Outbox Serialize data error"))
 			}
 			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
+
+			if !o.latencySent {
+				o.scratch.msg.NetworkStats = &execinfrapb.NetworkStats{Latency: o.latency}
+				o.latencySent = true
+			}
 
 			// o.scratch.msg can be reused as soon as Send returns since it returns as
 			// soon as the message is written to the control buffer. The message is
