@@ -177,6 +177,28 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
 	),
 
+	"covar_pop": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Float, types.Float}, types.Float, newCovarPopAggregate,
+			"Calculates the population covariance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Int}, types.Float, newCovarPopAggregate,
+			"Calculates the population covariance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float, types.Int}, types.Float, newCovarPopAggregate,
+			"Calculates the population covariance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Float}, types.Float, newCovarPopAggregate,
+			"Calculates the population covariance of the selected values.", tree.VolatilityImmutable),
+	),
+
+	"covar_samp": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Float, types.Float}, types.Float, newCovarSampAggregate,
+			"Calculates the sample covariance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Int}, types.Float, newCovarSampAggregate,
+			"Calculates the sample covariance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float, types.Int}, types.Float, newCovarSampAggregate,
+			"Calculates the sample covariance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Float}, types.Float, newCovarSampAggregate,
+			"Calculates the sample covariance of the selected values.", tree.VolatilityImmutable),
+	),
+
 	"count": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements.", tree.VolatilityImmutable),
@@ -1002,6 +1024,8 @@ var _ tree.AggregateFunc = &percentileContAggregate{}
 var _ tree.AggregateFunc = &stMakeLineAgg{}
 var _ tree.AggregateFunc = &stUnionAgg{}
 var _ tree.AggregateFunc = &stExtentAgg{}
+var _ tree.AggregateFunc = &covarPopAggregate{}
+var _ tree.AggregateFunc = &covarSampAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
@@ -1889,6 +1913,42 @@ func (a *corrAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return tree.NewDFloat(tree.DFloat(a.sxy / math.Sqrt(a.sxx*a.syy))), nil
+}
+
+// covarPopAggregate represents population covariance.
+type covarPopAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newCovarPopAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &covarPopAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *covarPopAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxy / a.n)), nil
+}
+
+// covarSampAggregate represents sample covariance.
+type covarSampAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newCovarSampAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &covarSampAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *covarSampAggregate) Result() (tree.Datum, error) {
+	if a.n < 2 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxy / (a.n - 1))), nil
 }
 
 type countAggregate struct {

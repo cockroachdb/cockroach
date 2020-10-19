@@ -75,6 +75,22 @@
 </span></td></tr>
 <tr><td><a name="count_rows"></a><code>count_rows() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of rows.</p>
 </span></td></tr>
+<tr><td><a name="covar_pop"></a><code>covar_pop(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the population covariance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="covar_pop"></a><code>covar_pop(arg1: <a href="float.html">float</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the population covariance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="covar_pop"></a><code>covar_pop(arg1: <a href="int.html">int</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the population covariance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="covar_pop"></a><code>covar_pop(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the population covariance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="covar_samp"></a><code>covar_samp(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the sample covariance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="covar_samp"></a><code>covar_samp(arg1: <a href="float.html">float</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the sample covariance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="covar_samp"></a><code>covar_samp(arg1: <a href="int.html">int</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the sample covariance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="covar_samp"></a><code>covar_samp(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the sample covariance of the selected values.</p>
+</span></td></tr>
 <tr><td><a name="every"></a><code>every(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Calculates the boolean value of <code>AND</code>ing all selected values.</p>
 </span></td></tr>
 <tr><td><a name="json_agg"></a><code>json_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Aggregates values as a JSON or JSONB array.</p>

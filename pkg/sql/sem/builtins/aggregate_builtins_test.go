@@ -301,36 +301,52 @@ func TestStdDevPopDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalStdDevPopAggregate, makeDecimalTestDatum(10))
 }
 
-func TestCorrFloatFloatResultDeepCopy(t *testing.T) {
+func TestCorr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testAggregateResultDeepCopy(t, newCorrAggregate, makeFloatTestDatum(10), makeFloatTestDatum(10))
+	testAggregateFunctionResultDeepCopy(t, newCorrAggregate, "corr")
 }
 
-func TestCorrIntIntResultDeepCopy(t *testing.T) {
+func TestCovarPop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeIntTestDatum(10))
+	testAggregateFunctionResultDeepCopy(t, newCovarPopAggregate, "covar_pop")
 }
 
-func TestCorrFloatIntResultDeepCopy(t *testing.T) {
+func TestCovarSamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testAggregateResultDeepCopy(t, newCorrAggregate, makeFloatTestDatum(10), makeIntTestDatum(10))
+	testAggregateFunctionResultDeepCopy(t, newCovarSampAggregate, "covar_samp")
 }
 
-func TestCorrIntFloatResultDeepCopy(t *testing.T) {
+// testAggregateFunctionResultDeepCopy is a helper function for testing correlation, covariance,
+// and regression aggregation functions.
+func testAggregateFunctionResultDeepCopy(
+	t *testing.T,
+	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	funcName string,
+) {
 	defer leaktest.AfterTest(t)()
-	testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeFloatTestDatum(10))
-}
-
-func TestCorrNullResultDeepCopy(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	t.Run("all null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newCorrAggregate, makeNullTestDatum(10), makeNullTestDatum(10))
+	t.Run(fmt.Sprintf("%s: float float", funcName), func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newCorrAggregate, makeFloatTestDatum(10), makeFloatTestDatum(10))
 	})
-	t.Run("with first arg null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newCorrAggregate, makeTestWithNullDatum(10, makeIntTestDatum), makeIntTestDatum(10))
+	t.Run(fmt.Sprintf("%s: int int", funcName), func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeIntTestDatum(10))
 	})
-	t.Run("with other arg null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeTestWithNullDatum(10, makeIntTestDatum))
+	t.Run(fmt.Sprintf("%s: float int", funcName), func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newCorrAggregate, makeFloatTestDatum(10), makeIntTestDatum(10))
+	})
+	t.Run(fmt.Sprintf("%s: int float", funcName), func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeFloatTestDatum(10))
+	})
+	t.Run(fmt.Sprintf("%s: all null", funcName), func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeIntTestDatum(10))
+	})
+	t.Run(fmt.Sprintf("%s: all null", funcName), func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFunc, makeNullTestDatum(10), makeNullTestDatum(10))
+	})
+	t.Run(fmt.Sprintf("%s: with first arg null", funcName), func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFunc, makeTestWithNullDatum(10, makeIntTestDatum), makeIntTestDatum(10))
+	})
+	t.Run(fmt.Sprintf("%s: with other arg null", funcName), func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFunc, makeIntTestDatum(10), makeTestWithNullDatum(10, makeIntTestDatum))
 	})
 }
 
