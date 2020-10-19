@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 type alterDatabaseOwnerNode struct {
@@ -78,3 +79,24 @@ func (p *planner) checkCanAlterDatabaseAndSetNewOwner(
 func (n *alterDatabaseOwnerNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterDatabaseOwnerNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseOwnerNode) Close(context.Context)        {}
+
+// AlterDatabaseAddRegion transforms a tree.AlterDatabaseAddRegion into a plan node.
+func (p *planner) AlterDatabaseAddRegion(
+	ctx context.Context, n *tree.AlterDatabaseAddRegion,
+) (planNode, error) {
+	return nil, unimplemented.New("alter database add region", "implementation pending")
+}
+
+// AlterDatabaseDropRegion transforms a tree.AlterDatabaseDropRegion into a plan node.
+func (p *planner) AlterDatabaseDropRegion(
+	ctx context.Context, n *tree.AlterDatabaseDropRegion,
+) (planNode, error) {
+	return nil, unimplemented.New("alter database drop region", "implementation pending")
+}
+
+// AlterDatabaseSurvive transforms a tree.AlterDatabaseSurvive into a plan node.
+func (p *planner) AlterDatabaseSurvive(
+	ctx context.Context, n *tree.AlterDatabaseSurvive,
+) (planNode, error) {
+	return nil, unimplemented.New("alter database survive", "implementation pending")
+}

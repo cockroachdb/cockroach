@@ -333,6 +333,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SHOW PARTITIONS FROM ??`, `SHOW PARTITIONS`},
 
+		{`SHOW REGIONS ??`, `SHOW REGIONS`},
+
 		{`SHOW ROLES ??`, `SHOW ROLES`},
 
 		{`SHOW SCHEMAS FROM ??`, `SHOW SCHEMAS`},

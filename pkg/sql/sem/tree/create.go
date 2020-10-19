@@ -43,6 +43,8 @@ type CreateDatabase struct {
 	Collate         string
 	CType           string
 	ConnectionLimit int32
+	Regions         NameList
+	Survive         Survive
 }
 
 // Format implements the NodeFormatter interface.
@@ -71,6 +73,14 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.ConnectionLimit != -1 {
 		ctx.WriteString(" CONNECTION LIMIT = ")
 		ctx.WriteString(strconv.Itoa(int(node.ConnectionLimit)))
+	}
+	if node.Regions != nil {
+		ctx.WriteString(" REGIONS = ")
+		node.Regions.Format(ctx)
+	}
+	if node.Survive != SurviveDefault {
+		ctx.WriteString(" ")
+		node.Survive.Format(ctx)
 	}
 }
 
