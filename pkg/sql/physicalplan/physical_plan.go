@@ -931,13 +931,14 @@ func (p *PhysicalPlan) PopulateEndpoints() {
 		} else {
 			endpoint.Type = execinfrapb.StreamEndpointSpec_REMOTE
 		}
-		p2.Spec.Input[s.DestInput].Streams = append(p2.Spec.Input[s.DestInput].Streams, endpoint)
 		if endpoint.Type == execinfrapb.StreamEndpointSpec_REMOTE {
 			if !p.remotePlan {
 				p.remotePlan = true
 			}
+			endpoint.OriginNodeID = p1.Node
 			endpoint.TargetNodeID = p2.Node
 		}
+		p2.Spec.Input[s.DestInput].Streams = append(p2.Spec.Input[s.DestInput].Streams, endpoint)
 
 		router := &p1.Spec.Output[0]
 		// We are about to put this stream on the len(router.Streams) position in

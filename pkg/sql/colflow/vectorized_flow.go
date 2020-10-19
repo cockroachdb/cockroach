@@ -340,18 +340,18 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	f.Release()
 }
 
-// wrapWithVectorizedStatsCollector creates a new
-// colexec.VectorizedStatsCollector that wraps op and connects the newly
+// wrapWithVectorizedStatsCollectorBase creates a new
+// colexec.VectorizedStatsCollectorBase that wraps op and connects the newly
 // created wrapper with those corresponding to operators in inputs (the latter
 // must have already been wrapped).
-func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
+func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	op colexecbase.Operator,
 	ioReader execinfra.IOReader,
 	inputs []colexecbase.Operator,
 	id int32,
 	idTagKey string,
 	monitors []*mon.BytesMonitor,
-) (*colexec.VectorizedStatsCollector, error) {
+) (*colexec.VectorizedStatsCollectorBase, error) {
 	inputWatch := timeutil.NewStopWatch()
 	var memMonitors, diskMonitors []*mon.BytesMonitor
 	for _, m := range monitors {
@@ -361,20 +361,33 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 			memMonitors = append(memMonitors, m)
 		}
 	}
-	inputStatsCollectors := make([]*colexec.VectorizedStatsCollector, len(inputs))
+	inputStatsCollectors := make([]colexec.ChildStatsCollector, len(inputs))
 	for i, input := range inputs {
-		sc, ok := input.(*colexec.VectorizedStatsCollector)
+		sc, ok := input.(colexec.ChildStatsCollector)
 		if !ok {
 			return nil, errors.New("unexpectedly an input is not collecting stats")
 		}
 		inputStatsCollectors[i] = sc
 	}
-	vsc := colexec.NewVectorizedStatsCollector(
+	vsc := colexec.NewVectorizedStatsCollectorBase(
 		op, ioReader, id, idTagKey, inputWatch,
 		memMonitors, diskMonitors, inputStatsCollectors,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
 	return vsc, nil
+}
+
+// wrapWithNetworkVectorizedStatsCollector creates a new
+// colexec.NetworkVectorizedStatsCollector that wraps op.
+func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
+	inbox *colrpc.Inbox, id int32, idTagKey string, latency int64,
+) (*colexec.NetworkVectorizedStatsCollector, error) {
+	inputWatch := timeutil.NewStopWatch()
+	op := colexecbase.Operator(inbox)
+	ioReader := execinfra.IOReader(inbox)
+	nvsc := colexec.NewNetworkVectorizedStatsCollector(op, ioReader, id, idTagKey, inputWatch, latency)
+	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, nvsc)
+	return nvsc, nil
 }
 
 // finishVectorizedStatsCollectors finishes the given stats collectors and
@@ -383,7 +396,7 @@ func finishVectorizedStatsCollectors(
 	ctx context.Context,
 	flowID execinfrapb.FlowID,
 	deterministicStats bool,
-	vectorizedStatsCollectors []*colexec.VectorizedStatsCollector,
+	vectorizedStatsCollectors []colexec.VectorizedStatsCollector,
 ) {
 	flowIDString := flowID.String()
 	for _, vsc := range vectorizedStatsCollectors {
@@ -461,7 +474,7 @@ type vectorizedFlowCreator struct {
 
 	streamIDToInputOp              map[execinfrapb.StreamID]opDAGWithMetaSources
 	recordingStats                 bool
-	vectorizedStatsCollectorsQueue []*colexec.VectorizedStatsCollector
+	vectorizedStatsCollectorsQueue []colexec.VectorizedStatsCollector
 	waitGroup                      *sync.WaitGroup
 	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
@@ -516,7 +529,7 @@ func newVectorizedFlowCreator(
 		remoteComponentCreator:         componentCreator,
 		streamIDToInputOp:              make(map[execinfrapb.StreamID]opDAGWithMetaSources),
 		recordingStats:                 recordingStats,
-		vectorizedStatsCollectorsQueue: make([]*colexec.VectorizedStatsCollector, 0, 2),
+		vectorizedStatsCollectorsQueue: make([]colexec.VectorizedStatsCollector, 0, 2),
 		waitGroup:                      waitGroup,
 		syncFlowConsumer:               syncFlowConsumer,
 		nodeDialer:                     nodeDialer,
@@ -593,6 +606,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	if err != nil {
 		return nil, err
 	}
+
 	atomic.AddInt32(&s.numOutboxes, 1)
 	run := func(ctx context.Context, cancelFn context.CancelFunc) {
 		// cancelFn is the cancellation function of the context of the whole
@@ -696,7 +710,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				// stats. This is mostly for compatibility but will provide some useful
 				// information (e.g. output stall time).
 				var err error
-				localOp, err = s.wrapWithVectorizedStatsCollector(
+				localOp, err = s.wrapWithVectorizedStatsCollectorBase(
 					op, nil /* ioReader */, nil, /* inputs */
 					int32(stream.StreamID), execinfrapb.StreamIDTagKey, mons,
 				)
@@ -757,18 +771,28 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err := s.checkInboundStreamID(inputStream.StreamID); err != nil {
 				return nil, nil, nil, err
 			}
+
+			var latency int64
+			// If LatencyGetter doesn't exist, latency's nil value of 0 is used.
+			// If latency is 0, it is not included in the displayed stats for
+			// EXPLAIN ANALYZE diagrams.
+			if flowCtx.Cfg.LatencyGetter != nil {
+				latency = flowCtx.Cfg.LatencyGetter.GetLatency(ctx, inputStream.OriginNodeID, inputStream.TargetNodeID)
+			}
+
 			inbox, err := s.remoteComponentCreator.newInbox(
 				ctx, colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory), input.ColumnTypes, inputStream.StreamID,
 			)
+
 			if err != nil {
 				return nil, nil, nil, err
 			}
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			op := colexecbase.Operator(inbox)
 			if s.recordingStats {
-				op, err = s.wrapWithVectorizedStatsCollector(
-					inbox, inbox, nil /* inputs */, int32(inputStream.StreamID),
-					execinfrapb.StreamIDTagKey, nil, /* monitors */
+				op, err = s.wrapWithNetworkVectorizedStatsCollector(
+					inbox, int32(inputStream.StreamID),
+					execinfrapb.StreamIDTagKey, latency,
 				)
 				if err != nil {
 					return nil, nil, nil, err
@@ -824,7 +848,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// TODO(asubiotto): Once we have IDs for synchronizers, plumb them into
 			// this stats collector to display stats.
 			var err error
-			op, err = s.wrapWithVectorizedStatsCollector(
+			op, err = s.wrapWithVectorizedStatsCollectorBase(
 				op, nil /* ioReader */, statsInputsAsOps, -1, /* id */
 				"" /* idTagKey */, nil, /* monitors */
 			)
@@ -882,7 +906,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if s.recordingStats {
 			// If recording stats, we add a metadata source that will generate all
 			// stats data as metadata for the stats collectors created so far.
-			vscs := append([]*colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			vscs := append([]colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
 			metadataSourcesQueue = append(
 				metadataSourcesQueue,
@@ -914,7 +938,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
 			// appended to.
-			vscq := append([]*colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			vscq := append([]colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			outputStatsToTrace = func() {
 				finishVectorizedStatsCollectors(
 					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq,
@@ -1068,7 +1092,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 			op := result.Op
 			if s.recordingStats {
-				op, err = s.wrapWithVectorizedStatsCollector(
+				op, err = s.wrapWithVectorizedStatsCollectorBase(
 					op, result.IOReader, inputs, pspec.ProcessorID,
 					execinfrapb.ProcessorIDTagKey, result.OpMonitors,
 				)

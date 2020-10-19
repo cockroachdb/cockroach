@@ -132,10 +132,10 @@ func getNetworkBytesFromDistSQLSpanStats(dss execinfrapb.DistSQLSpanStats) (int6
 	switch v := dss.(type) {
 	case *flowinfra.OutboxStats:
 		return v.BytesSent, nil
-	case *execpb.VectorizedStats:
-		// VectorizedStats are output by the Inbox, hence the read/sent difference
+	case *execpb.VectorizedInboxStats:
+		// VectorizedInboxStats are output by the Inbox, hence the read/sent difference
 		// with OutboxStats.
-		return v.BytesRead, nil
+		return v.BaseVectorizedStats.BytesRead, nil
 	}
 	return 0, errors.Errorf("could not get network bytes from %T", dss)
 }
