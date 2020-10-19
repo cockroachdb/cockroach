@@ -87,7 +87,7 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
-	if V(level) {
+	if VDepth(level, 1) {
 		logDepth(ctx, 1, Severity_INFO, format, args)
 	}
 }
