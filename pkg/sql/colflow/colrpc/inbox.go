@@ -18,6 +18,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -106,6 +107,10 @@ type Inbox struct {
 	// bytesRead contains the number of bytes sent to the Inbox.
 	bytesRead int64
 
+	// latency contains the network latency from the Outbox node to the Inbox
+	// node.
+	latency int64
+
 	scratch struct {
 		data []*array.Data
 		b    coldata.Batch
@@ -114,6 +119,7 @@ type Inbox struct {
 
 var _ colexecbase.Operator = &Inbox{}
 var _ execinfra.IOReader = &Inbox{}
+var _ colexec.NetworkReader = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
@@ -284,6 +290,9 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}
+		if m.NetworkStats != nil {
+			i.latency = m.NetworkStats.Latency
+		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
 				meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(ctx, rpm)
@@ -331,6 +340,11 @@ func (i *Inbox) GetBytesRead() int64 {
 // GetRowsRead is part of the execinfra.IOReader interface.
 func (i *Inbox) GetRowsRead() int64 {
 	return i.rowsRead
+}
+
+// GetLatency is part of the colexec.NetworkReader interface.
+func (i *Inbox) GetLatency() int64 {
+	return i.latency
 }
 
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -344,6 +346,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 	id int32,
 	idTagKey string,
 	monitors []*mon.BytesMonitor,
+	networkReader colexec.NetworkReader,
 ) (*colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
 	var memMonitors, diskMonitors []*mon.BytesMonitor
@@ -364,7 +367,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 	}
 	vsc := colexec.NewVectorizedStatsCollector(
 		op, ioReader, id, idTagKey, inputWatch,
-		memMonitors, diskMonitors, inputStatsCollectors,
+		memMonitors, diskMonitors, inputStatsCollectors, networkReader,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
 	return vsc, nil
@@ -583,6 +586,16 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	if err != nil {
 		return nil, err
 	}
+
+	var latency int64
+	ss, err := flowCtx.Cfg.NodesStatusServer.OptionalNodesStatusServer(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+	if err == nil {
+		response, _ := ss.Nodes(ctx, &serverpb.NodesRequest{})
+		if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); ok && nodeID != 0 {
+			latency = response.Nodes[nodeID-1].Activity[stream.TargetNodeID].Latency
+		}
+	}
+
 	atomic.AddInt32(&s.numOutboxes, 1)
 	run := func(ctx context.Context, cancelFn context.CancelFunc) {
 		// cancelFn is the cancellation function of the context of the whole
@@ -598,6 +611,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			stream.StreamID,
 			outboxCancelFn,
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
+			latency,
 		)
 		currentOutboxes := atomic.AddInt32(&s.numOutboxes, -1)
 		// When the last Outbox on this node exits, we want to make sure that
@@ -689,6 +703,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				localOp, err = s.wrapWithVectorizedStatsCollector(
 					op, nil /* ioReader */, nil, /* inputs */
 					int32(stream.StreamID), execinfrapb.StreamIDTagKey, mons,
+					nil, /* networkReader */
 				)
 				if err != nil {
 					return err
@@ -761,7 +776,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			if s.recordingStats {
 				op, err = s.wrapWithVectorizedStatsCollector(
 					inbox, inbox, nil /* inputs */, int32(inputStream.StreamID),
-					execinfrapb.StreamIDTagKey, nil, /* monitors */
+					execinfrapb.StreamIDTagKey, nil /* monitors */, inbox,
 				)
 				if err != nil {
 					return nil, nil, nil, err
@@ -820,6 +835,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			op, err = s.wrapWithVectorizedStatsCollector(
 				op, nil /* ioReader */, statsInputsAsOps, -1, /* id */
 				"" /* idTagKey */, nil, /* monitors */
+				nil, /* networkReader */
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -1070,6 +1086,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				op, err = s.wrapWithVectorizedStatsCollector(
 					op, result.IOReader, inputs, pspec.ProcessorID,
 					execinfrapb.ProcessorIDTagKey, result.OpMonitors,
+					nil, /* networkReader */
 				)
 				if err != nil {
 					return

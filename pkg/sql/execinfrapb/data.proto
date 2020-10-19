@@ -236,6 +236,14 @@ message ProducerMessage {
   repeated DatumInfo typing = 2 [(gogoproto.nullable) = false];
 
   optional ProducerData data = 3 [(gogoproto.nullable) = false];
+
+  optional NetworkStats network_stats = 4;
+}
+
+// NetworkStats is a message that contains network metrics between an Outbox
+// and an Inbox.
+message NetworkStats {
+  optional int64 latency = 1 [(gogoproto.nullable) = false];
 }
 
 // RemoteProducerMetadata represents records that a producer wants to pass to

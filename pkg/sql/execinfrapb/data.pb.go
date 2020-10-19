@@ -712,8 +712,9 @@ type ProducerMessage struct {
 	// TODO(andrei): It'd be nice if the typing information for streams would be
 	// configured statically at plan creation time, instead of being discovered
 	// dynamically through the first rows that flow.
-	Typing []DatumInfo  `protobuf:"bytes,2,rep,name=typing" json:"typing"`
-	Data   ProducerData `protobuf:"bytes,3,opt,name=data" json:"data"`
+	Typing       []DatumInfo   `protobuf:"bytes,2,rep,name=typing" json:"typing"`
+	Data         ProducerData  `protobuf:"bytes,3,opt,name=data" json:"data"`
+	NetworkStats *NetworkStats `protobuf:"bytes,4,opt,name=network_stats,json=networkStats" json:"network_stats,omitempty"`
 }
 
 func (m *ProducerMessage) Reset()         { *m = ProducerMessage{} }
@@ -744,6 +745,41 @@ func (m *ProducerMessage) XXX_DiscardUnknown() {
 }
 
 var xxx_messageInfo_ProducerMessage proto.InternalMessageInfo
+
+// NetworkStats is a message that contains network metrics between an Outbox
+// and an Inbox.
+type NetworkStats struct {
+	Latency int64 `protobuf:"varint,1,opt,name=latency" json:"latency"`
+}
+
+func (m *NetworkStats) Reset()         { *m = NetworkStats{} }
+func (m *NetworkStats) String() string { return proto.CompactTextString(m) }
+func (*NetworkStats) ProtoMessage()    {}
+func (*NetworkStats) Descriptor() ([]byte, []int) {
+	return fileDescriptor_data_159da26645983a0f, []int{10}
+}
+func (m *NetworkStats) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NetworkStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NetworkStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NetworkStats.Merge(dst, src)
+}
+func (m *NetworkStats) XXX_Size() int {
+	return m.Size()
+}
+func (m *NetworkStats) XXX_DiscardUnknown() {
+	xxx_messageInfo_NetworkStats.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NetworkStats proto.InternalMessageInfo
 
 // RemoteProducerMetadata represents records that a producer wants to pass to
 // a consumer, other than data rows. It's named RemoteProducerMetadata to not
@@ -1398,6 +1434,7 @@ func init() {
 	proto.RegisterType((*ProducerHeader)(nil), "cockroach.sql.distsqlrun.ProducerHeader")
 	proto.RegisterType((*ProducerData)(nil), "cockroach.sql.distsqlrun.ProducerData")
 	proto.RegisterType((*ProducerMessage)(nil), "cockroach.sql.distsqlrun.ProducerMessage")
+	proto.RegisterType((*NetworkStats)(nil), "cockroach.sql.distsqlrun.NetworkStats")
 	proto.RegisterType((*RemoteProducerMetadata)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata")
 	proto.RegisterType((*RemoteProducerMetadata_RangeInfos)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata.RangeInfos")
 	proto.RegisterType((*RemoteProducerMetadata_TraceData)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata.TraceData")
@@ -1962,6 +1999,37 @@ func (m *ProducerMessage) MarshalTo(dAtA []byte) (int, error) {
 		return 0, err
 	}
 	i += n7
+	if m.NetworkStats != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintData(dAtA, i, uint64(m.NetworkStats.Size()))
+		n8, err := m.NetworkStats.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	return i, nil
+}
+
+func (m *NetworkStats) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *NetworkStats) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0x8
+	i++
+	i = encodeVarintData(dAtA, i, uint64(m.Latency))
 	return i, nil
 }
 
@@ -1981,11 +2049,11 @@ func (m *RemoteProducerMetadata) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Value != nil {
-		nn8, err := m.Value.MarshalTo(dAtA[i:])
+		nn9, err := m.Value.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += nn8
+		i += nn9
 	}
 	return i, nil
 }
@@ -1996,11 +2064,11 @@ func (m *RemoteProducerMetadata_RangeInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintData(dAtA, i, uint64(m.RangeInfo.Size()))
-		n9, err := m.RangeInfo.MarshalTo(dAtA[i:])
+		n10, err := m.RangeInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n9
+		i += n10
 	}
 	return i, nil
 }
@@ -2010,11 +2078,11 @@ func (m *RemoteProducerMetadata_Error) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintData(dAtA, i, uint64(m.Error.Size()))
-		n10, err := m.Error.MarshalTo(dAtA[i:])
+		n11, err := m.Error.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n10
+		i += n11
 	}
 	return i, nil
 }
@@ -2024,11 +2092,11 @@ func (m *RemoteProducerMetadata_TraceData_) MarshalTo(dAtA []byte) (int, error) 
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintData(dAtA, i, uint64(m.TraceData.Size()))
-		n11, err := m.TraceData.MarshalTo(dAtA[i:])
+		n12, err := m.TraceData.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n11
+		i += n12
 	}
 	return i, nil
 }
@@ -2038,11 +2106,11 @@ func (m *RemoteProducerMetadata_LeafTxnFinalState) MarshalTo(dAtA []byte) (int, 
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintData(dAtA, i, uint64(m.LeafTxnFinalState.Size()))
-		n12, err := m.LeafTxnFinalState.MarshalTo(dAtA[i:])
+		n13, err := m.LeafTxnFinalState.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n12
+		i += n13
 	}
 	return i, nil
 }
@@ -2052,11 +2120,11 @@ func (m *RemoteProducerMetadata_RowNum_) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintData(dAtA, i, uint64(m.RowNum.Size()))
-		n13, err := m.RowNum.MarshalTo(dAtA[i:])
+		n14, err := m.RowNum.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n13
+		i += n14
 	}
 	return i, nil
 }
@@ -2066,11 +2134,11 @@ func (m *RemoteProducerMetadata_SamplerProgress_) MarshalTo(dAtA []byte) (int, e
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintData(dAtA, i, uint64(m.SamplerProgress.Size()))
-		n14, err := m.SamplerProgress.MarshalTo(dAtA[i:])
+		n15, err := m.SamplerProgress.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n14
+		i += n15
 	}
 	return i, nil
 }
@@ -2080,11 +2148,11 @@ func (m *RemoteProducerMetadata_Metrics_) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintData(dAtA, i, uint64(m.Metrics.Size()))
-		n15, err := m.Metrics.MarshalTo(dAtA[i:])
+		n16, err := m.Metrics.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n15
+		i += n16
 	}
 	return i, nil
 }
@@ -2094,11 +2162,11 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress_) MarshalTo(dAtA []byte) (
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintData(dAtA, i, uint64(m.BulkProcessorProgress.Size()))
-		n16, err := m.BulkProcessorProgress.MarshalTo(dAtA[i:])
+		n17, err := m.BulkProcessorProgress.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n16
+		i += n17
 	}
 	return i, nil
 }
@@ -2295,11 +2363,11 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress) MarshalTo(dAtA []byte) (i
 	dAtA[i] = 0x22
 	i++
 	i = encodeVarintData(dAtA, i, uint64(m.ProgressDetails.Size()))
-	n17, err := m.ProgressDetails.MarshalTo(dAtA[i:])
+	n18, err := m.ProgressDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n17
+	i += n18
 	return i, nil
 }
 
@@ -2615,6 +2683,20 @@ func (m *ProducerMessage) Size() (n int) {
 	}
 	l = m.Data.Size()
 	n += 1 + l + sovData(uint64(l))
+	if m.NetworkStats != nil {
+		l = m.NetworkStats.Size()
+		n += 1 + l + sovData(uint64(l))
+	}
+	return n
+}
+
+func (m *NetworkStats) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	n += 1 + sovData(uint64(m.Latency))
 	return n
 }
 
@@ -4515,6 +4597,108 @@ func (m *ProducerMessage) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NetworkStats", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.NetworkStats == nil {
+				m.NetworkStats = &NetworkStats{}
+			}
+			if err := m.NetworkStats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipData(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthData
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *NetworkStats) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: NetworkStats: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: NetworkStats: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Latency", wireType)
+			}
+			m.Latency = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Latency |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(dAtA[iNdEx:])
