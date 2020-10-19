@@ -23,30 +23,41 @@ var _ tracing.SpanStats = &VectorizedStats{}
 var _ execinfrapb.DistSQLSpanStats = &VectorizedStats{}
 
 const (
-	batchesOutputTagSuffix     = "output.batches"
-	tuplesOutputTagSuffix      = "output.tuples"
-	ioTimeTagSuffix            = "time.io"
-	executionTimeTagSuffix     = "time.execution"
-	maxVecMemoryBytesTagSuffix = "mem.vectorized.max"
-	maxVecDiskBytesTagSuffix   = "disk.vectorized.max"
-	bytesReadTagSuffix         = "bytes.read"
-	rowsReadTagSuffix          = "rows.read"
+	batchesOutputTagSuffix       = "output.batches"
+	tuplesOutputTagSuffix        = "output.tuples"
+	ioTimeTagSuffix              = "time.io"
+	executionTimeTagSuffix       = "time.execution"
+	deserializationTimeTagSuffix = "time.deserialization"
+	maxVecMemoryBytesTagSuffix   = "mem.vectorized.max"
+	maxVecDiskBytesTagSuffix     = "disk.vectorized.max"
+	bytesReadTagSuffix           = "bytes.read"
+	rowsReadTagSuffix            = "rows.read"
+	networkLatencyTagSuffix      = "network.latency"
 )
 
 // Stats is part of SpanStats interface.
 func (vs *VectorizedStats) Stats() map[string]string {
 	var timeSuffix string
 	if vs.IO {
-		timeSuffix = ioTimeTagSuffix
+		if vs.OnStream {
+			timeSuffix = deserializationTimeTagSuffix
+		} else {
+			timeSuffix = ioTimeTagSuffix
+		}
 	} else {
 		timeSuffix = executionTimeTagSuffix
 	}
 	stats := map[string]string{
 		batchesOutputTagSuffix:     fmt.Sprintf("%d", vs.NumBatches),
-		tuplesOutputTagSuffix:      fmt.Sprintf("%d", vs.NumTuples),
 		timeSuffix:                 fmt.Sprintf("%v", vs.Time.Round(time.Microsecond)),
 		maxVecMemoryBytesTagSuffix: fmt.Sprintf("%d", vs.MaxAllocatedMem),
 		maxVecDiskBytesTagSuffix:   fmt.Sprintf("%d", vs.MaxAllocatedDisk),
+	}
+	if vs.OnStream {
+		stats[networkLatencyTagSuffix] = fmt.Sprintf("%v", time.Duration(vs.NetworkLatency).Round(time.Microsecond))
+		stats[timeSuffix] = fmt.Sprintf("%v", (vs.Time - time.Duration(vs.NetworkLatency)).Round(time.Microsecond))
+	} else {
+		stats[tuplesOutputTagSuffix] = fmt.Sprintf("%d", vs.NumTuples)
 	}
 	if vs.BytesRead != 0 {
 		stats[bytesReadTagSuffix] = humanizeutil.IBytes(vs.BytesRead)
@@ -58,28 +69,40 @@ func (vs *VectorizedStats) Stats() map[string]string {
 }
 
 const (
-	batchesOutputQueryPlanSuffix     = "batches output"
-	tuplesOutputQueryPlanSuffix      = "tuples output"
-	ioTimeQueryPlanSuffix            = "IO time"
-	executionTimeQueryPlanSuffix     = "execution time"
-	maxVecMemoryBytesQueryPlanSuffix = "max vectorized memory allocated"
-	maxVecDiskBytesQueryPlanSuffix   = "max vectorized disk allocated"
-	bytesReadQueryPlanSuffix         = "bytes read"
-	rowsReadQueryPlanSuffix          = "rows read"
+	batchesOutputQueryPlanSuffix       = "batches output"
+	tuplesOutputQueryPlanSuffix        = "tuples output"
+	ioTimeQueryPlanSuffix              = "IO time"
+	executionTimeQueryPlanSuffix       = "execution time"
+	deserializationTimeQueryPlanSuffix = "deserialization time"
+	maxVecMemoryBytesQueryPlanSuffix   = "max vectorized memory allocated"
+	maxVecDiskBytesQueryPlanSuffix     = "max vectorized disk allocated"
+	bytesReadQueryPlanSuffix           = "bytes read"
+	rowsReadQueryPlanSuffix            = "rows read"
+	networkLatencyQueryPlanSuffix      = "network latency"
 )
 
 // StatsForQueryPlan is part of DistSQLSpanStats interface.
 func (vs *VectorizedStats) StatsForQueryPlan() []string {
 	var timeSuffix string
 	if vs.IO {
-		timeSuffix = ioTimeQueryPlanSuffix
+		if vs.OnStream {
+			timeSuffix = deserializationTimeQueryPlanSuffix
+		} else {
+			timeSuffix = ioTimeQueryPlanSuffix
+		}
 	} else {
 		timeSuffix = executionTimeQueryPlanSuffix
 	}
 	stats := []string{
 		fmt.Sprintf("%s: %d", batchesOutputQueryPlanSuffix, vs.NumBatches),
-		fmt.Sprintf("%s: %d", tuplesOutputQueryPlanSuffix, vs.NumTuples),
-		fmt.Sprintf("%s: %v", timeSuffix, vs.Time.Round(time.Microsecond)),
+	}
+	if vs.OnStream {
+		stats = append(stats,
+			fmt.Sprintf("%s: %v", timeSuffix, (vs.Time-time.Duration(vs.NetworkLatency)).Round(time.Microsecond)),
+			fmt.Sprintf("%s: %v", networkLatencyQueryPlanSuffix, time.Duration(vs.NetworkLatency).Round(time.Microsecond)))
+	} else {
+		stats = append(stats, fmt.Sprintf("%s: %d", tuplesOutputQueryPlanSuffix, vs.NumTuples),
+			fmt.Sprintf("%s: %v", timeSuffix, vs.Time.Round(time.Microsecond)))
 	}
 	if vs.MaxAllocatedMem != 0 {
 		stats = append(stats,
