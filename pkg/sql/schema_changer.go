@@ -84,6 +84,8 @@ type SchemaChanger struct {
 	db                *kv.DB
 	leaseMgr          *lease.Manager
 
+	metrics *SchemaChangerMetrics
+
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *DistSQLPlanner
 	jobRegistry    *jobs.Registry
@@ -126,6 +128,7 @@ func NewSchemaChangerForTesting(
 		) sqlutil.InternalExecutor {
 			return execCfg.InternalExecutor
 		},
+		metrics: NewSchemaChangerMetrics(),
 	}
 }
 
@@ -550,6 +553,9 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 // If the txn that queued the schema changer did not commit, this will be a
 // no-op, as we'll fail to find the job for our mutation in the jobs registry.
 func (sc *SchemaChanger) exec(ctx context.Context) error {
+	sc.metrics.RunningSchemaChanges.Inc(1)
+	defer sc.metrics.RunningSchemaChanges.Dec(1)
+
 	ctx = logtags.AddTags(ctx, sc.execLogTags())
 
 	// Pull out the requested descriptor.
@@ -2075,6 +2081,7 @@ func (r schemaChangeResumer) Resume(
 			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
 				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
 			},
+			metrics: p.ExecCfg().SchemaChangerMetrics,
 		}
 		opts := retry.Options{
 			InitialBackoff: 20 * time.Millisecond,
@@ -2092,6 +2099,7 @@ func (r schemaChangeResumer) Resume(
 			scErr = sc.exec(ctx)
 			switch {
 			case scErr == nil:
+				sc.metrics.Successes.Inc(1)
 				return nil
 			case errors.Is(scErr, catalog.ErrDescriptorNotFound):
 				// If the table descriptor for the ID can't be found, we assume that
@@ -2108,10 +2116,15 @@ func (r schemaChangeResumer) Resume(
 				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
 				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
+				sc.metrics.RetryErrors.Inc(1)
 			default:
+				if ctx.Err() == nil {
+					sc.metrics.PermanentErrors.Inc(1)
+				}
 				// All other errors lead to a failed job.
 				return scErr
 			}
+
 		}
 		// If the context was canceled, the job registry will retry the job. We can
 		// just return the error without wrapping it in a retry error.
