@@ -540,9 +540,9 @@ func (w *tpcc) Tables() []workload.Table {
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
 			maybeAddFkSuffix(
-				w.fks,
+				w.deprecatedFkIndexes,
 				tpccStockSchemaBase,
-				tpccStockSchemaFkSuffix,
+				deprecatedTpccStockSchemaFkSuffix,
 			),
 			tpccStockSchemaInterleaveSuffix,
 		),

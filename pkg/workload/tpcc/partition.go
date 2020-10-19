@@ -347,9 +347,6 @@ func partitionOrderLine(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error 
 }
 
 func partitionStock(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
-	// The stock_item_fk_idx can't be partitioned because it doesn't have a
-	// warehouse prefix. It's an all-around unfortunate index that we only
-	// need because of a restriction in SQL. See #36859 and #37255.
 	return partitionTable(db, cfg, wPart, "stock", "s_w_id", 0)
 }
 

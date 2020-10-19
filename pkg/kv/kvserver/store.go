@@ -149,17 +149,17 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterNonNegativeIntSett
 	"the burst rate at which the store will add all replicas to the split and merge queue due to system config gossip",
 	32)
 
-// raftLeadershipTransferTimeout limits the amount of time a drain command
-// waits for lease transfers.
-var raftLeadershipTransferWait = func() *settings.DurationSetting {
+// leaseTransferWait limits the amount of time a drain command waits for lease
+// and Raft leadership transfers.
+var leaseTransferWait = func() *settings.DurationSetting {
 	s := settings.RegisterValidatedDurationSetting(
-		raftLeadershipTransferWaitKey,
+		leaseTransferWaitSettingName,
 		"the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process",
 		5*time.Second,
 		func(v time.Duration) error {
 			if v < 0 {
 				return errors.Errorf("cannot set %s to a negative duration: %s",
-					raftLeadershipTransferWaitKey, v)
+					leaseTransferWaitSettingName, v)
 			}
 			return nil
 		},
@@ -168,7 +168,7 @@ var raftLeadershipTransferWait = func() *settings.DurationSetting {
 	return s
 }()
 
-const raftLeadershipTransferWaitKey = "server.shutdown.lease_transfer_wait"
+const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 
 // ExportRequestsLimit is the number of Export requests that can run at once.
 // Each extracts data from RocksDB to a temp file and then uploads it to cloud
@@ -1218,9 +1218,10 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 
 	// We've seen all the replicas once. Now we're going to iterate
 	// until they're all gone, up to the configured timeout.
-	transferTimeout := raftLeadershipTransferWait.Get(&s.cfg.Settings.SV)
+	transferTimeout := leaseTransferWait.Get(&s.cfg.Settings.SV)
 
-	if err := contextutil.RunWithTimeout(ctx, "wait for raft leadership transfer", transferTimeout,
+	drainLeasesOp := "transfer range leases"
+	if err := contextutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
 		func(ctx context.Context) error {
 			opts := retry.Options{
 				InitialBackoff: 10 * time.Millisecond,
@@ -1251,9 +1252,16 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 			// err, take it into account here.
 			return errors.CombineErrors(err, ctx.Err())
 		}); err != nil {
-		// You expect this message when shutting down a server in an unhealthy
-		// cluster. If we see it on healthy ones, there's likely something to fix.
-		log.Warningf(ctx, "unable to drain cleanly within %s, service might briefly deteriorate: %+v", transferTimeout, err)
+		if tErr := (*contextutil.TimeoutError)(nil); errors.As(err, &tErr) && tErr.Operation() == drainLeasesOp {
+			// You expect this message when shutting down a server in an unhealthy
+			// cluster, or when draining all nodes with replicas for some range at the
+			// same time. If we see it on healthy ones, there's likely something to fix.
+			log.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
+				"service might briefly deteriorate if the node is terminated: %s",
+				transferTimeout, leaseTransferWaitSettingName, tErr.Cause())
+		} else {
+			log.Warningf(ctx, "drain error: %+v", err)
+		}
 	}
 }
 
