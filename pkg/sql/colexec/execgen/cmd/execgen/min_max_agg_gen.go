@@ -18,37 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type minMaxTmplInfo struct {
-	// Note that we embed the corresponding comparison overload (either LT or
-	// GT) into this struct (so that we could have access to methods like Set,
-	// Range, etc.) but also customize the result variables.
-	*lastArgWidthOverload
-	Agg string
-	// The following three fields have "Agg" prefix in order to not collide
-	// with the fields in lastArgWidthOverload, just to be safe.
-	AggRetGoTypeSlice string
-	AggRetGoType      string
-	AggRetVecMethod   string
-}
-
-// AggNameTitle returns the aggregation name in title case, e.g. "Min".
-func (a minMaxTmplInfo) AggNameTitle() string {
-	return strings.Title(a.Agg)
-}
-
-// Avoid unused warning for functions which are only used in templates.
-var _ = minMaxTmplInfo{}.AggNameTitle()
-
 const minMaxAggTmpl = "pkg/sql/colexec/min_max_agg_tmpl.go"
 
 func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
-	// TODO(yuzefovich): clean up this file as per comments in #54080.
 	r := strings.NewReplacer(
-		"_AGG_TITLE", "{{.AggNameTitle}}",
-		"_AGG", "{{.Agg}}",
-		"_RET_GOTYPESLICE", "{{.AggRetGoTypeSlice}}",
-		"_RET_GOTYPE", "{{.AggRetGoType}}",
-		"_RET_TYPE", "{{.AggRetVecMethod}}",
+		"_AGG", "{{$agg}}",
+		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
+		"_GOTYPE", "{{.GoType}}",
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)
@@ -66,30 +42,19 @@ func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-
-	var tmplInfos []minMaxTmplInfo
-	for _, agg := range []string{"min", "max"} {
-		cmpOp := tree.LT
-		if agg == "max" {
-			cmpOp = tree.GT
-		}
-		for _, ov := range sameTypeComparisonOpToOverloads[cmpOp] {
-			for i := range ov.WidthOverloads {
-				widthOv := ov.WidthOverloads[i]
-				retGoTypeSlice := widthOv.GoTypeSliceName()
-				retGoType := widthOv.GoType
-				retVecMethod := widthOv.VecMethod
-				tmplInfos = append(tmplInfos, minMaxTmplInfo{
-					lastArgWidthOverload: widthOv,
-					Agg:                  agg,
-					AggRetGoTypeSlice:    retGoTypeSlice,
-					AggRetGoType:         retGoType,
-					AggRetVecMethod:      retVecMethod,
-				})
-			}
-		}
-	}
-	return tmpl.Execute(wr, tmplInfos)
+	return tmpl.Execute(wr, []struct {
+		Agg       string
+		Overloads []*oneArgOverload
+	}{
+		{
+			Agg:       "min",
+			Overloads: sameTypeComparisonOpToOverloads[tree.LT],
+		},
+		{
+			Agg:       "max",
+			Overloads: sameTypeComparisonOpToOverloads[tree.GT],
+		},
+	})
 }
 
 func init() {
