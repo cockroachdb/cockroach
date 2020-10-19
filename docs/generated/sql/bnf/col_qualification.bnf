@@ -1,7 +1,7 @@
 col_qualification ::=
 	'CONSTRAINT' constraint_name 'NOT' 'NULL'
 	| 'CONSTRAINT' constraint_name 'NULL'
-	| 'CONSTRAINT' constraint_name 'UNIQUE'
+	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY'
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
 	| 'CONSTRAINT' constraint_name 'CHECK' '(' a_expr ')'
@@ -10,7 +10,7 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'STORED'
 	| 'NOT' 'NULL'
 	| 'NULL'
-	| 'UNIQUE'
+	| 'UNIQUE' opt_without_index
 	| 'PRIMARY' 'KEY'
 	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
 	| 'CHECK' '(' a_expr ')'

@@ -1652,7 +1652,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// [CONSTRAINT name]
-	//    [PRIMARY KEY|UNIQUE] ( ... )
+	//    [PRIMARY KEY|UNIQUE [WITHOUT INDEX]] ( ... )
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
@@ -1660,7 +1660,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//
 	// or (no constraint name):
 	//
-	// [PRIMARY KEY|UNIQUE] ( ... )
+	// [PRIMARY KEY|UNIQUE [WITHOUT INDEX]] ( ... )
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
@@ -1672,6 +1672,9 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 		title = pretty.Keyword("PRIMARY KEY")
 	} else {
 		title = pretty.Keyword("UNIQUE")
+		if node.WithoutIndex {
+			title = pretty.ConcatSpace(title, pretty.Keyword("WITHOUT INDEX"))
+		}
 	}
 	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
 	if node.Name != "" {
@@ -1768,7 +1771,7 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	//   [[CREATE [IF NOT EXISTS]] FAMILY [name]]
 	//   [[CONSTRAINT name] DEFAULT expr]
 	//   [[CONSTRAINT name] {NULL|NOT NULL}]
-	//   [[CONSTRAINT name] {PRIMARY KEY|UNIQUE}]
+	//   [[CONSTRAINT name] {PRIMARY KEY|UNIQUE [WITHOUT INDEX]}]
 	//   [[CONSTRAINT name] CHECK ...]
 	//   [[CONSTRAINT name] REFERENCES tbl (...)
 	//         [MATCH ...]
@@ -1829,11 +1832,14 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	pkConstraint := pretty.Nil
 	if node.PrimaryKey.IsPrimaryKey {
 		pkConstraint = pretty.Keyword("PRIMARY KEY")
-	} else if node.Unique {
+	} else if node.Unique.IsUnique {
 		pkConstraint = pretty.Keyword("UNIQUE")
+		if node.Unique.WithoutIndex {
+			pkConstraint = pretty.ConcatSpace(pkConstraint, pretty.Keyword("WITHOUT INDEX"))
+		}
 	}
 	if pkConstraint != pretty.Nil {
-		clauses = append(clauses, p.maybePrependConstraintName(&node.UniqueConstraintName, pkConstraint))
+		clauses = append(clauses, p.maybePrependConstraintName(&node.Unique.ConstraintName, pkConstraint))
 	}
 
 	if node.PrimaryKey.Sharded {

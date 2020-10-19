@@ -163,6 +163,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableAddConstraint:
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
+				if d.WithoutIndex {
+					return pgerror.New(pgcode.FeatureNotSupported,
+						"unique constraints without an index are not yet supported",
+					)
+				}
 				if d.PrimaryKey {
 					// We only support "adding" a primary key when we are using the
 					// default rowid primary index or if a DROP PRIMARY KEY statement
