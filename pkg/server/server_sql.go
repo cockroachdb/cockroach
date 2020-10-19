@@ -355,6 +355,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
 
+		LatencyGetter: &serverpb.LatencyGetter{
+			NodesStatusServer: &cfg.nodesStatusServer,
+		},
+
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
 		TempFS:          tempFS,

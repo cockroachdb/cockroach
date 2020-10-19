@@ -37,3 +37,11 @@ message VectorizedStats {
   // io is true.
   int64 rows_read = 9;
 }
+
+message VectorizedInboxStats {
+  VectorizedStats base_vectorized_stats = 1;
+
+  // network_latency is the latency time in nanoseconds between outbox and inbox.
+  // It is set only when on_stream is true.
+  int64 network_latency = 2;
+}
