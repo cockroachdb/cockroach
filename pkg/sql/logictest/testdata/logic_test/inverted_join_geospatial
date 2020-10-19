@@ -330,3 +330,88 @@ WHERE NOT EXISTS (
 1
 5
 6
+
+statement ok
+CREATE TABLE g (
+  k INT PRIMARY KEY,
+  geom GEOMETRY
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON g(geom)
+
+statement ok
+INSERT INTO g VALUES
+  (1, ST_MakePolygon('LINESTRING(0 0, 0 15, 15 15, 15 0, 0 0)'::geometry)),
+  (2, ST_MakePolygon('LINESTRING(0 0, 0 2, 2 2, 2 0, 0 0)'::geometry))
+
+# This query performs an inverted join.
+query II
+SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+----
+1  1
+1  2
+2  2
+
+# This query performs a cross join followed by a filter.
+query II
+SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+----
+1  1
+1  2
+2  2
+
+# This query is checking that the results of the previous two queries are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom)) AS inv_join(k1, k2)
+FULL OUTER JOIN
+(SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom)) AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+# Regression test for #55648.
+# This query performs an inverted join with an additional filter.
+query II
+SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2
+WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+ORDER BY g1.k, g2.k
+----
+1  1
+1  2
+
+# This query performs a cross join followed by a filter.
+query II
+SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2
+WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+ORDER BY g1.k, g2.k
+----
+1  1
+1  2
+
+# This query is checking that the results of the previous two queries are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(
+  SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2
+  WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+) AS inv_join(k1, k2)
+FULL OUTER JOIN
+(
+  SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2
+  WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+) AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----

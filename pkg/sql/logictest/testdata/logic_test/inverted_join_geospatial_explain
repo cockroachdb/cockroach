@@ -494,3 +494,100 @@ project                       ·                      ·                        
 ·                             estimated row count    1000 (missing stats)                     ·                                         ·
 ·                             table                  ltable@primary                           ·                                         ·
 ·                             spans                  FULL SCAN                                ·                                         ·
+
+statement ok
+CREATE TABLE g (
+  k INT PRIMARY KEY,
+  geom GEOMETRY
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON g(geom)
+
+# This query performs an inverted join.
+query TTT
+EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+----
+·                        distribution           local
+·                        vectorized             true
+sort                     ·                      ·
+ │                       order                  +k,+k
+ └── lookup join         ·                      ·
+      │                  table                  g@primary
+      │                  equality               (k) = (k)
+      │                  equality cols are key  ·
+      │                  pred                   st_contains(geom, geom)
+      └── inverted join  ·                      ·
+           │             table                  g@foo_inv
+           └── scan      ·                      ·
+·                        missing stats          ·
+·                        table                  g@primary
+·                        spans                  FULL SCAN
+
+# This query performs a cross join followed by a filter.
+query TTT
+EXPLAIN SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+----
+·                distribution   local
+·                vectorized     true
+sort             ·              ·
+ │               order          +k,+k
+ └── cross join  ·              ·
+      │          pred           st_contains(geom, geom)
+      ├── scan   ·              ·
+      │          missing stats  ·
+      │          table          g@primary
+      │          spans          FULL SCAN
+      └── scan   ·              ·
+·                missing stats  ·
+·                table          g@primary
+·                spans          FULL SCAN
+
+# This query performs an inverted join with an additional filter.
+query TTT
+EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2
+WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+ORDER BY g1.k, g2.k
+----
+·                        distribution           local
+·                        vectorized             true
+sort                     ·                      ·
+ │                       order                  +k,+k
+ └── lookup join         ·                      ·
+      │                  table                  g@primary
+      │                  equality               (k) = (k)
+      │                  equality cols are key  ·
+      │                  pred                   st_contains(geom, geom) AND st_contains(geom, '010300000001000000050000000000000000000000000000000000000000000000000000000000000000001440000000000000144000000000000014400000000000001440000000000000000000000000000000000000000000000000')
+      └── inverted join  ·                      ·
+           │             table                  g@foo_inv
+           └── scan      ·                      ·
+·                        missing stats          ·
+·                        table                  g@primary
+·                        spans                  [ - /19]
+
+# This query performs a cross join followed by a filter.
+query TTT
+EXPLAIN SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2
+WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+ORDER BY g1.k, g2.k
+----
+·                    distribution   local
+·                    vectorized     true
+sort                 ·              ·
+ │                   order          +k,+k
+ └── cross join      ·              ·
+      │              pred           st_contains(geom, geom)
+      ├── filter     ·              ·
+      │    │         filter         st_contains(geom, '010300000001000000050000000000000000000000000000000000000000000000000000000000000000001440000000000000144000000000000014400000000000001440000000000000000000000000000000000000000000000000')
+      │    └── scan  ·              ·
+      │              missing stats  ·
+      │              table          g@primary
+      │              spans          FULL SCAN
+      └── scan       ·              ·
+·                    missing stats  ·
+·                    table          g@primary
+·                    spans          [ - /19]
