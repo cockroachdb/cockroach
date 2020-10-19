@@ -172,9 +172,6 @@ type LocalOnlySessionData struct {
 	// RequireExplicitPrimaryKeys indicates whether CREATE TABLE statements should
 	// error out if no primary key is provided.
 	RequireExplicitPrimaryKeys bool
-	// VectorizeRowCountThreshold indicates the row count above which the
-	// vectorized execution engine will be used if possible.
-	VectorizeRowCountThreshold uint64
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic

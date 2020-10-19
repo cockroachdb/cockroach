@@ -96,10 +96,14 @@ func registerTPCDSVec(r *testRegistry) {
 	runTPCDSVec := func(ctx context.Context, t *test, c *cluster) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t)
+		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		clusterConn := c.Conn(ctx, 1)
 		disableAutoStats(t, clusterConn)
-		disableVectorizeRowCountThresholdHeuristic(t, clusterConn)
+		maybeDisableVectorizeRowCountThresholdHeuristic(t, clusterConn, versionString)
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup';`,
@@ -113,10 +117,6 @@ func registerTPCDSVec(r *testRegistry) {
 		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
 		waitForFullReplication(t, clusterConn)
-		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
-		if err != nil {
-			t.Fatal(err)
-		}
 
 		// TODO(yuzefovich): it seems like if cmpconn.CompareConns hits a
 		// timeout, the query actually keeps on going and the connection

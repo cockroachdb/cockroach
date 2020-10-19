@@ -72,7 +72,8 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled": {},
 	"sql.parallel_scans.enabled":                                       {},
 	// removed as of 21.1.
-	"sql.distsql.interleaved_joins.enabled": {},
+	"sql.distsql.interleaved_joins.enabled":      {},
+	"sql.defaults.vectorize_row_count_threshold": {},
 }
 
 // register adds a setting to the registry.

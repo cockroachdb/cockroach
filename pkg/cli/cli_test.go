@@ -528,7 +528,7 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `--set`, `echo=true`, `-e`, `select 123 as "123"`})
 	c.RunWithArgs([]string{`sql`, `--set`, `unknownoption`, `-e`, `select 123 as "123"`})
 	// Check that partial results + error get reported together.
-	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-3) from generate_series(1,4)`})
+	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-2) from generate_series(1,3)`})
 
 	// Output:
 	// sql -e show application_name
@@ -586,9 +586,8 @@ func Example_sql() {
 	// sql --set unknownoption -e select 123 as "123"
 	// invalid syntax: \set unknownoption. Try \? for help.
 	// ERROR: invalid syntax
-	// sql -e select 1/(@1-3) from generate_series(1,4)
+	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
-	// -0.5
 	// -1
 	// (error encountered after some results were delivered)
 	// ERROR: division by zero
@@ -1368,7 +1367,7 @@ func Example_misc_table() {
 	//     tree    |     field     | description
 	// ------------+---------------+--------------
 	//             | distribution  | full
-	//             | vectorized    | false
+	//             | vectorized    | true
 	//   render    |               |
 	//    └── scan |               |
 	//             | missing stats |

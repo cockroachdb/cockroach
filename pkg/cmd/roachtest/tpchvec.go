@@ -656,10 +656,14 @@ func runTPCHVec(
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", firstNode)
 	c.Start(ctx, t)
+	versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	conn := c.Conn(ctx, 1)
 	disableAutoStats(t, conn)
-	disableVectorizeRowCountThresholdHeuristic(t, conn)
+	maybeDisableVectorizeRowCountThresholdHeuristic(t, conn, versionString)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, newMonitor(ctx, c), c.All()); err != nil {
 		t.Fatal(err)
@@ -671,10 +675,6 @@ func runTPCHVec(
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
 	waitForFullReplication(t, conn)
-	versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
-	if err != nil {
-		t.Fatal(err)
-	}
 	version, err := toCRDBVersion(versionString)
 	if err != nil {
 		t.Fatal(err)

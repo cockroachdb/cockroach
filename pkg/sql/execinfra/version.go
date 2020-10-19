@@ -39,17 +39,20 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 39
+const Version execinfrapb.DistSQLVersion = 40
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 39
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 40
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 40 (MinAcceptedVersion: 40)
+  - '201auto' option of 'vectorize' setting has been removed.
 
 - Version: 39 (MinAcceptedVersion: 39)
   - Many parameters from sessiondata.SessionData object were pulled into a

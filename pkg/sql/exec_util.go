@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
@@ -303,25 +302,8 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"default vectorize mode",
 	"on",
 	map[int64]string{
-		int64(sessiondatapb.VectorizeOff):     "off",
-		int64(sessiondatapb.Vectorize201Auto): "201auto",
-		int64(sessiondatapb.VectorizeOn):      "on",
-	},
-)
-
-// VectorizeRowCountThresholdClusterValue controls the cluster default for the
-// vectorize row count threshold. When it is met, the vectorized execution
-// engine will be used if possible.
-var VectorizeRowCountThresholdClusterValue = settings.RegisterValidatedIntSetting(
-	"sql.defaults.vectorize_row_count_threshold",
-	"default vectorize row count threshold",
-	colexec.DefaultVectorizeRowCountThreshold,
-	func(v int64) error {
-		if v < 0 {
-			return pgerror.Newf(pgcode.InvalidParameterValue,
-				"cannot set sql.defaults.vectorize_row_count_threshold to a negative value: %d", v)
-		}
-		return nil
+		int64(sessiondatapb.VectorizeOff): "off",
+		int64(sessiondatapb.VectorizeOn):  "on",
 	},
 )
 
@@ -2073,10 +2055,6 @@ func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
 
 func (m *sessionDataMutator) SetVectorize(val sessiondatapb.VectorizeExecMode) {
 	m.data.VectorizeMode = val
-}
-
-func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
-	m.data.VectorizeRowCountThreshold = val
 }
 
 func (m *sessionDataMutator) SetTestingVectorizeInjectPanics(val bool) {

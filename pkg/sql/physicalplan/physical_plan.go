@@ -127,10 +127,6 @@ type PhysicalPlan struct {
 	// specifies whether there is more than one node involved in a plan.
 	remotePlan bool
 
-	// MaxEstimatedRowCount tracks the maximum estimated row count that a table
-	// reader in this plan will output. This information is used to decide
-	// whether to use the vectorized execution engine.
-	MaxEstimatedRowCount uint64
 	// TotalEstimatedScannedRows is the sum of the row count estimate of all the
 	// table readers in the plan.
 	TotalEstimatedScannedRows uint64
@@ -977,10 +973,6 @@ func (p *PhysicalPlan) GenerateFlowSpecs() map[roachpb.NodeID]*execinfrapb.FlowS
 // plans.
 func (p *PhysicalPlan) SetRowEstimates(left, right *PhysicalPlan) {
 	p.TotalEstimatedScannedRows = left.TotalEstimatedScannedRows + right.TotalEstimatedScannedRows
-	p.MaxEstimatedRowCount = left.MaxEstimatedRowCount
-	if right.MaxEstimatedRowCount > p.MaxEstimatedRowCount {
-		p.MaxEstimatedRowCount = right.MaxEstimatedRowCount
-	}
 }
 
 // MergePlans merges the processors and streams of two plans into a new plan.

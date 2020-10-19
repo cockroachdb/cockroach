@@ -111,14 +111,20 @@ func createStatsFromTables(t *test, conn *gosql.DB, tableNames []string) {
 	}
 }
 
-// disableVectorizeRowCountThresholdHeuristic sets
+// maybeDisableVectorizeRowCountThresholdHeuristic sets (if it exists)
 // 'vectorize_row_count_threshold' cluster setting to zero so that the test
 // would use the vectorized engine with 'vectorize=on' regardless of the
 // fact whether the stats are present or not (if we don't set it, then when
 // the stats are not present, we fallback to row-by-row engine even with
 // `vectorize=on` set).
-func disableVectorizeRowCountThresholdHeuristic(t *test, conn *gosql.DB) {
-	if _, err := conn.Exec("SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold=0"); err != nil {
+func maybeDisableVectorizeRowCountThresholdHeuristic(t *test, conn *gosql.DB, version string) {
+	v, err := toCRDBVersion(version)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if v <= tpchVecVersion20_2 {
+		if _, err := conn.Exec("SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold=0"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
