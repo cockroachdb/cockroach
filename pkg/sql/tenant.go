@@ -86,8 +86,31 @@ func CreateTenantRecord(
 	return nil
 }
 
-// getTenantRecord retrieves a tenant in system.tenants.
-func getTenantRecord(
+// DeleteTenantRecord deletes a tenant row from system.tenants.
+func DeleteTenantRecord(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfo,
+) error {
+	const op = "delete"
+	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(info.ID, op); err != nil {
+		return err
+	}
+
+	if num, err := execCfg.InternalExecutor.ExecEx(
+		ctx, "delete-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.tenants WHERE id = $1`, info.ID,
+	); err != nil {
+		return errors.Wrapf(err, "deleting tenant %d", info.ID)
+	} else if num != 1 {
+		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
+	}
+	return nil
+}
+
+// GetTenantRecord retrieves a tenant in system.tenants.
+func GetTenantRecord(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64,
 ) (*descpb.TenantInfo, error) {
 	row, err := execCfg.InternalExecutor.QueryRowEx(
@@ -95,6 +118,7 @@ func getTenantRecord(
 		`SELECT info FROM system.tenants WHERE id = $1`, tenID,
 	)
 	if err != nil {
+		// TODO(spaskob): consider returning a retryable error.
 		return nil, err
 	} else if row == nil {
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant \"%d\" does not exist", tenID)
@@ -197,7 +221,7 @@ func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, t
 	}
 
 	// Retrieve the tenant's info.
-	info, err := getTenantRecord(ctx, execCfg, txn, tenID)
+	info, err := GetTenantRecord(ctx, execCfg, txn, tenID)
 	if err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
@@ -222,7 +246,7 @@ func DestroyTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, te
 	}
 
 	// Retrieve the tenant's info.
-	info, err := getTenantRecord(ctx, execCfg, txn, tenID)
+	info, err := GetTenantRecord(ctx, execCfg, txn, tenID)
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
