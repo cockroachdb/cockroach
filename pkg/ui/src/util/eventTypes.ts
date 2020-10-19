@@ -73,6 +73,10 @@ export const SET_ZONE_CONFIG = "set_zone_config";
 export const REMOVE_ZONE_CONFIG = "remove_zone_config";
 // Recorded when statistics are collected for a table.
 export const CREATE_STATISTICS = "create_statistics";
+// Recorded when privileges are added to a user(s).
+export const GRANT_PRIVILEGE = "grant_privilege";
+// Recorded when privileges are removed from a user(s).
+export const REVOKE_PRIVILEGE = "revoke_privilege";
 
 // Node Event Types
 export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONING, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
