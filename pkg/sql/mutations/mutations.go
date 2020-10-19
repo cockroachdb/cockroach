@@ -278,13 +278,15 @@ func statisticsMutator(
 					DistinctCount: distinctCount,
 					NullCount:     nullCount,
 				}
-				if def.Unique || def.PrimaryKey.IsPrimaryKey {
+				if (def.Unique.IsUnique && !def.Unique.WithoutIndex) || def.PrimaryKey.IsPrimaryKey {
 					makeHistogram(def)
 				}
 			case *tree.IndexTableDef:
 				makeHistogram(cols[def.Columns[0].Column])
 			case *tree.UniqueConstraintTableDef:
-				makeHistogram(cols[def.Columns[0].Column])
+				if !def.WithoutIndex {
+					makeHistogram(cols[def.Columns[0].Column])
+				}
 			}
 		}
 		if len(colStats) > 0 {
@@ -569,6 +571,10 @@ var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts
 						def.Family.Create = false
 						changed = true
 					}
+					if def.Unique.WithoutIndex {
+						def.Unique.WithoutIndex = false
+						changed = true
+					}
 				case *tree.UniqueConstraintTableDef:
 					if def.Interleave != nil {
 						def.Interleave = nil
@@ -576,6 +582,10 @@ var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts
 					}
 					if def.PartitionBy != nil {
 						def.PartitionBy = nil
+						changed = true
+					}
+					if def.WithoutIndex {
+						def.WithoutIndex = false
 						changed = true
 					}
 				}
