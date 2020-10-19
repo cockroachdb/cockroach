@@ -536,3 +536,28 @@ func ConditionalGetTableDescFromTxn(
 	}
 	return existingKV.Value, nil
 }
+
+func GetTableDescFromTxn(
+	ctx context.Context, txn *kv.Txn, expectation *TableDescriptor,
+) (*TableDescriptor, error) {
+	key := MakeDescMetadataKey(expectation.ID)
+	existingKV, err := txn.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+
+	var existing *Descriptor
+	if existingKV.Value != nil {
+		existing = &Descriptor{}
+		if err := existingKV.Value.GetProto(existing); err != nil {
+			return nil, errors.Wrapf(err,
+				"decoding current table descriptor value for id: %d", expectation.ID)
+		}
+		existing.Table(existingKV.Value.Timestamp)
+	}
+
+	if existing == nil {
+		return nil, errors.Newf("failed to find table desc for id: %d", expectation.ID)
+	}
+	return existing.GetTable(), nil
+}
