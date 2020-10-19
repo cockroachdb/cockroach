@@ -12,7 +12,7 @@ package tree
 
 // AlterSchema represents an ALTER SCHEMA statement.
 type AlterSchema struct {
-	Schema Name
+	Schema ObjectNamePrefix
 	Cmd    AlterSchemaCmd
 }
 

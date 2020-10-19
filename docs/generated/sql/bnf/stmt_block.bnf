@@ -1232,8 +1232,8 @@ alter_partition_stmt ::=
 	alter_zone_partition_stmt
 
 alter_schema_stmt ::=
-	'ALTER' 'SCHEMA' schema_name 'RENAME' 'TO' schema_name
-	| 'ALTER' 'SCHEMA' schema_name 'OWNER' 'TO' role_spec
+	'ALTER' 'SCHEMA' qualifiable_schema_name 'RENAME' 'TO' schema_name
+	| 'ALTER' 'SCHEMA' qualifiable_schema_name 'OWNER' 'TO' role_spec
 
 alter_type_stmt ::=
 	'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'SCONST' opt_add_val_placement
@@ -1658,6 +1658,10 @@ alter_zone_partition_stmt ::=
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
 
+qualifiable_schema_name ::=
+	name
+	| name '.' name
+
 schema_name ::=
 	name
 
@@ -1774,10 +1778,6 @@ opt_interleave ::=
 opt_partition_by ::=
 	partition_by
 	| 
-
-qualifiable_schema_name ::=
-	name
-	| name '.' name
 
 opt_schema_name ::=
 	qualifiable_schema_name

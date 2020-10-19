@@ -330,6 +330,31 @@ SELECT schema_name FROM scdrop4_db.information_schema.schemata WHERE schema_name
 query T
 SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'scdrop%'
 
+subtest alter_schema_with_database_prefix
+
+# We should be able to alter schemas in different databases
+statement ok
+CREATE DATABASE with_alter_schema;
+CREATE ROLE jay;
+CREATE SCHEMA with_alter_schema.schema_to_alter AUTHORIZATION jay;
+
+statement ok
+ALTER SCHEMA with_alter_schema.schema_to_alter RENAME TO altered_schema;
+
+statement ok
+ALTER SCHEMA with_alter_schema.altered_schema OWNER TO root;
+
+statement ok
+USE with_alter_schema
+
+query T
+SELECT owner from [SHOW SCHEMAS] WHERE schema_name = 'altered_schema';
+----
+root
+
+statement error pq: unknown schema "schema_to_alter"
+ALTER SCHEMA with_alter_schema.schema_to_alter RENAME TO altered_schema;
+
 subtest drop_database
 
 # Ensure that user defined schemas are dropped when dropping the parent database.
