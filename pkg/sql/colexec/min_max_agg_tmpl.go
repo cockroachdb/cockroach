@@ -110,6 +110,9 @@ func newMax_AGGKINDAggAlloc(
 }
 
 // {{range .}}
+// {{$agg := .Agg}}
+// {{range .Overloads}}
+// {{range .WidthOverloads}}
 
 type _AGG_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
@@ -121,9 +124,9 @@ type _AGG_TYPE_AGGKINDAgg struct {
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
-	curAgg _RET_GOTYPE
+	curAgg _GOTYPE
 	// col points to the output vector we are updating.
-	col _RET_GOTYPESLICE
+	col _GOTYPESLICE
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -140,7 +143,7 @@ func (a *_AGG_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
 	a.vec = vec
-	a.col = vec._RET_TYPE()
+	a.col = vec._TYPE()
 	a.Reset()
 }
 
@@ -268,6 +271,8 @@ func (a *_AGG_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	return f
 }
 
+// {{end}}
+// {{end}}
 // {{end}}
 
 // {{/*
