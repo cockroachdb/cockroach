@@ -1081,8 +1081,20 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 		// accessed.
 		b := txn.NewBatch()
 		newTables := make([]*sqlbase.TableDescriptor, 0, len(details.TableDescs))
-		for _, tbl := range r.tables {
-			tableDesc := *tbl
+		for tableIndex, tbl := range r.tables {
+			existingDescVal, existingRoachVal, err := sqlbase.GetTableDescFromTxn(ctx, txn, tbl)
+			if err != nil {
+				return errors.Wrapf(err, "restore: failed to get table desc from kv for table %d",
+					tbl.ID)
+			}
+			tableDesc := *existingDescVal
+
+			log.Infof(ctx,
+				"restore: table desc in KV for table %d before restored version is published %s",
+				tableDesc.ID, existingDescVal.String())
+			log.Infof(ctx, "restore: table desc for table %d in job details: %s",
+				tableDesc.ID, details.TableDescs[tableIndex].String())
+
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
 			// Convert any mutations that were in progress on the table descriptor
@@ -1092,14 +1104,11 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 				return err
 			}
 			newSchemaChangeJobs = append(newSchemaChangeJobs, newJobs...)
-			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
-			if err != nil {
-				return errors.Wrapf(err, "validating table descriptor has not changed, expected: %v", tbl)
-			}
+
 			b.CPut(
 				sqlbase.MakeDescMetadataKey(tableDesc.ID),
 				sqlbase.WrapDescriptor(&tableDesc),
-				existingDescVal,
+				existingRoachVal,
 			)
 			newTables = append(newTables, &tableDesc)
 		}

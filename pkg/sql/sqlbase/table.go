@@ -536,3 +536,29 @@ func ConditionalGetTableDescFromTxn(
 	}
 	return existingKV.Value, nil
 }
+
+// GetTableDescFromTxn returns the TableDescriptor and the corresponding
+// roachpb.Value written to kv, for the supplied findTable.
+func GetTableDescFromTxn(
+	ctx context.Context, txn *kv.Txn, findTable *TableDescriptor,
+) (*TableDescriptor, *roachpb.Value, error) {
+	key := MakeDescMetadataKey(findTable.ID)
+	existingKV, err := txn.Get(ctx, key)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var existing *Descriptor
+	if existingKV.Value != nil {
+		existing = &Descriptor{}
+		if err := existingKV.Value.GetProto(existing); err != nil {
+			return nil, nil, errors.Wrapf(err,
+				"decoding current table descriptor value for id: %d", findTable.ID)
+		}
+	}
+
+	if existing == nil {
+		return nil, nil, errors.Newf("failed to find table desc for id: %d", findTable.ID)
+	}
+	return existing.Table(existingKV.Value.Timestamp), existingKV.Value, nil
+}
