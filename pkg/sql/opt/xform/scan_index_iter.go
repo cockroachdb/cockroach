@@ -157,7 +157,13 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		// If the index is a partial index, check whether or not the
 		// originalFilters imply the predicate.
 		if isPartialIndex {
-			pred := memo.PartialIndexPredicate(it.tabMeta, ord)
+			pred, ok := memo.PartialIndexPredicate(it.tabMeta, ord)
+			if !ok {
+				// A partial index predicate expression was not built for the
+				// partial index. Implication cannot be proven so it must be
+				// skipped.
+				continue
+			}
 
 			// If there are no originalFilters, then skip over any partial
 			// indexes that are not pseudo-partial indexes.
