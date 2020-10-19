@@ -6054,6 +6054,13 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		testutils.SucceedsSoon(t, func() error {
 			return checkTableKeyCountExact(ctx, kvDB, 2)
 		})
+		var permanentErrors int
+		require.NoError(t, sqlDB.QueryRow(`
+SELECT value
+  FROM crdb_internal.node_metrics
+ WHERE name = 'sql.schema_changer.permanent_errors';
+`).Scan(&permanentErrors))
+		require.Equal(t, 1, permanentErrors)
 	}
 
 	t.Run("error-before-backfill", func(t *testing.T) {
