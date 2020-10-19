@@ -648,7 +648,7 @@ func (sc *SchemaChanger) validateConstraints(
 				evalCtx.Txn = txn
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
 				semaCtx := tree.MakeSemaContext()
-				collection := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+				collection := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 				semaCtx.TypeResolver = descs.NewDistSQLTypeResolver(collection, txn)
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
@@ -791,7 +791,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+				tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
@@ -980,7 +980,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 
-			tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+			tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 			// Use a leased table descriptor for the backfill.
 			defer tc.ReleaseAll(ctx)
 			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
@@ -1338,7 +1338,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			if err != nil {
 				return err
 			}
-			tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+			tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 			// pretend that the schema has been modified.
 			if err := tc.AddUncommittedDescriptor(desc); err != nil {
 				return err
@@ -1414,7 +1414,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			return err
 		}
 
-		tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+		tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 		if err := tc.AddUncommittedDescriptor(desc); err != nil {
 			return err
 		}
@@ -1824,7 +1824,7 @@ func validateCheckInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewCollection(ctx, evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
+		newTc := descs.NewCollection(evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
 		// pretend that the schema has been modified.
 		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
 			return err
@@ -1860,7 +1860,7 @@ func validateFkInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewCollection(ctx, evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
+		newTc := descs.NewCollection(evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
 		// pretend that the schema has been modified.
 		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
 			return err

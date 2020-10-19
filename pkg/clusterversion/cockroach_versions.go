@@ -396,6 +396,9 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	},
 	{
 		// VersionLeasedDatabasedDescriptors enables leased database descriptors.
+		// Now that we unconditionally use leased descriptors in 21.1 and the main
+		// usages of this version gate have been removed, this version remains to
+		// gate a few miscellaneous database descriptor changes.
 		Key:     VersionLeasedDatabaseDescriptors,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 18},
 	},

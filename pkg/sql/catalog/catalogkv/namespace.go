@@ -116,14 +116,6 @@ func RemoveSchemaNamespaceEntry(
 	return RemoveObjectNamespaceEntry(ctx, txn, codec, parentID, keys.RootNamespaceID, name, false /* KVTrace */)
 }
 
-// RemoveDatabaseNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
-// for databases.
-func RemoveDatabaseNamespaceEntry(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string, KVTrace bool,
-) error {
-	return RemoveObjectNamespaceEntry(ctx, txn, codec, keys.RootNamespaceID, keys.RootNamespaceID, name, KVTrace)
-}
-
 // MakeObjectNameKey returns a key in the system.namespace table for
 // a given parentID and name, based on the cluster version.
 // - If cluster version >= 20.1, the key is in the new system.namespace table.

@@ -13,17 +13,14 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -167,50 +164,18 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
+	n.dbDesc.AddDrainingName(descpb.NameInfo{
+		ParentID:       keys.RootNamespaceID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           n.dbDesc.Name,
+	})
+	n.dbDesc.State = descpb.DescriptorState_DROP
+
 	b := &kv.Batch{}
-	if p.Descriptors().DatabaseLeasingUnsupported() {
-		// Remove the namespace entry from system.namespace.
-		err := catalogkv.RemoveDatabaseNamespaceEntry(
-			ctx, p.txn, p.ExecCfg().Codec, n.dbDesc.GetName(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		)
-		if err != nil {
-			return err
-		}
-
-		// Delete the database from the system.descriptor table.
-		descKey := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
-		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-			log.VEventf(ctx, 2, "Del %s", descKey)
-		}
-		b.Del(descKey)
-
-		// No job was created because no tables were dropped, so zone config can be
-		// immediately removed, if applicable.
-		if len(n.d.allTableObjectsToDelete) == 0 && params.ExecCfg().Codec.ForSystemTenant() {
-			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(n.dbDesc.GetID()))
-			if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-				log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
-			}
-			// Delete the zone config entry for this database.
-			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-		}
-
-		p.Descriptors().AddUncommittedDatabaseDeprecated(n.dbDesc.GetName(), n.dbDesc.GetID(), descs.DBDropped)
-
-	} else {
-		n.dbDesc.AddDrainingName(descpb.NameInfo{
-			ParentID:       keys.RootNamespaceID,
-			ParentSchemaID: keys.RootNamespaceID,
-			Name:           n.dbDesc.Name,
-		})
-		n.dbDesc.State = descpb.DescriptorState_DROP
-
-		// Note that a job was already queued above.
-		if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
-			return err
-		}
+	// Note that a job was already queued above.
+	if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
+		return err
 	}
-
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
