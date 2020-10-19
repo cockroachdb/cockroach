@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -37,18 +36,10 @@ var insertFastPathNodePool = sync.Pool{
 	},
 }
 
-// Check that exec.InsertFastPathMaxRows does not exceed the default
-// mutations.MaxBatchSize.
-func init() {
-	if mutations.MaxBatchSize() < exec.InsertFastPathMaxRows {
-		panic("decrease exec.InsertFastPathMaxRows")
-	}
-}
-
 // insertFastPathNode is a faster implementation of inserting values in a table
 // and performing FK checks. It is used when all the foreign key checks can be
 // performed via a direct lookup in an index, and when the input is VALUES of
-// limited size (at most exec.InsertFastPathMaxRows).
+// limited size (at most mutations.MaxBatchSize).
 type insertFastPathNode struct {
 	// input values, similar to a valuesNode.
 	input [][]tree.TypedExpr
