@@ -865,6 +865,17 @@ func isDatabaseEmpty(
 	return true, nil
 }
 
+func getTempSystemDBID(details jobspb.RestoreDetails) sqlbase.ID {
+	tempSystemDBID := keys.MinNonPredefinedUserDescID
+	for id := range details.TableRewrites {
+		if int(id) > tempSystemDBID {
+			tempSystemDBID = int(id)
+		}
+	}
+
+	return sqlbase.ID(tempSystemDBID)
+}
+
 // createImportingTables create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingTables(
@@ -893,15 +904,11 @@ func createImportingTables(
 			}
 		}
 	}
-	tempSystemDBID := keys.MinNonPredefinedUserDescID
-	for id := range details.TableRewrites {
-		if int(id) > tempSystemDBID {
-			tempSystemDBID = int(id)
-		}
-	}
+
 	if details.DescriptorCoverage == tree.AllDescriptors {
+		tempSystemDBID := getTempSystemDBID(details)
 		databases = append(databases, &sqlbase.DatabaseDescriptor{
-			ID:         sqlbase.ID(tempSystemDBID),
+			ID:         tempSystemDBID,
 			Name:       restoreTempSystemDB,
 			Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
 		})
@@ -1019,8 +1026,8 @@ func (r *restoreResumer) Resume(
 	// TODO(pbardea): This was part of the original design where full cluster
 	// restores were a special case, but really we should be making only the
 	// temporary system tables public before we restore all the system table data.
-	if r.descriptorCoverage == tree.AllDescriptors {
-		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB); err != nil {
+	if details.DescriptorCoverage == tree.AllDescriptors {
+		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, tables); err != nil {
 			return err
 		}
 	}
@@ -1263,10 +1270,26 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 
 // restoreSystemTables atomically replaces the contents of the system tables
 // with the data from the restored system tables.
-func (r *restoreResumer) restoreSystemTables(ctx context.Context, db *kv.DB) error {
+func (r *restoreResumer) restoreSystemTables(
+	ctx context.Context,
+	db *kv.DB,
+	restoreDetails jobspb.RestoreDetails,
+	tables []*sqlbase.TableDescriptor,
+) error {
+	tempSystemDBID := getTempSystemDBID(restoreDetails)
+
 	executor := r.execCfg.InternalExecutor
 	var err error
-	for _, systemTableName := range fullClusterSystemTables {
+
+	// Iterate through all the tables that we're restoring, and if it was restored
+	// to the temporary system DB then copy it's data over to the real system
+	// table.
+	for _, table := range tables {
+		if table.GetParentID() != tempSystemDBID {
+			continue
+		}
+		systemTableName := table.GetName()
+
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
 			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTableName)
