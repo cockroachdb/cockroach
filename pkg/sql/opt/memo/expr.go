@@ -642,11 +642,16 @@ func (s *ScanPrivate) UsesPartialIndex(md *opt.Metadata) bool {
 
 // PartialIndexPredicate returns the FiltersExpr representing the predicate of
 // the partial index that the scan uses. If the scan does not use a partial
-// index, this function panics. UsesPartialIndex should be called first to
-// determine if the scan operates over a partial index.
+// index or if a partial index predicate was not built for this index, this
+// function panics. UsesPartialIndex should be called first to determine if the
+// scan operates over a partial index.
 func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 	tabMeta := md.TableMeta(s.Table)
-	return PartialIndexPredicate(tabMeta, s.Index)
+	pred, ok := PartialIndexPredicate(tabMeta, s.Index)
+	if !ok {
+		panic(errors.AssertionFailedf("partial index predicate not found for %s", tabMeta.Table.Index(s.Index).Name()))
+	}
+	return pred
 }
 
 // UsesPartialIndex returns true if the the LookupJoinPrivate looks-up via a
@@ -906,14 +911,19 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 
 // PartialIndexPredicate returns the FiltersExpr representing the partial index
 // predicate at the given index ordinal. If the index at the ordinal is not a
-// partial index, this function panics. cat.Index.Predicate should be used first
-// to determine if the index is a partial index.
+// partial index or the predicate expression was not built for the index,
+// ok=false is returned.
 //
 // Note that TableMeta.PartialIndexPredicates is not initialized for mutation
-// queries. This function will panic in the context of a mutation.
-func PartialIndexPredicate(tabMeta *opt.TableMeta, ord cat.IndexOrdinal) FiltersExpr {
-	p := tabMeta.PartialIndexPredicates[ord]
-	return *p.(*FiltersExpr)
+// queries. This function will never return ok=true in the context of a mutation.
+func PartialIndexPredicate(
+	tabMeta *opt.TableMeta, ord cat.IndexOrdinal,
+) (pred FiltersExpr, ok bool) {
+	p, ok := tabMeta.PartialIndexPredicates[ord]
+	if !ok {
+		return nil, false
+	}
+	return *p.(*FiltersExpr), true
 }
 
 // FKCascades stores metadata necessary for building cascading queries.
