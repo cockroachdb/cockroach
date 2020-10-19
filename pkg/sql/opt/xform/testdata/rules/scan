@@ -748,3 +748,54 @@ scan with_time_index@secondary
  ├── constraint: /2/1: [/'2017-05-10 00:00:00' - ]
  ├── key: (1)
  └── fd: (1)-->(2)
+
+exec-ddl
+CREATE TABLE fk_a (
+    a INT PRIMARY KEY,
+    t TIMESTAMPTZ DEFAULT NULL,
+    UNIQUE INDEX (a) WHERE t is NULL
+)
+----
+
+exec-ddl
+CREATE TABLE fk_b (
+    b INT PRIMARY KEY,
+    a INT NOT NULL REFERENCES fk_a (a)
+)
+----
+
+# Do not use a non-implied partial index for FK check scans.
+opt
+INSERT INTO fk_b (b,a) VALUES (1,1)
+----
+insert fk_b
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => b:1
+ │    └── column2:5 => fk_b.a:2
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── values
+ │    ├── columns: column1:4!null column2:5!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(4,5)
+ │    └── (1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: fk_b(a) -> fk_a(a)
+           └── anti-join (lookup fk_a)
+                ├── columns: column2:6!null
+                ├── key columns: [6] = [7]
+                ├── lookup columns are key
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(6)
+                ├── with-scan &1
+                │    ├── columns: column2:6!null
+                │    ├── mapping:
+                │    │    └──  column2:5 => column2:6
+                │    ├── cardinality: [1 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(6)
+                └── filters (true)
