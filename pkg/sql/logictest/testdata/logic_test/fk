@@ -3600,7 +3600,6 @@ USE db2
 statement ok
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
 
-
 # Test that reversing a constraint addition after adding a self foreign key
 # works correctly.
 
@@ -3626,3 +3625,13 @@ foreign key violation: "add_self_fk_fail" row b=3, k=1 has no match in "add_self
 
 statement ok
 DROP TABLE add_self_fk_fail
+
+# Test that foreign keys cannot reference columns that are indexed by a partial
+# unique index. Partial unique indexes do not guarantee uniqueness in the entire
+# table.
+
+statement ok
+CREATE TABLE partial_parent (p INT, UNIQUE INDEX (p) WHERE p > 100)
+
+statement error there is no unique constraint matching given keys for referenced table partial_parent
+CREATE TABLE partial_child (p INT REFERENCES partial_parent (p))
