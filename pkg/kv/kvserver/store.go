@@ -1069,11 +1069,10 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 		const leaseTransferConcurrency = 100
 		sem := quotapool.NewIntPool("Store.SetDraining", leaseTransferConcurrency)
 
-		// Incremented for every lease or Raft leadership transfer
-		// attempted. We try to send both the lease and the Raft leaders
-		// away, but this may not reliably work. Instead, we run the
-		// surrounding retry loop until there are no leaders/leases left
-		// (ignoring single-replica or uninitialized Raft groups).
+		// Incremented for every lease transfer attempted. We try to send the lease
+		// away, but this may not reliably work. Instead, we run the surrounding
+		// retry loop until there are no leases left (ignoring single-replica
+		// ranges).
 		var numTransfersAttempted int32
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 			//
@@ -1110,12 +1109,6 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 
 					r.mu.Lock()
 					r.mu.draining = true
-					status := r.raftStatusRLocked()
-					// needsRaftTransfer is true when we can reasonably hope to transfer
-					// this replica's lease and/or Raft leadership away.
-					needsRaftTransfer := status != nil &&
-						len(status.Progress) > 1 &&
-						!(status.RaftState == raft.StateFollower && status.Lead != 0)
 					r.mu.Unlock()
 
 					var drainingLease roachpb.Lease
@@ -1142,7 +1135,13 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 						drainingLease.OwnedBy(s.StoreID()) &&
 						r.IsLeaseValid(ctx, drainingLease, s.Clock().Now())
 
-					if !needsLeaseTransfer && !needsRaftTransfer {
+					// Note that this code doesn't deal with transferring the Raft
+					// leadership. Leadership tries to follow the lease, so when leases
+					// are transferred, leadership will be transferred too. For ranges
+					// without leases we probably should try to move the leadership
+					// manually to a non-draining replica.
+
+					if !needsLeaseTransfer {
 						if log.V(1) {
 							// This logging is useful to troubleshoot incomplete drains.
 							log.Info(ctx, "not moving out")
@@ -1152,7 +1151,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 					}
 					if log.V(1) {
 						// This logging is useful to troubleshoot incomplete drains.
-						log.Infof(ctx, "trying to move replica out: lease transfer = %v, raft transfer = %v", needsLeaseTransfer, needsRaftTransfer)
+						log.Infof(ctx, "trying to move replica out")
 					}
 
 					if needsLeaseTransfer {
@@ -1175,18 +1174,6 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 								err,
 							)
 						}
-						if err == nil && leaseTransferred {
-							// If we just transferred the lease away, Raft leadership will
-							// usually transfer with it. Invoking a separate Raft leadership
-							// transfer would only obstruct this.
-							needsRaftTransfer = false
-						}
-					}
-
-					if needsRaftTransfer {
-						r.raftMu.Lock()
-						r.maybeTransferRaftLeadership(ctx)
-						r.raftMu.Unlock()
 					}
 				}); err != nil {
 				if log.V(1) {
