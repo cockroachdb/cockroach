@@ -365,6 +365,9 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 				return false
 			}
 		}
+		if _, isPartialIndex := idx.Predicate(); isPartialIndex {
+			return false
+		}
 		return true
 	}
 
