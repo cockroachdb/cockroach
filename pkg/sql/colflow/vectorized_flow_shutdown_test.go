@@ -212,6 +212,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory),
 						typs,
 						execinfrapb.StreamID(streamID),
+						0, /* latency */
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
@@ -323,6 +324,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory),
 						typs,
 						execinfrapb.StreamID(streamID),
+						0, /* latency */
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
