@@ -1366,6 +1366,8 @@ func TestParse(t *testing.T) {
 
 		{`ALTER SCHEMA s RENAME TO s2`},
 		{`ALTER SCHEMA s OWNER TO foo`},
+		{`ALTER SCHEMA db.s RENAME TO s2`},
+		{`ALTER SCHEMA db.s OWNER TO foo`},
 
 		{`ALTER TABLE a RENAME TO b`},
 		{`EXPLAIN ALTER TABLE a RENAME TO b`},
