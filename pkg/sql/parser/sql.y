@@ -5520,19 +5520,19 @@ create_schema_stmt:
 //   ALTER SCHEMA ... RENAME TO <newschemaname>
 //   ALTER SCHEMA ... OWNER TO {<newowner> | CURRENT_USER | SESSION_USER }
 alter_schema_stmt:
-  ALTER SCHEMA schema_name RENAME TO schema_name
+  ALTER SCHEMA qualifiable_schema_name RENAME TO schema_name
   {
     $$.val = &tree.AlterSchema{
-      Schema: tree.Name($3),
+      Schema: $3.objectNamePrefix(),
       Cmd: &tree.AlterSchemaRename{
         NewName: tree.Name($6),
       },
     }
   }
-| ALTER SCHEMA schema_name OWNER TO role_spec
+| ALTER SCHEMA qualifiable_schema_name OWNER TO role_spec
   {
     $$.val = &tree.AlterSchema{
-      Schema: tree.Name($3),
+      Schema: $3.objectNamePrefix(),
       Cmd: &tree.AlterSchemaOwner{
         Owner: $6.user(),
       },
