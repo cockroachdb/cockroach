@@ -370,6 +370,7 @@ type ColumnTableDef struct {
 		ShardBuckets Expr
 	}
 	Unique               bool
+	UniqueNoIndex        bool
 	UniqueConstraintName Name
 	DefaultExpr          struct {
 		Expr           Expr
@@ -487,6 +488,7 @@ func NewColumnTableDef(
 			d.UniqueConstraintName = c.Name
 		case UniqueConstraint:
 			d.Unique = true
+			d.UniqueNoIndex = t.NoIndex
 			d.UniqueConstraintName = c.Name
 		case *ColumnCheckConstraint:
 			d.CheckExprs = append(d.CheckExprs, ColumnTableDefCheckExpr{
@@ -575,6 +577,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 			}
 		} else if node.Unique {
 			ctx.WriteString(" UNIQUE")
+			if node.UniqueNoIndex {
+				ctx.WriteString(" WITHOUT INDEX")
+			}
 		}
 	}
 	if node.HasDefaultExpr() {
@@ -700,7 +705,9 @@ type ShardedPrimaryKeyConstraint struct {
 }
 
 // UniqueConstraint represents UNIQUE on a column.
-type UniqueConstraint struct{}
+type UniqueConstraint struct {
+	NoIndex bool
+}
 
 // ColumnCheckConstraint represents either a check on a column.
 type ColumnCheckConstraint struct {
@@ -800,6 +807,7 @@ func (*CheckConstraintTableDef) constraintTableDef()      {}
 type UniqueConstraintTableDef struct {
 	IndexTableDef
 	PrimaryKey bool
+	NoIndex    bool
 }
 
 // SetName implements the TableDef interface.
@@ -818,6 +826,9 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString("PRIMARY KEY ")
 	} else {
 		ctx.WriteString("UNIQUE ")
+	}
+	if node.NoIndex {
+		ctx.WriteString("WITHOUT INDEX ")
 	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)

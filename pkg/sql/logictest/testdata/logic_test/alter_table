@@ -1401,3 +1401,17 @@ ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT v_unique TO 
 
 statement error relation idx_v already exists
 ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT "primary" TO idx_v;
+
+subtest unique_without_index
+
+statement ok
+CREATE TABLE unique_without_index (
+  a INT,
+  b INT
+)
+
+statement error unique constraints without an index are not yet supported
+ALTER TABLE unique_without_index ADD COLUMN c INT UNIQUE WITHOUT INDEX
+
+statement error unique constraints without an index are not yet supported
+ALTER TABLE unique_without_index ADD CONSTRAINT ab UNIQUE WITHOUT INDEX (a, b)

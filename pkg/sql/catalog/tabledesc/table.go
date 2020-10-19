@@ -64,6 +64,11 @@ func MakeColumnDefDescs(
 		// Should never happen since `HoistConstraints` moves these to table level
 		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
 	}
+	if d.UniqueNoIndex {
+		return nil, nil, nil, pgerror.New(pgcode.FeatureNotSupported,
+			"unique constraints without an index are not yet supported",
+		)
+	}
 
 	col := &descpb.ColumnDescriptor{
 		Name:     string(d.Name),
@@ -107,7 +112,7 @@ func MakeColumnDefDescs(
 	}
 
 	var idx *descpb.IndexDescriptor
-	if d.PrimaryKey.IsPrimaryKey || d.Unique {
+	if d.PrimaryKey.IsPrimaryKey || (d.Unique && !d.UniqueNoIndex) {
 		if !d.PrimaryKey.Sharded {
 			idx = &descpb.IndexDescriptor{
 				Unique:           true,
