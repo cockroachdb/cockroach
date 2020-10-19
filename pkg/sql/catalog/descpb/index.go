@@ -160,13 +160,13 @@ func (desc *IndexDescriptor) ColNamesString() string {
 // IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
 // key constraint with the provided set of originColIDs.
 func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
-	return ColumnIDs(desc.ColumnIDs).HasPrefix(originColIDs)
+	return !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).HasPrefix(originColIDs)
 }
 
 // IsValidReferencedIndex returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
 func (desc *IndexDescriptor) IsValidReferencedIndex(referencedColIDs ColumnIDs) bool {
-	return desc.Unique && ColumnIDs(desc.ColumnIDs).Equals(referencedColIDs)
+	return desc.Unique && !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).Equals(referencedColIDs)
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
