@@ -86,3 +86,24 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t4 ORDER BY k`, results)
 	}
 }
+
+func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		params := base.TestServerArgs{}
+		const numAccounts = 1000
+		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+			InitNone, base.TestClusterArgs{ServerArgs: params})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
+		require.NoError(t, err)
+
+		// Ensure that the restore succeeds.
+		var unused string
+		var importedRows int
+		sqlDB.QueryRow(t, `RESTORE FROM $1`, LocalFoo).Scan(
+			&unused, &unused, &unused, &importedRows, &unused, &unused,
+		)
+
+		//
+	}
+}
