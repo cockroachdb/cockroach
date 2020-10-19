@@ -21,6 +21,7 @@
 /pkg/sql/sem/builtins/       @cockroachdb/sql-api-prs
 
 /pkg/cli/                    @cockroachdb/cli-prs
+/pkg/server/                 @cockroachdb/cli-prs
 
 /pkg/ccl/backupccl/          @cockroachdb/bulk-prs
 /pkg/ccl/importccl/          @cockroachdb/bulk-prs
