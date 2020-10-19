@@ -644,6 +644,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 			outboxStreamID,
 			nil, /* cancelFn */
 			0,   /* connectionTimeout */
+			0,   /* latency */
 		)
 		outboxDone <- struct{}{}
 	}()
