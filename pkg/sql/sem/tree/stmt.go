@@ -179,6 +179,30 @@ func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABASE OWNER"
 func (*AlterDatabaseOwner) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*AlterDatabaseAddRegion) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseAddRegion) StatementTag() string { return "ALTER DATABASE ADD REGION" }
+
+func (*AlterDatabaseAddRegion) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseDropRegion) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseDropRegion) StatementTag() string { return "ALTER DATABASE DROP REGION" }
+
+func (*AlterDatabaseDropRegion) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseSurvive) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseSurvive) StatementTag() string { return "ALTER DATABASE SURVIVE" }
+
+func (*AlterDatabaseSurvive) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*AlterIndex) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -940,6 +964,12 @@ func (*ShowRangeForRow) StatementType() StatementType { return Rows }
 func (*ShowRangeForRow) StatementTag() string { return "SHOW RANGE FOR ROW" }
 
 // StatementType implements the Statement interface.
+func (*ShowRegions) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowRegions) StatementTag() string { return "SHOW REGIONS" }
+
+// StatementType implements the Statement interface.
 func (*ShowFingerprints) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1016,6 +1046,9 @@ func (*ValuesClause) StatementTag() string { return "VALUES" }
 
 func (n *AlterIndex) String() string                     { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
+func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }
+func (n *AlterDatabaseDropRegion) String() string        { return AsString(n) }
+func (n *AlterDatabaseSurvive) String() string           { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }
@@ -1122,6 +1155,7 @@ func (n *ShowJobs) String() string                       { return AsString(n) }
 func (n *ShowQueries) String() string                    { return AsString(n) }
 func (n *ShowRanges) String() string                     { return AsString(n) }
 func (n *ShowRangeForRow) String() string                { return AsString(n) }
+func (n *ShowRegions) String() string                    { return AsString(n) }
 func (n *ShowRoleGrants) String() string                 { return AsString(n) }
 func (n *ShowRoles) String() string                      { return AsString(n) }
 func (n *ShowSavepointStatus) String() string            { return AsString(n) }

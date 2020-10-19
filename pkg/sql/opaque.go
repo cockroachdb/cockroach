@@ -51,6 +51,12 @@ func buildOpaque(
 	switch n := stmt.(type) {
 	case *tree.AlterDatabaseOwner:
 		plan, err = p.AlterDatabaseOwner(ctx, n)
+	case *tree.AlterDatabaseAddRegion:
+		plan, err = p.AlterDatabaseAddRegion(ctx, n)
+	case *tree.AlterDatabaseDropRegion:
+		plan, err = p.AlterDatabaseDropRegion(ctx, n)
+	case *tree.AlterDatabaseSurvive:
+		plan, err = p.AlterDatabaseSurvive(ctx, n)
 	case *tree.AlterIndex:
 		plan, err = p.AlterIndex(ctx, n)
 	case *tree.AlterSchema:
@@ -185,7 +191,10 @@ func buildOpaque(
 
 func init() {
 	for _, stmt := range []tree.Statement{
+		&tree.AlterDatabaseAddRegion{},
+		&tree.AlterDatabaseDropRegion{},
 		&tree.AlterDatabaseOwner{},
+		&tree.AlterDatabaseSurvive{},
 		&tree.AlterIndex{},
 		&tree.AlterSchema{},
 		&tree.AlterTable{},
