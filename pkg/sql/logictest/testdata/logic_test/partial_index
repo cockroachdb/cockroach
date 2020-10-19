@@ -1423,3 +1423,31 @@ INSERT INTO t55387 VALUES (1, 1, 5);
 query I rowsort
 SELECT k FROM t55387 WHERE a > 1 AND b > 3
 ----
+
+# Regression test for #55672. Do not build partial index predicates when the
+# scope does not include all table columns, like FK check scans.
+
+statement ok
+CREATE TABLE t55672_a (
+    a INT PRIMARY KEY,
+    t TIMESTAMPTZ DEFAULT NULL,
+    UNIQUE INDEX (a) WHERE t is NULL
+)
+
+statement ok
+CREATE TABLE t55672_b (
+    b INT PRIMARY KEY,
+    a INT NOT NULL REFERENCES t55672_a (a)
+)
+
+statement ok
+INSERT INTO t55672_a (a) VALUES (1)
+
+statement ok
+INSERT INTO t55672_b (b,a) VALUES (1,1)
+
+statement ok
+INSERT INTO t55672_a (a, t) VALUES (2, now())
+
+statement ok
+INSERT INTO t55672_b (b,a) VALUES (2,2)
