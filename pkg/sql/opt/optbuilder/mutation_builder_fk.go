@@ -134,7 +134,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 		//  - with Cascade/SetNull/SetDefault, we create a cascading mutation to
 		//    modify or delete "orphaned" rows in the child table.
 		//  - with Restrict/NoAction, we create a check that causes an error if
-		//    there are any "orhpaned" rows in the child table.
+		//    there are any "orphaned" rows in the child table.
 		if a := h.fk.DeleteReferenceAction(); a != tree.Restrict && a != tree.NoAction {
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
 			var builder memo.CascadeBuilder
