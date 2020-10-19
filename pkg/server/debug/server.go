@@ -232,8 +232,7 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 
 		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
 		if err != nil {
-			// HACK(tbg)
-			continue
+			return err
 		}
 
 		dir := specs[i].Path

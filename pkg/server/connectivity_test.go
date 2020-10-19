@@ -392,9 +392,11 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 	})
 }
 
-// TestAddNewStoresToExistingNodes starts a cluster with three nodes,
-// shuts down all nodes and adds a store to each node, and ensures
-// nodes start back up successfully.
+// TestAddNewStoresToExistingNodes tests database behavior with
+// multiple stores per node, in particular when new stores are
+// added while nodes are shut down. This test starts a cluster with
+// three nodes, shuts down all nodes and adds a store to each node,
+// and ensures nodes start back up successfully. See #39415.
 func TestAddNewStoresToExistingNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
