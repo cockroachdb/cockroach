@@ -99,7 +99,13 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		// for an unconstrained index scan.
 		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
 		if isPartialIndex {
-			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			pred, ok := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			if !ok {
+				// A partial index predicate expression was not built for the
+				// partial index. Implication cannot be proven so it must be
+				// skipped.
+				continue
+			}
 			if !pred.IsTrue() {
 				continue
 			}
@@ -215,7 +221,13 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	// Iterate over all partial indexes.
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes)
 	for iter.Next() {
-		pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+		pred, ok := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+		if !ok {
+			// A partial index predicate expression was not built for the
+			// partial index. Implication cannot be proven so it must be
+			// skipped.
+			continue
+		}
 		remainingFilters, ok := c.im.FiltersImplyPredicate(filters, pred)
 		if !ok {
 			// The filters do not imply the predicate, so the partial index
@@ -346,9 +358,14 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// If the index is a partial index, check whether or not the filter
 		// implies the predicate.
 		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
-		var pred memo.FiltersExpr
 		if isPartialIndex {
-			pred = memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			pred, ok := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			if !ok {
+				// A partial index predicate expression was not built for the
+				// partial index. Implication cannot be proven so it must be
+				// skipped.
+				continue
+			}
 			remainingFilters, ok := c.im.FiltersImplyPredicate(filters, pred)
 			if !ok {
 				// The filters do not imply the predicate, so the partial index
@@ -1727,7 +1744,13 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// ON filters.
 		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
 		if isPartialIndex {
-			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			pred, ok := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			if !ok {
+				// A partial index predicate expression was not built for the
+				// partial index. Implication cannot be proven so it must be
+				// skipped.
+				continue
+			}
 			remainingFilters, ok := c.im.FiltersImplyPredicate(onFilters, pred)
 			if !ok {
 				// The ON filters do not imply the predicate, so the partial

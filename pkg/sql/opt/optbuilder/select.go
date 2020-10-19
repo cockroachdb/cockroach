@@ -521,8 +521,26 @@ func (b *Builder) buildScan(
 		outScope.expr = b.factory.ConstructScan(&private)
 
 		// Add the partial indexes after constructing the scan so we can use the
-		// logical properties of the scan to fully normalize the index predicates.
-		b.addPartialIndexPredicatesForTable(tabMeta, outScope)
+		// logical properties of the scan to fully normalize the index
+		// predicates. Partial index predicates are only added if the outScope
+		// contains all the table's ordinary columns. If it does not, partial
+		// index predicates cannot be built because they may reference columns
+		// not in outScope. In the most common case, the outScope has the same
+		// number of columns as the table and we can skip checking that each
+		// ordinary column exists in outScope.
+		containsAllOrdinaryTableColumns := true
+		if len(outScope.cols) != tab.ColumnCount() {
+			for i := 0; i < tab.ColumnCount(); i++ {
+				col := tab.Column(i)
+				if col.Kind() == cat.Ordinary && !outScope.colSet().Contains(tabID.ColumnID(col.Ordinal())) {
+					containsAllOrdinaryTableColumns = false
+					break
+				}
+			}
+		}
+		if containsAllOrdinaryTableColumns {
+			b.addPartialIndexPredicatesForTable(tabMeta, outScope)
+		}
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
