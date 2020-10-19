@@ -15,6 +15,7 @@ show_stmt ::=
 	| show_queries_stmt
 	| show_ranges_stmt
 	| show_range_for_row_stmt
+	| show_regions_stmt
 	| show_roles_stmt
 	| show_savepoint_stmt
 	| show_schemas_stmt
