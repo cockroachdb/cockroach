@@ -348,8 +348,7 @@ func (n *Node) start(
 	locality roachpb.Locality,
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
-	bootstrapStoresComplete chan<-bool,
-) error {
+) (error, func()) {
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
 	// use the KV store to get a NodeID assigned.
@@ -373,7 +372,7 @@ func (n *Node) start(
 		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
 		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
 		if err != nil {
-			return err
+			return err, nil
 		}
 		log.Infof(ctxWithSpan, "new node allocated ID %d", newID)
 		span.Finish()
@@ -382,7 +381,7 @@ func (n *Node) start(
 		// We're joining via gossip, so we don't have a liveness record for
 		// ourselves yet. Let's create one while here.
 		if err := n.storeCfg.NodeLiveness.CreateLivenessRecord(ctx, nodeID); err != nil {
-			return err
+			return err, nil
 		}
 	}
 
@@ -412,7 +411,7 @@ func (n *Node) start(
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.storeCfg.Gossip.NodeID.Set(ctx, n.Descriptor.NodeID)
 	if err := n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-		return errors.Errorf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+		return errors.Errorf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err), nil
 	}
 
 	// Start the closed timestamp subsystem.
@@ -422,11 +421,11 @@ func (n *Node) start(
 	for _, e := range state.initializedEngines {
 		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
-			return errors.Errorf("failed to start store: %s", err)
+			return errors.Errorf("failed to start store: %s", err), nil
 		}
 		capacity, err := s.Capacity(ctx, false /* useCached */)
 		if err != nil {
-			return errors.Errorf("could not query store capacity: %s", err)
+			return errors.Errorf("could not query store capacity: %s", err), nil
 		}
 		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
 
@@ -435,7 +434,7 @@ func (n *Node) start(
 
 	// Verify all initialized stores agree on cluster and node IDs.
 	if err := n.validateStores(ctx); err != nil {
-		return err
+		return err, nil
 	}
 	log.VEventf(ctx, 2, "validated stores")
 
@@ -452,7 +451,7 @@ func (n *Node) start(
 		}
 		return nil
 	}); err != nil {
-		return errors.Wrapf(err, "failed to read last up timestamp from stores")
+		return errors.Wrapf(err, "failed to read last up timestamp from stores"), nil
 	}
 	n.lastUp = mostRecentTimestamp.WallTime
 
@@ -460,13 +459,11 @@ func (n *Node) start(
 	// gossip can bootstrap using the most recently persisted set of
 	// node addresses.
 	if err := n.storeCfg.Gossip.SetStorage(n.stores); err != nil {
-		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
+		return fmt.Errorf("failed to initialize the gossip interface: %s", err), nil
 	}
 
-	// Bootstrap any uninitialized stores.
-	//
-	// TODO(tbg): address https://github.com/cockroachdb/cockroach/issues/39415.
-	// Should be easy enough. Writing the test is probably most of the work.
+	// Bootstrap any uninitialized stores and signal channel once complete.
+	bootstrapStoresComplete := make(chan struct{})
 	if len(state.newEngines) > 0 {
 		// We need to bootstrap additional stores asynchronously because we can't rely on
 		// the KV layer to be available yet. See:
@@ -476,8 +473,10 @@ func (n *Node) start(
 			if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
 				log.Fatalf(ctx, "while bootstrapping additional stores: %v", err)
 			}
-			bootstrapStoresComplete <- true
+			close(bootstrapStoresComplete)
 		})
+	} else {
+		close(bootstrapStoresComplete)
 	}
 
 	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
@@ -497,7 +496,9 @@ func (n *Node) start(
 		log.Infof(ctx, "started with engine type %v", t)
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
-	return nil
+	return nil, func() {
+		<-bootstrapStoresComplete
+	}
 }
 
 // IsDraining returns true if at least one Store housed on this Node is not
