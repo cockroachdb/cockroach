@@ -74,6 +74,7 @@ type Provider struct {
 		subscription   subscriptions.Subscription
 		resourceGroups map[string]resources.Group
 		subnets        map[string]network.Subnet
+		securityGroup  network.SecurityGroup
 	}
 }
 
@@ -619,6 +620,12 @@ func (p *Provider) createNIC(
 		return
 	}
 
+	p.mu.Lock()
+	sg := p.mu.securityGroup
+	p.mu.Unlock()
+
+	fmt.Printf("security group ID: %v\n", sg.ID)
+
 	future, err := client.CreateOrUpdate(ctx, *group.Name, *ip.Name, network.Interface{
 		Name:     ip.Name,
 		Location: group.Location,
@@ -633,6 +640,9 @@ func (p *Provider) createNIC(
 					},
 				},
 			},
+			NetworkSecurityGroup:        &sg,
+			EnableAcceleratedNetworking: to.BoolPtr(true),
+			Primary:                     to.BoolPtr(true),
 		},
 	})
 	if err != nil {
@@ -794,48 +804,128 @@ func (p *Provider) createVNet(
 	if sgp.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
-	fut, err := sgp.CreateOrUpdate(ctx, *group.Name, "SSH", network.SecurityGroup{
+	fut, err := sgp.CreateOrUpdate(ctx, *group.Name, *group.Name+"-arula-default-sg", network.SecurityGroup{
 		SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
+			SecurityRules: &[]network.SecurityRule{
+				{
+					Name: to.StringPtr("All"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(110),
+						Protocol:                 network.SecurityRuleProtocolAsterisk,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("*"),
+					},
+				},
+				{
+					Name: to.StringPtr("All"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(110),
+						Protocol:                 network.SecurityRuleProtocolAsterisk,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("*"),
+					},
+				},
+			},
 			DefaultSecurityRules: &[]network.SecurityRule{
 				{
-					Name: to.StringPtr("SSH"),
+					Name: to.StringPtr("All"),
 					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(300),
-						Protocol:                 network.SecurityRuleProtocolTCP,
+						Priority:                 to.Int32Ptr(110),
+						Protocol:                 network.SecurityRuleProtocolAsterisk,
 						Access:                   network.SecurityRuleAccessAllow,
 						Direction:                network.SecurityRuleDirectionInbound,
 						SourceAddressPrefix:      to.StringPtr("*"),
 						SourcePortRange:          to.StringPtr("*"),
 						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("22"),
+						DestinationPortRange:     to.StringPtr("*"),
 					},
 				},
-				{
-					Name: to.StringPtr("HTTP"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(320),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("80"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTPS"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(340),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("443"),
-					},
-				},
+				//{
+				//	Name: to.StringPtr("SSH Inbound"),
+				//	SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+				//		Priority:                 to.Int32Ptr(300),
+				//		Protocol:                 network.SecurityRuleProtocolTCP,
+				//		Access:                   network.SecurityRuleAccessAllow,
+				//		Direction:                network.SecurityRuleDirectionInbound,
+				//		SourceAddressPrefix:      to.StringPtr("*"),
+				//		SourcePortRange:          to.StringPtr("*"),
+				//		DestinationAddressPrefix: to.StringPtr("*"),
+				//		DestinationPortRange:     to.StringPtr("22"),
+				//	},
+				//},
+				////		{
+				////			Name: to.StringPtr("SSH Outbound"),
+				////			SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+				////				Priority:                 to.Int32Ptr(301),
+				////				Protocol:                 network.SecurityRuleProtocolTCP,
+				////				Access:                   network.SecurityRuleAccessAllow,
+				////				Direction:                network.SecurityRuleDirectionOutbound,
+				////				SourceAddressPrefix:      to.StringPtr("*"),
+				////				SourcePortRange:          to.StringPtr("*"),
+				////				DestinationAddressPrefix: to.StringPtr("*"),
+				////				DestinationPortRange:     to.StringPtr("*"),
+				////			},
+				////		},
+				////		{
+				////			Name: to.StringPtr("HTTP Inbound"),
+				////			SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+				////				Priority:                 to.Int32Ptr(320),
+				////				Protocol:                 network.SecurityRuleProtocolTCP,
+				////				Access:                   network.SecurityRuleAccessAllow,
+				////				Direction:                network.SecurityRuleDirectionInbound,
+				////				SourceAddressPrefix:      to.StringPtr("*"),
+				////				SourcePortRange:          to.StringPtr("*"),
+				////				DestinationAddressPrefix: to.StringPtr("*"),
+				////				DestinationPortRange:     to.StringPtr("80"),
+				////			},
+				////		},
+				////		{
+				////			Name: to.StringPtr("HTTP Outbound"),
+				////			SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+				////				Priority:                 to.Int32Ptr(321),
+				////				Protocol:                 network.SecurityRuleProtocolTCP,
+				////				Access:                   network.SecurityRuleAccessAllow,
+				////				Direction:                network.SecurityRuleDirectionOutbound,
+				////				SourceAddressPrefix:      to.StringPtr("*"),
+				////				SourcePortRange:          to.StringPtr("*"),
+				////				DestinationAddressPrefix: to.StringPtr("*"),
+				////				DestinationPortRange:     to.StringPtr("*"),
+				////			},
+				////		},
+				////		{
+				////			Name: to.StringPtr("HTTPS Inbound"),
+				////			SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+				////				Priority:                 to.Int32Ptr(340),
+				////				Protocol:                 network.SecurityRuleProtocolTCP,
+				////				Access:                   network.SecurityRuleAccessAllow,
+				////				Direction:                network.SecurityRuleDirectionInbound,
+				////				SourceAddressPrefix:      to.StringPtr("*"),
+				////				SourcePortRange:          to.StringPtr("*"),
+				////				DestinationAddressPrefix: to.StringPtr("*"),
+				////				DestinationPortRange:     to.StringPtr("443"),
+				////			},
+				////		},
+				////		{
+				////			Name: to.StringPtr("HTTPS Outbound"),
+				////			SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+				////				Priority:                 to.Int32Ptr(341),
+				////				Protocol:                 network.SecurityRuleProtocolTCP,
+				////				Access:                   network.SecurityRuleAccessAllow,
+				////				Direction:                network.SecurityRuleDirectionOutbound,
+				////				SourceAddressPrefix:      to.StringPtr("*"),
+				////				SourcePortRange:          to.StringPtr("*"),
+				////				DestinationAddressPrefix: to.StringPtr("*"),
+				////				DestinationPortRange:     to.StringPtr("*"),
+				////			},
+				////		},
 			},
 		},
 		Location: group.Location,
@@ -851,7 +941,7 @@ func (p *Provider) createVNet(
 		return
 	}
 	vnet = network.VirtualNetwork{
-		Name:     group.Name,
+		Name:     to.StringPtr(vnetName),
 		Location: group.Location,
 		VirtualNetworkPropertiesFormat: &network.VirtualNetworkPropertiesFormat{
 			AddressSpace: &network.AddressSpace{
@@ -883,6 +973,7 @@ func (p *Provider) createVNet(
 		subnet = (*vnet.Subnets)[0]
 		p.mu.Lock()
 		p.mu.subnets[*group.Location] = subnet
+		p.mu.securityGroup = securityGroup
 		p.mu.Unlock()
 		log.Printf("created Azure VNet %q in %q with prefix %d", vnetName, *group.Name, prefix)
 	}
@@ -968,7 +1059,7 @@ func (p *Provider) createIP(
 				Name: network.PublicIPAddressSkuNameStandard,
 			},
 			Location: group.Location,
-			Zones:    to.StringSlicePtr([]string{"3"}),
+			Zones:    to.StringSlicePtr([]string{"2"}),
 			PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 				PublicIPAddressVersion:   network.IPv4,
 				PublicIPAllocationMethod: network.Static,
