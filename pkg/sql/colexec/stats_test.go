@@ -33,7 +33,7 @@ func TestNumBatches(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	nBatches := 10
 	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
-	vsc := NewVectorizedStatsCollector(
+	vsc := NewVectorizedStatsCollectorBase(
 		noop, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
 		nil, /* inputStatsCollectors */
@@ -55,7 +55,7 @@ func TestNumTuples(t *testing.T) {
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
 		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
-		vsc := NewVectorizedStatsCollector(
+		vsc := NewVectorizedStatsCollectorBase(
 			noop, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
@@ -87,7 +87,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
-		leftInput := NewVectorizedStatsCollector(
+		leftInput := NewVectorizedStatsCollectorBase(
 			leftSource, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
@@ -96,7 +96,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
-		rightInput := NewVectorizedStatsCollector(
+		rightInput := NewVectorizedStatsCollectorBase(
 			rightSource, nil /* ioReader */, 1 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
@@ -117,10 +117,10 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeSource:   timeSource,
 		}
 
-		mjStatsCollector := NewVectorizedStatsCollector(
+		mjStatsCollector := NewVectorizedStatsCollectorBase(
 			timeAdvancingMergeJoiner, nil /* ioReader */, 2 /* id */, execinfrapb.ProcessorIDTagKey,
 			mjInputWatch, nil /* memMonitors */, nil, /* diskMonitors */
-			[]*VectorizedStatsCollector{leftInput, rightInput},
+			[]ChildStatsCollector{leftInput, rightInput},
 		)
 
 		// The inputs are identical, so the merge joiner should output
