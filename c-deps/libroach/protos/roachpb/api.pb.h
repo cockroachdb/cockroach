@@ -12245,6 +12245,12 @@ class ImportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::roachpb::FileEncryptionOptions* mutable_encryption();
   void set_allocated_encryption(::cockroach::roachpb::FileEncryptionOptions* encryption);
 
+  // bool dry_run = 8;
+  void clear_dry_run();
+  static const int kDryRunFieldNumber = 8;
+  bool dry_run() const;
+  void set_dry_run(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ImportRequest)
  private:
 
@@ -12255,6 +12261,7 @@ class ImportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::roachpb::Span* data_span_;
   ::cockroach::util::hlc::Timestamp* end_time_;
   ::cockroach::roachpb::FileEncryptionOptions* encryption_;
+  bool dry_run_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -28938,6 +28945,20 @@ inline void ImportRequest::set_allocated_encryption(::cockroach::roachpb::FileEn
   }
   encryption_ = encryption;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ImportRequest.encryption)
+}
+
+// bool dry_run = 8;
+inline void ImportRequest::clear_dry_run() {
+  dry_run_ = false;
+}
+inline bool ImportRequest::dry_run() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ImportRequest.dry_run)
+  return dry_run_;
+}
+inline void ImportRequest::set_dry_run(bool value) {
+  
+  dry_run_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ImportRequest.dry_run)
 }
 
 // -------------------------------------------------------------------

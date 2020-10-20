@@ -490,6 +490,7 @@ func restore(
 	spans []roachpb.Span,
 	job *jobs.Job,
 	encryption *jobspb.BackupEncryptionOptions,
+	dryRun bool,
 ) (RowCount, error) {
 	user := phs.User()
 	// A note about contexts and spans in this method: the top-level context
@@ -627,6 +628,7 @@ func restore(
 		rekeys,
 		endTime,
 		progCh,
+		dryRun,
 	); err != nil {
 		return emptyRowCount, err
 	}
@@ -964,7 +966,7 @@ func createImportingDescriptors(
 		dbsByID[databases[i].GetID()] = databases[i]
 	}
 
-	if !details.PrepareCompleted {
+	if !details.PrepareCompleted && !details.DryRun {
 		err := descs.Txn(
 			ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
 			p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(
@@ -1189,9 +1191,23 @@ func (r *restoreResumer) Resume(
 		spans,
 		r.job,
 		details.Encryption,
+		details.DryRun,
 	)
 	if err != nil {
 		return err
+	}
+
+	resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(res.Rows)),
+		tree.NewDInt(tree.DInt(res.IndexEntries)),
+		tree.NewDInt(tree.DInt(res.DataSize)),
+	}
+
+	if details.DryRun {
+		return nil
 	}
 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), latestStats); err != nil {
@@ -1232,15 +1248,6 @@ func (r *restoreResumer) Resume(
 		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB); err != nil {
 			return err
 		}
-	}
-
-	resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*r.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(res.Rows)),
-		tree.NewDInt(tree.DInt(res.IndexEntries)),
-		tree.NewDInt(tree.DInt(res.DataSize)),
 	}
 
 	// Collect telemetry.

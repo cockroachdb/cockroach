@@ -26591,6 +26591,7 @@ const int ImportRequest::kDataSpanFieldNumber;
 const int ImportRequest::kEndTimeFieldNumber;
 const int ImportRequest::kRekeysFieldNumber;
 const int ImportRequest::kEncryptionFieldNumber;
+const int ImportRequest::kDryRunFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ImportRequest::ImportRequest()
@@ -26626,13 +26627,14 @@ ImportRequest::ImportRequest(const ImportRequest& from)
   } else {
     encryption_ = NULL;
   }
+  dry_run_ = from.dry_run_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ImportRequest)
 }
 
 void ImportRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&encryption_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(encryption_));
+      reinterpret_cast<char*>(&dry_run_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(dry_run_));
 }
 
 ImportRequest::~ImportRequest() {
@@ -26680,6 +26682,7 @@ void ImportRequest::Clear() {
     delete encryption_;
   }
   encryption_ = NULL;
+  dry_run_ = false;
   _internal_metadata_.Clear();
 }
 
@@ -26766,6 +26769,20 @@ bool ImportRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // bool dry_run = 8;
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &dry_run_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -26829,6 +26846,11 @@ void ImportRequest::SerializeWithCachedSizes(
       7, this->_internal_encryption(), output);
   }
 
+  // bool dry_run = 8;
+  if (this->dry_run() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(8, this->dry_run(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ImportRequest)
@@ -26885,6 +26907,11 @@ size_t ImportRequest::ByteSizeLong() const {
         *encryption_);
   }
 
+  // bool dry_run = 8;
+  if (this->dry_run() != 0) {
+    total_size += 1 + 1;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -26916,6 +26943,9 @@ void ImportRequest::MergeFrom(const ImportRequest& from) {
   if (from.has_encryption()) {
     mutable_encryption()->::cockroach::roachpb::FileEncryptionOptions::MergeFrom(from.encryption());
   }
+  if (from.dry_run() != 0) {
+    set_dry_run(from.dry_run());
+  }
 }
 
 void ImportRequest::CopyFrom(const ImportRequest& from) {
@@ -26941,6 +26971,7 @@ void ImportRequest::InternalSwap(ImportRequest* other) {
   swap(data_span_, other->data_span_);
   swap(end_time_, other->end_time_);
   swap(encryption_, other->encryption_);
+  swap(dry_run_, other->dry_run_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

@@ -168,7 +168,8 @@ message RestoreDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
   BackupEncryptionOptions encryption = 12;
-  // NEXT ID: 17.
+  bool dry_run = 17;
+  // NEXT ID: 18.
 }
 
 message RestoreProgress {
@@ -299,7 +300,7 @@ message SchemaChangeGCDetails {
 
   // The below two fields are used only in the case of TRUNCATE operating on
   // tables with interleaved indexes. They are only set together.
-  
+
   // InterleavedTable is the table being truncated. In particular, it is the
   // TableDescriptor before any of the truncate modifications have been applied.
   sqlbase.TableDescriptor interleaved_table = 4;

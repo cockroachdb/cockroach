@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -198,7 +199,12 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		iters = append(iters, iter)
 	}
 
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, cArgs.EvalCtx.ClusterSettings(), func() int64 { return MaxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) })
+	var sender bulk.SSTSender = db
+	if args.DryRun {
+		sender = discardSender{}
+	}
+
+	batcher, err := bulk.MakeSSTBatcher(ctx, sender, cArgs.EvalCtx.ClusterSettings(), func() int64 { return MaxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) })
 	if err != nil {
 		return nil, err
 	}
@@ -272,4 +278,16 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	log.Event(ctx, "done")
 	return &roachpb.ImportResponse{Imported: batcher.GetSummary()}, nil
+}
+
+type discardSender struct{}
+
+func (discardSender) AddSSTable(
+	ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats, ingestAsWrites bool,
+) error {
+	return nil
+}
+
+func (discardSender) SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error {
+	return nil
 }

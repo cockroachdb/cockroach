@@ -62,6 +62,7 @@ const (
 	restoreOptSkipMissingSequences      = "skip_missing_sequences"
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
+	restoreOptDryRun                    = "dry_run"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
@@ -1108,6 +1109,7 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingSequences:      opts.SkipMissingSequences,
 		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
 		SkipMissingViews:          opts.SkipMissingViews,
+		DryRun:                    opts.DryRun,
 		Detached:                  opts.Detached,
 	}
 
@@ -1590,6 +1592,7 @@ func doRestorePlan(
 			OverrideDB:         intoDB,
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
+			DryRun:             restoreStmt.Options.DryRun,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}

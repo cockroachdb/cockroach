@@ -597,7 +597,7 @@ func (u *sqlSymUnion) survive() tree.Survive {
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC DESTINATION DETACHED
-%token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
+%token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP DRY_RUN
 
 %token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
@@ -2496,6 +2496,7 @@ opt_with_schedule_options:
 //    skip_missing_sequence_owners: remove sequence-table ownership dependencies before restoring
 //    encryption_passphrase=passphrase: decrypt BACKUP with specified passphrase
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : decrypt backups using KMS
+//    dry_run: go through the motions of restoring to verify the backup's contents could be used to restore but do not restore the actual data.
 //    detached: execute restore job asynchronously, without waiting for its completion
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
@@ -2606,6 +2607,10 @@ restore_options:
 | SKIP_MISSING_VIEWS
   {
     $$.val = &tree.RestoreOptions{SkipMissingViews: true}
+  }
+| DRY_RUN
+  {
+    $$.val = &tree.RestoreOptions{DryRun: true}
   }
 | DETACHED
   {
@@ -11683,6 +11688,7 @@ unreserved_keyword:
 | DOMAIN
 | DOUBLE
 | DROP
+| DRY_RUN
 | ENCODING
 | ENCRYPTION_PASSPHRASE
 | ENUM
