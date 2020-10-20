@@ -37,7 +37,7 @@ type Grant struct {
 // Only one field may be non-nil.
 type TargetList struct {
 	Databases NameList
-	Schemas   NameList
+	Schemas   ObjectNamePrefixList
 	Tables    TablePatterns
 	Tenant    roachpb.TenantID
 	Types     []*UnresolvedObjectName

@@ -478,6 +478,79 @@ COMMENT ON COLUMN privs.usage_tbl.x IS 'foo'
 statement error pq: user testuser does not have USAGE privilege on schema privs
 ALTER TYPE privs.usage_typ ADD VALUE 'denied'
 
+# Test privileges for schemas qualified with database names
+user root
+
+# Create some other databases with schemas
+statement ok
+CREATE DATABASE otherdb;
+CREATE SCHEMA otherdb.privs;
+CREATE DATABASE otherdb2;
+CREATE SCHEMA otherdb2.privs;
+
+# testuser should have create privilege on test.priv, otherdb.priv, and otherdb2.priv after grant
+statement ok
+GRANT CREATE ON SCHEMA privs, otherdb.privs, otherdb2.privs TO testuser;
+
+user testuser
+
+statement ok
+CREATE TABLE test.privs.fail_tbl();
+
+statement ok
+CREATE TABLE otherdb.privs.fail_tbl();
+
+statement ok
+CREATE TABLE otherdb2.privs.fail_tbl();
+
+# Show should support database qualified schema names
+user root
+
+statement ok
+SET SESSION sql_safe_updates=false;
+
+statement ok
+USE ""
+
+query TTTT
+SELECT database_name, schema_name, grantee, privilege_type FROM
+[SHOW GRANTS ON SCHEMA test.privs, otherdb.privs, otherdb2.privs]
+WHERE grantee = 'testuser'
+ORDER BY database_name, schema_name, grantee
+----
+otherdb   privs  testuser  CREATE
+otherdb2  privs  testuser  CREATE
+test      privs  testuser  CREATE
+
+statement ok
+use test
+
+query TTTT
+SELECT database_name, schema_name, grantee, privilege_type FROM
+[SHOW GRANTS ON SCHEMA privs, otherdb.privs, otherdb2.privs]
+WHERE grantee = 'testuser'
+ORDER BY database_name, schema_name, grantee
+----
+otherdb   privs  testuser  CREATE
+otherdb2  privs  testuser  CREATE
+test      privs  testuser  CREATE
+
+# testuser should not have create privilege on test.priv, otherdb.priv, nor otherdb2.priv after revoke
+
+statement ok
+REVOKE CREATE ON SCHEMA privs, otherdb.privs, otherdb2.privs FROM testuser;
+
+user testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE test.privs.fail_tbl();
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE otherdb.privs.fail_tbl();
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE otherdb2.privs.fail_tbl();
+
 subtest authorization
 
 user root

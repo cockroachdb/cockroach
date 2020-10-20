@@ -3748,7 +3748,7 @@ deallocate_stmt:
 //   DATABASE <databasename> [, ...]
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //   TYPE <typename> [, <typename>]...
-//   SCHEMA <schemaname> [, <schemaname]...
+//   SCHEMA [<databasename> .]<schemaname> [, [<databasename> .]<schemaname>]...
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
@@ -3768,12 +3768,12 @@ grant_stmt:
   {
     $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
   }
-| GRANT privileges ON SCHEMA name_list TO name_list
+| GRANT privileges ON SCHEMA schema_name_list TO name_list
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
       Targets: tree.TargetList{
-        Schemas: $5.nameList(),
+        Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.nameList(),
     }
@@ -3795,7 +3795,7 @@ grant_stmt:
 //   DATABASE <databasename> [, <databasename>]...
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //   TYPE <typename> [, <typename>]...
-//   SCHEMA <schemaname> [, <schemaname]...
+//   SCHEMA [<databasename> .]<schemaname> [, [<databasename> .]<schemaname]...
 //
 // %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
@@ -3815,12 +3815,12 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
   }
-| REVOKE privileges ON SCHEMA name_list FROM name_list
+| REVOKE privileges ON SCHEMA schema_name_list FROM name_list
   {
     $$.val = &tree.Revoke{
       Privileges: $2.privilegeList(),
       Targets: tree.TargetList{
-        Schemas: $5.nameList(),
+        Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.nameList(),
     }
@@ -5308,9 +5308,9 @@ targets_roles:
   {
      $$.val = tree.TargetList{ForRoles: true, Roles: $2.nameList()}
   }
-| SCHEMA name_list
+| SCHEMA schema_name_list
   {
-     $$.val = tree.TargetList{Schemas: $2.nameList()}
+     $$.val = tree.TargetList{Schemas: $2.objectNamePrefixList()}
   }
 | TYPE type_name_list
   {
