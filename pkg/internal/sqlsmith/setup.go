@@ -70,8 +70,13 @@ func randTables(r *rand.Rand) string {
 	stmts := rowenc.RandCreateTables(r, "table", r.Intn(5)+1,
 		mutations.ForeignKeyMutator,
 		mutations.StatisticsMutator,
-		mutations.PartialIndexMutator,
+		// TODO(mgartner): Re-enable the partial index mutator once it is aware
+		// that it should not mutate unique indexes on foreign key references.
+		// mutations.PartialIndexMutator,
 	)
+	// Satisfy the linter's desire to have mutations.PartialIndexMutator be
+	// used.
+	var _ = mutations.PartialIndexMutator
 
 	for _, stmt := range stmts {
 		sb.WriteString(tree.SerializeForDisplay(stmt))
