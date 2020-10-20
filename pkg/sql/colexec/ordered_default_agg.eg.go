@@ -61,9 +61,9 @@ func (a *defaultOrderedAgg) Compute(
 	// and not for the intermediate results of aggregation since the aggregate
 	// function itself does the latter.
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		if sel != nil {
-			for convertedTupleIdx, origTupleIdx := range sel[:inputLen] {
-				if a.groups[origTupleIdx] {
+		if sel == nil {
+			for tupleIdx := 0; tupleIdx < inputLen; tupleIdx++ {
+				if a.groups[tupleIdx] {
 					res, err := a.fn.Result()
 					if err != nil {
 						colexecerror.ExpectedError(err)
@@ -79,9 +79,9 @@ func (a *defaultOrderedAgg) Compute(
 				// Note that the only function that takes no arguments is COUNT_ROWS, and
 				// it has an optimized implementation, so we don't need to check whether
 				// len(inputIdxs) is at least 1.
-				firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[convertedTupleIdx]
+				firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[tupleIdx]
 				for j, colIdx := range inputIdxs[1:] {
-					a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[convertedTupleIdx]
+					a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
 				}
 				if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
 					colexecerror.ExpectedError(err)
@@ -89,8 +89,11 @@ func (a *defaultOrderedAgg) Compute(
 
 			}
 		} else {
-			for convertedTupleIdx, origTupleIdx := 0, 0; origTupleIdx < inputLen; {
-				if a.groups[origTupleIdx] {
+			// Both aggregators convert the batch "sparsely" - without
+			// deselection - so converted values are at the same positions as
+			// the original ones.
+			for _, tupleIdx := range sel[:inputLen] {
+				if a.groups[tupleIdx] {
 					res, err := a.fn.Result()
 					if err != nil {
 						colexecerror.ExpectedError(err)
@@ -106,16 +109,14 @@ func (a *defaultOrderedAgg) Compute(
 				// Note that the only function that takes no arguments is COUNT_ROWS, and
 				// it has an optimized implementation, so we don't need to check whether
 				// len(inputIdxs) is at least 1.
-				firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[convertedTupleIdx]
+				firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[tupleIdx]
 				for j, colIdx := range inputIdxs[1:] {
-					a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[convertedTupleIdx]
+					a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
 				}
 				if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
 					colexecerror.ExpectedError(err)
 				}
 
-				convertedTupleIdx++
-				origTupleIdx++
 			}
 		}
 	})
