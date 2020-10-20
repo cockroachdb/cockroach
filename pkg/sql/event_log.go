@@ -32,8 +32,14 @@ const (
 	// EventLogRenameDatabase is recorded when a database is renamed.
 	EventLogRenameDatabase EventLogType = "rename_database"
 
+	// EventLogCreateSchema is recorded when a schema is created.
+	EventLogCreateSchema EventLogType = "create_schema"
 	// EventLogDropSchema is recorded when a schema is dropped.
 	EventLogDropSchema EventLogType = "drop_schema"
+	// EventLogRenameSchema is recorded when a schema is renamed.
+	EventLogRenameSchema EventLogType = "rename_schema"
+	// EventLogChangeSchemaOwner is recorded when a schema's owner is changed.
+	EventLogAlterSchemaOwner EventLogType = "alter_schema_owner"
 
 	// EventLogCreateTable is recorded when a table is created.
 	EventLogCreateTable EventLogType = "create_table"

@@ -534,3 +534,57 @@ DROP USER u
 
 statement ok
 DROP USER v
+
+
+# Schema events
+##################
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE USER u
+
+statement ok
+CREATE SCHEMA AUTHORIZATION u
+
+query ITT
+SELECT "reportingID", info::JSONB->>'SchemaName', info::JSONB->>'Owner'
+FROM system.eventlog
+WHERE "eventType" = 'create_schema'
+ORDER BY 2
+----
+1 s root
+1 u u
+
+statement ok
+ALTER SCHEMA u RENAME TO t
+
+query ITT
+SELECT "reportingID", info::JSONB->>'SchemaName', info::JSONB->>'NewSchemaName'
+FROM system.eventlog
+WHERE "eventType" = 'rename_schema'
+----
+1 u t
+
+statement ok
+ALTER SCHEMA t OWNER TO root
+
+query ITT
+SELECT "reportingID", info::JSONB->>'SchemaName', info::JSONB->>'Owner'
+FROM system.eventlog
+WHERE "eventType" = 'alter_schema_owner'
+----
+1 t root
+
+statement ok
+DROP SCHEMA s, t
+
+query IT
+SELECT "reportingID", info::JSONB->>'SchemaName'
+FROM system.eventlog
+WHERE "eventType" = 'drop_schema'
+ORDER BY 2
+----
+1 s
+1 t
