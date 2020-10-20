@@ -1812,6 +1812,7 @@ func (a *regressionAccumulatorBase) Size() int64 {
 }
 
 func (a *regressionAccumulatorBase) add(y float64, x float64) error {
+	fmt.Printf("y:%g, x:%g\n", y, x)
 	n := a.n
 	sx := a.sx
 	sxx := a.sxx

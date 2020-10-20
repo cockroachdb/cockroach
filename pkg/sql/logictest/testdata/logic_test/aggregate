@@ -1337,10 +1337,10 @@ SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(y, int_x)::decimal
 ----
 0.9330078226479681  0.9330078226479681  0.9330078226479681  0.9330078226479681
 
-query F
-SELECT corr(DISTINCT y, x)::decimal FROM statistics_agg_test
+query FI
+SELECT corr(DISTINCT y, x)::decimal, count(DISTINCT y)  FROM statistics_agg_test
 ----
-0.9326733179802503
+0.9326733179802503 4
 
 query F
 SELECT CAST(corr(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 30) AS decimal) FROM statistics_agg_test
