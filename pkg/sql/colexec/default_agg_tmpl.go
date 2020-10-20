@@ -82,28 +82,25 @@ func (a *default_AGGKINDAgg) Compute(
 	// function itself does the latter.
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
-		if sel != nil {
-			for convertedTupleIdx, origTupleIdx := range sel[:inputLen] {
-				_ADD_TUPLE(a, a.groups, a.nulls, convertedTupleIdx, origTupleIdx)
+		if sel == nil {
+			for tupleIdx := 0; tupleIdx < inputLen; tupleIdx++ {
+				_ADD_TUPLE(a, a.groups, a.nulls, tupleIdx)
 			}
-		} else {
-			for convertedTupleIdx, origTupleIdx := 0, 0; origTupleIdx < inputLen; {
-				_ADD_TUPLE(a, a.groups, a.nulls, convertedTupleIdx, origTupleIdx)
-				convertedTupleIdx++
-				origTupleIdx++
-			}
-		}
-		// {{else}}
-		// We don't need to check whether sel is non-nil because the hash
-		// aggregator always uses non-nil sel to specify the tuples to be
-		// aggregated. Also, the hash aggregator converts the batch "sparsely",
-		// so converted values are at the same positions as the original ones.
-		var convertedTupleIdx int
-		for _, origTupleIdx := range sel[:inputLen] {
-			convertedTupleIdx = origTupleIdx
-			_ADD_TUPLE(a, a.groups, a.nulls, convertedTupleIdx, origTupleIdx)
-		}
+		} else
 		// {{end}}
+		{
+			// {{if eq "_AGGKIND" "Hash"}}
+			// We don't need to check whether sel is non-nil in case of the
+			// hash aggregator because it always uses non-nil sel to specify
+			// the tuples to be aggregated.
+			// {{end}}
+			// Both aggregators convert the batch "sparsely" - without
+			// deselection - so converted values are at the same positions as
+			// the original ones.
+			for _, tupleIdx := range sel[:inputLen] {
+				_ADD_TUPLE(a, a.groups, a.nulls, tupleIdx)
+			}
+		}
 	})
 }
 
@@ -220,17 +217,13 @@ func (a *default_AGGKINDAggAlloc) Close(ctx context.Context) error {
 }
 
 // {{/*
-// _ADD_TUPLE aggregates the tuple that is at position 'origTupleIdx' in the
-// original batch but has the converted tree.Datum values at position
-// 'convertedTupleIdx'. These indices are the same when there is no selection
-// vector but could be different if there is one.
-func _ADD_TUPLE(
-	a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, convertedTupleIdx, origTupleIdx int,
-) { // */}}
+// _ADD_TUPLE aggregates the tuple that is at position 'tupleIdx' in the
+// original batch and has the converted tree.Datum values at the same position.
+func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupleIdx int) { // */}}
 	// {{define "addTuple" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[origTupleIdx] {
+	if a.groups[tupleIdx] {
 		res, err := a.fn.Result()
 		if err != nil {
 			colexecerror.ExpectedError(err)
@@ -243,16 +236,13 @@ func _ADD_TUPLE(
 		a.curIdx++
 		a.fn.Reset(a.ctx)
 	}
-	// {{else}}
-	// Go around unused warning.
-	_ = origTupleIdx
 	// {{end}}
 	// Note that the only function that takes no arguments is COUNT_ROWS, and
 	// it has an optimized implementation, so we don't need to check whether
 	// len(inputIdxs) is at least 1.
-	firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[convertedTupleIdx]
+	firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[tupleIdx]
 	for j, colIdx := range inputIdxs[1:] {
-		a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[convertedTupleIdx]
+		a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
 	}
 	if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
 		colexecerror.ExpectedError(err)
