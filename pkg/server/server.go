@@ -1528,7 +1528,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
-	if err := s.node.start(
+	err, waitForBootstrapNewStores := s.node.start(
 		ctx,
 		advAddrU,
 		advSQLAddrU,
@@ -1539,7 +1539,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
 		s.sqlServer.execCfg.DistSQLPlanner.SetNodeInfo,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -1603,7 +1604,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
+	// After setting modeOperational, we can block until all stores are fully
+	// bootstrapped.
 	s.grpc.setMode(modeOperational)
+
+	// Block until all stores are fully bootstrapped.
+	waitForBootstrapNewStores()
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
