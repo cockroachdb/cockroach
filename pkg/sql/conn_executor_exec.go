@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -762,6 +763,16 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
 }
 
+var ExperimentalRateLimiterApplicationName = settings.RegisterStringSetting(
+	"sql.rate_limiter.application_name",
+	"special application name which will be rate limited according to sql.rate_limit.rate",
+	"foo")
+
+var ExperimentalRateLimiterLimit = settings.RegisterFloatSetting(
+	"sql.rate_limiter.limit",
+	"rate limit for sql queries with the relevant application name",
+	1000)
+
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
@@ -775,6 +786,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	ex.statsCollector.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
+
+	if !ex.planner.isInternalPlanner &&
+		ex.sessionData.ApplicationName == ExperimentalRateLimiterApplicationName.Get(&ex.planner.execCfg.Settings.SV) {
+		if err := ex.planner.execCfg.ExperimentalSQLRateLimiter.WaitN(ctx, 1); err != nil {
+			return err
+		}
+	}
 
 	// Prepare the plan. Note, the error is processed below. Everything
 	// between here and there needs to happen even if there's an error.

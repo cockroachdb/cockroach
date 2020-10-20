@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -727,6 +728,10 @@ type ExecutorConfig struct {
 	HydratedTables *hydratedtables.Cache
 
 	GCJobNotifier *gcjobnotifier.Notifier
+
+	// ExperimentalSQLRateLimiter is used to rate limit SQL queries with a special
+	// application name.
+	ExperimentalSQLRateLimiter *quotapool.RateLimiter
 }
 
 // Organization returns the value of cluster.organization.

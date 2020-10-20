@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
@@ -212,6 +213,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	if override := cfg.SQLConfig.TenantIDCodecOverride; override != (roachpb.TenantID{}) {
 		codec = keys.MakeSQLCodec(override)
 	}
+
+	const burst = 1
+	rateLimiter := quotapool.NewRateLimiter(
+		"experimental_sql_limiter",
+		quotapool.Limit(sql.ExperimentalRateLimiterLimit.Get(&cfg.Settings.SV)),
+		burst, /* burst */
+		quotapool.QueueLIFO())
+	sql.ExperimentalRateLimiterLimit.SetOnChange(&cfg.Settings.SV, func() {
+		rateLimiter.UpdateLimit(
+			quotapool.Limit(sql.ExperimentalRateLimiterLimit.Get(&cfg.Settings.SV)),
+			burst)
+	})
 
 	// Create blob service for inter-node file sharing.
 	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)
@@ -526,6 +539,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
 		HydratedTables:             hydratedTablesCache,
 		GCJobNotifier:              gcJobNotifier,
+		ExperimentalSQLRateLimiter: rateLimiter,
 	}
 
 	cfg.stopper.AddCloser(execCfg.ExecLogger)
