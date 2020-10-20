@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -67,24 +66,6 @@ const (
 	passphrase
 	kms
 )
-
-// TODO(pbardea): We should move to a model of having the system tables opt-
-// {in,out} of being included in a full cluster backup. See #43781.
-var fullClusterSystemTables = []string{
-	// System config tables.
-	systemschema.UsersTable.Name,
-	systemschema.ZonesTable.Name,
-	systemschema.SettingsTable.Name,
-	// Rest of system tables.
-	systemschema.LocationsTable.Name,
-	systemschema.RoleMembersTable.Name,
-	systemschema.RoleOptionsTable.Name,
-	systemschema.UITable.Name,
-	systemschema.CommentsTable.Name,
-	systemschema.JobsTable.Name,
-	systemschema.ScheduledJobsTable.Name,
-	// Table statistics are backed up in the backup descriptor for now.
-}
 
 type tableAndIndex struct {
 	tableID descpb.ID

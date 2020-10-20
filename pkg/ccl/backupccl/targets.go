@@ -759,10 +759,7 @@ func fullClusterTargets(
 	fullClusterDescs := make([]catalog.Descriptor, 0, len(allDescs))
 	fullClusterDBs := make([]*dbdesc.Immutable, 0)
 
-	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
-	for _, tableName := range fullClusterSystemTables {
-		systemTablesToBackup[tableName] = struct{}{}
-	}
+	systemTablesToBackup := getSystemTablesToIncludeInClusterBackup()
 
 	for _, desc := range allDescs {
 		switch desc := desc.(type) {
