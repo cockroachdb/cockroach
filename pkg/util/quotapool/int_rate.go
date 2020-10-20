@@ -198,6 +198,9 @@ func (i *rateRequest) Acquire(
 		if timeDelta == 0 {
 			timeDelta++
 		}
+		if timeDelta < time.Millisecond {
+			timeDelta = time.Millisecond
+		}
 
 		return false, timeDelta
 	}

@@ -342,7 +342,7 @@ func (qp *QuotaPool) acquireFastPath(
 		return false, nil, 0, qp.closeErr
 	}
 	isHead := qp.mu.q.len == 0
-	if isHead {
+	if isHead || qp.queueLifo {
 		if fulfilled, tryAgainAfter = r.Acquire(ctx, qp.mu.quota); fulfilled {
 			return true, nil, tryAgainAfter, nil
 		}
@@ -359,6 +359,8 @@ func (qp *QuotaPool) acquireFastPath(
 	n := pushFunc(c)
 	if isHead {
 		qp.mu.notifyee = n
+	} else {
+		tryAgainAfter = 0
 	}
 	return false, n, tryAgainAfter, nil
 }
