@@ -1418,6 +1418,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "during init")
 	}
 
+	if err := s.refreshSettings(state.initialSettingsKVs); err != nil {
+		return errors.Wrap(err, "during initializing settings updater")
+	}
+
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
 	// If there's no NodeID here, then we didn't just bootstrap. The Node will
 	// read its ID from the stores or request a new one via KV.
@@ -1568,8 +1572,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
-
-	s.refreshSettings()
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTags(map[string]string{

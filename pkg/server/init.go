@@ -140,6 +140,7 @@ type initState struct {
 	clusterVersion       clusterversion.ClusterVersion
 	initializedEngines   []storage.Engine
 	uninitializedEngines []storage.Engine
+	initialSettingsKVs   []roachpb.KeyValue
 }
 
 // bootstrapped is a shorthand to check if there exists at least one initialized
@@ -195,6 +196,11 @@ func (s *initServer) ServeAndWait(
 ) (state *initState, initialBoot bool, err error) {
 	// If we're restarting an already bootstrapped node, return early.
 	if s.inspectedDiskState.bootstrapped() {
+		cachedSettings, err := loadCachedSettingsKVs(ctx, s.inspectedDiskState.initializedEngines[0])
+		if err != nil {
+			return nil, false, err
+		}
+		s.inspectedDiskState.initialSettingsKVs = cachedSettings
 		return s.inspectedDiskState, false, nil
 	}
 
