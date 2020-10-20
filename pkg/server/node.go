@@ -150,18 +150,19 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	stopper      *stop.Stopper
-	clusterID    *base.ClusterIDContainer // UUID for Cockroach cluster
-	Descriptor   roachpb.NodeDescriptor   // Node ID, network/physical topology
-	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
-	eventLogger  sql.EventLogger
-	stores       *kvserver.Stores // Access to node-local stores
-	metrics      nodeMetrics
-	recorder     *status.MetricsRecorder
-	startedAt    int64
-	lastUp       int64
-	initialStart bool // True if this is the first time this node has started.
-	txnMetrics   kvcoord.TxnMetrics
+	stopper              *stop.Stopper
+	clusterID            *base.ClusterIDContainer // UUID for Cockroach cluster
+	Descriptor           roachpb.NodeDescriptor   // Node ID, network/physical topology
+	storeCfg             kvserver.StoreConfig     // Config to use and pass to stores
+	eventLogger          sql.EventLogger
+	stores               *kvserver.Stores // Access to node-local stores
+	metrics              nodeMetrics
+	recorder             *status.MetricsRecorder
+	startedAt            int64
+	lastUp               int64
+	initialStart         bool // True if this is the first time this node has started.
+	txnMetrics           kvcoord.TxnMetrics
+	bootstrapNewStoresCh chan struct{}
 
 	perReplicaServer kvserver.Server
 }
@@ -333,10 +334,10 @@ func (n *Node) AnnotateCtxWithSpan(
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-// start starts the node by registering the storage instance for the
-// RPC service "Node" and initializing stores for each specified
-// engine. Launches periodic store gossiping in a goroutine.
-// A callback can be optionally provided that will be invoked once this node's
+// start starts the node by registering the storage instance for the RPC
+// service "Node" and initializing stores for each specified engine.
+// Launches periodic store gossiping in a goroutine. A callback can
+// be optionally provided that will be invoked once this node's
 // NodeDescriptor is available, to help bootstrapping.
 func (n *Node) start(
 	ctx context.Context,
@@ -462,12 +463,29 @@ func (n *Node) start(
 		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
 	}
 
-	// Bootstrap any uninitialized stores.
-	//
-	// TODO(tbg): address https://github.com/cockroachdb/cockroach/issues/39415.
-	// Should be easy enough. Writing the test is probably most of the work.
+	// Bootstrap any uninitialized stores and define a function for blocking
+	// until new stores are fully bootstrapped. This function remains a
+	// no-op unless we find ourselves bootstrapping new stores.
 	if len(state.newEngines) > 0 {
-		if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
+		// We need to bootstrap additional stores asynchronously. Consider the range that
+		// houses the store ID allocator. When restarting the set of nodes that holds a
+		// quorum of these replicas, when restarting them with additional stores, those
+		// additional stores will require store IDs to get fully bootstrapped. But if we're
+		// gating node start (specifically opening up the RPC floodgates) on having all
+		// stores fully bootstrapped, we'll simply hang when trying to allocate store IDs.
+		// See TestAddNewStoresToExistingNodes and #39415 for more details.
+		//
+		// Instead we opt to bootstrap additional stores asynchronously, and rely on the
+		// blocking function n.waitForBootstrapNewStores() to signal to the caller that
+		// all stores have been fully bootstrapped.
+		n.bootstrapNewStoresCh = make(chan struct{})
+		if err := n.stopper.RunAsyncTask(ctx, "bootstrap-stores", func(ctx context.Context) {
+			if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
+				log.Fatalf(ctx, "while bootstrapping additional stores: %v", err)
+			}
+			close(n.bootstrapNewStoresCh)
+		}); err != nil {
+			close(n.bootstrapNewStoresCh)
 			return err
 		}
 	}
@@ -490,6 +508,14 @@ func (n *Node) start(
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
 	return nil
+}
+
+// waitForBootstrapNewStores blocks until all additional empty stores,
+// if any, have been bootstrapped.
+func (n *Node) waitForBootstrapNewStores() {
+	if n.bootstrapNewStoresCh != nil {
+		<-n.bootstrapNewStoresCh
+	}
 }
 
 // IsDraining returns true if at least one Store housed on this Node is not
