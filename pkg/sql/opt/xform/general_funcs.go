@@ -1891,9 +1891,9 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
-		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
-			// We cannot use a non-covering index for semi and anti join. Note that
-			// since the semi/anti join doesn't pass through any columns, "non
+		if joinType == opt.SemiJoinOp {
+			// We cannot use a non-covering index for semi join. Note that
+			// since the semi join doesn't pass through any columns, "non
 			// covering" here means that not all columns in the ON condition are
 			// available.
 			//
@@ -1920,18 +1920,22 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		indexCols = pkCols.ToSet()
 
 		continuationCol := opt.ColumnID(0)
-		if joinType == opt.LeftJoinOp {
+		invertedJoinType := joinType
+		// Anti joins are converted to a pair consisting of a left join and
+		// anti join.
+		if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
 			continuationCol = c.constructContinuationColumnForPairedLeftJoin()
+			invertedJoinType = opt.LeftJoinOp
 		}
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
 		invertedJoin.JoinPrivate = *joinPrivate
-		invertedJoin.JoinType = joinType
+		invertedJoin.JoinType = invertedJoinType
 		invertedJoin.Table = scanPrivate.Table
 		invertedJoin.Index = index.Ordinal()
 		invertedJoin.InvertedExpr = invertedExpr
 		invertedJoin.InvertedCol = scanPrivate.Table.IndexColumnID(index, 0)
 		invertedJoin.Cols = indexCols.Union(inputCols)
-		if joinType == opt.LeftJoinOp {
+		if invertedJoinType == opt.LeftJoinOp {
 			invertedJoin.Cols.Add(continuationCol)
 			invertedJoin.IsFirstJoinInPairedJoiner = true
 			invertedJoin.ContinuationCol = continuationCol
@@ -1956,7 +1960,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols.Union(inputCols)
 		indexJoin.LookupColsAreTableKey = true
-		if joinType == opt.LeftJoinOp {
+		if invertedJoinType == opt.LeftJoinOp {
 			indexJoin.IsSecondJoinInPairedJoiner = true
 		}
 
@@ -2631,100 +2635,6 @@ func (c *CustomFuncs) MapFilterCols(
 
 	newFilters := c.RemapCols(&filters, colMap).(*memo.FiltersExpr)
 	return *newFilters
-}
-
-// CanGenerateInvertedJoin is a best-effort check that returns true if it
-// may be possible to generate an inverted join with the given right-side input
-// and on conditions. It may return some false positives, but it is used to
-// avoid applying certain rules such as ConvertAntiToLeftJoin in cases where
-// they may not be beneficial.
-func (c *CustomFuncs) CanGenerateInvertedJoin(rightInput memo.RelExpr, on memo.FiltersExpr) bool {
-	// The right-side input must be either a canonical Scan or a Select wrapping a
-	// canonical Scan on a table that has inverted indexes. These are the conditions
-	// checked by GenerateInvertedJoins and GenerateInvertedJoinsFromSelect,
-	// so they are required for generating an inverted join.
-	scan, ok := rightInput.(*memo.ScanExpr)
-	if !ok {
-		sel, ok := rightInput.(*memo.SelectExpr)
-		if !ok {
-			return false
-		}
-		scan, ok = sel.Input.(*memo.ScanExpr)
-		if !ok {
-			return false
-		}
-	}
-
-	if !c.IsCanonicalScan(&scan.ScanPrivate) || !c.HasInvertedIndexes(&scan.ScanPrivate) {
-		return false
-	}
-
-	// Check whether any of the ON conditions contain a geospatial function or
-	// operator that can be index-accelerated.
-	for i := range on {
-		if c.exprContainsGeoIndexRelationship(on[i].Condition) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// exprContainsGeoIndexRelationship returns true if the given expression
-// contains a geospatial function or bounding box operator that can be
-// index accelerated. It is not a guarantee that an inverted join will be
-// produced for the given ON condition, but it eliminates expressions that
-// definitely cannot produce an inverted join.
-func (c *CustomFuncs) exprContainsGeoIndexRelationship(expr opt.ScalarExpr) bool {
-	switch t := expr.(type) {
-	case *memo.AndExpr:
-		return c.exprContainsGeoIndexRelationship(t.Left) || c.exprContainsGeoIndexRelationship(t.Right)
-	case *memo.OrExpr:
-		return c.exprContainsGeoIndexRelationship(t.Left) || c.exprContainsGeoIndexRelationship(t.Right)
-	default:
-		if _, ok := invertedidx.GetGeoIndexRelationship(expr); ok {
-			return true
-		}
-		return false
-	}
-}
-
-// EnsureNotNullColFromFilteredScan ensures that there is at least one not-null
-// column in the given expression. If there is already at least one not-null
-// column, EnsureNotNullColFromFilteredScan returns the expression unchanged.
-// Otherwise, it calls TryAddKeyToScan, which will try to augment the
-// expression with the primary key of the underlying table scan (guaranteed to
-// be not-null). In order for this call to succeed, the input expression must
-// be a non-virtual Scan, optionally wrapped in a Select. Otherwise,
-// EnsureNotNullColFromFilteredScan will panic.
-//
-// Note that we cannot just project a not-null constant value because we want
-// the output expression to be like the input: a non-virtual Scan, optionally
-// wrapped in a Select. This is needed to ensure that GenerateInvertedJoins
-// or GenerateInvertedJoinsFromSelect can match on this expression.
-func (c *CustomFuncs) EnsureNotNullColFromFilteredScan(expr memo.RelExpr) memo.RelExpr {
-	if !expr.Relational().NotNullCols.Empty() {
-		return expr
-	}
-	if res, ok := c.TryAddKeyToScan(expr); ok {
-		return res
-	}
-	panic(errors.AssertionFailedf(
-		"TryAddKeyToScan failed. Input must have type Scan or Select(Scan). Actual type: %T", expr,
-	))
-}
-
-// NotNullCol returns the first not-null column from the input expression.
-// EnsureNotNullColFromFilteredScan must have been called previously to
-// ensure that such a column exists.
-func (c *CustomFuncs) NotNullCol(expr memo.RelExpr) opt.ColumnID {
-	col, ok := expr.Relational().NotNullCols.Next(0)
-	if !ok {
-		panic(errors.AssertionFailedf(
-			"NotNullCol was called on an expression with no not-null columns",
-		))
-	}
-	return col
 }
 
 // ----------------------------------------------------------------------
