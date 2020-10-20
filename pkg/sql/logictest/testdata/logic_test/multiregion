@@ -1,5 +1,14 @@
-statement error implementation pending
-CREATE DATABASE new_db REGION "us-west-1"
+statement ok
+CREATE DATABASE region_test_db REGION "test"
+
+# TODO(multiregion): test SHOW REGIONS FROM region_test_db
+# TODO(multiregion): add configs for multiple test clusters, test that.
+
+statement error region "region_no_exists" does not exist\nHINT:.*valid regions: test
+CREATE DATABASE invalid_region_db REGION "region_no_exists"
+
+statement error region "test" defined multiple times
+CREATE DATABASE duplicate_region_name_db REGIONS "test", "test"
 
 statement error implementation pending
 CREATE DATABASE new_db SURVIVE AVAILABILITY ZONE FAILURE

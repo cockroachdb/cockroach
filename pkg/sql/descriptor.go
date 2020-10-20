@@ -86,7 +86,38 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	desc := dbdesc.NewInitial(id, string(database.Name), p.SessionData().User)
+	var regions []string
+	if len(database.Regions) > 0 {
+		activeRegions, err := p.getActiveRegions()
+		if err != nil {
+			return nil, false, err
+		}
+		regions = make([]string, 0, len(database.Regions))
+		for _, r := range database.Regions {
+			region := string(r)
+			if err := checkCanAddRegion(activeRegions, region); err != nil {
+				return nil, false, err
+			}
+			// Check names are not duplicated.
+			for _, existingRegion := range regions {
+				if existingRegion == region {
+					return nil, false, pgerror.Newf(
+						pgcode.InvalidName,
+						"region %q defined multiple times",
+						existingRegion,
+					)
+				}
+			}
+			regions = append(regions, region)
+		}
+	}
+
+	desc := dbdesc.NewInitial(
+		id,
+		string(database.Name),
+		p.SessionData().User,
+		dbdesc.NewInitialOptionWithRegions(regions),
+	)
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}

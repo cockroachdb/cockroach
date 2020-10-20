@@ -1085,6 +1085,8 @@ message DatabaseDescriptor {
 
   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
   optional string offline_reason = 9 [(gogoproto.nullable) = false];
+
+  repeated string regions = 10;
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured

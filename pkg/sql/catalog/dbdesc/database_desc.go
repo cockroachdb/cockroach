@@ -46,24 +46,42 @@ type Mutable struct {
 	ClusterVersion *Immutable
 }
 
+// NewInitialOption are options for new database descriptors.
+type NewInitialOption func(*descpb.DatabaseDescriptor)
+
+// NewInitialOptionWithRegions applies the regions field to the database descriptor.
+func NewInitialOptionWithRegions(regions []string) NewInitialOption {
+	return func(d *descpb.DatabaseDescriptor) {
+		d.Regions = regions
+	}
+}
+
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
-func NewInitial(id descpb.ID, name string, owner string) *Mutable {
-	return NewInitialWithPrivileges(id, name,
-		descpb.NewDefaultPrivilegeDescriptor(owner))
+func NewInitial(id descpb.ID, name string, owner string, opts ...NewInitialOption) *Mutable {
+	return NewInitialWithPrivileges(
+		id,
+		name,
+		descpb.NewDefaultPrivilegeDescriptor(owner),
+		opts...,
+	)
 }
 
 // NewInitialWithPrivileges constructs a new Mutable for an initial version
 // from an id and name and custom privileges.
 func NewInitialWithPrivileges(
-	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor,
+	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor, opts ...NewInitialOption,
 ) *Mutable {
-	return NewCreatedMutable(descpb.DatabaseDescriptor{
+	desc := descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Version:    1,
 		Privileges: privileges,
-	})
+	}
+	for _, opt := range opts {
+		opt(&desc)
+	}
+	return NewCreatedMutable(desc)
 }
 
 func makeImmutable(desc descpb.DatabaseDescriptor) Immutable {
