@@ -61,6 +61,7 @@ import StatementDetails from "src/views/statements/statementDetails";
 import StatementsPage from "src/views/statements/statementsPage";
 import SessionsPage from "src/views/sessions/sessionsPage";
 import SessionDetails from "src/views/sessions/sessionDetails";
+import TransactionsPage from "src/views/transactions/transactionsPage";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import "styl/app.styl";
 
@@ -144,6 +145,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   { /* sessions */ }
                   <Route exact path="/sessions" component={ SessionsPage }/>
                   <Route exact path={ `/session/:${sessionAttr}`} component={ SessionDetails } />
+                  { /* transactions */ }
+                  <Route exact path="/transactions" component={ TransactionsPage }/>
 
                   { /* debug pages */ }
                   <Route exact path="/debug" component={Debug}/>
