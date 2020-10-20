@@ -241,7 +241,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			if batchLength > 0 {
-				a.inputArgsConverter.ConvertBatchAndDeselect(batch)
+				a.inputArgsConverter.ConvertBatch(batch)
 				a.aggHelper.performAggregation(
 					ctx, batch.ColVecs(), batchLength, batch.Selection(), &a.bucket, a.groupCol,
 				)
