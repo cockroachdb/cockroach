@@ -560,3 +560,24 @@ ALTER TABLE rename_column RENAME crdb_internal_c2_shard_8 TO foo;
 
 statement ok
 DROP TABLE rename_column;
+
+# This is a regression test for a bug whereby the dropping of a hash column
+# could result in an invalid descriptor and would fail. The underlying bug was
+# due to a column descriptor pointer to a slice being clobbered. See #55766.
+subtest drop_earlier_column_due_to_hash_sharded_index
+
+statement ok
+CREATE TABLE IF NOT EXISTS drop_earlier_hash_column (
+    i INT PRIMARY KEY,
+    j INT,
+    k INT
+);
+
+statement ok
+CREATE INDEX h1 ON drop_earlier_hash_column(j) USING HASH WITH BUCKET_COUNT = 8;
+
+statement ok
+CREATE INDEX h2 ON drop_earlier_hash_column(k) USING HASH WITH BUCKET_COUNT = 8;
+
+statement ok
+DROP INDEX h1;
