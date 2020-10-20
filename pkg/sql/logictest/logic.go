@@ -452,6 +452,9 @@ type testClusterConfig struct {
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
+	// localities is set if nodes should be set to a particular locality.
+	// Nodes are 1-indexed.
+	localities map[int]roachpb.Locality
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -633,6 +636,67 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats: "false",
 		useTenant:         true,
 		isCCLConfig:       true,
+	},
+	{
+		name:              "multiregion",
+		numNodes:          9,
+		overrideAutoStats: "false",
+		localities: map[int]roachpb.Locality{
+			1: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test"},
+					{Key: "availability zone", Value: "test-az-1"},
+				},
+			},
+			2: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test"},
+					{Key: "availability zone", Value: "test-az-1"},
+				},
+			},
+			3: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test"},
+					{Key: "availability zone", Value: "test-az-1"},
+				},
+			},
+			4: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test2"},
+					{Key: "availability zone", Value: "test2-az-1"},
+				},
+			},
+			5: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test2"},
+					{Key: "availability zone", Value: "test2-az-1"},
+				},
+			},
+			6: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test2"},
+					{Key: "availability zone", Value: "test2-az-1"},
+				},
+			},
+			7: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test"},
+					{Key: "availability zone", Value: "test-az-2"},
+				},
+			},
+			8: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test"},
+					{Key: "availability zone", Value: "test-az-2"},
+				},
+			},
+			9: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test"},
+					{Key: "availability zone", Value: "test-az-2"},
+				},
+			},
+		},
 	},
 }
 
@@ -1300,22 +1364,28 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = 1
 	}
 
-	if cfg.binaryVersion != (roachpb.Version{}) {
-		// If we want to run a specific server version, we assume that it
-		// supports at least the bootstrap version.
-		paramsPerNode := map[int]base.TestServerArgs{}
-		binaryMinSupportedVersion := cfg.binaryVersion
-		if cfg.bootstrapVersion != (roachpb.Version{}) {
-			binaryMinSupportedVersion = cfg.bootstrapVersion
+	paramsPerNode := map[int]base.TestServerArgs{}
+	for i := 0; i < cfg.numNodes; i++ {
+		nodeParams := params.ServerArgs
+		if locality, ok := cfg.localities[i+1]; ok {
+			nodeParams.Locality = locality
 		}
-		for i := 0; i < cfg.numNodes; i++ {
-			nodeParams := params.ServerArgs
+		if cfg.binaryVersion != (roachpb.Version{}) {
+			binaryMinSupportedVersion := cfg.binaryVersion
+			if cfg.bootstrapVersion != (roachpb.Version{}) {
+				// If we want to run a specific server version, we assume that it
+				// supports at least the bootstrap version.
+				binaryMinSupportedVersion = cfg.bootstrapVersion
+			}
 			nodeParams.Settings = cluster.MakeTestingClusterSettingsWithVersions(
-				cfg.binaryVersion, binaryMinSupportedVersion, false /* initializeVersion */)
-			paramsPerNode[i] = nodeParams
+				cfg.binaryVersion,
+				binaryMinSupportedVersion,
+				false, /* initializeVersion */
+			)
 		}
-		params.ServerArgsPerNode = paramsPerNode
+		paramsPerNode[i] = nodeParams
 	}
+	params.ServerArgsPerNode = paramsPerNode
 
 	// Update the defaults for automatic statistics to avoid delays in testing.
 	// Avoid making the DefaultAsOfTime too small to avoid interacting with
