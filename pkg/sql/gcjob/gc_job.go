@@ -12,6 +12,7 @@ package gcjob
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -56,6 +57,10 @@ func performGC(
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
+	if details.Tenant != nil {
+		id := details.Tenant.ID
+		return errors.Wrapf(gcTenant(ctx, execCfg, id, progress), "attempting to GC tenant %d", id)
+	}
 	if details.Indexes != nil {
 		return errors.Wrap(gcIndexes(ctx, execCfg, details.ParentID, progress), "attempting to GC indexes")
 	} else if details.Tables != nil {
@@ -130,9 +135,17 @@ func (r schemaChangeGCResumer) Resume(
 			return ctx.Err()
 		}
 
-		// Refresh the status of all tables in case any GC TTLs have changed.
-		remainingTables := getAllTablesWaitingForGC(details, progress)
-		expired, earliestDeadline := refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
+		// Refresh the status of all elements in case any GC TTLs have changed.
+		var expired bool
+		earliestDeadline := timeutil.Unix(0, math.MaxInt64)
+		if details.Tenant == nil {
+			remainingTables := getAllTablesWaitingForGC(details, progress)
+			expired, earliestDeadline = refreshTables(
+				ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress,
+			)
+		} else {
+			expired, earliestDeadline = refreshTenant(ctx, execCfg, details.Tenant.DropTime, details, progress)
+		}
 		timerDuration := time.Until(earliestDeadline)
 
 		if expired {

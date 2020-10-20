@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -273,4 +274,31 @@ func isProtected(
 			return true
 		})
 	return protected
+}
+
+// refreshTenant updates the status of tenant that is waiting to be GC'd. It
+// returns whether or the tenant has expired or the duration until it expires.
+func refreshTenant(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	dropTime int64,
+	details *jobspb.SchemaChangeGCDetails,
+	progress *jobspb.SchemaChangeGCProgress,
+) (expired bool, deadline time.Time) {
+	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
+	tenID := details.Tenant.ID
+	cfg := execCfg.SystemConfig.GetSystemConfig()
+	zoneCfg, err := cfg.GetZoneConfigForObject(keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)), 0)
+	if err == nil {
+		tenantTTLSeconds = zoneCfg.GC.TTLSeconds
+	} else {
+		log.Errorf(ctx, "zone config for tenants range: err = %+v", err)
+	}
+
+	deadlineNanos := dropTime + int64(tenantTTLSeconds)*time.Second.Nanoseconds()
+	if timeutil.Now().UnixNano() >= deadlineNanos {
+		progress.Tenant.Status = jobspb.SchemaChangeGCProgress_DELETING
+		return true, time.Time{}
+	}
+	return false, timeutil.Unix(0, deadlineNanos)
 }
