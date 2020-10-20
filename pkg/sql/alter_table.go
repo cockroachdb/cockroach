@@ -323,7 +323,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
-				return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will remove all data in that column")
+				err := pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
+					"remove all data in that column")
+				if !params.extendedEvalCtx.TxnImplicit {
+					err = errors.WithIssueLink(err, errors.IssueLink{
+						IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
+						Detail: "when used in an explicit transaction combined with other " +
+							"schema changes to the same table, DROP COLUMN can result in data " +
+							"loss if one of the other schema change fails or is canceled",
+					})
+				}
+				return err
 			}
 
 			colToDrop, dropped, err := n.tableDesc.FindColumnByName(t.Column)
