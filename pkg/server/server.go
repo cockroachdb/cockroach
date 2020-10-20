@@ -783,6 +783,13 @@ func inspectEngines(
 	if err != nil {
 		return nil, err
 	}
+	var initialSettingsKVs []roachpb.KeyValue
+	if len(initializedEngines) != 0 {
+		initialSettingsKVs, err = loadCachedSettingsKVs(ctx, initializedEngines[0])
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	state := &initState{
 		clusterID:            clusterID,
@@ -790,6 +797,7 @@ func inspectEngines(
 		initializedEngines:   initializedEngines,
 		uninitializedEngines: uninitializedEngines,
 		clusterVersion:       clusterVersion,
+		initialSettingsKVs:   initialSettingsKVs,
 	}
 	return state, nil
 }
@@ -1397,6 +1405,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "invalid init state")
 	}
 
+	// Apply any cached initial settings (and start the gossip listener) as early
+	// as possible, to avoid spending time with stale settings.
+	if err := s.refreshSettings(state.initialSettingsKVs); err != nil {
+		return errors.Wrap(err, "during initializing settings updater")
+	}
+
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
 	s.rpcContext.NodeID.Set(ctx, state.nodeID)
 
@@ -1511,8 +1525,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
-
-	s.refreshSettings()
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTags(map[string]string{

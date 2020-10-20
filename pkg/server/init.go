@@ -132,6 +132,7 @@ type initState struct {
 	clusterVersion       clusterversion.ClusterVersion
 	initializedEngines   []storage.Engine
 	uninitializedEngines []storage.Engine
+	initialSettingsKVs   []roachpb.KeyValue
 }
 
 // bootstrapped is a shorthand to check if there exists at least one initialized
