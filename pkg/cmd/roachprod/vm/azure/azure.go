@@ -74,6 +74,7 @@ type Provider struct {
 		subscription   subscriptions.Subscription
 		resourceGroups map[string]resources.Group
 		subnets        map[string]network.Subnet
+		securityGroups map[string]network.SecurityGroup
 	}
 }
 
@@ -81,6 +82,7 @@ type Provider struct {
 func New() *Provider {
 	p := &Provider{}
 	p.mu.resourceGroups = make(map[string]resources.Group)
+	p.mu.securityGroups = make(map[string]network.SecurityGroup)
 	p.mu.subnets = make(map[string]network.Subnet)
 	return p
 }
@@ -116,6 +118,16 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		return errors.Wrapf(err, "could not find SSH public key file")
 	}
 
+	clusterTags := make(map[string]*string)
+	clusterTags[tagCluster] = to.StringPtr(opts.ClusterName)
+	clusterTags[tagCreated] = to.StringPtr(timeutil.Now().Format(time.RFC3339))
+	clusterTags[tagLifetime] = to.StringPtr(opts.Lifetime.String())
+	clusterTags[tagRoachprod] = to.StringPtr("true")
+
+	getClusterResourceGroupName := func(location string) string {
+		return fmt.Sprintf("%s-%s", opts.ClusterName, location)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), p.opts.operationTimeout)
 	defer cancel()
 
@@ -125,6 +137,10 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		} else {
 			p.opts.locations = []string{defaultLocations[0]}
 		}
+	}
+
+	if len(p.opts.zone) == 0 {
+		p.opts.zone = defaultZone
 	}
 
 	if _, err := p.createVNets(ctx, p.opts.locations); err != nil {
@@ -148,7 +164,8 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			location := p.opts.locations[locIdx]
 
 			// Create a resource group within the location.
-			group, err := p.getResourceGroup(ctx, opts.ClusterName, location, opts)
+			group, err := p.getOrCreateResourceGroup(
+				ctx, getClusterResourceGroupName(location), location, clusterTags)
 			if err != nil {
 				return err
 			}
@@ -519,6 +536,7 @@ mounts:
 	// https://github.com/Azure-Samples/azure-sdk-for-go-samples/blob/79e3f3af791c3873d810efe094f9d61e93a6ccaa/compute/vm.go#L41
 	vm = compute.VirtualMachine{
 		Location: group.Location,
+		Zones:    to.StringSlicePtr([]string{p.opts.zone}),
 		Tags:     tags,
 		VirtualMachineProperties: &compute.VirtualMachineProperties{
 			HardwareProfile: &compute.HardwareProfile{
@@ -568,15 +586,30 @@ mounts:
 		},
 	}
 	if !opts.SSDOpts.UseLocalSSD {
+		var storageAccType compute.StorageAccountTypes
+		switch p.opts.networkDiskType {
+		case "premium-disk":
+			storageAccType = compute.StorageAccountTypesPremiumLRS
+		case "ultra-disk":
+			storageAccType = compute.StorageAccountTypesUltraSSDLRS
+		default:
+			err = errors.Newf("unsuported network disk type: %s", p.opts.networkDiskType)
+			return
+		}
 		vm.VirtualMachineProperties.StorageProfile.DataDisks = &[]compute.DataDisk{
 			{
 				CreateOption: compute.DiskCreateOptionTypesEmpty,
 				DiskSizeGB:   to.Int32Ptr(100),
 				Lun:          to.Int32Ptr(42),
 				ManagedDisk: &compute.ManagedDiskParameters{
-					StorageAccountType: compute.StorageAccountTypesPremiumLRS,
+					StorageAccountType: storageAccType,
 				},
 			},
+		}
+		if storageAccType == compute.StorageAccountTypesUltraSSDLRS {
+			vm.AdditionalCapabilities = &compute.AdditionalCapabilities{
+				UltraSSDEnabled: to.BoolPtr(true),
+			}
 		}
 	}
 	future, err := client.CreateOrUpdate(ctx, *group.Name, name, vm)
@@ -602,6 +635,10 @@ func (p *Provider) createNIC(
 		return
 	}
 
+	p.mu.Lock()
+	sg := p.mu.securityGroups[p.getVnetNetworkSecurityGroupName(*group.Location)]
+	p.mu.Unlock()
+
 	future, err := client.CreateOrUpdate(ctx, *group.Name, *ip.Name, network.Interface{
 		Name:     ip.Name,
 		Location: group.Location,
@@ -616,6 +653,9 @@ func (p *Provider) createNIC(
 					},
 				},
 			},
+			NetworkSecurityGroup:        &sg,
+			EnableAcceleratedNetworking: to.BoolPtr(true),
+			Primary:                     to.BoolPtr(true),
 		},
 	})
 	if err != nil {
@@ -631,6 +671,151 @@ func (p *Provider) createNIC(
 	return
 }
 
+func (p *Provider) getOrCreateNetworkSecurityGroup(
+	ctx context.Context, name string, resourceGroup resources.Group,
+) (network.SecurityGroup, error) {
+	p.mu.Lock()
+	group, ok := p.mu.securityGroups[name]
+	p.mu.Unlock()
+	if ok {
+		return group, nil
+	}
+
+	sub, err := p.getSubscription(ctx)
+	if err != nil {
+		return network.SecurityGroup{}, err
+	}
+	client := network.NewSecurityGroupsClient(*sub.SubscriptionID)
+	if client.Authorizer, err = p.getAuthorizer(); err != nil {
+		return network.SecurityGroup{}, err
+	}
+	if client.Authorizer, err = p.getAuthorizer(); err != nil {
+		return network.SecurityGroup{}, err
+	}
+
+	cacheAndReturn := func(group network.SecurityGroup) (network.SecurityGroup, error) {
+		p.mu.Lock()
+		p.mu.securityGroups[name] = group
+		p.mu.Unlock()
+		return group, nil
+	}
+
+	// Check if the network security group already exists on Azure.
+	group, err = client.Get(ctx, *resourceGroup.Name, name, "" /* expand */)
+	if err == nil {
+		return cacheAndReturn(group)
+	}
+	var detail autorest.DetailedError
+	if errors.As(err, &detail) {
+		// It's okay if the network security group was not found, it will be created
+		// below.
+		if code, ok := detail.StatusCode.(int); ok && code != 404 {
+			return network.SecurityGroup{}, err
+		}
+	}
+
+	future, err := client.CreateOrUpdate(ctx, *resourceGroup.Name, name, network.SecurityGroup{
+		SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
+			SecurityRules: &[]network.SecurityRule{
+				{
+					Name: to.StringPtr("SSH_Inbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(300),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("22"),
+					},
+				},
+				{
+					Name: to.StringPtr("SSH_Outbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(301),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionOutbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("*"),
+					},
+				},
+				{
+					Name: to.StringPtr("HTTP_Inbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(320),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("80"),
+					},
+				},
+				{
+					Name: to.StringPtr("HTTP_Outbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(321),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionOutbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("*"),
+					},
+				},
+				{
+					Name: to.StringPtr("HTTPS_Inbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(340),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("443"),
+					},
+				},
+				{
+					Name: to.StringPtr("HTTPS_Outbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(341),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionOutbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("*"),
+					},
+				},
+			},
+		},
+		Location: resourceGroup.Location,
+	})
+	if err != nil {
+		return network.SecurityGroup{}, err
+	}
+	if err = future.WaitForCompletionRef(ctx, client.Client); err != nil {
+		return network.SecurityGroup{}, err
+	}
+	securityGroup, err := future.Result(client)
+	if err != nil {
+		return network.SecurityGroup{}, err
+	}
+	return cacheAndReturn(securityGroup)
+}
+
+func (p *Provider) getVnetNetworkSecurityGroupName(location string) string {
+	return fmt.Sprintf("roachprod-vnets-nsg-%s", location)
+}
+
 // createVNets will create a VNet in each of the given locations to be
 // shared across roachprod clusters. Thus, all roachprod clusters will
 // be able to communicate with one another, although this is scoped by
@@ -644,39 +829,13 @@ func (p *Provider) createVNets(
 	}
 
 	groupsClient := resources.NewGroupsClient(*sub.SubscriptionID)
-	if groupsClient.Authorizer, err = p.getAuthorizer(); err != nil {
-		return nil, err
-	}
 
-	vnetGroupName := func(location string) string {
+	vnetResourceGroupTags := make(map[string]*string)
+	vnetResourceGroupTags[tagComment] = to.StringPtr("DO NOT DELETE: Used by all roachprod clusters")
+	vnetResourceGroupTags[tagRoachprod] = to.StringPtr("true")
+
+	vnetResourceGroupName := func(location string) string {
 		return fmt.Sprintf("roachprod-vnets-%s", location)
-	}
-
-	// Supporting local functions to make the logic below easier to read.
-	createVNetGroup := func(location string) (resources.Group, error) {
-		return groupsClient.CreateOrUpdate(ctx, vnetGroupName(location), resources.Group{
-			Location: to.StringPtr(location),
-			Tags: map[string]*string{
-				tagComment:   to.StringPtr("DO NOT DELETE: Used by all roachprod clusters"),
-				tagRoachprod: to.StringPtr("true"),
-			},
-		})
-	}
-
-	getVNetGroup := func(location string) (resources.Group, bool, error) {
-		group, err := groupsClient.Get(ctx, vnetGroupName(location))
-		if err == nil {
-			return group, true, nil
-		}
-		var detail autorest.DetailedError
-		if errors.As(err, &detail) {
-			if code, ok := detail.StatusCode.(int); ok {
-				if code == 404 {
-					return resources.Group{}, false, nil
-				}
-			}
-		}
-		return resources.Group{}, false, err
 	}
 
 	setVNetSubnetPrefix := func(group resources.Group, subnet int) (resources.Group, error) {
@@ -687,18 +846,17 @@ func (p *Provider) createVNets(
 		})
 	}
 
-	// First, find or create a resource group for roachprod to create the
-	// VNets in. We need one per location.
-	groupsByLocation := make(map[string]resources.Group)
+	// First, find or create a resource groups and network security groups for
+	// roachprod to create the VNets in. We need one per location.
 	for _, location := range locations {
-		group, found, err := getVNetGroup(location)
-		if err == nil && !found {
-			group, err = createVNetGroup(location)
-		}
+		group, err := p.getOrCreateResourceGroup(ctx, vnetResourceGroupName(location), location, vnetResourceGroupTags)
 		if err != nil {
-			return nil, errors.Wrapf(err, "for location %q", location)
+			return nil, errors.Wrapf(err, "resource group for location %q", location)
 		}
-		groupsByLocation[location] = group
+		_, err = p.getOrCreateNetworkSecurityGroup(ctx, p.getVnetNetworkSecurityGroupName(location), group)
+		if err != nil {
+			return nil, errors.Wrapf(err, "nsg for location %q", location)
+		}
 	}
 
 	// In order to prevent overlapping subnets, we want to associate each
@@ -709,8 +867,22 @@ func (p *Provider) createVNets(
 	// roachprod to select a new network prefix.
 	prefixesByLocation := make(map[string]int)
 	activePrefixes := make(map[int]bool)
-	var locationsWithoutSubnet []string
-	for location, group := range groupsByLocation {
+
+	nextAvailablePrefix := func() int {
+		prefix := 1
+		for activePrefixes[prefix] {
+			prefix++
+		}
+		activePrefixes[prefix] = true
+		return prefix
+	}
+	newSubnetsCreated := false
+
+	for _, location := range p.opts.locations {
+		p.mu.Lock()
+		group := p.mu.resourceGroups[vnetResourceGroupName(location)]
+		p.mu.Unlock()
+		// Prefix already exists for the resource group.
 		if prefixString := group.Tags[tagSubnet]; prefixString != nil {
 			prefix, err := strconv.Atoi(*prefixString)
 			if err != nil {
@@ -719,29 +891,38 @@ func (p *Provider) createVNets(
 			activePrefixes[prefix] = true
 			prefixesByLocation[location] = prefix
 		} else {
-			locationsWithoutSubnet = append(locationsWithoutSubnet, location)
-		}
-	}
-
-	prefix := 1
-	for _, location := range locationsWithoutSubnet {
-		for activePrefixes[prefix] {
-			prefix++
-		}
-		activePrefixes[prefix] = true
-		prefixesByLocation[location] = prefix
-		group := groupsByLocation[location]
-		if groupsByLocation[location], err = setVNetSubnetPrefix(group, prefix); err != nil {
-			return nil, errors.Wrapf(err, "for location %q", location)
+			// The fact that the vnet didn't have a prefix means that new subnets will
+			// be created.
+			newSubnetsCreated = true
+			prefix := nextAvailablePrefix()
+			prefixesByLocation[location] = prefix
+			p.mu.Lock()
+			group := p.mu.resourceGroups[vnetResourceGroupName(location)]
+			p.mu.Unlock()
+			group, err = setVNetSubnetPrefix(group, prefix)
+			if err != nil {
+				return nil, errors.Wrapf(err, "for location %q", location)
+			}
+			// We just updated the VNet Subnet prefix on the resource group -- update
+			// the cached entry to reflect that.
+			p.mu.Lock()
+			p.mu.resourceGroups[vnetResourceGroupName(location)] = group
+			p.mu.Unlock()
 		}
 	}
 
 	// Now, we can ensure that the VNet exists with the requested subnet.
+	// TODO(arul): Does this need to be done for all locations or just for the
+	// locations that didn't have a subnet/vnet before? I'm inclined to say the
+	// latter, but I'm leaving the existing behavior as is.
 	ret := make(map[string]network.VirtualNetwork)
 	vnets := make([]network.VirtualNetwork, len(ret))
 	for location, prefix := range prefixesByLocation {
-		group := groupsByLocation[location]
-		if vnet, _, err := p.createVNet(ctx, group, prefix); err == nil {
+		p.mu.Lock()
+		resourceGroup := p.mu.resourceGroups[vnetResourceGroupName(location)]
+		networkSecurityGroup := p.mu.securityGroups[p.getVnetNetworkSecurityGroupName(location)]
+		p.mu.Unlock()
+		if vnet, _, err := p.createVNet(ctx, resourceGroup, networkSecurityGroup, prefix); err == nil {
 			ret[location] = vnet
 			vnets = append(vnets, vnet)
 		} else {
@@ -750,10 +931,9 @@ func (p *Provider) createVNets(
 	}
 
 	// We only need to create peerings if there are new subnets.
-	if locationsWithoutSubnet != nil {
+	if newSubnetsCreated {
 		return ret, p.createVNetPeerings(ctx, vnets)
 	}
-
 	return ret, nil
 }
 
@@ -761,7 +941,10 @@ func (p *Provider) createVNets(
 // A single /18 subnet will be created within the VNet.
 // The results  will be memoized in the Provider.
 func (p *Provider) createVNet(
-	ctx context.Context, group resources.Group, prefix int,
+	ctx context.Context,
+	resourceGroup resources.Group,
+	securityGroup network.SecurityGroup,
+	prefix int,
 ) (vnet network.VirtualNetwork, subnet network.Subnet, err error) {
 	vnetName := p.opts.vnetName
 
@@ -774,40 +957,42 @@ func (p *Provider) createVNet(
 		return
 	}
 	vnet = network.VirtualNetwork{
-		Name:     group.Name,
-		Location: group.Location,
+		Name:     to.StringPtr(vnetName),
+		Location: resourceGroup.Location,
 		VirtualNetworkPropertiesFormat: &network.VirtualNetworkPropertiesFormat{
 			AddressSpace: &network.AddressSpace{
 				AddressPrefixes: &[]string{fmt.Sprintf("10.%d.0.0/16", prefix)},
 			},
 			Subnets: &[]network.Subnet{
 				{
-					Name: group.Name,
+					Name: resourceGroup.Name,
 					SubnetPropertiesFormat: &network.SubnetPropertiesFormat{
-						AddressPrefix: to.StringPtr(fmt.Sprintf("10.%d.0.0/18", prefix)),
+						AddressPrefix:        to.StringPtr(fmt.Sprintf("10.%d.0.0/18", prefix)),
+						NetworkSecurityGroup: &securityGroup,
 					},
 				},
 			},
 		},
 	}
-	future, err := client.CreateOrUpdate(ctx, *group.Name, *group.Name, vnet)
+	future, err := client.CreateOrUpdate(ctx, *resourceGroup.Name, *resourceGroup.Name, vnet)
 	if err != nil {
-		err = errors.Wrapf(err, "creating Azure VNet %q in %q", vnetName, *group.Name)
+		err = errors.Wrapf(err, "creating Azure VNet %q in %q", vnetName, *resourceGroup.Name)
 		return
 	}
 	if err = future.WaitForCompletionRef(ctx, client.Client); err != nil {
-		err = errors.Wrapf(err, "creating Azure VNet %q in %q", vnetName, *group.Name)
+		err = errors.Wrapf(err, "creating Azure VNet %q in %q", vnetName, *resourceGroup.Name)
 		return
 	}
 	vnet, err = future.Result(client)
-	err = errors.Wrapf(err, "creating Azure VNet %q in %q", vnetName, *group.Name)
-	if err == nil {
-		subnet = (*vnet.Subnets)[0]
-		p.mu.Lock()
-		p.mu.subnets[*group.Location] = subnet
-		p.mu.Unlock()
-		log.Printf("created Azure VNet %q in %q with prefix %d", vnetName, *group.Name, prefix)
+	err = errors.Wrapf(err, "creating Azure VNet %q in %q", vnetName, *resourceGroup.Name)
+	if err != nil {
+		return
 	}
+	subnet = (*vnet.Subnets)[0]
+	p.mu.Lock()
+	p.mu.subnets[*resourceGroup.Location] = subnet
+	p.mu.Unlock()
+	log.Printf("created Azure VNet %q in %q with prefix %d", vnetName, *resourceGroup.Name, prefix)
 	return
 }
 
@@ -885,11 +1070,15 @@ func (p *Provider) createIP(
 	}
 	future, err := ipc.CreateOrUpdate(ctx, *group.Name, name,
 		network.PublicIPAddress{
-			Name:     to.StringPtr(name),
+			Name: to.StringPtr(name),
+			Sku: &network.PublicIPAddressSku{
+				Name: network.PublicIPAddressSkuNameStandard,
+			},
 			Location: group.Location,
+			Zones:    to.StringSlicePtr([]string{p.opts.zone}),
 			PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 				PublicIPAddressVersion:   network.IPv4,
-				PublicIPAllocationMethod: network.Dynamic,
+				PublicIPAllocationMethod: network.Static,
 			},
 		})
 	if err != nil {
@@ -960,49 +1149,60 @@ func (p *Provider) fillNetworkDetails(ctx context.Context, m *vm.VM, nicID azure
 	return nil
 }
 
-// getResourceGroup creates or retrieves a resource group within the
-// specified location. The base name will be combined with the location,
-// to allow for easy tear-down of multi-region clusters. Results are
-// memoized within the Provider instance.
-func (p *Provider) getResourceGroup(
-	ctx context.Context, cluster, location string, opts vm.CreateOpts,
-) (group resources.Group, err error) {
-	groupName := fmt.Sprintf("%s-%s", cluster, location)
+// getOrCreateResourceGroup retrieves or creates a resource group with the given
+// name in the specified location and with the given tags. Results are memoized
+// within the Provider instance.
+func (p *Provider) getOrCreateResourceGroup(
+	ctx context.Context, name string, location string, tags map[string]*string,
+) (resources.Group, error) {
 
+	// First, check the local provider cache.
 	p.mu.Lock()
-	group, ok := p.mu.resourceGroups[groupName]
+	group, ok := p.mu.resourceGroups[name]
 	p.mu.Unlock()
 	if ok {
-		return
+		return group, nil
+	}
+
+	cacheAndReturn := func(group resources.Group) (resources.Group, error) {
+		p.mu.Lock()
+		p.mu.resourceGroups[name] = group
+		p.mu.Unlock()
+		return group, nil
 	}
 
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
-		return
+		return resources.Group{}, err
 	}
 
 	client := resources.NewGroupsClient(*sub.SubscriptionID)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
-		return
+		return resources.Group{}, err
 	}
 
-	tags := make(map[string]*string)
-	tags[tagCluster] = to.StringPtr(cluster)
-	tags[tagCreated] = to.StringPtr(timeutil.Now().Format(time.RFC3339))
-	tags[tagLifetime] = to.StringPtr(opts.Lifetime.String())
-	tags[tagRoachprod] = to.StringPtr("true")
+	// Next, we make an API call to see if the resource already exists on Azure.
+	group, err = client.Get(ctx, name)
+	if err == nil {
+		return cacheAndReturn(group)
+	}
+	var detail autorest.DetailedError
+	if errors.As(err, &detail) {
+		// It's okay if the resource was "not found" -- we will create it below.
+		if code, ok := detail.StatusCode.(int); ok && code != 404 {
+			return resources.Group{}, err
+		}
+	}
 
-	group, err = client.CreateOrUpdate(ctx, groupName,
+	group, err = client.CreateOrUpdate(ctx, name,
 		resources.Group{
 			Location: to.StringPtr(location),
 			Tags:     tags,
 		})
-	if err == nil {
-		p.mu.Lock()
-		p.mu.resourceGroups[groupName] = group
-		p.mu.Unlock()
+	if err != nil {
+		return resources.Group{}, err
 	}
-	return
+	return cacheAndReturn(group)
 }
 
 // getSubscription chooses the first available subscription. The value
