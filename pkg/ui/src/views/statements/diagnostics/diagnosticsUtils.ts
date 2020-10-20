@@ -19,7 +19,7 @@ export function getDiagnosticsStatus(diagnosticsRequest: IStatementDiagnosticsRe
     return "READY";
   }
 
-  return "WAITING FOR QUERY";
+  return "WAITING";
 }
 
 export function sortByRequestedAtField(a: IStatementDiagnosticsReport, b: IStatementDiagnosticsReport) {
