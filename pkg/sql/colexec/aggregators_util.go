@@ -354,6 +354,10 @@ func (b *distinctAggregatorHelperBase) selectDistinctTuples(
 			}
 		}
 		for _, colIdx := range inputIdxs {
+			// Note that we don't need to explicitly unset ed because encoded
+			// field is never set during fingerprinting - we'll compute the
+			// encoding and return it without updating the EncDatum; therefore,
+			// simply setting Datum field to the argument is sufficient.
 			b.scratch.ed.Datum = b.aggColsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
 			// We know that we have tree.Datum, so there will definitely be no
 			// need to decode b.scratch.ed for fingerprinting, so we pass in
