@@ -261,3 +261,59 @@ query TTTI
 SHOW TABLES
 ----
 public  kv  table  0
+
+# Test that tables can't be renamed to a different database unless both the
+# old and new schemas are in the public schema.
+subtest rename_table_across_dbs
+
+statement ok
+CREATE DATABASE olddb
+
+statement ok
+CREATE DATABASE newdb
+
+statement ok
+USE olddb
+
+statement ok
+CREATE SCHEMA oldsc
+
+statement ok
+USE newdb
+
+statement ok
+CREATE SCHEMA newsc
+
+statement ok
+CREATE TABLE olddb.public.tbl1();
+
+statement ok
+CREATE TABLE olddb.oldsc.tbl2();
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.public.tbl1 RENAME TO newdb.newsc.tbl1
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.public.tbl2
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.newsc.tbl2
+
+# Try different but equivalent names.
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.tbl1 RENAME TO newdb.newsc.tbl1
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.tbl2
+
+# Using the public schemas should still work.
+
+statement ok
+ALTER TABLE olddb.public.tbl1 RENAME TO newdb.public.tbl1
+
+statement ok
+DROP DATABASE olddb CASCADE
+
+statement ok
+DROP DATABASE newdb CASCADE
