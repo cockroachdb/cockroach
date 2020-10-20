@@ -144,6 +144,7 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/twpayne/go-geom v1.3.6
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
+	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
 	go.etcd.io/etcd/raft/v3 v3.0.0-20210215124703-719f6ce06fbc
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
