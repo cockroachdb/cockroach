@@ -82,6 +82,7 @@ const (
 	SinkParamFileSize         = `file_size`
 	SinkParamSchemaTopic      = `schema_topic`
 	SinkParamTLSEnabled       = `tls_enabled`
+	SinkParamTLSSkipVerify    = `tls_skip_verify`
 	SinkParamTopicPrefix      = `topic_prefix`
 	SinkSchemeBuffer          = ``
 	SinkSchemeExperimentalSQL = `experimental-sql`
@@ -90,6 +91,7 @@ const (
 	SinkParamSASLHandshake    = `sasl_handshake`
 	SinkParamSASLUser         = `sasl_user`
 	SinkParamSASLPassword     = `sasl_password`
+	SinkParamSASLMechanism    = `sasl_mechanism`
 )
 
 // ChangefeedOptionExpectValues is used to parse changefeed options using

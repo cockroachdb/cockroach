@@ -1990,6 +1990,14 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=foo`,
 	)
 	sqlDB.ExpectErr(
+		t, `param tls_skip_verify must be a bool`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_skip_verify=foo`,
+	)
+	sqlDB.ExpectErr(
+		t, `tls_skip_verify requires tls_enabled=true`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_skip_verify=true`,
+	)
+	sqlDB.ExpectErr(
 		t, `param ca_cert must be base 64 encoded`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?ca_cert=!`,
 	)
@@ -2050,6 +2058,10 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `sasl_enabled must be enabled if a SASL password is provided`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_password=a`,
+	)
+	sqlDB.ExpectErr(
+		t, `sasl_enabled must be enabled to configure SASL mechanism`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_mechanism=false`,
 	)
 
 	// The avro format doesn't support key_in_value yet.

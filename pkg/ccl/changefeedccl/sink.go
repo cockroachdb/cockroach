@@ -102,6 +102,13 @@ func getSink(
 			}
 		}
 		q.Del(changefeedbase.SinkParamTLSEnabled)
+		if tlsBool := q.Get(changefeedbase.SinkParamTLSSkipVerify); tlsBool != `` {
+			var err error
+			if cfg.tlsSkipVerify, err = strconv.ParseBool(tlsBool); err != nil {
+				return nil, errors.Errorf(`param %s must be a bool: %s`, changefeedbase.SinkParamTLSSkipVerify, err)
+			}
+		}
+		q.Del(changefeedbase.SinkParamTLSSkipVerify)
 		if caCertHex := q.Get(changefeedbase.SinkParamCACert); caCertHex != `` {
 			// TODO(dan): There's a straightforward and unambiguous transformation
 			// between the base 64 encoding defined in RFC 4648 and the URL variant
@@ -148,6 +155,11 @@ func getSink(
 				return nil, errors.Wrapf(err, `param %s must be a bool:`, changefeedbase.SinkParamSASLHandshake)
 			}
 			cfg.saslHandshake = b
+		}
+		cfg.saslMechanism = q.Get(changefeedbase.SinkParamSASLMechanism)
+		q.Del(changefeedbase.SinkParamSASLMechanism)
+		if cfg.saslMechanism != "" && !cfg.saslEnabled {
+			return nil, errors.Errorf(`%s must be enabled to configure SASL mechanism`, changefeedbase.SinkParamSASLEnabled)
 		}
 		cfg.saslUser = q.Get(changefeedbase.SinkParamSASLUser)
 		q.Del(changefeedbase.SinkParamSASLUser)
@@ -289,6 +301,7 @@ func init() {
 type kafkaSinkConfig struct {
 	kafkaTopicPrefix string
 	tlsEnabled       bool
+	tlsSkipVerify    bool
 	caCert           []byte
 	clientCert       []byte
 	clientKey        []byte
@@ -296,6 +309,7 @@ type kafkaSinkConfig struct {
 	saslHandshake    bool
 	saslUser         string
 	saslPassword     string
+	saslMechanism		 string
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
@@ -335,15 +349,26 @@ func makeKafkaSink(
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
 
+	if cfg.tlsSkipVerify {
+		if !cfg.tlsEnabled {
+			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamTLSSkipVerify, changefeedbase.SinkParamTLSEnabled)
+		}
+		if config.Net.TLS.Config == nil {
+			config.Net.TLS.Config = &tls.Config{}
+		}
+		config.Net.TLS.Config.InsecureSkipVerify = cfg.tlsSkipVerify
+	}
+
 	if cfg.caCert != nil {
 		if !cfg.tlsEnabled {
 			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamCACert, changefeedbase.SinkParamTLSEnabled)
 		}
 		caCertPool := x509.NewCertPool()
 		caCertPool.AppendCertsFromPEM(cfg.caCert)
-		config.Net.TLS.Config = &tls.Config{
-			RootCAs: caCertPool,
+		if config.Net.TLS.Config == nil {
+			config.Net.TLS.Config = &tls.Config{}
 		}
+		config.Net.TLS.Config.RootCAs = caCertPool
 		config.Net.TLS.Enable = true
 	} else if cfg.tlsEnabled {
 		config.Net.TLS.Enable = true
@@ -373,6 +398,12 @@ func makeKafkaSink(
 		config.Net.SASL.Handshake = cfg.saslHandshake
 		config.Net.SASL.User = cfg.saslUser
 		config.Net.SASL.Password = cfg.saslPassword
+		config.Net.SASL.Mechanism = sarama.SASLMechanism(cfg.saslMechanism)
+		if config.Net.SASL.Mechanism == sarama.SASLTypeSCRAMSHA512 {
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &ScramClient{HashGeneratorFcn: SHA512} }
+		} else if config.Net.SASL.Mechanism == sarama.SASLTypeSCRAMSHA256 {
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &ScramClient{HashGeneratorFcn: SHA256} }
+		}
 	}
 
 	// When we emit messages to sarama, they're placed in a queue (as does any
