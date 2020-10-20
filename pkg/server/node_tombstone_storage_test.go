@@ -15,9 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,6 +32,21 @@ func TestNodeTombstoneStorage(t *testing.T) {
 	defer eng1.Close()
 	eng2 := storage.NewDefaultInMem()
 	defer eng2.Close()
+
+	engs := []storage.Engine{eng1, eng2}
+
+	// The tombstone storage only writes to initialized engines.
+	// We'll test uninited engines at the end of the test.
+	id, err := uuid.NewV4()
+	require.NoError(t, err)
+	for i := range engs {
+		require.NoError(t, kvserver.WriteClusterVersion(ctx, engs[i], clusterversion.TestingClusterVersion))
+		require.NoError(t, kvserver.InitEngine(ctx, engs[i], roachpb.StoreIdent{
+			ClusterID: id,
+			NodeID:    1,
+			StoreID:   roachpb.StoreID(1 + i),
+		}))
+	}
 
 	mustTime := func(ts time.Time, err error) time.Time {
 		t.Helper()
@@ -67,7 +86,6 @@ func TestNodeTombstoneStorage(t *testing.T) {
 	// We're not hitting the disks any more; the decommissioned
 	// status is cached. This includes both the decommissioned nodes
 	// and n3, which is not decommissioned but was checked above.
-	engs := s.engs
 	s.engs = nil
 	require.Equal(t, ts1, mustTime(s.IsDecommissioned(ctx, 2)))
 	require.Equal(t, ts2, mustTime(s.IsDecommissioned(ctx, 1)))
@@ -78,4 +96,20 @@ func TestNodeTombstoneStorage(t *testing.T) {
 	require.Equal(t, ts1, mustTime(s.IsDecommissioned(ctx, 2)))
 	require.Equal(t, ts2, mustTime(s.IsDecommissioned(ctx, 1)))
 	require.Equal(t, time.Time{}, mustTime(s.IsDecommissioned(ctx, 3)))
+
+	// Throw an uninitialized engine in the mix. It should be skipped over.
+	eng3 := storage.NewDefaultInMem()
+	defer eng3.Close()
+	s = &nodeTombstoneStorage{engs: []storage.Engine{eng1, eng2, eng3}}
+	// Decommission n100.
+	ts3 := timeutil.Unix(15, 30).UTC()
+	require.NoError(t, s.SetDecommissioned(ctx, 100, ts3))
+	require.Equal(t, ts3, mustTime(s.IsDecommissioned(ctx, 100)))
+	// Rehydrate.
+	s = &nodeTombstoneStorage{engs: []storage.Engine{eng1, eng2, eng3}}
+	require.Equal(t, ts3, mustTime(s.IsDecommissioned(ctx, 100)))
+	// Rehydrate, but only from eng3. Now the entry is gone, meaning it
+	// wasn't written to n3.
+	s = &nodeTombstoneStorage{engs: []storage.Engine{eng3}}
+	require.Equal(t, time.Time{}, mustTime(s.IsDecommissioned(ctx, 100)))
 }
