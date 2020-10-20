@@ -822,6 +822,7 @@ unreserved_keyword ::=
 	| 'DOMAIN'
 	| 'DOUBLE'
 	| 'DROP'
+	| 'DRY_RUN'
 	| 'ENCODING'
 	| 'ENCRYPTION_PASSPHRASE'
 	| 'ENUM'
@@ -1897,6 +1898,7 @@ restore_options ::=
 	| 'SKIP_MISSING_SEQUENCES'
 	| 'SKIP_MISSING_SEQUENCE_OWNERS'
 	| 'SKIP_MISSING_VIEWS'
+	| 'DRY_RUN'
 	| 'DETACHED'
 
 scrub_option_list ::=
