@@ -93,6 +93,7 @@ const (
 	SinkParamSASLHandshake    = `sasl_handshake`
 	SinkParamSASLUser         = `sasl_user`
 	SinkParamSASLPassword     = `sasl_password`
+	SinkParamSASLMechanism    = `sasl_mechanism`
 )
 
 // ChangefeedOptionExpectValues is used to parse changefeed options using
