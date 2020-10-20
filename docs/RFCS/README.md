@@ -56,7 +56,8 @@ guidance and to help shepherd your RFC through the process.
 
 2. Copy `00000000_template.md` to a new file and fill in the
    details. Commit this version in your own fork of the repository or
-   a branch.
+   a branch. Your commit message (and corresponding pull request) 
+   should include the prefix `rfc`. Eg: `rfc: edit RFC template`
 
 3. Submit a pull request (PR) to add your new file to the main
    repository. Each RFC should get its own pull request; do not
