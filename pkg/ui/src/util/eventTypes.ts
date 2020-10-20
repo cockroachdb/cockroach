@@ -77,6 +77,14 @@ export const CREATE_STATISTICS = "create_statistics";
 export const GRANT_PRIVILEGE = "grant_privilege";
 // Recorded when privileges are removed from a user(s).
 export const REVOKE_PRIVILEGE = "revoke_privilege";
+// Recorded when a schema is created.
+export const CREATE_SCHEMA = "create_schema";
+// Recorded when a schema is dropped.
+export const DROP_SCHEMA = "drop_schema";
+// Recorded when a schema is renamed.
+export const RENAME_SCHEMA = "rename_schema";
+// Recorded when a schema's owner is changed.
+export const ALTER_SCHEMA_OWNER = "alter_schema_owner";
 
 // Node Event Types
 export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONING, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];

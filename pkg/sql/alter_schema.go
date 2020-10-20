@@ -78,11 +78,44 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 func (n *alterSchemaNode) startExec(params runParams) error {
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterSchemaRename:
-		return params.p.renameSchema(
-			params.ctx, n.db, n.desc, string(t.NewName), tree.AsStringWithFQNames(n.n, params.Ann()))
+		oldName := n.desc.Name
+		newName := string(t.NewName)
+		if err := params.p.renameSchema(
+			params.ctx, n.db, n.desc, newName, tree.AsStringWithFQNames(n.n, params.Ann()),
+		); err != nil {
+			return err
+		}
+		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+			params.ctx,
+			params.p.txn,
+			EventLogRenameSchema,
+			int32(n.desc.ID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+			struct {
+				SchemaName    string
+				NewSchemaName string
+				User          string
+			}{oldName, newName, params.p.SessionData().User},
+		)
 	case *tree.AlterSchemaOwner:
-		return params.p.alterSchemaOwner(
-			params.ctx, n.desc, string(t.Owner), tree.AsStringWithFQNames(n.n, params.Ann()))
+		newOwner := string(t.Owner)
+		if err := params.p.alterSchemaOwner(
+			params.ctx, n.desc, newOwner, tree.AsStringWithFQNames(n.n, params.Ann()),
+		); err != nil {
+			return err
+		}
+		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+			params.ctx,
+			params.p.txn,
+			EventLogAlterSchemaOwner,
+			int32(n.desc.ID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+			struct {
+				SchemaName string
+				Owner      string
+				User       string
+			}{n.desc.Name, newOwner, params.p.SessionData().User},
+		)
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
 	}

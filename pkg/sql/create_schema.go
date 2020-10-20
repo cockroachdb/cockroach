@@ -141,13 +141,27 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	// Finally create the schema on disk.
-	return p.createDescriptorWithID(
+	if err := p.createDescriptorWithID(
 		params.ctx,
 		catalogkeys.NewSchemaKey(db.ID, schemaName).Key(p.ExecCfg().Codec),
 		id,
 		desc,
 		params.ExecCfg().Settings,
 		tree.AsStringWithFQNames(n, params.Ann()),
+	); err != nil {
+		return err
+	}
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogCreateSchema,
+		int32(desc.GetID()),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			SchemaName string
+			Owner      string
+			User       string
+		}{schemaName, privs.Owner, params.SessionData().User},
 	)
 }
 
