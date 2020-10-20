@@ -151,8 +151,9 @@ func getSink(
 		}
 		cfg.saslUser = q.Get(changefeedbase.SinkParamSASLUser)
 		q.Del(changefeedbase.SinkParamSASLUser)
-		cfg.saslPassword = q.Get(changefeedbase.SinkParamSASLPassword)
+		cfg.saslPassword = strings.ToUpper(q.Get(changefeedbase.SinkParamSASLPassword))
 		q.Del(changefeedbase.SinkParamSASLPassword)
+		cfg.saslMechanism = q.Get(changefeedbase.SinkParamSASLMechanism)
 		if cfg.saslEnabled {
 			if cfg.saslUser == `` {
 				return nil, errors.Errorf(`%s must be provided when SASL is enabled`, changefeedbase.SinkParamSASLUser)
@@ -160,12 +161,22 @@ func getSink(
 			if cfg.saslPassword == `` {
 				return nil, errors.Errorf(`%s must be provided when SASL is enabled`, changefeedbase.SinkParamSASLPassword)
 			}
+			switch cfg.saslMechanism {
+			case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypePlaintext:
+			default:
+				return nil, errors.Errorf(`invalid value for %s must be one of %s, %s, or %s`,
+					changefeedbase.SinkParamSASLMechanism,
+					sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypePlaintext)
+			}
 		} else {
 			if cfg.saslUser != `` {
 				return nil, errors.Errorf(`%s must be enabled if a SASL user is provided`, changefeedbase.SinkParamSASLEnabled)
 			}
 			if cfg.saslPassword != `` {
 				return nil, errors.Errorf(`%s must be enabled if a SASL password is provided`, changefeedbase.SinkParamSASLEnabled)
+			}
+			if cfg.saslMechanism != `` {
+				return nil, errors.Errorf(`%s must be enabled if a SASL mechanism is provided`, changefeedbase.SinkParamSASLEnabled)
 			}
 		}
 
@@ -296,6 +307,7 @@ type kafkaSinkConfig struct {
 	saslHandshake    bool
 	saslUser         string
 	saslPassword     string
+	saslMechanism    string
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
@@ -373,6 +385,9 @@ func makeKafkaSink(
 		config.Net.SASL.Handshake = cfg.saslHandshake
 		config.Net.SASL.User = cfg.saslUser
 		config.Net.SASL.Password = cfg.saslPassword
+		if cfg.saslMechanism != "" {
+			config.Net.SASL.Mechanism = sarama.SASLMechanism(cfg.saslMechanism)
+		}
 	}
 
 	// When we emit messages to sarama, they're placed in a queue (as does any
