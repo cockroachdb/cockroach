@@ -760,9 +760,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		iteration++
 		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
 		m := newMonitor(ctx, c, roachNodes)
-		// Restart the cluster before each iteration to help eliminate
-		// inter-trial interactions.
-		m.ExpectDeaths(int32(len(roachNodes)))
 		c.Stop(ctx, roachNodes)
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 		time.Sleep(restartWait)
