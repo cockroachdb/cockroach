@@ -2501,6 +2501,9 @@ func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
 
 	rng, _ := randutil.NewPseudoRand()
 	randomizedMutationsMaxBatchSize := mutations.MaxBatchSize()
+	// Temporarily disable this randomization because of #54948.
+	// TODO(yuzefovich): re-enable it once the issue is figured out.
+	serverArgs.DisableMutationsMaxBatchSizeRandomization = true
 	if !serverArgs.DisableMutationsMaxBatchSizeRandomization {
 		randomizedMutationsMaxBatchSize = randomValue(rng, []int{1, 2 + rng.Intn(99)}, []float64{0.25, 0.25}, mutations.MaxBatchSize())
 		if randomizedMutationsMaxBatchSize != mutations.MaxBatchSize() {
