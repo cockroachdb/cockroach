@@ -93,15 +93,23 @@ func initializeProgress(
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
-	if len(progress.Tables) != len(details.Tables) || len(progress.Indexes) != len(details.Indexes) {
+	var update bool
+	if details.Tenant != nil {
+		progress.Tenant = &jobspb.SchemaChangeGCProgress_TenantProgress{
+			Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC,
+		}
+		update = true
+	} else if len(progress.Tables) != len(details.Tables) || len(progress.Indexes) != len(details.Indexes) {
+		update = true
 		for _, table := range details.Tables {
 			progress.Tables = append(progress.Tables, jobspb.SchemaChangeGCProgress_TableProgress{ID: table.ID})
 		}
 		for _, index := range details.Indexes {
 			progress.Indexes = append(progress.Indexes, jobspb.SchemaChangeGCProgress_IndexProgress{IndexID: index.IndexID})
 		}
+	}
 
-		// Write out new progress.
+	if update {
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 			if err != nil {
@@ -126,6 +134,9 @@ func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 		if table.Status != jobspb.SchemaChangeGCProgress_DELETED {
 			return false
 		}
+	}
+	if progress.Tenant != nil && progress.Tenant.Status != jobspb.SchemaChangeGCProgress_DELETED {
+		return false
 	}
 
 	return true
@@ -153,6 +164,12 @@ func getAllTablesWaitingForGC(
 // validateDetails ensures that the job details payload follows the structure
 // described in the comment for SchemaChangeGCDetails.
 func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
+	if details.Tenant != nil &&
+		(len(details.Tables) > 0 || len(details.Indexes) > 0) {
+		return errors.AssertionFailedf(
+			"Either field Tenant is set or any of Tables or Indexes: %+v", *details,
+		)
+	}
 	if len(details.Indexes) > 0 {
 		if details.ParentID == descpb.InvalidID {
 			return errors.Errorf("must provide a parentID when dropping an index")
