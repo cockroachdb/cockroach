@@ -55,29 +55,22 @@ func performGC(
 	execCfg *sql.ExecutorConfig,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
-) (bool, error) {
-	didGC := false
+) error {
 	if details.Indexes != nil {
-		if didGCIndex, err := gcIndexes(ctx, execCfg, details.ParentID, progress); err != nil {
-			return false, errors.Wrap(err, "attempting to GC indexes")
-		} else if didGCIndex {
-			didGC = true
-		}
+		return errors.Wrap(gcIndexes(ctx, execCfg, details.ParentID, progress), "attempting to GC indexes")
 	} else if details.Tables != nil {
-		if didGCTable, err := gcTables(ctx, execCfg, progress); err != nil {
-			return false, errors.Wrap(err, "attempting to GC tables")
-		} else if didGCTable {
-			didGC = true
+		if err := gcTables(ctx, execCfg, progress); err != nil {
+			return errors.Wrap(err, "attempting to GC tables")
 		}
 
 		// Drop database zone config when all the tables have been GCed.
 		if details.ParentID != descpb.InvalidID && isDoneGC(progress) {
 			if err := deleteDatabaseZoneConfig(ctx, execCfg.DB, execCfg.Codec, details.ParentID); err != nil {
-				return false, errors.Wrap(err, "deleting database zone config")
+				return errors.Wrap(err, "deleting database zone config")
 			}
 		}
 	}
-	return didGC, nil
+	return nil
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -115,78 +108,54 @@ func (r schemaChangeGCResumer) Resume(
 		}
 	}
 
-	gossipUpdateC, cleanup := execCfg.GCJobNotifier.AddNotifyee(ctx)
-	defer cleanup()
 	tableDropTimes, indexDropTimes := getDropTimes(details)
 
-	allTables := getAllTablesWaitingForGC(details, progress)
-	if len(allTables) == 0 {
-		return nil
-	}
-	expired, earliestDeadline := refreshTables(ctx, execCfg, allTables, tableDropTimes, indexDropTimes, r.jobID, progress)
-	timerDuration := timeutil.Until(earliestDeadline)
-	if expired {
-		timerDuration = 0
-	} else if timerDuration > MaxSQLGCInterval {
-		timerDuration = MaxSQLGCInterval
-	}
 	timer := timeutil.NewTimer()
 	defer timer.Stop()
-	timer.Reset(timerDuration)
-
+	timer.Reset(0)
+	gossipUpdateC, cleanup := execCfg.GCJobNotifier.AddNotifyee(ctx)
+	defer cleanup()
 	for {
 		select {
 		case <-gossipUpdateC:
-			// Upon notification of a gossip update, update the status of the relevant schema elements.
 			if log.V(2) {
 				log.Info(ctx, "received a new system config")
 			}
-			remainingTables := getAllTablesWaitingForGC(details, progress)
-			if len(remainingTables) == 0 {
-				return nil
-			}
-			expired, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
-
-			if isDoneGC(progress) {
-				return nil
-			}
-
-			timerDuration := time.Until(earliestDeadline)
-			if expired {
-				timerDuration = 0
-			} else if timerDuration > MaxSQLGCInterval {
-				timerDuration = MaxSQLGCInterval
-			}
-
-			timer.Reset(timerDuration)
 		case <-timer.C:
 			timer.Read = true
 			if log.V(2) {
 				log.Info(ctx, "SchemaChangeGC timer triggered")
 			}
-			// Refresh the status of all tables in case any GC TTLs have changed.
-			remainingTables := getAllTablesWaitingForGC(details, progress)
-			_, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
-
-			if didWork, err := performGC(ctx, execCfg, details, progress); err != nil {
-				return err
-			} else if didWork {
-				persistProgress(ctx, execCfg, r.jobID, progress)
-			}
-
-			if isDoneGC(progress) {
-				return nil
-			}
-
-			// Schedule the next check for GC.
-			timerDuration := time.Until(earliestDeadline)
-			if timerDuration > MaxSQLGCInterval {
-				timerDuration = MaxSQLGCInterval
-			}
-			timer.Reset(timerDuration)
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+
+		// Refresh the status of all tables in case any GC TTLs have changed.
+		remainingTables := getAllTablesWaitingForGC(details, progress)
+		expired, earliestDeadline := refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
+		timerDuration := time.Until(earliestDeadline)
+
+		if expired {
+			// Some elements have been marked as DELETING so save the progress.
+			persistProgress(ctx, execCfg, r.jobID, progress)
+			if err := performGC(ctx, execCfg, details, progress); err != nil {
+				return err
+			}
+			persistProgress(ctx, execCfg, r.jobID, progress)
+
+			// Trigger immediate re-run in case of more expired elements.
+			timerDuration = 0
+		}
+
+		if isDoneGC(progress) {
+			return nil
+		}
+
+		// Schedule the next check for GC.
+		if timerDuration > MaxSQLGCInterval {
+			timerDuration = MaxSQLGCInterval
+		}
+		timer.Reset(timerDuration)
 	}
 }
 

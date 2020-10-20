@@ -33,8 +33,7 @@ import (
 // The job progress is updated in place, but needs to be persisted to the job.
 func gcTables(
 	ctx context.Context, execCfg *sql.ExecutorConfig, progress *jobspb.SchemaChangeGCProgress,
-) (bool, error) {
-	didGC := false
+) error {
 	if log.V(2) {
 		log.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
 	}
@@ -56,10 +55,9 @@ func gcTables(
 				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress)
-				didGC = true
 				continue
 			}
-			return false, errors.Wrapf(err, "fetching table %d", droppedTable.ID)
+			return errors.Wrapf(err, "fetching table %d", droppedTable.ID)
 		}
 
 		if !table.Dropped() {
@@ -69,19 +67,18 @@ func gcTables(
 
 		// First, delete all the table data.
 		if err := ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, table); err != nil {
-			return false, errors.Wrapf(err, "clearing data for table %d", table.ID)
+			return errors.Wrapf(err, "clearing data for table %d", table.ID)
 		}
 
 		// Finished deleting all the table data, now delete the table meta data.
 		if err := dropTableDesc(ctx, execCfg.DB, execCfg.Codec, table); err != nil {
-			return false, errors.Wrapf(err, "dropping table descriptor for table %d", table.ID)
+			return errors.Wrapf(err, "dropping table descriptor for table %d", table.ID)
 		}
 
 		// Update the details payload to indicate that the table was dropped.
 		markTableGCed(ctx, table.ID, progress)
-		didGC = true
 	}
-	return didGC, nil
+	return nil
 }
 
 // ClearTableData deletes all of the data in the specified table.
