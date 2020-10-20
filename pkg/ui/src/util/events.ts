@@ -87,6 +87,14 @@ export function getEventDescription(e: Event$Properties): string {
       return `Privileges granted: User ${info.User} granted ${info.Privileges} to ${info.Grantees} on ${info.Target}`;
     case eventTypes.REVOKE_PRIVILEGE:
       return `Privileges revoked: User ${info.User} revoked ${info.Privileges} from ${info.Grantees} on ${info.Target}`;
+    case eventTypes.CREATE_SCHEMA:
+      return `Schema Created: User ${info.User} created schema ${info.SchemaName} with owner ${info.Owner}`;
+    case eventTypes.DROP_SCHEMA:
+      return `Schema Dropped: User ${info.User} dropped schema ${info.SchemaName}`;
+    case eventTypes.RENAME_SCHEMA:
+      return `Schema Renamed: User ${info.User} renamed schema ${info.SchemaName} to ${info.NewSchemaName}`;
+    case eventTypes.ALTER_SCHEMA_OWNER:
+      return `Schema Owner Altered: User ${info.User} altered the owner of schema ${info.SchemaName} to ${info.Owner}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
   }
@@ -111,6 +119,9 @@ export interface EventInfo {
   Statement?: string;
   Grantees?: string;
   Privileges?: string;
+  SchemaName?: string;
+  NewSchemaName?: string;
+  Owner?: string;
   // The following are three names for the same key (it was renamed twice).
   // All ar included for backwards compatibility.
   DroppedTables?: string[];
