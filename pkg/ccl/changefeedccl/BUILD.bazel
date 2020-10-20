@@ -13,6 +13,7 @@ go_library(
         "metrics.go",
         "name.go",
         "rowfetcher_cache.go",
+        "scram_client.go",
         "sink.go",
         "sink_cloudstorage.go",
         "testing_knobs.go",
@@ -92,6 +93,7 @@ go_library(
         "@com_github_google_btree//:btree",
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_shopify_sarama//:sarama",
+        "@com_github_xdg_scram//:scram",
     ],
 )
 
