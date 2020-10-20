@@ -43,4 +43,8 @@ export class TableInfo {
           this.physicalSize = FixLong(stats.approximate_disk_bytes).toNumber();
       }
   }
+
+  public detailsAndStatsLoaded(): boolean {
+    return this.id !== undefined && this.physicalSize !== undefined;
+  }
 }

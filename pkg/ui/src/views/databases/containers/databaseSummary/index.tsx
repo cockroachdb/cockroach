@@ -24,6 +24,7 @@ import { TableInfo } from "src/views/databases/data/tableInfo";
 // on a DatabaseSummary component.
 export interface DatabaseSummaryExplicitData {
   name: string;
+  updateOnLoad?: boolean;
 }
 
 // DatabaseSummaryConnectedData describes properties which are applied to a
@@ -44,45 +45,53 @@ interface DatabaseSummaryActions {
   refreshTableStats: typeof refreshTableStats;
 }
 
-type DatabaseSummaryProps = DatabaseSummaryExplicitData & DatabaseSummaryConnectedData & DatabaseSummaryActions;
+export type DatabaseSummaryProps = DatabaseSummaryExplicitData & DatabaseSummaryConnectedData & DatabaseSummaryActions;
+
+interface DatabaseSummaryState {
+  finishedLoadingTableData: boolean;
+}
 
 // DatabaseSummaryBase implements common lifecycle methods for DatabaseSummary
 // components, which differ primarily by their render() method.
 // TODO(mrtracy): We need to find a better abstraction for the common
 // "refresh-on-mount-or-receiveProps" we have in many of our connected
 // components; that would allow us to avoid this inheritance.
-export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {}> {
+export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, DatabaseSummaryState> {
   // loadTableDetails loads data for each table which have no info in the store.
   // TODO(mrtracy): Should this be refreshing data always? Not sure if there
   // is a performance concern with invalidation periods.
-  loadTableDetails(props = this.props) {
+  async loadTableDetails(props = this.props) {
     if (props.tableInfos && props.tableInfos.length > 0) {
-      _.each(props.tableInfos, (tblInfo) => {
-        if (_.isUndefined(tblInfo.numColumns)) {
-          props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
+      for (const tblInfo of props.tableInfos) {
+        // TODO(davidh): this is a stopgap inserted to deal with DBs containing hundreds of tables
+        await Promise.all([
+        _.isUndefined(tblInfo.numColumns) ? props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
             database: props.name,
             table: tblInfo.name,
-          }));
-        }
-        if (_.isUndefined(tblInfo.physicalSize)) {
-          props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({
+          })) : null,
+        _.isUndefined(tblInfo.physicalSize) ? props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({
             database: props.name,
             table: tblInfo.name,
-          }));
-        }
-      });
+          })) : null,
+        ]);
+      }
     }
+    this.setState({finishedLoadingTableData: true});
   }
 
   // Refresh when the component is mounted.
-  componentDidMount() {
+  async componentDidMount() {
     this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: this.props.name }));
-    this.loadTableDetails();
+    if (this.props.updateOnLoad) {
+      await this.loadTableDetails();
+    }
   }
 
   // Refresh when the component receives properties.
-  componentDidUpdate() {
-    this.loadTableDetails(this.props);
+  async componentDidUpdate() {
+    if (this.props.updateOnLoad) {
+      await this.loadTableDetails(this.props);
+    }
   }
 
   render(): React.ReactElement<any> {
