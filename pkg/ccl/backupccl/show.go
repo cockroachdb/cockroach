@@ -298,15 +298,25 @@ func backupShowerDefault(
 						descriptorType = "database"
 					case catalog.SchemaDescriptor:
 						descriptorType = "schema"
-						dbName = dbIDToName[desc.GetParentID()]
+						if dbNameFromBackup, ok := dbIDToName[desc.GetParentID()]; ok {
+							dbName = dbNameFromBackup
+						}
 					case catalog.TypeDescriptor:
 						descriptorType = "type"
-						dbName = dbIDToName[desc.GetParentID()]
-						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
+						if dbNameFromBackup, ok := dbIDToName[desc.GetParentID()]; ok {
+							dbName = dbNameFromBackup
+						}
+						if schemaNameFromBackup, ok := schemaIDToName[desc.GetParentSchemaID()]; ok {
+							parentSchemaName = schemaNameFromBackup
+						}
 					case catalog.TableDescriptor:
 						descriptorType = "table"
-						dbName = dbIDToName[desc.GetParentID()]
-						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
+						if dbNameFromBackup, ok := dbIDToName[desc.GetParentID()]; ok {
+							dbName = dbNameFromBackup
+						}
+						if schemaNameFromBackup, ok := schemaIDToName[desc.GetParentSchemaID()]; ok {
+							parentSchemaName = schemaNameFromBackup
+						}
 						descSize := descSizes[desc.GetID()]
 						dataSizeDatum = tree.NewDInt(tree.DInt(descSize.DataSize))
 						rowCountDatum = tree.NewDInt(tree.DInt(descSize.Rows))
@@ -318,9 +328,11 @@ func backupShowerDefault(
 						createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
 							tabledesc.NewImmutable(*desc.TableDesc()), displayOptions)
 						if err != nil {
-							continue
+							// We expect that we might get an error here due to X-DB
+							// references, which were possible on 20.2 betas and rcs.
+							log.Errorf(ctx, "error while generating create statement: %+v", err)
 						}
-						createStmtDatum = tree.NewDString(createStmt)
+						createStmtDatum = nullIfEmpty(createStmt)
 					default:
 						descriptorType = "unknown"
 					}
