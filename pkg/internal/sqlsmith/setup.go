@@ -68,15 +68,16 @@ func randTables(r *rand.Rand) string {
 
 	// Create the random tables.
 	stmts := rowenc.RandCreateTables(r, "table", r.Intn(5)+1,
-		mutations.ForeignKeyMutator,
 		mutations.StatisticsMutator,
-		// TODO(mgartner): Re-enable the partial index mutator once it is aware
-		// that it should not mutate unique indexes on foreign key references.
-		// mutations.PartialIndexMutator,
+		// The PartialIndexMutator must be listed before the ForeignKeyMutator.
+		// A foreign key requires a unique index on the referenced column. These
+		// unique indexes are created by the ForeignKeyMutator. If the
+		// PartialIndexMutator is listed after the ForeignKeyMutator, it may
+		// mutate these unique indexes into partial unique indexes, which do not
+		// satisfy the requirements for creating the foreign key.
+		mutations.PartialIndexMutator,
+		mutations.ForeignKeyMutator,
 	)
-	// Satisfy the linter's desire to have mutations.PartialIndexMutator be
-	// used.
-	var _ = mutations.PartialIndexMutator
 
 	for _, stmt := range stmts {
 		sb.WriteString(tree.SerializeForDisplay(stmt))
