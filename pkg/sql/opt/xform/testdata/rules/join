@@ -58,16 +58,6 @@ CREATE TABLE zz (
 ----
 
 exec-ddl
-CREATE TABLE zz_redundant (
-    a INT8 PRIMARY KEY,
-    b INT8 NULL,
-    c INT8 NULL,
-    INDEX idx_u (b ASC, c ASC),
-    INDEX idx_v (b ASC, c ASC)
-)
-----
-
-exec-ddl
 CREATE TABLE large (m INT, n INT)
 ----
 
@@ -1631,6 +1621,228 @@ left-join (hash)
  └── filters
       └── a:1 = z:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
+# -----------------------------------------------------
+# CommuteSemiJoin
+# -----------------------------------------------------
+
+exec-ddl
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (d, e));
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# Test the CommuteSemiJoinRule creates an appropriate inner join.
+opt
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
+----
+semi-join (hash)
+ ├── columns: a:1 b:2 c:3
+ ├── scan abc
+ │    └── columns: a:1 b:2 c:3
+ ├── scan def
+ │    └── columns: f:8
+ └── filters
+      └── a:1 = f:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# Test that we don't commute a SemiJoin when the On conditions are not
+# equalities. For example, in this test we have a Lt condition.
+opt expect-not=CommuteSemiJoin
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a < e)
+----
+semi-join (cross)
+ ├── columns: a:1 b:2 c:3
+ ├── scan abc
+ │    └── columns: a:1 b:2 c:3
+ ├── scan def
+ │    └── columns: e:7!null
+ └── filters
+      └── a:1 < e:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+
+# Test that we don't commute a SemiJoin when the On conditions are not
+# equalities. For example, in this test we have an Or condition.
+opt expect-not=CommuteSemiJoin
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR c=e)
+----
+semi-join (cross)
+ ├── columns: a:1 b:2 c:3
+ ├── scan abc
+ │    └── columns: a:1 b:2 c:3
+ ├── scan def
+ │    ├── columns: d:6!null e:7!null
+ │    └── key: (6,7)
+ └── filters
+      └── (a:1 = d:6) OR (c:3 = e:7) [outer=(1,3,6,7)]
+
+opt disable=CommuteSemiJoin format=show-all
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d AND c=e)
+----
+semi-join (lookup def)
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── key columns: [1 3] = [6 7]
+ ├── lookup columns are key
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
+ ├── cost: 511.050394
+ ├── prune: (2)
+ ├── interesting orderings: (+1,+2) (+2,+3)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
+ │    ├── cost: 111.02
+ │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2) (+2,+3)
+ │    └── unfiltered-cols: (1-5)
+ └── filters (true)
+
+# TODO(rytaft): See stats/join tests. Since we don't collect the stats properly
+# for SemiJoins, we prefer the InnerJoin plan over the SemiJoin one more times
+# than necessary.
+opt format=show-all
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d AND c=e)
+----
+semi-join (lookup def)
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── key columns: [1 3] = [6 7]
+ ├── lookup columns are key
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
+ ├── cost: 511.050394
+ ├── prune: (2)
+ ├── interesting orderings: (+1,+2) (+2,+3)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
+ │    ├── cost: 111.02
+ │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2) (+2,+3)
+ │    └── unfiltered-cols: (1-5)
+ └── filters (true)
+
+exec-ddl
+CREATE TABLE customers (id INT PRIMARY KEY, name STRING)
+----
+
+exec-ddl
+CREATE TABLE orders (id INT PRIMARY KEY, cust_id INT REFERENCES customers (id), order_date DATE, INDEX (order_date) STORING (cust_id))
+----
+
+exec-ddl
+ALTER TABLE customers INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE orders INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["cust_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 10000000
+  },
+  {
+    "columns": ["order_date"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  }
+]'
+----
+
+opt disable=CommuteSemiJoin
+SELECT *
+FROM customers c
+WHERE EXISTS(SELECT * FROM orders o WHERE o.cust_id=c.id AND o.order_date='2019-01-01')
+----
+semi-join (merge)
+ ├── columns: id:1!null name:2
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan c
+ │    ├── columns: c.id:1!null name:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ ├── sort
+ │    ├── columns: cust_id:5 order_date:6!null
+ │    ├── fd: ()-->(6)
+ │    ├── ordering: +5 opt(6) [actual: +5]
+ │    └── scan o@secondary
+ │         ├── columns: cust_id:5 order_date:6!null
+ │         ├── constraint: /6/4: [/'2019-01-01' - /'2019-01-01']
+ │         └── fd: ()-->(6)
+ └── filters (true)
+
+# The CommuteSemiJoin rule allows a much better plan because we can use
+# a lookup join.
+opt
+SELECT *
+FROM customers c
+WHERE EXISTS(SELECT * FROM orders o WHERE o.cust_id=c.id AND o.order_date='2019-01-01')
+----
+project
+ ├── columns: id:1!null name:2
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join (lookup customers)
+      ├── columns: c.id:1!null name:2 cust_id:5!null
+      ├── key columns: [5] = [1]
+      ├── lookup columns are key
+      ├── key: (5)
+      ├── fd: (1)-->(2), (1)==(5), (5)==(1)
+      ├── distinct-on
+      │    ├── columns: cust_id:5
+      │    ├── grouping columns: cust_id:5
+      │    ├── key: (5)
+      │    └── scan o@secondary
+      │         ├── columns: cust_id:5 order_date:6!null
+      │         ├── constraint: /6/4: [/'2019-01-01' - /'2019-01-01']
+      │         └── fd: ()-->(6)
+      └── filters (true)
+
 # --------------------------------------------------
 # GenerateMergeJoins
 # --------------------------------------------------
@@ -1658,14 +1870,14 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+6) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,6-8)) (merge-join G3 G2 G5 inner-join,+6,+1) (lookup-join G3 G5 abc@ab,keyCols=[6],outCols=(1-3,6-8))
  │    └── [presentation: a:1,b:2,c:3,x:6,y:7,z:8]
  │         ├── best: (merge-join G2="[ordering: +1]" G3="[ordering: +6]" G5 inner-join,+1,+6)
- │         └── cost: 2178.05
+ │         └── cost: 1197.05
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 111.02
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1074.02
+ │         └── cost: 111.02
  ├── G3: (scan xyz,cols=(6-8)) (scan xyz@xy,cols=(6-8)) (scan xyz@yz,cols=(6-8))
  │    ├── [ordering: +6]
  │    │    ├── best: (scan xyz@xy,cols=(6-8))
@@ -1687,11 +1899,11 @@ memo (optimized, ~8KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:1,b:2,c:3,x:6,y:7,z:8]
  │         ├── best: (inner-join G2 G3 G4)
- │         └── cost: 2188.06
+ │         └── cost: 1204.81
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1074.02
+ │         └── cost: 111.02
  ├── G3: (scan xyz,cols=(6-8)) (scan xyz@xy,cols=(6-8)) (scan xyz@yz,cols=(6-8))
  │    └── []
  │         ├── best: (scan xyz,cols=(6-8))
@@ -1741,14 +1953,14 @@ SELECT * FROM abc JOIN xyz ON a=x AND b=y WHERE b=1 AND y=1
 inner-join (hash)
  ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
  ├── fd: ()-->(2,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
- ├── scan abc@bc
- │    ├── columns: a:1 b:2!null c:3
- │    ├── constraint: /2/3/4: [/1 - /1]
- │    └── fd: ()-->(2)
  ├── scan xyz@yz
  │    ├── columns: x:6 y:7!null z:8
  │    ├── constraint: /7/8/9: [/1 - /1]
  │    └── fd: ()-->(7)
+ ├── scan abc@bc
+ │    ├── columns: a:1 b:2!null c:3
+ │    ├── constraint: /2/3/4: [/1 - /1]
+ │    └── fd: ()-->(2)
  └── filters
       ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
@@ -1968,11 +2180,11 @@ memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:6,y:7,z:8]
  │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 2169.68
+ │         └── cost: 1208.58
  ├── G2: (select G5 G6) (select G7 G6) (select G8 G6)
  │    └── []
- │         ├── best: (select G8 G6)
- │         └── cost: 1073.23
+ │         ├── best: (select G7 G6)
+ │         └── cost: 112.03
  ├── G3: (scan xyz,cols=(6-8)) (scan xyz@xy,cols=(6-8)) (scan xyz@yz,cols=(6-8))
  │    └── []
  │         ├── best: (scan xyz,cols=(6-8))
@@ -1981,16 +2193,16 @@ memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  ├── G5: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1074.02
+ │         └── cost: 111.02
  ├── G6: (filters G9)
  ├── G7: (scan abc@ab,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan abc@ab,cols=(1-3),constrained)
- │         └── cost: 1074.01
+ │         └── cost: 111.01
  ├── G8: (scan abc@bc,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan abc@bc,cols=(1-3),constrained)
- │         └── cost: 1063.31
+ │         └── cost: 111.01
  ├── G9: (eq G10 G11)
  ├── G10: (variable a)
  └── G11: (variable b)
@@ -2005,12 +2217,12 @@ SELECT * FROM abc JOIN kfloat ON a=k
 memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,k:6])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,k:6]
- │         ├── best: (inner-join G2 G3 G4)
- │         └── cost: 12128.06
+ │         ├── best: (inner-join G3 G2 G4)
+ │         └── cost: 2149.31
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1074.02
+ │         └── cost: 111.02
  ├── G3: (scan kfloat,cols=(6))
  │    └── []
  │         ├── best: (scan kfloat,cols=(6))
@@ -4459,889 +4671,283 @@ project
       └── filters
            └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
+# -----------------------------------------------------
+# ConvertSemiToInnerJoin
+# -----------------------------------------------------
+
+# This rule applies when the On conditions are not equalities. For example,
+# in this test we have a Lt condition. It allows us to use a lookup join even
+# though the index is not covering.
+opt expect=ConvertSemiToInnerJoin
+SELECT * from pqr WHERE EXISTS (SELECT * FROM zz WHERE a = 0 AND q = b AND r < c)
+----
+project
+ ├── columns: p:1!null q:2 r:3 s:4 t:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── project
+      ├── columns: p:1!null q:2!null r:3!null s:4 t:5
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3-5)
+      └── inner-join (lookup pqr)
+           ├── columns: p:1!null q:2!null r:3!null s:4 t:5 a:7!null b:8!null c:9!null
+           ├── key columns: [1] = [1]
+           ├── lookup columns are key
+           ├── key: (1)
+           ├── fd: ()-->(2,7-9), (1)-->(3-5), (2)==(8), (8)==(2)
+           ├── inner-join (lookup pqr@q)
+           │    ├── columns: p:1!null q:2!null a:7!null b:8!null c:9
+           │    ├── key columns: [8] = [2]
+           │    ├── key: (1)
+           │    ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
+           │    ├── scan zz
+           │    │    ├── columns: a:7!null b:8 c:9
+           │    │    ├── constraint: /7: [/0 - /0]
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    └── fd: ()-->(7-9)
+           │    └── filters (true)
+           └── filters
+                └── r:3 < c:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ])]
+
+# In this test we have an Or condition.
+opt expect=ConvertSemiToInnerJoin
+SELECT * from pqr WHERE EXISTS (SELECT * FROM zz WHERE a = 0 AND q = b AND (p = a OR r = c))
+----
+project
+ ├── columns: p:1!null q:2 r:3 s:4 t:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── project
+      ├── columns: p:1!null q:2!null r:3 s:4 t:5
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3-5)
+      └── inner-join (lookup pqr)
+           ├── columns: p:1!null q:2!null r:3 s:4 t:5 a:7!null b:8!null c:9
+           ├── key columns: [1] = [1]
+           ├── lookup columns are key
+           ├── key: (1)
+           ├── fd: ()-->(2,7-9), (1)-->(3-5), (2)==(8), (8)==(2)
+           ├── inner-join (lookup pqr@q)
+           │    ├── columns: p:1!null q:2!null a:7!null b:8!null c:9
+           │    ├── key columns: [8] = [2]
+           │    ├── key: (1)
+           │    ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
+           │    ├── scan zz
+           │    │    ├── columns: a:7!null b:8 c:9
+           │    │    ├── constraint: /7: [/0 - /0]
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    └── fd: ()-->(7-9)
+           │    └── filters (true)
+           └── filters
+                └── (p:1 = 0) OR (r:3 = c:9) [outer=(1,3,9)]
+
+# In this case we need to add the key back to zz since it was pruned during
+# normalization.
+opt expect=ConvertSemiToInnerJoin
+SELECT b, c from zz WHERE EXISTS (SELECT * FROM pqr WHERE p = 0 AND q = b AND (p = c OR r = c))
+----
+project
+ ├── columns: b:2 c:3
+ ├── lax-key: (2,3)
+ ├── fd: (3)~~>(2)
+ └── project
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3), (3)-->(1)
+      └── inner-join (lookup zz)
+           ├── columns: a:1!null b:2!null c:3!null p:5!null q:6!null r:7
+           ├── key columns: [1] = [1]
+           ├── lookup columns are key
+           ├── key: (1)
+           ├── fd: ()-->(2,5-7), (1)-->(3), (3)-->(1), (2)==(6), (6)==(2)
+           ├── inner-join (lookup zz@idx_b)
+           │    ├── columns: a:1!null b:2!null p:5!null q:6!null r:7
+           │    ├── key columns: [6] = [2]
+           │    ├── key: (1)
+           │    ├── fd: ()-->(2,5-7), (2)==(6), (6)==(2)
+           │    ├── scan pqr
+           │    │    ├── columns: p:5!null q:6 r:7
+           │    │    ├── constraint: /5: [/0 - /0]
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    └── fd: ()-->(5-7)
+           │    └── filters (true)
+           └── filters
+                └── (c:3 = 0) OR (r:7 = c:3) [outer=(3,7), constraints=(/3: (/NULL - ])]
+
 # --------------------------------------------------
-# GenerateZigzagJoins
+# PushJoinIntoIndexJoin
 # --------------------------------------------------
 
-# Simple zigzag case - where all requested columns are in the indexes being
-# joined.
-opt
-SELECT q,r FROM pqr WHERE q = 1 AND r = 2
-----
-inner-join (zigzag pqr@q pqr@r)
- ├── columns: q:2!null r:3!null
- ├── eq columns: [1] = [1]
- ├── left fixed columns: [2] = [1]
- ├── right fixed columns: [3] = [2]
- ├── fd: ()-->(2,3)
- └── filters
-      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
-
-opt
-SELECT q,r FROM pqr WHERE q = 1 AND r IS NULL
-----
-inner-join (zigzag pqr@q pqr@r)
- ├── columns: q:2!null r:3
- ├── eq columns: [1] = [1]
- ├── left fixed columns: [2] = [1]
- ├── right fixed columns: [3] = [NULL]
- ├── fd: ()-->(2,3)
- └── filters
-      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      └── r:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
-
-memo
-SELECT q,r FROM pqr WHERE q = 1 AND r = 2
-----
-memo (optimized, ~13KB, required=[presentation: q:2,r:3])
- ├── G1: (select G2 G3) (zigzag-join G3 pqr@q pqr@r) (select G4 G5) (select G6 G7) (select G8 G7)
- │    └── [presentation: q:2,r:3]
- │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 1.93
- ├── G2: (scan pqr,cols=(2,3))
- │    └── []
- │         ├── best: (scan pqr,cols=(2,3))
- │         └── cost: 1074.02
- ├── G3: (filters G9 G10)
- ├── G4: (index-join G11 pqr,cols=(2,3))
- │    └── []
- │         ├── best: (index-join G11 pqr,cols=(2,3))
- │         └── cost: 75.12
- ├── G5: (filters G10)
- ├── G6: (index-join G12 pqr,cols=(2,3))
- │    └── []
- │         ├── best: (index-join G12 pqr,cols=(2,3))
- │         └── cost: 75.12
- ├── G7: (filters G9)
- ├── G8: (index-join G13 pqr,cols=(2,3))
- │    └── []
- │         ├── best: (index-join G13 pqr,cols=(2,3))
- │         └── cost: 75.22
- ├── G9: (eq G14 G15)
- ├── G10: (eq G16 G17)
- ├── G11: (scan pqr@q,cols=(1,2),constrained)
- │    └── []
- │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 14.41
- ├── G12: (scan pqr@r,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 14.41
- ├── G13: (scan pqr@rs,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
- │         └── cost: 14.51
- ├── G14: (variable q)
- ├── G15: (const 1)
- ├── G16: (variable r)
- └── G17: (const 2)
-
-# Case where the fixed columns are extracted from a complicated expression.
-opt
-SELECT q,r FROM pqr WHERE q = 1 AND ((r < 1 AND r > 1) OR (r >= 2 AND r <= 2))
-----
-inner-join (zigzag pqr@q pqr@r)
- ├── columns: q:2!null r:3!null
- ├── eq columns: [1] = [1]
- ├── left fixed columns: [2] = [1]
- ├── right fixed columns: [3] = [2]
- ├── fd: ()-->(2,3)
- └── filters
-      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      └── ((r:3 < 1) AND (r:3 > 1)) OR ((r:3 >= 2) AND (r:3 <= 2)) [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
-
-# Nested zigzag case - zigzag join needs to be wrapped in a lookup join to
-# satisfy required columns.
-opt
-SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
+opt expect=PushJoinIntoIndexJoin
+SELECT * FROM abc INNER JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5) ON a=q
 ----
 inner-join (lookup pqr)
- ├── columns: q:2!null r:3!null s:4
- ├── key columns: [1] = [1]
+ ├── columns: a:1!null b:2 c:3 p:6!null q:7!null r:8 s:9 t:10
+ ├── key columns: [6] = [6]
  ├── lookup columns are key
- ├── fd: ()-->(2,3)
- ├── inner-join (zigzag pqr@q pqr@r)
- │    ├── columns: p:1!null q:2!null r:3!null
- │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [2] = [1]
- │    ├── right fixed columns: [3] = [2]
- │    ├── fd: ()-->(2,3)
- │    └── filters
- │         ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
- │         └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+ ├── fd: (6)-->(7-10), (1)==(7), (7)==(1)
+ ├── inner-join (lookup abc@ab)
+ │    ├── columns: a:1!null b:2 c:3 p:6!null q:7!null
+ │    ├── key columns: [7] = [1]
+ │    ├── fd: (6)-->(7), (1)==(7), (7)==(1)
+ │    ├── scan pqr@q
+ │    │    ├── columns: p:6!null q:7
+ │    │    ├── limit: 5
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    └── filters (true)
  └── filters (true)
 
-memo
-SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
+# Cross join case. The plan produced by PushJoinIntoIndexJoin isn't chosen
+# because the cross join doesn't filter rows.
+opt expect=PushJoinIntoIndexJoin
+SELECT * FROM abc CROSS JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5)
 ----
-memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
- ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4)) (select G6 G7) (select G8 G9) (select G10 G9)
- │    └── [presentation: q:2,r:3,s:4]
- │         ├── best: (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 7.48
- ├── G2: (scan pqr,cols=(2-4))
- │    └── []
- │         ├── best: (scan pqr,cols=(2-4))
- │         └── cost: 1084.02
- ├── G3: (filters G11 G12)
- ├── G4: (zigzag-join G3 pqr@q pqr@r)
- │    └── []
- │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 1.94
- ├── G5: (filters)
- ├── G6: (index-join G13 pqr,cols=(2-4))
- │    └── []
- │         ├── best: (index-join G13 pqr,cols=(2-4))
- │         └── cost: 75.22
- ├── G7: (filters G12)
- ├── G8: (index-join G14 pqr,cols=(2-4))
- │    └── []
- │         ├── best: (index-join G14 pqr,cols=(2-4))
- │         └── cost: 75.22
- ├── G9: (filters G11)
- ├── G10: (index-join G15 pqr,cols=(2-4))
- │    └── []
- │         ├── best: (index-join G15 pqr,cols=(2-4))
- │         └── cost: 75.32
- ├── G11: (eq G16 G17)
- ├── G12: (eq G18 G19)
- ├── G13: (scan pqr@q,cols=(1,2),constrained)
- │    └── []
- │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 14.41
- ├── G14: (scan pqr@r,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 14.41
- ├── G15: (scan pqr@rs,cols=(1,3,4),constrained)
- │    └── []
- │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
- │         └── cost: 14.61
- ├── G16: (variable q)
- ├── G17: (const 1)
- ├── G18: (variable r)
- └── G19: (const 2)
+inner-join (cross)
+ ├── columns: a:1 b:2 c:3 p:6!null q:7 r:8 s:9 t:10
+ ├── fd: (6)-->(7-10)
+ ├── scan abc
+ │    └── columns: a:1 b:2 c:3
+ ├── index-join pqr
+ │    ├── columns: p:6!null q:7 r:8 s:9 t:10
+ │    ├── cardinality: [0 - 5]
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7-10)
+ │    └── scan pqr@q
+ │         ├── columns: p:6!null q:7
+ │         ├── limit: 5
+ │         ├── key: (6)
+ │         └── fd: (6)-->(7)
+ └── filters (true)
 
-# Zigzag with fixed columns of different types.
-opt
-SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
+# No-op case because the index join is the right input of the LeftJoin.
+opt expect-not=PushJoinIntoIndexJoin
+SELECT * FROM abc LEFT JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5) ON a=q
 ----
-inner-join (zigzag pqr@q pqr@s)
- ├── columns: q:2!null s:4!null
- ├── eq columns: [1] = [1]
- ├── left fixed columns: [2] = [1]
- ├── right fixed columns: [4] = ['foo']
- ├── fd: ()-->(2,4)
+left-join (merge)
+ ├── columns: a:1 b:2 c:3 p:6 q:7 r:8 s:9 t:10
+ ├── left ordering: +1
+ ├── right ordering: +7
+ ├── fd: (6)-->(7-10)
+ ├── scan abc@ab
+ │    ├── columns: a:1 b:2 c:3
+ │    └── ordering: +1
+ ├── index-join pqr
+ │    ├── columns: p:6!null q:7 r:8 s:9 t:10
+ │    ├── cardinality: [0 - 5]
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7-10)
+ │    ├── ordering: +7
+ │    └── scan pqr@q
+ │         ├── columns: p:6!null q:7
+ │         ├── limit: 5
+ │         ├── key: (6)
+ │         ├── fd: (6)-->(7)
+ │         └── ordering: +7
+ └── filters (true)
+
+# No-op case because the InnerJoin has join hints.
+opt expect-not=PushJoinIntoIndexJoin
+SELECT * FROM (SELECT * FROM pqr ORDER BY q LIMIT 5) INNER HASH JOIN abc ON a=q
+----
+inner-join (hash)
+ ├── columns: p:1!null q:2!null r:3 s:4 t:5 a:7!null b:8 c:9
+ ├── flags: force hash join (store right side)
+ ├── fd: (1)-->(2-5), (2)==(7), (7)==(2)
+ ├── index-join pqr
+ │    ├── columns: p:1!null q:2 r:3 s:4 t:5
+ │    ├── cardinality: [0 - 5]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── scan pqr@q
+ │         ├── columns: p:1!null q:2
+ │         ├── limit: 5
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ ├── scan abc
+ │    └── columns: a:7 b:8 c:9
  └── filters
-      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      └── a:7 = q:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
-memo
-SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
+# No-op case because the ON condition references a column that doesn't come from
+# the input of the index join or the right side of the InnerJoin.
+opt expect-not=PushJoinIntoIndexJoin
+SELECT * FROM (SELECT * FROM pqr ORDER BY q LIMIT 5) INNER JOIN abc ON a=r
 ----
-memo (optimized, ~11KB, required=[presentation: q:2,s:4])
- ├── G1: (select G2 G3) (zigzag-join G3 pqr@q pqr@s) (select G4 G5) (select G6 G7)
- │    └── [presentation: q:2,s:4]
- │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 1.94
- ├── G2: (scan pqr,cols=(2,4))
- │    └── []
- │         ├── best: (scan pqr,cols=(2,4))
- │         └── cost: 1074.02
- ├── G3: (filters G8 G9)
- ├── G4: (index-join G10 pqr,cols=(2,4))
- │    └── []
- │         ├── best: (index-join G10 pqr,cols=(2,4))
- │         └── cost: 75.12
- ├── G5: (filters G9)
- ├── G6: (index-join G11 pqr,cols=(2,4))
- │    └── []
- │         ├── best: (index-join G11 pqr,cols=(2,4))
- │         └── cost: 75.22
- ├── G7: (filters G8)
- ├── G8: (eq G12 G13)
- ├── G9: (eq G14 G15)
- ├── G10: (scan pqr@q,cols=(1,2),constrained)
- │    └── []
- │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 14.41
- ├── G11: (scan pqr@s,cols=(1,4),constrained)
- │    └── []
- │         ├── best: (scan pqr@s,cols=(1,4),constrained)
- │         └── cost: 14.51
- ├── G12: (variable q)
- ├── G13: (const 1)
- ├── G14: (variable s)
- └── G15: (const 'foo')
+inner-join (lookup abc@ab)
+ ├── columns: p:1!null q:2 r:3!null s:4 t:5 a:7!null b:8 c:9
+ ├── key columns: [3] = [7]
+ ├── fd: (1)-->(2-5), (3)==(7), (7)==(3)
+ ├── index-join pqr
+ │    ├── columns: p:1!null q:2 r:3 s:4 t:5
+ │    ├── cardinality: [0 - 5]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── scan pqr@q
+ │         ├── columns: p:1!null q:2
+ │         ├── limit: 5
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters (true)
 
-# Zigzag with implicit equality column in addition to primary key:
-# indexes on (r,s) and (t,s) should be chosen even though s is not being fixed
-# in the ON clause.
-opt
-SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
-----
-inner-join (zigzag pqr@rs pqr@ts)
- ├── columns: r:3!null t:5!null
- ├── eq columns: [4 1] = [4 1]
- ├── left fixed columns: [3] = [1]
- ├── right fixed columns: [5] = ['foo']
- ├── fd: ()-->(3,5)
- └── filters
-      ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
-      └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
-
-memo
-SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
-----
-memo (optimized, ~13KB, required=[presentation: r:3,t:5])
- ├── G1: (select G2 G3) (zigzag-join G3 pqr@rs pqr@ts) (select G4 G5) (select G6 G5) (select G7 G8)
- │    └── [presentation: r:3,t:5]
- │         ├── best: (zigzag-join G3 pqr@rs pqr@ts)
- │         └── cost: 1.95
- ├── G2: (scan pqr,cols=(3,5))
- │    └── []
- │         ├── best: (scan pqr,cols=(3,5))
- │         └── cost: 1074.02
- ├── G3: (filters G9 G10)
- ├── G4: (index-join G11 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G11 pqr,cols=(3,5))
- │         └── cost: 75.12
- ├── G5: (filters G10)
- ├── G6: (index-join G12 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G12 pqr,cols=(3,5))
- │         └── cost: 75.22
- ├── G7: (index-join G13 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G13 pqr,cols=(3,5))
- │         └── cost: 75.22
- ├── G8: (filters G9)
- ├── G9: (eq G14 G15)
- ├── G10: (eq G16 G17)
- ├── G11: (scan pqr@r,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 14.41
- ├── G12: (scan pqr@rs,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
- │         └── cost: 14.51
- ├── G13: (scan pqr@ts,cols=(1,5),constrained)
- │    └── []
- │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
- │         └── cost: 14.51
- ├── G14: (variable r)
- ├── G15: (const 1)
- ├── G16: (variable t)
- └── G17: (const 'foo')
-
-# Zigzag with choice between indexes for multiple equality predicates.
-opt
-SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
-----
-inner-join (zigzag pqr@q pqr@s)
- ├── columns: p:1!null q:2!null r:3!null s:4!null
- ├── eq columns: [1] = [1]
- ├── left fixed columns: [2] = [1]
- ├── right fixed columns: [4] = ['foo']
- ├── key: (1)
- ├── fd: ()-->(2-4)
- └── filters
-      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
-      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-
-# Tests for zigzag joins over partial indexes.
-
-exec-ddl
-CREATE TABLE zz_partial (
-    k INT PRIMARY KEY,
-    i INT,
-    j INT,
-    b1 BOOL,
-    b2 BOOL,
-    s STRING
+# No-op case because the right side of the InnerJoin has outer columns.
+opt expect-not=PushJoinIntoIndexJoin disable=(TryDecorrelateProject)
+SELECT * 
+FROM stu
+INNER JOIN LATERAL (
+   SELECT *
+   FROM (SELECT * FROM pqr ORDER BY q LIMIT 5)
+   INNER JOIN (SELECT *, a*s FROM abc)
+   ON a=q
 )
+ON True
 ----
-
-exec-ddl
-CREATE INDEX i ON zz_partial (i) WHERE b1
-----
-
-exec-ddl
-CREATE INDEX j ON zz_partial (j) WHERE b2
-----
-
-# Generate a zigzag join over two partial indexes.
-opt expect=GenerateZigzagJoins
-SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20 AND b2
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── inner-join (lookup zz_partial)
-      ├── columns: k:1!null i:2!null j:3!null b1:4!null b2:5!null
-      ├── key columns: [1] = [1]
-      ├── lookup columns are key
-      ├── key: (1)
-      ├── fd: ()-->(2-5)
-      ├── inner-join (zigzag zz_partial@i zz_partial@j)
-      │    ├── columns: k:1!null i:2!null j:3!null
-      │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [2] = [10]
-      │    ├── right fixed columns: [3] = [20]
-      │    ├── fd: ()-->(2,3)
-      │    └── filters
-      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
-      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
-      └── filters (true)
-
-# Don't generate a zigzag join when the first index predicate is not implied.
-opt expect-not=GenerateZigzagJoins format=hide-all
-SELECT k FROM zz_partial WHERE i = 10 AND j = 20 AND b2
-----
-project
- └── select
-      ├── index-join zz_partial
-      │    └── select
-      │         ├── scan zz_partial@j,partial
-      │         └── filters
-      │              └── j = 20
-      └── filters
-           └── i = 10
-
-# Don't generate a zigzag join when the second index predicate is not implied.
-opt expect-not=GenerateZigzagJoins format=hide-all
-SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20
-----
-project
- └── select
-      ├── index-join zz_partial
-      │    └── select
-      │         ├── scan zz_partial@i,partial
-      │         └── filters
-      │              └── i = 10
-      └── filters
-           └── j = 20
-
-exec-ddl
-DROP INDEX j
-----
-
-exec-ddl
-CREATE INDEX j ON zz_partial (j)
-----
-
-# Generate a zigzag join over one partial and one non-partial index.
-opt expect=GenerateZigzagJoins
-SELECT k FROM zz_partial WHERE i = 10 AND b1 AND j = 20
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── inner-join (lookup zz_partial)
-      ├── columns: k:1!null i:2!null j:3!null b1:4!null
-      ├── key columns: [1] = [1]
-      ├── lookup columns are key
-      ├── key: (1)
-      ├── fd: ()-->(2-4)
-      ├── inner-join (zigzag zz_partial@i zz_partial@j)
-      │    ├── columns: k:1!null i:2!null j:3!null
-      │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [2] = [10]
-      │    ├── right fixed columns: [3] = [20]
-      │    ├── fd: ()-->(2,3)
-      │    └── filters
-      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
-      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
-      └── filters (true)
-
-# Don't generate a zigzag join when the partial index predicate is not implied.
-opt expect-not=GenerateZigzagJoins format=hide-all
-SELECT k FROM zz_partial WHERE i = 10 AND j = 20
-----
-project
- └── select
-      ├── index-join zz_partial
-      │    └── scan zz_partial@j
-      │         └── constraint: /3/1: [/20 - /20]
-      └── filters
-           └── i = 10
-
-exec-ddl
-DROP INDEX i
-----
-
-exec-ddl
-DROP INDEX j
-----
-
-exec-ddl
-CREATE INDEX i ON zz_partial (i) WHERE i = 10
-----
-
-exec-ddl
-CREATE INDEX j ON zz_partial (j)
-----
-
-# Don't generate a zigzag join when the expression that fixes the left columns
-# is removed during partial index implication of the left index.
-opt expect-not=GenerateZigzagJoins format=hide-all
-SELECT k FROM zz_partial WHERE i = 10 AND j = 20
-----
-project
- └── select
-      ├── index-join zz_partial
-      │    └── scan zz_partial@i,partial
-      └── filters
-           └── j = 20
-
-exec-ddl
-DROP INDEX i
-----
-
-exec-ddl
-DROP INDEX j
-----
-
-exec-ddl
-CREATE INDEX i ON zz_partial (i)
-----
-
-exec-ddl
-CREATE INDEX j ON zz_partial (j) WHERE j = 20
-----
-
-# Don't generate a zigzag join when the expression that fixes the right columns
-# is removed during partial index implication of the right index.
-opt expect-not=GenerateZigzagJoins format=hide-all
-SELECT k FROM zz_partial WHERE i = 10 AND j = 20
-----
-project
- └── select
-      ├── index-join zz_partial
-      │    └── scan zz_partial@j,partial
-      └── filters
-           └── i = 10
-
-exec-ddl
-DROP INDEX i
-----
-
-exec-ddl
-DROP INDEX j
-----
-
-exec-ddl
-CREATE INDEX zz_partial_s ON zz_partial (s)
-----
-
-exec-ddl
-CREATE INDEX j ON zz_partial (j) WHERE s = 'foo'
-----
-
-# Don't generate a zigzag join when the expression that fixes the left columns
-# is removed during partial index implication of the right index.
-opt expect-not=GenerateZigzagJoins format=hide-all
-SELECT k FROM zz_partial WHERE s = 'foo' AND j = 20
-----
-project
- └── scan zz_partial@j,partial
-      └── constraint: /3/1: [/20 - /20]
-
-exec-ddl
-DROP INDEX zz_partial_s
-----
-
-exec-ddl
-DROP INDEX j
-----
-
-exec-ddl
-CREATE INDEX i ON zz_partial (i) WHERE s = 'foo'
-----
-
-exec-ddl
-CREATE INDEX zz_partial_s ON zz_partial (s)
-----
-
-# Don't generate a zigzag join when the expression that fixes the right columns
-# is removed during partial index implication of the left index.
-opt expect-not=GenerateZigzagJoins format=hide-all
-SELECT k FROM zz_partial WHERE i = 10 AND s = 'foo'
-----
-project
- └── scan zz_partial@i,partial
-      └── constraint: /2/1: [/10 - /10]
-
-exec-ddl
-DROP INDEX i
-----
-
-exec-ddl
-DROP INDEX zz_partial_s
-----
-
-exec-ddl
-CREATE INDEX i ON zz_partial (i)
-----
-
-exec-ddl
-CREATE INDEX b1 ON zz_partial (b1) WHERE s = 'foo'
-----
-
-exec-ddl
-CREATE INDEX j ON zz_partial (j)
-----
-
-# The filters should be reset during each iteration over the left and right
-# indexes if they are reduced while proving partial index implication. In this
-# test, (s = 'foo') must be applied after the zigzag join.
-opt expect=GenerateZigzagJoins
-SELECT k FROM zz_partial WHERE i = 10 AND j = 20 AND b1 AND s = 'foo'
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── inner-join (lookup zz_partial)
-      ├── columns: k:1!null i:2!null j:3!null b1:4!null s:6!null
-      ├── key columns: [1] = [1]
-      ├── lookup columns are key
-      ├── key: (1)
-      ├── fd: ()-->(2-4,6)
-      ├── inner-join (zigzag zz_partial@i zz_partial@j)
-      │    ├── columns: k:1!null i:2!null j:3!null
-      │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [2] = [10]
-      │    ├── right fixed columns: [3] = [20]
-      │    ├── fd: ()-->(2,3)
-      │    └── filters
-      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
-      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
-      └── filters
-           ├── b1:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
-           └── s:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
-
-# Don't generate a zigzag which has the PK as its equality columns against
-# nullable unique indexes where the primary key is not part of the indexed
-# columns.
-
-# Regression test for #36051: prior to fixing this, we would try to use the PK
-# as the equality column here, but it's not actually part of the key so we
-# can't zigzag on it.
-opt
-SELECT * FROM zz WHERE b IS NULL AND c = 2
-----
-select
- ├── columns: a:1!null b:2 c:3!null
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(1-3)
- ├── index-join zz
- │    ├── columns: a:1!null b:2 c:3
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(1-3)
- │    └── scan zz@idx_c
- │         ├── columns: a:1!null c:3!null
- │         ├── constraint: /3: [/2 - /2]
- │         ├── cardinality: [0 - 1]
- │         ├── key: ()
- │         └── fd: ()-->(1,3)
- └── filters
-      └── b:2 IS NULL [outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
-
-memo
-SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
-----
-memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
- ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G6 G7 pqr,keyCols=[1],outCols=(1-4)) (select G8 G9) (select G10 G11) (select G12 G7) (select G13 G7)
- │    └── [presentation: p:1,q:2,r:3,s:4]
- │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 1.95
- ├── G2: (scan pqr,cols=(1-4))
- │    └── []
- │         ├── best: (scan pqr,cols=(1-4))
- │         └── cost: 1094.02
- ├── G3: (filters G14 G15 G16)
- ├── G4: (zigzag-join G17 pqr@q pqr@r)
- │    └── []
- │         ├── best: (zigzag-join G17 pqr@q pqr@r)
- │         └── cost: 1.94
- ├── G5: (filters G16)
- ├── G6: (zigzag-join G9 pqr@r pqr@s)
- │    └── []
- │         ├── best: (zigzag-join G9 pqr@r pqr@s)
- │         └── cost: 1.95
- ├── G7: (filters G14)
- ├── G8: (index-join G18 pqr,cols=(1-4))
- │    └── []
- │         ├── best: (index-join G18 pqr,cols=(1-4))
- │         └── cost: 75.22
- ├── G9: (filters G15 G16)
- ├── G10: (index-join G19 pqr,cols=(1-4))
- │    └── []
- │         ├── best: (index-join G19 pqr,cols=(1-4))
- │         └── cost: 75.22
- ├── G11: (filters G14 G16)
- ├── G12: (index-join G20 pqr,cols=(1-4))
- │    └── []
- │         ├── best: (index-join G20 pqr,cols=(1-4))
- │         └── cost: 21.76
- ├── G13: (index-join G21 pqr,cols=(1-4))
- │    └── []
- │         ├── best: (index-join G21 pqr,cols=(1-4))
- │         └── cost: 10.51
- ├── G14: (eq G22 G23)
- ├── G15: (eq G24 G23)
- ├── G16: (eq G25 G26)
- ├── G17: (filters G14 G15)
- ├── G18: (scan pqr@q,cols=(1,2),constrained)
- │    └── []
- │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 14.41
- ├── G19: (scan pqr@r,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 14.41
- ├── G20: (select G27 G28)
- │    └── []
- │         ├── best: (select G27 G28)
- │         └── cost: 14.73
- ├── G21: (scan pqr@rs,cols=(1,3,4),constrained)
- │    └── []
- │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
- │         └── cost: 4.98
- ├── G22: (variable q)
- ├── G23: (const 1)
- ├── G24: (variable r)
- ├── G25: (variable s)
- ├── G26: (const 'foo')
- ├── G27: (scan pqr@s,cols=(1,3,4),constrained)
- │    └── []
- │         ├── best: (scan pqr@s,cols=(1,3,4),constrained)
- │         └── cost: 14.61
- └── G28: (filters G15)
-
-# Zigzag joins cannot be planned for indexes where equality columns do not
-# immediately follow fixed columns. Here, the only index on t is (t,s,p) and
-# s is not a fixed or equal column, so a zigzag join shouldn't be planned.
-opt
-SELECT q,t FROM pqr WHERE q = 1 AND t = 'foo'
-----
-select
- ├── columns: q:2!null t:5!null
- ├── fd: ()-->(2,5)
- ├── index-join pqr
- │    ├── columns: q:2 t:5
- │    ├── fd: ()-->(2)
- │    └── scan pqr@q
- │         ├── columns: p:1!null q:2!null
- │         ├── constraint: /2/1: [/1 - /1]
- │         ├── key: (1)
- │         └── fd: ()-->(2)
- └── filters
-      └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
-
-memo
-SELECT q,t FROM pqr WHERE q = 1 AND t = 'foo'
-----
-memo (optimized, ~9KB, required=[presentation: q:2,t:5])
- ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
- │    └── [presentation: q:2,t:5]
- │         ├── best: (select G4 G5)
- │         └── cost: 75.24
- ├── G2: (scan pqr,cols=(2,5))
- │    └── []
- │         ├── best: (scan pqr,cols=(2,5))
- │         └── cost: 1074.02
- ├── G3: (filters G8 G9)
- ├── G4: (index-join G10 pqr,cols=(2,5))
- │    └── []
- │         ├── best: (index-join G10 pqr,cols=(2,5))
- │         └── cost: 75.12
- ├── G5: (filters G9)
- ├── G6: (index-join G11 pqr,cols=(2,5))
- │    └── []
- │         ├── best: (index-join G11 pqr,cols=(2,5))
- │         └── cost: 75.22
- ├── G7: (filters G8)
- ├── G8: (eq G12 G13)
- ├── G9: (eq G14 G15)
- ├── G10: (scan pqr@q,cols=(1,2),constrained)
- │    └── []
- │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 14.41
- ├── G11: (scan pqr@ts,cols=(1,5),constrained)
- │    └── []
- │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
- │         └── cost: 14.51
- ├── G12: (variable q)
- ├── G13: (const 1)
- ├── G14: (variable t)
- └── G15: (const 'foo')
-
-# Don't zigzag on two identical indexes.
-memo
-SELECT c FROM zz_redundant WHERE b = 1
-----
-memo (optimized, ~6KB, required=[presentation: c:3])
- ├── G1: (project G2 G3 c)
- │    └── [presentation: c:3]
- │         ├── best: (project G2 G3 c)
- │         └── cost: 14.62
- ├── G2: (select G4 G5) (scan zz_redundant@idx_u,cols=(2,3),constrained) (scan zz_redundant@idx_v,cols=(2,3),constrained)
- │    └── []
- │         ├── best: (scan zz_redundant@idx_u,cols=(2,3),constrained)
- │         └── cost: 14.51
- ├── G3: (projections)
- ├── G4: (scan zz_redundant,cols=(2,3)) (scan zz_redundant@idx_u,cols=(2,3)) (scan zz_redundant@idx_v,cols=(2,3))
- │    └── []
- │         ├── best: (scan zz_redundant,cols=(2,3))
- │         └── cost: 1054.02
- ├── G5: (filters G6)
- ├── G6: (eq G7 G8)
- ├── G7: (variable b)
- └── G8: (const 1)
-
-# GenerateZigzagJoins is disabled in the presence of a row-level locking clause.
-opt
-SELECT q,r FROM pqr WHERE q = 1 AND r = 2 FOR UPDATE
-----
-select
- ├── columns: q:2!null r:3!null
- ├── volatile
- ├── fd: ()-->(2,3)
- ├── index-join pqr
- │    ├── columns: q:2 r:3
- │    ├── volatile
- │    ├── fd: ()-->(2)
- │    └── scan pqr@q
- │         ├── columns: p:1!null q:2!null
- │         ├── constraint: /2/1: [/1 - /1]
- │         ├── locking: for-update
- │         ├── volatile
- │         ├── key: (1)
- │         └── fd: ()-->(2)
- └── filters
-      └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+inner-join-apply
+ ├── columns: s:1!null t:2!null u:3!null p:5!null q:6!null r:7 s:8 t:9 a:11!null b:12 c:13 "?column?":16
+ ├── immutable
+ ├── fd: (1-3,5)-->(6-9), (1-3,11)-->(16), (6)==(11), (11)==(6)
+ ├── scan stu
+ │    ├── columns: stu.s:1!null stu.t:2!null u:3!null
+ │    └── key: (1-3)
+ ├── inner-join (merge)
+ │    ├── columns: p:5!null q:6!null r:7 pqr.s:8 pqr.t:9 a:11!null b:12 c:13 "?column?":16
+ │    ├── left ordering: +6
+ │    ├── right ordering: +11
+ │    ├── outer: (1)
+ │    ├── immutable
+ │    ├── fd: (5)-->(6-9), (11)-->(16), (6)==(11), (11)==(6)
+ │    ├── index-join pqr
+ │    │    ├── columns: p:5!null q:6 r:7 pqr.s:8 pqr.t:9
+ │    │    ├── cardinality: [0 - 5]
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6-9)
+ │    │    ├── ordering: +6
+ │    │    └── scan pqr@q
+ │    │         ├── columns: p:5!null q:6
+ │    │         ├── limit: 5
+ │    │         ├── key: (5)
+ │    │         ├── fd: (5)-->(6)
+ │    │         └── ordering: +6
+ │    ├── project
+ │    │    ├── columns: "?column?":16 a:11 b:12 c:13
+ │    │    ├── outer: (1)
+ │    │    ├── immutable
+ │    │    ├── fd: (11)-->(16)
+ │    │    ├── ordering: +11
+ │    │    ├── scan abc@ab
+ │    │    │    ├── columns: a:11 b:12 c:13
+ │    │    │    └── ordering: +11
+ │    │    └── projections
+ │    │         └── a:11 * stu.s:1 [as="?column?":16, outer=(1,11), immutable]
+ │    └── filters (true)
+ └── filters (true)
 
 # --------------------------------------------------
-# GenerateInvertedIndexZigzagJoins
+# Misc
 # --------------------------------------------------
-
-exec-ddl
-CREATE TABLE t5 (
-    a INT PRIMARY KEY,
-    b JSONB,
-    c INT,
-    INVERTED INDEX b_idx(b)
-)
-----
-
-# One path. Should generate a scan constrained on the inverted index.
-opt
-SELECT b,a FROM t5 WHERE b @> '{"a":1}'
-----
-index-join t5
- ├── columns: b:2!null a:1!null
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2)
- └── scan t5@b_idx
-      ├── columns: a:1!null
-      ├── constraint: /2/1: [/'{"a": 1}' - /'{"a": 1}']
-      └── key: (1)
-
-opt
-SELECT b,a FROM t5 WHERE b @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
-----
-index-join t5
- ├── columns: b:2!null a:1!null
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2)
- └── scan t5@b_idx
-      ├── columns: a:1!null
-      ├── constraint: /2/1: [/'{"a": [[{"b": {"c": [{"d": "e"}]}}]]}' - /'{"a": [[{"b": {"c": [{"d": "e"}]}}]]}']
-      └── key: (1)
-
-# Two paths. Should generate a zigzag join.
-opt
-SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}'
-----
-inner-join (lookup t5)
- ├── columns: b:2!null a:1!null
- ├── key columns: [1] = [1]
- ├── lookup columns are key
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── inner-join (zigzag t5@b_idx t5@b_idx)
- │    ├── columns: a:1!null
- │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [2] = ['{"a": 1}']
- │    ├── right fixed columns: [2] = ['{"c": 2}']
- │    └── filters (true)
- └── filters
-      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
-
-memo
-SELECT a FROM t5 WHERE b @> '{"a":1, "c":2}'
-----
-memo (optimized, ~14KB, required=[presentation: a:1])
- ├── G1: (project G2 G3 a)
- │    └── [presentation: a:1]
- │         ├── best: (project G2 G3 a)
- │         └── cost: 100.53
- ├── G2: (select G4 G5) (lookup-join G6 G5 t5,keyCols=[1],outCols=(1,2)) (select G7 G5)
- │    └── []
- │         ├── best: (lookup-join G6 G5 t5,keyCols=[1],outCols=(1,2))
- │         └── cost: 100.40
- ├── G3: (projections)
- ├── G4: (scan t5,cols=(1,2))
- │    └── []
- │         ├── best: (scan t5,cols=(1,2))
- │         └── cost: 1054.02
- ├── G5: (filters G8)
- ├── G6: (zigzag-join G9 t5@b_idx t5@b_idx)
- │    └── []
- │         ├── best: (zigzag-join G9 t5@b_idx t5@b_idx)
- │         └── cost: 25.69
- ├── G7: (index-join G10 t5,cols=(1,2))
- │    └── []
- │         ├── best: (index-join G10 t5,cols=(1,2))
- │         └── cost: 782.82
- ├── G8: (contains G11 G12)
- ├── G9: (filters)
- ├── G10: (scan t5@b_idx,cols=(1),constrained)
- │    └── []
- │         ├── best: (scan t5@b_idx,cols=(1),constrained)
- │         └── cost: 117.31
- ├── G11: (variable b)
- └── G12: (const '{"a": 1, "c": 2}')
-
-# Three or more paths. Should generate zigzag joins.
-opt
-SELECT b,a FROM t5 WHERE b @> '{"a":[{"b":"c", "d":3}, 5]}'
-----
-inner-join (lookup t5)
- ├── columns: b:2!null a:1!null
- ├── key columns: [1] = [1]
- ├── lookup columns are key
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── inner-join (zigzag t5@b_idx t5@b_idx)
- │    ├── columns: a:1!null
- │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [2] = ['{"a": [{"b": "c"}]}']
- │    ├── right fixed columns: [2] = ['{"a": [{"d": 3}]}']
- │    └── filters (true)
- └── filters
-      └── b:2 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 # Regression test for issue where zero-column expressions could exist multiple
 # times in the tree, causing collisions.
@@ -5617,519 +5223,3 @@ union-all
       │    └── filters (true)
       └── projections
            └── 1 [as="?column?":6]
-
-exec-ddl
-CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (d, e));
-----
-
-exec-ddl
-ALTER TABLE abc INJECT STATISTICS '[
-  {
-    "columns": ["a"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 100,
-    "distinct_count": 100
-  },
-  {
-    "columns": ["b"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 100,
-    "distinct_count": 100
-  }
-]'
-----
-
-exec-ddl
-ALTER TABLE def INJECT STATISTICS '[
-  {
-    "columns": ["d"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10000,
-    "distinct_count": 10000
-  },
-  {
-    "columns": ["e"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10000,
-    "distinct_count": 10000
-  }
-]'
-----
-
-# Test the CommuteSemiJoinRule creates an appropriate inner join.
-opt
-SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
-----
-semi-join (hash)
- ├── columns: a:1 b:2 c:3
- ├── scan abc
- │    └── columns: a:1 b:2 c:3
- ├── scan def
- │    └── columns: f:8
- └── filters
-      └── a:1 = f:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-
-# Test that we don't commute a SemiJoin when the On conditions are not
-# equalities. For example, in this test we have a Lt condition.
-opt expect-not=CommuteSemiJoin
-SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a < e)
-----
-semi-join (cross)
- ├── columns: a:1 b:2 c:3
- ├── scan abc
- │    └── columns: a:1 b:2 c:3
- ├── scan def
- │    └── columns: e:7!null
- └── filters
-      └── a:1 < e:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-
-# Test that we don't commute a SemiJoin when the On conditions are not
-# equalities. For example, in this test we have an Or condition.
-opt expect-not=CommuteSemiJoin
-SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR c=e)
-----
-semi-join (cross)
- ├── columns: a:1 b:2 c:3
- ├── scan abc
- │    └── columns: a:1 b:2 c:3
- ├── scan def
- │    ├── columns: d:6!null e:7!null
- │    └── key: (6,7)
- └── filters
-      └── (a:1 = d:6) OR (c:3 = e:7) [outer=(1,3,6,7)]
-
-opt disable=CommuteSemiJoin format=show-all
-SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d AND c=e)
-----
-semi-join (lookup def)
- ├── columns: a:1(int) b:2(int) c:3(int)
- ├── key columns: [1 3] = [6 7]
- ├── lookup columns are key
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
- ├── cost: 511.050394
- ├── prune: (2)
- ├── interesting orderings: (+1,+2) (+2,+3)
- ├── scan t.public.abc
- │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
- │    ├── cost: 111.02
- │    ├── prune: (1-3)
- │    ├── interesting orderings: (+1,+2) (+2,+3)
- │    └── unfiltered-cols: (1-5)
- └── filters (true)
-
-# TODO(rytaft): See stats/join tests. Since we don't collect the stats properly
-# for SemiJoins, we prefer the InnerJoin plan over the SemiJoin one more times
-# than necessary.
-opt format=show-all
-SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d AND c=e)
-----
-semi-join (lookup def)
- ├── columns: a:1(int) b:2(int) c:3(int)
- ├── key columns: [1 3] = [6 7]
- ├── lookup columns are key
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
- ├── cost: 511.050394
- ├── prune: (2)
- ├── interesting orderings: (+1,+2) (+2,+3)
- ├── scan t.public.abc
- │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
- │    ├── cost: 111.02
- │    ├── prune: (1-3)
- │    ├── interesting orderings: (+1,+2) (+2,+3)
- │    └── unfiltered-cols: (1-5)
- └── filters (true)
-
-exec-ddl
-CREATE TABLE customers (id INT PRIMARY KEY, name STRING)
-----
-
-exec-ddl
-CREATE TABLE orders (id INT PRIMARY KEY, cust_id INT REFERENCES customers (id), order_date DATE, INDEX (order_date) STORING (cust_id))
-----
-
-exec-ddl
-ALTER TABLE customers INJECT STATISTICS '[
-  {
-    "columns": ["id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 100000,
-    "distinct_count": 100000
-  }
-]'
-----
-
-exec-ddl
-ALTER TABLE orders INJECT STATISTICS '[
-  {
-    "columns": ["id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 1000000
-  },
-  {
-    "columns": ["cust_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 10000000
-  },
-  {
-    "columns": ["order_date"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 1000000
-  }
-]'
-----
-
-opt disable=CommuteSemiJoin
-SELECT *
-FROM customers c
-WHERE EXISTS(SELECT * FROM orders o WHERE o.cust_id=c.id AND o.order_date='2019-01-01')
-----
-semi-join (merge)
- ├── columns: id:1!null name:2
- ├── left ordering: +1
- ├── right ordering: +5
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── scan c
- │    ├── columns: c.id:1!null name:2
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── ordering: +1
- ├── sort
- │    ├── columns: cust_id:5 order_date:6!null
- │    ├── fd: ()-->(6)
- │    ├── ordering: +5 opt(6) [actual: +5]
- │    └── scan o@secondary
- │         ├── columns: cust_id:5 order_date:6!null
- │         ├── constraint: /6/4: [/'2019-01-01' - /'2019-01-01']
- │         └── fd: ()-->(6)
- └── filters (true)
-
-# The CommuteSemiJoin rule allows a much better plan because we can use
-# a lookup join.
-opt
-SELECT *
-FROM customers c
-WHERE EXISTS(SELECT * FROM orders o WHERE o.cust_id=c.id AND o.order_date='2019-01-01')
-----
-project
- ├── columns: id:1!null name:2
- ├── key: (1)
- ├── fd: (1)-->(2)
- └── inner-join (lookup customers)
-      ├── columns: c.id:1!null name:2 cust_id:5!null
-      ├── key columns: [5] = [1]
-      ├── lookup columns are key
-      ├── key: (5)
-      ├── fd: (1)-->(2), (1)==(5), (5)==(1)
-      ├── distinct-on
-      │    ├── columns: cust_id:5
-      │    ├── grouping columns: cust_id:5
-      │    ├── key: (5)
-      │    └── scan o@secondary
-      │         ├── columns: cust_id:5 order_date:6!null
-      │         ├── constraint: /6/4: [/'2019-01-01' - /'2019-01-01']
-      │         └── fd: ()-->(6)
-      └── filters (true)
-
-# GenerateInvertedIndexZigzagJoins is disabled in the presence of a row-level
-# locking clause.
-opt
-SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}' FOR UPDATE
-----
-select
- ├── columns: b:2!null a:1!null
- ├── volatile
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── index-join t5
- │    ├── columns: a:1!null b:2
- │    ├── volatile
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t5@b_idx
- │         ├── columns: a:1!null
- │         ├── constraint: /2/1: [/'{"a": 1}' - /'{"a": 1}']
- │         ├── locking: for-update
- │         ├── volatile
- │         └── key: (1)
- └── filters
-      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
-
-# -----------------------------------------------------
-# ConvertSemiToInnerJoin
-# -----------------------------------------------------
-
-# This rule applies when the On conditions are not equalities. For example,
-# in this test we have a Lt condition. It allows us to use a lookup join even
-# though the index is not covering.
-opt expect=ConvertSemiToInnerJoin
-SELECT * from pqr WHERE EXISTS (SELECT * FROM zz WHERE a = 0 AND q = b AND r < c)
-----
-project
- ├── columns: p:1!null q:2 r:3 s:4 t:5
- ├── key: (1)
- ├── fd: (1)-->(2-5)
- └── project
-      ├── columns: p:1!null q:2!null r:3!null s:4 t:5
-      ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(3-5)
-      └── inner-join (lookup pqr)
-           ├── columns: p:1!null q:2!null r:3!null s:4 t:5 a:7!null b:8!null c:9!null
-           ├── key columns: [1] = [1]
-           ├── lookup columns are key
-           ├── key: (1)
-           ├── fd: ()-->(2,7-9), (1)-->(3-5), (2)==(8), (8)==(2)
-           ├── inner-join (lookup pqr@q)
-           │    ├── columns: p:1!null q:2!null a:7!null b:8!null c:9
-           │    ├── key columns: [8] = [2]
-           │    ├── key: (1)
-           │    ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
-           │    ├── scan zz
-           │    │    ├── columns: a:7!null b:8 c:9
-           │    │    ├── constraint: /7: [/0 - /0]
-           │    │    ├── cardinality: [0 - 1]
-           │    │    ├── key: ()
-           │    │    └── fd: ()-->(7-9)
-           │    └── filters (true)
-           └── filters
-                └── r:3 < c:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ])]
-
-# In this test we have an Or condition.
-opt expect=ConvertSemiToInnerJoin
-SELECT * from pqr WHERE EXISTS (SELECT * FROM zz WHERE a = 0 AND q = b AND (p = a OR r = c))
-----
-project
- ├── columns: p:1!null q:2 r:3 s:4 t:5
- ├── key: (1)
- ├── fd: (1)-->(2-5)
- └── project
-      ├── columns: p:1!null q:2!null r:3 s:4 t:5
-      ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(3-5)
-      └── inner-join (lookup pqr)
-           ├── columns: p:1!null q:2!null r:3 s:4 t:5 a:7!null b:8!null c:9
-           ├── key columns: [1] = [1]
-           ├── lookup columns are key
-           ├── key: (1)
-           ├── fd: ()-->(2,7-9), (1)-->(3-5), (2)==(8), (8)==(2)
-           ├── inner-join (lookup pqr@q)
-           │    ├── columns: p:1!null q:2!null a:7!null b:8!null c:9
-           │    ├── key columns: [8] = [2]
-           │    ├── key: (1)
-           │    ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
-           │    ├── scan zz
-           │    │    ├── columns: a:7!null b:8 c:9
-           │    │    ├── constraint: /7: [/0 - /0]
-           │    │    ├── cardinality: [0 - 1]
-           │    │    ├── key: ()
-           │    │    └── fd: ()-->(7-9)
-           │    └── filters (true)
-           └── filters
-                └── (p:1 = 0) OR (r:3 = c:9) [outer=(1,3,9)]
-
-# In this case we need to add the key back to zz since it was pruned during
-# normalization.
-opt expect=ConvertSemiToInnerJoin
-SELECT b, c from zz WHERE EXISTS (SELECT * FROM pqr WHERE p = 0 AND q = b AND (p = c OR r = c))
-----
-project
- ├── columns: b:2 c:3
- ├── lax-key: (2,3)
- ├── fd: (3)~~>(2)
- └── project
-      ├── columns: a:1!null b:2!null c:3!null
-      ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(3), (3)-->(1)
-      └── inner-join (lookup zz)
-           ├── columns: a:1!null b:2!null c:3!null p:5!null q:6!null r:7
-           ├── key columns: [1] = [1]
-           ├── lookup columns are key
-           ├── key: (1)
-           ├── fd: ()-->(2,5-7), (1)-->(3), (3)-->(1), (2)==(6), (6)==(2)
-           ├── inner-join (lookup zz@idx_b)
-           │    ├── columns: a:1!null b:2!null p:5!null q:6!null r:7
-           │    ├── key columns: [6] = [2]
-           │    ├── key: (1)
-           │    ├── fd: ()-->(2,5-7), (2)==(6), (6)==(2)
-           │    ├── scan pqr
-           │    │    ├── columns: p:5!null q:6 r:7
-           │    │    ├── constraint: /5: [/0 - /0]
-           │    │    ├── cardinality: [0 - 1]
-           │    │    ├── key: ()
-           │    │    └── fd: ()-->(5-7)
-           │    └── filters (true)
-           └── filters
-                └── (c:3 = 0) OR (r:7 = c:3) [outer=(3,7), constraints=(/3: (/NULL - ])]
-
-# --------------------------------------------------
-# PushJoinIntoIndexJoin
-# --------------------------------------------------
-
-opt expect=PushJoinIntoIndexJoin
-SELECT * FROM abc INNER JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5) ON a=q
-----
-inner-join (lookup pqr)
- ├── columns: a:1!null b:2 c:3 p:6!null q:7!null r:8 s:9 t:10
- ├── key columns: [6] = [6]
- ├── lookup columns are key
- ├── fd: (6)-->(7-10), (1)==(7), (7)==(1)
- ├── inner-join (lookup abc@ab)
- │    ├── columns: a:1!null b:2 c:3 p:6!null q:7!null
- │    ├── key columns: [7] = [1]
- │    ├── fd: (6)-->(7), (1)==(7), (7)==(1)
- │    ├── scan pqr@q
- │    │    ├── columns: p:6!null q:7
- │    │    ├── limit: 5
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── filters (true)
- └── filters (true)
-
-# Cross join case. The plan produced by PushJoinIntoIndexJoin isn't chosen
-# because the cross join doesn't filter rows.
-opt expect=PushJoinIntoIndexJoin
-SELECT * FROM abc CROSS JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5)
-----
-inner-join (cross)
- ├── columns: a:1 b:2 c:3 p:6!null q:7 r:8 s:9 t:10
- ├── fd: (6)-->(7-10)
- ├── scan abc
- │    └── columns: a:1 b:2 c:3
- ├── index-join pqr
- │    ├── columns: p:6!null q:7 r:8 s:9 t:10
- │    ├── cardinality: [0 - 5]
- │    ├── key: (6)
- │    ├── fd: (6)-->(7-10)
- │    └── scan pqr@q
- │         ├── columns: p:6!null q:7
- │         ├── limit: 5
- │         ├── key: (6)
- │         └── fd: (6)-->(7)
- └── filters (true)
-
-# No-op case because the index join is the right input of the LeftJoin.
-opt expect-not=PushJoinIntoIndexJoin
-SELECT * FROM abc LEFT JOIN (SELECT * FROM pqr ORDER BY q LIMIT 5) ON a=q
-----
-left-join (merge)
- ├── columns: a:1 b:2 c:3 p:6 q:7 r:8 s:9 t:10
- ├── left ordering: +1
- ├── right ordering: +7
- ├── fd: (6)-->(7-10)
- ├── scan abc@ab
- │    ├── columns: a:1 b:2 c:3
- │    └── ordering: +1
- ├── index-join pqr
- │    ├── columns: p:6!null q:7 r:8 s:9 t:10
- │    ├── cardinality: [0 - 5]
- │    ├── key: (6)
- │    ├── fd: (6)-->(7-10)
- │    ├── ordering: +7
- │    └── scan pqr@q
- │         ├── columns: p:6!null q:7
- │         ├── limit: 5
- │         ├── key: (6)
- │         ├── fd: (6)-->(7)
- │         └── ordering: +7
- └── filters (true)
-
-# No-op case because the InnerJoin has join hints.
-opt expect-not=PushJoinIntoIndexJoin
-SELECT * FROM (SELECT * FROM pqr ORDER BY q LIMIT 5) INNER HASH JOIN abc ON a=q
-----
-inner-join (hash)
- ├── columns: p:1!null q:2!null r:3 s:4 t:5 a:7!null b:8 c:9
- ├── flags: force hash join (store right side)
- ├── fd: (1)-->(2-5), (2)==(7), (7)==(2)
- ├── index-join pqr
- │    ├── columns: p:1!null q:2 r:3 s:4 t:5
- │    ├── cardinality: [0 - 5]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── scan pqr@q
- │         ├── columns: p:1!null q:2
- │         ├── limit: 5
- │         ├── key: (1)
- │         └── fd: (1)-->(2)
- ├── scan abc
- │    └── columns: a:7 b:8 c:9
- └── filters
-      └── a:7 = q:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-
-# No-op case because the ON condition references a column that doesn't come from
-# the input of the index join or the right side of the InnerJoin.
-opt expect-not=PushJoinIntoIndexJoin
-SELECT * FROM (SELECT * FROM pqr ORDER BY q LIMIT 5) INNER JOIN abc ON a=r
-----
-inner-join (lookup abc@ab)
- ├── columns: p:1!null q:2 r:3!null s:4 t:5 a:7!null b:8 c:9
- ├── key columns: [3] = [7]
- ├── fd: (1)-->(2-5), (3)==(7), (7)==(3)
- ├── index-join pqr
- │    ├── columns: p:1!null q:2 r:3 s:4 t:5
- │    ├── cardinality: [0 - 5]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── scan pqr@q
- │         ├── columns: p:1!null q:2
- │         ├── limit: 5
- │         ├── key: (1)
- │         └── fd: (1)-->(2)
- └── filters (true)
-
-# No-op case because the right side of the InnerJoin has outer columns.
-opt expect-not=PushJoinIntoIndexJoin disable=(TryDecorrelateProject)
-SELECT * 
-FROM stu
-INNER JOIN LATERAL (
-   SELECT *
-   FROM (SELECT * FROM pqr ORDER BY q LIMIT 5)
-   INNER JOIN (SELECT *, a*s FROM abc)
-   ON a=q
-)
-ON True
-----
-inner-join-apply
- ├── columns: s:1!null t:2!null u:3!null p:5!null q:6!null r:7 s:8 t:9 a:11!null b:12 c:13 "?column?":16
- ├── immutable
- ├── fd: (1-3,5)-->(6-9), (1-3,11)-->(16), (6)==(11), (11)==(6)
- ├── scan stu
- │    ├── columns: stu.s:1!null stu.t:2!null u:3!null
- │    └── key: (1-3)
- ├── inner-join (merge)
- │    ├── columns: p:5!null q:6!null r:7 pqr.s:8 pqr.t:9 a:11!null b:12 c:13 "?column?":16
- │    ├── left ordering: +6
- │    ├── right ordering: +11
- │    ├── outer: (1)
- │    ├── immutable
- │    ├── fd: (5)-->(6-9), (11)-->(16), (6)==(11), (11)==(6)
- │    ├── index-join pqr
- │    │    ├── columns: p:5!null q:6 r:7 pqr.s:8 pqr.t:9
- │    │    ├── cardinality: [0 - 5]
- │    │    ├── key: (5)
- │    │    ├── fd: (5)-->(6-9)
- │    │    ├── ordering: +6
- │    │    └── scan pqr@q
- │    │         ├── columns: p:5!null q:6
- │    │         ├── limit: 5
- │    │         ├── key: (5)
- │    │         ├── fd: (5)-->(6)
- │    │         └── ordering: +6
- │    ├── project
- │    │    ├── columns: "?column?":16 a:11 b:12 c:13
- │    │    ├── outer: (1)
- │    │    ├── immutable
- │    │    ├── fd: (11)-->(16)
- │    │    ├── ordering: +11
- │    │    ├── scan abc@ab
- │    │    │    ├── columns: a:11 b:12 c:13
- │    │    │    └── ordering: +11
- │    │    └── projections
- │    │         └── a:11 * stu.s:1 [as="?column?":16, outer=(1,11), immutable]
- │    └── filters (true)
- └── filters (true)
