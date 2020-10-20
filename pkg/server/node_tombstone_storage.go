@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -117,6 +118,18 @@ func (s *nodeTombstoneStorage) SetDecommissioned(
 	// We've populated the cache, now write through to disk.
 	k := s.key(nodeID)
 	for _, eng := range s.engs {
+		// Read the store ident before trying to write to this
+		// engine. An engine that is not bootstrapped should not be
+		// written to, as we check (in InitEngine) that it is empty.
+		//
+		// One initialized engine is always available when this method
+		// is called, so we're still persisting on at least one engine.
+		if _, err := kvserver.ReadStoreIdent(ctx, eng); err != nil {
+			if errors.Is(err, &kvserver.NotBootstrappedError{}) {
+				continue
+			}
+			return err
+		}
 		var v roachpb.Value
 		if err := v.SetProto(&hlc.Timestamp{WallTime: ts.UnixNano()}); err != nil {
 			return err
