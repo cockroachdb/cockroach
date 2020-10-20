@@ -843,48 +843,32 @@ query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 WHERE NOT EXISTS (SELECT * FROM geo_table@geom_index
 WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
-project
+anti-join (lookup geo_table)
  ├── columns: k:1 geom:2
+ ├── key columns: [5] = [5]
+ ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=990]
- ├── cost: 112793.98
+ ├── cost: 112684.05
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1)
- └── select
-      ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 geo_table.geom:6
-      ├── immutable
-      ├── stats: [rows=10.0004317, distinct(5)=1, null(5)=0]
-      ├── cost: 112784.07
-      ├── key: (1)
-      ├── fd: ()-->(5,6), (1)-->(2)
-      ├── left-join (lookup geo_table)
-      │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 geo_table.geom:6
-      │    ├── key columns: [5] = [5]
-      │    ├── lookup columns are key
-      │    ├── immutable
-      │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(5)=999.956829, null(5)=0]
-      │    ├── cost: 112684.05
-      │    ├── key: (1,5)
-      │    ├── fd: (1)-->(2), (5)-->(6)
-      │    ├── left-join (inverted-lookup geo_table@geom_index)
-      │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
-      │    │    ├── inverted-expr
-      │    │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
-      │    │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0]
-      │    │    ├── cost: 41984.03
-      │    │    ├── key: (1,5)
-      │    │    ├── fd: (1)-->(2), (5)-->(11)
-      │    │    ├── scan geo_table2
-      │    │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
-      │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
-      │    │    │    ├── cost: 1084.02
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2)
-      │    │    │    ├── prune: (1,2)
-      │    │    │    └── unfiltered-cols: (1-4)
-      │    │    └── filters (true)
-      │    └── filters
-      │         └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-      └── filters
-           └── geo_table.k:5 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(5), constraints=(/5: [/NULL - /NULL]; tight), fd=()-->(5)]
+ ├── left-join (inverted-lookup geo_table@geom_index)
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
+ │    ├── inverted-expr
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0]
+ │    ├── cost: 41984.03
+ │    ├── key: (1,5)
+ │    ├── fd: (1)-->(2), (5)-->(11)
+ │    ├── scan geo_table2
+ │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    │    ├── cost: 1084.02
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    └── unfiltered-cols: (1-4)
+ │    └── filters (true)
+ └── filters
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
