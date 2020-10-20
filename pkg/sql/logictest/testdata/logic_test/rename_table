@@ -317,3 +317,58 @@ DROP DATABASE olddb CASCADE
 
 statement ok
 DROP DATABASE newdb CASCADE
+
+subtest rename_table_using_types_to_different_database_not_allowed_55709
+
+statement ok
+CREATE DATABASE olddb
+
+statement ok
+CREATE DATABASE newdb
+
+statement ok
+USE olddb
+
+statement ok
+CREATE TYPE typ AS ENUM ('foo')
+
+statement ok
+CREATE TABLE tbl(a typ)
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl RENAME TO newdb.tbl
+
+# Try it in a transaction with non-public columns.
+
+statement ok
+CREATE TABLE tbl2()
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE tbl2 ADD COLUMN b typ
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl2 RENAME TO newdb.tbl2
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE tbl DROP COLUMN a
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl RENAME TO newdb.tbl
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP DATABASE olddb CASCADE
+
+statement ok
+DROP DATABASE newdb CASCADE
