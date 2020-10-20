@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
@@ -592,9 +593,7 @@ func (t *multiTestContextKVTransport) SendNext(
 	// the multi test context, so we can derive the index for stoppers
 	// and senders by subtracting 1 from the node ID.
 	nodeIndex := int(rep.NodeID) - 1
-	if log.V(1) {
-		log.Infof(ctx, "SendNext nodeIndex=%d", nodeIndex)
-	}
+	log.VEventf(ctx, 2, "SendNext nodeIndex=%d", nodeIndex)
 
 	// This method crosses store boundaries: it is possible that the
 	// destination store is stopped while the source is still running.
@@ -618,7 +617,14 @@ func (t *multiTestContextKVTransport) SendNext(
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
 	if err := s.RunTask(ctx, "mtc send", func(ctx context.Context) {
-		br, pErr = sender.Send(ctx, ba)
+		// Clear the caller's tags to simulate going to a different node. Otherwise
+		// logs get tags from both the sender node and the receiver node,
+		// confusingly.
+		// TODO(andrei): Don't clear the tags if the RPC is going to the same node
+		// as the sender. We'd have to tell the multiTestContextKVTransport who the
+		// sender is.
+		callCtx := logtags.WithTags(ctx, nil /* tags */)
+		br, pErr = sender.Send(callCtx, ba)
 	}); err != nil {
 		pErr = roachpb.NewError(err)
 	}

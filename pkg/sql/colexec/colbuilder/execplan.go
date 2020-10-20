@@ -576,6 +576,19 @@ func NewColOperator(
 		if core.MetadataTestReceiver != nil {
 			return r, errors.Newf("core.MetadataTestReceiver is not supported")
 		}
+		// We do not wrap Change{Aggregator,Frontier} because these processors
+		// are very row-oriented and the Columnarizer might block indefinitely
+		// while buffering coldata.BatchSize() tuples to emit as a single
+		// batch.
+		if core.ChangeAggregator != nil {
+			return r, errors.Newf("core.ChangeAggregator is not supported")
+		}
+		if core.ChangeFrontier != nil {
+			return r, errors.Newf("core.ChangeFrontier is not supported")
+		}
+		// We do not wrap InvertedFilterer because that processor just happen
+		// to work due to the inverted data not being decoded which the
+		// ColBatchScan will attempt to do and will fail. See #50695.
 		if core.InvertedFilterer != nil {
 			// colfetcher.cfetcher currently tries to decode the inverted
 			// column needed for inverted filtering, but that inverted column is
