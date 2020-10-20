@@ -3,4 +3,4 @@ revoke_stmt ::=
 	
 	
 	| 'REVOKE' ( 'ALL' opt_privileges_clause | ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) ) 'ON' 'TYPE' target_types 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )
-	| 'REVOKE' ( 'ALL' opt_privileges_clause | ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) ) 'ON' 'SCHEMA' ( ( name ) ( ( ',' name ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )
+	| 'REVOKE' ( 'ALL' opt_privileges_clause | ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) ) 'ON' 'SCHEMA' schema_name_list 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )

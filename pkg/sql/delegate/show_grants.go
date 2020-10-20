@@ -82,32 +82,27 @@ FROM "".information_schema.type_privileges`
 			fmt.Fprintf(&cond, `WHERE database_name IN (%s)`, strings.Join(params, ","))
 		}
 	} else if n.Targets != nil && len(n.Targets.Schemas) > 0 {
-		schemaNames := n.Targets.Schemas.ToStrings()
-		for _, schema := range schemaNames {
-			name := cat.SchemaName{
-				SchemaName:     tree.Name(schema),
-				ExplicitSchema: true,
-			}
-			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &name)
+		currDB := d.evalCtx.SessionData.Database
+
+		for _, schema := range n.Targets.Schemas {
+			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
 			if err != nil {
 				return nil, err
 			}
-			params = append(params, lex.EscapeSQLString(schema))
+			dbName := currDB
+			if schema.ExplicitCatalog {
+				dbName = schema.Catalog()
+			}
+			params = append(params, fmt.Sprintf("(%s,%s)", lex.EscapeSQLString(dbName), lex.EscapeSQLString(schema.Schema())))
 		}
-		dbNameClause := "true"
-		// If the current database is set, restrict the command to it.
-		if currDB := d.evalCtx.SessionData.Database; currDB != "" {
-			dbNameClause = fmt.Sprintf("database_name = %s", lex.EscapeSQLString(currDB))
-		}
+
 		fmt.Fprint(&source, dbOrSchemaPrivQuery)
 		orderBy = "1,2,3,4"
-		if len(params) == 0 {
-			cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
-		} else {
+
+		if len(params) != 0 {
 			fmt.Fprintf(
 				&cond,
-				`WHERE %s AND schema_name IN (%s)`,
-				dbNameClause,
+				`WHERE (database_name, schema_name) IN (%s)`,
 				strings.Join(params, ","),
 			)
 		}
