@@ -1585,8 +1585,17 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 		// we need to hydrate our types. Set up an accessor for the type hydration
 		// method to look into the scanned set of descriptors.
 		typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
-			typDesc := typDescs[id]
-			dbDesc := dbDescs[typDesc.ParentID]
+			typDesc, ok := typDescs[id]
+			if !ok {
+				n := tree.MakeUnresolvedName(fmt.Sprintf("[%d]", id))
+				return tree.TypeName{}, nil, sqlerrors.NewUndefinedObjectError(&n,
+					tree.TypeObject)
+			}
+			dbDesc, ok := dbDescs[typDesc.ParentID]
+			if !ok {
+				n := fmt.Sprintf("[%d]", typDesc.ParentID)
+				return tree.TypeName{}, nil, sqlerrors.NewUndefinedDatabaseError(n)
+			}
 			// We don't use the collection's ResolveSchemaByID method here because
 			// we already have all of the descriptors. User defined types are only
 			// members of the public schema or a user defined schema, so those are
