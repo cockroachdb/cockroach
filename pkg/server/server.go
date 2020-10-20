@@ -751,8 +751,18 @@ func inspectEngines(
 	var clusterID uuid.UUID
 	var nodeID roachpb.NodeID
 	var initializedEngines, uninitializedEngines []storage.Engine
+	var initialSettingsKVs []roachpb.KeyValue
 
 	for _, eng := range engines {
+		// Once cached settings are loaded from any engine we can stop.
+		if len(initialSettingsKVs) == 0 {
+			var err error
+			initialSettingsKVs, err = loadCachedSettingsKVs(ctx, eng)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
 		if errors.HasType(err, (*kvserver.NotBootstrappedError)(nil)) {
 			uninitializedEngines = append(uninitializedEngines, eng)
@@ -790,6 +800,7 @@ func inspectEngines(
 		initializedEngines:   initializedEngines,
 		uninitializedEngines: uninitializedEngines,
 		clusterVersion:       clusterVersion,
+		initialSettingsKVs:   initialSettingsKVs,
 	}
 	return state, nil
 }
@@ -1369,6 +1380,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "invalid init state")
 	}
 
+	// Apply any cached initial settings (and start the gossip listener) as early
+	// as possible, to avoid spending time with stale settings.
+	if err := s.refreshSettings(state.initialSettingsKVs); err != nil {
+		return errors.Wrap(err, "during initializing settings updater")
+	}
+
 	// TODO(irfansharif): Let's make this unconditional. We could avoid
 	// persisting + initializing the cluster version in response to being
 	// bootstrapped (within `ServeAndWait` above) and simply do it here, in the
@@ -1508,9 +1525,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
-
-	// Listen in on the gossip for changes to cluster settings.
-	s.refreshSettings()
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTags(map[string]string{
