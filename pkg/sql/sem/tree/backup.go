@@ -113,6 +113,7 @@ type RestoreOptions struct {
 	SkipMissingSequences      bool
 	SkipMissingSequenceOwners bool
 	SkipMissingViews          bool
+	DryRun                    bool
 	Detached                  bool
 }
 
@@ -317,6 +318,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("skip_missing_views")
 	}
 
+	if o.DryRun {
+		maybeAddSep()
+		ctx.WriteString("dry_run")
+	}
+
 	if o.Detached {
 		maybeAddSep()
 		ctx.WriteString("detached")
@@ -376,6 +382,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.SkipMissingViews = other.SkipMissingViews
 	}
 
+	if o.DryRun {
+		if other.DryRun {
+			return errors.New("dry_run option specified multiple times")
+		}
+	} else {
+		o.DryRun = other.DryRun
+	}
+
 	if o.Detached {
 		if other.Detached {
 			return errors.New("detached option specified multiple times")
@@ -397,5 +411,6 @@ func (o RestoreOptions) IsDefault() bool {
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.IntoDB == options.IntoDB &&
+		o.DryRun == options.DryRun &&
 		o.Detached == options.Detached
 }

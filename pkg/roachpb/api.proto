@@ -1552,6 +1552,8 @@ message ImportRequest {
   repeated TableRekey rekeys = 5 [(gogoproto.nullable) = false];
 
   FileEncryptionOptions encryption = 7;
+
+  bool dry_run = 8;
 }
 
 // ImportResponse is the response to a Import() operation.

@@ -1688,7 +1688,7 @@ func TestParse(t *testing.T) {
 		{`RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'`},
 
 		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
-		{`RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached`},
+		{`RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, dry_run, detached`},
 
 		{`IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
