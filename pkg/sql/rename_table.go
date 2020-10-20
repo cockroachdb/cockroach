@@ -144,6 +144,15 @@ func (n *renameTableNode) startExec(params runParams) error {
 		)
 	}
 
+	// Disable renaming objects between databases unless both the source and
+	// target schemas are the public schema. This preserves backward compatibility
+	// for the behavior prior to user-defined schemas.
+	if oldTn.Catalog() != newTn.Catalog() &&
+		(oldTn.Schema() != string(tree.PublicSchemaName) || newTn.Schema() != string(tree.PublicSchemaName)) {
+		return pgerror.Newf(pgcode.InvalidName,
+			"cannot change database of table unless both the old and new schemas are the public schema in each database")
+	}
+
 	// oldTn and newTn are already normalized, so we can compare directly here.
 	if oldTn.Catalog() == newTn.Catalog() &&
 		oldTn.Schema() == newTn.Schema() &&
@@ -167,6 +176,10 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// The parent schema ID is never modified here because changing the schema of
+	// a table within the same database is disallowed, and changing the database
+	// of a table is only allowed if both the source and target schemas are the
+	// public schema.
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
 
