@@ -259,6 +259,9 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 		if tryAgainAfter <= 0 {
 			return
 		}
+		if tryAgainAfter < qp.minimumWait {
+			tryAgainAfter = qp.minimumWait
+		}
 		if tryAgainTimer == nil {
 			tryAgainTimer = qp.timeSource.NewTimer()
 		}
