@@ -482,6 +482,11 @@ INSERT INTO t1 values (-1), (10), (-100);
 		return res
 	}
 
+	expectedSystemTables := make([]string, 0)
+	for systemTableName := range getSystemTablesToIncludeInClusterBackup() {
+		expectedSystemTables = append(expectedSystemTables, systemTableName)
+	}
+
 	testCases := []struct {
 		name         string
 		schedule     string
@@ -493,7 +498,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 			verifyTables: expectBackupTables(
 				dbTables{"db", []string{"t1", "t2", "t3"}},
 				dbTables{"other_db", []string{"t1"}},
-				dbTables{"system", fullClusterSystemTables},
+				dbTables{"system", expectedSystemTables},
 			),
 		},
 		{
