@@ -5539,6 +5539,50 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: tree.VolatilityImmutable,
 		}),
 
+	"st_minimumboundingcircle": makeBuiltin(defProps(),
+		geometryOverload1(
+			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				polygon, _, _, err := geomfn.MinimumBoundingCircle(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(polygon), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the smallest circle polygon that can fully contain a geometry.",
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {" num_segs", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Info: infoBuilder{
+				info: "Returns the smallest circle polygon that can fully contain a geometry.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+			Fn: func(evalContext *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				numOfSeg := tree.MustBeDInt(args[1])
+				_, centroid, radius, err := geomfn.MinimumBoundingCircle(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				polygon, err := geomfn.Buffer(
+					centroid,
+					geomfn.MakeDefaultBufferParams().WithQuadrantSegments(int(numOfSeg)),
+					radius,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(polygon), nil
+			},
+		},
+	),
+
 	//
 	// Unimplemented.
 	//
@@ -5568,7 +5612,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
 	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
 	"st_linesubstring":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
-	"st_minimumboundingcircle": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
 	"st_node":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
 	"st_orientedenvelope":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
 	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
