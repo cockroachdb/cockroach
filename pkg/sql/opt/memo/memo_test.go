@@ -19,14 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	opttestutils "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
 )
@@ -60,9 +58,6 @@ func TestStatsQuality(t *testing.T) {
 
 func TestCompositeSensitive(t *testing.T) {
 	datadriven.RunTest(t, "testdata/composite_sensitive", func(t *testing.T, d *datadriven.TestData) string {
-		var varTypes []*types.T
-		var err error
-
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
@@ -73,19 +68,15 @@ func TestCompositeSensitive(t *testing.T) {
 		if d.Cmd != "composite-sensitive" {
 			d.Fatalf(t, "unsupported command: %s\n", d.Cmd)
 		}
+		var sv opttestutils.ScalarVars
 
 		for _, arg := range d.CmdArgs {
 			key, vals := arg.Key, arg.Vals
 			switch key {
 			case "vars":
-				varTypes, err = exprgen.ParseTypes(vals)
+				err := sv.Init(md, vals)
 				if err != nil {
-					d.Fatalf(t, "failed to parse vars%v\n", err)
-				}
-
-				// Set up the columns in the metadata.
-				for i, typ := range varTypes {
-					md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
+					d.Fatalf(t, "%v", err)
 				}
 
 			default:
