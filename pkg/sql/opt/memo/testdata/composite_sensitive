@@ -1,76 +1,76 @@
 # Non-composite variable.
-composite-sensitive vars=(int)
-@1::string
+composite-sensitive vars=(a int)
+a::string
 ----
 false
 
-composite-sensitive vars=(decimal)
-@1::string
+composite-sensitive vars=(a decimal)
+a::string
 ----
 true
 
-composite-sensitive vars=(decimal)
-@1::string = '1.0'
+composite-sensitive vars=(a decimal)
+a::string = '1.0'
 ----
 true
 
 # Composite insensitive operator.
-composite-sensitive vars=(decimal)
-@1 >= 2
+composite-sensitive vars=(a decimal)
+a >= 2
 ----
 false
 
-composite-sensitive vars=(decimal, decimal)
-@1 <= @2
+composite-sensitive vars=(a decimal, b decimal)
+a <= b
 ----
 false
 
-composite-sensitive vars=(decimal, decimal)
-(@1 + @2)::string
+composite-sensitive vars=(a decimal, b decimal)
+(a + b)::string
 ----
 true
 
-composite-sensitive vars=(decimal, decimal, decimal)
-(@1 + @2 <= @3)::string
+composite-sensitive vars=(a decimal, b decimal, c decimal)
+(a + b <= c)::string
 ----
 false
 
-composite-sensitive vars=(decimal, decimal)
-@1 + @2 < 10
+composite-sensitive vars=(a decimal, b decimal)
+a + b < 10
 ----
 false
 
-composite-sensitive vars=(decimal, decimal)
-@1 = 10 AND @2 > 10 
+composite-sensitive vars=(a decimal, b decimal)
+a = 10 AND b > 10 
 ----
 false
 
-composite-sensitive vars=(int, decimal)
-concat(@1::string, @2::string)
+composite-sensitive vars=(a int, b decimal)
+concat(a::string, b::string)
 ----
 true
 
-composite-sensitive vars=(int, int)
-concat(@1::string, @2::string)
+composite-sensitive vars=(a int, b int)
+concat(a::string, b::string)
 ----
 false
 
 # Even though the expression contains a potentially problematic cast from
 # decimal to string, it is not sensitive because the input to the cast only
 # depends on non-composite columns.
-composite-sensitive vars=(int, decimal, decimal)
-@1::decimal::string || (@2 > @3)::string
+composite-sensitive vars=(a int, b decimal, c decimal)
+a::decimal::string || (b > c)::string
 ----
 false
 
 # This is actually not sensitive; we could whitelist certain functions.
-composite-sensitive vars=(decimal, decimal)
-log(@1, @2)
+composite-sensitive vars=(a decimal, b decimal)
+log(a, b)
 ----
 true
 
 # This is actually not sensitive; we could whitelist certain casts.
-composite-sensitive vars=(decimal)
-@1::float
+composite-sensitive vars=(a decimal)
+a::float
 ----
 true
