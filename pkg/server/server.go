@@ -1405,6 +1405,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "during init")
 	}
 
+	// Since we have initial settings from ServeAndWait, we can process the
+	// initial settings KVs which maybe loaded from the locally cached settings
+	// or the default settings in case of a new node.
+	if err := processSystemConfigKVs(ctx, state.initialSettingsKVs, s.st.MakeUpdater(), s.engines[0]); err != nil {
+		return errors.Wrap(err, "during processing initial settings")
+	}
+
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
 	// If there's no NodeID here, then we didn't just bootstrap. The Node will
 	// read its ID from the stores or request a new one via KV.

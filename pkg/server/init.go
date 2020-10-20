@@ -130,7 +130,8 @@ type initDiskState struct {
 type initState struct {
 	initDiskState
 
-	firstStoreID roachpb.StoreID
+	firstStoreID       roachpb.StoreID
+	initialSettingsKVs []roachpb.KeyValue
 }
 
 // NeedsInit is like needsInitLocked, except it acquires the necessary locks.
@@ -201,7 +202,15 @@ func (s *initServer) ServeAndWait(
 		diskState := *s.mu.inspectState
 		s.mu.Unlock()
 
-		return &initState{initDiskState: diskState}, false, nil
+		cachedSettings, err := loadCachedSettingsKVs(ctx, diskState.initializedEngines[0])
+		if err != nil {
+			return nil, false, err
+		}
+
+		return &initState{
+			initDiskState:      diskState,
+			initialSettingsKVs: cachedSettings,
+		}, false, nil
 	}
 	s.mu.Unlock()
 
@@ -341,8 +350,16 @@ func (s *initServer) ServeAndWait(
 			diskState := *s.mu.inspectState
 			s.mu.Unlock()
 
+			var initialSettingsKVs []roachpb.KeyValue
+			select {
+			case <-time.After(5 * time.Second):
+			case <-g.RegisterSystemConfigChannel():
+				initialSettingsKVs = g.GetSystemConfig().Values
+			}
+
 			state := &initState{
-				initDiskState: diskState,
+				initDiskState:      diskState,
+				initialSettingsKVs: initialSettingsKVs,
 			}
 			log.Infof(ctx, "joined cluster %s through gossip (legacy behavior)", state.clusterID)
 			return state, true, nil
