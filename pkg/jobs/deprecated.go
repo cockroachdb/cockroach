@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -396,7 +397,9 @@ func (r *Registry) deprecatedResume(
 	return errCh, nil
 }
 
-func (j *Job) deprecatedInsert(ctx context.Context, id int64, lease *jobspb.Lease) error {
+func (j *Job) deprecatedInsert(
+	ctx context.Context, id int64, lease *jobspb.Lease, session sqlliveness.Session,
+) error {
 	if j.id != nil {
 		// Already created - do nothing.
 		return nil
@@ -420,19 +423,51 @@ func (j *Job) deprecatedInsert(ctx context.Context, id int64, lease *jobspb.Leas
 		if err != nil {
 			return err
 		}
-
-		if j.createdBy == nil {
-			const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
-			_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
+		// If there's no session then we know that the sqlliveness subsystem hasn't
+		// been started and thus there's no claim that the corresponding columns
+		// exist.
+		if session == nil && !j.registry.startUsingSQLLivenessAdoption(ctx) {
+			const stmt = `INSERT
+  INTO system.jobs (
+                    id,
+                    status,
+                    payload,
+                    progress
+                   )
+VALUES ($1, $2, $3, $4);`
+			_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
+				id, StatusRunning, payloadBytes, progressBytes)
 			return err
 		}
-		const stmt = `
-INSERT INTO system.jobs (id, status, payload, progress, created_by_type, created_by_id) 
-VALUES ($1, $2, $3, $4, $5, $6)`
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
-			id, StatusRunning, payloadBytes, progressBytes, j.createdBy.Name, j.createdBy.ID)
-		return err
 
+		var claimInstanceID, sessionID, createdByType, createdByID interface{}
+		if session != nil {
+			j.sessionID = session.ID()
+			sessionID = j.sessionID.UnsafeBytes()
+			claimInstanceID = int64(j.registry.ID())
+		}
+		if j.createdBy != nil {
+			createdByType = j.createdBy.Name
+			createdByID = j.createdBy.ID
+		}
+		const stmt = `
+INSERT
+  INTO system.jobs (
+                    id,
+                    status,
+                    payload,
+                    progress,
+                    created_by_type,
+                    created_by_id,
+                    claim_session_id,
+                    claim_instance_id
+                   )
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8);`
+		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
+			id, StatusRunning, payloadBytes, progressBytes,
+			createdByType, createdByID,
+			sessionID, claimInstanceID)
+		return err
 	}); err != nil {
 		return err
 	}

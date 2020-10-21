@@ -676,7 +676,6 @@ func (s *sqlServer) preStart(
 	}
 	s.connManager = connManager
 	s.pgL = pgL
-	s.sqlLivenessProvider.Start(ctx)
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
@@ -697,6 +696,13 @@ func (s *sqlServer) preStart(
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB, s.execCfg.Gossip)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
+
+	// Only start the sqlliveness subsystem if we're already at the cluster
+	// version which relies on it.
+	sqllivenessActive := sqlliveness.IsActive(ctx, s.execCfg.Settings)
+	if sqllivenessActive {
+		s.sqlLivenessProvider.Start(ctx)
+	}
 
 	migrationsExecutor := sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
@@ -763,6 +769,20 @@ func (s *sqlServer) preStart(
 
 	log.Infof(ctx, "done ensuring all necessary migrations have run")
 
+	// Start the sqlLivenessProvider after we've run the SQL migrations that it
+	// relies on. Jobs used by sqlmigrations can't rely on having the
+	// sqlLivenessProvider running as it was introduced in 20.2.
+	//
+	// TODO(ajwerner): For 21.1 this call will need to be lifted above the call
+	// to EnsureMigrations so that migrations which launch jobs will work.
+	if !sqllivenessActive &&
+		// This clause exists to support sqlmigrations tests which intentionally
+		// inject a binary version below the one which includes the relevant
+		// migration. In this case we won't start the sqlliveness subsystem.
+		(!s.execCfg.Settings.Version.BinaryVersion().Less(clusterversion.VersionByKey(
+			clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable))) {
+		s.sqlLivenessProvider.Start(ctx)
+	}
 	// Start the async migration to upgrade namespace entries from the old
 	// namespace table (id 2) to the new one (id 30).
 	if err := migMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {

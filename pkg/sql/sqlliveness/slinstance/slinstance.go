@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -183,7 +182,6 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 	}()
 	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
-	sqlliveness.WaitForActive(ctx, l.settings)
 	t := timeutil.NewTimer()
 	t.Reset(0)
 	for {
@@ -261,7 +259,7 @@ func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 	l.mu.Lock()
 	if !l.mu.started {
 		l.mu.Unlock()
-		return nil, errors.New("the Instance has not been started yet")
+		return nil, sqlliveness.NotStartedError
 	}
 	l.mu.Unlock()
 

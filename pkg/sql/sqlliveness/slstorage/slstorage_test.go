@@ -68,6 +68,7 @@ func TestStorage(t *testing.T) {
 		stopper := stop.NewStopper()
 		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
 			dbName, timeSource.NewTimer)
+		storage.Start(ctx)
 		return clock, timeSource, settings, stopper, storage
 	}
 
@@ -317,9 +318,11 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	}, base.DefaultMaxClockOffset)
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(&settings.SV, 10)
 	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
 		dbName, timeSource.NewTimer)
+	storage.Start(ctx)
 
 	const (
 		runsPerWorker   = 100
@@ -340,6 +343,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 			liveSessions: make(map[int]struct{}),
 		}
 		makeSession = func(t *testing.T) {
+			t.Helper()
 			state.Lock()
 			defer state.Unlock()
 			s := session{
@@ -351,6 +355,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 			state.sessions = append(state.sessions, s)
 		}
 		updateSession = func(t *testing.T) {
+			t.Helper()
 			state.Lock()
 			defer state.Unlock()
 			now := clock.Now()
@@ -399,6 +404,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		// checkIsAlive verifies that if false was returned that the session really
 		// no longer is alive.
 		checkIsAlive = func(t *testing.T, i int, isAlive bool) {
+			t.Helper()
 			state.RLock()
 			defer state.RUnlock()
 			now := clock.Now()
