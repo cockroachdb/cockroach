@@ -1135,23 +1135,21 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 
 					if needsLeaseTransfer {
 						desc, zone := r.DescAndZone()
-						leaseTransferred, err := s.replicateQueue.findTargetAndTransferLease(
+						transferStatus, err := s.replicateQueue.shedLease(
 							ctx,
 							r,
 							desc,
 							zone,
 							transferLeaseOptions{},
 						)
-						if log.V(1) && !leaseTransferred {
-							// Note that a nil error means that there were no suitable
-							// candidates.
-							log.Errorf(
-								ctx,
-								"did not transfer lease %s for replica %s when draining: %v",
-								drainingLease,
-								desc,
-								err,
-							)
+						if transferStatus != transferOK {
+							if err != nil {
+								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
+									drainingLease, desc, err)
+							} else {
+								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
+									drainingLease, desc, transferStatus)
+							}
 						}
 					}
 				}); err != nil {
