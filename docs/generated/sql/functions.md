@@ -2399,9 +2399,17 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="sha1"></a><code>sha1(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA1 hash value of a set of values.</p>
 </span></td></tr>
+<tr><td><a name="sha224"></a><code>sha224(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA224 hash value of a set of values.</p>
+</span></td></tr>
+<tr><td><a name="sha224"></a><code>sha224(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA224 hash value of a set of values.</p>
+</span></td></tr>
 <tr><td><a name="sha256"></a><code>sha256(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA256 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="sha256"></a><code>sha256(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA256 hash value of a set of values.</p>
+</span></td></tr>
+<tr><td><a name="sha384"></a><code>sha384(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA384 hash value of a set of values.</p>
+</span></td></tr>
+<tr><td><a name="sha384"></a><code>sha384(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA384 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="sha512"></a><code>sha512(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
 </span></td></tr>

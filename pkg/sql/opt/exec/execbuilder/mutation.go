@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -132,10 +133,13 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		return execPlan{}, false, nil
 	}
 
-	//  - the input is Values with at most InsertFastPathMaxRows, and there are no
+	//  - the input is Values with at most mutations.MaxBatchSize, and there are no
 	//    subqueries;
+	//    (note that mutations.MaxBatchSize() is a quantity of keys in the batch
+	//     that we send, not a number of rows. We use this as a guideline only,
+	//     and there is no guarantee that we won't produce a bigger batch.)
 	values, ok := ins.Input.(*memo.ValuesExpr)
-	if !ok || values.ChildCount() > exec.InsertFastPathMaxRows || values.Relational().HasSubquery {
+	if !ok || values.ChildCount() > mutations.MaxBatchSize() || values.Relational().HasSubquery {
 		return execPlan{}, false, nil
 	}
 

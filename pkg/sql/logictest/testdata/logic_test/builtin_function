@@ -408,9 +408,19 @@ SELECT sha1('abc')
 a9993e364706816aba3e25717850c26c9cd0d89d
 
 query T
+SELECT sha224('abc')
+----
+23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7
+
+query T
 SELECT sha256('abc')
 ----
 ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+
+query T
+SELECT sha384('abc')
+----
+cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7
 
 query IIII
 SELECT fnv32('abc'), fnv32a('abc'), fnv64('abc'), fnv64a('abc')
@@ -444,7 +454,17 @@ SELECT sha1(NULL::STRING)
 NULL
 
 query T
+SELECT sha224(NULL::STRING)
+----
+NULL
+
+query T
 SELECT sha256(NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha384(NULL::STRING)
 ----
 NULL
 
