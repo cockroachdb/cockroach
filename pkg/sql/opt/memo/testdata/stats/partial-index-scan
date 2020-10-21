@@ -1172,10 +1172,8 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=16.6666667]
@@ -1183,10 +1181,7 @@ project
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── stats: [rows=16.6666667, distinct(1)=16.6666667, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=16.6666667, null(6)=0]
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
@@ -1218,10 +1213,8 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=16.6666667]
@@ -1229,10 +1222,7 @@ project
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── stats: [rows=16.6666667, distinct(1)=16.6666667, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=16.6666667, null(6)=0]
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
@@ -1283,10 +1273,8 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=8.54700855]
@@ -1294,10 +1282,7 @@ project
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── stats: [rows=8.54700855, distinct(1)=8.54700855, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=8.54700855, null(6)=0]
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
@@ -1327,10 +1312,8 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=8.54700855]
@@ -1338,10 +1321,7 @@ project
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── stats: [rows=8.54700855, distinct(1)=8.54700855, null(1)=0, distinct(3)=3, null(3)=0, distinct(6)=8.54700855, null(6)=0]
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
@@ -1415,10 +1395,8 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=300]
@@ -1426,10 +1404,7 @@ project
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── stats: [rows=300, distinct(1)=85.7142857, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
       │              │   histogram(3)=  0    100     0    100
       │              │                <--- 'banana' --- 'cherry'
@@ -1467,10 +1442,8 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=300]
@@ -1478,10 +1451,7 @@ project
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── stats: [rows=300, distinct(1)=85.7142857, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
       │              │   histogram(3)=  0    100     0    100
       │              │                <--- 'banana' --- 'cherry'
@@ -1553,10 +1523,8 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=307.105263]
@@ -1564,10 +1532,7 @@ project
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
       │              │   histogram(3)=  0    100     0    100
       │              │                <--- 'banana' --- 'cherry'
@@ -1603,10 +1568,8 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
       │         ├── stats: [rows=307.105263]
@@ -1614,10 +1577,7 @@ project
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
       │              │   histogram(3)=  0    100     0    100
       │              │                <--- 'banana' --- 'cherry'

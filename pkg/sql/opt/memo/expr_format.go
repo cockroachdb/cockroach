@@ -366,7 +366,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 			}
 		}
-		if c := t.Constraint; c != nil {
+		if c := t.Constraint; c != nil && t.InvertedConstraint == nil {
 			if c.IsContradiction() {
 				tp.Childf("constraint: contradiction")
 			} else if c.Spans.Count() == 1 {
@@ -386,7 +386,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				b.WriteString(fmt.Sprintf("%d", t.Table.ColumnID(idx.Column(i).Ordinal())))
 			}
 			n := tp.Childf("inverted constraint: %s", b.String())
-			ic.Format(n, "spans")
+			if c := t.Constraint; c != nil {
+				n.Childf("prefix constraint: %s: %s", c.Columns.String(), c.Spans.Get(0).String())
+			}
+			n.Childf("inverted spans: %d", len(ic))
 		}
 		if t.HardLimit.IsSet() {
 			tp.Childf("limit: %s", t.HardLimit)
@@ -440,7 +443,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		b.WriteRune('/')
 		b.WriteString(fmt.Sprintf("%d", t.InvertedColumn))
 		n := tp.Childf("inverted expression: %s", b.String())
-		t.InvertedExpression.Format(n, false /* includeSpansToRead */)
+		n.Childf("tight: %t", t.InvertedExpression.Tight)
+		n.Childf("to read: %d", len(t.InvertedExpression.SpansToRead))
+		n.Childf("union: %d", len(t.InvertedExpression.FactoredUnionSpans))
 		if t.PreFiltererState != nil {
 			n := tp.Childf("pre-filterer expression")
 			f.formatExpr(t.PreFiltererState.Expr, n)

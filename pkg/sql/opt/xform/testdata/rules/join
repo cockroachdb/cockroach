@@ -3980,14 +3980,15 @@ project
       │    │    │         ├── columns: n.gid:13!null
       │    │    │         ├── inverted expression: /18
       │    │    │         │    ├── tight: false
-      │    │    │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │    │    │         │    ├── to read: 1
+      │    │    │         │    └── union: 1
       │    │    │         ├── pre-filterer expression
       │    │    │         │    └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16)
       │    │    │         ├── key: (13)
       │    │    │         └── scan n@nyc_neighborhoods_geo_idx
       │    │    │              ├── columns: n.gid:13!null n.geom_inverted_key:18!null
       │    │    │              ├── inverted constraint: /18/13
-      │    │    │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │    │    │              │    └── inverted spans: 1
       │    │    │              ├── flags: force-index=nyc_neighborhoods_geo_idx
       │    │    │              ├── key: (13)
       │    │    │              └── fd: (13)-->(18)

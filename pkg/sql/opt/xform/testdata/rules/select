@@ -1894,20 +1894,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -1934,20 +1929,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -1973,20 +1963,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 3
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2013,14 +1998,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │    ├── to read: 1
+      │         │    └── union: 1
       │         ├── pre-filterer expression
       │         │    └── st_covers('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │              │    └── inverted spans: 1
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2046,14 +2032,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │    ├── to read: 1
+      │         │    └── union: 1
       │         ├── pre-filterer expression
       │         │    └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │              │    └── inverted spans: 1
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2079,14 +2066,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │    ├── to read: 1
+      │         │    └── union: 1
       │         ├── pre-filterer expression
       │         │    └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │              │    └── inverted spans: 1
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2112,34 +2100,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x01", "B\xfdF\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x01", "B\xfdR\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdR\x00\x00\x00\x00\x00\x00\x01", "B\xfdT\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 10
+      │         │    └── union: 10
       │         ├── pre-filterer expression
       │         │    └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x01", "B\xfdF\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x01", "B\xfdR\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdR\x00\x00\x00\x00\x00\x00\x01", "B\xfdT\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 10
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -2165,34 +2134,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x01", "B\xfdF\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x01", "B\xfdR\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdR\x00\x00\x00\x00\x00\x00\x01", "B\xfdT\x00\x00\x00\x00\x00\x00\x00")
-      │         │         ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 10
+      │         │    └── union: 10
       │         ├── pre-filterer expression
       │         │    └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x01", "B\xfdF\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x01", "B\xfdR\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdR\x00\x00\x00\x00\x00\x00\x01", "B\xfdT\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 10
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -2219,14 +2169,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │    ├── to read: 1
+      │         │    └── union: 1
       │         ├── pre-filterer expression
       │         │    └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │              │    └── inverted spans: 1
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2253,14 +2204,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │    ├── to read: 1
+      │         │    └── union: 1
       │         ├── pre-filterer expression
       │         │    └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │              │    └── inverted spans: 1
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2286,14 +2238,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │    ├── to read: 1
+      │         │    └── union: 1
       │         ├── pre-filterer expression
       │         │    └── st_dfullywithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │              │    └── inverted spans: 1
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2324,19 +2277,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdO\x00\x00\x00\x00\x00\x00\x00", "B\xfdO\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 2
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
+      │              │    └── inverted spans: 2
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -2365,16 +2314,13 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
+      │         │    ├── to read: 2
+      │         │    └── union: 2
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
+      │              │    └── inverted spans: 2
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -2403,45 +2349,13 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    ├── union spans
-      │         │    │    ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │         │    │    ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │         │    │    └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │         │    └── INTERSECTION
-      │         │         ├── span expression
-      │         │         │    ├── tight: false
-      │         │         │    ├── union spans: empty
-      │         │         │    └── INTERSECTION
-      │         │         │         ├── span expression
-      │         │         │         │    ├── tight: false
-      │         │         │         │    └── union spans
-      │         │         │         │         ├── ["B\xfd\x81\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x81\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         │         │         ├── ["B\xfd\x84\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x84\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         │         │         └── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         │         └── span expression
-      │         │         │              ├── tight: false
-      │         │         │              └── union spans
-      │         │         │                   ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         │                   ├── ["B\xfdG\x00\x00\x00\x00\x00\x00\x00", "B\xfdG\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         │                   └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         └── span expression
-      │         │              ├── tight: false
-      │         │              └── union spans
-      │         │                   ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │         │                   ├── ["B\xfdO\x00\x00\x00\x00\x00\x00\x00", "B\xfdO\x00\x00\x00\x00\x00\x00\x00"]
-      │         │                   └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 7
+      │         │    └── union: 3
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdG\x00\x00\x00\x00\x00\x00\x00", "B\xfdG\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
-      │              │         ├── ["B\xfd\x81\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x81\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x84\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x84\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 7
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -2470,14 +2384,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │    ├── to read: 1
+      │         │    └── union: 1
       │         ├── pre-filterer expression
       │         │    └── st_overlaps('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │              │    └── inverted spans: 1
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2529,16 +2444,13 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
+      │         │    ├── to read: 2
+      │         │    └── union: 2
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
+      │              │    └── inverted spans: 2
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -2567,10 +2479,8 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 3
+      │         │    └── union: 3
       │         ├── pre-filterer expression
       │         │    └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
@@ -2581,10 +2491,7 @@ project
       │              ├── scan g@geog_idx
       │              │    ├── columns: k:1!null geog_inverted_key:7!null
       │              │    ├── inverted constraint: /7/1
-      │              │    │    └── spans
-      │              │    │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │    │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │    │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    │    └── inverted spans: 3
       │              │    ├── key: (1)
       │              │    └── fd: (1)-->(7)
       │              └── filters
@@ -2614,18 +2521,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         └── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x18\x00\x00\x00\x00\x00\x00\x00")
+      │         │    ├── to read: 2
+      │         │    └── union: 2
       │         ├── pre-filterer expression
       │         │    └── st_covers('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x18\x00\x00\x00\x00\x00\x00\x00")
+      │              │    └── inverted spans: 2
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2651,18 +2555,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    └── union spans
-      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 2
+      │         │    └── union: 2
       │         ├── pre-filterer expression
       │         │    └── st_coveredby('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 2
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
@@ -2688,27 +2589,15 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /6
       │         │    ├── tight: false
-      │         │    ├── union spans
-      │         │    │    ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │    │    └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │         │    └── INTERSECTION
-      │         │         ├── span expression
-      │         │         │    ├── tight: false
-      │         │         │    └── union spans: ["B\xfd\x15\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x15\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         └── span expression
-      │         │              ├── tight: false
-      │         │              └── union spans: ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    ├── to read: 4
+      │         │    └── union: 2
       │         ├── pre-filterer expression
       │         │    └── st_coveredby('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
       │              ├── inverted constraint: /6/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x15\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x15\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    └── inverted spans: 4
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
