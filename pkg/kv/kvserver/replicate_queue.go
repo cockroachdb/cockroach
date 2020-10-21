@@ -652,7 +652,7 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 	// out of situations where this store is overfull and yet holds all the
 	// leases. The fullness checks need to be ignored for cases where
 	// a replica needs to be removed for constraint violations.
-	return rq.findTargetAndTransferLease(
+	transferred, err := rq.shedLease(
 		ctx,
 		repl,
 		desc,
@@ -661,6 +661,7 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 			dryRun: dryRun,
 		},
 	)
+	return transferred == transferOK, err
 }
 
 func (rq *replicateQueue) remove(
@@ -895,32 +896,26 @@ func (rq *replicateQueue) considerRebalance(
 		}
 	}
 
-	if canTransferLease() {
-		// We require the lease in order to process replicas, so
-		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		transferred, err := rq.findTargetAndTransferLease(
-			ctx,
-			repl,
-			desc,
-			zone,
-			transferLeaseOptions{
-				checkTransferLeaseSource: true,
-				checkCandidateFullness:   true,
-				dryRun:                   dryRun,
-			},
-		)
-		if err != nil {
-			return false, err
-		}
-		// Do not requeue as we transferred our lease away.
-		if transferred {
-			return false, nil
-		}
+	if !canTransferLease() {
+		// No action was necessary and no rebalance target was found. Return
+		// without re-queuing this replica.
+		return false, nil
 	}
 
-	// No action was necessary and no rebalance target was found. Return
-	// without re-queuing this replica.
-	return false, nil
+	// We require the lease in order to process replicas, so
+	// repl.store.StoreID() corresponds to the lease-holder's store ID.
+	_, err := rq.shedLease(
+		ctx,
+		repl,
+		desc,
+		zone,
+		transferLeaseOptions{
+			checkTransferLeaseSource: true,
+			checkCandidateFullness:   true,
+			dryRun:                   dryRun,
+		},
+	)
+	return false, err
 }
 
 type transferLeaseOptions struct {
@@ -929,13 +924,41 @@ type transferLeaseOptions struct {
 	dryRun                   bool
 }
 
-func (rq *replicateQueue) findTargetAndTransferLease(
+// leaseTransferOutcome represents the result of shedLease().
+type leaseTransferOutcome int
+
+const (
+	transferErr leaseTransferOutcome = iota
+	transferOK
+	noTransferDryRun
+	noSuitableTarget
+)
+
+func (o leaseTransferOutcome) String() string {
+	switch o {
+	case transferErr:
+		return "err"
+	case transferOK:
+		return "ok"
+	case noTransferDryRun:
+		return "no transfer; dry run"
+	case noSuitableTarget:
+		return "no suitable transfer target found"
+	default:
+		return fmt.Sprintf("unexpected status value: %d", o)
+	}
+}
+
+// shedLease takes in a leaseholder replica, looks for a target for transferring
+// the lease and, if a suitable target is found (e.g. alive, not draining),
+// transfers the lease away.
+func (rq *replicateQueue) shedLease(
 	ctx context.Context,
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
 	zone *zonepb.ZoneConfig,
 	opts transferLeaseOptions,
-) (bool, error) {
+) (leaseTransferOutcome, error) {
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,
 	// so only consider the `Voters` replicas.
 	target := rq.allocator.TransferLeaseTarget(
@@ -949,20 +972,22 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 		false, /* alwaysAllowDecisionWithoutStats */
 	)
 	if target == (roachpb.ReplicaDescriptor{}) {
-		return false, nil
+		return noSuitableTarget, nil
 	}
 
 	if opts.dryRun {
 		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-		return false, nil
+		return noTransferDryRun, nil
 	}
 
 	avgQPS, qpsMeasurementDur := repl.leaseholderStats.avgQPS()
 	if qpsMeasurementDur < MinStatsDuration {
 		avgQPS = 0
 	}
-	err := rq.transferLease(ctx, repl, target, avgQPS)
-	return err == nil, err
+	if err := rq.transferLease(ctx, repl, target, avgQPS); err != nil {
+		return transferErr, err
+	}
+	return transferOK, nil
 }
 
 func (rq *replicateQueue) transferLease(
