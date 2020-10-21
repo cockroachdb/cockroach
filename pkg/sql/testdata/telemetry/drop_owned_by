@@ -1,0 +1,19 @@
+# This file contains telemetry tests for the sql.drop_owned_by counter.
+
+feature-allowlist
+sql.drop_owned_by.*
+----
+
+exec
+CREATE ROLE testuser;
+CREATE TABLE t();
+GRANT CREATE ON DATABASE defaultdb TO testuser;
+ALTER TABLE t OWNER TO testuser
+----
+
+# TODO(angelaw): Remove unimplemented message after implementation.
+feature-usage
+DROP OWNED BY testuser
+----
+error: pq: unimplemented: drop owned by is not yet implemented
+sql.drop_owned_by
