@@ -119,8 +119,7 @@ func (ctx *extendedEvalContext) QueueJob(record jobs.Record) (*jobs.Job, error) 
 // schemaInterface provides access to the database and table descriptors.
 // See schema_accessors.go.
 type schemaInterface struct {
-	physical catalog.Accessor
-	logical  catalog.Accessor
+	logical catalog.Accessor
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -408,10 +407,6 @@ func internalExtendedEvalCtx(
 		schemaAccessors:   newSchemaInterface(tables, execCfg.VirtualSchemas),
 		DistSQLPlanner:    execCfg.DistSQLPlanner,
 	}
-}
-
-func (p *planner) PhysicalSchemaAccessor() catalog.Accessor {
-	return p.extendedEvalCtx.schemaAccessors.physical
 }
 
 // LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.

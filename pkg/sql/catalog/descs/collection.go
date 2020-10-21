@@ -273,8 +273,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 		return db, nil
 	}
 
-	phyAccessor := catalogkv.UncachedPhysicalAccessor{}
-	db, err := phyAccessor.GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
+	db, err := getDatabaseDesc(ctx, txn, tc.codec(), name, flags)
 	if err != nil || db == nil {
 		return nil, err
 	}
@@ -356,8 +355,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 		return mut, nil
 	}
 
-	phyAccessor := catalogkv.UncachedPhysicalAccessor{}
-	obj, err := phyAccessor.GetObjectDesc(
+	obj, err := getObjectDesc(
 		ctx,
 		txn,
 		tc.settings,
@@ -395,8 +393,7 @@ func (tc *Collection) getMutableUserDefinedSchemaDescriptor(
 		return schema, nil
 	}
 
-	phyAccessor := catalogkv.UncachedPhysicalAccessor{}
-	found, schema, err := phyAccessor.GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+	found, schema, err := getSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
 	if err != nil || !found {
 		return nil, err
 	}
@@ -407,8 +404,7 @@ func (tc *Collection) getUserDefinedSchemaVersion(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
 ) (*schemadesc.Immutable, error) {
 	readFromStore := func() (*schemadesc.Immutable, error) {
-		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
-		exists, schema, err := phyAccessor.GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+		exists, schema, err := getSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
 		if err != nil || !exists || schema.Kind != catalog.SchemaUserDefined {
 			return nil, err
 		}
@@ -523,7 +519,7 @@ func (tc *Collection) ResolveSchema(
 			}
 		}
 
-		exists, resolved, err := (catalogkv.UncachedPhysicalAccessor{}).GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+		exists, resolved, err := getSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
 		if err != nil || !exists {
 			return exists, catalog.ResolvedSchema{}, err
 		}
@@ -567,8 +563,7 @@ func (tc *Collection) GetDatabaseVersion(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (*dbdesc.Immutable, error) {
 	readFromStore := func() (*dbdesc.Immutable, error) {
-		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
-		desc, err := phyAccessor.GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
+		desc, err := getDatabaseDesc(ctx, txn, tc.codec(), name, flags)
 		if err != nil || desc == nil {
 			return nil, err
 		}
@@ -654,8 +649,7 @@ func (tc *Collection) getObjectVersion(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
 	readObjectFromStore := func() (catalog.Descriptor, error) {
-		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
-		return phyAccessor.GetObjectDesc(
+		return getObjectDesc(
 			ctx,
 			txn,
 			tc.settings,
