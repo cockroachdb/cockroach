@@ -495,9 +495,14 @@ var specs = []stmtSpec{
 		inline: []string{"col_qual_list"},
 	},
 	{
+		name:   "for_locking",
+		stmt:   "for_locking_item",
+		inline: []string{"for_locking_strength", "opt_locked_rels", "opt_nowait_or_skip", "table_name_list"},
+	},
+	{
 		name:   "col_qualification",
 		stmt:   "col_qualification",
-		inline: []string{"col_qualification_elem", "opt_hash_sharded"},
+		inline: []string{"col_qualification_elem", "opt_hash_sharded", "generated_as"},
 		replace: map[string]string{
 			"'=' a_expr": "'=' n_buckets",
 		},
