@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -146,7 +147,7 @@ type projectInOp_TYPE struct {
 var _ colexecbase.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool) {
-	conv := GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(t)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {

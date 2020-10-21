@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -140,7 +141,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				if err := tc.init(); err != nil {
 					t.Fatal(err)
 				}
-				constructors, constArguments, outputTypes, err := ProcessAggregations(
+				constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 					&evalCtx, &semaCtx, tc.spec.Aggregations, tc.typs,
 				)
 				require.NoError(t, err)

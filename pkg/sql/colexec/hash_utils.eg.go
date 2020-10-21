@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,11 +35,11 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker CancelChecker,
-	overloadHelper overloadHelper,
+	overloadHelper execgen.OverloadHelper,
 	datumAlloc *rowenc.DatumAlloc,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
+	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
 	_overloadHelper := overloadHelper
 	switch col.CanonicalTypeFamily() {
 	case types.BoolFamily:
@@ -236,7 +237,7 @@ func rehash(
 
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
-						tmpDec := &_overloadHelper.tmpDec1
+						tmpDec := &_overloadHelper.TmpDec1
 						tmpDec.Reduce(&v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
@@ -260,7 +261,7 @@ func rehash(
 
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
-						tmpDec := &_overloadHelper.tmpDec1
+						tmpDec := &_overloadHelper.TmpDec1
 						tmpDec.Reduce(&v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
@@ -283,7 +284,7 @@ func rehash(
 
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
-						tmpDec := &_overloadHelper.tmpDec1
+						tmpDec := &_overloadHelper.TmpDec1
 						tmpDec.Reduce(&v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
@@ -304,7 +305,7 @@ func rehash(
 
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
-						tmpDec := &_overloadHelper.tmpDec1
+						tmpDec := &_overloadHelper.TmpDec1
 						tmpDec.Reduce(&v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))

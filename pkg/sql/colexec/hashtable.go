@@ -15,6 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -178,7 +179,7 @@ type hashTable struct {
 	// each other.
 	allowNullEquality bool
 
-	overloadHelper overloadHelper
+	overloadHelper execgen.OverloadHelper
 	datumAlloc     rowenc.DatumAlloc
 	cancelChecker  CancelChecker
 

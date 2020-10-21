@@ -17,7 +17,7 @@
 //
 // */}}
 
-package colexec
+package colexecagg
 
 import (
 	"unsafe"
@@ -134,7 +134,7 @@ type _AGG_TYPE_AGGKINDAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-var _ aggregateFunc = &_AGG_TYPE_AGGKINDAgg{}
+var _ AggregateFunc = &_AGG_TYPE_AGGKINDAgg{}
 
 func (a *_AGG_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
@@ -260,7 +260,7 @@ var _ aggregateFuncAlloc = &_AGG_TYPE_AGGKINDAggAlloc{}
 const sizeOf_AGG_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(_AGG_TYPE_AGGKINDAgg{}))
 const _AGG_TYPE_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]_AGG_TYPE_AGGKINDAgg{}))
 
-func (a *_AGG_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
+func (a *_AGG_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(_AGG_TYPE_AGGKINDAggSliceOverhead + sizeOf_AGG_TYPE_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]_AGG_TYPE_AGGKINDAgg, a.allocSize)

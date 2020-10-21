@@ -8,23 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecagg
 
 import (
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
-// isAggOptimized returns whether aggFn has an optimized implementation.
-func isAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
+// IsAggOptimized returns whether aggFn has an optimized implementation.
+func IsAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 	switch aggFn {
 	case execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 		execinfrapb.AggregatorSpec_AVG,
@@ -43,16 +46,16 @@ func isAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 	}
 }
 
-// aggregateFunc is an aggregate function that performs computation on a batch
+// AggregateFunc is an aggregate function that performs computation on a batch
 // when Compute(batch) is called and writes the output to the Vec passed in
-// in Init. The aggregateFunc performs an aggregation per group and outputs the
+// in Init. The AggregateFunc performs an aggregation per group and outputs the
 // aggregation once the start of the new group is reached. If the end of the
-// group is not reached before the batch is finished, the aggregateFunc will
+// group is not reached before the batch is finished, the AggregateFunc will
 // store a carry value that it will use next time Compute is called. Note that
 // this carry value is stored at the output index. Therefore if any memory
 // modification of the output vector is made, the caller *MUST* copy the value
 // at the current index inclusive for a correct aggregation.
-type aggregateFunc interface {
+type AggregateFunc interface {
 	// Init sets the groups for the aggregation and the output vector. Each index
 	// in groups corresponds to a column value in the input batch. true represents
 	// the start of a new group. Note that the very first group in the whole
@@ -160,22 +163,22 @@ func (h *hashAggregateFuncBase) HandleEmptyInputScalar() {
 type aggregateFuncAlloc interface {
 	// newAggFunc returns the aggregate function from the pool with all
 	// necessary fields initialized.
-	newAggFunc() aggregateFunc
+	newAggFunc() AggregateFunc
 }
 
-// aggregateFuncsAlloc is a utility struct that pools allocations of multiple
+// AggregateFuncsAlloc is a utility struct that pools allocations of multiple
 // aggregate functions simultaneously (i.e. it supports a "schema of aggregate
 // functions"). It will resolve the aggregate functions in its constructor to
 // instantiate aggregateFuncAlloc objects and will use those to populate slices
 // of new aggregation functions when requested.
-type aggregateFuncsAlloc struct {
+type AggregateFuncsAlloc struct {
 	allocator *colmem.Allocator
 	// allocSize determines the number of objects allocated when the previous
 	// allocations have been used up.
 	allocSize int64
 	// returnFuncs is the pool for the slice to be returned in
 	// makeAggregateFuncs.
-	returnFuncs []aggregateFunc
+	returnFuncs []AggregateFunc
 	// aggFuncAllocs are all necessary aggregate function allocators. Note that
 	// a separate aggregateFuncAlloc will be created for each aggFn from the
 	// schema (even if there are "duplicates" - exactly the same functions - in
@@ -183,7 +186,8 @@ type aggregateFuncsAlloc struct {
 	aggFuncAllocs []aggregateFuncAlloc
 }
 
-func newAggregateFuncsAlloc(
+// NewAggregateFuncsAlloc returns a new AggregateFuncsAlloc.
+func NewAggregateFuncsAlloc(
 	allocator *colmem.Allocator,
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
@@ -193,12 +197,12 @@ func newAggregateFuncsAlloc(
 	outputTypes []*types.T,
 	allocSize int64,
 	isHashAgg bool,
-) (*aggregateFuncsAlloc, *colconv.VecToDatumConverter, Closers, error) {
+) (*AggregateFuncsAlloc, *colconv.VecToDatumConverter, colexecbase.Closers, error) {
 	funcAllocs := make([]aggregateFuncAlloc, len(spec.Aggregations))
-	var toClose Closers
+	var toClose colexecbase.Closers
 	var vecIdxsToConvert []int
 	for _, aggFn := range spec.Aggregations {
-		if !isAggOptimized(aggFn.Func) {
+		if !IsAggOptimized(aggFn.Func) {
 			for _, vecIdx := range aggFn.ColIdx {
 				found := false
 				for i := range vecIdxsToConvert {
@@ -298,27 +302,29 @@ func newAggregateFuncsAlloc(
 					len(aggFn.ColIdx), constArguments[i], outputTypes[i], allocSize,
 				)
 			}
-			toClose = append(toClose, funcAllocs[i].(Closer))
+			toClose = append(toClose, funcAllocs[i].(colexecbase.Closer))
 		}
 
 		if err != nil {
 			return nil, nil, nil, err
 		}
 	}
-	return &aggregateFuncsAlloc{
+	return &AggregateFuncsAlloc{
 		allocator:     allocator,
 		allocSize:     allocSize,
 		aggFuncAllocs: funcAllocs,
 	}, inputArgsConverter, toClose, nil
 }
 
-// sizeOfAggregateFunc is the size of some aggregateFunc implementation.
+// sizeOfAggregateFunc is the size of some AggregateFunc implementation.
 // countHashAgg was chosen arbitrarily, but it's important that we use a
 // pointer to the aggregate function struct.
 const sizeOfAggregateFunc = int64(unsafe.Sizeof(&countHashAgg{}))
-const aggregateFuncSliceOverhead = int64(unsafe.Sizeof([]aggregateFunc{}))
+const aggregateFuncSliceOverhead = int64(unsafe.Sizeof([]AggregateFunc{}))
 
-func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
+// MakeAggregateFuncs returns a slice of aggregate function according to the
+// initialized schema.
+func (a *AggregateFuncsAlloc) MakeAggregateFuncs() []AggregateFunc {
 	if len(a.returnFuncs) == 0 {
 		// We have exhausted the previously allocated pools of objects, so we
 		// need to allocate a new slice for a.returnFuncs, and we need it to be
@@ -326,7 +332,7 @@ func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 		// aggFuncAlloc will allocate allocSize of objects on the newAggFunc
 		// call below.
 		a.allocator.AdjustMemoryUsage(aggregateFuncSliceOverhead + sizeOfAggregateFunc*int64(len(a.aggFuncAllocs))*a.allocSize)
-		a.returnFuncs = make([]aggregateFunc, len(a.aggFuncAllocs)*int(a.allocSize))
+		a.returnFuncs = make([]AggregateFunc, len(a.aggFuncAllocs)*int(a.allocSize))
 	}
 	funcs := a.returnFuncs[:len(a.aggFuncAllocs)]
 	a.returnFuncs = a.returnFuncs[len(a.aggFuncAllocs):]
@@ -368,42 +374,10 @@ func ProcessAggregations(
 	return
 }
 
-// aggBucket stores the aggregation functions for the corresponding aggregation
-// group as well as other utility information.
-type aggBucket struct {
-	fns []aggregateFunc
-	// seen is a slice of maps used to handle distinct aggregation. A
-	// corresponding entry in the slice is nil if the function doesn't have a
-	// DISTINCT clause. The slice itself will be nil whenever no aggregate
-	// function has a DISTINCT clause.
-	seen []map[string]struct{}
-}
-
-func (b *aggBucket) init(
-	batch coldata.Batch, fns []aggregateFunc, seen []map[string]struct{}, groups []bool,
-) {
-	b.fns = fns
-	for fnIdx, fn := range b.fns {
-		fn.Init(groups, batch.ColVec(fnIdx))
-	}
-	b.seen = seen
-}
-
-const sizeOfAggBucket = int64(unsafe.Sizeof(aggBucket{}))
-const aggBucketSliceOverhead = int64(unsafe.Sizeof([]aggBucket{}))
-
-// aggBucketAlloc is a utility struct that batches allocations of aggBuckets.
-type aggBucketAlloc struct {
-	allocator *colmem.Allocator
-	buf       []aggBucket
-}
-
-func (a *aggBucketAlloc) newAggBucket() *aggBucket {
-	if len(a.buf) == 0 {
-		a.allocator.AdjustMemoryUsage(aggBucketSliceOverhead + hashAggregatorAllocSize*sizeOfAggBucket)
-		a.buf = make([]aggBucket, hashAggregatorAllocSize)
-	}
-	ret := &a.buf[0]
-	a.buf = a.buf[1:]
-	return ret
-}
+var (
+	zeroDecimalValue  apd.Decimal
+	zeroFloat64Value  float64
+	zeroInt64Value    int64
+	zeroIntervalValue duration.Duration
+	zeroBytesValue    []byte
+)

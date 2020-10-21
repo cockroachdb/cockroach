@@ -323,10 +323,10 @@ func runTestsWithTyps(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
-		if c, ok := originalOp.(Closer); ok {
+		if c, ok := originalOp.(colexecbase.Closer); ok {
 			require.NoError(t, c.Close(ctx))
 		}
-		if c, ok := opWithNulls.(Closer); ok {
+		if c, ok := opWithNulls.(colexecbase.Closer); ok {
 			require.NoError(t, c.Close(ctx))
 		}
 	}
@@ -434,7 +434,7 @@ func runTestsWithoutAllNullsInjection(
 					assert.False(t, maybeHasNulls(b))
 				}
 			}
-			if c, ok := op.(Closer); ok {
+			if c, ok := op.(colexecbase.Closer); ok {
 				// Some operators need an explicit Close if not drained completely of
 				// input.
 				assert.NoError(t, c.Close(ctx))
