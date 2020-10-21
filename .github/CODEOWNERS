@@ -36,3 +36,6 @@
 /pkg/ui/embedded.go
 /pkg/ui/src/js/protos.d.ts
 /pkg/ui/src/js/protos.js
+
+/docs/generated/http         @cockroachdb/http-api-prs
+/pkg/cmd/docgen/http.go
