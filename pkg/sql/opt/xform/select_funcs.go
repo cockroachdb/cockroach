@@ -604,6 +604,21 @@ func (c *CustomFuncs) inBetweenFilters(
 	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(inBetween))}
 }
 
+// constructOr constructs an expression that is an OR between all the
+// provided conditions
+func (c *CustomFuncs) constructOr(conditions memo.ScalarListExpr) opt.ScalarExpr {
+	if len(conditions) == 0 {
+		return c.e.f.ConstructFalse()
+	}
+
+	orExpr := conditions[0]
+	for i := 1; i < len(conditions); i++ {
+		orExpr = c.e.f.ConstructOr(conditions[i], orExpr)
+	}
+
+	return orExpr
+}
+
 // columnComparison returns a filter that compares the index columns to the
 // given values. The comp parameter can be -1, 0 or 1 to indicate whether the
 // comparison type of the filter should be a Lt, Eq or Gt.
