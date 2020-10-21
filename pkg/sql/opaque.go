@@ -105,18 +105,20 @@ func buildOpaque(
 		plan, err = p.DropDatabase(ctx, n)
 	case *tree.DropIndex:
 		plan, err = p.DropIndex(ctx, n)
+	case *tree.DropOwnedBy:
+		plan, err = p.DropOwnedBy(ctx)
 	case *tree.DropRole:
 		plan, err = p.DropRole(ctx, n)
 	case *tree.DropSchema:
 		plan, err = p.DropSchema(ctx, n)
+	case *tree.DropSequence:
+		plan, err = p.DropSequence(ctx, n)
 	case *tree.DropTable:
 		plan, err = p.DropTable(ctx, n)
 	case *tree.DropType:
 		plan, err = p.DropType(ctx, n)
 	case *tree.DropView:
 		plan, err = p.DropView(ctx, n)
-	case *tree.DropSequence:
-		plan, err = p.DropSequence(ctx, n)
 	case *tree.Grant:
 		plan, err = p.Grant(ctx, n)
 	case *tree.GrantRole:
@@ -219,12 +221,13 @@ func init() {
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropIndex{},
+		&tree.DropOwnedBy{},
+		&tree.DropRole{},
 		&tree.DropSchema{},
+		&tree.DropSequence{},
 		&tree.DropTable{},
 		&tree.DropType{},
 		&tree.DropView{},
-		&tree.DropRole{},
-		&tree.DropSequence{},
 		&tree.Grant{},
 		&tree.GrantRole{},
 		&tree.ReassignOwnedBy{},

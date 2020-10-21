@@ -828,7 +828,8 @@ func (u *sqlSymUnion) survive() tree.Survive {
 %type <tree.Statement> import_stmt
 %type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt
 %type <*tree.Select>   for_schedules_clause
-%type <tree.Statement> reassign_owned_stmt
+%type <tree.Statement> reassign_owned_by_stmt
+%type <tree.Statement> drop_owned_by_stmt
 %type <tree.Statement> release_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt
@@ -1254,22 +1255,23 @@ stmt_block:
 
 stmt:
   HELPTOKEN { return helpWith(sqllex, "") }
-| preparable_stmt   // help texts in sub-rule
-| analyze_stmt      // EXTEND WITH HELP: ANALYZE
+| preparable_stmt           // help texts in sub-rule
+| analyze_stmt              // EXTEND WITH HELP: ANALYZE
 | copy_from_stmt
 | comment_stmt
-| execute_stmt      // EXTEND WITH HELP: EXECUTE
-| deallocate_stmt   // EXTEND WITH HELP: DEALLOCATE
-| discard_stmt      // EXTEND WITH HELP: DISCARD
-| grant_stmt        // EXTEND WITH HELP: GRANT
-| prepare_stmt      // EXTEND WITH HELP: PREPARE
-| revoke_stmt       // EXTEND WITH HELP: REVOKE
-| savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
-| reassign_owned_stmt // EXTEND WITH HELP: REASSIGN OWNED BY
-| release_stmt      // EXTEND WITH HELP: RELEASE
-| refresh_stmt      // EXTEND WITH HELP: REFRESH
-| nonpreparable_set_stmt // help texts in sub-rule
-| transaction_stmt  // help texts in sub-rule
+| execute_stmt              // EXTEND WITH HELP: EXECUTE
+| deallocate_stmt           // EXTEND WITH HELP: DEALLOCATE
+| discard_stmt              // EXTEND WITH HELP: DISCARD
+| grant_stmt                // EXTEND WITH HELP: GRANT
+| prepare_stmt              // EXTEND WITH HELP: PREPARE
+| revoke_stmt               // EXTEND WITH HELP: REVOKE
+| savepoint_stmt            // EXTEND WITH HELP: SAVEPOINT
+| reassign_owned_by_stmt    // EXTEND WITH HELP: REASSIGN OWNED BY
+| drop_owned_by_stmt        // EXTEND WITH HELP: DROP OWNED BY
+| release_stmt              // EXTEND WITH HELP: RELEASE
+| refresh_stmt              // EXTEND WITH HELP: REFRESH
+| nonpreparable_set_stmt    // help texts in sub-rule
+| transaction_stmt          // help texts in sub-rule
 | close_cursor_stmt
 | declare_cursor_stmt
 | reindex_stmt
@@ -7723,7 +7725,8 @@ multiple_set_clause:
 // %Category: Priv
 // %Text: REASSIGN OWNED BY {<name> | CURRENT_USER | SESSION_USER}[,...]
 // TO {<name> | CURRENT_USER | SESSION_USER}
-reassign_owned_stmt:
+// %SeeAlso: DROP OWNED BY
+reassign_owned_by_stmt:
 	REASSIGN OWNED BY role_spec_list TO role_spec
 {
 	$$.val = &tree.ReassignOwnedBy{
@@ -7732,6 +7735,21 @@ reassign_owned_stmt:
 	}
 }
 | REASSIGN OWNED BY error // SHOW HELP: REASSIGN OWNED BY
+
+// %Help: DROP OWNED BY - remove database objects owned by role(s).
+// %Category: Priv
+// %Text: DROP OWNED BY {<name> | CURRENT_USER | SESSION_USER}[,...]
+// [RESTRICT | CASCADE]
+// %SeeAlso: REASSIGN OWNED BY
+drop_owned_by_stmt:
+	DROP OWNED BY role_spec_list opt_drop_behavior
+{
+	$$.val = &tree.DropOwnedBy{
+      Roles: $4.strs(),
+      DropBehavior: $5.dropBehavior(),
+	}
+}
+| DROP OWNED BY error // SHOW HELP: DROP OWNED BY
 
 // A complete SELECT statement looks like this.
 //

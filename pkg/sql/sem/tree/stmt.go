@@ -602,7 +602,13 @@ func (*Prepare) StatementTag() string { return "PREPARE" }
 func (*ReassignOwnedBy) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ReassignOwnedBy) StatementTag() string { return "REASSIGN OWNED" }
+func (*ReassignOwnedBy) StatementTag() string { return "REASSIGN OWNED BY" }
+
+// StatementType implements the Statement interface.
+func (*DropOwnedBy) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropOwnedBy) StatementTag() string { return "DROP OWNED BY" }
 
 // StatementType implements the Statement interface.
 func (*RefreshMaterializedView) StatementType() StatementType { return DDL }
@@ -1094,11 +1100,12 @@ func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }
 func (n *DropDatabase) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
+func (n *DropOwnedBy) String() string                    { return AsString(n) }
 func (n *DropSchema) String() string                     { return AsString(n) }
+func (n *DropSequence) String() string                   { return AsString(n) }
 func (n *DropTable) String() string                      { return AsString(n) }
 func (n *DropType) String() string                       { return AsString(n) }
 func (n *DropView) String() string                       { return AsString(n) }
-func (n *DropSequence) String() string                   { return AsString(n) }
 func (n *DropRole) String() string                       { return AsString(n) }
 func (n *Execute) String() string                        { return AsString(n) }
 func (n *Explain) String() string                        { return AsString(n) }

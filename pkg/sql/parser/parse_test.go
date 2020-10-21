@@ -1555,6 +1555,10 @@ func TestParse(t *testing.T) {
 
 		{`REASSIGN OWNED BY foo TO bar`},
 		{`REASSIGN OWNED BY foo, bar TO third`},
+		{`DROP OWNED BY foo`},
+		{`DROP OWNED BY foo, bar`},
+		{`DROP OWNED BY foo CASCADE`},
+		{`DROP OWNED BY foo RESTRICT`},
 
 		{`COMMENT ON COLUMN a.b IS 'a'`},
 		{`COMMENT ON COLUMN a.b IS NULL`},
@@ -2673,6 +2677,8 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 
 		{`REASSIGN OWNED BY CURRENT_USER TO foo`, `REASSIGN OWNED BY "current_user" TO foo`},
 		{`REASSIGN OWNED BY SESSION_USER TO foo`, `REASSIGN OWNED BY "session_user" TO foo`},
+		{`DROP OWNED BY CURRENT_USER`, `DROP OWNED BY "current_user"`},
+		{`DROP OWNED BY SESSION_USER`, `DROP OWNED BY "session_user"`},
 
 		// Validate that GRANT and REVOKE can accept optional PRIVILEGES syntax
 		{`GRANT ALL PRIVILEGES ON DATABASE foo TO root`, `GRANT ALL ON DATABASE foo TO root`},
