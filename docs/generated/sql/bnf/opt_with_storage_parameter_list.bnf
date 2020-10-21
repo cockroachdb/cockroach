@@ -1,0 +1,2 @@
+opt_with_storage_parameter_list ::=
+	'WITH' '(' storage_parameter ( ( ',' storage_parameter ) )* ')'

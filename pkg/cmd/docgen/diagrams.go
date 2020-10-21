@@ -567,7 +567,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_index_stmt",
-		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_index_access_method", "opt_hash_sharded", "opt_concurrently"},
+		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_index_access_method", "opt_hash_sharded", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
 			"'ON' a_expr":     "'ON' column_name",
 			"'=' a_expr":      "'=' n_buckets",
@@ -604,7 +604,7 @@ var specs = []stmtSpec{
 		name:   "create_inverted_index_stmt",
 		stmt:   "create_index_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' .* 'INVERTED' 'INDEX'")},
-		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_concurrently"},
+		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
 			"opt_nulls_order": "",
 		},
@@ -632,11 +632,11 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_table_as_stmt",
-		inline: []string{"create_as_opt_col_list", "create_as_table_defs"},
+		inline: []string{"create_as_opt_col_list", "create_as_table_defs", "opt_table_with", "opt_create_table_on_commit"},
 	},
 	{
 		name:    "create_table_stmt",
-		inline:  []string{"opt_table_elem_list", "table_elem_list", "table_elem"},
+		inline:  []string{"opt_table_elem_list", "table_elem_list", "table_elem", "opt_table_with", "opt_create_table_on_commit"},
 		nosplit: true,
 	},
 	{
@@ -942,7 +942,7 @@ var specs = []stmtSpec{
 	{
 		name:    "interleave",
 		stmt:    "create_table_stmt",
-		inline:  []string{"opt_interleave"},
+		inline:  []string{"opt_interleave", "opt_table_with", "opt_with_storage_parameter_list", "storage_parameter_list", "opt_create_table_on_commit"},
 		replace: map[string]string{"opt_table_elem_list": "table_definition"},
 		unlink:  []string{"table_definition"},
 	},
@@ -954,6 +954,10 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "opt_interleave",
+	},
+	{
+		name:   "opt_with_storage_parameter_list",
+		inline: []string{"storage_parameter_list"},
 	},
 	{
 		name:    "pause_job",
