@@ -1823,6 +1823,10 @@ func TestLint(t *testing.T) {
 			// Ignore types that can change by system.
 			stream.GrepNot(`pkg/util/sysutil/sysutil_unix.go:`),
 
+			// Ignore jemalloc issues warnings.
+			stream.GrepNot(`In file included from.*(start|runtime)_jemalloc\.go`),
+			stream.GrepNot(`include/jemalloc/jemalloc\.h`),
+
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 			stream.GrepNot(`\.pb\.gw\.go:[0-9:]+: declaration of "?ctx"? shadows`),
 			stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
