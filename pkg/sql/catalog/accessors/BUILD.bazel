@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "accessors",
-    srcs = [
-        "logical_schema_accessors.go",
-        "physical_schema_accessors.go",
-    ],
+    srcs = ["logical_schema_accessors.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors",
     visibility = ["//visibility:public"],
     deps = [

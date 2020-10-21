@@ -306,20 +306,15 @@ func (p *planner) MemberOfWithAdminOption(
 	roleMembersCache := p.execCfg.RoleMemberCache
 
 	// Lookup table version.
-	objDesc, err := p.PhysicalSchemaAccessor().GetObjectDesc(
+	tableDesc, err := p.Descriptors().GetTableVersion(
 		ctx,
 		p.txn,
-		p.ExecCfg().Settings,
-		p.ExecCfg().Codec,
-		roleMembersTableName.Catalog(),
-		roleMembersTableName.Schema(),
-		roleMembersTableName.Table(),
+		&roleMembersTableName,
 		p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
 	)
 	if err != nil {
 		return nil, err
 	}
-	tableDesc := objDesc.(catalog.TableDescriptor)
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
 		return p.resolveMemberOfWithAdminOption(ctx, member, p.txn)

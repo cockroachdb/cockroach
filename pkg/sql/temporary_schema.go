@@ -160,8 +160,7 @@ func getTemporaryObjectNames(
 	if err != nil {
 		return nil, err
 	}
-	a := catalogkv.UncachedPhysicalAccessor{}
-	return a.GetObjectNames(
+	return descs.GetObjectNames(
 		ctx,
 		txn,
 		codec,

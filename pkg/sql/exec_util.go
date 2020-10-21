@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -1344,11 +1343,7 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 }
 
 func newSchemaInterface(descsCol *descs.Collection, vs catalog.VirtualSchemas) *schemaInterface {
-	sc := &schemaInterface{
-		physical: accessors.NewCachedAccessor(catalogkv.UncachedPhysicalAccessor{}, descsCol),
-	}
-	sc.logical = accessors.NewLogicalAccessor(sc.physical, vs)
-	return sc
+	return &schemaInterface{logical: accessors.NewLogicalAccessor(descsCol, vs)}
 }
 
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
