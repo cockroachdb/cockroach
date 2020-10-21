@@ -246,6 +246,7 @@ func TestContextualHelp(t *testing.T) {
 
 		{`REASSIGN OWNED BY ?? TO ??`, `REASSIGN OWNED BY`},
 		{`REASSIGN OWNED BY foo, bar TO ??`, `REASSIGN OWNED BY`},
+		{`DROP OWNED BY ??`, `DROP OWNED BY`},
 
 		{`RESUME ??`, `RESUME`},
 		{`RESUME JOB ??`, `RESUME JOBS`},
