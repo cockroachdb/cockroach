@@ -250,17 +250,17 @@ a  57  true  false  false
 
 # Hibernate query.
 
-query TTTOBIIITTOT
+query TTTOBIIITTOT rowsort
 SELECT * FROM (SELECT n.nspname, c.relname, a.attname, a.atttypid, a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull) AS attnotnull, a.atttypmod, a.attlen, row_number() OVER (PARTITION BY a.attrelid ORDER BY a.attnum) AS attnum, pg_get_expr(def.adbin, def.adrelid) AS adsrc, dsc.description, t.typbasetype, t.typtype FROM pg_catalog.pg_namespace AS n JOIN pg_catalog.pg_class AS c ON (c.relnamespace = n.oid) JOIN pg_catalog.pg_attribute AS a ON (a.attrelid = c.oid) JOIN pg_catalog.pg_type AS t ON (a.atttypid = t.oid) LEFT JOIN pg_catalog.pg_attrdef AS def ON ((a.attrelid = def.adrelid) AND (a.attnum = def.adnum)) LEFT JOIN pg_catalog.pg_description AS dsc ON ((c.oid = dsc.objoid) AND (a.attnum = dsc.objsubid)) LEFT JOIN pg_catalog.pg_class AS dc ON ((dc.oid = dsc.classoid) AND (dc.relname = 'pg_class')) LEFT JOIN pg_catalog.pg_namespace AS dn ON ((dc.relnamespace = dn.oid) AND (dn.nspname = 'pg_catalog')) WHERE (((c.relkind IN ('r', 'v', 'f', 'm')) AND (a.attnum > 0)) AND (NOT a.attisdropped)) AND (n.nspname LIKE 'public')) AS c;
 ----
 public  a          id     20  false  -1  8   1  NULL            NULL  0  b
-public  a          name   25  false  -1  -1  2  NULL            NULL  0  b
 public  a          rowid  20  true   -1  8   3  unique_rowid()  NULL  0  b
-public  customers  name   25  true   -1  -1  1  NULL            NULL  0  b
+public  a          name   25  false  -1  -1  2  NULL            NULL  0  b
 public  customers  id     20  false  -1  8   2  NULL            NULL  0  b
+public  customers  name   25  true   -1  -1  1  NULL            NULL  0  b
+public  b          rowid  20  true   -1  8   3  unique_rowid()  NULL  0  b
 public  b          id     20  false  -1  8   1  NULL            NULL  0  b
 public  b          a_id   20  false  -1  8   2  NULL            NULL  0  b
-public  b          rowid  20  true   -1  8   3  unique_rowid()  NULL  0  b
 public  c          a      20  true   -1  8   1  NULL            NULL  0  b
 public  c          b      20  true   -1  8   2  NULL            NULL  0  b
 public  metatest   a      20  true   -1  8   1  NULL            NULL  0  b
