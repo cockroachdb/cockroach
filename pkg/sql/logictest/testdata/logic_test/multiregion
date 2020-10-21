@@ -13,5 +13,8 @@ ALTER DATABASE new_db ADD REGION "us-west-1"
 statement error implementation pending
 ALTER DATABASE new_db DROP REGION "us-west-1"
 
-statement error implementation pending
+query T colnames
 SHOW REGIONS
+----
+region
+us-east1
