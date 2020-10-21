@@ -250,6 +250,24 @@ func ParseINet(s string, dest *IPAddr) error {
 	return nil
 }
 
+// PadIPv4Encoding pads the CRDB IPV4 key byte encoding after the prefix with 0,
+// following escape based encoding, to match the IPV6 address size.
+func PadIPv4Encoding(ipAddrEncoding []byte) []byte {
+	family := IPFamily(ipAddrEncoding[1])
+	if family == IPv4family {
+		ipv4Addr := make([]byte, len(ipAddrEncoding[4:]))
+		copy(ipv4Addr, ipAddrEncoding[4:])
+		ipAddrEncoding = append(
+			ipAddrEncoding[:4],
+			0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255,
+		)
+		ipAddrEncoding = append(
+			ipAddrEncoding, ipv4Addr...,
+		)
+	}
+	return ipAddrEncoding
+}
+
 // RandIPAddr generates a random IPAddr. This includes random mask size and IP
 // family.
 func RandIPAddr(rng *rand.Rand) IPAddr {

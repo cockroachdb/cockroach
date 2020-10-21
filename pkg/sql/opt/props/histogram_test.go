@@ -578,23 +578,249 @@ func TestFilterBucket(t *testing.T) {
 		runTest(h, testData, types.TimestampFamily)
 	})
 
-	t.Run("string", func(t *testing.T) {
+	t.Run("time", func(t *testing.T) {
+		upperBound, _, err := tree.ParseDTime(&evalCtx, "05:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerBound, _, err := tree.ParseDTime(&evalCtx, "04:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
 		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
-			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("baq"))},
-			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("foo")},
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
+			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
 		}}
+
+		ub1, _, err := tree.ParseDTime(&evalCtx, "04:15:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		testData := []testCase{
 			{
-				span:     "[/bar - /baz]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("baz")},
+				span:     "[/04:00:00 - /04:15:00]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 15.5, DistinctRange: 7.75, UpperBound: ub1},
 			},
 			{
-				span:     "[/baz - /foo]",
-				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("foo")},
+				span:     "[/04:30:00 - /05:00:00]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound},
 			},
 		}
 
-		runTest(h, testData, types.StringFamily)
+		runTest(h, testData, types.TimeFamily)
+	})
+
+	t.Run("timetz", func(t *testing.T) {
+		upperBound, _, err := tree.ParseDTimeTZ(&evalCtx, "05:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerBound, _, err := tree.ParseDTimeTZ(&evalCtx, "04:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
+			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
+		}}
+
+		ub1, _, err := tree.ParseDTimeTZ(&evalCtx, "04:15:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		testData := []testCase{
+			{
+				span:     "[/04:00:00 - /04:15:00]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 15.5, DistinctRange: 7.75, UpperBound: ub1},
+			},
+			{
+				span:     "[/04:30:00 - /05:00:00]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound},
+			},
+		}
+
+		runTest(h, testData, types.TimeTZFamily)
+	})
+
+	t.Run("string", func(t *testing.T) {
+		hComplex := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("bear"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("bobcat")},
+		}}
+		hSimple := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("a"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("c")},
+		}}
+
+		testDataSimple := []testCase{
+			{
+				span:     "[/b - /c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "[/as - /c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.75, DistinctRange: 7.75, UpperBound: tree.NewDString("c")},
+			},
+		}
+
+		// Justification for [/bluejay - /boar] :
+		//
+		// bear    := [18 98 101 97  114 0   1          ] => [101 97  114 0   0  ]
+		// bobcat  := [18 98 111 98  99  97  116 0   1  ] => [111 98  99  97  116]
+		// bluejay := [18 98 108 117 101 106 97  121 0 1] => [108 117 101 106 97 ]
+		// boar    := [18 98 111 97  114 0   1          ] => [111 97  114 0   0  ]
+		//
+		// Prev. NumRange * ((boar - bluejay) / (bobcat - bear)) = 2.92
+		// A similar exercise can explain the results for [/beer - /bobcat]
+		testDataComplex := []testCase{
+			{
+				span:     "[/bluejay - /boar]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.92, DistinctRange: 2.92, UpperBound: tree.NewDString("boar")},
+			},
+			{
+				span:     "[/beer - /bobcat]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 9.98, DistinctRange: 9.98, UpperBound: tree.NewDString("bobcat")},
+			},
+		}
+
+		runTest(hSimple, testDataSimple, types.StringFamily)
+		runTest(hComplex, testDataComplex, types.StringFamily)
+	})
+
+	t.Run("uuid", func(t *testing.T) {
+		lowerBoundComplex, err := tree.ParseDUuidFromString("2189ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+		upperBoundComplex, err := tree.ParseDUuidFromString("4589ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerBoundSimple, err := tree.ParseDUuidFromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+		if err != nil {
+			t.Fatal(err)
+		}
+		upperBoundSimple, err := tree.ParseDUuidFromString("cccccccc-cccc-cccc-cccc-cccccccccccc")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newUpperBound, err := tree.ParseDUuidFromString("4289ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		hComplex := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBoundComplex)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBoundComplex},
+		}}
+		hSimple := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBoundSimple)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBoundSimple},
+		}}
+
+		testDataSimple := []testCase{
+			{
+				span:     "[/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb - /cccccccc-cccc-cccc-cccc-cccccccccccc]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: upperBoundSimple},
+			},
+			{
+				span:     "[/b3333333-aaaa-aaaa-aaaa-aaaaaaaaaaaa - /cccccccc-cccc-cccc-cccc-cccccccccccc]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.5, DistinctRange: 7.5, UpperBound: upperBoundSimple},
+			},
+		}
+
+		testDataComplex := []testCase{
+			{
+				span:     "[/3189ad07-52f2-4d60-83e8-4a8347fef718 - /4289ad07-52f2-4d60-83e8-4a8347fef718]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.72, DistinctRange: 4.72, UpperBound: newUpperBound},
+			},
+			{
+				span:     "[/3189ad07-52f2-4d60-83e8-4a8347fef718 - /4589ad07-52f2-4d60-83e8-4a8347fef718]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5.56, DistinctRange: 5.56, UpperBound: upperBoundComplex},
+			},
+		}
+
+		runTest(hSimple, testDataSimple, types.UuidFamily)
+		runTest(hComplex, testDataComplex, types.UuidFamily)
+	})
+
+	t.Run("inet", func(t *testing.T) {
+		lowerBoundIPV4, err := tree.ParseDIPAddrFromINetString("0.0.0.0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		upperBoundIPV4, err := tree.ParseDIPAddrFromINetString("255.255.255.255")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerBoundIPV6, err := tree.ParseDIPAddrFromINetString("0:0:0:0:0:0:0:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		upperBoundIPV6, err := tree.ParseDIPAddrFromINetString("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newUpperBoundIPV6, err := tree.ParseDIPAddrFromINetString("0:0:0:0:ffff:ffff:ffff:ffff")
+		if err != nil {
+			t.Fatal(err)
+		}
+		hIPV4 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBoundIPV4)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBoundIPV4},
+		}}
+		hIPV6 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBoundIPV6)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBoundIPV6},
+		}}
+		hMixed := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBoundIPV4)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBoundIPV6},
+		}}
+
+		testDataIPV4 := []testCase{
+			{
+				span:     "[/128.128.128.128 - /255.255.255.255]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 4.98, DistinctRange: 4.98, UpperBound: upperBoundIPV4},
+			},
+			{
+				span:     "[/63.63.63.63 - /255.255.255.255]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.53, DistinctRange: 7.53, UpperBound: upperBoundIPV4},
+			},
+		}
+		testDataIPV6 := []testCase{
+			{
+				span:     "[/7777:7777:7777:7777:7777:7777:7777:7777 - /ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5.33, DistinctRange: 5.33, UpperBound: upperBoundIPV6},
+			},
+			{
+				span:     "[/3333:3333:3333:3333:3333:3333:3333:3333 - /ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 8, DistinctRange: 8, UpperBound: upperBoundIPV6},
+			},
+		}
+		testDataMixed := []testCase{
+			// Due to the large address space of IPV6, when the lower bound (IPV4) is
+			// updated but the upper bound (IPV6) stays the same, there is no
+			// difference in the range estimate.
+			{
+				span:     "[/255.255.255.255 - /ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBoundIPV6},
+			},
+			// The dominant factor in the range difference between IPV4 & IPV6 is the
+			// family-tag/mask which make up the upper 2 bytes of the CRDB encoding.
+			// Hence, there is still a very minor difference in NumRange even when the
+			// upperbound is updated but family-tag/mask remains the same.
+			{
+				span:     "[/0.0.0.0 - /0000:0000:0000:0000:ffff:ffff:ffff:ffff]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 9.97, DistinctRange: 9.97, UpperBound: newUpperBoundIPV6},
+			},
+		}
+
+		runTest(hIPV4, testDataIPV4, types.INetFamily)
+		runTest(hIPV6, testDataIPV6, types.INetFamily)
+		runTest(hMixed, testDataMixed, types.INetFamily)
 	})
 
 }
