@@ -81,12 +81,13 @@ var MembershipStatus_value = map[string]int32{
 }
 
 func (MembershipStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_e11b2e8cd41db0d7, []int{0}
+	return fileDescriptor_liveness_a5e43463048034bb, []int{0}
 }
 
 // NodeLivenessStatus describes the status of a node from the perspective of the
-// liveness system. See comment on LivenessStatus() for a description of the
-// states.
+// liveness system. A liveness record is interpreted by
+// kvserver.LivenessStatus() to one of these statuses. See comments there for a
+// description of the states.
 //
 // TODO(irfansharif): We should reconsider usage of NodeLivenessStatus.
 // It's unclear if the enum is well considered. It enumerates across two
@@ -106,7 +107,8 @@ const (
 	NodeLivenessStatus_DEAD NodeLivenessStatus = 1
 	// UNAVAILABLE indicates that the node is unavailable - it has not updated its
 	// liveness record recently enough to be considered live, but has not been
-	// unavailable long enough to be considered dead.
+	// unavailable long enough to be considered dead. Draining nodes also use this
+	// status.
 	NodeLivenessStatus_UNAVAILABLE NodeLivenessStatus = 2
 	// LIVE indicates a live node.
 	NodeLivenessStatus_LIVE NodeLivenessStatus = 3
@@ -138,7 +140,7 @@ func (x NodeLivenessStatus) String() string {
 	return proto.EnumName(NodeLivenessStatus_name, int32(x))
 }
 func (NodeLivenessStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_e11b2e8cd41db0d7, []int{1}
+	return fileDescriptor_liveness_a5e43463048034bb, []int{1}
 }
 
 // Liveness holds information about a node's latest heartbeat and epoch.
@@ -179,7 +181,7 @@ type Liveness struct {
 func (m *Liveness) Reset()      { *m = Liveness{} }
 func (*Liveness) ProtoMessage() {}
 func (*Liveness) Descriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_e11b2e8cd41db0d7, []int{0}
+	return fileDescriptor_liveness_a5e43463048034bb, []int{0}
 }
 func (m *Liveness) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -659,10 +661,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/liveness.proto", fileDescriptor_liveness_e11b2e8cd41db0d7)
+	proto.RegisterFile("kv/kvserver/kvserverpb/liveness.proto", fileDescriptor_liveness_a5e43463048034bb)
 }
 
-var fileDescriptor_liveness_e11b2e8cd41db0d7 = []byte{
+var fileDescriptor_liveness_a5e43463048034bb = []byte{
 	// 549 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x93, 0x3b, 0x6b, 0xdb, 0x50,
 	0x14, 0xc7, 0x75, 0xfd, 0x8a, 0x39, 0x86, 0x44, 0x5c, 0x07, 0x6a, 0x54, 0x90, 0x44, 0x1f, 0x60,
