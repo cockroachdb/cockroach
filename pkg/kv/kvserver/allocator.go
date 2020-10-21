@@ -765,6 +765,8 @@ func (a *Allocator) scorerOptions() scorerOptions {
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
 // to from the provided list. It excludes the current lease holder replica
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
+//
+// Returns an empty descriptor if no target is found.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,

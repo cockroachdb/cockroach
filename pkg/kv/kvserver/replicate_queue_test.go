@@ -655,6 +655,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 		}
 		transferred, err := leaseStore.FindTargetAndTransferLease(
 			ctx, leaseRepl, desc, &newZone)
+
 		if err != nil {
 			return err
 		}
