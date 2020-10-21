@@ -607,8 +607,9 @@ message Lease {
   // is considered invalid.
   util.hlc.Timestamp start = 1 [(gogoproto.nullable) = false];
 
-  // The expiration is a timestamp at which the lease expires. This means that
-  // a new lease can be granted for a later timestamp.
+  // The expiration is a timestamp at which the lease expires. This means that a
+  // new lease can be granted for a later timestamp. This field is only set for
+  // expiration-based leases.
   util.hlc.Timestamp expiration = 2;
 
   // The address of the would-be lease holder.
@@ -625,8 +626,8 @@ message Lease {
   // TODO(andrei): Make this non-nullable after the rollout.
   util.hlc.Timestamp proposed_ts  = 5 [(gogoproto.customname) = "ProposedTS"];
 
-  // The epoch of the lease holder's node liveness entry. If this value
-  // is non-zero, the start and expiration values are ignored.
+  // The epoch of the lease holder's node liveness entry. If this value is
+  // non-zero, the expiration field is ignored.
   int64 epoch = 6;
 
   // A zero-indexed sequence number which is incremented during the acquisition
