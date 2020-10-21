@@ -48,9 +48,10 @@ func TestRestoreOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const (
-		testdataBase = "testdata/restore_old_versions"
-		exportDirs   = testdataBase + "/exports"
-		clusterDirs  = testdataBase + "/cluster"
+		testdataBase    = "testdata/restore_old_versions"
+		exportDirs      = testdataBase + "/exports"
+		clusterDirs     = testdataBase + "/cluster"
+		exceptionalDirs = testdataBase + "/exceptional"
 	)
 
 	t.Run("table-restore", func(t *testing.T) {
@@ -73,6 +74,65 @@ func TestRestoreOldVersions(t *testing.T) {
 			require.NoError(t, err)
 			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir))
 		}
+	})
+
+	// exceptional backups are backups that were possible to generate on old
+	// versions, but are now disallowed, but we should check that we fail
+	// gracefully with them.
+	t.Run("exceptional-backups", func(t *testing.T) {
+		t.Run("x-db-type-reference", func(t *testing.T) {
+			backupUnderTest := "xDbRef"
+			/*
+				This backup was generated with the following SQL:
+
+				CREATE TYPE t AS ENUM ('foo');
+				CREATE TABLE tbl (a t);
+				CREATE DATABASE otherdb;
+				ALTER TABLE tbl RENAME TO otherdb.tbl;
+				BACKUP DATABASE otherdb TO 'nodelocal://1/xDbRef';
+
+				This was permitted on some release candidates of v20.2. (#55709)
+			*/
+			dir, err := os.Stat(filepath.Join(exceptionalDirs, backupUnderTest))
+			require.NoError(t, err)
+			require.True(t, dir.IsDir())
+
+			// We could create tables which reference types in another database on
+			// 20.2 release candidates.
+			exportDir, err := filepath.Abs(filepath.Join(exceptionalDirs, dir.Name()))
+			require.NoError(t, err)
+
+			externalDir, dirCleanup := testutils.TempDir(t)
+			ctx := context.Background()
+			tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					ExternalIODir: externalDir,
+				},
+			})
+			sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+			defer func() {
+				tc.Stopper().Stop(ctx)
+				dirCleanup()
+			}()
+			err = os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
+			require.NoError(t, err)
+
+			// Expect this restore to fail.
+			sqlDB.ExpectErr(t, `type "t" has unknown ParentID 50`, `RESTORE DATABASE otherdb FROM $1`, LocalFoo)
+
+			// Expect that we don't crash and that we emit NULL for data that we
+			// cannot resolve (e.g. missing database descriptor, create_statement).
+			sqlDB.CheckQueryResults(t, `
+SELECT
+  database_name, parent_schema_name, object_name, object_type, create_statement 
+FROM [SHOW BACKUP SCHEMAS '`+LocalFoo+`' WITH privileges]
+ORDER BY object_type, object_name`, [][]string{
+				{"NULL", "NULL", "otherdb", "database", "NULL"},
+				{"otherdb", "public", "tbl", "table", "NULL"},
+				{"NULL", "public", "_t", "type", "NULL"},
+				{"NULL", "public", "t", "type", "NULL"},
+			})
+		})
 	})
 }
 
