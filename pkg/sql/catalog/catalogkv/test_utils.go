@@ -12,17 +12,16 @@ package catalogkv
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // TestingGetTableDescriptorFromSchema retrieves a table descriptor directly
@@ -32,13 +31,7 @@ import (
 func TestingGetTableDescriptorFromSchema(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, table string,
 ) *tabledesc.Immutable {
-	desc, ok := testingGetObjectDescriptor(
-		kvDB, codec, tree.TableObject, false /* mutable */, database, schema, table,
-	).(*tabledesc.Immutable)
-	if !ok {
-		return nil
-	}
-	return desc
+	return testingGetObjectDescriptor(kvDB, codec, database, schema, table).(*tabledesc.Immutable)
 }
 
 // TestingGetTableDescriptor retrieves a table descriptor directly from the KV
@@ -58,13 +51,7 @@ func TestingGetTableDescriptor(
 func TestingGetImmutableTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
 ) *tabledesc.Immutable {
-	desc, ok := testingGetObjectDescriptor(
-		kvDB, codec, tree.TableObject, false /* mutable */, database, "public", table,
-	).(*tabledesc.Immutable)
-	if !ok {
-		return nil
-	}
-	return desc
+	return testingGetObjectDescriptor(kvDB, codec, database, "public", table).(*tabledesc.Immutable)
 }
 
 // TestingGetMutableExistingTableDescriptor retrieves a Mutable
@@ -72,13 +59,8 @@ func TestingGetImmutableTableDescriptor(
 func TestingGetMutableExistingTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
 ) *tabledesc.Mutable {
-	desc, ok := testingGetObjectDescriptor(
-		kvDB, codec, tree.TableObject, true /* mutable */, database, "public", table,
-	).(*tabledesc.Mutable)
-	if !ok {
-		return nil
-	}
-	return desc
+	return tabledesc.NewExistingMutable(
+		*TestingGetImmutableTableDescriptor(kvDB, codec, database, table).TableDesc())
 }
 
 // TestingGetTypeDescriptorFromSchema retrieves a type descriptor directly from
@@ -88,50 +70,34 @@ func TestingGetMutableExistingTableDescriptor(
 func TestingGetTypeDescriptorFromSchema(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, object string,
 ) *typedesc.Immutable {
-	desc, ok := testingGetObjectDescriptor(
-		kvDB, codec, tree.TypeObject, false /* mutable */, database, schema, object,
-	).(*typedesc.Immutable)
-	if !ok {
-		return nil
-	}
-	return desc
+	return testingGetObjectDescriptor(kvDB, codec, database, schema, object).(*typedesc.Immutable)
 }
 
-// TestingGetTypeDescriptor retrieves a type descriptor directly from the kv layer.
-//
-// This function should be moved wherever TestingGetTableDescriptor is moved.
+// TestingGetTypeDescriptor retrieves a type descriptor directly from the kv
+// layer.
 func TestingGetTypeDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
 ) *typedesc.Immutable {
-	desc, ok := testingGetObjectDescriptor(
-		kvDB, codec, tree.TypeObject, false /* mutable */, database, "public", object,
-	).(*typedesc.Immutable)
-	if !ok {
-		return nil
-	}
-	return desc
+	return TestingGetTypeDescriptorFromSchema(kvDB, codec, database, "public", object)
 }
 
 // TestingGetDatabaseDescriptor retrieves a database descriptor directly from
 // the kv layer.
-//
-// This function should be moved wherever TestingGetTableDescriptor is moved.
 func TestingGetDatabaseDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string,
 ) (db *dbdesc.Immutable) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		desc, err := UncachedPhysicalAccessor{}.GetDatabaseDesc(
-			ctx, txn, codec, database, tree.DatabaseLookupFlags{
-				Required:       true,
-				AvoidCached:    true,
-				IncludeOffline: true,
-				IncludeDropped: true,
-			})
+		found, id, err := LookupDatabaseID(ctx, txn, codec, database)
 		if err != nil {
-			return err
+			panic(err)
+		} else if !found {
+			panic(fmt.Sprintf("database %s not found", database))
 		}
-		db = desc.(*dbdesc.Immutable)
+		db, err = MustGetDatabaseDescByID(ctx, txn, codec, id)
+		if err != nil {
+			panic(err)
+		}
 		return nil
 	}); err != nil {
 		panic(err)
@@ -144,23 +110,18 @@ func TestingGetDatabaseDescriptor(
 func TestingGetSchemaDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, dbID descpb.ID, schemaName string,
 ) (schema *schemadesc.Immutable) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		_, schemaMeta, err := UncachedPhysicalAccessor{}.GetSchema(
-			ctx, txn, codec, dbID, schemaName, tree.SchemaLookupFlags{
-				Required:       true,
-				AvoidCached:    true,
-				IncludeDropped: true,
-				IncludeOffline: true,
-			})
+		exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, schemaName)
 		if err != nil {
-			return err
+			panic(err)
+		} else if !exists {
+			panic(fmt.Sprintf("schema %s not found", schemaName))
 		}
-		desc := schemaMeta.Desc
-		if desc == nil {
-			return nil
+		schema, err = MustGetSchemaDescByID(ctx, txn, codec, schemaID)
+		if err != nil {
+			panic(err)
 		}
-		schema = desc.(*schemadesc.Immutable)
 		return nil
 	}); err != nil {
 		panic(err)
@@ -169,26 +130,32 @@ func TestingGetSchemaDescriptor(
 }
 
 func testingGetObjectDescriptor(
-	kvDB *kv.DB,
-	codec keys.SQLCodec,
-	kind tree.DesiredObjectKind,
-	mutable bool,
-	database string,
-	schema string,
-	object string,
+	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, object string,
 ) (desc catalog.Descriptor) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		lookupFlags := tree.ObjectLookupFlagsWithRequired()
-		lookupFlags.IncludeOffline = true
-		lookupFlags.IncludeDropped = true
-		lookupFlags.DesiredObjectKind = kind
-		lookupFlags.RequireMutable = mutable
-		desc, err = UncachedPhysicalAccessor{}.GetObjectDesc(ctx,
-			txn, cluster.MakeTestingClusterSettings(), codec,
-			database, schema, object, lookupFlags)
+		found, dbID, err := LookupDatabaseID(ctx, txn, codec, database)
 		if err != nil {
-			return err
+			panic(err)
+		} else if !found {
+			panic(fmt.Sprintf("database %s not found", database))
+		}
+		exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, schema)
+		if err != nil {
+			panic(err)
+		} else if !exists {
+			panic(fmt.Sprintf("schema %s not found", schema))
+		}
+		found, objectID, err := LookupObjectID(ctx, txn, codec, dbID, schemaID, object)
+		if err != nil {
+			panic(err)
+		} else if !found {
+			panic(fmt.Sprintf("object %s not found", object))
+		}
+		desc, err = GetDescriptorByID(
+			ctx, txn, codec, objectID, Immutable, AnyDescriptorKind, true /* required */)
+		if err != nil {
+			panic(err)
 		}
 		return nil
 	}); err != nil {
