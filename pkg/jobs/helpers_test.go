@@ -75,7 +75,7 @@ func (j *Job) Created(ctx context.Context) error {
 	if j.ID() != nil {
 		return errors.Errorf("job already created with ID %v", *j.ID())
 	}
-	return j.deprecatedInsert(ctx, j.registry.makeJobID(), nil /* lease */)
+	return j.deprecatedInsert(ctx, j.registry.makeJobID(), nil /* lease */, nil /* session */)
 }
 
 // Paused is a wrapper around the internal function that moves a job to the
