@@ -807,13 +807,32 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
-		spanExpr, pfState, geoOk = invertedidx.TryConstrainGeoIndex(
-			c.e.evalCtx.Context, c.e.f, filters, scanPrivate.Table, index,
+		// TODO(mgartner): Consider optional filters (like check constraints)
+		// that can help constrain the prefix columns.
+		spanExpr, constraint, remainingFilters, pfState, geoOk := invertedidx.TryConstrainGeoIndex(
+			c.e.evalCtx, c.e.f, filters, scanPrivate.Table, index,
 		)
 		if geoOk {
-			// Geo index scans can never be tight, so the remaining filters do
-			// not change.
 			spansToRead = spanExpr.SpansToRead
+			// Override the filters with remainingFilters. If the index is a
+			// multi-column inverted index, the non-inverted prefix columns are
+			// constrained by the constraint. It may be possible to reduce the
+			// filters if the constraint fully describes some of
+			// sub-expressions. The remainingFilters are the filters that are
+			// not fully expressed by the constraint.
+			//
+			// Consider the example:
+			//
+			//   CREATE TABLE t (a INT, b INT, g GEOMETRY, INVERTED INDEX (b, g))
+			//
+			//   SELECT * FROM t WHERE a = 1 AND b = 2 AND ST_Intersects(.., g)
+			//
+			// The constraint would constrain b to [/2 - /2], guaranteeing that
+			// the inverted index scan would only produce rows where (b = 2).
+			// Reapplying the (b = 2) filter after the scan would be
+			// unnecessary, so the remainingFilters in this case would be
+			// (a = 1 AND ST_Intersects(.., g)).
+			filters = remainingFilters
 		} else {
 			constraint, filters, nonGeoOk = c.tryConstrainIndex(
 				filters,
@@ -837,7 +856,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// inverted filter.
 		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
-		invertedCol := scanPrivate.Table.IndexColumnID(index, 0)
+		invertedCol := scanPrivate.Table.ColumnID(index.VirtualInvertedColumn().Ordinal())
 		if spanExpr != nil {
 			newScanPrivate.Cols.Add(invertedCol)
 		}
