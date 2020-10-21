@@ -51,8 +51,8 @@ define ScanPrivate {
 
     # If set, the scan is a constrained scan; the constraint contains the spans
     # that need to be scanned. If InvertedConstraint is also set, Constraint
-    # contains spans for the scalar prefix columns to scan for a multi-column
-    # inverted index.
+    # contains a single span that constrains each of the scalar prefix columns
+    # of an inverted index to a single value.
     Constraint Constraint
 
     # If set, the scan is a constrained scan of an inverted index; the

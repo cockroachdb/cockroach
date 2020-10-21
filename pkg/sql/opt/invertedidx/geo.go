@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -120,16 +122,25 @@ func TryJoinGeoIndex(
 // derived, it is returned with ok=true. If no constraint can be derived,
 // then TryConstrainGeoIndex returns ok=false.
 func TryConstrainGeoIndex(
-	ctx context.Context,
+	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 	filters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
 ) (
 	invertedConstraint *invertedexpr.SpanExpression,
+	constraint *constraint.Constraint,
+	remainingFilters memo.FiltersExpr,
 	preFiltererState *invertedexpr.PreFiltererStateForInvertedFilterer,
 	ok bool,
 ) {
+	// Attempt to constrain the prefix columns, if there are any. If they cannot
+	// be constrained to single values, the index cannot be used.
+	constraint, filters, ok = constrainPrefixColumns(evalCtx, factory, filters, tabID, index)
+	if !ok {
+		return nil, nil, nil, nil, false
+	}
+
 	config := index.GeoConfig()
 	var getSpanExpr getSpanExprForGeoIndexFn
 	var typ *types.T
@@ -140,14 +151,14 @@ func TryConstrainGeoIndex(
 		getSpanExpr = getSpanExprForGeometryIndex
 		typ = types.Geometry
 	} else {
-		return nil, nil, false
+		return nil, nil, nil, nil, false
 	}
 
 	var invertedExpr invertedexpr.InvertedExpression
 	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 	for i := range filters {
 		invertedExprLocal, pfStateLocal := constrainGeoIndex(
-			ctx, factory, filters[i].Condition, tabID, index, getSpanExpr,
+			evalCtx.Context, factory, filters[i].Condition, tabID, index, getSpanExpr,
 		)
 		if invertedExpr == nil {
 			invertedExpr = invertedExprLocal
@@ -163,17 +174,17 @@ func TryConstrainGeoIndex(
 	}
 
 	if invertedExpr == nil {
-		return nil, nil, false
+		return nil, nil, nil, nil, false
 	}
 
 	spanExpr, ok := invertedExpr.(*invertedexpr.SpanExpression)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, nil, nil, false
 	}
 	if pfState != nil {
 		pfState.Typ = typ
 	}
-	return spanExpr, pfState, true
+	return spanExpr, constraint, filters, pfState, true
 }
 
 // getSpanExprForGeographyIndex gets a SpanExpression that constrains the given
@@ -601,7 +612,7 @@ func extractInfoFromExpr(
 	if !ok {
 		return 0, nil, nil, nil, false
 	}
-	if arg2.Col != tabID.ColumnID(index.Column(0).InvertedSourceColumnOrdinal()) {
+	if arg2.Col != tabID.ColumnID(index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()) {
 		// The column in the function does not match the index column.
 		return 0, nil, nil, nil, false
 	}
@@ -1128,4 +1139,54 @@ func newGeoBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, in
 	preFilterer := NewPreFilterer(typ, relationship, additionalParams)
 	preFilterState := preFilterer.Bind(bindParam)
 	return preFilterer, preFilterState, nil
+}
+
+// constrainPrefixColumns attempts to build a constraint for the scalar prefix
+// columns of the given index. If a constraint is successfully built, it is
+// returned along with remaining filters and ok=true. The function is only
+// successful if it can constrain all the prefix columns to a single value. If
+// the index is a single-column inverted index, there are no prefix columns to
+// constrain, and ok=true is returned.
+func constrainPrefixColumns(
+	evalCtx *tree.EvalContext,
+	factory *norm.Factory,
+	filters memo.FiltersExpr,
+	tabID opt.TableID,
+	index cat.Index,
+) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
+	prefixColumnCount := index.InvertedPrefixColumnCount()
+
+	// If this is a single-column inverted index, there are no prefix columns to
+	// constrain.
+	if prefixColumnCount == 0 {
+		return nil, filters, true
+	}
+
+	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
+	var notNullCols opt.ColSet
+	for i := 0; i < index.InvertedPrefixColumnCount(); i++ {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal())
+		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.IsNullable() {
+			notNullCols.Add(colID)
+		}
+	}
+
+	var ic idxconstraint.Instance
+	ic.Init(filters, nil /* optionalFilters */, prefixColumns, notNullCols, false /* isInverted */, evalCtx, factory)
+	constraint = ic.Constraint()
+	if constraint.IsUnconstrained() {
+		// If the constraint is unconstrained, the index cannot be used.
+		return nil, nil, false
+	}
+	if constraint.ExactPrefix(evalCtx) < prefixColumnCount {
+		// If all of the prefix columns are not constrained to a single value,
+		// the index cannot be used.
+		return nil, nil, false
+	}
+
+	remainingFilters = ic.RemainingFilters()
+	copy := *constraint
+	return &copy, remainingFilters, true
 }

@@ -121,6 +121,12 @@ type Index interface {
 	// columns is data-dependent, not schema-dependent.
 	LaxKeyColumnCount() int
 
+	// InvertedPrefixColumnCount returns the number of scalar columns in the
+	// inverted that are before the virtual inverted column. A non-zero value is
+	// only returned for multi-column inverted indexes. This function panics if
+	// the index is not an inverted index.
+	InvertedPrefixColumnCount() int
+
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
