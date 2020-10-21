@@ -106,7 +106,10 @@ func createTestCerts(certsDir string) (cleanup func() error) {
 	}
 
 	for _, a := range assets {
-		securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
+		_, err := securitytest.RestrictedCopy(a, certsDir, filepath.Base(a))
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return func() error {

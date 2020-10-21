@@ -258,19 +258,23 @@ func NewServer(params base.TestServerArgs) TestServerInterface {
 	return srvFactoryImpl.New(params).(TestServerInterface)
 }
 
-// OpenDBConn sets up a gosql DB connection to the given server.
-func OpenDBConn(
-	t testing.TB, server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
-) *gosql.DB {
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+// OpenDBConnE is like OpenDBConn, but returns an error.
+func OpenDBConnE(
+	server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
+) (*gosql.DB, error) {
+	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+		server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+	if err != nil {
+		return nil, err
+	}
+
 	pgURL.Path = params.UseDatabase
 	if params.Insecure {
 		pgURL.RawQuery = "sslmode=disable"
 	}
 	goDB, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	stopper.AddCloser(
@@ -278,7 +282,18 @@ func OpenDBConn(
 			_ = goDB.Close()
 			cleanupGoDB()
 		}))
-	return goDB
+	return goDB, nil
+}
+
+// OpenDBConn sets up a gosql DB connection to the given server.
+func OpenDBConn(
+	t testing.TB, server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
+) *gosql.DB {
+	conn, err := OpenDBConnE(server, params, stopper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conn
 }
 
 // StartServerRaw creates and starts a TestServer.
