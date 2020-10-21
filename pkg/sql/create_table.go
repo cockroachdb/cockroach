@@ -1468,6 +1468,11 @@ func NewTableDesc(
 				return nil, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.UniqueConstraintTableDef:
+			if d.WithoutIndex {
+				return nil, pgerror.New(pgcode.FeatureNotSupported,
+					"unique constraints without an index are not yet supported",
+				)
+			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
@@ -2076,8 +2081,12 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 	if desc.HasDefault() {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("default_expr"))
 	}
-	if def.Unique {
-		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
+	if def.Unique.IsUnique {
+		if def.Unique.WithoutIndex {
+			telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique_without_index"))
+		} else {
+			telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
+		}
 	}
 }
 

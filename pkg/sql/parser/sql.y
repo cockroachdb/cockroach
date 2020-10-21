@@ -1029,7 +1029,7 @@ func (u *sqlSymUnion) survive() tree.Survive {
 %type <types.IntervalTypeMetadata> opt_interval_qualifier interval_qualifier interval_second
 %type <tree.Expr> overlay_placing
 
-%type <bool> opt_unique opt_concurrently opt_cluster
+%type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
 %type <bool> opt_index_access_method
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
@@ -1327,7 +1327,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... SET SCHEMA <newschemaname>
 //
 // Column qualifiers:
-//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE [WITHOUT INDEX] | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )]
 //   COLLATE <collationname>
@@ -5491,11 +5491,11 @@ alter_schema_stmt:
 // Table constraints:
 //    PRIMARY KEY ( <colnames...> ) [USING HASH WITH BUCKET_COUNT = <shard_buckets>]
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
-//    UNIQUE ( <colnames... ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
+//    UNIQUE [WITHOUT INDEX] ( <colnames... ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
 //    CHECK ( <expr> )
 //
 // Column qualifiers:
-//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE [WITHOUT INDEX] | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
 //   COLLATE <collationname>
@@ -5933,9 +5933,11 @@ col_qualification_elem:
   {
     $$.val = tree.NullConstraint{}
   }
-| UNIQUE
+| UNIQUE opt_without_index
   {
-    $$.val = tree.UniqueConstraint{}
+    $$.val = tree.UniqueConstraint{
+      WithoutIndex: $2.bool(),
+    }
   }
 | PRIMARY KEY
   {
@@ -5979,6 +5981,16 @@ col_qualification_elem:
     sqllex.Error("use AS ( <expr> ) STORED")
     return 1
  }
+
+opt_without_index:
+  WITHOUT INDEX
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
 
 // GENERATED ALWAYS is a noise word for compatibility with Postgres.
 generated_as:
@@ -6056,15 +6068,17 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
-| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_deferrable opt_where_clause
+| UNIQUE opt_without_index '(' index_params ')'
+    opt_storing opt_interleave opt_partition_by opt_deferrable opt_where_clause
   {
     $$.val = &tree.UniqueConstraintTableDef{
+      WithoutIndex: $2.bool(),
       IndexTableDef: tree.IndexTableDef{
-        Columns: $3.idxElems(),
-        Storing: $5.nameList(),
-        Interleave: $6.interleave(),
-        PartitionBy: $7.partitionBy(),
-        Predicate: $9.expr(),
+        Columns: $4.idxElems(),
+        Storing: $6.nameList(),
+        Interleave: $7.interleave(),
+        PartitionBy: $8.partitionBy(),
+        Predicate: $10.expr(),
       },
     }
   }

@@ -379,9 +379,12 @@ type ColumnTableDef struct {
 		Sharded      bool
 		ShardBuckets Expr
 	}
-	Unique               bool
-	UniqueConstraintName Name
-	DefaultExpr          struct {
+	Unique struct {
+		IsUnique       bool
+		WithoutIndex   bool
+		ConstraintName Name
+	}
+	DefaultExpr struct {
 		Expr           Expr
 		ConstraintName Name
 	}
@@ -488,16 +491,17 @@ func NewColumnTableDef(
 			d.Nullable.ConstraintName = c.Name
 		case PrimaryKeyConstraint:
 			d.PrimaryKey.IsPrimaryKey = true
-			d.UniqueConstraintName = c.Name
+			d.Unique.ConstraintName = c.Name
 		case ShardedPrimaryKeyConstraint:
 			d.PrimaryKey.IsPrimaryKey = true
 			constraint := c.Qualification.(ShardedPrimaryKeyConstraint)
 			d.PrimaryKey.Sharded = true
 			d.PrimaryKey.ShardBuckets = constraint.ShardBuckets
-			d.UniqueConstraintName = c.Name
+			d.Unique.ConstraintName = c.Name
 		case UniqueConstraint:
-			d.Unique = true
-			d.UniqueConstraintName = c.Name
+			d.Unique.IsUnique = true
+			d.Unique.WithoutIndex = t.WithoutIndex
+			d.Unique.ConstraintName = c.Name
 		case *ColumnCheckConstraint:
 			d.CheckExprs = append(d.CheckExprs, ColumnTableDefCheckExpr{
 				Expr:           t.Expr,
@@ -572,10 +576,10 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	case NotNull:
 		ctx.WriteString(" NOT NULL")
 	}
-	if node.PrimaryKey.IsPrimaryKey || node.Unique {
-		if node.UniqueConstraintName != "" {
+	if node.PrimaryKey.IsPrimaryKey || node.Unique.IsUnique {
+		if node.Unique.ConstraintName != "" {
 			ctx.WriteString(" CONSTRAINT ")
-			ctx.FormatNode(&node.UniqueConstraintName)
+			ctx.FormatNode(&node.Unique.ConstraintName)
 		}
 		if node.PrimaryKey.IsPrimaryKey {
 			ctx.WriteString(" PRIMARY KEY")
@@ -583,8 +587,11 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 				ctx.WriteString(" USING HASH WITH BUCKET_COUNT=")
 				ctx.FormatNode(node.PrimaryKey.ShardBuckets)
 			}
-		} else if node.Unique {
+		} else if node.Unique.IsUnique {
 			ctx.WriteString(" UNIQUE")
+			if node.Unique.WithoutIndex {
+				ctx.WriteString(" WITHOUT INDEX")
+			}
 		}
 	}
 	if node.HasDefaultExpr() {
@@ -710,7 +717,9 @@ type ShardedPrimaryKeyConstraint struct {
 }
 
 // UniqueConstraint represents UNIQUE on a column.
-type UniqueConstraint struct{}
+type UniqueConstraint struct {
+	WithoutIndex bool
+}
 
 // ColumnCheckConstraint represents either a check on a column.
 type ColumnCheckConstraint struct {
@@ -809,7 +818,8 @@ func (*CheckConstraintTableDef) constraintTableDef()      {}
 // TABLE statement.
 type UniqueConstraintTableDef struct {
 	IndexTableDef
-	PrimaryKey bool
+	PrimaryKey   bool
+	WithoutIndex bool
 }
 
 // SetName implements the TableDef interface.
@@ -828,6 +838,9 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString("PRIMARY KEY ")
 	} else {
 		ctx.WriteString("UNIQUE ")
+	}
+	if node.WithoutIndex {
+		ctx.WriteString("WITHOUT INDEX ")
 	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)

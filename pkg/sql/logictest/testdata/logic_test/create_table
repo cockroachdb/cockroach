@@ -316,3 +316,11 @@ CREATE TABLE error (LIKE like_hash_base INCLUDING STATISTICS)
 
 statement error unimplemented
 CREATE TABLE error (LIKE like_hash_base INCLUDING STORAGE)
+
+subtest unique_without_index
+
+statement error unique constraints without an index are not yet supported
+CREATE TABLE unique_without_index (a INT UNIQUE WITHOUT INDEX)
+
+statement error unique constraints without an index are not yet supported
+CREATE TABLE unique_without_index (a INT, b INT, CONSTRAINT ab UNIQUE WITHOUT INDEX (a, b))
