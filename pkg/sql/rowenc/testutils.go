@@ -1368,7 +1368,7 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				case *tree.IndexTableDef:
 					idx = defType
 				case *tree.UniqueConstraintTableDef:
-					if !defType.PrimaryKey {
+					if !defType.PrimaryKey && !defType.WithoutIndex {
 						idx = &defType.IndexTableDef
 					}
 				}
@@ -1422,7 +1422,7 @@ func PartialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				case *tree.IndexTableDef:
 					idx = defType
 				case *tree.UniqueConstraintTableDef:
-					if !defType.PrimaryKey {
+					if !defType.PrimaryKey && !defType.WithoutIndex {
 						idx = &defType.IndexTableDef
 					}
 				}
