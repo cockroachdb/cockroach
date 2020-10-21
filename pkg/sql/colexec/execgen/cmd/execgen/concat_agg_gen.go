@@ -15,7 +15,7 @@ import (
 	"text/template"
 )
 
-const concatAggTmpl = "pkg/sql/colexec/concat_agg_tmpl.go"
+const concatAggTmpl = "pkg/sql/colexec/colexecagg/concat_agg_tmpl.go"
 
 func genConcatAgg(inputFileContents string, wr io.Writer) error {
 

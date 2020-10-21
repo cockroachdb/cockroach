@@ -12,9 +12,11 @@ package colexec
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -549,4 +551,44 @@ func (o *singleBatchOperator) reset(vecs []coldata.Vec, inputLen int, sel []int)
 	if sel != nil {
 		copy(o.batch.Selection(), sel[:inputLen])
 	}
+}
+
+// aggBucket stores the aggregation functions for the corresponding aggregation
+// group as well as other utility information.
+type aggBucket struct {
+	fns []colexecagg.AggregateFunc
+	// seen is a slice of maps used to handle distinct aggregation. A
+	// corresponding entry in the slice is nil if the function doesn't have a
+	// DISTINCT clause. The slice itself will be nil whenever no aggregate
+	// function has a DISTINCT clause.
+	seen []map[string]struct{}
+}
+
+func (b *aggBucket) init(
+	batch coldata.Batch, fns []colexecagg.AggregateFunc, seen []map[string]struct{}, groups []bool,
+) {
+	b.fns = fns
+	for fnIdx, fn := range b.fns {
+		fn.Init(groups, batch.ColVec(fnIdx))
+	}
+	b.seen = seen
+}
+
+const sizeOfAggBucket = int64(unsafe.Sizeof(aggBucket{}))
+const aggBucketSliceOverhead = int64(unsafe.Sizeof([]aggBucket{}))
+
+// aggBucketAlloc is a utility struct that batches allocations of aggBuckets.
+type aggBucketAlloc struct {
+	allocator *colmem.Allocator
+	buf       []aggBucket
+}
+
+func (a *aggBucketAlloc) newAggBucket() *aggBucket {
+	if len(a.buf) == 0 {
+		a.allocator.AdjustMemoryUsage(aggBucketSliceOverhead + hashAggregatorAllocSize*sizeOfAggBucket)
+		a.buf = make([]aggBucket, hashAggregatorAllocSize)
+	}
+	ret := &a.buf[0]
+	a.buf = a.buf[1:]
+	return ret
 }

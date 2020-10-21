@@ -11,19 +11,19 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for sum_agg.eg.go. It's formatted in a
+// This file is the execgen template for avg_agg.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
 // permits editing this file with editor support.
 //
 // */}}
 
-package colexec
+package colexecagg
 
 import (
-	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,6 +33,13 @@ import (
 // {{/*
 // Declarations to make the template compile properly
 
+// _ASSIGN_DIV_INT64 is the template division function for assigning the first
+// input to the result of the second input / the third input, where the third
+// input is an int64.
+func _ASSIGN_DIV_INT64(_, _, _, _, _, _ string) {
+	colexecerror.InternalError(errors.AssertionFailedf(""))
+}
+
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
 func _ASSIGN_ADD(_, _, _, _, _, _ string) {
@@ -41,7 +48,7 @@ func _ASSIGN_ADD(_, _, _, _, _, _ string) {
 
 // */}}
 
-func newSum_SUMKIND_AGGKINDAggAlloc(
+func newAvg_AGGKINDAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) (aggregateFuncAlloc, error) {
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
@@ -49,38 +56,40 @@ func newSum_SUMKIND_AGGKINDAggAlloc(
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
-			return &sum_SUMKINDInt16_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
+			return &avgInt16_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
 		case 32:
-			return &sum_SUMKINDInt32_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
+			return &avgInt32_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
 		default:
-			return &sum_SUMKINDInt64_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
+			return &avgInt64_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
 		}
-	// {{if eq .SumKind ""}}
 	case types.DecimalFamily:
-		return &sumDecimal_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
+		return &avgDecimal_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
 	case types.FloatFamily:
-		return &sumFloat64_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
+		return &avgFloat64_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
 	case types.IntervalFamily:
-		return &sumInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
-	// {{end}}
+		return &avgInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
 	default:
-		return nil, errors.Errorf("unsupported sum %s agg type %s", strings.ToLower("_SUMKIND"), t.Name())
+		return nil, errors.Errorf("unsupported avg agg type %s", t.Name())
 	}
 }
 
-// {{range .Infos}}
+// {{range .}}
 
-type sum_SUMKIND_TYPE_AGGKINDAgg struct {
+type avg_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
 	scratch struct {
-		// curAgg holds the running total, so we can index into the slice once per
-		// group, instead of on each iteration.
-		curAgg _RET_GOTYPE
-		// vec points to the output vector we are updating.
+		// curSum keeps track of the sum of elements belonging to the current group,
+		// so we can index into the slice once per group, instead of on each
+		// iteration.
+		curSum _RET_GOTYPE
+		// curCount keeps track of the number of elements that we've seen
+		// belonging to the current group.
+		curCount int64
+		// vec points to the output vector.
 		vec []_RET_GOTYPE
 		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 		// for the group that is currently being aggregated.
@@ -89,17 +98,16 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers
-	// and get a decimal result which is the case when {{if .NeedsHelper}}
-	// evaluates to true. In all other cases we don't want to wastefully
-	// allocate the helper.
+	// and get a decimal result which is the case when NeedsHelper is true. In
+	// all other cases we don't want to wastefully allocate the helper.
 	// */}}
-	overloadHelper overloadHelper
+	overloadHelper execgen.OverloadHelper
 	// {{end}}
 }
 
-var _ aggregateFunc = &sum_SUMKIND_TYPE_AGGKINDAgg{}
+var _ AggregateFunc = &avg_TYPE_AGGKINDAgg{}
 
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *avg_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	// {{else}}
@@ -109,24 +117,25 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.Reset()
 }
 
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Reset() {
+func (a *avg_TYPE_AGGKINDAgg) Reset() {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Reset()
 	// {{else}}
 	a.hashAggregateFuncBase.Reset()
 	// {{end}}
+	a.scratch.curSum = zero_RET_TYPEValue
+	a.scratch.curCount = 0
 	a.scratch.foundNonNullForCurrentGroup = false
 }
 
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
+func (a *avg_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers
-	// and get a decimal result which is the case when {{if .NeedsHelper}}
-	// evaluates to true. In all other cases we don't want to wastefully
-	// allocate the helper.
+	// and get a decimal result which is the case when NeedsHelper is true. In
+	// all other cases we don't want to wastefully allocate the helper.
 	// */}}
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -146,11 +155,11 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 		col = col[:inputLen]
 		if nulls.MaybeHasNulls() {
 			for i := range col {
-				_ACCUMULATE_SUM(a, nulls, i, true)
+				_ACCUMULATE_AVG(a, nulls, i, true)
 			}
 		} else {
 			for i := range col {
-				_ACCUMULATE_SUM(a, nulls, i, false)
+				_ACCUMULATE_AVG(a, nulls, i, false)
 			}
 		}
 	} else
@@ -159,20 +168,20 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 		sel = sel[:inputLen]
 		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
-				_ACCUMULATE_SUM(a, nulls, i, true)
+				_ACCUMULATE_AVG(a, nulls, i, true)
 			}
 		} else {
 			for _, i := range sel {
-				_ACCUMULATE_SUM(a, nulls, i, false)
+				_ACCUMULATE_AVG(a, nulls, i, false)
 			}
 		}
 	}
 }
 
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
+func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
-	// null.
+	// NULL.
 	// {{if eq "_AGGKIND" "Ordered"}}
 	// Go around "argument overwritten before first use" linter error.
 	_ = outputIdx
@@ -182,24 +191,24 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.scratch.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[outputIdx] = a.scratch.curAgg
+		_ASSIGN_DIV_INT64(a.scratch.vec[outputIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
 	}
 }
 
-type sum_SUMKIND_TYPE_AGGKINDAggAlloc struct {
+type avg_TYPE_AGGKINDAggAlloc struct {
 	aggAllocBase
-	aggFuncs []sum_SUMKIND_TYPE_AGGKINDAgg
+	aggFuncs []avg_TYPE_AGGKINDAgg
 }
 
-var _ aggregateFuncAlloc = &sum_SUMKIND_TYPE_AGGKINDAggAlloc{}
+var _ aggregateFuncAlloc = &avg_TYPE_AGGKINDAggAlloc{}
 
-const sizeOfSum_SUMKIND_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(sum_SUMKIND_TYPE_AGGKINDAgg{}))
-const sum_SUMKIND_TYPE_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]sum_SUMKIND_TYPE_AGGKINDAgg{}))
+const sizeOfAvg_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(avg_TYPE_AGGKINDAgg{}))
+const avg_TYPE_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]avg_TYPE_AGGKINDAgg{}))
 
-func (a *sum_SUMKIND_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
+func (a *avg_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sum_SUMKIND_TYPE_AGGKINDAggSliceOverhead + sizeOfSum_SUMKIND_TYPE_AGGKINDAgg*a.allocSize)
-		a.aggFuncs = make([]sum_SUMKIND_TYPE_AGGKINDAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(avg_TYPE_AGGKINDAggSliceOverhead + sizeOfAvg_TYPE_AGGKINDAgg*a.allocSize)
+		a.aggFuncs = make([]avg_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
@@ -209,12 +218,12 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 // {{end}}
 
 // {{/*
-// _ACCUMULATE_SUM adds the value of the ith row to the output for the current
-// group. If this is the first row of a new group, and no non-nulls have been
-// found for the current group, then the output for the current group is set to
-// null.
-func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
-	// {{define "accumulateSum"}}
+// _ACCUMULATE_AVG updates the total sum/count for current group using the value
+// of the ith row. If this is the first row of a new group, then the average is
+// computed for the current group. If no non-nulls have been found for the
+// current group, then the output for the current group is set to null.
+func _ACCUMULATE_AVG(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+	// {{define "accumulateAvg"}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
@@ -223,12 +232,15 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 		if !a.scratch.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(a.curIdx)
 		} else {
-			a.scratch.vec[a.curIdx] = a.scratch.curAgg
+			// {{with .Global}}
+			_ASSIGN_DIV_INT64(a.scratch.vec[a.curIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
+			// {{end}}
 		}
 		a.curIdx++
 		// {{with .Global}}
-		a.scratch.curAgg = zero_RET_TYPEValue
+		a.scratch.curSum = zero_RET_TYPEValue
 		// {{end}}
+		a.scratch.curCount = 0
 
 		// {{/*
 		// We only need to reset this flag if there are nulls. If there are no
@@ -247,7 +259,8 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 	isNull = false
 	// {{end}}
 	if !isNull {
-		_ASSIGN_ADD(a.scratch.curAgg, a.scratch.curAgg, col[i], _, _, col)
+		_ASSIGN_ADD(a.scratch.curSum, a.scratch.curSum, col[i], _, _, col)
+		a.scratch.curCount++
 		a.scratch.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}

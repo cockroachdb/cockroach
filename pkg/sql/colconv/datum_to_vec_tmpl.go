@@ -11,13 +11,13 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for utils.eg.go. It's formatted in a
+// This file is the execgen template for datum_to_vec.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
 // permits editing this file with editor support.
 //
 // */}}
 
-package colexec
+package colconv
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"

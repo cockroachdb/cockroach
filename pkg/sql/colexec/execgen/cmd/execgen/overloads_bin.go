@@ -451,7 +451,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				if {{.Right}} == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
-				leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
+				leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
 				leftTmpDec.SetInt64(int64({{.Left}}))
 				rightTmpDec.SetInt64(int64({{.Right}}))
 				if _, err := tree.{{.Ctx}}.Quo(&{{.Target}}, leftTmpDec, rightTmpDec); err != nil {
@@ -464,7 +464,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 
 			t = template.Must(template.New("").Parse(`
 			{
-				leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
+				leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
 				leftTmpDec.SetInt64(int64({{.Left}}))
 				rightTmpDec.SetInt64(int64({{.Right}}))
 				if _, err := tree.{{.Ctx}}.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
@@ -529,7 +529,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
-				tmpDec := &_overloadHelper.tmpDec1
+				tmpDec := &_overloadHelper.TmpDec1
 				tmpDec.SetInt64(int64({{.Right}}))
 				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
 					colexecerror.ExpectedError(err)
@@ -562,7 +562,7 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
-				tmpDec := &_overloadHelper.tmpDec1
+				tmpDec := &_overloadHelper.TmpDec1
 				tmpDec.SetInt64(int64({{.Left}}))
 				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
 				if err != nil {
@@ -761,7 +761,7 @@ func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumEl
 	}
 	return fmt.Sprintf(`
 			%s
-			_res, err := %s.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, %s)
+			_res, err := %s.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, %s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

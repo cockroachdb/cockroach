@@ -80,7 +80,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
 	op, err := GetSelectionConstOperator(
-		cmpOp, input, inputTypes, colIdx, constArg, nil /* evalCtx */, nil, /* cmpExpr */
+		cmpOp, input, inputTypes, colIdx, constArg, nil /* EvalCtx */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)
@@ -108,7 +108,7 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	constVal := int64(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	op, err := GetSelectionConstOperator(
-		cmpOp, input, inputTypes, colIdx, constArg, nil /* evalCtx */, nil, /* cmpExpr */
+		cmpOp, input, inputTypes, colIdx, constArg, nil /* EvalCtx */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)
@@ -137,7 +137,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	inputTypes[col1Idx] = ct
 	inputTypes[col2Idx] = ct
 	op, err := GetSelectionOperator(
-		cmpOp, input, inputTypes, col1Idx, col2Idx, nil /* evalCtx */, nil, /* cmpExpr */
+		cmpOp, input, inputTypes, col1Idx, col2Idx, nil /* EvalCtx */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)

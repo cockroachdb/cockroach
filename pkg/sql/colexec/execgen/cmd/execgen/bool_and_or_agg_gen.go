@@ -58,7 +58,7 @@ var (
 	_ = booleanAggTmplInfo{}.DefaultVal
 )
 
-const boolAggTmpl = "pkg/sql/colexec/bool_and_or_agg_tmpl.go"
+const boolAggTmpl = "pkg/sql/colexec/colexecagg/bool_and_or_agg_tmpl.go"
 
 func genBooleanAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(

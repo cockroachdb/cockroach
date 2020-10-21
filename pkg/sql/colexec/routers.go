@@ -514,7 +514,7 @@ type HashRouter struct {
 	metadataSources execinfrapb.MetadataSources
 	// closers is a slice of Closers that need to be closed when the hash router
 	// terminates.
-	closers Closers
+	closers colexecbase.Closers
 
 	// unblockedEventsChan is a channel shared between the HashRouter and its
 	// outputs. outputs send events on this channel when they are unblocked by a
@@ -562,7 +562,7 @@ func NewHashRouter(
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
 	toDrain []execinfrapb.MetadataSource,
-	toClose []Closer,
+	toClose []colexecbase.Closer,
 ) (*HashRouter, []colexecbase.DrainableOperator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
@@ -602,7 +602,7 @@ func newHashRouterWithOutputs(
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
 	toDrain []execinfrapb.MetadataSource,
-	toClose []Closer,
+	toClose []colexecbase.Closer,
 ) *HashRouter {
 	r := &HashRouter{
 		OneInputNode:        NewOneInputNode(input),

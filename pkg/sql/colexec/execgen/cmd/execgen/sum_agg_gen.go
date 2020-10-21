@@ -73,7 +73,7 @@ func getSumAddOverload(inputType *types.T) assignFunc {
 	return overload.WidthOverloads[0].AssignFunc
 }
 
-const sumAggTmpl = "pkg/sql/colexec/sum_agg_tmpl.go"
+const sumAggTmpl = "pkg/sql/colexec/colexecagg/sum_agg_tmpl.go"
 
 func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	r := strings.NewReplacer(

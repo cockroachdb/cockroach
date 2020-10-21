@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const countAggTmpl = "pkg/sql/colexec/count_agg_tmpl.go"
+const countAggTmpl = "pkg/sql/colexec/colexecagg/count_agg_tmpl.go"
 
 func genCountAgg(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_COUNTKIND", "{{.CountKind}}")
