@@ -800,7 +800,7 @@ func (sb *statisticsBuilder) invertedConstrainScan(
 	idx := sb.md.Table(scan.Table).Index(scan.Index)
 	// The constrained column is the first (and only) column in the inverted
 	// index. Using scan.Cols here would also include the PK, which we don't want.
-	constrainedCols.Add(scan.Table.ColumnID(idx.Column(0).Ordinal()))
+	constrainedCols.Add(scan.Table.ColumnID(idx.VirtualInvertedColumn().Ordinal()))
 	if sb.shouldUseHistogram(relProps, constrainedCols) {
 		constrainedCols.ForEach(func(col opt.ColumnID) {
 			colSet := opt.MakeColSet(col)
