@@ -86,6 +86,16 @@ func scatterTables(t *test, conn *gosql.DB, tableNames []string) {
 	}
 }
 
+// disableRangeMerges disables the range merge queue on the cluster.
+func disableRangeMerges(t *test, conn *gosql.DB) {
+	t.Status("disabling range merges")
+	if _, err := conn.Exec(
+		`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // disableAutoStats disables automatic collection of statistics on the cluster.
 func disableAutoStats(t *test, conn *gosql.DB) {
 	t.Status("disabling automatic collection of stats")
