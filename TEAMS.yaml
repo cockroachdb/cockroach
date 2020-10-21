@@ -90,3 +90,7 @@ cockroachdb/rfc-prs:
   email: TODO@cockroachlabs.com
   slack: TODO
   triage_column_id: 0 # TODO
+cockroachdb/http-api-prs:
+  email: TODO@cockroachlabs.com
+  slack: TODO
+  triage_column_id: 0 # TODO
