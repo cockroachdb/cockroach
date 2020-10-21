@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package catalogkv
+package descs
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -31,17 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// UncachedPhysicalAccessor implements direct access to sql object descriptors
-// stored in system tables without any kind of caching.
-type UncachedPhysicalAccessor struct {
-	// Used to avoid allocations.
-	tn tree.TableName
-}
-
-var _ catalog.Accessor = UncachedPhysicalAccessor{}
-
-// GetDatabaseDesc implements the Accessor interface.
-func (a UncachedPhysicalAccessor) GetDatabaseDesc(
+// getDatabaseDesc reads a database descriptor from the store.
+func getDatabaseDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
@@ -56,7 +48,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return systemschema.MakeSystemDatabaseDesc(), nil
 	}
 
-	found, descID, err := LookupDatabaseID(ctx, txn, codec, name)
+	found, descID, err := catalogkv.LookupDatabaseID(ctx, txn, codec, name)
 	if err != nil {
 		return nil, err
 	} else if !found {
@@ -68,7 +60,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 
 	// NB: Take care to actually return nil here rather than a typed nil which
 	// will not compare to nil when wrapped in the returned interface.
-	untypedDesc, err := GetAnyDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable))
+	untypedDesc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, descID, catalogkv.Mutability(flags.RequireMutable))
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +86,8 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	return db, nil
 }
 
-// GetSchema implements the Accessor interface.
-func (a UncachedPhysicalAccessor) GetSchema(
+// getSchema reads a schema descriptor from the store.
+func getSchema(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
@@ -111,7 +103,7 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}
 
 	// Lookup the schema ID.
-	exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, scName)
+	exists, schemaID, err := catalogkv.ResolveSchemaID(ctx, txn, codec, dbID, scName)
 	if err != nil {
 		return false, catalog.ResolvedSchema{}, err
 	} else if !exists {
@@ -131,7 +123,7 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}
 
 	// Get the descriptor from disk.
-	untypedDesc, err := GetAnyDescriptorByID(ctx, txn, codec, schemaID, Mutability(flags.RequireMutable))
+	untypedDesc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, schemaID, catalogkv.Mutability(flags.RequireMutable))
 	if err != nil {
 		return false, catalog.ResolvedSchema{}, err
 	}
@@ -162,8 +154,11 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}, nil
 }
 
-// GetObjectNames implements the Accessor interface.
-func (a UncachedPhysicalAccessor) GetObjectNames(
+// GetObjectNames returns the names of all objects in a database and schema.
+// TODO (lucy): This is exported as a standalone function for now, but it should
+// either go on descs.Collection or not exist. Since it calls getSchema(), it's
+// not entirely straightforward to put it in another package for now.
+func GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
@@ -171,7 +166,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
-	ok, schema, err := a.GetSchema(ctx, txn, codec, dbDesc.GetID(), scName, flags.CommonLookupFlags)
+	ok, schema, err := getSchema(ctx, txn, codec, dbDesc.GetID(), scName, flags.CommonLookupFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -255,8 +250,8 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	return tableNames, nil
 }
 
-// GetObjectDesc implements the Accessor interface.
-func (a UncachedPhysicalAccessor) GetObjectDesc(
+// getObjectDesc reads an object descriptor from the store.
+func getObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
@@ -265,13 +260,13 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
 	// Look up the database ID.
-	dbID, err := GetDatabaseID(ctx, txn, codec, db, flags.Required)
+	dbID, err := catalogkv.GetDatabaseID(ctx, txn, codec, db, flags.Required)
 	if err != nil || dbID == descpb.InvalidID {
 		// dbID can still be invalid if required is false and the database is not found.
 		return nil, err
 	}
 
-	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName,
+	ok, schema, err := getSchema(ctx, txn, codec, dbID, scName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -283,8 +278,8 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 	if !ok {
 		if flags.Required {
-			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&a.tn))
+			tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
+			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&tn))
 		}
 		return nil, nil
 	}
@@ -296,22 +291,22 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	descID := bootstrap.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
 	if descID == descpb.InvalidID {
 		var found bool
-		found, descID, err = LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)
+		found, descID, err = catalogkv.LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)
 		if err != nil {
 			return nil, err
 		}
 		if !found {
 			// KV name resolution failed.
 			if flags.Required {
-				a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-				return nil, sqlerrors.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
+				tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
+				return nil, sqlerrors.NewUndefinedObjectError(&tn, flags.DesiredObjectKind)
 			}
 			return nil, nil
 		}
 	}
 
 	// Look up the object using the discovered database descriptor.
-	desc, err := GetAnyDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable))
+	desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, descID, catalogkv.Mutability(flags.RequireMutable))
 	if err != nil {
 		return nil, err
 	}
@@ -338,8 +333,8 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 	if desc.GetName() != object {
 		if flags.Required {
-			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-			return nil, sqlerrors.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
+			tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
+			return nil, sqlerrors.NewUndefinedObjectError(&tn, flags.DesiredObjectKind)
 		}
 		return nil, nil
 	}
