@@ -1003,9 +1003,19 @@ var builtins = map[string]builtinDefinition{
 		"Calculates the SHA1 hash value of a set of values.",
 	),
 
+	"sha224": hashBuiltin(
+		func() hash.Hash { return sha256.New224() },
+		"Calculates the SHA224 hash value of a set of values.",
+	),
+
 	"sha256": hashBuiltin(
 		func() hash.Hash { return sha256.New() },
 		"Calculates the SHA256 hash value of a set of values.",
+	),
+
+	"sha384": hashBuiltin(
+		func() hash.Hash { return sha512.New384() },
+		"Calculates the SHA384 hash value of a set of values.",
 	),
 
 	"sha512": hashBuiltin(
