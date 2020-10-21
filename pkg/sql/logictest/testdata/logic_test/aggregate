@@ -10,12 +10,13 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRRRRRBBTIIRR
-SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1), var_samp(1),
-variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1), corr(1, 1), sqrdiff(1)
+query IIIIRRRRRRRRBBTIIRRRR
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1),
+var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1),
+corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1)
 FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Regression test for #29695
 query T
@@ -44,12 +45,12 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 ----
 NULL NULL NULL NULL
 
-query IIIIRRRRRRRBBTRR
+query IIIIRRRRRRRBBTRRRR
 SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), var_samp(v),
-bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes), corr(v,k), sqrdiff(v)
+bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes), corr(v,k), sqrdiff(v), covar_pop(v, k), covar_samp(v, k)
 FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT array_agg(v) FROM kv
@@ -67,11 +68,12 @@ SELECT jsonb_agg(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRRRRBBTRR
+query IIIIRRRRRRRBBTRRRR
 SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1),
-var_pop(1), var_samp(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 2), sqrdiff(1)
+var_pop(1), var_samp(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 2), sqrdiff(1),
+covar_pop(1, 2), covar_samp(1, 2)
 ----
-1  1  1  1  1  1  NULL  0  NULL  0  NULL true  true  01  NULL 0
+1  1  1  1  1  1  NULL  0  NULL  0  NULL true  true  01  NULL 0 0 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -1349,40 +1351,55 @@ CREATE TABLE statistics_agg_test (
   y float,
   x float,
   int_y int,
-  int_x int
+  int_x int,
+  dy decimal,
+  dx decimal
 )
 
 statement OK
-INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
-  (1.0,   10.0,    1,   10),
-  (2.0,   25.0,    2,   25),
-  (2.0,   25.0,    2,   25),
-  (3.0,   40.0,    3,   40),
-  (3.0,   40.0,    3,   40),
-  (3.0,   40.0,    3,   40),
-  (4.0,  100.0,    4,  100),
-  (4.0,  100.0,    4,  100),
-  (4.0,  100.0,    4,  100),
-  (4.0,  100.0,    4,  100),
-  (NULL,  NULL, NULL, NULL)
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0,   10.0,    1,   10, 1.0,   10.0),
+  (2.0,   25.0,    2,   25, 2.0,   25.0),
+  (2.0,   25.0,    2,   25, 2.0,   25.0),
+  (3.0,   40.0,    3,   40, 3.0,   40.0),
+  (3.0,   40.0,    3,   40, 3.0,   40.0),
+  (3.0,   40.0,    3,   40, 3.0,   40.0),
+  (4.0,  100.0,    4,  100, 4.0,  100.0),
+  (4.0,  100.0,    4,  100, 4.0,  100.0),
+  (4.0,  100.0,    4,  100, 4.0,  100.0),
+  (4.0,  100.0,    4,  100, 4.0,  100.0),
+  (NULL,  NULL, NULL, NULL, NULL, NULL)
 
-query FFFF
-SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(y, int_x)::decimal, corr(int_y, x)::decimal FROM statistics_agg_test
+query FFFFFFFFFFFFFFF
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(y, int_x)::decimal, corr(int_y, x)::decimal, corr(dy, dx),
+			 covar_pop(y, x)::decimal, covar_pop(int_y, int_x)::decimal, covar_pop(y, int_x)::decimal, covar_pop(int_y, x)::decimal, covar_pop(dy, dx),
+			 covar_samp(y, x)::decimal, covar_samp(int_y, int_x)::decimal, covar_samp(y, int_x)::decimal, covar_samp(int_y, x)::decimal, covar_samp(dy, dx)
+FROM statistics_agg_test
 ----
-0.9330078226479681  0.9330078226479681  0.9330078226479681  0.9330078226479681
+0.9330078226479681  0.9330078226479681  0.9330078226479681  0.9330078226479681 0.933007822647968026281734 33 33 33 33 33 36.666666666666664 36.666666666666664 36.666666666666664 36.666666666666664 36.66666666666666666666667
 
-query F
-SELECT corr(DISTINCT y, x)::decimal FROM statistics_agg_test
+query FFF
+SELECT corr(DISTINCT y, x)::decimal, covar_pop(DISTINCT y, x)::decimal, covar_samp(DISTINCT y, x)::decimal
+FROM statistics_agg_test
 ----
-0.9326733179802503
+0.9326733179802503 35.625 47.5
 
-query F
-SELECT CAST(corr(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 30) AS decimal) FROM statistics_agg_test
+query FFF
+SELECT CAST(corr(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 30) AS decimal),
+       CAST(covar_pop(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal),
+       CAST(covar_samp(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
+FROM statistics_agg_test
 ----
-0.9326733179802503
+0.9326733179802503 35.625 47.5
 
 query error pq: unknown signature: corr\(string, string\)
 SELECT corr(y::string, x::string) FROM statistics_agg_test
+
+query error pq: unknown signature: covar_pop\(string, string\)
+SELECT covar_pop(y::string, x::string) FROM statistics_agg_test
+
+query error pq: unknown signature: covar_samp\(string, string\)
+SELECT covar_samp(y::string, x::string) FROM statistics_agg_test
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
@@ -1391,44 +1408,68 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
 query error float out of range
 SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
 
-statement OK
-TRUNCATE statistics_agg_test
+query error float out of range
+SELECT covar_pop(y, x)::decimal, covar_pop(int_y, int_x)::decimal FROM statistics_agg_test
 
-statement OK
-INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
-  (1.0,  10.0, 1, 10),
-  (2.0,  20.0, 2, 20)
+query error float out of range
+SELECT covar_samp(y, x)::decimal, covar_samp(int_y, int_x)::decimal FROM statistics_agg_test
 
-query RR
-SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+query FFF
+SELECT corr(dy, dx), covar_pop(dy, dx), covar_samp(dy, dx)
+FROM statistics_agg_test
 ----
-1 1
-
-statement OK
-TRUNCATE statistics_agg_test
-
-statement OK
-INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
-  (1.0,  10.0, 1,  10),
-  (2.0, -20.0, 2, -20)
-
-query RR
-SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
-----
--1 -1
+0.933007822647968026281734 33 36.66666666666666666666667
 
 statement OK
 TRUNCATE statistics_agg_test
 
 statement OK
-INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
-  (1.0, -1.0, 1, -1),
-  (1.0,  1.0, 1,  1)
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, 10.0, 1, 10, 1.0, 10.0),
+  (2.0, 20.0, 2, 20, 2.0, 20.0)
 
-query RR
-SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+query RRRRRRRRR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(dy, dx),
+       covar_pop(y, x)::decimal, covar_pop(int_y, int_x)::decimal, covar_pop(dy, dx),
+       covar_samp(y, x)::decimal, covar_samp(int_y, int_x)::decimal, covar_samp(dy, dx)
+FROM statistics_agg_test
 ----
-NULL NULL
+1 1 1 2.5 2.5 2.5 5 5 5
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0,  10.0, 1,  10, 1.0,  10.0),
+  (2.0, -20.0, 2, -20, 2.0, -20.0)
+
+query RRRRRRRRR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(dy, dx),
+       covar_pop(y, x)::decimal, covar_pop(int_y, int_x)::decimal, covar_pop(dy, dx),
+       covar_samp(y, x)::decimal, covar_samp(int_y, int_x)::decimal, covar_samp(dy, dx)
+FROM statistics_agg_test
+----
+-1 -1 -1 -7.5 -7.5 -7.5 -15 -15 -15
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, -1.0, 1, -1, 1.0, -1.0),
+  (1.0,  1.0, 1,  1, 1.0,  1.0)
+
+query RRRRRRRRR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(dy, dx),
+       covar_pop(y, x)::decimal, covar_pop(int_y, int_x)::decimal, covar_pop(dy, dx),
+       covar_samp(y, x)::decimal, covar_samp(int_y, int_x)::decimal, covar_samp(dy, dx)
+FROM statistics_agg_test
+----
+NULL NULL NULL 0 0 0 0 0 0
+
+statement OK
+TRUNCATE statistics_agg_test
 
 subtest string_agg
 
