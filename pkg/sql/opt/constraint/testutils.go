@@ -156,6 +156,14 @@ func parseDatumPath(evalCtx *tree.EvalContext, str string, typs []types.Family) 
 			if err == nil {
 				val = tree.NewDOid(*dInt)
 			}
+		case types.UuidFamily:
+			val, err = tree.ParseDUuidFromString(valStr)
+		case types.INetFamily:
+			val, err = tree.ParseDIPAddrFromINetString(valStr)
+		case types.TimeFamily:
+			val, _, err = tree.ParseDTime(evalCtx, valStr, time.Microsecond)
+		case types.TimeTZFamily:
+			val, _, err = tree.ParseDTimeTZ(evalCtx, valStr, time.Microsecond)
 		default:
 			panic(errors.AssertionFailedf("type %s not supported", typs[i].String()))
 		}
