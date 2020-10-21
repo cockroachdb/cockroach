@@ -1317,18 +1317,50 @@ func (dsp *DistSQLPlanner) addAggregators(
 		orderedGroupColSet.Add(c.ColIdx)
 	}
 
-	// We either have a local stage on each stream followed by a final stage, or
-	// just a final stage. We only use a local stage if:
-	//  - the previous stage is distributed on multiple nodes, and
-	//  - all aggregation functions support it. TODO(radu): we could relax this by
-	//    splitting the aggregation into two different paths and joining on the
-	//    results.
-	//  - we have a mix of aggregations that use distinct and aggregations that
-	//    don't use distinct. TODO(arjun): This would require doing the same as
-	//    the todo as above.
-	multiStage := false
+	// We can have a local stage of distinct processors if all aggregation
+	// functions are distinct.
 	allDistinct := true
-	anyDistinct := false
+	for _, e := range aggregations {
+		if !e.Distinct {
+			allDistinct = false
+			break
+		}
+	}
+	if allDistinct {
+		var distinctColumnsSet util.FastIntSet
+		for _, e := range aggregations {
+			for _, colIdx := range e.ColIdx {
+				distinctColumnsSet.Add(int(colIdx))
+			}
+		}
+		if distinctColumnsSet.Len() > 0 {
+			// We only need to plan distinct processors if we have non-empty
+			// set of argument columns.
+			distinctColumns := make([]uint32, 0, distinctColumnsSet.Len())
+			distinctColumnsSet.ForEach(func(i int) {
+				distinctColumns = append(distinctColumns, uint32(i))
+			})
+			ordering := dsp.convertOrdering(planReqOrdering(n.plan), p.PlanToStreamColMap).Columns
+			orderedColumns := make([]uint32, 0, len(ordering))
+			for _, ord := range ordering {
+				if distinctColumnsSet.Contains(int(ord.ColIdx)) {
+					// Ordered columns must be a subset of distinct columns, so
+					// we only include such into orderedColumns slice.
+					orderedColumns = append(orderedColumns, ord.ColIdx)
+				}
+			}
+			sort.Slice(orderedColumns, func(i, j int) bool { return orderedColumns[i] < orderedColumns[j] })
+			sort.Slice(distinctColumns, func(i, j int) bool { return distinctColumns[i] < distinctColumns[j] })
+			distinctSpec := execinfrapb.ProcessorCoreUnion{
+				Distinct: &execinfrapb.DistinctSpec{
+					OrderedColumns:  orderedColumns,
+					DistinctColumns: distinctColumns,
+				},
+			}
+			// Add distinct processors local to each existing current result processor.
+			p.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes, p.MergeOrdering)
+		}
+	}
 
 	// Check if the previous stage is all on one node.
 	prevStageNode := p.Processors[p.ResultRouters[0]].Node
@@ -1339,73 +1371,30 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 	}
 
-	if prevStageNode == 0 {
-		// Check that all aggregation functions support a local stage.
-		multiStage = true
+	// We either have a local stage on each stream followed by a final stage, or
+	// just a final stage. We only use a local stage if:
+	//  - the previous stage is distributed on multiple nodes, and
+	//  - all aggregation functions support it, and
+	//  - no function is performing distinct aggregation.
+	//  TODO(radu): we could relax this by splitting the aggregation into two
+	//  different paths and joining on the results.
+	multiStage := prevStageNode == 0
+	if multiStage {
 		for _, e := range aggregations {
 			if e.Distinct {
-				// We can't do local aggregation for functions with distinct.
 				multiStage = false
-				anyDistinct = true
-			} else {
-				// We can't do local distinct if we have a mix of distinct and
-				// non-distinct aggregations.
-				allDistinct = false
+				break
 			}
+			// Check that the function supports a local stage.
 			if _, ok := physicalplan.DistAggregationTable[e.Func]; !ok {
 				multiStage = false
 				break
 			}
 		}
 	}
-	if !anyDistinct {
-		allDistinct = false
-	}
 
 	var finalAggsSpec execinfrapb.AggregatorSpec
 	var finalAggsPost execinfrapb.PostProcessSpec
-
-	if !multiStage && allDistinct {
-		// We can't do local aggregation, but we can do local distinct processing
-		// to reduce streaming duplicates, and aggregate on the final node.
-
-		ordering := dsp.convertOrdering(planReqOrdering(n.plan), p.PlanToStreamColMap).Columns
-		orderedColsMap := make(map[uint32]struct{})
-		for _, ord := range ordering {
-			orderedColsMap[ord.ColIdx] = struct{}{}
-		}
-		distinctColsMap := make(map[uint32]struct{})
-		for _, agg := range aggregations {
-			for _, c := range agg.ColIdx {
-				distinctColsMap[c] = struct{}{}
-			}
-		}
-		orderedColumns := make([]uint32, len(orderedColsMap))
-		idx := 0
-		for o := range orderedColsMap {
-			orderedColumns[idx] = o
-			idx++
-		}
-		distinctColumns := make([]uint32, len(distinctColsMap))
-		idx = 0
-		for o := range distinctColsMap {
-			distinctColumns[idx] = o
-			idx++
-		}
-
-		sort.Slice(orderedColumns, func(i, j int) bool { return orderedColumns[i] < orderedColumns[j] })
-		sort.Slice(distinctColumns, func(i, j int) bool { return distinctColumns[i] < distinctColumns[j] })
-
-		distinctSpec := execinfrapb.ProcessorCoreUnion{
-			Distinct: &execinfrapb.DistinctSpec{
-				OrderedColumns:  orderedColumns,
-				DistinctColumns: distinctColumns,
-			},
-		}
-
-		// Add distinct processors local to each existing current result processor.
-		p.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes, p.MergeOrdering)
-	}
 
 	// planToStreamMapSet keeps track of whether or not
 	// p.PlanToStreamColMap has been set to its desired mapping or not.
