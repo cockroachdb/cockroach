@@ -178,7 +178,7 @@ type hashTable struct {
 	// each other.
 	allowNullEquality bool
 
-	overloadHelper overloadHelper
+	overloadHelper colexecbase.OverloadHelper
 	datumAlloc     rowenc.DatumAlloc
 	cancelChecker  CancelChecker
 

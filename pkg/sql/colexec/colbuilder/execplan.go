@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
@@ -395,7 +397,7 @@ func (r opResult) createDiskBackedSort(
 				args.FDSemaphore,
 				diskAccount,
 			)
-			r.ToClose = append(r.ToClose, es.(colexec.Closer))
+			r.ToClose = append(r.ToClose, es.(colexecbase.Closer))
 			return es
 		},
 		args.TestingKnobs.SpillingCallbackFn,
@@ -695,7 +697,7 @@ func NewColOperator(
 			var constructors []execinfrapb.AggregateConstructor
 			var constArguments []tree.Datums
 			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
-			constructors, constArguments, result.ColumnTypes, err = colexec.ProcessAggregations(
+			constructors, constArguments, result.ColumnTypes, err = colexecagg.ProcessAggregations(
 				evalCtx, semaCtx, aggSpec.Aggregations, inputTypes,
 			)
 			if err != nil {
@@ -727,7 +729,7 @@ func NewColOperator(
 				)
 				result.IsStreaming = true
 			}
-			result.ToClose = append(result.ToClose, result.Op.(colexec.Closer))
+			result.ToClose = append(result.ToClose, result.Op.(colexecbase.Closer))
 
 		case core.Distinct != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -858,7 +860,7 @@ func NewColOperator(
 							args.TestingKnobs.DelegateFDAcquisitions,
 							diskAccount,
 						)
-						result.ToClose = append(result.ToClose, ehj.(colexec.Closer))
+						result.ToClose = append(result.ToClose, ehj.(colexecbase.Closer))
 						return ehj
 					},
 					args.TestingKnobs.SpillingCallbackFn,
@@ -927,7 +929,7 @@ func NewColOperator(
 			}
 
 			result.Op = mj
-			result.ToClose = append(result.ToClose, mj.(colexec.Closer))
+			result.ToClose = append(result.ToClose, mj.(colexecbase.Closer))
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
 			if !core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
@@ -1045,7 +1047,7 @@ func NewColOperator(
 					// NewRelativeRankOperator sometimes returns a constOp when there
 					// are no ordering columns, so we check that the returned operator
 					// is an Closer.
-					if c, ok := result.Op.(colexec.Closer); ok {
+					if c, ok := result.Op.(colexecbase.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
 				default:
@@ -1608,7 +1610,7 @@ func planProjectionOperators(
 			// operator.
 			return colexec.NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx), nil
 		}
-		constVal := colexec.GetDatumToPhysicalFn(datumType)(datum)
+		constVal := colconv.GetDatumToPhysicalFn(datumType)(datum)
 		return colexec.NewConstOp(colmem.NewAllocator(ctx, acc, factory), input, datumType, constVal, resultIdx)
 	}
 	resultIdx = -1

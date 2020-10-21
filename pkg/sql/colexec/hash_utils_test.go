@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,7 +42,7 @@ func TestHashFunctionFamily(t *testing.T) {
 	numBuckets := uint64(16)
 	var (
 		cancelChecker     CancelChecker
-		overloadHelperVar overloadHelper
+		overloadHelperVar colexecbase.OverloadHelper
 		datumAlloc        rowenc.DatumAlloc
 	)
 

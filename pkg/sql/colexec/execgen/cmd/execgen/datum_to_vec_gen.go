@@ -16,9 +16,9 @@ import (
 	"text/template"
 )
 
-const utilsTmpl = "pkg/sql/colexec/utils_tmpl.go"
+const datumToVecTmpl = "pkg/sql/colconv/datum_to_vec_tmpl.go"
 
-func genUtils(inputFileContents string, wr io.Writer) error {
+func genDatumToVec(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
@@ -39,5 +39,5 @@ func genUtils(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genUtils, "utils.eg.go", utilsTmpl)
+	registerGenerator(genDatumToVec, "datum_to_vec.eg.go", datumToVecTmpl)
 }

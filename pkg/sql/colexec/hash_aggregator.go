@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -113,10 +114,10 @@ type hashAggregator struct {
 
 	output coldata.Batch
 
-	aggFnsAlloc *aggregateFuncsAlloc
+	aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 	hashAlloc   aggBucketAlloc
 	datumAlloc  rowenc.DatumAlloc
-	toClose     Closers
+	toClose     colexecbase.Closers
 }
 
 var _ closableOperator = &hashAggregator{}
@@ -143,7 +144,7 @@ func NewHashAggregator(
 	constArguments []tree.Datums,
 	outputTypes []*types.T,
 ) (colexecbase.Operator, error) {
-	aggFnsAlloc, inputArgsConverter, toClose, err := newAggregateFuncsAlloc(
+	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		allocator, inputTypes, spec, evalCtx, constructors, constArguments,
 		outputTypes, hashAggregatorAllocSize, true, /* isHashAgg */
 	)
@@ -181,7 +182,7 @@ func (op *hashAggregator) Init() {
 	// Note that we use a batch with fixed capacity because aggregate functions
 	// hold onto the vectors passed in into their Init method, so we cannot
 	// simply reallocate the output batch.
-	// TODO(yuzefovich): consider changing aggregateFunc interface to allow for
+	// TODO(yuzefovich): consider changing AggregateFunc interface to allow for
 	// updating the output vector.
 	op.output = op.allocator.NewMemBatchWithFixedCapacity(op.outputTypes, coldata.BatchSize())
 	op.scratch.eqChains = make([][]int, op.maxBuffered)
@@ -406,7 +407,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			// We know that all selected tuples belong to the same single
 			// group, so we can pass 'nil' for the 'groups' argument.
 			bucket.init(
-				op.output, op.aggFnsAlloc.makeAggregateFuncs(),
+				op.output, op.aggFnsAlloc.MakeAggregateFuncs(),
 				op.aggHelper.makeSeenMaps(), nil, /* groups */
 			)
 			op.aggHelper.performAggregation(

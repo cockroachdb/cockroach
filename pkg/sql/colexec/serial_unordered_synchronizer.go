@@ -34,7 +34,7 @@ type SerialUnorderedSynchronizer struct {
 var (
 	_ colexecbase.Operator = &SerialUnorderedSynchronizer{}
 	_ execinfra.OpNode     = &SerialUnorderedSynchronizer{}
-	_ Closer               = &SerialUnorderedSynchronizer{}
+	_ colexecbase.Closer   = &SerialUnorderedSynchronizer{}
 )
 
 // ChildCount implements the execinfra.OpNode interface.

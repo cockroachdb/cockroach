@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -124,48 +123,13 @@ type ResettableOperator interface {
 	resetter
 }
 
-// Closer is an object that releases resources when Close is called. Note that
-// this interface must be implemented by all operators that could be planned on
-// top of other operators that do actually need to release the resources (e.g.
-// if we have a simple project on top of a disk-backed operator, that simple
-// project needs to implement this interface so that Close() call could be
-// propagated correctly).
-type Closer interface {
-	Close(ctx context.Context) error
-}
-
-// Closers is a slice of Closers.
-type Closers []Closer
-
-// CloseAndLogOnErr closes all Closers and logs the error if the log verbosity
-// is 1 or higher. The given prefix is prepended to the log message.
-// Note: this method should *only* be used when returning an error doesn't make
-// sense.
-func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
-	prefix += ":"
-	for _, closer := range c {
-		if err := closer.Close(ctx); err != nil && log.V(1) {
-			log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
-		}
-	}
-}
-
-// Close closes all Closers and returns the last error (if any occurs).
-func (c Closers) Close(ctx context.Context) error {
-	var lastErr error
-	for _, closer := range c {
-		if err := closer.Close(ctx); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
-}
-
 // CallbackCloser is a utility struct that implements the Closer interface by
 // calling a provided callback.
 type CallbackCloser struct {
 	CloseCb func(context.Context) error
 }
+
+var _ colexecbase.Closer = &CallbackCloser{}
 
 // Close implements the Closer interface.
 func (c *CallbackCloser) Close(ctx context.Context) error {
@@ -192,7 +156,7 @@ func (c *closerHelper) close() bool {
 
 type closableOperator interface {
 	colexecbase.Operator
-	Closer
+	colexecbase.Closer
 }
 
 func makeOneInputCloserHelper(input colexecbase.Operator) oneInputCloserHelper {
@@ -206,13 +170,13 @@ type oneInputCloserHelper struct {
 	closerHelper
 }
 
-var _ Closer = &oneInputCloserHelper{}
+var _ colexecbase.Closer = &oneInputCloserHelper{}
 
 func (c *oneInputCloserHelper) Close(ctx context.Context) error {
 	if !c.close() {
 		return nil
 	}
-	if closer, ok := c.input.(Closer); ok {
+	if closer, ok := c.input.(colexecbase.Closer); ok {
 		return closer.Close(ctx)
 	}
 	return nil

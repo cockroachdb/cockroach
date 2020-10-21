@@ -17,7 +17,7 @@
 //
 // */}}
 
-package colexec
+package colexecagg
 
 import (
 	"context"
@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -53,7 +54,7 @@ type default_AGGKINDAgg struct {
 	}
 }
 
-var _ aggregateFunc = &default_AGGKINDAgg{}
+var _ AggregateFunc = &default_AGGKINDAgg{}
 
 func (a *default_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
@@ -147,7 +148,7 @@ func newDefault_AGGKINDAggAlloc(
 		constructor:        constructor,
 		evalCtx:            evalCtx,
 		inputArgsConverter: inputArgsConverter,
-		resultConverter:    GetDatumToPhysicalFn(outputType),
+		resultConverter:    colconv.GetDatumToPhysicalFn(outputType),
 		otherArgsScratch:   otherArgsScratch,
 		arguments:          constArguments,
 	}
@@ -179,19 +180,19 @@ type default_AGGKINDAggAlloc struct {
 	// vectorized equivalents), and the alloc object is a convenient way to do
 	// so.
 	// TODO(yuzefovich): it might make sense to introduce Close method into
-	// colexec.aggregateFunc interface (which would be a noop for all optimized
+	// colexecagg.AggregateFunc interface (which would be a noop for all optimized
 	// functions) and move the responsibility of closing to the aggregators
 	// because they already have references to all aggregate functions.
 	returnedFns []*default_AGGKINDAgg
 }
 
 var _ aggregateFuncAlloc = &default_AGGKINDAggAlloc{}
-var _ Closer = &default_AGGKINDAggAlloc{}
+var _ colexecbase.Closer = &default_AGGKINDAggAlloc{}
 
 const sizeOfDefault_AGGKINDAgg = int64(unsafe.Sizeof(default_AGGKINDAgg{}))
 const default_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]default_AGGKINDAggAlloc{}))
 
-func (a *default_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
+func (a *default_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(default_AGGKINDAggSliceOverhead + sizeOfDefault_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]default_AGGKINDAgg, a.allocSize)
