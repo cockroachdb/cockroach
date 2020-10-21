@@ -123,6 +123,8 @@ func buildOpaque(
 		plan, err = p.GrantRole(ctx, n)
 	case *tree.ReassignOwnedBy:
 		plan, err = p.ReassignOwnedBy(ctx, n)
+	case *tree.DropOwnedBy:
+		plan, err = p.DropOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:
 		plan, err = p.RefreshMaterializedView(ctx, n)
 	case *tree.RenameColumn:
@@ -228,6 +230,7 @@ func init() {
 		&tree.Grant{},
 		&tree.GrantRole{},
 		&tree.ReassignOwnedBy{},
+		&tree.DropOwnedBy{},
 		&tree.RefreshMaterializedView{},
 		&tree.RenameColumn{},
 		&tree.RenameDatabase{},

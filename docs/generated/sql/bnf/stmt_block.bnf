@@ -14,7 +14,8 @@ stmt ::=
 	| prepare_stmt
 	| revoke_stmt
 	| savepoint_stmt
-	| reassign_owned_stmt
+	| reassign_owned_by_stmt
+	| drop_owned_by_stmt
 	| release_stmt
 	| refresh_stmt
 	| nonpreparable_set_stmt
@@ -90,8 +91,11 @@ revoke_stmt ::=
 savepoint_stmt ::=
 	'SAVEPOINT' name
 
-reassign_owned_stmt ::=
+reassign_owned_by_stmt ::=
 	'REASSIGN' 'OWNED' 'BY' role_spec_list 'TO' role_spec
+
+drop_owned_by_stmt ::=
+	'DROP' 'OWNED' 'BY' role_spec_list opt_drop_behavior
 
 release_stmt ::=
 	'RELEASE' savepoint_name
@@ -313,6 +317,11 @@ role_spec ::=
 	non_reserved_word_or_sconst
 	| 'CURRENT_USER'
 	| 'SESSION_USER'
+
+opt_drop_behavior ::=
+	'CASCADE'
+	| 'RESTRICT'
+	| 
 
 savepoint_name ::=
 	'SAVEPOINT' name
@@ -708,11 +717,6 @@ opt_table ::=
 
 relation_expr_list ::=
 	( relation_expr ) ( ( ',' relation_expr ) )*
-
-opt_drop_behavior ::=
-	'CASCADE'
-	| 'RESTRICT'
-	| 
 
 set_clause_list ::=
 	( set_clause ) ( ( ',' set_clause ) )*

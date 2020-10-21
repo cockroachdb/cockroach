@@ -602,7 +602,13 @@ func (*Prepare) StatementTag() string { return "PREPARE" }
 func (*ReassignOwnedBy) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ReassignOwnedBy) StatementTag() string { return "REASSIGN OWNED" }
+func (*ReassignOwnedBy) StatementTag() string { return "REASSIGN OWNED BY" }
+
+// StatementType implements the Statement interface.
+func (*DropOwnedBy) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropOwnedBy) StatementTag() string { return "DROP OWNED BY" }
 
 // StatementType implements the Statement interface.
 func (*RefreshMaterializedView) StatementType() StatementType { return DDL }
@@ -1111,6 +1117,7 @@ func (n *Import) String() string                         { return AsString(n) }
 func (n *ParenSelect) String() string                    { return AsString(n) }
 func (n *Prepare) String() string                        { return AsString(n) }
 func (n *ReassignOwnedBy) String() string                { return AsString(n) }
+func (n *DropOwnedBy) String() string                    { return AsString(n) }
 func (n *ReleaseSavepoint) String() string               { return AsString(n) }
 func (n *Relocate) String() string                       { return AsString(n) }
 func (n *RefreshMaterializedView) String() string        { return AsString(n) }

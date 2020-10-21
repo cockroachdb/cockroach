@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
-// ReassignOwnedByNode represents a REASSIGN OWNED BY <name> TO <name> statement.
+// ReassignOwnedByNode represents a REASSIGN OWNED BY <role(s)> TO <role> statement.
 type reassignOwnedByNode struct {
 	n *tree.ReassignOwnedBy
 }

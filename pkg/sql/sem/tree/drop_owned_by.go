@@ -10,23 +10,25 @@
 
 package tree
 
-// ReassignOwnedBy represents a REASSIGN OWNED BY <name> TO <name> statement.
-type ReassignOwnedBy struct {
-	OldRoles []string
-	NewRole  string
+// DropOwnedBy represents a DROP OWNED BY command.
+type DropOwnedBy struct {
+	Roles         []string
+	DropBehavior  DropBehavior
 }
 
-var _ Statement = &ReassignOwnedBy{}
+var _ Statement = &DropOwnedBy{}
 
 // Format implements the NodeFormatter interface.
-func (node *ReassignOwnedBy) Format(ctx *FmtCtx) {
-	ctx.WriteString("REASSIGN OWNED BY ")
-	for i := range node.OldRoles {
+func (node *DropOwnedBy) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP OWNED BY ")
+	for i := range node.Roles {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNameP(&node.OldRoles[i])
+		ctx.FormatNameP(&node.Roles[i])
 	}
-	ctx.WriteString(" TO ")
-	ctx.FormatNameP(&node.NewRole)
+	if node.DropBehavior != DropDefault {
+		ctx.WriteString(" ")
+		ctx.WriteString(node.DropBehavior.String())
+	}
 }

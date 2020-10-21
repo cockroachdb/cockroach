@@ -8,7 +8,6 @@ exec
 CREATE ROLE testuser;
 CREATE ROLE testuser2;
 CREATE TABLE t();
-GRANT testuser, testuser2 TO root;
 GRANT CREATE ON DATABASE defaultdb TO testuser, testuser2;
 ALTER TABLE t OWNER TO testuser
 ----
