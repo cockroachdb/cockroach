@@ -578,23 +578,159 @@ func TestFilterBucket(t *testing.T) {
 		runTest(h, testData, types.TimestampFamily)
 	})
 
+	t.Run("time", func(t *testing.T) {
+		upperBound, _, err := tree.ParseDTime(&evalCtx, "05:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerBound, _, err := tree.ParseDTime(&evalCtx, "04:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
+			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
+		}}
+
+		ub1, _, err := tree.ParseDTime(&evalCtx, "04:15:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		testData := []testCase{
+			{
+				span:     "[/04:00:00 - /04:15:00]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 15.5, DistinctRange: 7.75, UpperBound: ub1},
+			},
+			{
+				span:     "[/04:30:00 - /05:00:00]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound},
+			},
+		}
+
+		runTest(h, testData, types.TimeFamily)
+	})
+
+	t.Run("timetz", func(t *testing.T) {
+		upperBound, _, err := tree.ParseDTimeTZ(&evalCtx, "05:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerBound, _, err := tree.ParseDTimeTZ(&evalCtx, "04:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
+			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
+		}}
+
+		ub1, _, err := tree.ParseDTimeTZ(&evalCtx, "04:15:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		testData := []testCase{
+			{
+				span:     "[/04:00:00 - /04:15:00]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 15.5, DistinctRange: 7.75, UpperBound: ub1},
+			},
+			{
+				span:     "[/04:30:00 - /05:00:00]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound},
+			},
+		}
+
+		runTest(h, testData, types.TimeTZFamily)
+	})
+
 	t.Run("string", func(t *testing.T) {
 		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
-			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("baq"))},
-			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("foo")},
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("bear"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("bobcat")},
 		}}
 		testData := []testCase{
 			{
-				span:     "[/bar - /baz]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("baz")},
+				span:     "[/bluejay - /boar]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.92, DistinctRange: 2.92, UpperBound: tree.NewDString("boar")},
 			},
 			{
-				span:     "[/baz - /foo]",
-				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("foo")},
+				span:     "[/beer - /bobcat]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 9.98, DistinctRange: 9.98, UpperBound: tree.NewDString("bobcat")},
 			},
 		}
 
 		runTest(h, testData, types.StringFamily)
+	})
+
+	t.Run("uuid", func(t *testing.T) {
+		lowerBound, err := tree.ParseDUuidFromString("2189ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+		upperBound, err := tree.ParseDUuidFromString("4589ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBound},
+		}}
+
+		newUpperBound, err := tree.ParseDUuidFromString("4289ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		testData := []testCase{
+			{
+				span:     "[/3189ad07-52f2-4d60-83e8-4a8347fef718 - /4289ad07-52f2-4d60-83e8-4a8347fef718]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.72, DistinctRange: 4.72, UpperBound: newUpperBound},
+			},
+			{
+				span:     "[/3189ad07-52f2-4d60-83e8-4a8347fef718 - /4589ad07-52f2-4d60-83e8-4a8347fef718]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5.56, DistinctRange: 5.56, UpperBound: upperBound},
+			},
+		}
+
+		runTest(h, testData, types.UuidFamily)
+	})
+
+	t.Run("inet", func(t *testing.T) {
+		lowerBound, err := tree.ParseDIPAddrFromINetString("192.168.100.128")
+		if err != nil {
+			t.Fatal(err)
+		}
+		upperBound, err := tree.ParseDIPAddrFromINetString("201.156.156.128")
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBound},
+		}}
+
+		newUpperBound, err := tree.ParseDIPAddrFromINetString("198.180.50.30")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		testData := []testCase{
+			{
+				span:     "[/196.140.90.20 - /198.180.50.30]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.41, DistinctRange: 2.41, UpperBound: newUpperBound},
+			},
+			{
+				span:     "[/196.140.90.20 - /201.156.156.128]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5.66, DistinctRange: 5.66, UpperBound: upperBound},
+			},
+			{
+				span:     "[/0:0:0:0:0:0:c48c:5a14 - /198.180.50.30]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.41, DistinctRange: 2.41, UpperBound: newUpperBound},
+			},
+		}
+
+		runTest(h, testData, types.INetFamily)
 	})
 
 }

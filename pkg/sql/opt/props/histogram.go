@@ -12,6 +12,7 @@ package props
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -21,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
@@ -722,15 +725,97 @@ func getRangesBeforeAndAfter(
 			rng = float64(upper.Sub(lower))
 			return rng, true
 
+		case types.TimeFamily:
+			lower := lowerBound.(*tree.DTime)
+			upper := upperBound.(*tree.DTime)
+			rng = float64(*upper) - float64(*lower)
+			return rng, true
+
+		case types.TimeTZFamily:
+			lower := lowerBound.(*tree.DTimeTZ).TimeOfDay
+			upper := upperBound.(*tree.DTimeTZ).TimeOfDay
+			rng = float64(upper) - float64(lower)
+			return rng, true
+
 		default:
 			return 0, false
 		}
 	}
 
-	rangeBefore, okBefore := getRange(bucketLowerBound, bucketUpperBound)
-	rangeAfter, okAfter := getRange(spanLowerBound, spanUpperBound)
-	ok = okBefore && okAfter
+	getRangeNonNumeric := func(
+		lowerBoundBefore, upperBoundBefore, lowerBoundAfter, upperBoundAfter tree.Datum,
+	) (rangeBefore, rangeAfter float64, ok bool) {
 
+		// Utilizes an array to simplify number of repetitive calls
+		boundArr := []tree.Datum{lowerBoundBefore, upperBoundBefore, lowerBoundAfter, upperBoundAfter}
+		boundArrByte := make([][]byte, 4)
+
+		// Encode each bound value into a sortable byte format
+		for i := range boundArr {
+			var err error
+			boundArrByte[i], err = rowenc.EncodeTableKey(nil, boundArr[i], encoding.Ascending)
+			if err != nil {
+				return 0, 0, false
+			}
+		}
+
+		if lowerBoundBefore.ResolvedType().Family() == types.INetFamily {
+			// check the format of the INetFamily - ie. IPV4 vs. IPV6
+			ipv4Fam := false
+			ipv6Fam := false
+			for i := range boundArrByte {
+				if boundArrByte[i][1] == 0x0 {
+					ipv4Fam = true
+				} else if boundArrByte[i][1] == 0x01 {
+					ipv6Fam = true
+				}
+			}
+
+			// When IPV4 and IPV6 bound types are mixed, there are 2 actions:
+			// 1. Trim the leading 0's/f's from IPV6 when the form is : 0:0:0:0:0:0:XX:XX or 0:0:0:0:0:ffff:XX:XX/X.X.X.X
+			// 2. Remove the prefix for IPV4 as it will not match the IPV6 prefix
+			if ipv4Fam && ipv6Fam {
+				for i := range boundArrByte {
+					if boundArrByte[i][1] == 0x0 {
+						// First 4 bytes are the prefix including the IPV4 family tag & escape code
+						boundArrByte[i] = boundArrByte[i][4:]
+					} else if boundArrByte[i][1] == 0x01 {
+						// There are 2 types of formats the IPV6 tag can take
+						// Depending on this, the number of escape codes changes and accordingly the prefix length
+						if boundArrByte[i][23] == 0xff && boundArrByte[i][24] == 0xff {
+							boundArrByte[i] = boundArrByte[i][25:]
+						} else {
+							boundArrByte[i] = boundArrByte[i][27:]
+						}
+					}
+				}
+			}
+		}
+
+		// Remove common prefix and fix length to 4 bytes
+		maskUpperByte, ind := getCommonPrefix(boundArrByte[0], boundArrByte[1], boundArrByte[2], boundArrByte[3])
+		for i := range boundArrByte {
+			boundArrByte[i] = fixLenRemovePrefix(boundArrByte[i], ind, 4 /* fixLen */, maskUpperByte)
+		}
+
+		rngBeforeByte := subtractByteArr(boundArrByte[0], boundArrByte[1])
+		rngAfterByte := subtractByteArr(boundArrByte[2], boundArrByte[3])
+		rngBefore := binary.BigEndian.Uint32(rngBeforeByte)
+		rngAfter := binary.BigEndian.Uint32(rngAfterByte)
+
+		return float64(rngBefore), float64(rngAfter), true
+	}
+
+	// For non-numeric types, we require computing the prefix across bucket/span bounds
+	ok = false
+	if isNonNumeric(bucketLowerBound.ResolvedType()) {
+		rangeBefore, rangeAfter, ok = getRangeNonNumeric(bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound)
+	} else {
+		okBefore, okAfter := false, false
+		rangeBefore, okBefore = getRange(bucketLowerBound, bucketUpperBound)
+		rangeAfter, okAfter = getRange(spanLowerBound, spanUpperBound)
+		ok = okBefore && okAfter
+	}
 	return rangeBefore, rangeAfter, ok
 }
 
@@ -741,6 +826,148 @@ func isDiscrete(typ *types.T) bool {
 		return true
 	}
 	return false
+}
+
+// isNonNumeric returns true if the given data type is non-numeric
+// Note: this function does not support all data-types within cockroach db
+// a subset of non-numeric types are considered in conjunction
+func isNonNumeric(typ *types.T) bool {
+	switch typ.Family() {
+	case types.StringFamily, types.UuidFamily, types.INetFamily:
+		return true
+	}
+	return false
+}
+
+// extractHalfByte returns the upper 4 bits of byteVal if upperByte = True, else the lower 4 bits
+func extractHalfByte(byteVal byte, upperByte bool) byte {
+	if upperByte {
+		return (byteVal & 0xf0) >> 4
+	}
+	return byteVal & 0x0f
+}
+
+// getCommonPrefix returns the first index where the 4 byte arrays each contain a different value
+// and sets maskUpperByte = True, if the upper 4 bits pointed to by index are the same between all arrays
+//
+// Given the following ByteArrays
+// 	[98  97  114]
+// 	[102 111 111]
+//	[98  97  114]
+//  [98  97  122  114]
+//
+// The expected output will be: ind = 0, maskUpperByte = True
+func getCommonPrefix(byteArr1, byteArr2, byteArr3, byteArr4 []byte) (maskUpperByte bool, ind int) {
+
+	currIndMatching := func(ind int) bool {
+		if byteArr1[ind] == byteArr2[ind] && byteArr1[ind] == byteArr3[ind] && byteArr1[ind] == byteArr4[ind] {
+			return true
+		}
+		return false
+	}
+
+	// Finds the first instance between all four byteArrays, where ind points to different byte values
+	ind = 0
+	for (ind < len(byteArr1) && ind < len(byteArr2) && ind < len(byteArr3) && ind < len(byteArr4)) &&
+		(currIndMatching(ind)) {
+		ind++
+	}
+
+	// Checks to see if the upper 4 bits pointed to by ind is the same between all 4 byteArrays
+	maskUpperByte = false
+	if (ind < len(byteArr1) && ind < len(byteArr2) && ind < len(byteArr3) && ind < len(byteArr4)) &&
+		(byteArr1[ind]&0xf0 == byteArr2[ind]&0xf0 && byteArr1[ind]&0xf0 == byteArr3[ind]&0xf0 &&
+			byteArr1[ind]&0xf0 == byteArr4[ind]&0xf0) {
+		maskUpperByte = true
+	}
+
+	return maskUpperByte, ind
+}
+
+// fixLenRemovePrefix returns a byte array of size fixLen starting from ind in the original byteArray
+// if maskUpperByte = True, a byte array of size fixLen starting from the lower 4 bits of ind is returned
+//
+// Given the following Information:
+// byteArr = [98 97 114], ind = 0, fixLen = 4, maskUpperByte = True
+//
+// The expected output will be: [38 23 32 00]
+func fixLenRemovePrefix(byteArr []byte, ind, fixLen int, maskUpperByte bool) (byteArrFix []byte) {
+
+	// Preallocate fixed length arrays to simplify the code in the following 3 cases:
+	// 1. ind > len(byteArr)
+	// 2. maskUpperByte is set, and byteArr needs to be bit-shifted 4 bits
+	// 3. len(byteArr) < fixLen and needs to be zero extended
+	byteArrFix = make([]byte, fixLen)
+	newArrInd := 0
+	halfByteInd := 1
+	halfByteMult := []byte{0x01, 0x10}
+
+	// if maskUpperByte is set, the upper 4 bits pointed to by ind are masked
+	if maskUpperByte && ind < len(byteArr) {
+		byteArr[ind] &= 0x0f
+		halfByteInd--
+	}
+
+	for newArrInd < fixLen && ind < len(byteArr) {
+		// The if-conditions handle 3 main cases:
+		// 1. Current non-numeric types use an escape-based encoding, so we need to skip over the escape codes
+		// 2. If markUpperByte is set, we need to bit shift byte array 4 bits to the right
+		// 3. Copy byteArr into byteArrFix normally
+		if byteArr[ind] == 0x00 && (byteArr[ind+1] == 0xff || byteArr[ind+1] == 0x01) {
+			// When an escape code is encountered, skip the 0 value (as array was pre-initialized)
+			ind += 2
+			newArrInd++
+			halfByteInd = 1
+		} else if maskUpperByte {
+			byteArrFix[newArrInd] = byteArrFix[newArrInd] +
+				(halfByteMult[((halfByteInd+1)%2)] * extractHalfByte(byteArr[ind], halfByteInd != 0))
+			halfByteInd = (halfByteInd + 1) % 2
+			// The lowerHalfByte in byteArr will be the upperHalfByte in byteArrFix
+			// for this reason, the way we increment oldArrInd and newArrInd is staggered
+			if halfByteInd == 1 {
+				ind++
+			} else if halfByteInd == 0 {
+				newArrInd++
+			}
+		} else {
+			byteArrFix[newArrInd] = byteArrFix[newArrInd] +
+				(halfByteMult[halfByteInd] * extractHalfByte(byteArr[ind], halfByteInd != 0))
+			halfByteInd = (halfByteInd + 1) % 2
+			if halfByteInd == 1 {
+				ind++
+				newArrInd++
+			}
+		}
+	}
+
+	return byteArrFix
+}
+
+// subtractByteArr subtracts byteArr1 from byteArr2
+// the smaller len byteArr is implicitly zero extended to match the length of the longer byteArr
+func subtractByteArr(byteArr1, byteArr2 []byte) []byte {
+	maxByteLen := maxInt(len(byteArr1), len(byteArr2))
+	ans := make([]byte, maxByteLen)
+	ansInd := len(ans) - 1
+	borrow := 0
+	col := 0
+	for i := maxByteLen - 1; i >= 0; i-- {
+		if i >= len(byteArr2) {
+			col = 256 - int(byteArr1[i]) + borrow
+		} else if i >= len(byteArr1) {
+			col = int(byteArr2[i]) + borrow
+		} else {
+			col = int(byteArr2[i]) - int(byteArr1[i]) + borrow
+		}
+		// Borrow is either -1, or 0, used in the following iteration
+		borrow = col >> 8
+		if col < 0 {
+			col += 256
+		}
+		ans[ansInd] = byte(col)
+		ansInd--
+	}
+	return ans
 }
 
 // histogramWriter prints histograms with the following formatting:
@@ -805,4 +1032,11 @@ func (w *histogramWriter) write(out io.Writer) {
 	for i := range w.cells[boundaries] {
 		fmt.Fprintf(out, "%s", tablewriter.Pad(w.cells[boundaries][i], "-", w.colWidths[i]))
 	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
