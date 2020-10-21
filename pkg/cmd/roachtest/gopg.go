@@ -154,7 +154,7 @@ func registerGopg(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "gopg",
-		Owner:      OwnerAppDev,
+		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v19.2.0",
 		Tags:       []string{`default`, `orm`},
