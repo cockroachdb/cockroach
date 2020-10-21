@@ -131,7 +131,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 		col := index.Column(i)
 		ordinal := col.Ordinal()
 		nullable := col.IsNullable()
-		if isInverted && i == 0 {
+		if isInverted && col == index.VirtualInvertedColumn() {
 			// We pass the real column to the index constraint generator (instead of
 			// the virtual column).
 			// TODO(radu): improve the inverted index constraint generator to handle
