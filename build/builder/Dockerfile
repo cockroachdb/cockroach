@@ -224,8 +224,11 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
  && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
  && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
  && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
+ && echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list \
+ && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
  && apt-get update
 
+# bazel - build system
 # ccache - speed up C and C++ compilation
 # lsof - roachprod monitor
 # netcat - roachprod monitor
@@ -237,6 +240,7 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # chrome - ui
 # unzip - for installing awscli
 RUN apt-get install -y --no-install-recommends \
+    bazel-3.7.0 \
     ccache \
     google-cloud-sdk \
     lsof \
