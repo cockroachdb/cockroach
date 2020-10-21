@@ -807,13 +807,14 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
-		spanExpr, pfState, geoOk = invertedidx.TryConstrainGeoIndex(
-			c.e.evalCtx.Context, c.e.f, filters, scanPrivate.Table, index,
+		// TODO(mgartner): Consider optional filters (like check constraints)
+		// that can help constrain the prefix columns.
+		spanExpr, constraint, remainingFilters, pfState, geoOk := invertedidx.TryConstrainGeoIndex(
+			c.e.evalCtx, c.e.f, filters, scanPrivate.Table, index,
 		)
 		if geoOk {
-			// Geo index scans can never be tight, so the remaining filters do
-			// not change.
 			spansToRead = spanExpr.SpansToRead
+			filters = remainingFilters
 		} else {
 			constraint, filters, nonGeoOk = c.tryConstrainIndex(
 				filters,
@@ -837,7 +838,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// inverted filter.
 		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
-		invertedCol := scanPrivate.Table.IndexColumnID(index, 0)
+		invertedCol := scanPrivate.Table.ColumnID(index.VirtualInvertedColumn().Ordinal())
 		if spanExpr != nil {
 			newScanPrivate.Cols.Add(invertedCol)
 		}
