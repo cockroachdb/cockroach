@@ -2958,6 +2958,253 @@ project
       ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
       └── key: (1)
 
+# Tests for multi-column inverted indexes.
+
+exec-ddl
+CREATE TABLE m (
+  k INT PRIMARY KEY,
+  a STRING,
+  b STRING,
+  geom GEOMETRY,
+  INVERTED INDEX multicol (a, geom)
+)
+----
+
+# Constrain a single prefix column to one value.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM m WHERE a = 'foo' AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3 geom:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3,4)
+ ├── index-join m
+ │    ├── columns: k:1!null a:2 b:3 geom:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4)
+ │         ├── key: (1)
+ │         └── scan m@multicol
+ │              ├── columns: k:1!null geom_inverted_key:6!null
+ │              ├── constraint: /2: [/'foo' - /'foo']
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Constrain a single prefix column to multiple point values.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM m WHERE a IN ('foo', 'bar') AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3 geom:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join m
+ │    ├── columns: k:1!null a:2 b:3 geom:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4)
+ │         ├── key: (1)
+ │         └── scan m@multicol
+ │              ├── columns: k:1!null geom_inverted_key:6!null
+ │              ├── constraint: /2
+ │              │    ├── [/'bar' - /'bar']
+ │              │    └── [/'foo' - /'foo']
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Do not generate an inverted index scan when a single prefix column is
+# constrained to a range.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM m WHERE a > 'x' AND a < 'y' AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3 geom:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan m
+ │    ├── columns: k:1!null a:2 b:3 geom:4
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      ├── (a:2 > 'x') AND (a:2 < 'y') [outer=(2), constraints=(/2: [/e'x\x00' - /'y'); tight)]
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+exec-ddl
+DROP INDEX multicol
+----
+
+exec-ddl
+CREATE INVERTED INDEX multicol ON m (a, b, geom)
+----
+
+# Constrain multiple prefix columns to one value.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM m WHERE a = 'foo' AND b = 'bar' AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null geom:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ ├── index-join m
+ │    ├── columns: k:1!null a:2 b:3 geom:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4)
+ │         ├── key: (1)
+ │         └── scan m@multicol
+ │              ├── columns: k:1!null geom_inverted_key:7!null
+ │              ├── constraint: /2/3: [/'foo'/'bar' - /'foo'/'bar']
+ │              ├── inverted constraint: /7/1
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(7)
+ └── filters
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Constrain multiple prefix columns to multiple point values.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM m WHERE a IN ('foo', 'bar') AND b IN ('baz', 'bob') AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null geom:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join m
+ │    ├── columns: k:1!null a:2 b:3 geom:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4)
+ │         ├── key: (1)
+ │         └── scan m@multicol
+ │              ├── columns: k:1!null geom_inverted_key:7!null
+ │              ├── constraint: /2/3
+ │              │    ├── [/'bar'/'baz' - /'bar'/'baz']
+ │              │    ├── [/'bar'/'bob' - /'bar'/'bob']
+ │              │    ├── [/'foo'/'baz' - /'foo'/'baz']
+ │              │    └── [/'foo'/'bob' - /'foo'/'bob']
+ │              ├── inverted constraint: /7/1
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(7)
+ └── filters
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+
+# Do not generate an inverted index scan when the first prefix column is
+# constrained to a range.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM m WHERE a > 'x' AND a < 'y' AND b = 'foo' AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null geom:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ ├── scan m
+ │    ├── columns: k:1!null a:2 b:3 geom:4
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      ├── (a:2 > 'x') AND (a:2 < 'y') [outer=(2), constraints=(/2: [/e'x\x00' - /'y'); tight)]
+      ├── b:3 = 'foo' [outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Do not generate an inverted index scan when the second prefix column is
+# constrained to a range.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM m WHERE a = 'foo' AND b > 'x' AND b < 'y' AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null geom:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3,4)
+ ├── scan m
+ │    ├── columns: k:1!null a:2 b:3 geom:4
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      ├── (b:3 > 'x') AND (b:3 < 'y') [outer=(3), constraints=(/3: [/e'x\x00' - /'y'); tight)]
+      ├── a:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Do not generate an inverted index scan when neither prefix column is constrained.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM m WHERE ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2 b:3 geom:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan m
+ │    ├── columns: k:1!null a:2 b:3 geom:4
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
 # --------------------------------------------------
 # GenerateZigzagJoins
 # --------------------------------------------------

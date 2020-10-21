@@ -1174,6 +1174,14 @@ func (oi *optIndex) LaxKeyColumnCount() int {
 	return oi.numLaxKeyCols
 }
 
+// NonInvertedPrefixColumnCount is part of the cat.Index interface.
+func (oi *optIndex) NonInvertedPrefixColumnCount() int {
+	if !oi.IsInverted() {
+		panic("non-inverted indexes do not have inverted prefix columns")
+	}
+	return len(oi.desc.ColumnIDs) - 1
+}
+
 // Column is part of the cat.Index interface.
 func (oi *optIndex) Column(i int) cat.IndexColumn {
 	length := len(oi.desc.ColumnIDs)
@@ -1851,6 +1859,11 @@ func (oi *optVirtualIndex) LaxKeyColumnCount() int {
 	return 2
 }
 
+// NonInvertedPrefixColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) NonInvertedPrefixColumnCount() int {
+	panic("virtual indexes are not inverted")
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optVirtualTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
@@ -1887,7 +1900,7 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 
 // VirtualInvertedColumn is part of the cat.Index interface.
 func (oi *optVirtualIndex) VirtualInvertedColumn() cat.IndexColumn {
-	panic("virtual indexes do not have inverted virtual columns")
+	panic("virtual indexes are not inverted")
 }
 
 // Predicate is part of the cat.Index interface.
