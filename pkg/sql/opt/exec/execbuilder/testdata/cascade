@@ -823,19 +823,23 @@ CREATE TABLE delrng3 (
   FOREIGN KEY (p,q) REFERENCES delrng2(p,q) ON DELETE CASCADE
 );
 
-query TTT
+query T
 EXPLAIN DELETE FROM delrng1 WHERE p = 1
 ----
-·                  distribution  local
-·                  vectorized    false
-root               ·             ·
- ├── delete range  ·             ·
- │                 from          delrng1
- │                 spans         [/1 - /1]
- ├── fk-cascade    ·             ·
- │                 fk            fk_p_ref_delrng1
- └── fk-cascade    ·             ·
-·                  fk            fk_p_ref_delrng1
+distribution: local
+vectorized: false
+·
+• root
+│
+├── • delete range
+│     from: delrng1
+│     spans: [/1 - /1]
+│
+├── • fk-cascade
+│     fk: fk_p_ref_delrng1
+│
+└── • fk-cascade
+      fk: fk_p_ref_delrng1
 
 query T kvtrace(DelRange)
 DELETE FROM delrng1 WHERE p = 1

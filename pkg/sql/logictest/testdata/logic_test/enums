@@ -1082,10 +1082,10 @@ CREATE TYPE local_type AS ENUM ('local');
 CREATE TABLE local_table (x INT);
 INSERT INTO local_table VALUES (1), (2)
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
 ----
-·     distribution  local
+distribution: local
 
 statement ok
 ROLLBACK
@@ -1096,10 +1096,10 @@ ALTER TYPE greeting RENAME TO greeting_local;
 CREATE TABLE local_table (x INT);
 INSERT INTO local_table VALUES (1), (2)
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
 ----
-·     distribution  local
+distribution: local
 
 statement ok
 ROLLBACK

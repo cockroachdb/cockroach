@@ -98,83 +98,105 @@ CREATE TABLE xyz (
   z INT
 )
 
-query TTT
+query T
 EXPLAIN UPDATE xyz SET y = x
 ----
-·          distribution      local
-·          vectorized        false
-update     ·                 ·
- │         table             xyz
- │         set               y
- │         auto commit       ·
- └── scan  ·                 ·
-·          missing stats     ·
-·          table             xyz@primary
-·          spans             FULL SCAN
-·          locking strength  for update
+distribution: local
+vectorized: false
+·
+• update
+│ table: xyz
+│ set: y
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: xyz@primary
+      spans: FULL SCAN
+      locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-·               distribution         local                 ·                        ·
-·               vectorized           false                 ·                        ·
-update          ·                    ·                     ()                       ·
- │              estimated row count  0 (missing stats)     ·                        ·
- │              table                xyz                   ·                        ·
- │              set                  x, y                  ·                        ·
- │              auto commit          ·                     ·                        ·
- └── render     ·                    ·                     (x, y, z, x_new, y_new)  ·
-      │         estimated row count  1000 (missing stats)  ·                        ·
-      │         render 0             1                     ·                        ·
-      │         render 1             2                     ·                        ·
-      │         render 2             x                     ·                        ·
-      │         render 3             y                     ·                        ·
-      │         render 4             z                     ·                        ·
-      └── scan  ·                    ·                     (x, y, z)                ·
-·               estimated row count  1000 (missing stats)  ·                        ·
-·               table                xyz@primary           ·                        ·
-·               spans                FULL SCAN             ·                        ·
-·               locking strength     for update            ·                        ·
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new, y_new)
+    │ estimated row count: 1000 (missing stats)
+    │ render 0: 1
+    │ render 1: 2
+    │ render 2: x
+    │ render 3: y
+    │ render 4: z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
+          locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
 ----
-·               distribution         local                 ·                ·
-·               vectorized           false                 ·                ·
-update          ·                    ·                     ()               ·
- │              estimated row count  0 (missing stats)     ·                ·
- │              table                xyz                   ·                ·
- │              set                  x, y                  ·                ·
- │              auto commit          ·                     ·                ·
- └── project    ·                    ·                     (x, y, z, y, x)  ·
-      └── scan  ·                    ·                     (x, y, z)        ·
-·               estimated row count  1000 (missing stats)  ·                ·
-·               table                xyz@primary           ·                ·
-·               spans                FULL SCAN             ·                ·
-·               locking strength     for update            ·                ·
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, z, y, x)
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
+          locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
 ----
-·                    distribution         local                 ·                        ·
-·                    vectorized           false                 ·                        ·
-update               ·                    ·                     ()                       ·
- │                   estimated row count  0 (missing stats)     ·                        ·
- │                   table                xyz                   ·                        ·
- │                   set                  x, y                  ·                        ·
- │                   auto commit          ·                     ·                        ·
- └── project         ·                    ·                     (x, y, z, x_new, x_new)  ·
-      └── render     ·                    ·                     (x_new, x, y, z)         ·
-           │         estimated row count  1000 (missing stats)  ·                        ·
-           │         render 0             2                     ·                        ·
-           │         render 1             x                     ·                        ·
-           │         render 2             y                     ·                        ·
-           │         render 3             z                     ·                        ·
-           └── scan  ·                    ·                     (x, y, z)                ·
-·                    estimated row count  1000 (missing stats)  ·                        ·
-·                    table                xyz@primary           ·                        ·
-·                    spans                FULL SCAN             ·                        ·
-·                    locking strength     for update            ·                        ·
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, z, x_new, x_new)
+    │
+    └── • render
+        │ columns: (x_new, x, y, z)
+        │ estimated row count: 1000 (missing stats)
+        │ render 0: 2
+        │ render 1: x
+        │ render 2: y
+        │ render 3: z
+        │
+        └── • scan
+              columns: (x, y, z)
+              estimated row count: 1000 (missing stats)
+              table: xyz@primary
+              spans: FULL SCAN
+              locking strength: for update
 
 statement ok
 CREATE TABLE pks (
@@ -219,42 +241,50 @@ CREATE TABLE kv (
   FAMILY (k, v)
 )
 
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 10
 ----
-·                         distribution   local
-·                         vectorized     false
-update                    ·              ·
- │                        table          kv
- │                        set            v
- │                        auto commit    ·
- └── render               ·              ·
-      └── limit           ·              ·
-           │              count          10
-           └── sort       ·              ·
-                │         order          -v
-                └── scan  ·              ·
-·                         missing stats  ·
-·                         table          kv@primary
-·                         spans          FULL SCAN
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • limit
+        │ count: 10
+        │
+        └── • sort
+            │ order: -v
+            │
+            └── • scan
+                  missing stats
+                  table: kv@primary
+                  spans: FULL SCAN
 
 # Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-·               distribution      local
-·               vectorized        false
-update          ·                 ·
- │              table             kv
- │              set               v
- │              auto commit       ·
- └── render     ·                 ·
-      └── scan  ·                 ·
-·               missing stats     ·
-·               table             kv@primary
-·               spans             [ - /2]
-·               limit             1
-·               locking strength  for update
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: [ - /2]
+          limit: 1
+          locking strength: for update
 
 # Check that updates on tables with multiple column families behave as
 # they should.
@@ -264,29 +294,33 @@ CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b),
   INSERT INTO tu VALUES (1, 2, 3, 4)
 
 # Update single column family.
-query TTT
-SELECT tree, field, description FROM [
+query T
 EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
-]
 ----
-·               distribution         local
-·               vectorized           false
-update          ·                    ·
- │              estimated row count  0 (missing stats)
- │              table                tu
- │              set                  c
- │              auto commit          ·
- └── render     ·                    ·
-      │         estimated row count  1000 (missing stats)
-      │         render 0             c + 1
-      │         render 1             a
-      │         render 2             c
-      │         render 3             d
-      └── scan  ·                    ·
-·               estimated row count  1000 (missing stats)
-·               table                tu@primary
-·               spans                FULL SCAN
-·               locking strength     for update
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: tu
+│ set: c
+│ auto commit
+│
+└── • render
+    │ columns: (a, c, d, c_new)
+    │ estimated row count: 1000 (missing stats)
+    │ render 0: c + 1
+    │ render 1: a
+    │ render 2: c
+    │ render 3: d
+    │
+    └── • scan
+          columns: (a, c, d)
+          estimated row count: 1000 (missing stats)
+          table: tu@primary
+          spans: FULL SCAN
+          locking strength: for update
 
 statement ok
 SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
@@ -325,36 +359,54 @@ rows affected: 1
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 ----
-·                                   distribution         local                             ·                    ·
-·                                   vectorized           false                             ·                    ·
-root                                ·                    ·                                 (a)                  ·
- ├── sort                           ·                    ·                                 (a)                  +a
- │    │                             estimated row count  1000 (missing stats)              ·                    ·
- │    │                             order                +a                                ·                    ·
- │    └── scan buffer               ·                    ·                                 (a)                  ·
- │                                  estimated row count  1000 (missing stats)              ·                    ·
- │                                  label                buffer 1                          ·                    ·
- └── subquery                       ·                    ·                                 ·                    ·
-      │                             id                   @S1                               ·                    ·
-      │                             original sql         UPDATE abc SET a = c RETURNING a  ·                    ·
-      │                             exec mode            all rows                          ·                    ·
-      └── buffer                    ·                    ·                                 (a)                  ·
-           │                        label                buffer 1                          ·                    ·
-           └── project              ·                    ·                                 (a)                  ·
-                │                   estimated row count  1000 (missing stats)              ·                    ·
-                └── update          ·                    ·                                 (a, rowid)           ·
-                     │              estimated row count  1000 (missing stats)              ·                    ·
-                     │              table                abc                               ·                    ·
-                     │              set                  a                                 ·                    ·
-                     └── project    ·                    ·                                 (a, b, c, rowid, c)  ·
-                          └── scan  ·                    ·                                 (a, b, c, rowid)     ·
-·                                   estimated row count  1000 (missing stats)              ·                    ·
-·                                   table                abc@primary                       ·                    ·
-·                                   spans                FULL SCAN                         ·                    ·
-·                                   locking strength     for update                        ·                    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (a)
+│
+├── • sort
+│   │ columns: (a)
+│   │ ordering: +a
+│   │ estimated row count: 1000 (missing stats)
+│   │ order: +a
+│   │
+│   └── • scan buffer
+│         columns: (a)
+│         estimated row count: 1000 (missing stats)
+│         label: buffer 1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: UPDATE abc SET a = c RETURNING a
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1
+        │
+        └── • project
+            │ columns: (a)
+            │ estimated row count: 1000 (missing stats)
+            │
+            └── • update
+                │ columns: (a, rowid)
+                │ estimated row count: 1000 (missing stats)
+                │ table: abc
+                │ set: a
+                │
+                └── • project
+                    │ columns: (a, b, c, rowid, c)
+                    │
+                    └── • scan
+                          columns: (a, b, c, rowid)
+                          estimated row count: 1000 (missing stats)
+                          table: abc@primary
+                          spans: FULL SCAN
+                          locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO
@@ -384,85 +436,103 @@ UPDATE t35364 SET x=2.5 RETURNING *
 statement ok
 CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b), FAMILY "primary" (a, b, c))
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) UPDATE t38799@foo SET c=2 WHERE a=1
 ----
-·                          distribution         local                 ·                 ·
-·                          vectorized           false                 ·                 ·
-update                     ·                    ·                     ()                ·
- │                         estimated row count  0 (missing stats)     ·                 ·
- │                         table                t38799                ·                 ·
- │                         set                  c                     ·                 ·
- │                         auto commit          ·                     ·                 ·
- └── render                ·                    ·                     (a, b, c, c_new)  ·
-      │                    estimated row count  1 (missing stats)     ·                 ·
-      │                    render 0             2                     ·                 ·
-      │                    render 1             a                     ·                 ·
-      │                    render 2             b                     ·                 ·
-      │                    render 3             c                     ·                 ·
-      └── filter           ·                    ·                     (a, b, c)         ·
-           │               estimated row count  1 (missing stats)     ·                 ·
-           │               filter               a = 1                 ·                 ·
-           └── index join  ·                    ·                     (a, b, c)         ·
-                │          estimated row count  1000 (missing stats)  ·                 ·
-                │          table                t38799@primary        ·                 ·
-                │          key columns          a                     ·                 ·
-                └── scan   ·                    ·                     (a, b)            ·
-·                          estimated row count  1000 (missing stats)  ·                 ·
-·                          table                t38799@foo            ·                 ·
-·                          spans                FULL SCAN             ·                 ·
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t38799
+│ set: c
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, c, c_new)
+    │ estimated row count: 1 (missing stats)
+    │ render 0: 2
+    │ render 1: a
+    │ render 2: b
+    │ render 3: c
+    │
+    └── • filter
+        │ columns: (a, b, c)
+        │ estimated row count: 1 (missing stats)
+        │ filter: a = 1
+        │
+        └── • index join
+            │ columns: (a, b, c)
+            │ estimated row count: 1000 (missing stats)
+            │ table: t38799@primary
+            │ key columns: a
+            │
+            └── • scan
+                  columns: (a, b)
+                  estimated row count: 1000 (missing stats)
+                  table: t38799@foo
+                  spans: FULL SCAN
 
 # ------------------------------------------------------------------------------
 # Test without implicit SELECT FOR UPDATE.
 # Some cases were all tested earlier in this file with implicit SFU enabled.
 # ------------------------------------------------------------------------------
 
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
 ----
-·               distribution      local
-·               vectorized        false
-update          ·                 ·
- │              table             kv
- │              set               v
- │              auto commit       ·
- └── render     ·                 ·
-      └── scan  ·                 ·
-·               missing stats     ·
-·               table             kv@primary
-·               spans             [/3 - /3]
-·               locking strength  for update
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: [/3 - /3]
+          locking strength: for update
 
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
-·          distribution      local
-·          vectorized        false
-update     ·                 ·
- │         table             kv
- │         set               v
- │         auto commit       ·
- └── scan  ·                 ·
-·          missing stats     ·
-·          table             kv@primary
-·          spans             [/2 - /9]
-·          locking strength  for update
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: kv@primary
+      spans: [/2 - /9]
+      locking strength: for update
 
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = 10
 ----
-·               distribution      local
-·               vectorized        false
-update          ·                 ·
- │              table             kv
- │              set               v
- │              auto commit       ·
- └── render     ·                 ·
-      └── scan  ·                 ·
-·               missing stats     ·
-·               table             kv@primary
-·               spans             FULL SCAN
-·               locking strength  for update
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: FULL SCAN
+          locking strength: for update
 
 statement ok
 CREATE TABLE kv3 (
@@ -473,176 +543,208 @@ CREATE TABLE kv3 (
   FAMILY (k, v, meta)
 )
 
-query TTT
+query T
 EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
 ----
-·                     distribution      local
-·                     vectorized        false
-update                ·                 ·
- │                    table             kv3
- │                    set               k
- │                    auto commit       ·
- └── render           ·                 ·
-      └── index join  ·                 ·
-           │          table             kv3@primary
-           └── scan   ·                 ·
-·                     missing stats     ·
-·                     table             kv3@kv3_v_idx
-·                     spans             [/10 - /10]
-·                     locking strength  for update
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: kv3@primary
+        │
+        └── • scan
+              missing stats
+              table: kv3@kv3_v_idx
+              spans: [/10 - /10]
+              locking strength: for update
 
-query TTT
+query T
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
 ----
-·                distribution      local
-·                vectorized        false
-update           ·                 ·
- │               table             kv3
- │               set               k
- │               auto commit       ·
- └── index join  ·                 ·
-      │          table             kv3@primary
-      └── scan   ·                 ·
-·                missing stats     ·
-·                table             kv3@kv3_v_idx
-·                spans             [/2 - /9]
-·                locking strength  for update
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • index join
+    │ table: kv3@primary
+    │
+    └── • scan
+          missing stats
+          table: kv3@kv3_v_idx
+          spans: [/2 - /9]
+          locking strength: for update
 
 statement ok
 SET enable_implicit_select_for_update = false
 
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
 ----
-·               distribution   local
-·               vectorized     false
-update          ·              ·
- │              table          kv
- │              set            v
- │              auto commit    ·
- └── render     ·              ·
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          kv@primary
-·               spans          [/3 - /3]
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: [/3 - /3]
 
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
-·          distribution   local
-·          vectorized     false
-update     ·              ·
- │         table          kv
- │         set            v
- │         auto commit    ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          kv@primary
-·          spans          [/2 - /9]
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: kv@primary
+      spans: [/2 - /9]
 
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = 10
 ----
-·               distribution   local
-·               vectorized     false
-update          ·              ·
- │              table          kv
- │              set            v
- │              auto commit    ·
- └── render     ·              ·
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          kv@primary
-·               spans          FULL SCAN
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-·               distribution         local                 ·                        ·
-·               vectorized           false                 ·                        ·
-update          ·                    ·                     ()                       ·
- │              estimated row count  0 (missing stats)     ·                        ·
- │              table                xyz                   ·                        ·
- │              set                  x, y                  ·                        ·
- │              auto commit          ·                     ·                        ·
- └── render     ·                    ·                     (x, y, z, x_new, y_new)  ·
-      │         estimated row count  1000 (missing stats)  ·                        ·
-      │         render 0             1                     ·                        ·
-      │         render 1             2                     ·                        ·
-      │         render 2             x                     ·                        ·
-      │         render 3             y                     ·                        ·
-      │         render 4             z                     ·                        ·
-      └── scan  ·                    ·                     (x, y, z)                ·
-·               estimated row count  1000 (missing stats)  ·                        ·
-·               table                xyz@primary           ·                        ·
-·               spans                FULL SCAN             ·                        ·
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new, y_new)
+    │ estimated row count: 1000 (missing stats)
+    │ render 0: 1
+    │ render 1: 2
+    │ render 2: x
+    │ render 3: y
+    │ render 4: z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-·               distribution   local
-·               vectorized     false
-update          ·              ·
- │              table          kv
- │              set            v
- │              auto commit    ·
- └── render     ·              ·
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          kv@primary
-·               spans          [ - /2]
-·               limit          1
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: [ - /2]
+          limit: 1
 
-query TTT
+query T
 EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
 ----
-·                     distribution   local
-·                     vectorized     false
-update                ·              ·
- │                    table          kv3
- │                    set            k
- │                    auto commit    ·
- └── render           ·              ·
-      └── index join  ·              ·
-           │          table          kv3@primary
-           └── scan   ·              ·
-·                     missing stats  ·
-·                     table          kv3@kv3_v_idx
-·                     spans          [/10 - /10]
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: kv3@primary
+        │
+        └── • scan
+              missing stats
+              table: kv3@kv3_v_idx
+              spans: [/10 - /10]
 
-query TTT
+query T
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
 ----
-·                distribution   local
-·                vectorized     false
-update           ·              ·
- │               table          kv3
- │               set            k
- │               auto commit    ·
- └── index join  ·              ·
-      │          table          kv3@primary
-      └── scan   ·              ·
-·                missing stats  ·
-·                table          kv3@kv3_v_idx
-·                spans          [/2 - /9]
+distribution: local
+vectorized: false
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • index join
+    │ table: kv3@primary
+    │
+    └── • scan
+          missing stats
+          table: kv3@kv3_v_idx
+          spans: [/2 - /9]
 
 # Update single column family.
-query TTT
-SELECT tree, field, description FROM [
+query T
 EXPLAIN UPDATE tu SET c=c+1
-]
 ----
-·               distribution   local
-·               vectorized     false
-update          ·              ·
- │              table          tu
- │              set            c
- │              auto commit    ·
- └── render     ·              ·
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          tu@primary
-·               spans          FULL SCAN
+distribution: local
+vectorized: false
+·
+• update
+│ table: tu
+│ set: c
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: tu@primary
+          spans: FULL SCAN
 
 # Reset for rest of test.
 statement ok
