@@ -49,6 +49,16 @@ func UnderRace(t SkippableTest, args ...interface{}) {
 	}
 }
 
+// UnderRaceWithIssue skips this test if the race detector is enabled,
+// logging the given issue ID as the reason.
+func UnderRaceWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	if util.RaceEnabled {
+		t.Skip(append([]interface{}{fmt.Sprintf(
+			"disabled under race. issue: https://github.com/cockroachdb/cockroach/issue/%d", githubIssueID,
+		)}, args...))
+	}
+}
+
 // UnderShort skips this test if the -short flag is specified.
 func UnderShort(t SkippableTest, args ...interface{}) {
 	if testing.Short() {
