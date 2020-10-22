@@ -1,175 +1,175 @@
-index-constraints vars=(jsonb) inverted-index=@1
-@1 @> '{"a": 1}'
+index-constraints vars=(a jsonb) inverted-index=a
+a @> '{"a": 1}'
 ----
 [/'{"a": 1}' - /'{"a": 1}']
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1 @> '{"a": 1, "b": 2}'
+index-constraints vars=(a jsonb) inverted-index=a
+a @> '{"a": 1, "b": 2}'
 ----
 [/'{"a": 1}' - /'{"a": 1}']
-Remaining filter: @1 @> '{"a": 1, "b": 2}'
+Remaining filter: a @> '{"a": 1, "b": 2}'
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1 @> '{"a": {"b": 1}, "c": 2}'
+index-constraints vars=(a jsonb) inverted-index=a
+a @> '{"a": {"b": 1}, "c": 2}'
 ----
 [/'{"a": {"b": 1}}' - /'{"a": {"b": 1}}']
-Remaining filter: @1 @> '{"a": {"b": 1}, "c": 2}'
+Remaining filter: a @> '{"a": {"b": 1}, "c": 2}'
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1 @> '{"a": {}, "c": 2}'
+index-constraints vars=(a jsonb) inverted-index=a
+a @> '{"a": {}, "c": 2}'
 ----
 [/'{"c": 2}' - /'{"c": 2}']
-Remaining filter: @1 @> '{"a": {}, "c": 2}'
+Remaining filter: a @> '{"a": {}, "c": 2}'
 
-index-constraints vars=(jsonb) inverted-index=@1
-'{"a": 1}' <@ @1
+index-constraints vars=(a jsonb) inverted-index=a
+'{"a": 1}' <@ a
 ----
 [/'{"a": 1}' - /'{"a": 1}']
 
 # Currently we only generate spans from one of the @> expressions.
-index-constraints vars=(jsonb) inverted-index=@1
-@1 @> '{"a": 1}' AND @1 @> '{"b": 1}'
+index-constraints vars=(a jsonb) inverted-index=a
+a @> '{"a": 1}' AND a @> '{"b": 1}'
 ----
 [/'{"a": 1}' - /'{"a": 1}']
-Remaining filter: @1 @> '{"b": 1}'
+Remaining filter: a @> '{"b": 1}'
 
-index-constraints vars=(jsonb) inverted-index=@1
-'{"a": 1}' <@ @1 AND '{"b": 1}' <@ @1
+index-constraints vars=(a jsonb) inverted-index=a
+'{"a": 1}' <@ a AND '{"b": 1}' <@ a
 ----
 [/'{"a": 1}' - /'{"a": 1}']
-Remaining filter: @1 @> '{"b": 1}'
+Remaining filter: a @> '{"b": 1}'
 
-index-constraints vars=(jsonb, int) inverted-index=@1
-@2 = 1 AND @1 @> '{"a": 1}' AND @1 @> '{"b": 1}'
+index-constraints vars=(a jsonb, b int) inverted-index=a
+b = 1 AND a @> '{"a": 1}' AND a @> '{"b": 1}'
 ----
 [/'{"a": 1}' - /'{"a": 1}']
-Remaining filter: (@2 = 1) AND (@1 @> '{"b": 1}')
+Remaining filter: (b = 1) AND (a @> '{"b": 1}')
 
-index-constraints vars=(int[]) inverted-index=@1
-@1 @> ARRAY[1]
+index-constraints vars=(a int[]) inverted-index=a
+a @> ARRAY[1]
 ----
 [/ARRAY[1] - /ARRAY[1]]
 
-index-constraints vars=(int[]) inverted-index=@1
-ARRAY[1] <@ @1
+index-constraints vars=(a int[]) inverted-index=a
+ARRAY[1] <@ a
 ----
 [/ARRAY[1] - /ARRAY[1]]
 
-index-constraints vars=(int[]) inverted-index=@1
-@1 @> ARRAY[1,2]
+index-constraints vars=(a int[]) inverted-index=a
+a @> ARRAY[1,2]
 ----
 [/ARRAY[1] - /ARRAY[1]]
-Remaining filter: @1 @> ARRAY[1,2]
+Remaining filter: a @> ARRAY[1,2]
 
 # Currently we only generate spans from one of the @> expressions.
-index-constraints vars=(int[]) inverted-index=@1
-@1 @> ARRAY[1] AND @1 @> ARRAY[2]
+index-constraints vars=(a int[]) inverted-index=a
+a @> ARRAY[1] AND a @> ARRAY[2]
 ----
 [/ARRAY[1] - /ARRAY[1]]
-Remaining filter: @1 @> ARRAY[2]
+Remaining filter: a @> ARRAY[2]
 
-# This could be better - @1 @> ARRAY[] is always true, but we currently
+# This could be better - a @> ARRAY[] is always true, but we currently
 # don't remove the extra filter.
-index-constraints vars=(int[]) inverted-index=@1
-@1 @> ARRAY[]::INT[]
+index-constraints vars=(a int[]) inverted-index=a
+a @> ARRAY[]::INT[]
 ----
 [ - ]
-Remaining filter: @1 @> ARRAY[]
+Remaining filter: a @> ARRAY[]
 
 # Arrays never contain ARRAY[NULL,...]
-index-constraints vars=(int[]) inverted-index=@1
-@1 @> ARRAY[NULL]::INT[]
+index-constraints vars=(a int[]) inverted-index=a
+a @> ARRAY[NULL]::INT[]
 ----
 
-index-constraints vars=(int[]) inverted-index=@1
-@1 @> ARRAY[1, NULL]::INT[]
+index-constraints vars=(a int[]) inverted-index=a
+a @> ARRAY[1, NULL]::INT[]
 ----
 
-index-constraints vars=(int[]) inverted-index=@1
-@1 @> ARRAY[NULL, 1]::INT[]
+index-constraints vars=(a int[]) inverted-index=a
+a @> ARRAY[NULL, 1]::INT[]
 ----
 
 # NOTE: this should be a contradiction, but the test harness strips the
 # constraint out too early by accident, I think.
-index-constraints vars=(int[]) inverted-index=@1
-@1 @> NULL
+index-constraints vars=(a int[]) inverted-index=a
+a @> NULL
 ----
 [ - ]
 Remaining filter: NULL
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1->'a' = 'true'
+index-constraints vars=(a jsonb) inverted-index=a
+a->'a' = 'true'
 ----
 [/'{"a": true}' - /'{"a": true}']
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1->'a' = 'false'
+index-constraints vars=(a jsonb) inverted-index=a
+a->'a' = 'false'
 ----
 [/'{"a": false}' - /'{"a": false}']
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1->'a' = 'null'
+index-constraints vars=(a jsonb) inverted-index=a
+a->'a' = 'null'
 ----
 [/'{"a": null}' - /'{"a": null}']
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1->'a' = '1'
+index-constraints vars=(a jsonb) inverted-index=a
+a->'a' = '1'
 ----
 [/'{"a": 1}' - /'{"a": 1}']
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1->'a' = '"b"'
+index-constraints vars=(a jsonb) inverted-index=a
+a->'a' = '"b"'
 ----
 [/'{"a": "b"}' - /'{"a": "b"}']
 
-index-constraints vars=(jsonb) inverted-index=@1
-@1->'0' = 'true'
+index-constraints vars=(a jsonb) inverted-index=a
+a->'0' = 'true'
 ----
 [/'{"0": true}' - /'{"0": true}']
 
 # Do not create a constraint when the var is not an indexed column.
-index-constraints vars=(jsonb,jsonb) inverted-index=@2
-@1->'a' = '1'
+index-constraints vars=(a jsonb, b jsonb) inverted-index=b
+a->'a' = '1'
 ----
 [ - ]
-Remaining filter: (@1->'a') = '1'
+Remaining filter: (a->'a') = '1'
 
 # Do not create a constraint when the fetch key is not a constant.
-index-constraints vars=(jsonb,string) inverted-index=@1
-@1->@2 = '1'
+index-constraints vars=(a jsonb, b string) inverted-index=a
+a->b = '1'
 ----
 [ - ]
-Remaining filter: (@1->@2) = '1'
+Remaining filter: (a->b) = '1'
 
 # Do not create a constraint when the fetch key is an integer.
-index-constraints vars=(jsonb) inverted-index=@1
-@1->0 = '1'
+index-constraints vars=(a jsonb) inverted-index=a
+a->0 = '1'
 ----
 [ - ]
-Remaining filter: (@1->0) = '1'
+Remaining filter: (a->0) = '1'
 
 # Do not create a constraint when the RHS of the equality is not a constant.
-# Note: @2 is wrapped in a function to avoid normalizing @2 to the RHS of the
+# Note: b is wrapped in a function to avoid normalizing b to the RHS of the
 # equality. This normalization would result in an expression that fails to match
 # the j->'key' = 'val' pattern that is required for building this type of
 # inverted index constraint. Therefore, the wrapping function ensures that the
 # code path of a non-const RHS is tested.
-index-constraints vars=(jsonb,string) inverted-index=@1
-@1->'a' = lower(@2)::JSONB
+index-constraints vars=(a jsonb, b string) inverted-index=a
+a->'a' = lower(b)::JSONB
 ----
 [ - ]
-Remaining filter: (@1->'a') = lower(@2)::JSONB
+Remaining filter: (a->'a') = lower(b)::JSONB
 
 # Do not create a constraint when the RHS of the equality is a JSON array.
-index-constraints vars=(jsonb) inverted-index=@1
-@1->'a' = '[1]'
+index-constraints vars=(a jsonb) inverted-index=a
+a->'a' = '[1]'
 ----
 [ - ]
-Remaining filter: (@1->'a') = '[1]'
+Remaining filter: (a->'a') = '[1]'
 
 # Do not create a constraint when the RHS of the equality is a JSON object.
-index-constraints vars=(jsonb) inverted-index=@1
-@1->'a' = '{"x": 1}'
+index-constraints vars=(a jsonb) inverted-index=a
+a->'a' = '{"x": 1}'
 ----
 [ - ]
-Remaining filter: (@1->'a') = '{"x": 1}'
+Remaining filter: (a->'a') = '{"x": 1}'
