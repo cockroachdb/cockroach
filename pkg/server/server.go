@@ -1603,7 +1603,17 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
+	// After setting modeOperational, we can block until all stores are fully
+	// bootstrapped.
 	s.grpc.setMode(modeOperational)
+
+	// We'll block here until all stores are fully bootstrapped. We do this here for
+	// two reasons:
+	// - some of the components below depend on all stores being fully bootstrapped
+	// (like the debug server registration for e.g.)
+	// - we'll need to do it after having opened up the RPC floodgates (due to the
+	// hazard described in Node.start, around bootstrapping additional stores)
+	s.node.waitForBootstrapNewStores()
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
