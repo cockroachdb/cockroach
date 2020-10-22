@@ -834,18 +834,12 @@ func newNotLeaseHolderError(
 	return err
 }
 
-// leaseGoodToGo is a fast-path for lease checks which verifies that an
-// existing lease is valid and owned by the current store. This method should
-// not be called directly. Use redirectOnOrAcquireLease instead.
-func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bool) {
+// ownsValidLease verifies that the replica owns a valid lease (valid for the
+// current time).
+func (r *Replica) ownsValidLease(ctx context.Context) (kvserverpb.LeaseStatus, bool) {
 	timestamp := r.store.Clock().Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	if r.requiresExpiringLeaseRLocked() {
-		// Slow-path for expiration-based leases.
-		return kvserverpb.LeaseStatus{}, false
-	}
 
 	status := r.leaseStatus(ctx, *r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 	if status.State == kvserverpb.LeaseState_VALID && status.Lease.OwnedBy(r.store.StoreID()) {
@@ -878,13 +872,15 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bo
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
-	if status, ok := r.leaseGoodToGo(ctx); ok {
+	status, ok := r.ownsValidLease(ctx)
+	// Expiration-based leases might need to be refreshed even if they're valid,
+	// so we don't short-circuit here for them.
+	if ok && status.Lease.Type() == roachpb.LeaseEpoch {
 		return status, nil
 	}
 
 	// Loop until the lease is held or the replica ascertains the actual
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
-	var status kvserverpb.LeaseStatus
 	for attempt := 1; ; attempt++ {
 		timestamp := r.store.Clock().Now()
 		llHandle, pErr := func() (*leaseRequestHandle, *roachpb.Error) {
