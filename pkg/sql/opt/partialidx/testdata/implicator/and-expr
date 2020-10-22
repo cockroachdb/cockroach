@@ -2,226 +2,226 @@
 
 # Atom filters
 
-predtest vars=(bool)
-@1
+predtest vars=(a bool)
+a
 =>
-@1 AND @1
+a AND a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool)
-NOT @1
+predtest vars=(a bool)
+NOT a
 =>
-@1 AND @1
+a AND a
 ----
 false
 
-predtest vars=(bool, bool)
-@1
+predtest vars=(a bool, b bool)
+a
 =>
-@1 AND @2
+a AND b
 ----
 false
 
 # Conjunction filters
 
-predtest vars=(bool)
-@1 AND true
+predtest vars=(a bool)
+a AND true
 =>
-true AND @1
+true AND a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool)
+a AND b
 =>
-@1 AND @1
+a AND a
 ----
 true
-└── remaining filters: @2
+└── remaining filters: b
 
-predtest vars=(bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool)
+a AND b
 =>
-@1 AND @2
-----
-true
-└── remaining filters: none
-
-predtest vars=(bool, bool)
-@1 AND @2
-=>
-@2 AND @1
+a AND b
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool, bool, bool)
-@1 AND @2 AND @3
+predtest vars=(a bool, b bool)
+a AND b
 =>
-@1 AND @2
+b AND a
 ----
 true
-└── remaining filters: @3
+└── remaining filters: none
 
-predtest vars=(bool, bool, bool)
-@1 AND @2 AND @3
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
 =>
-@1 AND @3
+a AND b
 ----
 true
-└── remaining filters: @2
+└── remaining filters: c
 
-predtest vars=(bool, bool, bool)
-@1 AND @2 AND @3
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
 =>
-@3 AND @1 AND @2
+a AND c
+----
+true
+└── remaining filters: b
+
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
+=>
+c AND a AND b
 ----
 true
 └── remaining filters: none
 
 # Regression for #51177. The InlineConstVars normalization rule must be applied
 # to the predicate if it is applied to the filters.
-predtest vars=(string, string)
-@1 = 'foo' and @1 = @2
+predtest vars=(a string, b string)
+a = 'foo' and a = b
 =>
-@1 = 'foo' and @1 = @2
+a = 'foo' and a = b
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool, bool)
-@1 AND NOT @2
+predtest vars=(a bool, b bool)
+a AND NOT b
 =>
-@1 AND @2
+a AND b
 ----
 false
 
-predtest vars=(bool, bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool, c bool)
+a AND b
 =>
-@1 AND @3
+a AND c
 ----
 false
 
 # Range filters
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 > 10 AND @1 < 100
+a > 10 AND a < 100
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 < 100 AND @1 > 10
+a < 100 AND a > 10
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 > 20 AND @1 < 80
+predtest vars=(a int)
+a > 20 AND a < 80
 =>
-@1 > 10 AND @1 < 100
+a > 10 AND a < 100
 ----
 true
-└── remaining filters: (@1 > 20) AND (@1 < 80)
+└── remaining filters: (a > 20) AND (a < 80)
 
-predtest vars=(int, bool)
-@1 > 10 AND @2 AND @1 < 100
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
 =>
-@1 > 10 AND @1 < 100
+a > 10 AND a < 100
 ----
 true
-└── remaining filters: @2
+└── remaining filters: b
 
-predtest vars=(int, bool)
-@1 > 20 AND @2 AND @1 < 80
+predtest vars=(a int, b bool)
+a > 20 AND b AND a < 80
 =>
-@1 > 10 AND @1 < 100
+a > 10 AND a < 100
 ----
 true
-└── remaining filters: ((@1 > 20) AND (@1 < 80)) AND @2
+└── remaining filters: ((a > 20) AND (a < 80)) AND b
 
-predtest vars=(int)
-@1 > 10 AND @1 < 90
+predtest vars=(a int)
+a > 10 AND a < 90
 =>
-@1 > 0 AND @1 < 100
+a > 0 AND a < 100
 ----
 true
-└── remaining filters: (@1 > 10) AND (@1 < 90)
+└── remaining filters: (a > 10) AND (a < 90)
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 > 20 AND @1 < 80
+a > 20 AND a < 80
 ----
 false
 
-predtest vars=(int, bool)
-@1 > 10 AND @2 AND @1 < 100
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
 =>
-@1 > 20 AND @1 < 80
+a > 20 AND a < 80
 ----
 false
 
-predtest vars=(int, bool)
-@1 > 10 AND NOT @2 AND @1 < 100
+predtest vars=(a int, b bool)
+a > 10 AND NOT b AND a < 100
 =>
-@1 > 10 AND @1 < 100 AND @2
+a > 10 AND a < 100 AND b
 ----
 false
 
 # Disjunction Filters
 
-predtest vars=(bool)
-@1 OR @1
+predtest vars=(a bool)
+a OR a
 =>
-@1 AND @1
+a AND a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 > 15 OR @1 > 10
+predtest vars=(a int)
+a > 15 OR a > 10
 =>
-@1 > 10 AND @1 > 5
+a > 10 AND a > 5
 ----
 true
-└── remaining filters: (@1 > 15) OR (@1 > 10)
+└── remaining filters: (a > 15) OR (a > 10)
 
-predtest vars=(bool, bool)
-@1 OR @2
+predtest vars=(a bool, b bool)
+a OR b
 =>
-@1 AND @2
+a AND b
 ----
 false
 
-predtest vars=(bool, bool)
-@1 OR @2
+predtest vars=(a bool, b bool)
+a OR b
 =>
-@2 AND @1
+b AND a
 ----
 false
 
 # Combination conjunction and disjunction filters
 
-predtest vars=(bool, bool, bool, bool)
-@1 AND (@3 OR @4) AND @2
+predtest vars=(a bool, b bool, c bool, d bool)
+a AND (c OR d) AND b
 =>
-@1 AND @2
+a AND b
 ----
 true
-└── remaining filters: @3 OR @4
+└── remaining filters: c OR d
 
-predtest vars=(bool, bool, bool, bool)
-(@1 OR @2) AND (@3 OR @4)
+predtest vars=(a bool, b bool, c bool, d bool)
+(a OR b) AND (c OR d)
 =>
-@1 AND @3
+a AND c
 ----
 false
