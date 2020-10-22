@@ -156,9 +156,7 @@ func makeInputConverter(
 		if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
 			for _, col := range singleTable.VisibleColumns() {
 				if col.IsComputed() {
-					// TODO(before merge): Replace this issue number with one that
-					// summarizes the above comment in a ticket.
-					return nil, unimplemented.NewWithIssueDetail(42846, "import.computed",
+					return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
 						"to use computed columns, use IMPORT INTO")
 				}
 			}
