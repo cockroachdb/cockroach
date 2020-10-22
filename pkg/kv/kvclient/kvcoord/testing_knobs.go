@@ -10,11 +10,23 @@
 
 package kvcoord
 
-import "github.com/cockroachdb/cockroach/pkg/base"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
+// RequestFilterType is type of functions used as RequestFilter.
+type RequestFilterType func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 
 // ClientTestingKnobs contains testing options that dictate the behavior
 // of the key-value client.
 type ClientTestingKnobs struct {
+	// RequestFilter, is set, is called by the gRPC transport before performing
+	// any request. If either of the retvals is non-nil, then that's used as the
+	// RPC's result and the call is not performed any more.
+	RequestFilter RequestFilterType
 	// The RPC dispatcher. Defaults to grpc but can be changed here for
 	// testing purposes.
 	TransportFactory TransportFactory

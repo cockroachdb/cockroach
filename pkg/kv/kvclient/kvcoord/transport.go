@@ -29,8 +29,11 @@ import (
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
-	class   rpc.ConnectionClass
-	metrics *DistSenderMetrics
+	class        rpc.ConnectionClass
+	metrics      *DistSenderMetrics
+	testingKnobs struct {
+		requestFilter func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+	}
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -148,6 +151,13 @@ func (gt *grpcTransport) sendBatch(
 	// in the local server comes pretty late)
 	if ctx.Err() != nil {
 		return nil, errors.Wrap(ctx.Err(), "aborted before batch send")
+	}
+
+	if rf := gt.opts.testingKnobs.requestFilter; rf != nil {
+		br, err := rf(ctx, ba)
+		if br != nil || err != nil {
+			return br, err
+		}
 	}
 
 	gt.opts.metrics.SentCount.Inc(1)
