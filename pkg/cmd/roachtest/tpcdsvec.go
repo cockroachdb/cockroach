@@ -13,13 +13,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
+	"github.com/cockroachdb/cockroach/pkg/cmd/smithcmp/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 	"github.com/cockroachdb/errors"
+	"strings"
+	"time"
 )
 
 func registerTPCDSVec(r *testRegistry) {
