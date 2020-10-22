@@ -5887,6 +5887,23 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+
+		restoreDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+		restoreDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
+		// Wait for tenant GC job to complete.
+		restoreDB.CheckQueryResultsRetry(
+			t,
+			"SELECT status FROM [SHOW JOBS] WHERE description = 'GC for tenant 10'",
+			[][]string{{"succeeded"}},
+		)
+
+		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
+		restoreDB.CheckQueryResults(t,
+			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
+			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+		)
 	})
 
 	t.Run("restore-t10-from-cluster-backup", func(t *testing.T) {

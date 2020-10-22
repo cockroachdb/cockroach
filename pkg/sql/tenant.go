@@ -12,8 +12,12 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -258,7 +263,7 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 }
 
 // DestroyTenant implements the tree.TenantOperator interface.
-func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
+func (p *planner) DestroyTenant(ctx context.Context, user security.SQLUsername, tenID uint64) error {
 	const op = "destroy"
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
 		return err
@@ -292,6 +297,7 @@ func GCTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantI
 		return err
 	}
 
+<<<<<<< HEAD
 	if err := clearTenant(ctx, execCfg, info); err != nil {
 		return errors.Wrap(err, "clear tenant")
 	}
@@ -308,8 +314,37 @@ func GCTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantI
 		return nil
 	})
 	return errors.Wrapf(err, "deleting tenant %d record", info.ID)
+||||||| merged common ancestors
+	// TODO(nvanbenschoten): actually clear tenant keyspace. We don't want to do
+	// this synchronously in the same transaction, because we could be deleting
+	// a very large amount of data. Instead, we should kick off a job that picks
+	// up the DROP state of the tenant, clears the tenant keyspace, and deletes
+	// the row in the system.tenants table. Tracked in #48775.
+
+	return nil
+=======
+	// Queue a GC job that will delete the tenant data and finally remove the
+	// row from `system.tenants`.
+	gcDetails := jobspb.SchemaChangeGCDetails{}
+	gcDetails.Tenant = &jobspb.SchemaChangeGCDetails_DroppedTenant{
+		ID:       tenID,
+		DropTime: timeutil.Now().UnixNano(),
+	}
+	gcJobRecord := jobs.Record{
+		Description:   fmt.Sprintf("GC for tenant %d", tenID),
+		Username:      user,
+		Details:       gcDetails,
+		Progress:      jobspb.SchemaChangeGCProgress{},
+		NonCancelable: true,
+	}
+	if _, err := execCfg.JobRegistry.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
+		return err
+	}
+	return nil
+>>>>>>> (WIP)sql/tenant: use async GC job for tenant
 }
 
+<<<<<<< HEAD
 // GCTenant implements the tree.TenantOperator interface.
 func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	if !p.ExtendedEvalContext().TxnImplicit {
@@ -329,4 +364,13 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	}
 
 	return GCTenant(ctx, p.ExecCfg(), info)
+||||||| merged common ancestors
+// DestroyTenant implements the tree.TenantOperator interface.
+func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
+	return DestroyTenant(ctx, p.ExecCfg(), p.Txn(), tenID)
+=======
+// DestroyTenant implements the tree.TenantOperator interface.
+func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
+	return DestroyTenant(ctx, p.ExecCfg(), p.Txn(), p.User(), tenID)
+>>>>>>> (WIP)sql/tenant: use async GC job for tenant
 }
