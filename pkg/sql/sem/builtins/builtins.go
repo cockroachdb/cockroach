@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -4080,16 +4081,8 @@ may increase either contention or retry errors, or both.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Jsonb}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				arg := args[0]
-				if arg == tree.DNull {
-					return tree.DZero, nil
-				}
-				n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(arg).JSON)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(n)), nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return jsonNumInvertedIndexEntries(ctx, args[0])
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityStable,
@@ -4098,21 +4091,36 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"val", types.AnyArray}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				arg := args[0]
-				if arg == tree.DNull {
-					return tree.DZero, nil
-				}
-				arr := tree.MustBeDArray(arg)
-				if !arr.HasNonNulls {
-					// Inverted indexes on arrays don't contain entries for null array
-					// elements.
-					return tree.DZero, nil
-				}
-				keys, err := rowenc.EncodeInvertedIndexTableKeys(arr, nil)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(len(keys))), nil
+				return arrayNumInvertedIndexEntries(ctx, args[0], tree.DNull)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.Jsonb},
+				{"version", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// The version argument is currently ignored for JSON inverted indexes,
+				// since all prior versions of JSON inverted indexes include the same
+				// entries. (The version argument was introduced for array indexes,
+				// since prior versions of array indexes did not include keys for empty
+				// arrays.)
+				return jsonNumInvertedIndexEntries(ctx, args[0])
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.AnyArray},
+				{"version", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return arrayNumInvertedIndexEntries(ctx, args[0], args[1])
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityStable,
@@ -6403,4 +6411,41 @@ func followerReadTimestamp(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, er
 		return nil, err
 	}
 	return tree.MakeDTimestampTZ(ts, time.Microsecond)
+}
+
+func jsonNumInvertedIndexEntries(_ *tree.EvalContext, val tree.Datum) (tree.Datum, error) {
+	if val == tree.DNull {
+		return tree.DZero, nil
+	}
+	n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(val).JSON)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDInt(tree.DInt(n)), nil
+}
+
+func arrayNumInvertedIndexEntries(
+	ctx *tree.EvalContext, val, version tree.Datum,
+) (tree.Datum, error) {
+	if val == tree.DNull {
+		return tree.DZero, nil
+	}
+	arr := tree.MustBeDArray(val)
+
+	v := descpb.SecondaryIndexFamilyFormatVersion
+	if version == tree.DNull {
+		if ctx.Settings.Version.IsActive(
+			ctx.Context, clusterversion.VersionEmptyArraysInInvertedIndexes,
+		) {
+			v = descpb.EmptyArraysInInvertedIndexesVersion
+		}
+	} else {
+		v = descpb.IndexDescriptorVersion(tree.MustBeDInt(version))
+	}
+
+	keys, err := rowenc.EncodeInvertedIndexTableKeys(arr, nil, v)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDInt(tree.DInt(len(keys))), nil
 }
