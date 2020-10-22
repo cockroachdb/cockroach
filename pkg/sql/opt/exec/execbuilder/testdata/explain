@@ -1,63 +1,67 @@
 # LogicTest: local
 
-query TTT colnames
+query T
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
-tree    field         description
-·       distribution  local
-·       vectorized    true
-norows  ·             ·
+distribution: local
+vectorized: true
+·
+• norows
 
-query TTT colnames
+query T
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
-tree    field         description
-·       distribution  local
-·       vectorized    true
-norows  ·             ·
+distribution: local
+vectorized: true
+·
+• norows
 
-query TTT colnames
+query T
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
 ----
-tree       field          description
-·          distribution   local
-·          vectorized     true
-render     ·              ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          jobs@jobs_status_created_idx
-·          spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • scan
+      missing stats
+      table: jobs@jobs_status_created_idx
+      spans: FULL SCAN
 
-query TTTTT colnames
+query T
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
-tree    field          description      columns  ordering
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a)      ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  1                ·        ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (a)
+  size: 1 column, 1 row
+  row 0, expr 0: 1
 
-query TTTTT colnames
+query T
 EXPLAIN (VERBOSE,PLAN) SELECT 1 a
 ----
-tree    field          description      columns  ordering
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a)      ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  1                ·        ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (a)
+  size: 1 column, 1 row
+  row 0, expr 0: 1
 
 
-query TTTTT colnames
+query T
 EXPLAIN (TYPES) SELECT 1 a
 ----
-tree    field          description      columns  ordering
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a int)  ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  (1)[int]         ·        ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (a int)
+  size: 1 column, 1 row
+  row 0, expr 0: (1)[int]
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
@@ -82,375 +86,478 @@ EXPLAIN (TYPES) SELECT $1
 
 
 # Ensure that all relevant statement types can be explained
-query TTT
+query T
 EXPLAIN CREATE DATABASE foo
 ----
-·                distribution  local
-·                vectorized    false
-create database  ·             ·
+distribution: local
+vectorized: false
+·
+• create database
 
-query TTT
+query T
 EXPLAIN CREATE TABLE foo (x INT)
 ----
-·             distribution  local
-·             vectorized    false
-create table  ·             ·
+distribution: local
+vectorized: false
+·
+• create table
 
 statement ok
 CREATE TABLE foo (x INT)
 
-query TTT
+query T
 EXPLAIN CREATE INDEX a ON foo(x)
 ----
-·             distribution  local
-·             vectorized    false
-create index  ·             ·
+distribution: local
+vectorized: false
+·
+• create index
 
 statement ok
 CREATE DATABASE foo
 
-query TTT
+query T
 EXPLAIN DROP DATABASE foo
 ----
-·              distribution  local
-·              vectorized    false
-drop database  ·             ·
+distribution: local
+vectorized: false
+·
+• drop database
 
 # explain SHOW JOBS - beware to test this before the CREATE INDEX
 # below, otherwise the result becomes non-deterministic.
 # Migrations with backfill will affect the number of rows.
-query TTT
-SELECT * FROM [EXPLAIN SHOW JOBS] WHERE field != 'size' AND field != 'filter'
+query T
+SELECT * FROM [EXPLAIN SHOW JOBS] WHERE info NOT LIKE '%size%' AND info NOT LIKE '%filter%'
 ----
-·                             distribution  local
-·                             vectorized    false
-sort                          ·             ·
- │                            order         -column18,-started
- └── render                   ·             ·
-      └── filter              ·             ·
-           └── virtual table  ·             ·
-·                             table         jobs@primary
+distribution: local
+vectorized: false
+·
+• sort
+│ order: -column18,-started
+│
+└── • render
+    │
+        │
+        └── • virtual table
+              table: jobs@primary
 
 statement ok
 CREATE INDEX a ON foo(x)
 
-query TTT
+query T
 EXPLAIN DROP INDEX foo@a
 ----
-·           distribution  local
-·           vectorized    false
-drop index  ·             ·
+distribution: local
+vectorized: false
+·
+• drop index
 
-query TTT
+query T
 EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 ----
-·            distribution  local
-·            vectorized    false
-alter table  ·             ·
+distribution: local
+vectorized: false
+·
+• alter table
 
-query TTT
-SELECT tree, field, description FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
+query T
+EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)
 ----
-·            distribution         local
-·            vectorized           false
-split        ·                    ·
- │           estimated row count  10 (missing stats)
- └── values  ·                    ·
-·            size                 1 column, 1 row
-·            row 0, expr 0        42
+distribution: local
+vectorized: false
+·
+• split
+│ columns: (key, pretty, split_enforced_until)
+│ estimated row count: 10 (missing stats)
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 1 row
+      row 0, expr 0: 42
 
-query TTT
+query T
 EXPLAIN DROP TABLE foo
 ----
-·           distribution  local
-·           vectorized    false
-drop table  ·             ·
+distribution: local
+vectorized: false
+·
+• drop table
 
-query TTT
+query T
 EXPLAIN SHOW DATABASES
 ----
-·                   distribution  local
-·                   vectorized    false
-sort                ·             ·
- │                  order         +name
- └── virtual table  ·             ·
-·                   table         databases@primary
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +name
+│
+└── • virtual table
+      table: databases@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW TABLES] WHERE info NOT LIKE '%size%'
 ----
-·                                                      distribution  local
-·                                                      vectorized    false
-sort                                                   ·             ·
- │                                                     order         +nspname,+relname
- └── render                                            ·             ·
-      └── hash join (left outer)                       ·             ·
-           │                                           equality      (column59) = (table_id)
-           ├── render                                  ·             ·
-           │    └── hash join (right outer)            ·             ·
-           │         │                                 equality      (oid) = (relowner)
-           │         ├── virtual table                 ·             ·
-           │         │                                 table         pg_roles@primary
-           │         └── hash join                     ·             ·
-           │              │                            equality      (oid) = (relnamespace)
-           │              ├── filter                   ·             ·
-           │              │    │                       filter        nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
-           │              │    └── virtual table       ·             ·
-           │              │                            table         pg_namespace@primary
-           │              └── hash join (left outer)   ·             ·
-           │                   │                       equality      (oid) = (objoid)
-           │                   ├── filter              ·             ·
-           │                   │    │                  filter        relkind IN ('S', 'm', 'r', 'v')
-           │                   │    └── virtual table  ·             ·
-           │                   │                       table         pg_class@primary
-           │                   └── filter              ·             ·
-           │                        │                  filter        objsubid = 0
-           │                        └── virtual table  ·             ·
-           │                                           table         pg_description@primary
-           └── virtual table                           ·             ·
-·                                                      table         table_row_statistics@primary
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +nspname,+relname
+│
+└── • render
+    │
+    └── • hash join (left outer)
+        │ equality: (column59) = (table_id)
+        │
+        ├── • render
+        │   │
+        │   └── • hash join (right outer)
+        │       │ equality: (oid) = (relowner)
+        │       │
+        │       ├── • virtual table
+        │       │     table: pg_roles@primary
+        │       │
+        │       └── • hash join
+        │           │ equality: (oid) = (relnamespace)
+        │           │
+        │           ├── • filter
+        │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+        │           │   │
+        │           │   └── • virtual table
+        │           │         table: pg_namespace@primary
+        │           │
+        │           └── • hash join (left outer)
+        │               │ equality: (oid) = (objoid)
+        │               │
+        │               ├── • filter
+        │               │   │ filter: relkind IN ('S', 'm', 'r', 'v')
+        │               │   │
+        │               │   └── • virtual table
+        │               │         table: pg_class@primary
+        │               │
+        │               └── • filter
+        │                   │ filter: objsubid = 0
+        │                   │
+        │                   └── • virtual table
+        │                         table: pg_description@primary
+        │
+        └── • virtual table
+              table: table_row_statistics@primary
 
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE info NOT LIKE '%size%'
 ----
-·                                                      distribution  local
-·                                                      vectorized    false
-sort                                                   ·             ·
- │                                                     order         +nspname,+relname
- └── render                                            ·             ·
-      └── hash join (left outer)                       ·             ·
-           │                                           equality      (column59) = (table_id)
-           ├── render                                  ·             ·
-           │    └── hash join (right outer)            ·             ·
-           │         │                                 equality      (oid) = (relowner)
-           │         ├── virtual table                 ·             ·
-           │         │                                 table         pg_roles@primary
-           │         └── hash join                     ·             ·
-           │              │                            equality      (oid) = (relnamespace)
-           │              ├── filter                   ·             ·
-           │              │    │                       filter        nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
-           │              │    └── virtual table       ·             ·
-           │              │                            table         pg_namespace@primary
-           │              └── hash join (left outer)   ·             ·
-           │                   │                       equality      (oid) = (objoid)
-           │                   ├── filter              ·             ·
-           │                   │    │                  filter        relkind IN ('S', 'm', 'r', 'v')
-           │                   │    └── virtual table  ·             ·
-           │                   │                       table         pg_class@primary
-           │                   └── filter              ·             ·
-           │                        │                  filter        objsubid = 0
-           │                        └── virtual table  ·             ·
-           │                                           table         pg_description@primary
-           └── virtual table                           ·             ·
-·                                                      table         table_row_statistics@primary
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +nspname,+relname
+│
+└── • render
+    │
+    └── • hash join (left outer)
+        │ equality: (column59) = (table_id)
+        │
+        ├── • render
+        │   │
+        │   └── • hash join (right outer)
+        │       │ equality: (oid) = (relowner)
+        │       │
+        │       ├── • virtual table
+        │       │     table: pg_roles@primary
+        │       │
+        │       └── • hash join
+        │           │ equality: (oid) = (relnamespace)
+        │           │
+        │           ├── • filter
+        │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+        │           │   │
+        │           │   └── • virtual table
+        │           │         table: pg_namespace@primary
+        │           │
+        │           └── • hash join (left outer)
+        │               │ equality: (oid) = (objoid)
+        │               │
+        │               ├── • filter
+        │               │   │ filter: relkind IN ('S', 'm', 'r', 'v')
+        │               │   │
+        │               │   └── • virtual table
+        │               │         table: pg_class@primary
+        │               │
+        │               └── • filter
+        │                   │ filter: objsubid = 0
+        │                   │
+        │                   └── • virtual table
+        │                         table: pg_description@primary
+        │
+        └── • virtual table
+              table: table_row_statistics@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE info NOT LIKE '%size%'
 ----
-·                   distribution  local
-·                   vectorized    false
-filter              ·             ·
- │                  filter        variable = 'database'
- └── virtual table  ·             ·
-·                   table         session_variables@primary
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: variable = 'database'
+│
+└── • virtual table
+      table: session_variables@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW SCHEMAS] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW SCHEMAS] WHERE info NOT LIKE '%size%'
 ----
-·                                  distribution  local
-·                                  vectorized    false
-sort                               ·             ·
- │                                 order         +nspname
- └── hash join (right outer)       ·             ·
-      │                            equality      (oid) = (nspowner)
-      ├── virtual table            ·             ·
-      │                            table         pg_roles@primary
-      └── hash join                ·             ·
-           │                       equality      (nspname) = (schema_name)
-           ├── virtual table       ·             ·
-           │                       table         pg_namespace@primary
-           └── filter              ·             ·
-                │                  filter        catalog_name = 'test'
-                └── virtual table  ·             ·
-·                                  table         schemata@primary
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +nspname
+│
+└── • hash join (right outer)
+    │ equality: (oid) = (nspowner)
+    │
+    ├── • virtual table
+    │     table: pg_roles@primary
+    │
+    └── • hash join
+        │ equality: (nspname) = (schema_name)
+        │
+        ├── • virtual table
+        │     table: pg_namespace@primary
+        │
+        └── • filter
+            │ filter: catalog_name = 'test'
+            │
+            └── • virtual table
+                  table: schemata@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE info NOT LIKE '%size%'
 ----
-·                   distribution  local
-·                   vectorized    false
-filter              ·             ·
- │                  filter        variable = 'timezone'
- └── virtual table  ·             ·
-·                   table         session_variables@primary
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: variable = 'timezone'
+│
+└── • virtual table
+      table: session_variables@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE info NOT LIKE '%size%'
 ----
-·                   distribution  local
-·                   vectorized    false
-filter              ·             ·
- │                  filter        variable = 'default_transaction_isolation'
- └── virtual table  ·             ·
-·                   table         session_variables@primary
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: variable = 'default_transaction_isolation'
+│
+└── • virtual table
+      table: session_variables@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE info NOT LIKE '%size%'
 ----
-·                   distribution  local
-·                   vectorized    false
-filter              ·             ·
- │                  filter        variable = 'default_transaction_priority'
- └── virtual table  ·             ·
-·                   table         session_variables@primary
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: variable = 'default_transaction_priority'
+│
+└── • virtual table
+      table: session_variables@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE info NOT LIKE '%size%'
 ----
-·                   distribution  local
-·                   vectorized    false
-filter              ·             ·
- │                  filter        variable = 'transaction_isolation'
- └── virtual table  ·             ·
-·                   table         session_variables@primary
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: variable = 'transaction_isolation'
+│
+└── • virtual table
+      table: session_variables@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE info NOT LIKE '%size%'
 ----
-·                   distribution  local
-·                   vectorized    false
-filter              ·             ·
- │                  filter        variable = 'transaction_priority'
- └── virtual table  ·             ·
-·                   table         session_variables@primary
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: variable = 'transaction_priority'
+│
+└── • virtual table
+      table: session_variables@primary
 
-query TTT
+query T
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-·                                       distribution  local
-·                                       vectorized    false
-render                                  ·             ·
- └── group                              ·             ·
-      │                                 group by      column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
-      │                                 ordered       +ordinal_position
-      └── sort                          ·             ·
-           │                            order         +ordinal_position
-           └── hash join (left outer)   ·             ·
-                │                       equality      (column_name) = (column_name)
-                ├── filter              ·             ·
-                │    │                  filter        ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-                │    └── virtual table  ·             ·
-                │                       table         columns@primary
-                └── filter              ·             ·
-                     │                  filter        ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-                     └── virtual table  ·             ·
-·                                       table         statistics@primary
+distribution: local
+vectorized: false
+·
+• render
+│
+└── • group
+    │ group by: column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
+    │ ordered: +ordinal_position
+    │
+    └── • sort
+        │ order: +ordinal_position
+        │
+        └── • hash join (left outer)
+            │ equality: (column_name) = (column_name)
+            │
+            ├── • filter
+            │   │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+            │   │
+            │   └── • virtual table
+            │         table: columns@primary
+            │
+            └── • filter
+                │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                │
+                └── • virtual table
+                      table: statistics@primary
 
-query TTT
-SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE field != 'size'
+query T
+SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE info NOT LIKE '%size%'
 ----
-·                        distribution  local
-·                        vectorized    false
-sort                     ·             ·
- │                       order         +grantee,+privilege_type
- └── filter              ·             ·
-      │                  filter        (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
-      └── virtual table  ·             ·
-·                        table         table_privileges@primary
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +grantee,+privilege_type
+│
+└── • filter
+    │ filter: (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+    │
+    └── • virtual table
+          table: table_privileges@primary
 
-query TTT
+query T
 EXPLAIN SHOW INDEX FROM foo
 ----
-·                        distribution  local
-·                        vectorized    false
-render                   ·             ·
- └── filter              ·             ·
-      │                  filter        ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-      └── virtual table  ·             ·
-·                        table         statistics@primary
+distribution: local
+vectorized: false
+·
+• render
+│
+└── • filter
+    │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+    │
+    └── • virtual table
+          table: statistics@primary
 
-query TTT
+query T
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-·                                         distribution  local
-·                                         vectorized    false
-sort                                      ·             ·
- │                                        order         +conname
- └── render                               ·             ·
-      └── hash join                       ·             ·
-           │                              equality      (relnamespace) = (oid)
-           ├── virtual table lookup join  ·             ·
-           │    │                         table         pg_constraint@pg_constraint_conrelid_idx
-           │    │                         equality      (oid) = (conrelid)
-           │    └── filter                ·             ·
-           │         │                    filter        relname = 'foo'
-           │         └── virtual table    ·             ·
-           │                              table         pg_class@primary
-           └── filter                     ·             ·
-                │                         filter        nspname = 'public'
-                └── virtual table         ·             ·
-·                                         table         pg_namespace@primary
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +conname
+│
+└── • render
+    │
+    └── • hash join
+        │ equality: (relnamespace) = (oid)
+        │
+        ├── • virtual table lookup join
+        │   │ table: pg_constraint@pg_constraint_conrelid_idx
+        │   │ equality: (oid) = (conrelid)
+        │   │
+        │   └── • filter
+        │       │ filter: relname = 'foo'
+        │       │
+        │       └── • virtual table
+        │             table: pg_class@primary
+        │
+        └── • filter
+            │ filter: nspname = 'public'
+            │
+            └── • virtual table
+                  table: pg_namespace@primary
 
-query TTT
+query T
 EXPLAIN SHOW USERS
 ----
-·                                                                distribution       local
-·                                                                vectorized         true
-sort                                                             ·                  ·
- │                                                               order              +username
- └── render                                                      ·                  ·
-      └── group                                                  ·                  ·
-           │                                                     group by           username
-           └── sort                                              ·                  ·
-                │                                                order              +role
-                └── hash join (left outer)                       ·                  ·
-                     │                                           equality           (username) = (member)
-                     │                                           left cols are key  ·
-                     ├── group                                   ·                  ·
-                     │    │                                      group by           username
-                     │    └── window                             ·                  ·
-                     │         └── render                        ·                  ·
-                     │              └── merge join (left outer)  ·                  ·
-                     │                   │                       equality           (username) = (username)
-                     │                   │                       left cols are key  ·
-                     │                   ├── scan                ·                  ·
-                     │                   │                       missing stats      ·
-                     │                   │                       table              users@primary
-                     │                   │                       spans              FULL SCAN
-                     │                   └── scan                ·                  ·
-                     │                                           missing stats      ·
-                     │                                           table              role_options@primary
-                     │                                           spans              FULL SCAN
-                     └── scan                                    ·                  ·
-·                                                                missing stats      ·
-·                                                                table              role_members@role_members_role_idx
-·                                                                spans              FULL SCAN
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +username
+│
+└── • render
+    │
+    └── • group
+        │ group by: username
+        │
+        └── • sort
+            │ order: +role
+            │
+            └── • hash join (left outer)
+                │ equality: (username) = (member)
+                │ left cols are key
+                │
+                ├── • group
+                │   │ group by: username
+                │   │
+                │   └── • window
+                │       │
+                │       └── • render
+                │           │
+                │           └── • merge join (left outer)
+                │               │ equality: (username) = (username)
+                │               │ left cols are key
+                │               │
+                │               ├── • scan
+                │               │     missing stats
+                │               │     table: users@primary
+                │               │     spans: FULL SCAN
+                │               │
+                │               └── • scan
+                │                     missing stats
+                │                     table: role_options@primary
+                │                     spans: FULL SCAN
+                │
+                └── • scan
+                      missing stats
+                      table: role_members@role_members_role_idx
+                      spans: FULL SCAN
 
 # EXPLAIN selecting from a sequence.
 statement ok
 CREATE SEQUENCE select_test
 
-query TTTTT colnames
+query T
 EXPLAIN (VERBOSE) SELECT * FROM select_test
 ----
-tree             field                description  columns                           ordering
-·                distribution         local        ·                                 ·
-·                vectorized           false        ·                                 ·
-sequence select  ·                    ·            (last_value, log_cnt, is_called)  ·
-·                estimated row count  1            ·                                 ·
+distribution: local
+vectorized: false
+·
+• sequence select
+  columns: (last_value, log_cnt, is_called)
+  estimated row count: 1
 
-query TTTTT colnames
+query T
 EXPLAIN (VERBOSE) SELECT @1 FROM select_test
 ----
-tree                  field                description  columns                           ordering
-·                     distribution         local        ·                                 ·
-·                     vectorized           false        ·                                 ·
-render                ·                    ·            ("?column?")                      ·
- │                    estimated row count  1            ·                                 ·
- │                    render 0             last_value   ·                                 ·
- └── sequence select  ·                    ·            (last_value, log_cnt, is_called)  ·
-·                     estimated row count  1            ·                                 ·
+distribution: local
+vectorized: false
+·
+• render
+│ columns: ("?column?")
+│ estimated row count: 1
+│ render 0: last_value
+│
+└── • sequence select
+      columns: (last_value, log_cnt, is_called)
+      estimated row count: 1
 
 statement ok
 CREATE TABLE t (
@@ -459,352 +566,435 @@ CREATE TABLE t (
   FAMILY "primary" (k, v)
 )
 
-query TTT
+query T
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
-·                 distribution  local
-·                 vectorized    false
-insert fast path  ·             ·
-·                 into          t(k, v)
-·                 auto commit   ·
-·                 size          2 columns, 1 row
-
-query I
-SELECT max(level) FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
-----
-0
+distribution: local
+vectorized: false
+·
+• insert fast path
+  into: t(k, v)
+  auto commit
+  size: 2 columns, 1 row
 
 statement ok
 INSERT INTO t VALUES (1, 2)
 
-query TTT
+query T
 EXPLAIN SELECT * FROM t
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          t@primary
-·     spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@primary
+  spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (k, v)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, v)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          t@primary
-·     spans          [/1 - /1] [/3 - /3]
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@primary
+  spans: [/1 - /1] [/3 - /3]
 
 statement ok
 CREATE TABLE t2 (x INT PRIMARY KEY)
 
-query TTT
+query T
 EXPLAIN (PLAN) SELECT * FROM t INNER LOOKUP JOIN t2 ON t.k = t2.x
 ----
-·            distribution           local
-·            vectorized             true
-lookup join  ·                      ·
- │           table                  t2@primary
- │           equality               (k) = (x)
- │           equality cols are key  ·
- └── scan    ·                      ·
-·            missing stats          ·
-·            table                  t@primary
-·            spans                  FULL SCAN
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: t2@primary
+│ equality: (k) = (x)
+│ equality cols are key
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
-·          distribution         local                 ·       ·
-·          vectorized           true                  ·       ·
-filter     ·                    ·                     (k, v)  ·
- │         estimated row count  333 (missing stats)   ·       ·
- │         filter               (k % 2) = 0           ·       ·
- └── scan  ·                    ·                     (k, v)  ·
-·          estimated row count  1000 (missing stats)  ·       ·
-·          table                t@primary             ·       ·
-·          spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (k, v)
+│ estimated row count: 333 (missing stats)
+│ filter: (k % 2) = 0
+│
+└── • scan
+      columns: (k, v)
+      estimated row count: 1000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
 ----
-·       distribution  local
-·       vectorized    false
-values  ·             ·
-·       size          3 columns, 2 rows
+distribution: local
+vectorized: false
+·
+• values
+  size: 3 columns, 2 rows
 
-query TTT
+query T
 EXPLAIN VALUES (1)
 ----
-·       distribution  local
-·       vectorized    false
-values  ·             ·
-·       size          1 column, 1 row
+distribution: local
+vectorized: false
+·
+• values
+  size: 1 column, 1 row
 
-query TTT
-SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 ----
-·                distribution         local
-·                vectorized           true
-limit            ·                    ·
- │               estimated row count  1 (missing stats)
- │               offset               1
- └── ordinality  ·                    ·
-      │          estimated row count  2 (missing stats)
-      └── scan   ·                    ·
-·                estimated row count  2 (missing stats)
-·                table                t@primary
-·                spans                LIMITED SCAN
-·                limit                2
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (k, v, "ordinality")
+│ estimated row count: 1 (missing stats)
+│ offset: 1
+│
+└── • ordinality
+    │ columns: (k, v, "ordinality")
+    │ estimated row count: 2 (missing stats)
+    │
+    └── • scan
+          columns: (k, v)
+          estimated row count: 2 (missing stats)
+          table: t@primary
+          spans: LIMITED SCAN
+          limit: 2
 
-query TTT
+query T
 EXPLAIN SELECT DISTINCT v FROM t
 ----
-·          distribution   local
-·          vectorized     true
-distinct   ·              ·
- │         distinct on    v
- └── scan  ·              ·
-·          missing stats  ·
-·          table          t@primary
-·          spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: v
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: FULL SCAN
 
-query TTT
-SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1
 ----
-·                    distribution         local
-·                    vectorized           true
-limit                ·                    ·
- │                   estimated row count  1 (missing stats)
- │                   offset               1
- └── limit           ·                    ·
-      │              estimated row count  2 (missing stats)
-      │              count                2
-      └── distinct   ·                    ·
-           │         estimated row count  100 (missing stats)
-           │         distinct on          v
-           └── scan  ·                    ·
-·                    estimated row count  1000 (missing stats)
-·                    table                t@primary
-·                    spans                FULL SCAN
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (v)
+│ estimated row count: 1 (missing stats)
+│ offset: 1
+│
+└── • limit
+    │ columns: (v)
+    │ estimated row count: 2 (missing stats)
+    │ count: 2
+    │
+    └── • distinct
+        │ columns: (v)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: v
+        │
+        └── • scan
+              columns: (v)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a), FAMILY "primary" (a, b, rowid))
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-·                distribution         local               ·           ·
-·                vectorized           true                ·           ·
-sort             ·                    ·                   (a, b)      +b
- │               estimated row count  10 (missing stats)  ·           ·
- │               order                +b                  ·           ·
- └── index join  ·                    ·                   (a, b)      ·
-      │          estimated row count  10 (missing stats)  ·           ·
-      │          table                tc@primary          ·           ·
-      │          key columns          rowid               ·           ·
-      └── scan   ·                    ·                   (a, rowid)  ·
-·                estimated row count  10 (missing stats)  ·           ·
-·                table                tc@c                ·           ·
-·                spans                /10-/11             ·           ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (a, b)
+│ ordering: +b
+│ estimated row count: 10 (missing stats)
+│ order: +b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 10 (missing stats)
+    │ table: tc@primary
+    │ key columns: rowid
+    │
+    └── • scan
+          columns: (a, rowid)
+          estimated row count: 10 (missing stats)
+          table: tc@c
+          spans: /10-/11
 
-query TTTTT colnames
+query T
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
-tree              field                description        columns  ordering
-·                 distribution         local              ·        ·
-·                 vectorized           false              ·        ·
-insert fast path  ·                    ·                  ()       ·
-·                 estimated row count  0 (missing stats)  ·        ·
-·                 into                 t(k, v)            ·        ·
-·                 auto commit          ·                  ·        ·
-·                 size                 2 columns, 1 row   ·        ·
-·                 row 0, expr 0        (1)[int]           ·        ·
-·                 row 0, expr 1        (2)[int]           ·        ·
+distribution: local
+vectorized: false
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t(k, v)
+  auto commit
+  size: 2 columns, 1 row
+  row 0, expr 0: (1)[int]
+  row 0, expr 1: (2)[int]
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT 42 AS a
 ----
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a int)  ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  (42)[int]        ·        ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (a int)
+  size: 1 column, 1 row
+  row 0, expr 0: (42)[int]
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT * FROM t
 ----
-·     distribution         local                 ·               ·
-·     vectorized           true                  ·               ·
-scan  ·                    ·                     (k int, v int)  ·
-·     estimated row count  1000 (missing stats)  ·               ·
-·     table                t@primary             ·               ·
-·     spans                FULL SCAN             ·               ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k int, v int)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
 ----
-·     distribution         local                 ·        ·
-·     vectorized           true                  ·        ·
-scan  ·                    ·                     (k int)  ·
-·     estimated row count  1000 (missing stats)  ·        ·
-·     table                t@primary             ·        ·
-·     spans                FULL SCAN             ·        ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k int)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
 ----
-·          distribution         local                          ·               ·
-·          vectorized           true                           ·               ·
-filter     ·                    ·                              (k int, v int)  ·
- │         estimated row count  333 (missing stats)            ·               ·
- │         filter               ((v)[int] > (123)[int])[bool]  ·               ·
- └── scan  ·                    ·                              (k int, v int)  ·
-·          estimated row count  1000 (missing stats)           ·               ·
-·          table                t@primary                      ·               ·
-·          spans                FULL SCAN                      ·               ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (k int, v int)
+│ estimated row count: 333 (missing stats)
+│ filter: ((v)[int] > (123)[int])[bool]
+│
+└── • scan
+      columns: (k int, v int)
+      estimated row count: 1000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
 ----
-·       distribution   local              ·                                        ·
-·       vectorized     false              ·                                        ·
-values  ·              ·                  (column1 int, column2 int, column3 int)  ·
-·       size           3 columns, 2 rows  ·                                        ·
-·       row 0, expr 0  (1)[int]           ·                                        ·
-·       row 0, expr 1  (2)[int]           ·                                        ·
-·       row 0, expr 2  (3)[int]           ·                                        ·
-·       row 1, expr 0  (4)[int]           ·                                        ·
-·       row 1, expr 1  (5)[int]           ·                                        ·
-·       row 1, expr 2  (6)[int]           ·                                        ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (column1 int, column2 int, column3 int)
+  size: 3 columns, 2 rows
+  row 0, expr 0: (1)[int]
+  row 0, expr 1: (2)[int]
+  row 0, expr 2: (3)[int]
+  row 1, expr 0: (4)[int]
+  row 1, expr 1: (5)[int]
+  row 1, expr 2: (6)[int]
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
-·            distribution         local                           ·                   ·
-·            vectorized           true                            ·                   ·
-render       ·                    ·                               (z int, v int)      ·
- │           estimated row count  0                               ·                   ·
- │           render 0             ((count)[int] * (2)[int])[int]  ·                   ·
- │           render 1             (v)[int]                        ·                   ·
- └── norows  ·                    ·                               (v int, count int)  ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (z int, v int)
+│ estimated row count: 0
+│ render 0: ((count)[int] * (2)[int])[int]
+│ render 1: (v)[int]
+│
+└── • norows
+      columns: (v int, count int)
 
-query TTTTT
+query T
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-·                    distribution         local                        ·               ·
-·                    vectorized           false                        ·               ·
-delete               ·                    ·                            ()              ·
- │                   estimated row count  0 (missing stats)            ·               ·
- │                   from                 t                            ·               ·
- │                   auto commit          ·                            ·               ·
- └── project         ·                    ·                            (k int)         ·
-      └── filter     ·                    ·                            (k int, v int)  ·
-           │         estimated row count  333 (missing stats)          ·               ·
-           │         filter               ((v)[int] > (1)[int])[bool]  ·               ·
-           └── scan  ·                    ·                            (k int, v int)  ·
-·                    estimated row count  1000 (missing stats)         ·               ·
-·                    table                t@primary                    ·               ·
-·                    spans                FULL SCAN                    ·               ·
+distribution: local
+vectorized: false
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t
+│ auto commit
+│
+└── • project
+    │ columns: (k int)
+    │
+    └── • filter
+        │ columns: (k int, v int)
+        │ estimated row count: 333 (missing stats)
+        │ filter: ((v)[int] > (1)[int])[bool]
+        │
+        └── • scan
+              columns: (k int, v int)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-·                    distribution         local                          ·                          ·
-·                    vectorized           false                          ·                          ·
-update               ·                    ·                              ()                         ·
- │                   estimated row count  0 (missing stats)              ·                          ·
- │                   table                t                              ·                          ·
- │                   set                  v                              ·                          ·
- │                   auto commit          ·                              ·                          ·
- └── render          ·                    ·                              (k int, v int, v_new int)  ·
-      │              estimated row count  333 (missing stats)            ·                          ·
-      │              render 0             ((k)[int] + (1)[int])[int]     ·                          ·
-      │              render 1             (k)[int]                       ·                          ·
-      │              render 2             (v)[int]                       ·                          ·
-      └── filter     ·                    ·                              (k int, v int)             ·
-           │         estimated row count  333 (missing stats)            ·                          ·
-           │         filter               ((v)[int] > (123)[int])[bool]  ·                          ·
-           └── scan  ·                    ·                              (k int, v int)             ·
-·                    estimated row count  1000 (missing stats)           ·                          ·
-·                    table                t@primary                      ·                          ·
-·                    spans                FULL SCAN                      ·                          ·
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t
+│ set: v
+│ auto commit
+│
+└── • render
+    │ columns: (k int, v int, v_new int)
+    │ estimated row count: 333 (missing stats)
+    │ render 0: ((k)[int] + (1)[int])[int]
+    │ render 1: (k)[int]
+    │ render 2: (v)[int]
+    │
+    └── • filter
+        │ columns: (k int, v int)
+        │ estimated row count: 333 (missing stats)
+        │ filter: ((v)[int] > (123)[int])[bool]
+        │
+        └── • scan
+              columns: (k int, v int)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 ----
-·            distribution         local            ·              ·
-·            vectorized           false            ·              ·
-union        ·                    ·                (column1 int)  ·
- │           estimated row count  2                ·              ·
- ├── values  ·                    ·                (column1 int)  ·
- │           size                 1 column, 1 row  ·              ·
- │           row 0, expr 0        (1)[int]         ·              ·
- └── values  ·                    ·                (column1 int)  ·
-·            size                 1 column, 1 row  ·              ·
-·            row 0, expr 0        (2)[int]         ·              ·
+distribution: local
+vectorized: false
+·
+• union
+│ columns: (column1 int)
+│ estimated row count: 2
+│
+├── • values
+│     columns: (column1 int)
+│     size: 1 column, 1 row
+│     row 0, expr 0: (1)[int]
+│
+└── • values
+      columns: (column1 int)
+      size: 1 column, 1 row
+      row 0, expr 0: (2)[int]
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-·     distribution         local                 ·        ·
-·     vectorized           true                  ·        ·
-scan  ·                    ·                     (k int)  ·
-·     estimated row count  1000 (missing stats)  ·        ·
-·     table                t@primary             ·        ·
-·     spans                FULL SCAN             ·        ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k int)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 ----
-·          distribution         local                 ·        ·
-·          vectorized           true                  ·        ·
-sort       ·                    ·                     (v int)  +v
- │         estimated row count  1000 (missing stats)  ·        ·
- │         order                +v                    ·        ·
- └── scan  ·                    ·                     (v int)  ·
-·          estimated row count  1000 (missing stats)  ·        ·
-·          table                t@primary             ·        ·
-·          spans                FULL SCAN             ·        ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (v int)
+│ ordering: +v
+│ estimated row count: 1000 (missing stats)
+│ order: +v
+│
+└── • scan
+      columns: (v int)
+      estimated row count: 1000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
 ----
-·     distribution         local              ·        ·
-·     vectorized           true               ·        ·
-scan  ·                    ·                  (v int)  ·
-·     estimated row count  1 (missing stats)  ·        ·
-·     table                t@primary          ·        ·
-·     spans                LIMITED SCAN       ·        ·
-·     limit                1                  ·        ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (v int)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: LIMITED SCAN
+  limit: 1
 
 statement ok
 CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-·          distribution         local                                                                      ·               ·
-·          vectorized           true                                                                       ·               ·
-filter     ·                    ·                                                                          (x int, y int)  ·
- │         estimated row count  311 (missing stats)                                                        ·               ·
- │         filter               ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
- └── scan  ·                    ·                                                                          (x int, y int)  ·
-·          estimated row count  1000 (missing stats)                                                       ·               ·
-·          table                tt@primary                                                                 ·               ·
-·          spans                FULL SCAN                                                                  ·               ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (x int, y int)
+│ estimated row count: 311 (missing stats)
+│ filter: ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]
+│
+└── • scan
+      columns: (x int, y int)
+      estimated row count: 1000 (missing stats)
+      table: tt@primary
+      spans: FULL SCAN
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT
@@ -814,24 +1004,28 @@ filter     ·                    ·                                             
 # │             render 0  (($1)[int] + (2)[int])[int]  ·        ·
 # └── emptyrow  ·         ·                            ()       ·
 
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a int)  ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  (1)[int]         ·        ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (a int)
+  size: 1 column, 1 row
+  row 0, expr 0: (1)[int]
 
 # Check array subscripts (#13811)
-query TTTTT
+query T
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (x int)  ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  (1)[int]         ·        ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (x int)
+  size: 1 column, 1 row
+  row 0, expr 0: (1)[int]
 
 query T
 EXPLAIN (OPT) SELECT 1 AS r
@@ -1086,69 +1280,79 @@ sort
                 ├── variable: a:1 [type=int]
                 └── variable: b:2 [type=int]
 
-query TTT colnames
+query T
 EXPLAIN SELECT string_agg(x, y) FROM (VALUES ('foo', 'foo'), ('bar', 'bar')) t(x, y)
 ----
-tree            field         description
-·               distribution  local
-·               vectorized    false
-group (scalar)  ·             ·
- └── values     ·             ·
-·               size          2 columns, 2 rows
+distribution: local
+vectorized: false
+·
+• group (scalar)
+│
+└── • values
+      size: 2 columns, 2 rows
 
-query TTT
+query T
 EXPLAIN SELECT corr(a, b) FROM tc;
 ----
-·               distribution   local
-·               vectorized     true
-group (scalar)  ·              ·
- └── scan       ·              ·
-·               missing stats  ·
-·               table          tc@primary
-·               spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: tc@primary
+      spans: FULL SCAN
 
 # Verify that subqueries are handled correctly, namely that we can have
 # subqueries outside of the EXPLAINed query.
-query ITTT
+query IT
 WITH
   a AS MATERIALIZED (SELECT max(k) FROM t WHERE k > (SELECT v FROM t WHERE v = k + 1)),
   b AS MATERIALIZED (EXPLAIN SELECT k, v FROM t)
 SELECT * FROM a, b
 ----
-NULL  ·     distribution   local
-NULL  ·     vectorized     true
-NULL  scan  ·              ·
-NULL  ·     missing stats  ·
-NULL  ·     table          t@primary
-NULL  ·     spans          FULL SCAN
+NULL  distribution: local
+NULL  vectorized: true
+NULL  ·
+NULL  • scan
+NULL    missing stats
+NULL    table: t@primary
+NULL    spans: FULL SCAN
 
 # Tests with EXPLAIN inside EXPLAIN.
-query TTT
+query T
 EXPLAIN EXPLAIN SELECT 1
 ----
-·        distribution  local
-·        vectorized    false
-explain  ·             ·
+distribution: local
+vectorized: false
+·
+• explain
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) EXPLAIN ANALYZE SELECT 1
 ----
-·             distribution         local               ·                       ·
-·             vectorized           false               ·                       ·
-project       ·                    ·                   (automatic, url)        ·
- └── explain  ·                    ·                   (automatic, url, json)  ·
-·             estimated row count  10 (missing stats)  ·                       ·
+distribution: local
+vectorized: false
+·
+• project
+│ columns: (automatic, url)
+│
+└── • explain
+      columns: (automatic, url, json)
+      estimated row count: 10 (missing stats)
 
 # Test a case with many spans.
-query TTT
+query T
 EXPLAIN SELECT * FROM t WHERE k IN (10, 20, 30, 40, 50, 60, 70, 80)
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          t@primary
-·     spans          [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] … (4 more)
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@primary
+  spans: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] … (4 more)
 
 
 # UPSERT and INSERT ON CONFLICT include arbiters.
@@ -1161,45 +1365,56 @@ CREATE TABLE u (
   FAMILY "primary" (k, v)
 )
 
-query TTT
+query T
 EXPLAIN UPSERT INTO u VALUES (1, 1)
 ----
-·                             distribution      local
-·                             vectorized        false
-upsert                        ·                 ·
- │                            into              u(k, v)
- │                            auto commit       ·
- │                            arbiter indexes   primary
- └── cross join (left outer)  ·                 ·
-      ├── values              ·                 ·
-      │                       size              2 columns, 1 row
-      └── scan                ·                 ·
-·                             missing stats     ·
-·                             table             u@primary
-·                             spans             [/1 - /1]
-·                             locking strength  for update
+distribution: local
+vectorized: false
+·
+• upsert
+│ into: u(k, v)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • cross join (left outer)
+    │
+    ├── • values
+    │     size: 2 columns, 1 row
+    │
+    └── • scan
+          missing stats
+          table: u@primary
+          spans: [/1 - /1]
+          locking strength: for update
 
-query TTT
+query T
 EXPLAIN INSERT INTO u VALUES (1, 1) ON CONFLICT DO NOTHING
 ----
-·                                            distribution           local
-·                                            vectorized             false
-insert                                       ·                      ·
- │                                           into                   u(k, v)
- │                                           auto commit            ·
- │                                           arbiter indexes        primary, u_v_key
- └── filter                                  ·                      ·
-      │                                      filter                 k IS NULL
-      └── lookup join (left outer)           ·                      ·
-           │                                 table                  u@u_v_key
-           │                                 equality               (column2) = (v)
-           │                                 equality cols are key  ·
-           └── filter                        ·                      ·
-                │                            filter                 k IS NULL
-                └── cross join (left outer)  ·                      ·
-                     ├── values              ·                      ·
-                     │                       size                   2 columns, 1 row
-                     └── scan                ·                      ·
-·                                            missing stats          ·
-·                                            table                  u@primary
-·                                            spans                  [/1 - /1]
+distribution: local
+vectorized: false
+·
+• insert
+│ into: u(k, v)
+│ auto commit
+│ arbiter indexes: primary, u_v_key
+│
+└── • filter
+    │ filter: k IS NULL
+    │
+    └── • lookup join (left outer)
+        │ table: u@u_v_key
+        │ equality: (column2) = (v)
+        │ equality cols are key
+        │
+        └── • filter
+            │ filter: k IS NULL
+            │
+            └── • cross join (left outer)
+                │
+                ├── • values
+                │     size: 2 columns, 1 row
+                │
+                └── • scan
+                      missing stats
+                      table: u@primary
+                      spans: [/1 - /1]

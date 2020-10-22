@@ -57,141 +57,162 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 
 # Check that EXPLAIN does not destroy data (#6613)
-query TTT colnames
+query T
 EXPLAIN DELETE FROM unindexed
 ----
-tree          field         description
-·             distribution  local
-·             vectorized    false
-delete range  ·             ·
-·             from          unindexed
-·             spans         FULL SCAN
+distribution: local
+vectorized: false
+·
+• delete range
+  from: unindexed
+  spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
-·                    distribution   local
-·                    vectorized     false
-delete               ·              ·
- │                   from           unindexed
- │                   auto commit    ·
- └── limit           ·              ·
-      │              count          10
-      └── filter     ·              ·
-           │         filter         v = 7
-           └── scan  ·              ·
-·                    missing stats  ·
-·                    table          unindexed@primary
-·                    spans          FULL SCAN
+distribution: local
+vectorized: false
+·
+• delete
+│ from: unindexed
+│ auto commit
+│
+└── • limit
+    │ count: 10
+    │
+    └── • filter
+        │ filter: v = 7
+        │
+        └── • scan
+              missing stats
+              table: unindexed@primary
+              spans: FULL SCAN
 
 # Check DELETE with LIMIT clause (MySQL extension)
-query TTT
+query T
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-·                    distribution   local
-·                    vectorized     false
-delete               ·              ·
- │                   from           unindexed
- │                   auto commit    ·
- └── limit           ·              ·
-      │              count          10
-      └── filter     ·              ·
-           │         filter         v = 5
-           └── scan  ·              ·
-·                    missing stats  ·
-·                    table          unindexed@primary
-·                    spans          FULL SCAN
+distribution: local
+vectorized: false
+·
+• delete
+│ from: unindexed
+│ auto commit
+│
+└── • limit
+    │ count: 10
+    │
+    └── • filter
+        │ filter: v = 5
+        │
+        └── • scan
+              missing stats
+              table: unindexed@primary
+              spans: FULL SCAN
 
 # Check fast DELETE.
-query TTT
+query T
 EXPLAIN DELETE FROM unindexed WHERE k > 0
 ----
-·             distribution  local
-·             vectorized    false
-delete range  ·             ·
-·             from          unindexed
-·             spans         [/1 - ]
+distribution: local
+vectorized: false
+·
+• delete range
+  from: unindexed
+  spans: [/1 - ]
 
 # Check fast DELETE with reverse scans (not supported by optimizer).
 query error DELETE statement requires LIMIT when ORDER BY is used
 EXPLAIN DELETE FROM unindexed WHERE true ORDER BY k DESC
 
 # Check that limits don't permit fast deletes.
-query TTT
+query T
 EXPLAIN DELETE FROM unindexed WHERE k > 0 LIMIT 1
 ----
-·          distribution   local
-·          vectorized     false
-delete     ·              ·
- │         from           unindexed
- │         auto commit    ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          unindexed@primary
-·          spans          [/1 - ]
-·          limit          1
+distribution: local
+vectorized: false
+·
+• delete
+│ from: unindexed
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: unindexed@primary
+      spans: [/1 - ]
+      limit: 1
 
-query TTT
+query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-·          distribution   local
-·          vectorized     false
-delete     ·              ·
- │         from           indexed
- │         auto commit    ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          indexed@indexed_value_idx
-·          spans          [/5 - /5]
-·          limit          10
+distribution: local
+vectorized: false
+·
+• delete
+│ from: indexed
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: indexed@indexed_value_idx
+      spans: [/5 - /5]
+      limit: 10
 
-query TTT
+query T
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
-·          distribution   local
-·          vectorized     false
-delete     ·              ·
- │         from           indexed
- │         auto commit    ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          indexed@indexed_value_idx
-·          spans          LIMITED SCAN
-·          limit          10
+distribution: local
+vectorized: false
+·
+• delete
+│ from: indexed
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: indexed@indexed_value_idx
+      spans: LIMITED SCAN
+      limit: 10
 
 # TODO(andyk): Prune columns so that index-join is not necessary.
-query TTT
+query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-·          distribution   local
-·          vectorized     false
-delete     ·              ·
- │         from           indexed
- │         auto commit    ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          indexed@indexed_value_idx
-·          spans          [/5 - /5]
-·          limit          10
+distribution: local
+vectorized: false
+·
+• delete
+│ from: indexed
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: indexed@indexed_value_idx
+      spans: [/5 - /5]
+      limit: 10
 
 # Ensure that index hints in DELETE statements force the choice of a specific index
 # as described in #38799.
 statement ok
 CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b))
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) DELETE FROM t38799@foo
 ----
-·          distribution         local                 ·       ·
-·          vectorized           false                 ·       ·
-delete     ·                    ·                     ()      ·
- │         estimated row count  0 (missing stats)     ·       ·
- │         from                 t38799                ·       ·
- │         auto commit          ·                     ·       ·
- └── scan  ·                    ·                     (a, b)  ·
-·          estimated row count  1000 (missing stats)  ·       ·
-·          table                t38799@foo            ·       ·
-·          spans                FULL SCAN             ·       ·
+distribution: local
+vectorized: false
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t38799
+│ auto commit
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1000 (missing stats)
+      table: t38799@foo
+      spans: FULL SCAN
 
 # Tracing tests for fast delete.
 statement ok
@@ -236,14 +257,15 @@ statement ok
 CREATE TABLE parent (id INT PRIMARY KEY)
 
 # Delete range should be used.
-query TTT
+query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·             distribution  local
-·             vectorized    false
-delete range  ·             ·
-·             from          parent
-·             spans         [/11 - ]
+distribution: local
+vectorized: false
+·
+• delete range
+  from: parent
+  spans: [/11 - ]
 
 statement ok
 CREATE TABLE child (
@@ -254,30 +276,34 @@ CREATE TABLE child (
 ) INTERLEAVE IN PARENT parent(pid)
 
 # Delete range should be used.
-query TTT
+query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·             distribution  local
-·             vectorized    false
-delete range  ·             ·
-·             from          parent
-·             spans         [/11 - ]
+distribution: local
+vectorized: false
+·
+• delete range
+  from: parent
+  spans: [/11 - ]
 
 # Delete range should not be used when deleting from the child.
-query TTT
+query T
 EXPLAIN DELETE FROM child WHERE id > 10
 ----
-·               distribution   local
-·               vectorized     false
-delete          ·              ·
- │              from           child
- │              auto commit    ·
- └── filter     ·              ·
-      │         filter         id > 10
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          child@primary
-·               spans          FULL SCAN
+distribution: local
+vectorized: false
+·
+• delete
+│ from: child
+│ auto commit
+│
+└── • filter
+    │ filter: id > 10
+    │
+    └── • scan
+          missing stats
+          table: child@primary
+          spans: FULL SCAN
 
 statement ok
 CREATE TABLE sibling (
@@ -288,14 +314,15 @@ CREATE TABLE sibling (
 ) INTERLEAVE IN PARENT parent(pid)
 
 # Delete range should be used.
-query TTT
+query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·             distribution  local
-·             vectorized    false
-delete range  ·             ·
-·             from          parent
-·             spans         [/11 - ]
+distribution: local
+vectorized: false
+·
+• delete range
+  from: parent
+  spans: [/11 - ]
 
 statement ok
 CREATE TABLE grandchild (
@@ -307,14 +334,15 @@ CREATE TABLE grandchild (
 ) INTERLEAVE IN PARENT child(gid, pid)
 
 # Delete range should be used.
-query TTT
+query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·             distribution  local
-·             vectorized    false
-delete range  ·             ·
-·             from          parent
-·             spans         [/11 - ]
+distribution: local
+vectorized: false
+·
+• delete range
+  from: parent
+  spans: [/11 - ]
 
 statement ok
 CREATE TABLE external_ref (
@@ -325,22 +353,27 @@ CREATE TABLE external_ref (
 )
 
 # Delete range should not be used (external ref).
-query TTT
+query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                distribution   local
-·                vectorized     false
-root             ·              ·
- ├── delete      ·              ·
- │    │          from           parent
- │    └── scan   ·              ·
- │               missing stats  ·
- │               table          parent@primary
- │               spans          [/11 - ]
- ├── fk-cascade  ·              ·
- │               fk             fk_pid_ref_parent
- └── fk-cascade  ·              ·
-·                fk             fk_pid_ref_parent
+distribution: local
+vectorized: false
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • scan
+│         missing stats
+│         table: parent@primary
+│         spans: [/11 - ]
+│
+├── • fk-cascade
+│     fk: fk_pid_ref_parent
+│
+└── • fk-cascade
+      fk: fk_pid_ref_parent
 
 statement ok
 DROP TABLE external_ref
@@ -356,41 +389,53 @@ CREATE TABLE child_with_index (
 ) INTERLEAVE IN PARENT parent(pid)
 
 # Delete range should not be used (child with secondary index).
-query TTT
+query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                                distribution        local
-·                                vectorized          false
-root                             ·                   ·
- ├── delete                      ·                   ·
- │    │                          from                parent
- │    └── buffer                 ·                   ·
- │         │                     label               buffer 1
- │         └── scan              ·                   ·
- │                               missing stats       ·
- │                               table               parent@primary
- │                               spans               [/11 - ]
- ├── fk-cascade                  ·                   ·
- │                               fk                  fk_pid_ref_parent
- │                               input               buffer 1
- ├── fk-cascade                  ·                   ·
- │                               fk                  fk_pid_ref_parent
- │                               input               buffer 1
- └── fk-check                    ·                   ·
-      └── error if rows          ·                   ·
-           └── hash join         ·                   ·
-                │                equality            (id) = (pid)
-                │                left cols are key   ·
-                │                right cols are key  ·
-                ├── scan buffer  ·                   ·
-                │                label               buffer 1
-                └── distinct     ·                   ·
-                     │           distinct on         pid
-                     │           order key           pid
-                     └── scan    ·                   ·
-·                                missing stats       ·
-·                                table               child_with_index@primary
-·                                spans               FULL SCAN
+distribution: local
+vectorized: false
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: parent@primary
+│             spans: [/11 - ]
+│
+├── • fk-cascade
+│     fk: fk_pid_ref_parent
+│     input: buffer 1
+│
+├── • fk-cascade
+│     fk: fk_pid_ref_parent
+│     input: buffer 1
+│
+└── • fk-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (id) = (pid)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: pid
+                │ order key: pid
+                │
+                └── • scan
+                      missing stats
+                      table: child_with_index@primary
+                      spans: FULL SCAN
 
 statement ok
 DROP TABLE child_with_index
@@ -404,41 +449,53 @@ CREATE TABLE child_without_cascade (
 ) INTERLEAVE IN PARENT parent(pid)
 
 # Delete range should not be used (child without cascading FK).
-query TTT
+query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                                distribution        local
-·                                vectorized          false
-root                             ·                   ·
- ├── delete                      ·                   ·
- │    │                          from                parent
- │    └── buffer                 ·                   ·
- │         │                     label               buffer 1
- │         └── scan              ·                   ·
- │                               missing stats       ·
- │                               table               parent@primary
- │                               spans               [/11 - ]
- ├── fk-cascade                  ·                   ·
- │                               fk                  fk_pid_ref_parent
- │                               input               buffer 1
- ├── fk-cascade                  ·                   ·
- │                               fk                  fk_pid_ref_parent
- │                               input               buffer 1
- └── fk-check                    ·                   ·
-      └── error if rows          ·                   ·
-           └── hash join         ·                   ·
-                │                equality            (id) = (pid)
-                │                left cols are key   ·
-                │                right cols are key  ·
-                ├── scan buffer  ·                   ·
-                │                label               buffer 1
-                └── distinct     ·                   ·
-                     │           distinct on         pid
-                     │           order key           pid
-                     └── scan    ·                   ·
-·                                missing stats       ·
-·                                table               child_without_cascade@primary
-·                                spans               FULL SCAN
+distribution: local
+vectorized: false
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: parent@primary
+│             spans: [/11 - ]
+│
+├── • fk-cascade
+│     fk: fk_pid_ref_parent
+│     input: buffer 1
+│
+├── • fk-cascade
+│     fk: fk_pid_ref_parent
+│     input: buffer 1
+│
+└── • fk-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (id) = (pid)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: pid
+                │ order key: pid
+                │
+                └── • scan
+                      missing stats
+                      table: child_without_cascade@primary
+                      spans: FULL SCAN
 
 statement ok
 DROP TABLE child_without_cascade
@@ -451,22 +508,27 @@ CREATE TABLE child_without_fk (
 ) INTERLEAVE IN PARENT parent(pid)
 
 # Delete range should not be used (child without cascading FK).
-query TTT
+query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                distribution   local
-·                vectorized     false
-root             ·              ·
- ├── delete      ·              ·
- │    │          from           parent
- │    └── scan   ·              ·
- │               missing stats  ·
- │               table          parent@primary
- │               spans          [/11 - ]
- ├── fk-cascade  ·              ·
- │               fk             fk_pid_ref_parent
- └── fk-cascade  ·              ·
-·                fk             fk_pid_ref_parent
+distribution: local
+vectorized: false
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • scan
+│         missing stats
+│         table: parent@primary
+│         spans: [/11 - ]
+│
+├── • fk-cascade
+│     fk: fk_pid_ref_parent
+│
+└── • fk-cascade
+      fk: fk_pid_ref_parent
 
 statement ok
 DROP TABLE child_without_fk
@@ -485,17 +547,21 @@ CREATE TABLE abc (
 
 
 # Delete range should not be used (FK columns are not in the right order).
-query TTT
+query T
 EXPLAIN DELETE FROM ab WHERE a = 1
 ----
-·                distribution   local
-·                vectorized     false
-root             ·              ·
- ├── delete      ·              ·
- │    │          from           ab
- │    └── scan   ·              ·
- │               missing stats  ·
- │               table          ab@primary
- │               spans          [/1 - /1]
- └── fk-cascade  ·              ·
-·                fk             fk_b_ref_ab
+distribution: local
+vectorized: false
+·
+• root
+│
+├── • delete
+│   │ from: ab
+│   │
+│   └── • scan
+│         missing stats
+│         table: ab@primary
+│         spans: [/1 - /1]
+│
+└── • fk-cascade
+      fk: fk_b_ref_ab

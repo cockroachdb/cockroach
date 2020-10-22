@@ -547,25 +547,7 @@ FROM
     OFFSET 1
 )
 ----
-offset
- ├── columns: tree:13 columns:18
- ├── internal-ordering: +13
- ├── sort
- │    ├── columns: tree:13 columns:18
- │    ├── ordering: +13
- │    └── project
- │         ├── columns: tree:13 columns:18
- │         ├── explain
- │         │    ├── columns: tree:6 level:7 node_type:8 field:9 description:10 columns:11 ordering:12
- │         │    ├── mode: verbose
- │         │    └── scan a
- │         │         ├── columns: k:1!null i:2 f:3 s:4
- │         │         ├── key: (1)
- │         │         └── fd: (1)-->(2-4)
- │         └── projections
- │              ├── tree:6 [as=tree:13, outer=(6)]
- │              └── columns:11 [as=columns:18, outer=(11)]
- └── 1
+error (42703): column "tree" does not exist
 
 # --------------------------------------------------
 # PruneLimitCols + PruneOffsetCols
@@ -1599,7 +1581,7 @@ norm expect=PruneExplainCols
 EXPLAIN SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
 ----
 explain
- ├── columns: tree:7 field:8 description:9
+ ├── columns: info:7
  └── sort
       ├── columns: a:1!null  [hidden: c:3!null]
       ├── key: (1)

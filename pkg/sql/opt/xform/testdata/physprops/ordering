@@ -621,7 +621,7 @@ opt
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
 explain
- ├── columns: tree:6 field:9 description:10 columns:11 ordering:12  [hidden: level:7 node_type:8]
+ ├── columns: info:6
  ├── mode: verbose
  └── sort
       ├── columns: x:1!null y:2!null z:3 s:4!null
@@ -636,9 +636,9 @@ explain
 memo
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
-memo (optimized, ~3KB, required=[presentation: tree:6,field:9,description:10,columns:11,ordering:12])
+memo (optimized, ~3KB, required=[presentation: info:6])
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │    └── [presentation: tree:6,field:9,description:10,columns:11,ordering:12]
+ │    └── [presentation: info:6]
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
  │         └── cost: 1303.36
  └── G2: (scan a,cols=(1-4))

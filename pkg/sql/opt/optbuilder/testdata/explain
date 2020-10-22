@@ -6,7 +6,7 @@ build
 EXPLAIN SELECT * FROM xy
 ----
 explain
- ├── columns: tree:4 field:5 description:6
+ ├── columns: info:4
  └── project
       ├── columns: x:1!null y:2
       └── scan xy
@@ -16,7 +16,7 @@ build
 EXPLAIN (TYPES) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:4 field:7 description:8 columns:9 ordering:10  [hidden: level:5 node_type:6]
+ ├── columns: info:4
  └── project
       ├── columns: x:1!null y:2
       └── scan xy
@@ -26,7 +26,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:4 field:7 description:8 columns:9 ordering:10  [hidden: level:5 node_type:6]
+ ├── columns: info:4
  ├── mode: verbose
  └── project
       ├── columns: x:1!null y:2
@@ -38,7 +38,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
 ----
 explain
- ├── columns: tree:4 field:7 description:8 columns:9 ordering:10  [hidden: level:5 node_type:6]
+ ├── columns: info:4
  ├── mode: verbose
  └── sort
       ├── columns: x:1!null y:2
@@ -52,7 +52,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
 ----
 explain
- ├── columns: tree:6 field:9 description:10 columns:11 ordering:12  [hidden: level:7 node_type:8]
+ ├── columns: info:6
  ├── mode: verbose
  └── project
       ├── columns: x:1!null y:2 u:4!null v:5!null
@@ -70,55 +70,12 @@ explain
 build
 SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ]
 ----
-with &1
- ├── columns: tree:11
- ├── explain
- │    ├── columns: tree:4 level:5 node_type:6 field:7 description:8 columns:9 ordering:10
- │    ├── mode: verbose
- │    └── project
- │         ├── columns: x:1!null y:2
- │         └── scan xy
- │              └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
- └── project
-      ├── columns: tree:11
-      └── with-scan &1
-           ├── columns: tree:11 level:12 node_type:13 field:14 description:15 columns:16 ordering:17
-           └── mapping:
-                ├──  tree:4 => tree:11
-                ├──  level:5 => level:12
-                ├──  node_type:6 => node_type:13
-                ├──  field:7 => field:14
-                ├──  description:8 => description:15
-                ├──  columns:9 => columns:16
-                └──  ordering:10 => ordering:17
+error (42703): column "tree" does not exist
 
 build
 SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y ]
 ----
-with &1
- ├── columns: tree:11
- ├── explain
- │    ├── columns: tree:4 level:5 node_type:6 field:7 description:8 columns:9 ordering:10
- │    ├── mode: verbose
- │    └── sort
- │         ├── columns: x:1!null x:1!null y:2
- │         ├── ordering: +2
- │         └── project
- │              ├── columns: x:1!null y:2
- │              └── scan xy
- │                   └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3
- └── project
-      ├── columns: tree:11
-      └── with-scan &1
-           ├── columns: tree:11 level:12 node_type:13 field:14 description:15 columns:16 ordering:17
-           └── mapping:
-                ├──  tree:4 => tree:11
-                ├──  level:5 => level:12
-                ├──  node_type:6 => node_type:13
-                ├──  field:7 => field:14
-                ├──  description:8 => description:15
-                ├──  columns:9 => columns:16
-                └──  ordering:10 => ordering:17
+error (42703): column "tree" does not exist
 
 build
 SELECT json FROM [EXPLAIN (DISTSQL) SELECT * FROM xy] WHERE false
