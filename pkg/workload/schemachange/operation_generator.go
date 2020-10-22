@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -69,7 +70,9 @@ type opType int
 
 // opsWithErrorScreening stores ops which currently check for exec
 // errors and update expectedExecErrors in the op generator state
-var opsWithExecErrorScreening = map[opType]bool{}
+var opsWithExecErrorScreening = map[opType]bool{
+	addColumn: true,
+}
 
 func opScreensForExecErrors(op opType) bool {
 	if _, exists := opsWithExecErrorScreening[op]; exists {
@@ -268,6 +271,15 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN IrrelevantColumnName string`, tableName), nil
+	}
+
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(false))
 	if err != nil {
 		return "", err
@@ -283,6 +295,25 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 		Type: typ,
 	}
 	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
+
+	columnExistsOnTable, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	typeExists, err := typeExists(tx, typ)
+	if err != nil {
+		return "", err
+	}
+	tableHasRows, err := tableHasRows(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
+		{code: pgcode.UndefinedObject, condition: !typeExists},
+		{code: pgcode.NotNullViolation, condition: tableHasRows && def.Nullable.Nullability == tree.NotNull},
+	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
 }
