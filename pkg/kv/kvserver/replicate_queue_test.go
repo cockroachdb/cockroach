@@ -358,7 +358,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, 38565)
-	skip.UnderRace(t, 38565)
+	skip.UnderRaceWithIssue(t, 38565)
 	skip.UnderShort(t, 38565)
 	ctx := context.Background()
 
