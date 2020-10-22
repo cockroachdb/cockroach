@@ -418,6 +418,49 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 	return MakeRangeKey(key, LocalQueueLastProcessedSuffix, roachpb.RKey(queue))
 }
 
+// LockTableSingleKey creates a key under which all single-key locks for the
+// given key can be found. Note that there can be multiple locks for the given
+// key, but those are distinguished using the "version" which is not in scope
+// of the keys package.
+// For a scan [start, end) the corresponding lock table scan is
+// [LTSK(start), LTSK(end)).
+func LockTableSingleKey(key roachpb.Key) roachpb.Key {
+	// Don't unwrap any local prefix on key using Addr(key). This allow for
+	// doubly-local lock table keys. For example, local range descriptor keys can
+	// be locked during split and merge transactions.
+	// The +3 account for the bytesMarker and terminator.
+	buf := make(roachpb.Key, 0,
+		len(LocalRangeLockTablePrefix)+len(LockTableSingleKeyInfix)+len(key)+3)
+	buf = append(buf, LocalRangeLockTablePrefix...)
+	buf = append(buf, LockTableSingleKeyInfix...)
+	buf = encoding.EncodeBytesAscending(buf, key)
+	return buf
+}
+
+// DecodeLockTableSingleKey decodes the single-key lock table key to return the key
+// that was locked..
+func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error) {
+	if !bytes.HasPrefix(key, LocalRangeLockTablePrefix) {
+		return nil, errors.Errorf("key %q does not have %q prefix",
+			key, LocalRangeLockTablePrefix)
+	}
+	// Cut the prefix.
+	b := key[len(LocalRangeLockTablePrefix):]
+	if !bytes.HasPrefix(b, LockTableSingleKeyInfix) {
+		return nil, errors.Errorf("key %q is not for a single-key lock", key)
+	}
+	b = b[len(LockTableSingleKeyInfix):]
+	b, lockedKey, err = encoding.DecodeBytesAscending(b, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) != 0 {
+		return nil, errors.Errorf("key %q has left-over bytes %d after decoding",
+			key, len(b))
+	}
+	return lockedKey, err
+}
+
 // IsLocal performs a cheap check that returns true iff a range-local key is
 // passed, that is, a key for which `Addr` would return a non-identical RKey
 // (or a decoding error).

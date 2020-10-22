@@ -724,3 +724,26 @@ func TestTenantPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestLockTableKeyEncodeDecode(t *testing.T) {
+	expectedPrefix := append([]byte(nil), LocalRangeLockTablePrefix...)
+	expectedPrefix = append(expectedPrefix, LockTableSingleKeyInfix...)
+	testCases := []struct {
+		key roachpb.Key
+	}{
+		{key: roachpb.Key("foo")},
+		{key: roachpb.Key("a")},
+		{key: roachpb.Key("")},
+		// Causes a doubly-local range local key.
+		{key: RangeDescriptorKey(roachpb.RKey("baz"))},
+	}
+	for _, test := range testCases {
+		t.Run("", func(t *testing.T) {
+			ltKey := LockTableSingleKey(test.key)
+			require.True(t, bytes.HasPrefix(ltKey, expectedPrefix))
+			k, err := DecodeLockTableSingleKey(ltKey)
+			require.NoError(t, err)
+			require.Equal(t, test.key, k)
+		})
+	}
+}
