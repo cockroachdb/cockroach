@@ -1343,6 +1343,93 @@ func TestEncodeJSONInvertedIndex(t *testing.T) {
 	}
 }
 
+func TestEncodeJSONInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		value    string
+		contains string
+		expected bool
+	}{
+		// This test uses EncodeInvertedIndexKeys and EncodeInvertedIndexSpans to
+		// determine whether the first JSON value contains the second. If the first
+		// value contains the second, expected is true. Otherwise it is false.
+		{`{}`, `{}`, true},
+		{`[]`, `[]`, true},
+		{`[]`, `{}`, false},
+		{`"a"`, `"a"`, true},
+		{`null`, `{}`, false},
+		{`{}`, `true`, false},
+		{`[[], {}]`, `[]`, true},
+		{`[[], {}]`, `{}`, false}, // Surprising, but matches Postgres' behavior.
+		{`[{"a": "a"}, {"a": "a"}]`, `[]`, true},
+		{`[[[["a"]]], [[["a"]]]]`, `[]`, true},
+		{`{}`, `{"a": {}}`, false},
+		{`{"a": 123.123}`, `{}`, true},
+		{`{"a": [{}]}`, `{"a": []}`, true},
+		{`{"a": [{}]}`, `{"a": {}}`, false},
+		{`{"a": [1]}`, `{"a": []}`, true},
+		{`{"a": {"b": "c"}}`, `{"a": {}}`, true},
+		{`{"a": {}}`, `{"a": {"b": true}}`, false},
+		{`[1, 2, 3, 4, "foo"]`, `[1, 2]`, true},
+		{`[1, 2, 3, 4, "foo"]`, `[1, "bar"]`, false},
+		{`{"a": {"b": [1]}}`, `{"a": {"b": [1]}}`, true},
+		{`{"a": {"b": [1, [2]]}}`, `{"a": {"b": [1]}}`, true},
+		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true},
+		{`{"a": {"b": false}}`, `{"a": {"b": true}}`, false},
+		{`[{"a": {"b": [1, [2]]}}, "d"]`, `[{"a": {"b": [[2]]}}, "d"]`, true},
+		{`["a", "a"]`, `"a"`, true},
+		{`[1, 2, 3, 1]`, `1`, true},
+		{`[true, false, null, 1.23, "a"]`, `"b"`, false},
+		{`{"a": {"b": "c", "d": "e"}, "f": "g"}`, `{"a": {"b": "c"}}`, true},
+	}
+
+	for _, c := range testCases {
+		keys, err := EncodeInvertedIndexKeys(nil, jsonTestShorthand(c.value))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		spansSlice, err := EncodeInvertedIndexSpans(nil, jsonTestShorthand(c.contains))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// The spans returned by EncodeInvertedIndexSpans represent the intersection
+		// of unions. So the below logic is performing a union on the inner loop
+		// (any span in the slice can contain any of the keys), and an intersection
+		// on the outer loop (all of the span slices must contain at least one key).
+		actual := true
+		for _, spans := range spansSlice {
+			found := false
+			for _, span := range spans {
+				if span.EndKey == nil {
+					// ContainsKey expects that the EndKey is filled in.
+					span.EndKey = span.Key.PrefixEnd()
+				}
+				for _, key := range keys {
+					if span.ContainsKey(key) {
+						found = true
+						break
+					}
+				}
+				if found == true {
+					break
+				}
+			}
+			actual = actual && found
+		}
+
+		if actual != c.expected {
+			if c.expected {
+				t.Errorf("expected %s to contain %s but it did not",
+					c.value, c.contains)
+			} else {
+				t.Errorf("expected %s not to contain %s but it did",
+					c.value, c.contains)
+			}
+		}
+	}
+}
+
 func TestNumInvertedIndexEntries(t *testing.T) {
 	testCases := []struct {
 		value    string
