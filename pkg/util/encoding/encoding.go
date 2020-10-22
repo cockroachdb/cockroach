@@ -941,6 +941,14 @@ func EncodeNotNullAscending(b []byte) []byte {
 	return append(b, encodedNotNull)
 }
 
+// EncodeJSONObjectSpanStartAscending encodes the first possible value for JSON
+// objects, which is \x00\xff. Non-objects (i.e., scalars and arrays) will
+// start with \x00\x01 or \x00\x03 (see AddJSONPathTerminator and
+// EncodeArrayAscending), so all objects will be ordered after them.
+func EncodeJSONObjectSpanStartAscending(b []byte) []byte {
+	return append(b, escape, escaped00)
+}
+
 // EncodeArrayAscending encodes a value used to signify membership of an array for JSON objects.
 func EncodeArrayAscending(b []byte) []byte {
 	return append(b, escape, escapedJSONArray)

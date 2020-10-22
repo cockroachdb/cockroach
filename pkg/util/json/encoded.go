@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -712,6 +713,16 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		return nil, err
 	}
 	return decoded.encodeInvertedIndexKeys(b)
+}
+
+func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
+	b []byte, isRoot, isObjectValue bool,
+) ([]roachpb.Spans, bool, error) {
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, false, err
+	}
+	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue)
 }
 
 // numInvertedIndexEntries implements the JSON interface.
