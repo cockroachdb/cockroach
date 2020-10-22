@@ -74,7 +74,7 @@ type _OP_CONST_NAME struct {
 
 func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -242,9 +242,9 @@ func GetProjection_CONST_SIDEConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
-		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
+		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
 	}
-	c := GetDatumToPhysicalFn(constType)(constArg)
+	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	// {{if _IS_CONST_LEFT}}
 	leftType, rightType := constType, inputTypes[colIdx]
 	// {{else}}
@@ -346,7 +346,7 @@ func GetProjection_CONST_SIDEConstOperator(
 			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
 			constArg:            constArg,
 			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}),
-			datumToVecConverter: GetDatumToPhysicalFn(outputType),
+			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
 		}, nil
 		// {{end}}
 	}

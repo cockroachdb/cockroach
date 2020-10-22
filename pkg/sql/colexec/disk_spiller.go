@@ -246,7 +246,7 @@ func (d *diskSpillerBase) Close(ctx context.Context) error {
 	if !d.close() {
 		return nil
 	}
-	if c, ok := d.diskBackedOp.(Closer); ok {
+	if c, ok := d.diskBackedOp.(colexecbase.Closer); ok {
 		return c.Close(ctx)
 	}
 	return nil

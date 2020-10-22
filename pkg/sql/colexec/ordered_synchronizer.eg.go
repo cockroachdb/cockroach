@@ -78,7 +78,7 @@ type OrderedSynchronizer struct {
 
 var (
 	_ colexecbase.Operator = &OrderedSynchronizer{}
-	_ Closer               = &OrderedSynchronizer{}
+	_ colexecbase.Closer   = &OrderedSynchronizer{}
 )
 
 // ChildCount implements the execinfrapb.OpNode interface.

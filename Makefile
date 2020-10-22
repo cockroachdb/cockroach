@@ -810,6 +810,7 @@ DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions docs/generated/redact_s
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
+  pkg/sql/colconv/datum_to_vec.eg.go \
   pkg/sql/colconv/vec_to_datum.eg.go \
   pkg/sql/colexec/and_or_projection.eg.go \
   pkg/sql/colexec/cast.eg.go \
@@ -823,15 +824,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/hashtable_full_default.eg.go \
   pkg/sql/colexec/hashtable_full_deleting.eg.go \
   pkg/sql/colexec/hash_aggregator.eg.go \
-  pkg/sql/colexec/hash_any_not_null_agg.eg.go \
-  pkg/sql/colexec/hash_avg_agg.eg.go \
-  pkg/sql/colexec/hash_bool_and_or_agg.eg.go \
-  pkg/sql/colexec/hash_concat_agg.eg.go \
-  pkg/sql/colexec/hash_count_agg.eg.go \
-  pkg/sql/colexec/hash_default_agg.eg.go \
-  pkg/sql/colexec/hash_min_max_agg.eg.go \
-  pkg/sql/colexec/hash_sum_agg.eg.go \
-  pkg/sql/colexec/hash_sum_int_agg.eg.go \
   pkg/sql/colexec/hash_utils.eg.go \
   pkg/sql/colexec/is_null_ops.eg.go \
   pkg/sql/colexec/like_ops.eg.go \
@@ -844,15 +836,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/mergejoiner_leftouter.eg.go \
   pkg/sql/colexec/mergejoiner_leftsemi.eg.go \
   pkg/sql/colexec/mergejoiner_rightouter.eg.go \
-  pkg/sql/colexec/ordered_any_not_null_agg.eg.go \
-  pkg/sql/colexec/ordered_avg_agg.eg.go \
-  pkg/sql/colexec/ordered_bool_and_or_agg.eg.go \
-  pkg/sql/colexec/ordered_concat_agg.eg.go \
-  pkg/sql/colexec/ordered_count_agg.eg.go \
-  pkg/sql/colexec/ordered_default_agg.eg.go \
-  pkg/sql/colexec/ordered_min_max_agg.eg.go \
-  pkg/sql/colexec/ordered_sum_agg.eg.go \
-  pkg/sql/colexec/ordered_sum_int_agg.eg.go \
   pkg/sql/colexec/ordered_synchronizer.eg.go \
   pkg/sql/colexec/proj_const_left_ops.eg.go \
   pkg/sql/colexec/proj_const_right_ops.eg.go \
@@ -866,10 +849,27 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/select_in.eg.go \
   pkg/sql/colexec/sort.eg.go \
   pkg/sql/colexec/substring.eg.go \
-  pkg/sql/colexec/utils.eg.go \
   pkg/sql/colexec/values_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
-  pkg/sql/colexec/window_peer_grouper.eg.go
+  pkg/sql/colexec/window_peer_grouper.eg.go \
+  pkg/sql/colexec/colexecagg/hash_any_not_null_agg.eg.go \
+  pkg/sql/colexec/colexecagg/hash_avg_agg.eg.go \
+  pkg/sql/colexec/colexecagg/hash_bool_and_or_agg.eg.go \
+  pkg/sql/colexec/colexecagg/hash_concat_agg.eg.go \
+  pkg/sql/colexec/colexecagg/hash_count_agg.eg.go \
+  pkg/sql/colexec/colexecagg/hash_default_agg.eg.go \
+  pkg/sql/colexec/colexecagg/hash_min_max_agg.eg.go \
+  pkg/sql/colexec/colexecagg/hash_sum_agg.eg.go \
+  pkg/sql/colexec/colexecagg/hash_sum_int_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_any_not_null_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_avg_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_bool_and_or_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_concat_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_count_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_default_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_min_max_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_sum_agg.eg.go \
+  pkg/sql/colexec/colexecagg/ordered_sum_int_agg.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \

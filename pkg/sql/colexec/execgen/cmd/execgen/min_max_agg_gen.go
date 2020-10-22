@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-const minMaxAggTmpl = "pkg/sql/colexec/min_max_agg_tmpl.go"
+const minMaxAggTmpl = "pkg/sql/colexec/colexecagg/min_max_agg_tmpl.go"
 
 func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(

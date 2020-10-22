@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-const anyNotNullAggTmpl = "pkg/sql/colexec/any_not_null_agg_tmpl.go"
+const anyNotNullAggTmpl = "pkg/sql/colexec/colexecagg/any_not_null_agg_tmpl.go"
 
 func genAnyNotNullAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(

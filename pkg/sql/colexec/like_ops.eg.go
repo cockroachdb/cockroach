@@ -17,7 +17,7 @@ type selPrefixBytesBytesConstOp struct {
 
 func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -109,7 +109,7 @@ type projPrefixBytesBytesConstOp struct {
 
 func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -206,7 +206,7 @@ type selSuffixBytesBytesConstOp struct {
 
 func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -298,7 +298,7 @@ type projSuffixBytesBytesConstOp struct {
 
 func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -395,7 +395,7 @@ type selContainsBytesBytesConstOp struct {
 
 func (p *selContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -487,7 +487,7 @@ type projContainsBytesBytesConstOp struct {
 
 func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -584,7 +584,7 @@ type selRegexpBytesBytesConstOp struct {
 
 func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -676,7 +676,7 @@ type projRegexpBytesBytesConstOp struct {
 
 func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -773,7 +773,7 @@ type selNotPrefixBytesBytesConstOp struct {
 
 func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -865,7 +865,7 @@ type projNotPrefixBytesBytesConstOp struct {
 
 func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -962,7 +962,7 @@ type selNotSuffixBytesBytesConstOp struct {
 
 func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1054,7 +1054,7 @@ type projNotSuffixBytesBytesConstOp struct {
 
 func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -1151,7 +1151,7 @@ type selNotContainsBytesBytesConstOp struct {
 
 func (p *selNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1243,7 +1243,7 @@ type projNotContainsBytesBytesConstOp struct {
 
 func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -1340,7 +1340,7 @@ type selNotRegexpBytesBytesConstOp struct {
 
 func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1432,7 +1432,7 @@ type projNotRegexpBytesBytesConstOp struct {
 
 func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.

@@ -67,7 +67,7 @@ type projConstOpBase struct {
 	allocator      *colmem.Allocator
 	colIdx         int
 	outputIdx      int
-	overloadHelper overloadHelper
+	overloadHelper execgen.OverloadHelper
 }
 
 // projOpBase contains all of the fields for non-constant projections.
@@ -77,7 +77,7 @@ type projOpBase struct {
 	col1Idx        int
 	col2Idx        int
 	outputIdx      int
-	overloadHelper overloadHelper
+	overloadHelper execgen.OverloadHelper
 }
 
 // {{define "projOp"}}
@@ -88,7 +88,7 @@ type _OP_NAME struct {
 
 func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
@@ -250,7 +250,7 @@ func GetProjectionOperator(
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,
 		outputIdx:      outputIdx,
-		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
+		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
@@ -318,7 +318,7 @@ func GetProjectionOperator(
 			projOpBase:          projOpBase,
 			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
 			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
-			datumToVecConverter: GetDatumToPhysicalFn(outputType),
+			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
 		}, nil
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())

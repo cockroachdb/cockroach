@@ -498,7 +498,7 @@ type mergeJoinBase struct {
 }
 
 var _ resetter = &mergeJoinBase{}
-var _ Closer = &mergeJoinBase{}
+var _ colexecbase.Closer = &mergeJoinBase{}
 
 func (o *mergeJoinBase) reset(ctx context.Context) {
 	if r, ok := o.left.source.(resetter); ok {
@@ -770,7 +770,7 @@ func (o *mergeJoinBase) Close(ctx context.Context) error {
 	}
 	var lastErr error
 	for _, op := range []colexecbase.Operator{o.left.source, o.right.source} {
-		if c, ok := op.(Closer); ok {
+		if c, ok := op.(colexecbase.Closer); ok {
 			if err := c.Close(ctx); err != nil {
 				lastErr = err
 			}
