@@ -2029,6 +2029,17 @@ func (s Span) EqualValue(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
 }
 
+// Compare returns an integer comparing two Spans lexicographically.
+// The result will be 0 if s==o, -1 if s starts before o or if the starts
+// are equal and s ends before o, and +1 otherwise.
+func (s Span) Compare(o Span) int {
+	cmp := bytes.Compare(s.Key, o.Key)
+	if cmp == 0 {
+		return bytes.Compare(s.EndKey, o.EndKey)
+	}
+	return cmp
+}
+
 // Overlaps returns true WLOG for span A and B iff:
 // 1. Both spans contain one key (just the start key) and they are equal; or
 // 2. The span with only one key is contained inside the other span; or
@@ -2169,6 +2180,30 @@ type Spans []Span
 func (a Spans) Len() int           { return len(a) }
 func (a Spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a Spans) Less(i, j int) bool { return a[i].Key.Compare(a[j].Key) < 0 }
+
+// Compare returns an integer comparing two Spans lexicographically.
+// - The result will be 0 if a==b.
+// - The result will be -1 if the first span in a that is not equal to the
+//   corresponding span in b (i.e., at the same position) is less than it
+//   (according to Span.Compare) or all corresponding spans are equal but
+//   there are fewer spans in a.
+// - The result will be +1 otherwise.
+// Assumes that each of the Spans are already sorted using Span.Compare.
+func (a Spans) Compare(b Spans) int {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		cmp := a[i].Compare(b[i])
+		if cmp != 0 {
+			return cmp
+		}
+	}
+	if len(a) < len(b) {
+		return -1
+	}
+	if len(b) < len(a) {
+		return 1
+	}
+	return 0
+}
 
 // ContainsKey returns whether any of the spans in the set of spans contains
 // the given key.

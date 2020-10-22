@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 )
@@ -1340,6 +1341,138 @@ func TestEncodeJSONInvertedIndex(t *testing.T) {
 					c.value, c.expEnc[j], path)
 			}
 		}
+	}
+}
+
+func TestEncodeJSONInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		value    string
+		contains string
+		expected bool
+	}{
+		// This test uses EncodeInvertedIndexKeys and EncodeContainingInvertedIndexSpans to
+		// determine whether the first JSON value contains the second. If the first
+		// value contains the second, expected is true. Otherwise it is false.
+		{`{}`, `{}`, true},
+		{`[]`, `[]`, true},
+		{`[]`, `{}`, false},
+		{`"a"`, `"a"`, true},
+		{`null`, `{}`, false},
+		{`{}`, `true`, false},
+		{`[[], {}]`, `[]`, true},
+		{`[[], {}]`, `{}`, false}, // Surprising, but matches Postgres' behavior.
+		{`[{"a": "a"}, {"a": "a"}]`, `[]`, true},
+		{`[[[["a"]]], [[["a"]]]]`, `[]`, true},
+		{`{}`, `{"a": {}}`, false},
+		{`{"a": 123.123}`, `{}`, true},
+		{`{"a": [{}]}`, `{"a": []}`, true},
+		{`{"a": [{}]}`, `{"a": {}}`, false},
+		{`{"a": [1]}`, `{"a": []}`, true},
+		{`{"a": {"b": "c"}}`, `{"a": {}}`, true},
+		{`{"a": {}}`, `{"a": {"b": true}}`, false},
+		{`[1, 2, 3, 4, "foo"]`, `[1, 2]`, true},
+		{`[1, 2, 3, 4, "foo"]`, `[1, "bar"]`, false},
+		{`{"a": {"b": [1]}}`, `{"a": {"b": [1]}}`, true},
+		{`{"a": {"b": [1, [2]]}}`, `{"a": {"b": [1]}}`, true},
+		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true},
+		{`{"a": {"b": false}}`, `{"a": {"b": true}}`, false},
+		{`[{"a": {"b": [1, [2]]}}, "d"]`, `[{"a": {"b": [[2]]}}, "d"]`, true},
+		{`["a", "a"]`, `"a"`, true},
+		{`[1, 2, 3, 1]`, `1`, true},
+		{`[true, false, null, 1.23, "a"]`, `"b"`, false},
+		{`{"a": {"b": "c", "d": "e"}, "f": "g"}`, `{"a": {"b": "c"}}`, true},
+		{`{"\u0000\u0001": "b"}`, `{}`, true},
+		{`{"\u0000\u0001": {"\u0000\u0001": "b"}}`, `{"\u0000\u0001": {}}`, true},
+	}
+
+	runTest := func(left, right JSON, expected bool) {
+		keys, err := EncodeInvertedIndexKeys(nil, left)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		spansSlice, err := EncodeContainingInvertedIndexSpans(nil, right)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// The spans returned by EncodeContainingInvertedIndexSpans represent the intersection
+		// of unions. So the below logic is performing a union on the inner loop
+		// (any span in the slice can contain any of the keys), and an intersection
+		// on the outer loop (all of the span slices must contain at least one key).
+		actual := true
+		for _, spans := range spansSlice {
+			found := false
+			for _, span := range spans {
+				if span.EndKey == nil {
+					// ContainsKey expects that the EndKey is filled in.
+					span.EndKey = span.Key.PrefixEnd()
+				}
+				for _, key := range keys {
+					if span.ContainsKey(key) {
+						found = true
+						break
+					}
+				}
+				if found == true {
+					break
+				}
+			}
+			actual = actual && found
+		}
+
+		if actual != expected {
+			if expected {
+				t.Errorf("expected %s to contain %s but it did not",
+					left.String(), right.String())
+			} else {
+				t.Errorf("expected %s not to contain %s but it did",
+					left.String(), right.String())
+			}
+		}
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		value, contains := jsonTestShorthand(c.value), jsonTestShorthand(c.contains)
+
+		// First check that evaluating `value @> contains` matches the expected
+		// result.
+		res, err := Contains(value, contains)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res != c.expected {
+			t.Fatalf(
+				"expected value of %s @> %s did not match actual value. Expected: %v. Got: %v",
+				c.value, c.contains, c.expected, res,
+			)
+		}
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(value, contains, c.expected)
+	}
+
+	// Run a set of randomly generated test cases.
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < 100; i++ {
+		// Generate two random JSONs and evaluate the result of `left @> right`.
+		left, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+		right, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := Contains(left, right)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(left, right, res)
 	}
 }
 

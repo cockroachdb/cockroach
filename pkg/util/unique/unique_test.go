@@ -15,6 +15,8 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 func TestUniquifyByteSlices(t *testing.T) {
@@ -63,6 +65,65 @@ func TestUniquifyByteSlices(t *testing.T) {
 			}
 			if got := UniquifyByteSlices(input); !reflect.DeepEqual(got, expected) {
 				t.Errorf("UniquifyByteSlices() = %v, expected %v", got, expected)
+			}
+		})
+	}
+}
+
+func TestUniquifySpans(t *testing.T) {
+	tests := []struct {
+		input    [][][]string
+		expected [][][]string
+	}{
+		{
+			input:    [][][]string{{{"a", "b"}}, {{"a", "b"}}},
+			expected: [][][]string{{{"a", "b"}}},
+		},
+		{
+			input:    [][][]string{},
+			expected: [][][]string{},
+		},
+		{
+			input:    [][][]string{{{"a", "b"}}},
+			expected: [][][]string{{{"a", "b"}}},
+		},
+		{
+			input:    [][][]string{{{"a", "b"}}, {{"a", "b"}, {"c", "d"}}, {{"a", "b"}}},
+			expected: [][][]string{{{"a", "b"}}, {{"a", "b"}, {"c", "d"}}},
+		},
+		{
+			input:    [][][]string{{{"a", "b"}, {"c", "d"}}, {{"a", "b"}}},
+			expected: [][][]string{{{"a", "b"}}, {{"a", "b"}, {"c", "d"}}},
+		},
+		{
+			input:    [][][]string{{{"bar", "foo"}}, {{"bar", "foo"}}, {{"foobar", "foobaz"}}},
+			expected: [][][]string{{{"bar", "foo"}}, {{"foobar", "foobaz"}}},
+		},
+	}
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			input := make([]roachpb.Spans, len(tt.input))
+			expected := make([]roachpb.Spans, len(tt.expected))
+			for i, spans := range tt.input {
+				input[i] = make(roachpb.Spans, len(spans))
+				for j := range spans {
+					input[i][j] = roachpb.Span{
+						Key:    roachpb.Key(spans[j][0]),
+						EndKey: roachpb.Key(spans[j][1]),
+					}
+				}
+			}
+			for i, spans := range tt.expected {
+				expected[i] = make(roachpb.Spans, len(spans))
+				for j := range spans {
+					expected[i][j] = roachpb.Span{
+						Key:    roachpb.Key(spans[j][0]),
+						EndKey: roachpb.Key(spans[j][1]),
+					}
+				}
+			}
+			if got := UniquifySpans(input); !reflect.DeepEqual(got, expected) {
+				t.Errorf("UniquifySpans() = %v, expected %v", got, expected)
 			}
 		})
 	}
