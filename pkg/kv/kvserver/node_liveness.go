@@ -128,6 +128,8 @@ type LivenessMetrics struct {
 	HeartbeatLatency   *metric.Histogram
 }
 
+// TODO(irfansharif): We should/could cut out a pkg/nodeliveness here.
+
 // IsLiveCallback is invoked when a node's IsLive state changes to true.
 // Callbacks can be registered via NodeLiveness.RegisterCallback().
 type IsLiveCallback func(kvserverpb.Liveness)
@@ -1000,6 +1002,39 @@ func (nl *NodeLiveness) GetLivenesses() []kvserverpb.Liveness {
 		livenesses = append(livenesses, l.Liveness)
 	}
 	return livenesses
+}
+
+// GetLivenessesFromKV returns a slice containing the liveness status of every
+// node on the cluster. It's the improved version of GetLivenesses above, which
+// only consults the (possibly stale) in-memory cache.
+func (nl *NodeLiveness) GetLivenessesFromKV(ctx context.Context) ([]kvserverpb.Liveness, error) {
+	kvs, err := nl.db.Scan(ctx, keys.NodeLivenessPrefix, keys.NodeLivenessKeyMax, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to get liveness")
+	}
+
+	var results []kvserverpb.Liveness
+	for _, kv := range kvs {
+		if kv.Value == nil {
+			return nil, errors.AssertionFailedf("missing liveness record")
+		}
+		var liveness kvserverpb.Liveness
+		if err := kv.Value.GetProto(&liveness); err != nil {
+			return nil, errors.Wrap(err, "invalid liveness record")
+		}
+
+		livenessRec := LivenessRecord{
+			Liveness: liveness,
+			raw:      kv.Value.TagAndDataBytes(),
+		}
+
+		// Update our cache with the liveness record we just found.
+		nl.maybeUpdate(ctx, livenessRec)
+
+		results = append(results, liveness)
+	}
+
+	return results, nil
 }
 
 // GetLiveness returns the liveness record for the specified nodeID. If the
