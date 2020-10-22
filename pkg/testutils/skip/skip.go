@@ -70,3 +70,11 @@ func UnderStressRace(t SkippableTest, args ...interface{}) {
 		t.Skip(append([]interface{}{"disabled under stressrace"}, args...))
 	}
 }
+
+// UnderMetamorphic skips this test during metamorphic runs, which are tests
+// run with the metamorphic build tag.
+func UnderMetamorphic(t SkippableTest, args ...interface{}) {
+	if util.MetamorphicBuild {
+		t.Skip(append([]interface{}{"disabled under metamorphic"}, args...))
+	}
+}
