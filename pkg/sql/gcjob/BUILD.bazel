@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "gcjob",
@@ -9,6 +9,7 @@ go_library(
         "index_garbage_collection.go",
         "refresh_statuses.go",
         "table_garbage_collection.go",
+        "tenant_garbage_collection.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/gcjob",
     visibility = ["//visibility:public"],
@@ -30,9 +31,39 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "gcjob_test",
+    srcs = [
+        "helpers_test.go",
+        "main_test.go",
+        "tenant_garbage_collection_test.go",
+    ],
+    embed = [":gcjob"],
+    deps = [
+        "//pkg/base",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
