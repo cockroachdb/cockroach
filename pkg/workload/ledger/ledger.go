@@ -129,7 +129,7 @@ func (w *ledger) Tables() []workload.Table {
 		Schema: ledgerCustomerSchema,
 		InitialRows: workload.TypedTuples(
 			w.customers,
-			ledgerCustomerTypes,
+			ledgerCustomerColTypes,
 			w.ledgerCustomerInitialRow,
 		),
 		Splits: workload.Tuples(

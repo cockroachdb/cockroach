@@ -25,8 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
@@ -190,10 +189,10 @@ const (
 // intended to be easier to use than directly specifying a BatchedTuples, but
 // the tradeoff is some bit of performance. If typs is nil, an attempt is
 // made to infer them.
-func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) BatchedTuples {
+func TypedTuples(count int, colTypes []coltypes.T, fn func(int) []interface{}) BatchedTuples {
 	// The FillBatch we create has to be concurrency safe, so we can't let it do
-	// the one-time initialization of typs without this protection.
-	var typesOnce sync.Once
+	// the one-time initialization of colTypes without this protection.
+	var colTypesOnce sync.Once
 
 	t := BatchedTuples{
 		NumBatches: count,
@@ -202,9 +201,9 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 		t.FillBatch = func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
 			row := fn(batchIdx)
 
-			typesOnce.Do(func() {
-				if typs == nil {
-					typs = make([]*types.T, len(row))
+			colTypesOnce.Do(func() {
+				if colTypes == nil {
+					colTypes = make([]coltypes.T, len(row))
 					for i, datum := range row {
 						if datum == nil {
 							panic(fmt.Sprintf(
@@ -212,16 +211,16 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 						} else {
 							switch datum.(type) {
 							case time.Time:
-								typs[i] = types.Bytes
+								colTypes[i] = coltypes.Bytes
 							default:
-								typs[i] = typeconv.UnsafeFromGoType(datum)
+								colTypes[i] = coltypes.FromGoType(datum)
 							}
 						}
 					}
 				}
 			})
 
-			cb.Reset(typs, 1, coldata.StandardColumnFactory)
+			cb.Reset(colTypes, 1)
 			for colIdx, col := range cb.ColVecs() {
 				switch d := row[colIdx].(type) {
 				case nil:
@@ -252,7 +251,7 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 // heavy. In performance-critical code, FillBatch should be used directly,
 // instead.
 func (b BatchedTuples) BatchRows(batchIdx int) [][]interface{} {
-	cb := coldata.NewMemBatchWithCapacity(nil, 0, coldata.StandardColumnFactory)
+	cb := coldata.NewMemBatchWithSize(nil, 0)
 	var a bufalloc.ByteAllocator
 	b.FillBatch(batchIdx, cb, &a)
 	return ColBatchToRows(cb)
@@ -265,37 +264,32 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 	datums := make([]interface{}, numRows*numCols)
 	for colIdx, col := range cb.ColVecs() {
 		nulls := col.Nulls()
-		switch col.CanonicalTypeFamily() {
-		case types.BoolFamily:
+		switch col.Type() {
+		case coltypes.Bool:
 			for rowIdx, datum := range col.Bool()[:numRows] {
 				if !nulls.NullAt(rowIdx) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
-		case types.IntFamily:
-			switch col.Type().Width() {
-			case 0, 64:
-				for rowIdx, datum := range col.Int64()[:numRows] {
-					if !nulls.NullAt(rowIdx) {
-						datums[rowIdx*numCols+colIdx] = datum
-					}
+		case coltypes.Int64:
+			for rowIdx, datum := range col.Int64()[:numRows] {
+				if !nulls.NullAt(rowIdx) {
+					datums[rowIdx*numCols+colIdx] = datum
 				}
-			case 16:
-				for rowIdx, datum := range col.Int16()[:numRows] {
-					if !nulls.NullAt(rowIdx) {
-						datums[rowIdx*numCols+colIdx] = datum
-					}
-				}
-			default:
-				panic(fmt.Sprintf(`unhandled type %s`, col.Type()))
 			}
-		case types.FloatFamily:
+		case coltypes.Int16:
+			for rowIdx, datum := range col.Int16()[:numRows] {
+				if !nulls.NullAt(rowIdx) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
+		case coltypes.Float64:
 			for rowIdx, datum := range col.Float64()[:numRows] {
 				if !nulls.NullAt(rowIdx) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
-		case types.BytesFamily:
+		case coltypes.Bytes:
 			// HACK: workload's Table schemas are SQL schemas, but the initial data is
 			// returned as a coldata.Batch, which has a more limited set of types.
 			// (Or, in the case of simple workloads that return a []interface{}, it's

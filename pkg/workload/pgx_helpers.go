@@ -12,6 +12,7 @@ package workload
 
 import (
 	"context"
+	gosql "database/sql"
 	"sync"
 	"sync/atomic"
 
@@ -164,19 +165,22 @@ type PgxTx pgx.Tx
 
 var _ crdb.Tx = &PgxTx{}
 
-// Exec is part of the crdb.Tx interface.
-func (tx *PgxTx) Exec(ctx context.Context, sql string, args ...interface{}) error {
+// ExecContext is part of the crdb.Tx interface.
+func (tx *PgxTx) ExecContext(
+	ctx context.Context, sql string, args ...interface{},
+) (gosql.Result, error) {
 	_, err := (*pgx.Tx)(tx).ExecEx(ctx, sql, nil /* QueryExOptions */, args...)
-	return err
+	// crdb.ExecuteInTx doesn't actually care about the Result, just the error.
+	return nil, err
 }
 
 // Commit is part of the crdb.Tx interface.
-func (tx *PgxTx) Commit(context.Context) error {
+func (tx *PgxTx) Commit() error {
 	return (*pgx.Tx)(tx).Commit()
 }
 
 // Rollback is part of the crdb.Tx interface.
-func (tx *PgxTx) Rollback(context.Context) error {
+func (tx *PgxTx) Rollback() error {
 	return (*pgx.Tx)(tx).Rollback()
 }
 
