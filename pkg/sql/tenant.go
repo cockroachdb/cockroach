@@ -12,11 +12,15 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -25,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,29 +85,6 @@ func CreateTenantRecord(
 			return pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\" already exists", tenID)
 		}
 		return errors.Wrap(err, "inserting new tenant")
-	} else if num != 1 {
-		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
-	}
-	return nil
-}
-
-// DeleteTenantRecord deletes a tenant row from system.tenants.
-func DeleteTenantRecord(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfo,
-) error {
-	const op = "delete"
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
-		return err
-	}
-	if err := rejectIfSystemTenant(info.ID, op); err != nil {
-		return err
-	}
-
-	if num, err := execCfg.InternalExecutor.ExecEx(
-		ctx, "delete-tenant", txn, sessiondata.NodeUserSessionDataOverride,
-		`DELETE FROM system.tenants WHERE id = $1`, info.ID,
-	); err != nil {
-		return errors.Wrapf(err, "deleting tenant %d", info.ID)
 	} else if num != 1 {
 		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
 	}
@@ -258,6 +240,11 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 }
 
 // DestroyTenant implements the tree.TenantOperator interface.
+// TODO(spaskob): this function currently does not actually delete the data but
+// just marks it as DROP. This is for done for safety in case we would like to
+// restore the tenant later.
+// We should just add a new function DropTenant to the interface and convert
+// this one to really remove the tenant and its data.
 func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
 	const op = "destroy"
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
@@ -282,8 +269,8 @@ func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
 	return errors.Wrap(updateTenantRecord(ctx, p.execCfg, p.txn, info), "destroying tenant")
 }
 
-// GCTenant clears the tenant's data and removes its record.
-func GCTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantInfo) error {
+// GCTenantSync clears the tenant's data and removes its record.
+func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantInfo) error {
 	const op = "gc"
 	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
 		return err
@@ -310,23 +297,52 @@ func GCTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantI
 	return errors.Wrapf(err, "deleting tenant %d record", info.ID)
 }
 
+// GCTenantJob clears the tenant's data and removes its record using a GC job.
+func GCTenantJob(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	user security.SQLUsername,
+	tenID uint64,
+) error {
+	// Queue a GC job that will delete the tenant data and finally remove the
+	// row from `system.tenants`.
+	gcDetails := jobspb.SchemaChangeGCDetails{}
+	gcDetails.Tenant = &jobspb.SchemaChangeGCDetails_DroppedTenant{
+		ID:       tenID,
+		DropTime: timeutil.Now().UnixNano(),
+	}
+	gcJobRecord := jobs.Record{
+		Description:   fmt.Sprintf("GC for tenant %d", tenID),
+		Username:      user,
+		Details:       gcDetails,
+		Progress:      jobspb.SchemaChangeGCProgress{},
+		NonCancelable: true,
+	}
+	if _, err := execCfg.JobRegistry.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
+		return err
+	}
+	return nil
+}
+
 // GCTenant implements the tree.TenantOperator interface.
 func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	if !p.ExtendedEvalContext().TxnImplicit {
 		return errors.Errorf("gc_tenant cannot be used inside a transaction")
 	}
-
 	var info *descpb.TenantInfo
-	var err error
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if txnErr := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
 		info, err = GetTenantRecord(ctx, p.execCfg, p.txn, tenID)
-		if err != nil {
-			return errors.Wrapf(err, "retrieving tenant %d", tenID)
-		}
-		return nil
-	}); err != nil {
 		return err
+	}); txnErr != nil {
+		return errors.Wrapf(txnErr, "retrieving tenant %d", tenID)
 	}
 
-	return GCTenant(ctx, p.ExecCfg(), info)
+	// Confirm tenant is ready to be cleared.
+	if info.State != descpb.TenantInfo_DROP {
+		return errors.Errorf("tenant %d is not in state DROP", info.ID)
+	}
+
+	return GCTenantJob(ctx, p.ExecCfg(), p.Txn(), p.User(), tenID)
 }

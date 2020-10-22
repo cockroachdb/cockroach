@@ -58,8 +58,10 @@ func performGC(
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	if details.Tenant != nil {
-		id := details.Tenant.ID
-		return errors.Wrapf(gcTenant(ctx, execCfg, id, progress), "attempting to GC tenant %d", id)
+		return errors.Wrapf(
+			gcTenant(ctx, execCfg, details.Tenant.ID, progress),
+			"attempting to GC tenant %+v", details.Tenant,
+		)
 	}
 	if details.Indexes != nil {
 		return errors.Wrap(gcIndexes(ctx, execCfg, details.ParentID, progress), "attempting to GC indexes")

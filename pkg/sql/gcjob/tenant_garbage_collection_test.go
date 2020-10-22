@@ -103,7 +103,7 @@ func TestGCTenant(t *testing.T) {
 		require.EqualError(
 			t,
 			gcClosure(activeTenID, progress),
-			"tenant id:10 state:ACTIVE is not in state DROP", activeTenID,
+			"gc tenant 10: clear tenant: tenant 10 is not in state DROP", activeTenID,
 		)
 	})
 
