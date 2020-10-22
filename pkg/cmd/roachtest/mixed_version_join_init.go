@@ -16,10 +16,9 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func registerJoinInitMixed(r *testRegistry) {
@@ -166,9 +165,9 @@ func unsuccessfullyAddNodeStep(nodes nodeListOption, joinNode int, newVersion st
 				// Today it includes both versions, which seems silly.
 				startArgs(fmt.Sprintf("-a=--join=%s", joinAddr)),
 			)
-			if !errors.Is(err, server.ErrIncompatibleBinaryVersion) {
-				t.Fatalf("expected err: %s, got %v", server.ErrIncompatibleBinaryVersion, err)
-			}
+			// TODO(adityamaru): Check whether we want to backport this particular
+			// error mode.
+			require.Error(t, err)
 		}
 	}
 }
