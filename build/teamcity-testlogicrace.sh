@@ -15,8 +15,7 @@ run_json_test build/builder.sh \
   make testrace \
   GOTESTFLAGS=-json \
   PKG=./pkg/sql/logictest \
-  TESTTIMEOUT="${TESTTIMEOUT}" \
-  ENABLE_ROCKSDB_ASSERTIONS=1
+  TESTTIMEOUT="${TESTTIMEOUT}"
 
 # Run each of the optimizer tests again with randomized alternate query plans.
 
@@ -28,8 +27,7 @@ run_json_test build/builder.sh \
   PKG=./pkg/sql/logictest \
   TESTS='^TestLogic/local$$' \
   TESTTIMEOUT="${TESTTIMEOUT}" \
-  TESTFLAGS='-optimizer-cost-perturbation=0.9' \
-  ENABLE_ROCKSDB_ASSERTIONS=1
+  TESTFLAGS='-optimizer-cost-perturbation=0.9'
 
 LOGICTESTS=`ls -A pkg/sql/logictest/testdata/logic_test/`
 
@@ -51,6 +49,5 @@ for file in $LOGICTESTS; do
           TESTS='^TestLogic/local/'${file}'$$' \
           TESTTIMEOUT="${TESTTIMEOUT}" \
           TESTFLAGS='-disable-opt-rule-probability=0.5' \
-          ENABLE_ROCKSDB_ASSERTIONS=1 \
     fi
 done
