@@ -51,8 +51,11 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		return err
 	}
 	v := params.p.newContainerValuesNode(e.columns, 0)
-	for _, row := range ob.BuildExplainRows() {
-		if _, err := v.rows.AddRow(params.ctx, row); err != nil {
+	rows := ob.BuildStringRows()
+	datums := make([]tree.DString, len(rows))
+	for i, row := range rows {
+		datums[i] = tree.DString(row)
+		if _, err := v.rows.AddRow(params.ctx, tree.Datums{&datums[i]}); err != nil {
 			return err
 		}
 	}

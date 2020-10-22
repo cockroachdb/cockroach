@@ -165,9 +165,6 @@ func getResultColumns(
 	case explainOp:
 		switch o := args.(*explainArgs).Options; o.Mode {
 		case tree.ExplainPlan:
-			if o.Flags[tree.ExplainFlagVerbose] || o.Flags[tree.ExplainFlagTypes] {
-				return colinfo.ExplainPlanVerboseColumns, nil
-			}
 			return colinfo.ExplainPlanColumns, nil
 		case tree.ExplainDistSQL:
 			return colinfo.ExplainDistSQLColumns, nil
@@ -178,10 +175,6 @@ func getResultColumns(
 		}
 
 	case explainPlanOp:
-		o := args.(*explainPlanArgs).Options
-		if o.Flags[tree.ExplainFlagVerbose] || o.Flags[tree.ExplainFlagTypes] {
-			return colinfo.ExplainPlanVerboseColumns, nil
-		}
 		return colinfo.ExplainPlanColumns, nil
 
 	case explainOptOp:
