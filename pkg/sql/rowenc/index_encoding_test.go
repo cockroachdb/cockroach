@@ -404,6 +404,87 @@ func TestInvertedIndexKey(t *testing.T) {
 	}
 }
 
+func TestEncodeArrayInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		value    string
+		contains string
+		expected bool
+	}{
+		// This test uses EncodeInvertedIndexTableKeys and EncodeInvertedIndexTableSpans
+		// to determine whether the first Array value contains the second. If the first
+		// value contains the second, expected is true. Otherwise it is false.
+		{`{}`, `{}`, true},
+		{`{}`, `{1}`, false},
+		{`{1}`, `{}`, true},
+		{`{1}`, `{1}`, true},
+		{`{1}`, `{1, 2}`, false},
+		{`{1, 2}`, `{1}`, true},
+		{`{1, 2}`, `{2}`, true},
+		{`{1, 2}`, `{1, 2}`, true},
+		{`{1, 2}`, `{1, 2, 1}`, true},
+		{`{1, 2, 3}`, `{1, 2, 4}`, false},
+		{`{1, 2, 3}`, `{}`, true},
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	parseArray := func(s string) tree.Datum {
+		arr, _, err := tree.ParseDArrayFromString(&evalCtx, s, types.Int)
+		if err != nil {
+			t.Fatalf("Failed to parse array %s: %v", s, err)
+		}
+		return arr
+	}
+
+	version := descpb.EmptyArraysInInvertedIndexesVersion
+	for _, c := range testCases {
+		keys, err := EncodeInvertedIndexTableKeys(parseArray(c.value), nil, version)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		spansSlice, err := EncodeInvertedIndexTableSpans(parseArray(c.contains), nil, version)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// The spans returned by EncodeInvertedIndexTableSpans represent the
+		// intersection of unions. So the below logic is performing a union on the
+		// inner loop (any span in the slice can contain any of the keys), and an
+		// intersection on the outer loop (all of the span slices must contain at
+		// least one key).
+		actual := true
+		for _, spans := range spansSlice {
+			found := false
+			for _, span := range spans {
+				if span.EndKey == nil {
+					// ContainsKey expects that the EndKey is filled in.
+					span.EndKey = span.Key.PrefixEnd()
+				}
+				for _, key := range keys {
+					if span.ContainsKey(key) {
+						found = true
+						break
+					}
+				}
+				if found == true {
+					break
+				}
+			}
+			actual = actual && found
+		}
+
+		if actual != c.expected {
+			if c.expected {
+				t.Errorf("expected %s to contain %s but it did not",
+					c.value, c.contains)
+			} else {
+				t.Errorf("expected %s not to contain %s but it did",
+					c.value, c.contains)
+			}
+		}
+	}
+}
+
 type arrayEncodingTest struct {
 	name     string
 	datum    tree.DArray
