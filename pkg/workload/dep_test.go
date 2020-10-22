@@ -21,10 +21,11 @@ func TestDepAllowlist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// We want workload to be lightweight.
-	buildutil.VerifyTransitiveAllowlist(t, "github.com/cockroachdb/cockroach/pkg/workload",
+	buildutil.VerifyTransitiveWhitelist(t, "github.com/cockroachdb/cockroach/pkg/workload",
 		[]string{
 			`github.com/cockroachdb/cockroach/pkg/build`,
 			`github.com/cockroachdb/cockroach/pkg/col/coldata`,
+			`github.com/cockroachdb/cockroach/pkg/col/coltypes`,
 			`github.com/cockroachdb/cockroach/pkg/col/typeconv`,
 			`github.com/cockroachdb/cockroach/pkg/docs`,
 			`github.com/cockroachdb/cockroach/pkg/geo/geopb`,
@@ -41,6 +42,7 @@ func TestDepAllowlist(t *testing.T) {
 			`github.com/cockroachdb/cockroach/pkg/util/humanizeutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/protoutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/randutil`,
+			`github.com/cockroachdb/cockroach/pkg/util/stacktrace`,
 			`github.com/cockroachdb/cockroach/pkg/util/stringencoding`,
 			`github.com/cockroachdb/cockroach/pkg/util/syncutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/timeutil`,

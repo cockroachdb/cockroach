@@ -12,10 +12,10 @@ package workload_test
 
 import (
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload"

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"golang.org/x/exp/rand"
@@ -52,10 +52,10 @@ var nations = [...]struct {
 	{name: `UNITED STATES`, regionKey: 1},
 }
 
-var regionTypes = []*types.T{
-	types.Int2,
-	types.Bytes,
-	types.Bytes,
+var regionColTypes = []coltypes.T{
+	coltypes.Int16,
+	coltypes.Bytes,
+	coltypes.Bytes,
 }
 
 func (w *tpch) tpchRegionInitialRowBatch(
@@ -67,17 +67,17 @@ func (w *tpch) tpchRegionInitialRowBatch(
 	rng.Seed(w.seed + uint64(batchIdx))
 
 	regionKey := batchIdx
-	cb.Reset(regionTypes, 1, coldata.StandardColumnFactory)
+	cb.Reset(regionColTypes, 1)
 	cb.ColVec(0).Int16()[0] = int16(regionKey)                       // r_regionkey
 	cb.ColVec(1).Bytes().Set(0, []byte(regionNames[regionKey]))      // r_name
 	cb.ColVec(2).Bytes().Set(0, w.textPool.randString(rng, 31, 115)) // r_comment
 }
 
-var nationTypes = []*types.T{
-	types.Int2,
-	types.Bytes,
-	types.Int2,
-	types.Bytes,
+var nationColTypes = []coltypes.T{
+	coltypes.Int16,
+	coltypes.Bytes,
+	coltypes.Int16,
+	coltypes.Bytes,
 }
 
 func (w *tpch) tpchNationInitialRowBatch(
@@ -90,21 +90,21 @@ func (w *tpch) tpchNationInitialRowBatch(
 
 	nationKey := batchIdx
 	nation := nations[nationKey]
-	cb.Reset(nationTypes, 1, coldata.StandardColumnFactory)
+	cb.Reset(nationColTypes, 1)
 	cb.ColVec(0).Int16()[0] = int16(nationKey)                       // n_nationkey
 	cb.ColVec(1).Bytes().Set(0, []byte(nation.name))                 // n_name
 	cb.ColVec(2).Int16()[0] = int16(nation.regionKey)                // n_regionkey
 	cb.ColVec(3).Bytes().Set(0, w.textPool.randString(rng, 31, 115)) // r_comment
 }
 
-var supplierTypes = []*types.T{
-	types.Int,
-	types.Bytes,
-	types.Bytes,
-	types.Int2,
-	types.Bytes,
-	types.Float,
-	types.Bytes,
+var supplierColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Int16,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Bytes,
 }
 
 func (w *tpch) tpchSupplierInitialRowBatch(
@@ -117,7 +117,7 @@ func (w *tpch) tpchSupplierInitialRowBatch(
 
 	suppKey := int64(batchIdx) + 1
 	nationKey := int16(randInt(rng, 0, 24))
-	cb.Reset(supplierTypes, 1, coldata.StandardColumnFactory)
+	cb.Reset(supplierColTypes, 1)
 	cb.ColVec(0).Int64()[0] = suppKey                                        // s_suppkey
 	cb.ColVec(1).Bytes().Set(0, supplierName(a, suppKey))                    // s_name
 	cb.ColVec(2).Bytes().Set(0, randVString(rng, a, 10, 40))                 // s_address
@@ -128,16 +128,16 @@ func (w *tpch) tpchSupplierInitialRowBatch(
 	cb.ColVec(6).Bytes().Set(0, w.textPool.randString(rng, 25, 100)) // s_comment
 }
 
-var partTypes = []*types.T{
-	types.Int,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Int2,
-	types.Bytes,
-	types.Float,
-	types.Bytes,
+var partColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Int16,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Bytes,
 }
 
 func makeRetailPriceFromPartKey(partKey int) float32 {
@@ -151,7 +151,7 @@ func (w *tpch) tpchPartInitialRowBatch(batchIdx int, cb coldata.Batch, a *bufall
 	rng.Seed(w.seed + uint64(batchIdx))
 
 	partKey := batchIdx + 1
-	cb.Reset(partTypes, 1, coldata.StandardColumnFactory)
+	cb.Reset(partColTypes, 1)
 
 	// P_PARTKEY unique within [SF * 200,000].
 	cb.ColVec(0).Int64()[0] = int64(partKey)
@@ -175,12 +175,12 @@ func (w *tpch) tpchPartInitialRowBatch(batchIdx int, cb coldata.Batch, a *bufall
 	cb.ColVec(8).Bytes().Set(0, w.textPool.randString(rng, 5, 22))
 }
 
-var partSuppTypes = []*types.T{
-	types.Int,
-	types.Int,
-	types.Int2,
-	types.Float,
-	types.Bytes,
+var partSuppColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int16,
+	coltypes.Float64,
+	coltypes.Bytes,
 }
 
 func (w *tpch) tpchPartSuppInitialRowBatch(
@@ -192,7 +192,7 @@ func (w *tpch) tpchPartSuppInitialRowBatch(
 	rng.Seed(w.seed + uint64(batchIdx))
 
 	partKey := batchIdx + 1
-	cb.Reset(partSuppTypes, numPartSuppPerPart, coldata.StandardColumnFactory)
+	cb.Reset(partSuppColTypes, numPartSuppPerPart)
 
 	// P_PARTKEY unique within [SF * 200,000].
 	partKeyCol := cb.ColVec(0).Int64()
@@ -219,15 +219,15 @@ func (w *tpch) tpchPartSuppInitialRowBatch(
 	}
 }
 
-var customerTypes = []*types.T{
-	types.Int,
-	types.Bytes,
-	types.Bytes,
-	types.Int2,
-	types.Bytes,
-	types.Float,
-	types.Bytes,
-	types.Bytes,
+var customerColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Int16,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Bytes,
+	coltypes.Bytes,
 }
 
 func (w *tpch) tpchCustomerInitialRowBatch(
@@ -239,7 +239,7 @@ func (w *tpch) tpchCustomerInitialRowBatch(
 	rng.Seed(w.seed + uint64(batchIdx))
 
 	custKey := int64(batchIdx) + 1
-	cb.Reset(customerTypes, 1, coldata.StandardColumnFactory)
+	cb.Reset(customerColTypes, 1)
 
 	// C_CUSTKEY unique within [SF * 150,000].
 	cb.ColVec(0).Int64()[0] = custKey
@@ -322,16 +322,16 @@ type orderSharedRandomData struct {
 	allF bool
 }
 
-var ordersTypes = []*types.T{
-	types.Int,
-	types.Int,
-	types.Bytes,
-	types.Float,
-	types.Int,
-	types.Bytes,
-	types.Bytes,
-	types.Int2,
-	types.Bytes,
+var ordersColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Int16,
+	coltypes.Bytes,
 }
 
 func populateSharedData(rng *rand.Rand, seed uint64, sf int, data *orderSharedRandomData) {
@@ -371,7 +371,7 @@ func (w *tpch) tpchOrdersInitialRowBatch(
 	defer w.localsPool.Put(l)
 	rng := l.rng
 
-	cb.Reset(ordersTypes, numOrderPerCustomer, coldata.StandardColumnFactory)
+	cb.Reset(ordersColTypes, numOrderPerCustomer)
 
 	orderKeyCol := cb.ColVec(0).Int64()
 	custKeyCol := cb.ColVec(1).Int64()
@@ -426,23 +426,23 @@ func (w *tpch) tpchOrdersInitialRowBatch(
 	}
 }
 
-var lineItemTypes = []*types.T{
-	types.Int,
-	types.Int,
-	types.Int,
-	types.Int2,
-	types.Float,
-	types.Float,
-	types.Float,
-	types.Float,
-	types.Bytes,
-	types.Bytes,
-	types.Int,
-	types.Int,
-	types.Int,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
+var lineItemColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int16,
+	coltypes.Float64,
+	coltypes.Float64,
+	coltypes.Float64,
+	coltypes.Float64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
 }
 
 func (w *tpch) tpchLineItemInitialRowBatch(
@@ -452,7 +452,7 @@ func (w *tpch) tpchLineItemInitialRowBatch(
 	defer w.localsPool.Put(l)
 	rng := l.rng
 
-	cb.Reset(lineItemTypes, numOrderPerCustomer*7, coldata.StandardColumnFactory)
+	cb.Reset(lineItemColTypes, numOrderPerCustomer*7)
 
 	orderKeyCol := cb.ColVec(0).Int64()
 	partKeyCol := cb.ColVec(1).Int64()
