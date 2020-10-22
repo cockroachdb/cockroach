@@ -18,6 +18,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
+        "//pkg/roachpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/encoding",
@@ -39,8 +40,10 @@ go_test(
     deps = [
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/encoding",
+        "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//pkg/util/unique",
         "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/stretchr/testify/require",
     ],
 )
