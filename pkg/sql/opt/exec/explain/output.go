@@ -13,12 +13,10 @@ package explain
 import (
 	"bytes"
 	"fmt"
-	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -54,6 +52,15 @@ type entry struct {
 
 func (e *entry) isNode() bool {
 	return e.level > 0
+}
+
+// fieldStr returns a "field" or "field: val" string; only used when this entry
+// is a field.
+func (e *entry) fieldStr() string {
+	if e.fieldVal == "" {
+		return e.field
+	}
+	return fmt.Sprintf("%s: %s", e.field, e.fieldVal)
 }
 
 // EnterNode creates a new node as a child of the current node.
@@ -208,18 +215,50 @@ func (ob *OutputBuilder) BuildExplainRows() []tree.Datums {
 // The output string always ends in a newline.
 func (ob *OutputBuilder) BuildString() string {
 	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+	tp := treeprinter.NewWithStyle(treeprinter.BulletStyle)
+	stack := []treeprinter.Node{tp}
+	entries := ob.entries
 
-	treeRows := ob.buildTreeRows()
-	for i, e := range ob.entries {
-		fmt.Fprintf(tw, "%s\t%s\t%s", treeRows[i], e.field, e.fieldVal)
-		if ob.flags.Verbose {
-			fmt.Fprintf(tw, "\t%s\t%s", e.columns, e.ordering)
-		}
-		fmt.Fprintf(tw, "\n")
+	pop := func() *entry {
+		e := &entries[0]
+		entries = entries[1:]
+		return e
 	}
-	_ = tw.Flush()
-	return util.RemoveTrailingSpaces(buf.String())
+
+	popField := func() *entry {
+		if len(entries) > 0 && !entries[0].isNode() {
+			return pop()
+		}
+		return nil
+	}
+
+	// There may be some top-level non-node entries (like "distributed"). Print
+	// them separately, as they can't be part of the tree.
+	for e := popField(); e != nil; e = popField() {
+		buf.WriteString(e.fieldStr())
+		buf.WriteString("\n")
+	}
+	if buf.Len() > 0 {
+		buf.WriteString("\n")
+	}
+
+	for len(entries) > 0 {
+		entry := pop()
+		child := stack[entry.level-1].Child(entry.node)
+		stack = append(stack[:entry.level], child)
+		if entry.columns != "" {
+			child.AddLine(fmt.Sprintf("columns: %s", entry.columns))
+		}
+		if entry.ordering != "" {
+			child.AddLine(fmt.Sprintf("ordering: %s", entry.ordering))
+		}
+		// Add any fields for the node.
+		for entry = popField(); entry != nil; entry = popField() {
+			child.AddLine(entry.fieldStr())
+		}
+	}
+	buf.WriteString(tp.String())
+	return buf.String()
 }
 
 // BuildProtoTree creates a representation of the plan as a tree of

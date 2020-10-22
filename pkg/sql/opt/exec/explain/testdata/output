@@ -1,0 +1,201 @@
+string
+----
+----
+distributed: true
+
+• meta
+│
+└── • render
+    │ render 0: foo
+    │ render 1: bar
+    │
+    └── • join
+        │ type: outer
+        │
+        ├── • scan
+        │     table: foo
+        │
+        └── • scan
+              table: bar
+----
+----
+
+string verbose
+----
+----
+distributed: true
+
+• meta
+│
+└── • render
+    │ columns: (a, b)
+    │ ordering: +a,-b
+    │ render 0: foo
+    │ render 1: bar
+    │
+    └── • join
+        │ columns: (x)
+        │ type: outer
+        │
+        ├── • scan
+        │     columns: (x)
+        │     table: foo
+        │
+        └── • scan
+              columns: ()
+              table: bar
+----
+----
+
+string types
+----
+----
+distributed: true
+
+• meta
+│
+└── • render
+    │ columns: (a int, b string)
+    │ ordering: +a,-b
+    │ render 0: foo
+    │ render 1: bar
+    │
+    └── • join
+        │ columns: (x int)
+        │ type: outer
+        │
+        ├── • scan
+        │     columns: (x int)
+        │     table: foo
+        │
+        └── • scan
+              columns: ()
+              table: bar
+----
+----
+
+tree
+----
+name: meta
+attrs: []
+children:
+- name: render
+  attrs:
+  - key: render 0
+    value: foo
+  - key: render 1
+    value: bar
+  children:
+  - name: join
+    attrs:
+    - key: type
+      value: outer
+    children:
+    - name: scan
+      attrs:
+      - key: table
+        value: foo
+      children: []
+    - name: scan
+      attrs:
+      - key: table
+        value: bar
+      children: []
+
+tree verbose
+----
+name: meta
+attrs: []
+children:
+- name: render
+  attrs:
+  - key: render 0
+    value: foo
+  - key: render 1
+    value: bar
+  children:
+  - name: join
+    attrs:
+    - key: type
+      value: outer
+    children:
+    - name: scan
+      attrs:
+      - key: table
+        value: foo
+      children: []
+    - name: scan
+      attrs:
+      - key: table
+        value: bar
+      children: []
+
+tree types
+----
+name: meta
+attrs: []
+children:
+- name: render
+  attrs:
+  - key: render 0
+    value: foo
+  - key: render 1
+    value: bar
+  children:
+  - name: join
+    attrs:
+    - key: type
+      value: outer
+    children:
+    - name: scan
+      attrs:
+      - key: table
+        value: foo
+      children: []
+    - name: scan
+      attrs:
+      - key: table
+        value: bar
+      children: []
+
+datums
+----
+                     distributed  true
+meta
+ └── render
+      │              render 0     foo
+      │              render 1     bar
+      └── join
+           │         type         outer
+           ├── scan
+           │         table        foo
+           └── scan
+                     table        bar
+
+datums verbose
+----
+                     0          distributed  true
+meta                 0  meta
+ └── render          1  render                      (a, b)  +a,-b
+      │              1          render 0     foo
+      │              1          render 1     bar
+      └── join       2  join                        (x)
+           │         2          type         outer
+           ├── scan  3  scan                        (x)
+           │         3          table        foo
+           └── scan  3  scan                        ()
+                     3          table        bar
+
+datums types
+----
+                     0          distributed  true
+meta                 0  meta
+ └── render          1  render                      (a int, b string)  +a,-b
+      │              1          render 0     foo
+      │              1          render 1     bar
+      └── join       2  join                        (x int)
+           │         2          type         outer
+           ├── scan  3  scan                        (x int)
+           │         3          table        foo
+           └── scan  3  scan                        ()
+                     3          table        bar
