@@ -1606,7 +1606,7 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Con
 	}
 	lhReplicaID := uint64(lease.Replica.ReplicaID)
 	lhProgress, ok := raftStatus.Progress[lhReplicaID]
-	if (ok && lhProgress.Match >= raftStatus.Commit) || r.mu.draining {
+	if (ok && lhProgress.Match >= raftStatus.Commit) || r.store.IsDraining() {
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
