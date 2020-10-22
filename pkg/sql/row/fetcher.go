@@ -804,8 +804,10 @@ func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []rowenc.EncDatum) str
 	var buf strings.Builder
 	for i, v := range vals {
 		if err := v.EnsureDecoded(types[i], rf.alloc); err != nil {
-			buf.WriteString("error decoding: ")
+			buf.WriteString("/{error decoding: ")
 			buf.WriteString(err.Error())
+			buf.WriteByte('}')
+			continue
 		}
 		buf.WriteByte('/')
 		buf.WriteString(v.Datum.String())
