@@ -74,7 +74,6 @@ func TestIndexConstraints(t *testing.T) {
 			var varTypes []*types.T
 			var indexCols []opt.OrderingColumn
 			var notNullCols opt.ColSet
-			var iVarHelper tree.IndexedVarHelper
 			var invertedIndex bool
 			var err error
 
@@ -91,7 +90,6 @@ func TestIndexConstraints(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 					// Set up the columns in the metadata.
 					for i, typ := range varTypes {
 						md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
@@ -146,7 +144,7 @@ func TestIndexConstraints(t *testing.T) {
 						nil /* execFactory */, f.Memo(), nil /* catalog */, &remainingFilter,
 						&evalCtx, false, /* allowAutoCommit */
 					)
-					expr, err := execBld.BuildScalar(&iVarHelper)
+					expr, err := execBld.BuildScalar()
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
 					}

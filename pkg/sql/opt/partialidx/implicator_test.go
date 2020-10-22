@@ -59,7 +59,6 @@ func TestImplicator(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var varTypes []*types.T
 			var cols opt.ColSet
-			var iVarHelper tree.IndexedVarHelper
 			var err error
 
 			var f norm.Factory
@@ -78,8 +77,6 @@ func TestImplicator(t *testing.T) {
 					if err != nil {
 						d.Fatalf(t, "failed to parse vars%v\n", err)
 					}
-
-					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
 					// Add the columns to the metadata.
 					cols = addColumnsToMetadata(varTypes, md)
@@ -122,7 +119,7 @@ func TestImplicator(t *testing.T) {
 					nil /* factory */, f.Memo(), nil /* catalog */, &remainingFilters,
 					&evalCtx, false, /* allowAutoCommit */
 				)
-				expr, err := execBld.BuildScalar(&iVarHelper)
+				expr, err := execBld.BuildScalar()
 				if err != nil {
 					d.Fatalf(t, "unexpected error: %v\n", err)
 				}
