@@ -38,17 +38,44 @@ type operationGeneratorParams struct {
 
 // The OperationBuilder has the sole responsibility of generating ops
 type operationGenerator struct {
-	params *operationGeneratorParams
+	params               *operationGeneratorParams
+	screenForExecErrors  bool
+	expectedExecErrors   *errorCodeSet
+	expectedCommitErrors *errorCodeSet
 }
 
 func makeOperationGenerator(params *operationGeneratorParams) *operationGenerator {
 	return &operationGenerator{
-		params: params,
+		params:               params,
+		expectedExecErrors:   makeExpectedErrorSet(),
+		expectedCommitErrors: makeExpectedErrorSet(),
 	}
+}
+
+// Reset internal state used per operation within a transaction
+func (og *operationGenerator) resetOpState() {
+	og.screenForExecErrors = false
+	og.expectedExecErrors.reset()
+}
+
+// Reset internal state used per transaction
+func (og *operationGenerator) resetTxnState() {
+	og.expectedCommitErrors.reset()
 }
 
 //go:generate stringer -type=opType
 type opType int
+
+// opsWithErrorScreening stores ops which currently check for exec
+// errors and update expectedExecErrors in the op generator state
+var opsWithExecErrorScreening = map[opType]bool{}
+
+func opScreensForExecErrors(op opType) bool {
+	if _, exists := opsWithExecErrorScreening[op]; exists {
+		return true
+	}
+	return false
+}
 
 const (
 	addColumn     opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
@@ -224,6 +251,10 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 		if stmt == "" || errors.Is(err, pgx.ErrNoRows) {
 			log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
 			continue
+		}
+
+		if opScreensForExecErrors(op) {
+			og.screenForExecErrors = true
 		}
 		return stmt, log.String(), err
 	}

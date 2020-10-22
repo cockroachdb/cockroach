@@ -17,7 +17,9 @@ import (
 	"math/rand"
 	"runtime"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -216,11 +218,29 @@ var (
 	errRunInTxnRbkSentinel   = errors.New("txn needs to rollback")
 )
 
+type histBin int
+
+const (
+	operationOk histBin = iota
+	txnOk
+	txnCommitError
+	txnRollback
+)
+
+func (d histBin) String() string {
+	return [...]string{"opOk", "txnOk", "txnCmtErr", "txnRbk"}[d]
+}
+
+func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
+	w.hists.Get(bin.String()).Record(elapsed)
+}
+
 func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 	var log strings.Builder
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
 
 	for i := 0; i < opsNum; i++ {
+		w.opGen.resetOpState()
 		op, noops, err := w.opGen.randOp(tx)
 		if err != nil {
 			return noops, errors.Mark(
@@ -234,16 +254,48 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 		}
 		log.WriteString(fmt.Sprintf("  %s;\n", op))
 		if !w.dryRun {
-			histBin := "opOk"
 			start := timeutil.Now()
+
 			if _, err = tx.Exec(op); err != nil {
-				histBin = "txnRbk"
-				log.WriteString(fmt.Sprintf("***FAIL: %v\n", err))
-				log.WriteString("ROLLBACK;\n")
+				if w.opGen.screenForExecErrors {
+					if w.opGen.expectedExecErrors.empty() {
+						log.WriteString(fmt.Sprintf("***FAIL; Expected no errors, but got %v\n", err))
+						return log.String(), errors.Mark(
+							errors.Wrap(err, "***UNEXPECTED ERROR"),
+							errRunInTxnFatalSentinel,
+						)
+					} else if pgErr := (pgx.PgError{}); !errors.As(err, &pgErr) || errors.As(err, &pgErr) && !w.opGen.expectedExecErrors.empty() && !w.opGen.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
+						log.WriteString(fmt.Sprintf("***FAIL; Expected one of SQLSTATES %s, but got %v\n", w.opGen.expectedExecErrors.string(), err))
+						return log.String(), errors.Mark(
+							errors.Wrap(err, "***UNEXPECTED ERROR"),
+							errRunInTxnFatalSentinel,
+						)
+					}
+
+					log.WriteString(fmt.Sprintf("ROLLBACK; expected SQLSTATE(S) %s, and got %v\n", w.opGen.expectedExecErrors.string(), err))
+					w.recordInHist(timeutil.Since(start), txnRollback)
+					return log.String(), errors.Mark(
+						err,
+						errRunInTxnRbkSentinel,
+					)
+				}
+
+				// TODO(jayshrivastava): Once all operations support error screening, delete this default and remove w.opGen.screenForExecErrors state
+				w.recordInHist(timeutil.Since(start), txnRollback)
+				log.WriteString(fmt.Sprintf("ROLLBACK; %v\n", err))
 				return log.String(), errors.Mark(err, errRunInTxnRbkSentinel)
+
 			}
-			elapsed := timeutil.Since(start)
-			w.hists.Get(histBin).Record(elapsed)
+			if w.opGen.screenForExecErrors {
+				if !w.opGen.expectedExecErrors.empty() {
+					log.WriteString(fmt.Sprintf("Expected SQLSTATE(S) %s, but got no errors\n", w.opGen.expectedExecErrors.string()))
+					return log.String(), errors.Mark(
+						errors.Errorf("***UNEXPECTED SUCCESS"),
+						errRunInTxnFatalSentinel,
+					)
+				}
+			}
+			w.recordInHist(timeutil.Since(start), operationOk)
 		}
 	}
 	return log.String(), nil
@@ -257,6 +309,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	start := timeutil.Now()
+	w.opGen.resetTxnState()
 	logs, err := w.runInTxn(tx)
 	logs = "BEGIN\n" + logs
 	defer func() {
@@ -268,29 +321,31 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	if err != nil {
 		// Rollback in all cases to release the txn object and its conn pool.
 		if rbkErr := tx.Rollback(); rbkErr != nil {
-			return errors.Wrapf(err, "Could not rollback %v", rbkErr)
+			return errors.Wrapf(err, "***UNEXPECTED ERROR IN ROLLBACK %v", rbkErr)
 		}
 		switch {
 		case errors.Is(err, errRunInTxnFatalSentinel):
 			return err
 		case errors.Is(err, errRunInTxnRbkSentinel):
+			// TODO(jayshrivastava): Once all operations support error screening, return nil
+			// All unexpected or non pg errors will be fatal, and all rollbacks will be expected
 			if seriousErr := handleOpError(err); seriousErr != nil {
 				return seriousErr
 			}
 			return nil
 		default:
-			return errors.Wrapf(err, "Unexpected error")
+			return errors.Wrapf(err, "***UNEXPECTED ERROR")
 		}
 	}
 
 	// If there were no errors commit the txn.
-	histBin := "txnOk"
+	histBin := txnOk
 	cmtErrMsg := ""
 	if err = tx.Commit(); err != nil {
-		histBin = "txnCmtErr"
+		histBin = txnCommitError
 		cmtErrMsg = fmt.Sprintf("***FAIL: %v", err)
 	}
-	w.hists.Get(histBin).Record(timeutil.Since(start))
+	w.recordInHist(timeutil.Since(start), histBin)
 	logs = logs + fmt.Sprintf("COMMIT;  %s\n", cmtErrMsg)
 	return nil
 }
