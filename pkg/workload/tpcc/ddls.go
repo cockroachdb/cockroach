@@ -14,7 +14,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -91,7 +91,7 @@ const (
 		h_amount decimal(6,2),
 		h_data   varchar(24),
 		primary key (h_w_id, rowid)`
-	tpccHistorySchemaFkSuffix = `
+	deprecatedTpccHistorySchemaFkSuffix = `
 		index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
 		index history_district_fk_idx (h_w_id, h_d_id)`
 
@@ -154,7 +154,7 @@ const (
 		s_remote_cnt integer,
 		s_data       varchar(50),
 		primary key (s_w_id, s_i_id)`
-	tpccStockSchemaFkSuffix = `
+	deprecatedTpccStockSchemaFkSuffix = `
 		index stock_item_fk_idx (s_i_id)`
 	tpccStockSchemaInterleaveSuffix = `
 		interleave in parent warehouse (s_w_id)`
@@ -172,7 +172,7 @@ const (
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
-	tpccOrderLineSchemaFkSuffix = `
+	deprecatedTpccOrderLineSchemaFkSuffix = `
 		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
 	tpccOrderLineSchemaInterleaveSuffix = `
 		interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`

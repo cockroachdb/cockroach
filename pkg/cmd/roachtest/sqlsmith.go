@@ -81,6 +81,9 @@ func registerSQLSmith(r *testRegistry) {
 		c.l.Printf("seed: %d", seed)
 
 		c.Put(ctx, cockroach, "./cockroach")
+		if err := c.PutLibraries(ctx, "./lib"); err != nil {
+			t.Fatalf("could not initialize libraries: %v", err)
+		}
 		c.Start(ctx, t)
 
 		setupFunc, ok := setups[setupName]
@@ -94,6 +97,15 @@ func registerSQLSmith(r *testRegistry) {
 
 		setup := setupFunc(rng)
 		setting := settingFunc(rng)
+
+		// We will enable panic injection on this connection in the vectorized
+		// engine (and will ignore the injected errors) in order to test that
+		// the panic-catching mechanism of error propagation works as expected.
+		// TODO(yuzefovich): this setting is only supported on master (i.e.
+		// after 20.2 version), so we need to gate it, yet we can't do so
+		// because 21.1 version hasn't been minted yet. We skip this check for
+		// now.
+		//setup += "SET testing_vectorize_inject_panics=true;"
 
 		conn := c.Conn(ctx, 1)
 		t.Status("executing setup")
@@ -193,7 +205,7 @@ func registerSQLSmith(r *testRegistry) {
 			// NB: sqlsmith failures should never block a release.
 			Owner:      OwnerSQLExec,
 			Cluster:    makeClusterSpec(4),
-			MinVersion: "v20.1.0",
+			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)

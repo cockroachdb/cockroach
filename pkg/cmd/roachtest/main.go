@@ -63,7 +63,7 @@ func main() {
 			}
 			switch cmd.Name() {
 			case "run", "bench", "store-gen":
-				initBinaries()
+				initBinariesAndLibraries()
 			}
 			return nil
 		},
@@ -161,6 +161,10 @@ the test tags.
 		},
 	}
 
+	// TODO(irfansharif): We could remove this by directly running `cockroach
+	// version` against the binary being tested, instead of what we do today
+	// which is defaulting to checking the last git release tag present in the
+	// local checkout.
 	runCmd.Flags().StringVar(
 		&buildTag, "build-tag", "", "build tag (auto-detect if empty)")
 	runCmd.Flags().StringVar(
@@ -220,6 +224,10 @@ the test tags.
 			"The number of cloud CPUs roachtest is allowed to use at any one time.")
 		cmd.Flags().IntVar(
 			&httpPort, "port", 8080, "the port on which to serve the HTTP interface")
+		cmd.Flags().BoolVar(
+			&localSSD, "local-ssd", true, "Use a local SSD instead of an EBS volume (only for use with AWS) (defaults to true if instance type supports local SSDs)")
+		cmd.Flags().StringSliceVar(
+			&createArgs, "create-args", []string{}, "extra args to pass onto the roachprod create command")
 	}
 
 	rootCmd.AddCommand(listCmd)
@@ -364,10 +372,11 @@ func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
 		// If we get a second CTRL-C, exit immediately.
 		select {
 		case <-sig:
-			shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting.")
+			shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting. Cluster might be left behind.")
 			os.Exit(2)
 		case <-destroyCh:
 			shout(ctx, l, os.Stderr, "Done destroying all clusters.")
+			os.Exit(2)
 		}
 	}()
 }

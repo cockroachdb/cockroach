@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
@@ -26,14 +26,18 @@ import (
 // coverage checking here.
 
 func TestDescriptorMarshal(t *testing.T) {
-	skip.UnderStress(t)
+	if testutils.NightlyStress() {
+		t.Skip("skip under nightly stressrace")
+	}
 	testdata, err := filepath.Abs(filepath.Join("..", "descriptormarshal", "testdata"))
 	require.NoError(t, err)
 	analysistest.Run(t, testdata, descriptormarshal.Analyzer, "a")
 }
 
 func TestUnconvert(t *testing.T) {
-	skip.UnderStress(t)
+	if testutils.NightlyStress() {
+		t.Skip("skip under nightly stressrace")
+	}
 	testdata, err := filepath.Abs(filepath.Join("..", "unconvert", "testdata"))
 	require.NoError(t, err)
 	analysistest.Run(t, testdata, unconvert.Analyzer, "a")

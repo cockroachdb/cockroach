@@ -29,13 +29,12 @@ func registerAcceptance(r *testRegistry) {
 		{
 			name: "bank/zerosum-splits", fn: runBankNodeZeroSum,
 			skip: "https://github.com/cockroachdb/cockroach/issues/33683 (runs into " +
-				" various errors during its rebalances, see isExpectedRelocateError)",
+				" various errors during its rebalances, see IsExpectedRelocateError)",
 		},
 		// {"bank/zerosum-restart", runBankZeroSumRestart},
 		{name: "build-info", fn: runBuildInfo},
 		{name: "build-analyze", fn: runBuildAnalyze},
 		{name: "cli/node-status", fn: runCLINodeStatus},
-		{name: "decommission", fn: runDecommissionAcceptance},
 		{name: "cluster-init", fn: runClusterInit},
 		{name: "event-log", fn: runEventLog},
 		{name: "gossip/peerings", fn: runGossipPeerings},
@@ -43,18 +42,24 @@ func registerAcceptance(r *testRegistry) {
 		{name: "gossip/restart-node-one", fn: runGossipRestartNodeOne},
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 		{name: "rapid-restart", fn: runRapidRestart},
+		{
+			name: "many-splits", fn: runManySplits,
+			minVersion: "v19.2.0", // SQL syntax unsupported on 19.1.x
+		},
 		{name: "status-server", fn: runStatusServer},
 		{
 			name: "version-upgrade",
-			fn:   runVersionUpgrade,
-			skip: "skipped due to flakiness",
+			fn: func(ctx context.Context, t *test, c *cluster) {
+				runVersionUpgrade(ctx, t, c, r.buildVersion)
+			},
 			// This test doesn't like running on old versions because it upgrades to
 			// the latest released version and then it tries to "head", where head is
 			// the cockroach binary built from the branch on which the test is
 			// running. If that branch corresponds to an older release, then upgrading
 			// to head after 19.2 fails.
 			minVersion: "v19.2.0",
-			timeout:    30 * time.Minute},
+			timeout:    30 * time.Minute,
+		},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4

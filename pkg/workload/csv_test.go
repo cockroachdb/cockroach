@@ -57,7 +57,7 @@ func TestHandleCSV(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			res, err := httputil.Get(context.TODO(), ts.URL+`/bank/bank`+test.params)
+			res, err := httputil.Get(context.Background(), ts.URL+`/bank/bank`+test.params)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -79,7 +79,7 @@ func BenchmarkWriteCSVRows(b *testing.B) {
 
 	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
-		cb := coldata.NewMemBatch(nil)
+		cb := coldata.NewMemBatch(nil /* types */)
 		var a bufalloc.ByteAllocator
 		table.InitialRows.FillBatch(0, cb, &a)
 		batches = append(batches, cb)
@@ -129,7 +129,7 @@ func TestCSVRowsReader(t *testing.T) {
 func BenchmarkCSVRowsReader(b *testing.B) {
 	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
-		cb := coldata.NewMemBatch(nil)
+		cb := coldata.NewMemBatch(nil /* types */)
 		var a bufalloc.ByteAllocator
 		table.InitialRows.FillBatch(0, cb, &a)
 		batches = append(batches, cb)

@@ -18,14 +18,14 @@ import (
 	"strings"
 )
 
-var issueRegexp = regexp.MustCompile(`See: https://github.com/cockroachdb/cockroach/issues/(\d+)`)
+var issueRegexp = regexp.MustCompile(`See: https://[^\s]+issues?/(\d+)`)
 
 type status int
 
 const (
-	pass status = iota
-	fail
-	skip
+	statusPass status = iota
+	statusFail
+	statusSkip
 )
 
 // extractFailureFromJUnitXML parses an XML report to find all failed tests. The
@@ -72,11 +72,11 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []status, map[string
 			testPassed := len(testCase.Failure.Message) == 0 && len(testCase.Error.Message) == 0
 			tests = append(tests, testName)
 			if testCase.Skipped != nil {
-				testStatuses = append(testStatuses, skip)
+				testStatuses = append(testStatuses, statusSkip)
 			} else if testPassed {
-				testStatuses = append(testStatuses, pass)
+				testStatuses = append(testStatuses, statusPass)
 			} else {
-				testStatuses = append(testStatuses, fail)
+				testStatuses = append(testStatuses, statusFail)
 				message := testCase.Failure.Message
 				if len(message) == 0 {
 					message = testCase.Error.Message
@@ -114,7 +114,7 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []status, map[string
 // parseJUnitXML parses testOutputInJUnitXMLFormat and updates the receiver
 // accordingly.
 func (r *ormTestsResults) parseJUnitXML(
-	t *test, expectedFailures, ignorelist blacklist, testOutputInJUnitXMLFormat []byte,
+	t *test, expectedFailures, ignorelist blocklist, testOutputInJUnitXMLFormat []byte,
 ) {
 	tests, statuses, issueHints, err := extractFailureFromJUnitXML(testOutputInJUnitXMLFormat)
 	if err != nil {
@@ -140,24 +140,24 @@ func (r *ormTestsResults) parseJUnitXML(
 		case expectedIgnored:
 			r.results[test] = fmt.Sprintf("--- IGNORE: %s due to %s (expected)", test, ignoredIssue)
 			r.ignoredCount++
-		case status == skip:
+		case status == statusSkip:
 			r.results[test] = fmt.Sprintf("--- SKIP: %s", test)
 			r.skipCount++
-		case status == pass && !expectedFailure:
+		case status == statusPass && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 			r.passExpectedCount++
-		case status == pass && expectedFailure:
+		case status == statusPass && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
 				test, maybeAddGithubLink(issue),
 			)
 			r.passUnexpectedCount++
-		case status == fail && expectedFailure:
+		case status == statusFail && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
 				test, maybeAddGithubLink(issue),
 			)
 			r.failExpectedCount++
 			r.currentFailures = append(r.currentFailures, test)
-		case status == fail && !expectedFailure:
+		case status == statusFail && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
 				test, maybeAddGithubLink(issue))
 			r.failUnexpectedCount++
@@ -170,7 +170,7 @@ func (r *ormTestsResults) parseJUnitXML(
 // parseAndSummarizeJavaORMTestsResults parses the test output of running a
 // test suite for some Java ORM against cockroach and summarizes it. If an
 // unexpected result is observed (for example, a test unexpectedly failed or
-// passed), a new blacklist is populated.
+// passed), a new blocklist is populated.
 func parseAndSummarizeJavaORMTestsResults(
 	ctx context.Context,
 	t *test,
@@ -178,11 +178,11 @@ func parseAndSummarizeJavaORMTestsResults(
 	node nodeListOption,
 	ormName string,
 	testOutput []byte,
-	blacklistName string,
-	expectedFailures blacklist,
-	ignorelist blacklist,
+	blocklistName string,
+	expectedFailures blocklist,
+	ignorelist blocklist,
 	version string,
-	latestTag string,
+	tag string,
 ) {
 	results := newORMTestsResults()
 	filesRaw := strings.Split(string(testOutput), "\n")
@@ -214,6 +214,6 @@ func parseAndSummarizeJavaORMTestsResults(
 	}
 
 	results.summarizeAll(
-		t, ormName, blacklistName, expectedFailures, version, latestTag,
+		t, ormName, blocklistName, expectedFailures, version, tag,
 	)
 }

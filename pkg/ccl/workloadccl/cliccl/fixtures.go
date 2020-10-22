@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"google.golang.org/api/option"
@@ -47,6 +47,7 @@ func config() workloadccl.FixtureConfig {
 		config.BillingProject = *gcsBillingProjectOverride
 	}
 	config.CSVServerURL = *fixturesMakeImportCSVServerURL
+	config.TableStats = *fixturesMakeTableStats
 	return config
 }
 
@@ -90,6 +91,10 @@ var fixturesMakeOnlyTable = fixturesMakeCmd.PersistentFlags().String(
 var fixturesMakeFilesPerNode = fixturesMakeCmd.PersistentFlags().Int(
 	`files-per-node`, 1,
 	`number of file URLs to generate per node when using csv-server`)
+
+var fixturesMakeTableStats = fixturesMakeCmd.PersistentFlags().Bool(
+	`table-stats`, true,
+	`generate full table statistics for all tables`)
 
 var fixturesImportFilesPerNode = fixturesImportCmd.PersistentFlags().Int(
 	`files-per-node`, 1,

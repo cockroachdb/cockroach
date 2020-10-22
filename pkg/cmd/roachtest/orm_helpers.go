@@ -32,44 +32,39 @@ func alterZoneConfigAndClusterSettings(
 	defer db.Close()
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER RANGE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
-	}
-
-	// TODO(rafi): remove this check once we stop testing against 2.0 and 2.1
-	if strings.HasPrefix(version, "v2.0") || strings.HasPrefix(version, "v2.1") {
-		return nil
 	}
 
 	if _, err := db.ExecContext(
@@ -78,8 +73,23 @@ func alterZoneConfigAndClusterSettings(
 		return err
 	}
 
-	// Enable temp tables for v20.1
-	if strings.HasPrefix(version, "v20.") {
+	// Shorten the merge queue interval to clean up ranges due to dropped tables.
+	if _, err := db.ExecContext(
+		ctx, `SET CLUSTER SETTING kv.range_merge.queue_interval = '200ms'`,
+	); err != nil {
+		return err
+	}
+
+	// Disable syncs associated with the Raft log which are the primary causes of
+	// fsyncs.
+	if _, err := db.ExecContext(
+		ctx, `SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true'`,
+	); err != nil {
+		return err
+	}
+
+	// Enable temp tables for v20.1+
+	if strings.HasPrefix(version, "v20.") || strings.HasPrefix(version, "v21.") {
 		if _, err := db.ExecContext(
 			ctx, `SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
 		); err != nil {
@@ -114,9 +124,9 @@ func newORMTestsResults() *ormTestsResults {
 
 // summarizeAll summarizes the result of running an ORM or a driver test suite
 // against a cockroach node. If an unexpected result is observed (for example,
-// a test unexpectedly failed or passed), a new blacklist is populated.
+// a test unexpectedly failed or passed), a new blocklist is populated.
 func (r *ormTestsResults) summarizeAll(
-	t *test, ormName, blacklistName string, expectedFailures blacklist, version, latestTag string,
+	t *test, ormName, blocklistName string, expectedFailures blocklist, version, tag string,
 ) {
 	// Collect all the tests that were not run.
 	notRunCount := 0
@@ -142,7 +152,7 @@ func (r *ormTestsResults) summarizeAll(
 	t.l.Printf("------------------------\n")
 
 	r.summarizeFailed(
-		t, ormName, blacklistName, expectedFailures, version, latestTag, notRunCount,
+		t, ormName, blocklistName, expectedFailures, version, tag, notRunCount,
 	)
 }
 
@@ -152,17 +162,21 @@ func (r *ormTestsResults) summarizeAll(
 // If a test suite outputs only the failures, then this method should be used.
 func (r *ormTestsResults) summarizeFailed(
 	t *test,
-	ormName, blacklistName string,
-	expectedFailures blacklist,
+	ormName, blocklistName string,
+	expectedFailures blocklist,
 	version, latestTag string,
 	notRunCount int,
 ) {
 	var bResults strings.Builder
 	fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
 	fmt.Fprintf(&bResults, "Tests run against %s %s\n", ormName, latestTag)
+	totalTestsRun := r.passExpectedCount + r.passUnexpectedCount + r.failExpectedCount + r.failUnexpectedCount
 	fmt.Fprintf(&bResults, "%d Total Tests Run\n",
-		r.passExpectedCount+r.passUnexpectedCount+r.failExpectedCount+r.failUnexpectedCount,
+		totalTestsRun,
 	)
+	if totalTestsRun == 0 {
+		t.Fatal("No tests ran! Fix the testing commands.")
+	}
 
 	p := func(msg string, count int) {
 		testString := "tests"
@@ -193,11 +207,11 @@ func (r *ormTestsResults) summarizeFailed(
 
 	if r.failUnexpectedCount > 0 || r.passUnexpectedCount > 0 ||
 		notRunCount > 0 || r.unexpectedSkipCount > 0 {
-		// Create a new blacklist so we can easily update this test.
+		// Create a new blocklist so we can easily update this test.
 		sort.Strings(r.currentFailures)
 		var b strings.Builder
-		fmt.Fprintf(&b, "Here is new %s blacklist that can be used to update the test:\n\n", ormName)
-		fmt.Fprintf(&b, "var %s = blacklist{\n", blacklistName)
+		fmt.Fprintf(&b, "Here is new %s blocklist that can be used to update the test:\n\n", ormName)
+		fmt.Fprintf(&b, "var %s = blocklist{\n", blocklistName)
 		for _, test := range r.currentFailures {
 			issue := expectedFailures[test]
 			if len(issue) == 0 || issue == "unknown" {
@@ -211,9 +225,9 @@ func (r *ormTestsResults) summarizeFailed(
 		fmt.Fprintf(&b, "}\n\n")
 		t.l.Printf("\n\n%s\n\n", b.String())
 		t.l.Printf("------------------------\n")
-		t.Fatalf("\n%s\nAn updated blacklist (%s) is available in the artifacts' %s log\n",
+		t.Fatalf("\n%s\nAn updated blocklist (%s) is available in the artifacts' %s log\n",
 			bResults.String(),
-			blacklistName,
+			blocklistName,
 			ormName,
 		)
 	}

@@ -20,7 +20,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Both M5 and I3 machines expose their EBS or local SSD volumes as NVMe block
@@ -39,11 +39,14 @@ set -x
 sudo apt-get update
 sudo apt-get install -qy --no-install-recommends mdadm
 
-mount_opts="discard,defaults"
+mount_opts="defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
+use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
+
 disks=()
-mountpoint="/mnt/data1"
+mount_prefix="/mnt/data"
+
 # On different machine types, the drives are either called nvme... or xvdd.
 for d in $(ls /dev/nvme?n1 /dev/xvdd); do
   if ! mount | grep ${d}; then
@@ -53,24 +56,33 @@ for d in $(ls /dev/nvme?n1 /dev/xvdd); do
     echo "Disk ${d} already mounted, skipping..."
   fi
 done
+
+
 if [ "${#disks[@]}" -eq "0" ]; then
+  mountpoint="${mount_prefix}1"
   echo "No disks mounted, creating ${mountpoint}"
   mkdir -p ${mountpoint}
   chmod 777 ${mountpoint}
-elif [ "${#disks[@]}" -eq "1" ]; then
-  echo "One disk mounted, creating ${mountpoint}"
-  mkdir -p ${mountpoint}
-  disk=${disks[0]}
-  mkfs.ext4 -E nodiscard ${disk}
-  mount -o ${mount_opts} ${disk} ${mountpoint}
-  chmod 777 ${mountpoint}
-  echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+elif [ "${#disks[@]}" -eq "1" ] || [ -n "use_multiple_disks" ]; then
+  disknum=1
+  for disk in "${disks[@]}"
+  do
+    mountpoint="${mount_prefix}${disknum}"
+    disknum=$((disknum + 1 ))
+    echo "Creating ${mountpoint}"
+    mkdir -p ${mountpoint}
+    mkfs.ext4 -F ${disk}
+    mount -o ${mount_opts} ${disk} ${mountpoint}
+    chmod 777 ${mountpoint}
+    echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+  done
 else
+  mountpoint="${mount_prefix}1"
   echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
   mkdir -p ${mountpoint}
   raiddisk="/dev/md0"
   mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
-  mkfs.ext4 -E nodiscard ${raiddisk}
+  mkfs.ext4 -F ${raiddisk}
   mount -o ${mount_opts} ${raiddisk} ${mountpoint}
   chmod 777 ${mountpoint}
   echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
@@ -96,7 +108,7 @@ sudo service sshd restart
 # increase the default maximum number of open file descriptors for
 # root and non-root users. Load generators running a lot of concurrent
 # workers bump into this often.
-sudo sh -c 'echo "root - nofile 65536\n* - nofile 65536" > /etc/security/limits.d/10-roachprod-nofiles.conf'
+sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'
 
 # Enable core dumps
 cat <<EOF > /etc/security/limits.d/core_unlimited.conf
@@ -125,12 +137,13 @@ sudo touch /mnt/data1/.roachprod-initialized
 //
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
-func writeStartupScript(extraMountOpts string) (string, error) {
+func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error) {
 	type tmplParams struct {
-		ExtraMountOpts string
+		ExtraMountOpts   string
+		UseMultipleDisks bool
 	}
 
-	args := tmplParams{ExtraMountOpts: extraMountOpts}
+	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple}
 
 	tmpfile, err := ioutil.TempFile("", "aws-startup-script")
 	if err != nil {
@@ -156,7 +169,7 @@ func (p *Provider) runCommand(args []string) ([]byte, error) {
 	cmd.Stderr = &stderrBuf
 	output, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
 			log.Println(string(exitErr.Stderr))
 		}
 		return nil, errors.Wrapf(err, "failed to run: aws %s: stderr: %v",

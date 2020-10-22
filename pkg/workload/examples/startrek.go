@@ -72,6 +72,13 @@ var episodesColTypes = []coltypes.T{
 	coltypes.Float64,
 }
 
+var quotesColTypes = []coltypes.T{
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Int64,
+}
+
 // The data that follows was derived from the 'startrek' fortune cookie file.
 var startrekEpisodes = [...][]interface{}{
 	{1, 1, 1, `The Man Trap`, 1531.1},
@@ -153,13 +160,6 @@ var startrekEpisodes = [...][]interface{}{
 	{77, 3, 22, `The Savage Curtain`, 5906.4},
 	{78, 3, 23, `All Our Yesterdays`, 5943.7},
 	{79, 3, 24, `Turnabout Intruder`, 5928.5},
-}
-
-var quotesColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Float64,
-	coltypes.Int64,
 }
 
 var startrekQuotes = [...][]interface{}{

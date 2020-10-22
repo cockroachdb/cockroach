@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -93,7 +93,9 @@ func (*tpccChecks) Meta() workload.Meta {
 }
 
 // Ops implements the Opser interface.
-func (w *tpccChecks) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *tpccChecks) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.flags.Lookup("db").Value.String(), urls)
 	if err != nil {
 		return workload.QueryLoad{}, fmt.Errorf("%v", err)

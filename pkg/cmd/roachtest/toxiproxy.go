@@ -21,7 +21,7 @@ import (
 	"time"
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // cockroachToxiWrapper replaces the cockroach binary. It modifies the listening port so

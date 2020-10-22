@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 	"golang.org/x/exp/rand"
 )
 
@@ -433,7 +433,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 
 			return nil
 		})
-	if err == errSimulated {
+	if errors.Is(err, errSimulated) {
 		return d, nil
 	}
 	return d, err
