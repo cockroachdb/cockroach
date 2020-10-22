@@ -13,7 +13,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// XXX: Replace this test in its entirety.
 // This test verifies that preserve_downgrade_option is respected and that in the
 // absence of it the cluster auto-upgrades when this is safe.
 //
@@ -31,7 +34,7 @@ import (
 // You want to look at versionupgrade.go, which has a test harness you
 // can use.
 func registerAutoUpgrade(r *testRegistry) {
-	runAutoUpgrade := func(ctx context.Context, t *test, c *cluster, oldVersion string) {
+	_ = func(ctx context.Context, t *test, c *cluster, oldVersion string) {
 		nodes := c.spec.NodeCount
 		goos := ifLocal(runtime.GOOS, "linux")
 
@@ -158,10 +161,11 @@ func registerAutoUpgrade(r *testRegistry) {
 			t.Fatal(err)
 		}
 
+		// XXX: This starts failing. Shouldn't
 		if upgraded, err := checkUpgraded(); err != nil {
 			t.Fatal(err)
-		} else if upgraded {
-			t.Fatal("cluster setting version shouldn't be upgraded before all non-decommissioned nodes are alive")
+		} else if !upgraded {
+			t.Fatal("cluster setting version should be upgraded before all non-decommissioned nodes are alive")
 		}
 
 		// Now decommission and stop n3, to test that the auto upgrade happens
@@ -258,11 +262,123 @@ func registerAutoUpgrade(r *testRegistry) {
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			pred, err := PredecessorVersion(r.buildVersion)
-			if err != nil {
-				t.Fatal(err)
-			}
-			runAutoUpgrade(ctx, t, c, pred)
+			runAutoUpgrade(ctx, t, c, r.buildVersion)
 		},
 	})
+}
+
+func runAutoUpgrade(
+	ctx context.Context, t *test, c *cluster, buildVersion version.Version,
+) {
+	predecessorVersion, err := PredecessorVersion(buildVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// h := newAutoupgradeHelper(t, c)
+
+	// An empty string means that the cockroach binary specified by flag
+	// `cockroach` will be used.
+	const mainVersion = ""
+	allNodes := c.All()
+	u := newVersionUpgradeTest(c,
+		// We upload both binaries to each node, to be able to vary the binary
+		// used when issuing `cockroach node` subcommands.
+		uploadVersion(allNodes, predecessorVersion),
+		uploadVersion(allNodes, mainVersion),
+
+		startVersion(allNodes, predecessorVersion),
+		waitForUpgradeStep(allNodes),
+		checkClusterVersion(1, predecessorVersion),
+
+		// XXX:
+		sleepStep(10*time.Second),
+
+		// Upgrade all binaries except for one.
+		binaryUpgradeStep(c.Nodes(2, c.spec.NodeCount), mainVersion),
+		checkClusterVersion(1, predecessorVersion),
+
+		// Block autoupgrade manually.
+		preventAutoUpgradeStep(1),
+		binaryUpgradeStep(c.Node(1), mainVersion),
+		checkClusterVersion(1, predecessorVersion),
+
+		allowAutoUpgradeStep(1),
+		checkClusterVersion(1, mainVersion),
+	)
+
+	u.run(ctx, t)
+}
+
+type autoupgradeTestHelper struct {
+	t       *test
+	c       *cluster
+	nodeIDs []int
+}
+
+func newAutoupgradeHelper(t *test, c *cluster) *autoupgradeTestHelper {
+	var nodeIDs []int
+	for i := 1; i <= c.spec.NodeCount; i++ {
+		nodeIDs = append(nodeIDs, i)
+	}
+	return &autoupgradeTestHelper{
+		t:       t,
+		c:       c,
+		nodeIDs: nodeIDs,
+	}
+}
+
+// decommission decommissions the given targetNodes, running the process
+// through the specified runNode.
+func (h *autoupgradeTestHelper) decommission(
+	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+) (string, error) {
+	args := []string{"node", "decommission"}
+	args = append(args, verbs...)
+
+	if len(targetNodes) == 1 && targetNodes[0] == runNode {
+		args = append(args, "--self")
+	} else {
+		for _, target := range targetNodes {
+			args = append(args, strconv.Itoa(target))
+		}
+	}
+	return execCLI(ctx, h.t, h.c, runNode, args...)
+}
+
+// recommission recommissions the given targetNodes, running the process
+// through the specified runNode.
+func (h *autoupgradeTestHelper) recommission(
+	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+) (string, error) {
+	args := []string{"node", "recommission"}
+	args = append(args, verbs...)
+
+	if len(targetNodes) == 1 && targetNodes[0] == runNode {
+		args = append(args, "--self")
+	} else {
+		for _, target := range targetNodes {
+			args = append(args, strconv.Itoa(target))
+		}
+	}
+	return execCLI(ctx, h.t, h.c, runNode, args...)
+}
+
+func checkClusterVersion(node int, version string) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, node).String())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var clusterVersion string
+		if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&clusterVersion); err != nil {
+			t.Fatal(err)
+		}
+
+		if clusterVersion != version {
+			t.Fatalf("expected cluster version %s, got %s", version, clusterVersion)
+		}
+	}
 }

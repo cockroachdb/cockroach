@@ -1256,7 +1256,7 @@ func (s *statusServer) Profile(
 // that status "UNKNOWN" has value 0 (the default) when accessing the
 // map.
 func (s *statusServer) Nodes(
-	ctx context.Context, req *serverpb.NodesRequest,
+	ctx context.Context, _ *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)

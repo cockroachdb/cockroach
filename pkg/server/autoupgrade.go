@@ -15,10 +15,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -49,10 +50,12 @@ func (s *Server) startAutoUpgrade(ctx context.Context) {
 
 			// Check if we should upgrade cluster version, keep checking upgrade
 			// status, or stop attempting upgrade.
-			if quit, err := s.upgradeStatus(ctx); err != nil {
+			shouldUpgrade, err := s.shouldUpgrade(ctx)
+			if err != nil {
 				log.Infof(ctx, "failed attempt to upgrade cluster version, error: %s", err)
 				continue
-			} else if quit {
+			}
+			if !shouldUpgrade {
 				log.Info(ctx, "no need to upgrade, cluster already at the newest version")
 				return
 			}
@@ -86,56 +89,56 @@ func (s *Server) startAutoUpgrade(ctx context.Context) {
 	}
 }
 
-// upgradeStatus lets the main checking loop know if we should do upgrade,
-// keep checking upgrade status, or stop attempting upgrade.
-// Return (true, nil) to indicate we want to stop attempting upgrade.
-// Return (false, nil) to indicate we want to do the upgrade.
-// Return (false, err) to indicate we want to keep checking upgrade status.
-func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
+// shouldUpgrade lets the autoupgrade loop know whether or not we should
+// upgrade, or retry after if if we can't yet tell.
+//  - (true, nil) indicates that we should upgrade
+//  - (false, nil) indicates that we shouldn't upgrade
+//  - (    , err) indicate we don't know one way or another, and should retry
+func (s *Server) shouldUpgrade(ctx context.Context) (should bool, _ error) {
+	livenesses, err := s.nodeLiveness.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if len(livenesses) == 0 {
+		return false, errors.AssertionFailedf("didn't find any liveness records")
+	}
+
+	for _, liveness := range livenesses {
+		// For nodes that have expired and haven't been decommissioned, stall
+		// auto-upgrade.
+		expiration := hlc.Timestamp(liveness.Expiration)
+		if expiration.Less(s.clock.Now()) && !liveness.Membership.Decommissioned() {
+			return false, errors.Errorf("node %d not live (since %s), and not decommissioned", liveness.NodeID, expiration.String())
+		}
+	}
+
+	resp, err := s.status.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return false, err
+	}
+
+	if len(resp.Nodes) != len(livenesses) {
+		return false, errors.AssertionFailedf("mismatched number of node statuses, expected %d got %d", len(livenesses), len(resp.Nodes))
+	}
+
+	firstVersion := resp.Nodes[0].Desc.ServerVersion
+	for _, status := range resp.Nodes[1:] {
+		// Check version of all nodes.
+		if status.Desc.ServerVersion != firstVersion {
+			return false, errors.Newf("mismatched server versions between nodes (saw %s and %s)", firstVersion, status.Desc.ServerVersion)
+		}
+	}
+
 	// Check if all nodes are running at the newest version.
 	clusterVersion, err := s.clusterVersion(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	nodesWithLiveness, err := s.status.nodesStatusWithLiveness(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	var newVersion string
-	var notRunningErr error
-	for nodeID, st := range nodesWithLiveness {
-		if st.livenessStatus != kvserverpb.NodeLivenessStatus_LIVE &&
-			st.livenessStatus != kvserverpb.NodeLivenessStatus_DECOMMISSIONING {
-			// We definitely won't be able to upgrade, but defer this error as
-			// we may find out that we are already at the latest version (the
-			// cluster may be up to date, but a node is down).
-			if notRunningErr == nil {
-				notRunningErr = errors.Errorf("node %d not running (%s), cannot determine version", nodeID, st.livenessStatus)
-			}
-			continue
-		}
-
-		version := st.NodeStatus.Desc.ServerVersion.String()
-		if newVersion == "" {
-			newVersion = version
-		} else if version != newVersion {
-			return false, errors.Newf("not all nodes are running the latest version yet (saw %s and %s)", newVersion, version)
-		}
-	}
-
-	if newVersion == "" {
-		return false, errors.Errorf("no live nodes found")
-	}
-
 	// Check if we really need to upgrade cluster version.
-	if newVersion == clusterVersion {
-		return true, nil
-	}
-
-	if notRunningErr != nil {
-		return false, notRunningErr
+	if firstVersion.String() == clusterVersion {
+		return false, nil
 	}
 
 	// Check if auto upgrade is enabled at current version. This is read from
@@ -151,15 +154,12 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	}
 
 	if len(datums) != 0 {
-		row := datums[0]
-		downgradeVersion := string(tree.MustBeDString(row[0]))
-
+		downgradeVersion := string(tree.MustBeDString(datums[0][0]))
 		if clusterVersion == downgradeVersion {
 			return false, errors.Errorf("auto upgrade is disabled for current version: %s", clusterVersion)
 		}
 	}
-
-	return false, nil
+	return true, nil
 }
 
 // clusterVersion returns the current cluster version from the SQL subsystem
@@ -179,6 +179,5 @@ func (s *Server) clusterVersion(ctx context.Context) (string, error) {
 	}
 	row := datums[0]
 	clusterVersion := string(tree.MustBeDString(row[0]))
-
 	return clusterVersion, nil
 }

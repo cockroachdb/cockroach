@@ -695,7 +695,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 						oldLiveness, ok := nl.Self()
 						if !ok {
 							nodeID := nl.gossip.NodeID.Get()
-							liveness, err := nl.getLivenessFromKV(ctx, nodeID)
+							liveness, err := nl.GetLivenessFromKV(ctx, nodeID)
 							if err != nil {
 								log.Infof(ctx, "unable to get liveness record from KV: %s", err)
 								continue
@@ -1002,6 +1002,39 @@ func (nl *NodeLiveness) GetLivenesses() []kvserverpb.Liveness {
 	return livenesses
 }
 
+// GetLivenessesFromKV returns a slice containing the liveness status of every
+// node on the cluster. It's the improved version of GetLivenesses above, which
+// only consults the (possibly stale) in-memory cache.
+func (nl *NodeLiveness) GetLivenessesFromKV(ctx context.Context) ([]kvserverpb.Liveness, error) {
+	kvs, err := nl.db.Scan(ctx, keys.NodeLivenessPrefix, keys.NodeLivenessKeyMax, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to get liveness")
+	}
+
+	var results []kvserverpb.Liveness
+	for _, kv := range kvs {
+		if kv.Value == nil {
+			return nil, errors.AssertionFailedf("missing liveness record")
+		}
+		var liveness kvserverpb.Liveness
+		if err := kv.Value.GetProto(&liveness); err != nil {
+			return nil, errors.Wrap(err, "invalid liveness record")
+		}
+
+		livenessRec := LivenessRecord{
+			Liveness: liveness,
+			raw:      kv.Value.TagAndDataBytes(),
+		}
+
+		// Update our cache with the liveness record we just found.
+		nl.maybeUpdate(ctx, livenessRec)
+
+		results = append(results, liveness)
+	}
+
+	return results, nil
+}
+
 // GetLiveness returns the liveness record for the specified nodeID. If the
 // liveness record is not found (due to gossip propagation delays or due to the
 // node not existing), we surface that to the caller. The record returned also
@@ -1024,9 +1057,9 @@ func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (_ LivenessReco
 	return LivenessRecord{}, false
 }
 
-// getLivenessFromKV fetches the liveness record from KV for a given node, and
+// GetLivenessFromKV fetches the liveness record from KV for a given node, and
 // updates the internal in-memory cache when doing so.
-func (nl *NodeLiveness) getLivenessFromKV(
+func (nl *NodeLiveness) GetLivenessFromKV(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (kvserverpb.Liveness, error) {
 	livenessRec, err := nl.getLivenessRecordFromKV(ctx, nodeID)
@@ -1036,7 +1069,7 @@ func (nl *NodeLiveness) getLivenessFromKV(
 	return livenessRec.Liveness, nil
 }
 
-// getLivenessRecordFromKV is like getLivenessFromKV, but returns the raw,
+// getLivenessRecordFromKV is like GetLivenessFromKV, but returns the raw,
 // encoded value that the database has for this liveness record in addition to
 // the decoded liveness proto.
 func (nl *NodeLiveness) getLivenessRecordFromKV(
