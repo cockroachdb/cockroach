@@ -171,12 +171,6 @@ func (h *IndexedVarHelper) checkIndex(idx int) {
 	}
 }
 
-// NumVars returns the number of variables the IndexedVarHelper was initialized
-// for.
-func (h *IndexedVarHelper) NumVars() int {
-	return len(h.vars)
-}
-
 // IndexedVar returns an IndexedVar for the given index. The index must be
 // valid.
 func (h *IndexedVarHelper) IndexedVar(idx int) *IndexedVar {

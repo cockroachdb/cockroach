@@ -23,21 +23,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
 
 // The test files in testdata/predicate support only one command:
 //
-//   - predtest vars=(type1,type2, ...)
+//   - predtest vars=(var1 type1, var2 type2, ...)"
 //
-//   The vars argument sets the type of the variables (e.g. @1, @2) in the
+//   The vars argument sets the names and types of the variables in the
 //   expressions.
 //
 //   The test input must be in the format:
@@ -57,9 +56,6 @@ func TestImplicator(t *testing.T) {
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			var varTypes []*types.T
-			var cols opt.ColSet
-			var iVarHelper tree.IndexedVarHelper
 			var err error
 
 			var f norm.Factory
@@ -70,19 +66,16 @@ func TestImplicator(t *testing.T) {
 				d.Fatalf(t, "unsupported command: %s\n", d.Cmd)
 			}
 
+			var sv testutils.ScalarVars
+
 			for _, arg := range d.CmdArgs {
 				key, vals := arg.Key, arg.Vals
 				switch key {
 				case "vars":
-					varTypes, err = exprgen.ParseTypes(vals)
+					err := sv.Init(md, vals)
 					if err != nil {
-						d.Fatalf(t, "failed to parse vars%v\n", err)
+						d.Fatalf(t, "%v", err)
 					}
-
-					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
-
-					// Add the columns to the metadata.
-					cols = addColumnsToMetadata(varTypes, md)
 
 				default:
 					d.Fatalf(t, "unknown argument: %s\n", key)
@@ -95,13 +88,13 @@ func TestImplicator(t *testing.T) {
 			}
 
 			// Build the filters from the first split, everything before "=>".
-			filters, err := makeFilters(splitInput[0], cols, &semaCtx, &evalCtx, &f)
+			filters, err := makeFilters(splitInput[0], sv.Cols(), &semaCtx, &evalCtx, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building filters: %v\n", err)
 			}
 
 			// Build the predicate from the second split, everything after "=>".
-			pred, err := makeFilters(splitInput[1], cols, &semaCtx, &evalCtx, &f)
+			pred, err := makeFilters(splitInput[1], sv.Cols(), &semaCtx, &evalCtx, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
@@ -122,11 +115,16 @@ func TestImplicator(t *testing.T) {
 					nil /* factory */, f.Memo(), nil /* catalog */, &remainingFilters,
 					&evalCtx, false, /* allowAutoCommit */
 				)
-				expr, err := execBld.BuildScalar(&iVarHelper)
+				expr, err := execBld.BuildScalar()
 				if err != nil {
 					d.Fatalf(t, "unexpected error: %v\n", err)
 				}
-				buf.WriteString(expr.String())
+				fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+				fmtCtx.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+					ctx.WriteString(md.ColumnMeta(opt.ColumnID(idx + 1)).Alias)
+				})
+				expr.Format(fmtCtx)
+				buf.WriteString(fmtCtx.String())
 			}
 			return buf.String()
 		})
@@ -135,86 +133,86 @@ func TestImplicator(t *testing.T) {
 
 func BenchmarkImplicator(b *testing.B) {
 	type testCase struct {
-		name, varTypes, filters, pred string
+		name, vars, filters, pred string
 	}
 	testCases := []testCase{
 		{
-			name:     "single-exact-match",
-			varTypes: "int",
-			filters:  "@1 >= 10",
-			pred:     "@1 >= 10",
+			name:    "single-exact-match",
+			vars:    "a int",
+			filters: "a >= 10",
+			pred:    "a >= 10",
 		},
 		{
-			name:     "single-inexact-match",
-			varTypes: "int",
-			filters:  "@1 >= 10",
-			pred:     "@1 > 5",
+			name:    "single-inexact-match",
+			vars:    "a int",
+			filters: "a >= 10",
+			pred:    "a > 5",
 		},
 		{
-			name:     "range-inexact-match",
-			varTypes: "int, int",
-			filters:  "@1 >= 10 AND @1 <= 90",
-			pred:     "@1 > 0 AND @1 < 100",
+			name:    "range-inexact-match",
+			vars:    "a int, b int",
+			filters: "a >= 10 AND a <= 90",
+			pred:    "a > 0 AND a < 100",
 		},
 		{
-			name:     "single-exact-match-extra-filters",
-			varTypes: "int, int, int, int, int",
-			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @4 = 4 AND @5 = 5",
-			pred:     "@3 >= 10",
+			name:    "single-exact-match-extra-filters",
+			vars:    "a int, b int, c int, d int, e int",
+			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND @5 = 5",
+			pred:    "c >= 10",
 		},
 		{
-			name:     "single-inexact-match-extra-filters",
-			varTypes: "int, int, int, int, int",
-			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @4 = 4 AND @5 = 5",
-			pred:     "@3 > 0",
+			name:    "single-inexact-match-extra-filters",
+			vars:    "a int, b int, c int, d int, e int",
+			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND @5 = 5",
+			pred:    "c > 0",
 		},
 		{
-			name:     "multi-column-and-exact-match",
-			varTypes: "int, string",
-			filters:  "@1 >= 10 AND @2 = 'foo'",
-			pred:     "@1 >= 10 AND @2 = 'foo'",
+			name:    "multi-column-and-exact-match",
+			vars:    "a int, b string",
+			filters: "a >= 10 AND b = 'foo'",
+			pred:    "a >= 10 AND b = 'foo'",
 		},
 		{
-			name:     "multi-column-and-inexact-match",
-			varTypes: "int, string",
-			filters:  "@1 >= 10 AND @2 = 'foo'",
-			pred:     "@1 >= 0 AND @2 IN ('foo', 'bar')",
+			name:    "multi-column-and-inexact-match",
+			vars:    "a int, b string",
+			filters: "a >= 10 AND b = 'foo'",
+			pred:    "a >= 0 AND b IN ('foo', 'bar')",
 		},
 		{
-			name:     "multi-column-or-exact-match",
-			varTypes: "int, string",
-			filters:  "@1 >= 10 OR @2 = 'foo'",
-			pred:     "@1 >= 10 OR @2 = 'foo'",
+			name:    "multi-column-or-exact-match",
+			vars:    "a int, b string",
+			filters: "a >= 10 OR b = 'foo'",
+			pred:    "a >= 10 OR b = 'foo'",
 		},
 		{
-			name:     "multi-column-or-exact-match-reverse",
-			varTypes: "int, string",
-			filters:  "@1 >= 10 OR @2 = 'foo'",
-			pred:     "@2 = 'foo' OR @1 >= 10",
+			name:    "multi-column-or-exact-match-reverse",
+			vars:    "a int, b string",
+			filters: "a >= 10 OR b = 'foo'",
+			pred:    "b = 'foo' OR a >= 10",
 		},
 		{
-			name:     "multi-column-or-inexact-match",
-			varTypes: "int, string",
-			filters:  "@1 >= 10 OR @2 = 'foo'",
-			pred:     "@1 > 0 OR @2 IN ('foo', 'bar')",
+			name:    "multi-column-or-inexact-match",
+			vars:    "a int, b string",
+			filters: "a >= 10 OR b = 'foo'",
+			pred:    "a > 0 OR b IN ('foo', 'bar')",
 		},
 		{
-			name:     "in-implies-or",
-			varTypes: "int",
-			filters:  "@1 IN (1, 2, 3)",
-			pred:     "@1 = 2 OR @1 IN (1, 3)",
+			name:    "in-implies-or",
+			vars:    "a int",
+			filters: "a IN (1, 2, 3)",
+			pred:    "a = 2 OR a IN (1, 3)",
 		},
 		{
-			name:     "and-filters-do-not-imply-pred",
-			varTypes: "int, int, int, int, string",
-			filters:  "@1 < 0 AND @2 > 10 AND @3 >= 10 AND @4 = 4 AND @5 = 'foo'",
-			pred:     "@2 > 0 AND @5 = 'foo'",
+			name:    "and-filters-do-not-imply-pred",
+			vars:    "a int, b int, c int, d int, e string",
+			filters: "a < 0 AND b > 10 AND c >= 10 AND d = 4 AND e = 'foo'",
+			pred:    "b > 0 AND e = 'foo'",
 		},
 		{
-			name:     "or-filters-do-not-imply-pred",
-			varTypes: "int, int, int, int, string",
-			filters:  "@1 < 0 OR @2 > 10 OR @3 >= 10 OR @4 = 4 OR @5 = 'foo'",
-			pred:     "@2 > 0 OR @5 = 'foo'",
+			name:    "or-filters-do-not-imply-pred",
+			vars:    "a int, b int, c int, d int, e string",
+			filters: "a < 0 OR b > 10 OR c >= 10 OR d = 4 OR e = 'foo'",
+			pred:    "b > 0 OR e = 'foo'",
 		},
 	}
 	// Generate a few test cases with many columns to show how performance
@@ -224,13 +222,13 @@ func BenchmarkImplicator(b *testing.B) {
 		tc.name = fmt.Sprintf("many-columns-exact-match%d", n)
 		for i := 1; i <= n; i++ {
 			if i > 1 {
-				tc.varTypes += ", "
+				tc.vars += ", "
 				tc.filters += " AND "
 				tc.pred += " AND "
 			}
-			tc.varTypes += "int"
-			tc.filters += fmt.Sprintf("@%d = %d", i, i)
-			tc.pred += fmt.Sprintf("@%d = %d", i, i)
+			tc.vars += fmt.Sprintf("x%d int", i)
+			tc.filters += fmt.Sprintf("x%d = %d", i, i)
+			tc.pred += fmt.Sprintf("x%d = %d", i, i)
 		}
 		testCases = append(testCases, tc)
 
@@ -238,13 +236,13 @@ func BenchmarkImplicator(b *testing.B) {
 		tc.name = fmt.Sprintf("many-columns-inexact-match%d", n)
 		for i := 1; i <= n; i++ {
 			if i > 1 {
-				tc.varTypes += ", "
+				tc.vars += ", "
 				tc.filters += " AND "
 				tc.pred += " AND "
 			}
-			tc.varTypes += "int"
-			tc.filters += fmt.Sprintf("@%d > %d", i, i)
-			tc.pred += fmt.Sprintf("@%d >= %d", i, i)
+			tc.vars += fmt.Sprintf("x%d int", i)
+			tc.filters += fmt.Sprintf("x%d > %d", i, i)
+			tc.pred += fmt.Sprintf("x%d >= %d", i, i)
 		}
 		testCases = append(testCases, tc)
 	}
@@ -258,22 +256,20 @@ func BenchmarkImplicator(b *testing.B) {
 		md := f.Metadata()
 
 		// Parse the variable types.
-		varTypes, err := exprgen.ParseTypes(strings.Split(tc.varTypes, ", "))
+		var sv testutils.ScalarVars
+		err := sv.Init(md, strings.Split(tc.vars, ", "))
 		if err != nil {
 			b.Fatal(err)
 		}
 
-		// Add the variables to the metadata.
-		cols := addColumnsToMetadata(varTypes, md)
-
 		// Build the filters.
-		filters, err := makeFilters(tc.filters, cols, &semaCtx, &evalCtx, &f)
+		filters, err := makeFilters(tc.filters, sv.Cols(), &semaCtx, &evalCtx, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building filters: %v\n", err)
 		}
 
 		// Build the predicate.
-		pred, err := makeFilters(tc.pred, cols, &semaCtx, &evalCtx, &f)
+		pred, err := makeFilters(tc.pred, sv.Cols(), &semaCtx, &evalCtx, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building predicate: %v\n", err)
 		}
@@ -292,17 +288,6 @@ func BenchmarkImplicator(b *testing.B) {
 			}
 		})
 	}
-}
-
-// addColumnsToMetadata adds a new column to the metadata for each type in the
-// given list. It returns the set of column IDs that were added.
-func addColumnsToMetadata(varTypes []*types.T, md *opt.Metadata) opt.ColSet {
-	cols := opt.ColSet{}
-	for i, typ := range varTypes {
-		col := md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
-		cols.Add(col)
-	}
-	return cols
 }
 
 // makeFilters returns a FiltersExpr generated from the input string that is

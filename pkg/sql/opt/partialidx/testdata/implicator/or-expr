@@ -2,252 +2,252 @@
 
 # Atom filters
 
-predtest vars=(bool)
-@1
+predtest vars=(a bool)
+a
 =>
-@1 OR @1
+a OR a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool, bool)
-@1
+predtest vars=(a bool, b bool)
+a
 =>
-@1 OR @2
+a OR b
 ----
 true
-└── remaining filters: @1
+└── remaining filters: a
 
-predtest vars=(bool, bool)
-@2
+predtest vars=(a bool, b bool)
+b
 =>
-@1 OR @2
+a OR b
 ----
 true
-└── remaining filters: @2
+└── remaining filters: b
 
-predtest vars=(int, int)
-(@1, @2) = (1, 2)
+predtest vars=(a int, b int)
+(a, b) = (1, 2)
 =>
-@1 = 1 OR @2 = 2
+a = 1 OR b = 2
 ----
 true
-└── remaining filters: (@1 = 1) AND (@2 = 2)
+└── remaining filters: (a = 1) AND (b = 2)
 
-predtest vars=(bool, bool)
-NOT @2
+predtest vars=(a bool, b bool)
+NOT b
 =>
-@1 OR @2
+a OR b
 ----
 false
 
-predtest vars=(int)
-@1 IN (1, 2)
+predtest vars=(a int)
+a IN (1, 2)
 =>
-@1 = 1 OR @1 = 2
+a = 1 OR a = 2
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 IN (1)
+predtest vars=(a int)
+a IN (1)
 =>
-@1 = 1 OR @1 = 2
+a = 1 OR a = 2
 ----
 true
-└── remaining filters: @1 IN (1,)
+└── remaining filters: a IN (1,)
 
-predtest vars=(int)
-@1 IN (1, 2, 3)
+predtest vars=(a int)
+a IN (1, 2, 3)
 =>
-@1 IN (1, 2) OR @1 = 3
+a IN (1, 2) OR a = 3
 ----
 true
 └── remaining filters: none
 
 # Regression tests for #54649. Atoms that are contradictions, like NULL, should
 # not cause panics.
-predtest vars=(bool)
-@1
+predtest vars=(a bool)
+a
 =>
-(@1 OR NULL) OR @1
+(a OR NULL) OR a
 ----
 true
-└── remaining filters: @1
+└── remaining filters: a
 
-predtest vars=(bool, bool)
-@1
+predtest vars=(a bool, b bool)
+a
 =>
-(@2 OR NULL) OR @2
+(b OR NULL) OR b
 ----
 false
 
 # Conjunction filters
 
-predtest vars=(bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool)
+a AND b
 =>
-@1 OR @1
+a OR a
 ----
 true
-└── remaining filters: @2
+└── remaining filters: b
 
-predtest vars=(bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool)
+a AND b
 =>
-@1 OR @2
+a OR b
 ----
 true
-└── remaining filters: @1 AND @2
+└── remaining filters: a AND b
 
-predtest vars=(bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool)
+a AND b
 =>
-@2 OR @1
+b OR a
 ----
 true
-└── remaining filters: @1 AND @2
+└── remaining filters: a AND b
 
-predtest vars=(bool, bool, bool)
-@1 AND @2 AND @3
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
 =>
-@1 OR @3
+a OR c
 ----
 true
-└── remaining filters: (@1 AND @2) AND @3
+└── remaining filters: (a AND b) AND c
 
-predtest vars=(bool, bool, bool)
-@1 AND @2 AND @3
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
 =>
-@1 OR @2
+a OR b
 ----
 true
-└── remaining filters: (@1 AND @2) AND @3
+└── remaining filters: (a AND b) AND c
 
-predtest vars=(bool, bool, bool)
-@1 AND @2 AND @3
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
 =>
-@3 OR @1 OR @2
+c OR a OR b
 ----
 true
-└── remaining filters: (@1 AND @2) AND @3
+└── remaining filters: (a AND b) AND c
 
-predtest vars=(int, int)
-@1 > 10 AND @2 < 20
+predtest vars=(a int, b int)
+a > 10 AND b < 20
 =>
-@1 > 0 OR @2 < 30
+a > 0 OR b < 30
 ----
 true
-└── remaining filters: (@1 > 10) AND (@2 < 20)
+└── remaining filters: (a > 10) AND (b < 20)
 
-predtest vars=(int)
-@1 IN (1) OR @1 IN (2)
+predtest vars=(a int)
+a IN (1) OR a IN (2)
 =>
-@1 = 1 OR @1 = 2
+a = 1 OR a = 2
 ----
 true
-└── remaining filters: (@1 IN (1,)) OR (@1 IN (2,))
+└── remaining filters: (a IN (1,)) OR (a IN (2,))
 
-predtest vars=(int,int)
-@1 IN (1, 2)
+predtest vars=(a int, b int)
+a IN (1, 2)
 =>
-@1 IN (1, 2) OR @2 = 3
+a IN (1, 2) OR b = 3
 ----
 true
-└── remaining filters: @1 IN (1, 2)
+└── remaining filters: a IN (1, 2)
 
-predtest vars=(bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool)
+a AND b
 =>
-NOT @1 OR NOT @2
+NOT a OR NOT b
 ----
 false
 
-predtest vars=(bool, bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool, c bool)
+a AND b
 =>
-NOT @1 OR @3
+NOT a OR c
 ----
 false
 
-predtest vars=(int, int)
-@1 > 10 AND @2 < 20
+predtest vars=(a int, b int)
+a > 10 AND b < 20
 =>
-@1 > 11 OR @2 < 19
+a > 11 OR b < 19
 ----
 false
 
 # Range filters
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 > 10 OR @1 < 100
+a > 10 OR a < 100
 ----
 true
-└── remaining filters: (@1 > 10) AND (@1 < 100)
+└── remaining filters: (a > 10) AND (a < 100)
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 < 100 OR @1 > 10
+a < 100 OR a > 10
 ----
 true
-└── remaining filters: (@1 > 10) AND (@1 < 100)
+└── remaining filters: (a > 10) AND (a < 100)
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 > 0 OR @1 < 90
+a > 0 OR a < 90
 ----
 true
-└── remaining filters: (@1 > 10) AND (@1 < 100)
+└── remaining filters: (a > 10) AND (a < 100)
 
-predtest vars=(int, bool)
-@1 > 10 AND @2 AND @1 < 100
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
 =>
-@1 > 10 OR @1 < 100
+a > 10 OR a < 100
 ----
 true
-└── remaining filters: ((@1 > 10) AND (@1 < 100)) AND @2
+└── remaining filters: ((a > 10) AND (a < 100)) AND b
 
-predtest vars=(int)
-@1 > 0 AND @1 < 90
+predtest vars=(a int)
+a > 0 AND a < 90
 =>
-@1 > 10 OR @1 < 100
+a > 10 OR a < 100
 ----
 true
-└── remaining filters: (@1 > 0) AND (@1 < 90)
+└── remaining filters: (a > 0) AND (a < 90)
 
-predtest vars=(int)
-@1 > 0 AND @1 < 90
+predtest vars=(a int)
+a > 0 AND a < 90
 =>
-@1 < 10 OR @1 > 100
+a < 10 OR a > 100
 ----
 false
 
 # Disjunction filters
 
-predtest vars=(bool)
-@1 OR @1
+predtest vars=(a bool)
+a OR a
 =>
-@1 OR @1
+a OR a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 < 10 OR @1 > 100
+predtest vars=(a int)
+a < 10 OR a > 100
 =>
-@1 < 20 OR @1 > 80
+a < 20 OR a > 80
 ----
 true
-└── remaining filters: (@1 < 10) OR (@1 > 100)
+└── remaining filters: (a < 10) OR (a > 100)
 
-predtest vars=(bool, bool)
-@1 OR @2
+predtest vars=(a bool, b bool)
+a OR b
 =>
-@1 OR @2
+a OR b
 ----
 true
 └── remaining filters: none
@@ -256,103 +256,103 @@ true
 # difficult because we don't remove exact expression matches inside Or
 # expressions in the predicate or filters. See the docs for
 # FilterImpliesPredicate for more details.
-predtest vars=(bool, bool)
-@1 OR @2
+predtest vars=(a bool, b bool)
+a OR b
 =>
-@2 OR @1
+b OR a
 ----
 true
-└── remaining filters: @1 OR @2
+└── remaining filters: a OR b
 
-predtest vars=(bool, bool, bool)
-@1 OR @2
+predtest vars=(a bool, b bool, c bool)
+a OR b
 =>
-@1 OR @2 OR @3
+a OR b OR c
 ----
 true
-└── remaining filters: @1 OR @2
+└── remaining filters: a OR b
 
-predtest vars=(bool, bool, bool)
-@1 OR @2
+predtest vars=(a bool, b bool, c bool)
+a OR b
 =>
-@3 OR @1 OR @2
+c OR a OR b
 ----
 true
-└── remaining filters: @1 OR @2
+└── remaining filters: a OR b
 
-predtest vars=(bool, bool, bool)
-@1 OR @2
+predtest vars=(a bool, b bool, c bool)
+a OR b
 =>
-@1 OR @3
+a OR c
 ----
 false
 
-predtest vars=(int, int, int, int)
-@1 > @2 OR @3 > @4
+predtest vars=(a int, b int, c int, d int)
+a > b OR c > d
 =>
-@2 < @1 OR @4 < @3
+b < a OR d < c
 ----
 true
-└── remaining filters: (@1 > @2) OR (@3 > @4)
+└── remaining filters: (a > b) OR (c > d)
 
 # Combination conjunction and disjunction filters
 
-predtest vars=(int)
-(@1 > 10 OR @1 < 0) AND (@1 > 11 OR @1 < 0)
+predtest vars=(a int)
+(a > 10 OR a < 0) AND (a > 11 OR a < 0)
 =>
-@1 > 10 OR @1 < 0
+a > 10 OR a < 0
 ----
 true
-└── remaining filters: (@1 > 11) OR (@1 < 0)
+└── remaining filters: (a > 11) OR (a < 0)
 
-predtest vars=(int)
-(@1 > 10 OR @1 < 0) AND (@1 > 11 OR @1 < 0)
+predtest vars=(a int)
+(a > 10 OR a < 0) AND (a > 11 OR a < 0)
 =>
-@1 > 5 OR @1 < 1
+a > 5 OR a < 1
 ----
 true
-└── remaining filters: ((@1 > 10) OR (@1 < 0)) AND ((@1 > 11) OR (@1 < 0))
+└── remaining filters: ((a > 10) OR (a < 0)) AND ((a > 11) OR (a < 0))
 
-predtest vars=(bool, bool, bool)
-@1 OR (@2 AND @3)
+predtest vars=(a bool, b bool, c bool)
+a OR (b AND c)
 =>
-@1 OR @3
+a OR c
 ----
 true
-└── remaining filters: @1 OR (@2 AND @3)
+└── remaining filters: a OR (b AND c)
 
-predtest vars=(bool, bool, bool)
-(@1 OR @2) AND @3
+predtest vars=(a bool, b bool, c bool)
+(a OR b) AND c
 =>
-@1 OR @2
+a OR b
 ----
 true
-└── remaining filters: @3
+└── remaining filters: c
 
-predtest vars=(bool, bool, bool)
-(@1 OR @2) AND (@1 OR @3)
+predtest vars=(a bool, b bool, c bool)
+(a OR b) AND (a OR c)
 =>
-@1 OR @2
+a OR b
 ----
 true
-└── remaining filters: @1 OR @3
+└── remaining filters: a OR c
 
-# These filters could, in theory, be reduced to "@1 OR @3". However, doing so is
+# These filters could, in theory, be reduced to "a OR c". However, doing so is
 # difficult because we don't remove exact expression matches inside Or
 # expressions in the predicate or filters. See the docs for
 # FilterImpliesPredicate for more details.
-predtest vars=(bool, bool, bool)
-(@2 OR @1) AND (@1 OR @3)
+predtest vars=(a bool, b bool, c bool)
+(b OR a) AND (a OR c)
 =>
-@1 OR @2
+a OR b
 ----
 true
-└── remaining filters: (@2 OR @1) AND (@1 OR @3)
+└── remaining filters: (b OR a) AND (a OR c)
 
-predtest vars=(bool, bool, bool, bool)
-@1 OR (@2 AND @3) OR @4
+predtest vars=(a bool, b bool, c bool, d bool)
+a OR (b AND c) OR d
 =>
-@1 OR @3 OR @4
+a OR c OR d
 ----
 true
-└── remaining filters: (@1 OR (@2 AND @3)) OR @4
+└── remaining filters: (a OR (b AND c)) OR d

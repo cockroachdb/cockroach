@@ -48,17 +48,3 @@ func ParseType(typeStr string) (*types.T, error) {
 	}
 	return tree.MustBeStaticallyKnownType(typ), nil
 }
-
-// ParseTypes parses a list of types. Note that it does not support
-// user defined types.
-func ParseTypes(colStrs []string) ([]*types.T, error) {
-	res := make([]*types.T, len(colStrs))
-	for i, s := range colStrs {
-		var err error
-		res[i], err = ParseType(s)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
