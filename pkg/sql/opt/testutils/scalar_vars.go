@@ -23,8 +23,9 @@ import (
 // ScalarVars is a helper used to populate the metadata with specified columns,
 // useful for tests involving scalar expressions.
 type ScalarVars struct {
-	cols        opt.ColSet
-	notNullCols opt.ColSet
+	cols         opt.ColSet
+	notNullCols  opt.ColSet
+	computedCols map[opt.ColumnID]tree.Expr
 }
 
 // Init parses variables definition strings, adds new columns to the metadata,
@@ -38,27 +39,34 @@ type ScalarVars struct {
 func (sv *ScalarVars) Init(md *opt.Metadata, vars []string) error {
 	// We use the same syntax that is used with CREATE TABLE, so reuse the parsing
 	// logic.
-	sql := fmt.Sprintf("CREATE TABLE foo (%s)", strings.Join(vars, ", "))
+	varDef := strings.Join(vars, ", ")
+	sql := fmt.Sprintf("CREATE TABLE foo (%s)", varDef)
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
-		return errors.Wrapf(err, "invalid vars definition '%s'", vars)
+		return errors.Wrapf(err, "invalid vars definition '%s'", varDef)
 	}
 	ct := stmt.AST.(*tree.CreateTable)
 	for _, d := range ct.Defs {
 		cd, ok := d.(*tree.ColumnTableDef)
 		if !ok {
-			return errors.Newf("invalid vars definition '%s'", vars)
+			return errors.Newf("invalid vars definition '%s'", varDef)
 		}
 		if cd.PrimaryKey.IsPrimaryKey || cd.Unique.IsUnique || cd.DefaultExpr.Expr != nil ||
-			len(cd.CheckExprs) > 0 || cd.References.Table != nil || cd.Computed.Computed ||
-			cd.Family.Name != "" {
-			return errors.Newf("invalid vars definition '%s'", vars)
+			len(cd.CheckExprs) > 0 || cd.References.Table != nil || cd.Family.Name != "" {
+			return errors.Newf("invalid vars definition '%s'", varDef)
 		}
 		typ := tree.MustBeStaticallyKnownType(cd.Type)
 		id := md.AddColumn(string(cd.Name), typ)
 		sv.cols.Add(id)
 		if cd.Nullable.Nullability == tree.NotNull {
 			sv.notNullCols.Add(id)
+		}
+
+		if cd.Computed.Computed {
+			if sv.computedCols == nil {
+				sv.computedCols = make(map[opt.ColumnID]tree.Expr)
+			}
+			sv.computedCols[id] = cd.Computed.Expr
 		}
 	}
 	return nil
@@ -72,4 +80,9 @@ func (sv *ScalarVars) Cols() opt.ColSet {
 // NotNullCols returns the columns that correspond to not null variables.
 func (sv *ScalarVars) NotNullCols() opt.ColSet {
 	return sv.notNullCols
+}
+
+// ComputedCols returns a map of computed column expressions.
+func (sv *ScalarVars) ComputedCols() map[opt.ColumnID]tree.Expr {
+	return sv.computedCols
 }
