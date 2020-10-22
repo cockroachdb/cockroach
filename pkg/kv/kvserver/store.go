@@ -2760,20 +2760,16 @@ func (s *Store) ManuallyEnqueue(
 	return collect(), processErr, nil
 }
 
-// GetClusterVersion reads the the cluster version from the store-local version
-// key. Returns an empty version if the key is not found.
-func (s *Store) GetClusterVersion(ctx context.Context) (clusterversion.ClusterVersion, error) {
-	return ReadClusterVersion(ctx, s.engine)
-}
-
-// WriteClusterVersion writes the given cluster version to the store-local cluster version key.
+// WriteClusterVersion writes the given cluster version to the store-local
+// cluster version key.
 func WriteClusterVersion(
 	ctx context.Context, writer storage.ReadWriter, cv clusterversion.ClusterVersion,
 ) error {
 	return storage.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
 }
 
-// ReadClusterVersion reads the the cluster version from the store-local version key.
+// ReadClusterVersion reads the the cluster version from the store-local version
+// key. Returns an empty version if the key is not found.
 func ReadClusterVersion(
 	ctx context.Context, reader storage.Reader,
 ) (clusterversion.ClusterVersion, error) {
