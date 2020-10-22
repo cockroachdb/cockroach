@@ -119,7 +119,7 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                lease_preferences = '[]'
 
 statement ok
-ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 300
+ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1
 
 query TT
 SHOW ZONE CONFIGURATION FOR RANGE tenants
@@ -127,7 +127,25 @@ SHOW ZONE CONFIGURATION FOR RANGE tenants
 RANGE tenants  ALTER RANGE tenants CONFIGURE ZONE USING
                range_min_bytes = 134217728,
                range_max_bytes = 536870912,
-               gc.ttlseconds = 300,
+               gc.ttlseconds = 1,
                num_replicas = 3,
                constraints = '[]',
                lease_preferences = '[]'
+
+query I
+SELECT status FROM [
+  SHOW JOB WHEN COMPLETE (
+      SELECT job_id FROM crdb_internal.jobs
+      WHERE description = 'GC for tenant 5'
+  )
+]
+---
+succeeded
+
+query IBT colnames
+SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info)
+FROM system.tenants
+ORDER BY id
+----
+id  active  crdb_internal.pb_to_json
+10  true    {"id": "10", "state": "ACTIVE"}
