@@ -43,18 +43,18 @@ import (
 // This will give your code a batch size of 1 in the test_constants build
 // configuration, increasing the amount of exercise the edge conditions get.
 func ConstantWithMetamorphicTestValue(defaultValue, metamorphicValue int) int {
-	if metamorphicBuild {
+	if MetamorphicBuild {
 		logMetamorphicValue(metamorphicValue)
 		return metamorphicValue
 	}
 	return defaultValue
 }
 
-// rng is initialized to a rand.Rand if metamorphicBuild is enabled.
+// rng is initialized to a rand.Rand if MetamorphicBuild is enabled.
 var rng *rand.Rand
 
 func init() {
-	if metamorphicBuild {
+	if MetamorphicBuild {
 		rng, _ = randutil.NewPseudoRand()
 	}
 }
@@ -63,7 +63,7 @@ func init() {
 // except instead of returning a single metamorphic test value, it returns a
 // random test value in a range.
 func ConstantWithMetamorphicTestRange(defaultValue, min, max int) int {
-	if metamorphicBuild {
+	if MetamorphicBuild {
 		ret := int(rng.Int31())%(max-min) + min
 		logMetamorphicValue(ret)
 		return ret
@@ -72,6 +72,6 @@ func ConstantWithMetamorphicTestRange(defaultValue, min, max int) int {
 }
 
 func logMetamorphicValue(value int) {
-	fmt.Fprintf(os.Stderr, "initialized metamorphic constant with value %d: %s",
+	fmt.Fprintf(os.Stderr, "initialized metamorphic constant with value %d: %s\n",
 		value, GetSmallTrace(1))
 }

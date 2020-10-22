@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -424,6 +425,9 @@ func TestLimitScans(t *testing.T) {
 	if rows != limit {
 		t.Fatalf("expected %d rows, got: %d", limit, rows)
 	}
+
+	skip.UnderMetamorphic(t, "the rest of this test isn't metamorphic: its output "+
+		"depends on the batch size, which varies the number of spans searched.")
 
 	// We're now going to count how many distinct scans we've done. This regex is
 	// specific so that we don't count range resolving requests, and we dedupe
