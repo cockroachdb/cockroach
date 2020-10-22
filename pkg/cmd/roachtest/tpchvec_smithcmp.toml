@@ -1,0 +1,519 @@
+smither = "vec-off"
+seed = -1
+timeoutmins = 30
+stmttimeoutsecs = 120
+
+sql = [
+"""
+SELECT
+	l_returnflag,
+	l_linestatus,
+	sum(l_quantity) AS sum_qty,
+	sum(l_extendedprice) AS sum_base_price,
+	sum(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
+	sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
+	avg(l_quantity) AS avg_qty,
+	avg(l_extendedprice) AS avg_price,
+	avg(l_discount) AS avg_disc,
+	count(*) AS count_order
+FROM
+	lineitem
+WHERE
+	l_shipdate <= $1::DATE - $2::INTERVAL
+GROUP BY
+	l_returnflag,
+	l_linestatus
+ORDER BY
+	l_returnflag,
+	l_linestatus;
+""",
+"""
+SELECT
+	s_acctbal,
+	s_name,
+	n_name,
+	p_partkey,
+	p_mfgr,
+	s_address,
+	s_phone,
+	s_comment
+FROM
+	part,
+	supplier,
+	partsupp,
+	nation,
+	region
+WHERE
+	p_partkey = ps_partkey
+	AND s_suppkey = ps_suppkey
+	AND p_size = $1
+	AND p_type LIKE '%BRASS'
+	AND s_nationkey = n_nationkey
+	AND n_regionkey = r_regionkey
+	AND r_name = 'EUROPE'
+	AND ps_supplycost = (
+		SELECT
+			min(ps_supplycost)
+		FROM
+			partsupp,
+			supplier,
+			nation,
+			region
+		WHERE
+			p_partkey = ps_partkey
+			AND s_suppkey = ps_suppkey
+			AND s_nationkey = n_nationkey
+			AND n_regionkey = r_regionkey
+			AND r_name = 'EUROPE'
+	)
+ORDER BY
+	s_acctbal DESC,
+	n_name,
+	s_name,
+	p_partkey
+LIMIT 100;
+""",
+"""
+SELECT
+	l_orderkey,
+	sum(l_extendedprice * (1 - l_discount)) AS revenue,
+	o_orderdate,
+	o_shippriority
+FROM
+	customer,
+	orders,
+	lineitem
+WHERE
+	c_mktsegment = 'BUILDING'
+	AND c_custkey = o_custkey
+	AND l_orderkey = o_orderkey
+	AND o_orderDATE < $1::DATE
+	AND l_shipdate > $2::DATE
+GROUP BY
+	l_orderkey,
+	o_orderdate,
+	o_shippriority
+ORDER BY
+	revenue DESC,
+	o_orderdate
+LIMIT 10;
+""",
+"""
+SELECT
+	o_orderpriority,
+	count(*) AS order_count
+FROM
+	orders
+WHERE
+	o_orderdate >= $1::DATE
+	AND o_orderdate < $2::DATE + $3::INTERVAL
+	AND EXISTS (
+		SELECT
+			*
+		FROM
+			lineitem
+		WHERE
+			l_orderkey = o_orderkey
+			AND l_commitDATE < l_receiptdate
+	)
+GROUP BY
+	o_orderpriority
+ORDER BY
+	o_orderpriority;
+""",
+"""
+SELECT
+	n_name,
+	sum(l_extendedprice * (1 - l_discount)) AS revenue
+FROM
+	customer,
+	orders,
+	lineitem,
+	supplier,
+	nation,
+	region
+WHERE
+	c_custkey = o_custkey
+	AND l_orderkey = o_orderkey
+	AND l_suppkey = s_suppkey
+	AND c_nationkey = s_nationkey
+	AND s_nationkey = n_nationkey
+	AND n_regionkey = r_regionkey
+	AND r_name = 'ASIA'
+	AND o_orderDATE >= $1::DATE
+	AND o_orderDATE < $2::DATE + $3::INTERVAL
+GROUP BY
+	n_name
+ORDER BY
+	revenue DESC;
+""",
+"""
+SELECT
+	sum(l_extendedprice * l_discount) AS revenue
+FROM
+	lineitem
+WHERE
+	l_shipdate >= $1::DATE
+	AND l_shipdate < $2::DATE + $3::INTERVAL
+	AND l_discount BETWEEN $4::FLOAT8 - $5::FLOAT8 AND $6::FLOAT8 + $7::FLOAT8
+	AND l_quantity < $8::FLOAT8;
+""",
+"""
+SELECT
+	supp_nation,
+	cust_nation,
+	l_year,
+	sum(volume) AS revenue
+FROM
+	(
+		SELECT
+			n1.n_name AS supp_nation,
+			n2.n_name AS cust_nation,
+			EXTRACT(year FROM l_shipdate) AS l_year,
+			l_extendedprice * (1 - l_discount) AS volume
+		FROM
+			supplier,
+			lineitem,
+			orders,
+			customer,
+			nation n1,
+			nation n2
+		WHERE
+			s_suppkey = l_suppkey
+			AND o_orderkey = l_orderkey
+			AND c_custkey = o_custkey
+			AND s_nationkey = n1.n_nationkey
+			AND c_nationkey = n2.n_nationkey
+			AND (
+				(n1.n_name = 'FRANCE' AND n2.n_name = 'GERMANY')
+				or (n1.n_name = 'GERMANY' AND n2.n_name = 'FRANCE')
+			)
+			AND l_shipdate BETWEEN $1::DATE AND $2::DATE
+	) AS shipping
+GROUP BY
+	supp_nation,
+	cust_nation,
+	l_year
+ORDER BY
+	supp_nation,
+	cust_nation,
+	l_year;
+""",
+"""
+SELECT
+	o_year,
+	sum(CASE
+		WHEN nation = 'BRAZIL' THEN volume
+		ELSE 0
+	END) / sum(volume) AS mkt_share
+FROM
+	(
+		SELECT
+			EXTRACT(year FROM o_orderdate) AS o_year,
+			l_extendedprice * (1 - l_discount) AS volume,
+			n2.n_name AS nation
+		FROM
+			part,
+			supplier,
+			lineitem,
+			orders,
+			customer,
+			nation n1,
+			nation n2,
+			region
+		WHERE
+			p_partkey = l_partkey
+			AND s_suppkey = l_suppkey
+			AND l_orderkey = o_orderkey
+			AND o_custkey = c_custkey
+			AND c_nationkey = n1.n_nationkey
+			AND n1.n_regionkey = r_regionkey
+			AND r_name = 'AMERICA'
+			AND s_nationkey = n2.n_nationkey
+			AND o_orderdate BETWEEN $1::DATE AND $2::DATE
+			AND p_type = 'ECONOMY ANODIZED STEEL'
+	) AS all_nations
+GROUP BY
+	o_year
+ORDER BY
+	o_year;
+""",
+"""
+SELECT
+	c_custkey,
+	c_name,
+	sum(l_extendedprice * (1 - l_discount)) AS revenue,
+	c_acctbal,
+	n_name,
+	c_address,
+	c_phone,
+	c_comment
+FROM
+	customer,
+	orders,
+	lineitem,
+	nation
+WHERE
+	c_custkey = o_custkey
+	AND l_orderkey = o_orderkey
+	AND o_orderDATE >= $1::DATE
+	AND o_orderDATE < $2::DATE + $3::INTERVAL
+	AND l_returnflag = 'R'
+	AND c_nationkey = n_nationkey
+GROUP BY
+	c_custkey,
+	c_name,
+	c_acctbal,
+	c_phone,
+	n_name,
+	c_address,
+	c_comment
+ORDER BY
+	revenue DESC
+LIMIT 20;
+""",
+"""
+SELECT
+	ps_partkey,
+	sum(ps_supplycost * ps_availqty::float) AS value
+FROM
+	partsupp,
+	supplier,
+	nation
+WHERE
+	ps_suppkey = s_suppkey
+	AND s_nationkey = n_nationkey
+	AND n_name = 'GERMANY'
+GROUP BY
+	ps_partkey HAVING
+		sum(ps_supplycost * ps_availqty::float) > (
+			SELECT
+				sum(ps_supplycost * ps_availqty::float) * $1::FLOAT8
+			FROM
+				partsupp,
+				supplier,
+				nation
+			WHERE
+				ps_suppkey = s_suppkey
+				AND s_nationkey = n_nationkey
+				AND n_name = 'GERMANY'
+		)
+ORDER BY
+	value DESC, ps_partkey;
+""",
+"""
+SELECT
+	l_shipmode,
+	sum(CASE
+		WHEN o_orderpriority = '1-URGENT'
+			or o_orderpriority = '2-HIGH'
+			THEN 1
+		ELSE 0
+	END) AS high_line_count,
+	sum(CASE
+		WHEN o_orderpriority <> '1-URGENT'
+			AND o_orderpriority <> '2-HIGH'
+			THEN 1
+		ELSE 0
+	END) AS low_line_count
+FROM
+	orders,
+	lineitem
+WHERE
+	o_orderkey = l_orderkey
+	AND l_shipmode IN ('MAIL', 'SHIP')
+	AND l_commitdate < l_receiptdate
+	AND l_shipdate < l_commitdate
+	AND l_receiptdate >= $1::DATE
+	AND l_receiptdate < $2::DATE + $3::INTERVAL
+GROUP BY
+	l_shipmode
+ORDER BY
+	l_shipmode;
+""",
+"""
+SELECT
+	100.00 * sum(CASE
+		WHEN p_type LIKE 'PROMO%'
+			THEN l_extendedprice * (1 - l_discount)
+		ELSE 0
+	END) / sum(l_extendedprice * (1 - l_discount)) AS promo_revenue
+FROM
+	lineitem,
+	part
+WHERE
+	l_partkey = p_partkey
+	AND l_shipdate >= $1::DATE
+	AND l_shipdate < $2::DATE + $3::INTERVAL;
+""",
+"""
+SELECT
+	c_name,
+	c_custkey,
+	o_orderkey,
+	o_orderdate,
+	o_totalprice,
+	sum(l_quantity)
+FROM
+	customer,
+	orders,
+	lineitem
+WHERE
+	o_orderkey IN (
+		SELECT
+			l_orderkey
+		FROM
+			lineitem
+		GROUP BY
+			l_orderkey HAVING
+				sum(l_quantity) > $1::INT8
+	)
+	AND c_custkey = o_custkey
+	AND o_orderkey = l_orderkey
+GROUP BY
+	c_name,
+	c_custkey,
+	o_orderkey,
+	o_orderdate,
+	o_totalprice
+ORDER BY
+	o_totalprice DESC,
+	o_orderdate
+LIMIT 100;
+""",
+"""
+SELECT
+	sum(l_extendedprice* (1 - l_discount)) AS revenue
+FROM
+	lineitem,
+	part
+WHERE
+	(
+		p_partkey = l_partkey
+		AND p_brand = 'Brand#12'
+		AND p_container IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG')
+		AND l_quantity >= $1::INT8 AND l_quantity <= $2::INT8 + $3::INT8
+		AND p_size BETWEEN $4::INT8 AND $5::INT8
+		AND l_shipmode IN ('AIR', 'AIR REG')
+		AND l_shipinstruct = 'DELIVER IN PERSON'
+	)
+	OR
+	(
+		p_partkey = l_partkey
+		AND p_brand = 'Brand#23'
+		AND p_container IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK')
+		AND l_quantity >= $6::INT8 AND l_quantity <= $7::INT8 + $8::INT8
+		AND p_size BETWEEN $9::INT8 AND $10::INT8
+		AND l_shipmode IN ('AIR', 'AIR REG')
+		AND l_shipinstruct = 'DELIVER IN PERSON'
+	)
+	OR
+	(
+		p_partkey = l_partkey
+		AND p_brand = 'Brand#34'
+		AND p_container IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG')
+		AND l_quantity >= $11::INT8 AND l_quantity <= $12::INT8 + $13::INT8
+		AND p_size BETWEEN $14::INT8 AND $15::INT8
+		AND l_shipmode IN ('AIR', 'AIR REG')
+		AND l_shipinstruct = 'DELIVER IN PERSON'
+	);
+""",
+"""
+SELECT
+	s_name,
+	s_address
+FROM
+	supplier,
+	nation
+WHERE
+	s_suppkey IN (
+		SELECT
+			ps_suppkey
+		FROM
+			partsupp
+		WHERE
+			ps_partkey IN (
+				SELECT
+					p_partkey
+				FROM
+					part
+				WHERE
+					p_name LIKE 'forest%'
+			)
+			AND ps_availqty > (
+				SELECT
+					$1::FLOAT8 * sum(l_quantity)
+				FROM
+					lineitem
+				WHERE
+					l_partkey = ps_partkey
+					AND l_suppkey = ps_suppkey
+					AND l_shipdate >= $2::DATE
+					AND l_shipdate < $3::DATE + $4::INTERVAL
+			)
+	)
+	AND s_nationkey = n_nationkey
+	AND n_name = 'CANADA'
+ORDER BY
+	s_name;
+""",
+"""
+SELECT
+	cntrycode,
+	count(*) AS numcust,
+	sum(c_acctbal) AS totacctbal
+FROM
+	(
+		SELECT
+			substring(c_phone FROM $1::INT4 FOR $2::INT4) AS cntrycode,
+			c_acctbal
+		FROM
+			customer
+		WHERE
+			substring(c_phone FROM $3::INT4 FOR $4::INT4) in
+        ('13', '31', '23', '29', '30', '18', '17')
+			AND c_acctbal > (
+				SELECT
+					avg(c_acctbal)
+				FROM
+					customer
+				WHERE
+					c_acctbal > $5::FLOAT8
+					AND substring(c_phone FROM $6::INT4 FOR $7::INT4) in
+            ('13', '31', '23', '29', '30', '18', '17')
+			)
+			AND NOT EXISTS (
+				SELECT
+					*
+				FROM
+					orders
+				WHERE
+					o_custkey = c_custkey
+			)
+	) AS custsale
+GROUP BY
+	cntrycode
+ORDER BY
+	cntrycode;
+""",
+]
+
+# Missing: 9, 13, 15, 16, 17, 21
+# These are missing either because 1) they use a CREATE VIEW, or 2)
+# they don't have any parameters that make sense to randomize, and we'd
+# thus be executing the same query each time. Queries that don't change
+# should be tested in other places; smithcmp is for random testing.
+
+[databases.vec-off]
+addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
+allowmutations = true
+initsql = """
+set vectorize=off;
+"""
+
+[databases.vec-on]
+addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
+allowmutations = true
+initsql = """
+set vectorize=on;
+"""
