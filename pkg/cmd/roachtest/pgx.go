@@ -17,6 +17,7 @@ import (
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedPGXTag = "v4.6.0"
 
 // This test runs pgx's full test suite against a single cockroach node.
 
@@ -46,9 +47,15 @@ func registerPgx(r *testRegistry) {
 		t.Status("setting up go")
 		installLatestGolang(ctx, t, c, node)
 
-		t.Status("installing pgx")
-		if err := repeatRunE(
-			ctx, c, node, "install pgx", "go get -u github.com/jackc/pgx",
+		t.Status("getting pgx")
+		if err := repeatGitCloneE(
+			ctx,
+			t.l,
+			c,
+			"https://github.com/jackc/pgx.git",
+			"/mnt/data1/pgx",
+			supportedPGXTag,
+			node,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -58,23 +65,24 @@ func registerPgx(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest jackc/pgx release is %s.", latestTag)
+		c.l.Printf("Supported release is %s.", supportedPGXTag)
 
 		t.Status("installing go-junit-report")
 		if err := repeatRunE(
-			ctx, c, node, "install pgx", "go get -u github.com/jstemmer/go-junit-report",
+			ctx, c, node, "install go-junit-report", "go get -u github.com/jstemmer/go-junit-report",
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		t.Status("checking blacklist")
-		blacklistName, expectedFailures, ignorelistName, ignorelist := pgxBlacklists.getLists(version)
+		t.Status("checking blocklist")
+		blocklistName, expectedFailures, ignorelistName, ignorelist := pgxBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No pgx blacklist defined for cockroach version %s", version)
+			t.Fatalf("No pgx blocklist defined for cockroach version %s", version)
 		}
-		status := fmt.Sprintf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 		if ignorelist != nil {
-			status = fmt.Sprintf("Running cockroach version %s, using blacklist %s, using ignorelist %s",
-				version, blacklistName, ignorelistName)
+			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+				version, blocklistName, ignorelistName)
 		}
 		c.l.Printf("%s", status)
 
@@ -101,7 +109,7 @@ func registerPgx(r *testRegistry) {
 		xmlResults, _ := repeatRunWithBuffer(
 			ctx, c, t.l, node,
 			"run pgx test suite",
-			"cd `go env GOPATH`/src/github.com/jackc/pgx && "+
+			"cd /mnt/data1/pgx && "+
 				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",
 		)
@@ -109,7 +117,7 @@ func registerPgx(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeAll(
-			t, "pgx", blacklistName, expectedFailures, version, latestTag,
+			t, "pgx", blocklistName, expectedFailures, version, supportedPGXTag,
 		)
 	}
 

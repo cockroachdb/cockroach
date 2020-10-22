@@ -12,6 +12,7 @@ package examples
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -70,6 +71,13 @@ var episodesColTypes = []coltypes.T{
 	coltypes.Int64,
 	coltypes.Bytes,
 	coltypes.Float64,
+}
+
+var quotesColTypes = []coltypes.T{
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Int64,
 }
 
 // The data that follows was derived from the 'startrek' fortune cookie file.
@@ -155,11 +163,11 @@ var startrekEpisodes = [...][]interface{}{
 	{79, 3, 24, `Turnabout Intruder`, 5928.5},
 }
 
-var quotesColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Float64,
-	coltypes.Int64,
+var quotesTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Float,
+	types.Int,
 }
 
 var startrekQuotes = [...][]interface{}{

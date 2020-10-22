@@ -55,18 +55,3 @@ func UnderShort(t SkippableTest, args ...interface{}) {
 		t.Skip(append([]interface{}{"disabled under -short"}, args...))
 	}
 }
-
-// UnderStress skips this test when running under stress.
-func UnderStress(t SkippableTest, args ...interface{}) {
-	if NightlyStress() {
-		t.Skip(append([]interface{}{"disabled under stress"}, args...))
-	}
-}
-
-// UnderStressRace skips this test during stressrace runs, which are tests
-// run under stress with the -race flag.
-func UnderStressRace(t SkippableTest, args ...interface{}) {
-	if NightlyStress() && util.RaceEnabled {
-		t.Skip(append([]interface{}{"disabled under stressrace"}, args...))
-	}
-}

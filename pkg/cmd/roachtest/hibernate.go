@@ -10,11 +10,13 @@
 
 package main
 
-import "context"
+import (
+	"context"
+	"regexp"
+)
 
-// TODO(rafi): Once our fork is merged into the main repo, go back to using
-// latest release tag.
-//var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedHibernateTag = "5.4.20"
 
 // This test runs hibernate-core's full test suite against a single cockroach
 // node.
@@ -42,19 +44,15 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		// TODO(rafi): Once our fork is merged into the main repo, go back to
-		// fetching the latest tag. For now, always use the
-		// `HHH-13724-cockroachdb-dialects` branch, where we are building the
-		// dialect.
-		latestTag := "HHH-13724-cockroachdb-dialects"
-		//t.Status("cloning hibernate and installing prerequisites")
-		//latestTag, err := repeatGetLatestTag(
-		//	ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
-		//)
-		//if err != nil {
-		//	t.Fatal(err)
-		//}
-		//c.l.Printf("Latest Hibernate release is %s.", latestTag)
+		t.Status("cloning hibernate and installing prerequisites")
+		latestTag, err := repeatGetLatestTag(
+			ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.l.Printf("Latest Hibernate release is %s.", latestTag)
+		c.l.Printf("Supported Hibernate release is %s.", supportedHibernateTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -78,16 +76,13 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		// TODO(rafi): Switch back to using the main hibernate/hibernate-orm repo
-		// once the CockroachDB dialect is merged into it. For now, we are using
-		// a fork so we can make incremental progress on building the dialect.
 		if err := repeatGitCloneE(
 			ctx,
 			t.l,
 			c,
-			"https://github.com/cockroachdb/hibernate-orm.git",
+			"https://github.com/hibernate/hibernate-orm.git",
 			"/mnt/data1/hibernate",
-			latestTag,
+			supportedHibernateTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -109,11 +104,11 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, _, _ := hibernateBlacklists.getLists(version)
+		blocklistName, expectedFailures, _, _ := hibernateBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No hibernate blacklist defined for cockroach version %s", version)
+			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// When testing, it is helpful to run only a subset of the tests. To do so
@@ -123,8 +118,8 @@ func registerHibernate(r *testRegistry) {
 		// Also note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		_ = c.RunE(ctx, node,
-			`cd /mnt/data1/hibernate/hibernate-core/ && `+
-				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb`,
+			`cd /mnt/data1/hibernate/ && `+
+				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./gradlew test -Pdb=cockroachdb`,
 		)
 
 		t.Status("collecting the test results")
@@ -161,7 +156,7 @@ func registerHibernate(r *testRegistry) {
 			t.l,
 			node,
 			"get list of test files",
-			`ls /mnt/data1/hibernate/hibernate-core/target/test-results/test/*.xml`,
+			`ls /mnt/data1/hibernate/*/target/test-results/test/*.xml`,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -172,7 +167,7 @@ func registerHibernate(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "hibernate" /* ormName */, output,
-			blacklistName, expectedFailures, nil /* ignorelist */, version, latestTag,
+			blocklistName, expectedFailures, nil /* ignorelist */, version, supportedHibernateTag,
 		)
 	}
 

@@ -22,6 +22,7 @@ func registerInconsistency(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("inconsistency"),
 		Owner:      OwnerKV,
+		Skip:       "Uses RocksDB put command; unskip when that's bypassed",
 		MinVersion: "v19.2.2", // https://github.com/cockroachdb/cockroach/pull/42149 is new in 19.2.2
 		Cluster:    makeClusterSpec(3),
 		Run:        runInconsistency,
@@ -39,7 +40,9 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 
 	{
 		db := c.Conn(ctx, 1)
-		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval = '10ms'`)
+		// Disable consistency checks. We're going to be introducing an inconsistency and wish for it to be detected when
+		// we've set up the test to expect it.
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,6 +88,22 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 		}
 		return nil
 	})
+
+	time.Sleep(10 * time.Second) // wait for n1-n3 to all be known as live to each other
+
+	// set an aggressive consistency check interval, but only now (that we're
+	// reasonably sure all nodes are live, etc). This makes sure that the consistency
+	// check runs against all three nodes. If it targeted only two nodes, a random
+	// one would fatal - not what we want.
+	{
+		db := c.Conn(ctx, 2)
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval = '10ms'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = db.Close()
+	}
+
 	if err := m.WaitE(); err == nil {
 		t.Fatal("expected a node to crash")
 	}

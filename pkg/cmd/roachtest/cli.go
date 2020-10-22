@@ -28,7 +28,9 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 
 	lastWords := func(s string) []string {
 		var result []string
-		for _, line := range strings.Split(s, "\n") {
+		s = elideInsecureDeprecationNotice(s)
+		lines := strings.Split(s, "\n")
+		for _, line := range lines {
 			words := strings.Fields(line)
 			if n := len(words); n > 0 {
 				result = append(result, words[n-2]+" "+words[n-1])

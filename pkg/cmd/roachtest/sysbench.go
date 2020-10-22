@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -111,7 +112,13 @@ func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions)
 		c.Run(ctx, loadNode, opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
-		c.Run(ctx, loadNode, opts.cmd(true /* haproxy */)+" run")
+		err := c.RunE(ctx, loadNode, opts.cmd(true /* haproxy */)+" run")
+		// Sysbench occasionally segfaults. When that happens, don't fail the
+		// test.
+		if err != nil && !strings.Contains(err.Error(), "Segmentation fault") {
+			c.l.Printf("sysbench segfaulted; passing test anyway")
+			return err
+		}
 		return nil
 	})
 	m.Wait()

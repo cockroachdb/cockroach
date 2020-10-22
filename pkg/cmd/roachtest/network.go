@@ -23,7 +23,8 @@ import (
 )
 
 // runNetworkSanity is just a sanity check to make sure we're setting up toxiproxy
-// correctly.
+// correctly. It injects latency between the nodes and verifies that we're not
+// seeing the latency on the client connection running `SELECT 1` on each node.
 func runNetworkSanity(ctx context.Context, t *test, origC *cluster, nodes int) {
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
 	c, err := Toxify(ctx, origC, origC.All())
@@ -41,8 +42,6 @@ func runNetworkSanity(ctx context.Context, t *test, origC *cluster, nodes int) {
 	// the upstream connections aren't affected by latency below, but the fixed
 	// cost of starting the binary and processing the query is already close to
 	// 100ms.
-	//
-	// NB: last node gets no latency injected, but first node gets cut off below.
 	const latency = 300 * time.Millisecond
 	for i := 1; i <= nodes; i++ {
 		// NB: note that these latencies only apply to connections *to* the node
@@ -84,7 +83,7 @@ insert into test.commit values(3,1000), (1,1000), (2,1000);
 select age, message from [ show trace for session ];
 `)
 
-		for i := 1; i < origC.spec.NodeCount; i++ {
+		for i := 1; i <= origC.spec.NodeCount; i++ {
 			if dur := c.Measure(ctx, i, `SELECT 1`); dur > latency {
 				t.Fatalf("node %d unexpectedly affected by latency: select 1 took %.2fs", i, dur.Seconds())
 			}
@@ -248,6 +247,28 @@ func registerNetwork(r *testRegistry) {
 		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(numNodes),
+		Skip:    "https://github.com/cockroachdb/cockroach/issues/49901#issuecomment-640666646",
+		SkipDetails: `The ordering of steps in the test is:
+
+- install toxiproxy
+- start cluster, wait for up-replication
+- launch the goroutine that starts the tpcc client command, but do not wait on
+it starting
+- immediately, cause a network partition
+- only then, the goroutine meant to start the tpcc client goes to fetch the
+pg URLs and start workload, but of course this fails because network
+partition
+- tpcc fails to start, so the test tears down before it resolves the network partition
+- test tear-down and debug zip fail because the network partition is still active
+
+There are two problems here:
+
+the tpcc client is not actually started yet when the test sets up the
+network partition. This is a race condition. there should be a defer in
+there to resolve the partition when the test aborts prematurely. (And the
+command to resolve the partition should not be sensitive to the test
+context's Done() channel, because during a tear-down that is closed already)
+`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runNetworkTPCC(ctx, t, c, numNodes)
 		},

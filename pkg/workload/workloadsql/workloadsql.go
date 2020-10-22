@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
 )
 
@@ -134,18 +134,20 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 					// If you're investigating an error coming out of this Exec, see the
 					// HACK comment in ColBatchToRows for some context that may (or may
 					// not) help you.
-					if _, err := db.Exec(buf.String()); err != nil {
-						return errors.Wrap(err, buf.String())
+					stmt := buf.String()
+					if _, err := db.Exec(stmt); err != nil {
+						return errors.Wrapf(err, "executing %s", stmt)
 					}
 
 					buf.Reset()
 					fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
 						table.Name, split, split)
-					if _, err := db.Exec(buf.String()); err != nil {
+					stmt = buf.String()
+					if _, err := db.Exec(stmt); err != nil {
 						// SCATTER can collide with normal replicate queue
 						// operations and fail spuriously, so only print the
 						// error.
-						log.Warningf(ctx, `%s: %s`, buf.String(), err)
+						log.Warningf(ctx, `%s: %v`, stmt, err)
 					}
 
 					select {
@@ -212,7 +214,7 @@ func StringTuple(datums []interface{}) []string {
 			// See the HACK comment in ColBatchToRows.
 			s[i] = lex.EscapeSQLString(string(x))
 		default:
-			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+			panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 		}
 	}
 	return s
@@ -263,7 +265,7 @@ func (s sliceSliceInterface) Less(i, j int) bool {
 		case []byte:
 			cmp = bytes.Compare(x, s[j][offset].([]byte))
 		default:
-			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+			panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 		}
 		if cmp < 0 {
 			return true

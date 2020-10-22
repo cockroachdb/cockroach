@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func registerEncryption(r *testRegistry) {

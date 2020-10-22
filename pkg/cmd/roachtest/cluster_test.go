@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"runtime"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,12 +66,62 @@ func (t testWrapper) logger() *logger {
 	return nil
 }
 
+func TestExecCmd(t *testing.T) {
+	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
+	logger, err := cfg.newLogger("" /* path */)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run(`success`, func(t *testing.T) {
+		res := execCmdEx(context.Background(), logger, "/bin/bash", "-c", "echo guacamole")
+		require.NoError(t, res.err)
+		require.Contains(t, res.stdout, "guacamole")
+	})
+
+	t.Run(`error`, func(t *testing.T) {
+		res := execCmdEx(context.Background(), logger, "/bin/bash", "-c", "echo burrito; false")
+		require.Error(t, res.err)
+		require.Contains(t, res.stdout, "burrito")
+	})
+
+	t.Run(`returns-on-cancel`, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+		}()
+		tBegin := timeutil.Now()
+		require.Error(t, execCmd(ctx, logger, "/bin/bash", "-c", "sleep 100"))
+		if max, act := 99*time.Second, timeutil.Since(tBegin); max < act {
+			t.Fatalf("took %s despite cancellation", act)
+		}
+	})
+
+	t.Run(`returns-on-cancel-subprocess`, func(t *testing.T) {
+		// The tricky version of the preceding test. The difference is that the process
+		// spawns a stalling subprocess and then waits for it. See execCmdEx for a
+		// detailed discussion of how this is made work.
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+		}()
+		tBegin := timeutil.Now()
+		require.Error(t, execCmd(ctx, logger, "/bin/bash", "-c", "sleep 100& wait"))
+		if max, act := 99*time.Second, timeutil.Since(tBegin); max < act {
+			t.Fatalf("took %s despite cancellation", act)
+		}
+	})
+}
+
 func TestClusterMonitor(t *testing.T) {
 	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
 	logger, err := cfg.newLogger("" /* path */)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Run(`success`, func(t *testing.T) {
 		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
@@ -192,10 +242,9 @@ func TestClusterMonitor(t *testing.T) {
 			// In reality t.Fatal adds text that is returned when the test fails,
 			// so the failing goroutine will be referenced (not like in the expected
 			// error below, where all you see is the other one being canceled).
-			runtime.Goexit()
-			return errors.New("unreachable")
+			panic(errTestFatal)
 		})
-		expectedErr := regexp.QuoteMeta(`Goexit() was called`)
+		expectedErr := regexp.QuoteMeta(`t.Fatal() was called`)
 		if err := m.wait("sleep", "100"); !testutils.IsError(err, expectedErr) {
 			t.Logf("error details: %+v", err)
 			t.Error(err)

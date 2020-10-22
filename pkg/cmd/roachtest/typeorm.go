@@ -18,6 +18,7 @@ import (
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedTypeORMRelease = "0.2.24"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r *testRegistry) {
@@ -34,12 +35,22 @@ func registerTypeORM(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
+		version, err := fetchCockroachVersion(ctx, c, node[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+			t.Fatal(err)
+		}
+
 		t.Status("cloning TypeORM and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(ctx, c, "typeorm", "typeorm", typeORMReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest TypeORM release is %s.", latestTag)
+		c.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -92,7 +103,7 @@ func registerTypeORM(r *testRegistry) {
 			c,
 			"https://github.com/typeorm/typeorm.git",
 			"/mnt/data1/typeorm",
-			latestTag,
+			supportedTypeORMRelease,
 			node,
 		); err != nil {
 			t.Fatal(err)

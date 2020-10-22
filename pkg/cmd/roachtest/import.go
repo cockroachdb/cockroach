@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func registerImportTPCC(r *testRegistry) {
@@ -35,12 +35,11 @@ func registerImportTPCC(r *testRegistry) {
 		hc := NewHealthChecker(c, c.All())
 		m.Go(hc.Runner)
 
+		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
 			defer hc.Done()
-			cmd := fmt.Sprintf(
-				`./workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`,
-				warehouses)
+			cmd := fmt.Sprintf(workloadStr, warehouses)
 			c.Run(ctx, c.Node(1), cmd)
 			return nil
 		})
@@ -62,12 +61,12 @@ func registerImportTPCC(r *testRegistry) {
 	const geoWarehouses = 4000
 	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
 	r.Add(testSpec{
+		Skip:    "#37349 - OOMing",
 		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 		Owner:   OwnerBulkIO,
 		Cluster: makeClusterSpec(8, cpu(16), geo(), zones(geoZones)),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			t.Skip("#37349 - OOMing", "" /* details */)
 			runImportTPCC(ctx, t, c, geoWarehouses)
 		},
 	})
