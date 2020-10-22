@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 )
 
@@ -108,7 +109,7 @@ type tupleHashDistributor struct {
 	// cancelChecker is used during the hashing of the rows to distribute to
 	// check for query cancellation.
 	cancelChecker  CancelChecker
-	overloadHelper overloadHelper
+	overloadHelper execgen.OverloadHelper
 	datumAlloc     rowenc.DatumAlloc
 }
 

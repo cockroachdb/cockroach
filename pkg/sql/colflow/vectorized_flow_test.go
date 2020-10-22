@@ -44,7 +44,7 @@ func (c callbackRemoteComponentCreator) newOutbox(
 	input colexecbase.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexec.Closer,
+	toClose []colexecbase.Closer,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(allocator, input, typs, metadataSources)
 }

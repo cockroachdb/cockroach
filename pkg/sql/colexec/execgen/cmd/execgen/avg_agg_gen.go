@@ -69,7 +69,7 @@ var (
 	_ = avgTmplInfo{}.AssignDivInt64
 )
 
-const avgAggTmpl = "pkg/sql/colexec/avg_agg_tmpl.go"
+const avgAggTmpl = "pkg/sql/colexec/colexecagg/avg_agg_tmpl.go"
 
 func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(

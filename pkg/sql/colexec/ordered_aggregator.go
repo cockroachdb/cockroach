@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -75,8 +76,8 @@ type orderedAggregator struct {
 	unsafeBatch coldata.Batch
 
 	// groupCol is the slice that aggregateFuncs use to determine whether a value
-	// is part of the current aggregation group. See aggregateFunc.Init for more
-	// information.
+	// is part of the current aggregation group. See colexecagg.AggregateFunc.Init
+	// for more information.
 	groupCol []bool
 	// bucket is the aggregation bucket that is reused for all aggregation
 	// groups.
@@ -88,7 +89,7 @@ type orderedAggregator struct {
 	// observed.
 	seenNonEmptyBatch bool
 	datumAlloc        rowenc.DatumAlloc
-	toClose           Closers
+	toClose           colexecbase.Closers
 }
 
 var _ closableOperator = &orderedAggregator{}
@@ -120,7 +121,7 @@ func NewOrderedAggregator(
 	}
 
 	a := &orderedAggregator{}
-	// The contract of aggregateFunc.Init requires that the very first group in
+	// The contract of AggregateFunc.Init requires that the very first group in
 	// the whole input is not marked as a start of a new group with 'true'
 	// value in groupCol. In order to satisfy that requirement we plan a
 	// oneShotOp that explicitly sets groupCol for the very first tuple it
@@ -142,7 +143,7 @@ func NewOrderedAggregator(
 
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
-	funcsAlloc, inputArgsConverter, toClose, err := newAggregateFuncsAlloc(
+	funcsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		allocator, inputTypes, spec, evalCtx, constructors, constArguments,
 		outputTypes, 1 /* allocSize */, false, /* isHashAgg */
 	)
@@ -157,7 +158,7 @@ func NewOrderedAggregator(
 		allocator:          allocator,
 		spec:               spec,
 		groupCol:           groupCol,
-		bucket:             aggBucket{fns: funcsAlloc.makeAggregateFuncs()},
+		bucket:             aggBucket{fns: funcsAlloc.MakeAggregateFuncs()},
 		isScalar:           isScalar,
 		outputTypes:        outputTypes,
 		inputArgsConverter: inputArgsConverter,
@@ -176,7 +177,7 @@ func (a *orderedAggregator) Init() {
 	// Note that we use a batch with fixed capacity because aggregate functions
 	// hold onto the vectors passed in into their Init method, so we cannot
 	// simply reallocate the output batch.
-	// TODO(yuzefovich): consider changing aggregateFunc interface to allow for
+	// TODO(yuzefovich): consider changing AggregateFunc interface to allow for
 	// updating the output vector.
 	a.unsafeBatch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, coldata.BatchSize())
 }

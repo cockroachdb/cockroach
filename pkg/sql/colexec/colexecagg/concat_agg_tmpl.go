@@ -17,7 +17,7 @@
 //
 // */}}
 
-package colexec
+package colexecagg
 
 import (
 	"unsafe"
@@ -146,7 +146,7 @@ var _ aggregateFuncAlloc = &concat_AGGKINDAggAlloc{}
 const sizeOfConcat_AGGKINDAgg = int64(unsafe.Sizeof(concat_AGGKINDAgg{}))
 const concat_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]concat_AGGKINDAgg{}))
 
-func (a *concat_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
+func (a *concat_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(concat_AGGKINDAggSliceOverhead + sizeOfConcat_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]concat_AGGKINDAgg, a.allocSize)

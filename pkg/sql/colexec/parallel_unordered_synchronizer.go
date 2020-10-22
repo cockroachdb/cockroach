@@ -119,7 +119,7 @@ type SynchronizerInput struct {
 	MetadataSources execinfrapb.MetadataSources
 	// ToClose are Closers in the input tree that should be closed in the same
 	// goroutine as Op.
-	ToClose Closers
+	ToClose colexecbase.Closers
 }
 
 func operatorsToSynchronizerInputs(ops []colexecbase.Operator) []SynchronizerInput {
