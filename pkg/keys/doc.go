@@ -214,6 +214,7 @@ var _ = [...]interface{}{
 	StoreGossipKey,              // "goss"
 	StoreHLCUpperBoundKey,       // "hlcu"
 	StoreIdentKey,               // "iden"
+	StoreNodeTombstoneKey,       // "ntmb"
 	StoreLastUpKey,              // "uptm"
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
