@@ -145,6 +145,24 @@ func makeInputConverter(
 				return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
 			}
 		}
+
+		// If we're using a format like CSV where data columns are not "named", and
+		// therefore cannot be mapped to schema columns, then require the user to
+		// use IMPORT INTO.
+		//
+		// We could potentially do something smarter here and check that only a
+		// suffix of the columns are computed, and then expect the data file to have
+		// #(visible columns) - #(computed columns).
+		if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
+			for _, col := range singleTable.VisibleColumns() {
+				if col.IsComputed() {
+					// TODO(before merge): Replace this issue number with one that
+					// summarizes the above comment in a ticket.
+					return nil, unimplemented.NewWithIssueDetail(42846, "import.computed",
+						"to use computed columns, use IMPORT INTO")
+				}
+			}
+		}
 	}
 
 	switch spec.Format.Format {
