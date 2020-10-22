@@ -9,4 +9,3 @@
 // licenses/APL.txt.
 
 export * from "./cockroachLabsLockupIcon";
-export * from "./backIcon";
