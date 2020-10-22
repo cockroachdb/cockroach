@@ -255,15 +255,16 @@ SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 ----
 Scan /Table/55/2/2.01/3.001/{0-1}, /Table/55/2/2.01/3.001/2/{1-2}
 
-query TTT
+query T
 EXPLAIN SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          t@i
-·     spans          [/2.01/3.001 - /2.01/3.001]
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@i
+  spans: [/2.01/3.001 - /2.01/3.001]
 
 # Ensure that we always have a k/v in family 0.
 statement ok

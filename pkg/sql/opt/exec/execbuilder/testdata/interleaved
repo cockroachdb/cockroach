@@ -36,47 +36,48 @@ CREATE TABLE level4 (
   CONSTRAINT fk3 FOREIGN KEY (k1, k2, k3) REFERENCES level3
 ) INTERLEAVE IN PARENT level3 (k1, k2, k3)
 
-query TTT
+query T
 EXPLAIN SELECT * FROM level4
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          level4@primary
-·     spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: level4@primary
+  spans: FULL SCAN
 
 # The span below ends at the end of the first index of table 53, and is not
 # constraining the value of k2 or k3. This is confusing on first glance because
 # the second interleave in the hierarchy doesn't contain any new primary key
 # columns on top of the first interleave.
 query T
-SELECT description FROM [
+SELECT info FROM [
   EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
-] WHERE field = 'spans'
+] WHERE info LIKE '%spans%'
 ----
-/2/#/54/1/#/55/1-/2/#/54/1/#/55/2
+  spans: /2/#/54/1/#/55/1-/2/#/54/1/#/55/2
 
 query T
-SELECT description FROM [
+SELECT info FROM [
   EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 = 2 AND k2 > 10 AND k2 < 30
-] WHERE field = 'spans'
+] WHERE info LIKE '%spans%'
 ----
-/2/#/54/1/#/55/1/11-/2/#/54/1/#/55/1/30
+  spans: /2/#/54/1/#/55/1/11-/2/#/54/1/#/55/1/30
 
 query T
-SELECT description FROM [
+SELECT info FROM [
   EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
-] WHERE field = 'spans'
+] WHERE info LIKE '%spans%'
 ----
-/2/#/54/1/#/55/1/20/101/#/56/1-/2/#/54/1/#/55/1/20/299/#/56/1/#
+  spans: /2/#/54/1/#/55/1/20/101/#/56/1-/2/#/54/1/#/55/1/20/299/#/56/1/#
 
 query T
-SELECT description FROM [
+SELECT info FROM [
   EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
-] WHERE field = 'spans'
+] WHERE info LIKE '%spans%'
 ----
-/2/#/54/1/#/55/1/20/200/#/56/1-/2/#/54/1/#/55/1/20/200/#/56/1/#
+  spans: /2/#/54/1/#/55/1/20/200/#/56/1-/2/#/54/1/#/55/1/20/200/#/56/1/#
 
 # ------------------------------------------------------------------------------
 # Trace of interleaved fetches from interesting interleaved hierarchy.
@@ -378,24 +379,30 @@ INSERT INTO table0 SELECT i FROM generate_series(1, 10) AS i;
 INSERT INTO table1 SELECT (i-1)//10+1, i FROM generate_series(1, 100) AS i;
 INSERT INTO table2 SELECT (i-1)//100+1, (i-1)//10+1, i FROM generate_series(1, 1000) AS i;
 
-query TTT
+query T
 EXPLAIN SELECT count(*) FROM table1 INNER MERGE JOIN table2 USING(c0, c1) WHERE c1 >= 25 AND c1 < 75
 ----
-·                    distribution       local
-·                    vectorized         true
-group (scalar)       ·                  ·
- └── merge join      ·                  ·
-      │              equality           (c0, c1) = (c0, c1)
-      │              left cols are key  ·
-      ├── filter     ·                  ·
-      │    │         filter             (c1 >= 25) AND (c1 < 75)
-      │    └── scan  ·                  ·
-      │              missing stats      ·
-      │              table              table1@primary
-      │              spans              FULL SCAN
-      └── filter     ·                  ·
-           │         filter             (c1 >= 25) AND (c1 < 75)
-           └── scan  ·                  ·
-·                    missing stats      ·
-·                    table              table2@primary
-·                    spans              FULL SCAN
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • merge join
+    │ equality: (c0, c1) = (c0, c1)
+    │ left cols are key
+    │
+    ├── • filter
+    │   │ filter: (c1 >= 25) AND (c1 < 75)
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: table1@primary
+    │         spans: FULL SCAN
+    │
+    └── • filter
+        │ filter: (c1 >= 25) AND (c1 < 75)
+        │
+        └── • scan
+              missing stats
+              table: table2@primary
+              spans: FULL SCAN

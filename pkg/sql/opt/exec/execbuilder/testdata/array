@@ -6,69 +6,81 @@ CREATE TABLE t (x INT[])
 
 # Test some scans of constrained spans on arrays.
 
-query TTT
+query T
 EXPLAIN SELECT x FROM t WHERE x = ARRAY[1,4,6]
 ----
-·          distribution   local
-·          vectorized     true
-filter     ·              ·
- │         filter         x = ARRAY[1,4,6]
- └── scan  ·              ·
-·          missing stats  ·
-·          table          t@primary
-·          spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: x = ARRAY[1,4,6]
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN SELECT x FROM t WHERE x < ARRAY[1, 4, 3]
 ----
-·          distribution   local
-·          vectorized     true
-filter     ·              ·
- │         filter         x < ARRAY[1,4,3]
- └── scan  ·              ·
-·          missing stats  ·
-·          table          t@primary
-·          spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: x < ARRAY[1,4,3]
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN SELECT x FROM t WHERE x > ARRAY [1, NULL]
 ----
-·          distribution   local
-·          vectorized     true
-filter     ·              ·
- │         filter         x > ARRAY[1,NULL]
- └── scan  ·              ·
-·          missing stats  ·
-·          table          t@primary
-·          spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: x > ARRAY[1,NULL]
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
 ----
-·               distribution   local
-·               vectorized     true
-sort            ·              ·
- │              order          +x
- └── filter     ·              ·
-      │         filter         (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          t@primary
-·               spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +x
+│
+└── • filter
+    │ filter: (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
+    │
+    └── • scan
+          missing stats
+          table: t@primary
+          spans: FULL SCAN
 
-query TTT
+query T
 EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x DESC
 ----
-·               distribution   local
-·               vectorized     true
-sort            ·              ·
- │              order          -x
- └── filter     ·              ·
-      │         filter         (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          t@primary
-·               spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• sort
+│ order: -x
+│
+└── • filter
+    │ filter: (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
+    │
+    └── • scan
+          missing stats
+          table: t@primary
+          spans: FULL SCAN
 
 statement ok
 DROP TABLE t
@@ -77,19 +89,22 @@ DROP TABLE t
 statement ok
 CREATE TABLE t (x INT, y INT[], z INT)
 
-query TTT
+query T
 EXPLAIN SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
 ----
-·               distribution   local
-·               vectorized     true
-sort            ·              ·
- │              order          +y
- └── filter     ·              ·
-      │         filter         (x = 2) AND (y < ARRAY[10])
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          t@primary
-·               spans          FULL SCAN
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +y
+│
+└── • filter
+    │ filter: (x = 2) AND (y < ARRAY[10])
+    │
+    └── • scan
+          missing stats
+          table: t@primary
+          spans: FULL SCAN
 
 # Test span generation on interleaved tables.
 # Add x to parent PRIMARY KEY (x, y) once #50659 is fixed.
@@ -99,38 +114,44 @@ statement ok
 CREATE TABLE parent (x INT, y INT[], PRIMARY KEY (x), FAMILY (x, y));
 CREATE TABLE child (x INT, y INT[], z INT[], PRIMARY KEY (x), FAMILY (x, y, z)) INTERLEAVE IN PARENT parent (x)
 
-query TTT
+query T
 EXPLAIN SELECT x, y FROM parent WHERE x > 1 AND y > ARRAY[1, NULL]
 ----
-·          distribution   local
-·          vectorized     true
-filter     ·              ·
- │         filter         y > ARRAY[1,NULL]
- └── scan  ·              ·
-·          missing stats  ·
-·          table          parent@primary
-·          spans          [/2 - ]
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: y > ARRAY[1,NULL]
+│
+└── • scan
+      missing stats
+      table: parent@primary
+      spans: [/2 - ]
 
-query TTT
+query T
 EXPLAIN SELECT y FROM parent WHERE x = 1 AND y = ARRAY[NULL, NULL]
 ----
-·          distribution   local
-·          vectorized     true
-filter     ·              ·
- │         filter         y = ARRAY[NULL,NULL]
- └── scan  ·              ·
-·          missing stats  ·
-·          table          parent@primary
-·          spans          [/1 - /1]
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: y = ARRAY[NULL,NULL]
+│
+└── • scan
+      missing stats
+      table: parent@primary
+      spans: [/1 - /1]
 
-query TTT
+query T
 EXPLAIN SELECT z FROM child WHERE x = 1 AND y = ARRAY[NULL, NULL]
 ----
-·          distribution   local
-·          vectorized     true
-filter     ·              ·
- │         filter         y = ARRAY[NULL,NULL]
- └── scan  ·              ·
-·          missing stats  ·
-·          table          child@primary
-·          spans          [/1 - /1]
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: y = ARRAY[NULL,NULL]
+│
+└── • scan
+      missing stats
+      table: child@primary
+      spans: [/1 - /1]

@@ -160,12 +160,13 @@ subtest truncate_30547
 statement ok
 CREATE TABLE tt AS SELECT 'foo'
 
-query TTT
+query T
 EXPLAIN TRUNCATE TABLE tt
 ----
-·         distribution  local
-·         vectorized    false
-truncate  ·             ·
+distribution: local
+vectorized: false
+·
+• truncate
 
 # Verify that EXPLAIN did not cause the truncate to be performed.
 query T
