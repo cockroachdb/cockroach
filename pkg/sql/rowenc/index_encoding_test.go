@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -54,17 +55,21 @@ func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, map[descpb.C
 	secondaryColumnIDs := make([]descpb.ColumnID, len(test.secondaryValues))
 	columns := make([]descpb.ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
 	colMap := make(map[descpb.ColumnID]int, len(test.secondaryValues))
+	secondaryType := descpb.IndexDescriptor_FORWARD
 	for i := range columns {
 		columns[i] = descpb.ColumnDescriptor{
-			ID:   descpb.ColumnID(i + 1),
-			Type: types.Int,
+			ID: descpb.ColumnID(i + 1),
 		}
 		colMap[columns[i].ID] = i
 		if i < len(test.primaryValues) {
+			columns[i].Type = test.primaryValues[i].ResolvedType()
 			primaryColumnIDs[i] = columns[i].ID
 		} else {
+			columns[i].Type = test.secondaryValues[i-len(test.primaryValues)].ResolvedType()
+			if colinfo.ColumnTypeIsInvertedIndexable(columns[i].Type) {
+				secondaryType = descpb.IndexDescriptor_INVERTED
+			}
 			secondaryColumnIDs[i-len(test.primaryValues)] = columns[i].ID
-
 		}
 	}
 
@@ -97,6 +102,7 @@ func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, map[descpb.C
 			Unique:           true,
 			ColumnDirections: make([]descpb.IndexDescriptor_Direction, len(secondaryColumnIDs)),
 			Interleave:       makeInterleave(2, test.secondaryInterleaves),
+			Type:             secondaryType,
 		}},
 	}
 	return tabledesc.NewImmutable(tableDesc), colMap
@@ -270,6 +276,131 @@ func TestIndexKey(t *testing.T) {
 
 		checkEntry(&tableDesc.PrimaryIndex, primaryIndexKV)
 		checkEntry(&tableDesc.Indexes[0], secondaryIndexKV)
+	}
+}
+
+func TestInvertedIndexKey(t *testing.T) {
+	parseJSON := func(s string) *tree.DJSON {
+		j, err := json.ParseJSON(s)
+		if err != nil {
+			t.Fatalf("Failed to parse %s: %v", s, err)
+		}
+		return tree.NewDJSON(j)
+	}
+
+	tests := []struct {
+		value                           tree.Datum
+		expectedKeys                    int
+		expectedKeysExcludingEmptyArray int
+	}{
+		{
+			value: &tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{},
+			},
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 0,
+		},
+		{
+			value: &tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{tree.NewDInt(1)},
+			},
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 1,
+		},
+		{
+			value: &tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{tree.NewDString("foo")},
+			},
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 1,
+		},
+		{
+			value: &tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(1)},
+			},
+			// The keys should be deduplicated.
+			expectedKeys:                    2,
+			expectedKeysExcludingEmptyArray: 2,
+		},
+		{
+			value:                           parseJSON(`{}`),
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 1,
+		},
+		{
+			value:                           parseJSON(`[]`),
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 1,
+		},
+		{
+			value: parseJSON(`[1, 2, 2]`),
+			// The keys should be deduplicated.
+			expectedKeys:                    2,
+			expectedKeysExcludingEmptyArray: 2,
+		},
+		{
+			value:                           parseJSON(`true`),
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 1,
+		},
+		{
+			value:                           parseJSON(`null`),
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 1,
+		},
+		{
+			value:                           parseJSON(`1`),
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 1,
+		},
+		{
+			value:                           parseJSON(`{"a": "b"}`),
+			expectedKeys:                    1,
+			expectedKeysExcludingEmptyArray: 1,
+		},
+		{
+			value:                           parseJSON(`{"a": "b", "c": {"d": "e", "f": "g"}}`),
+			expectedKeys:                    3,
+			expectedKeysExcludingEmptyArray: 3,
+		},
+	}
+
+	runTest := func(value tree.Datum, expectedKeys int, version descpb.IndexDescriptorVersion) {
+		primaryValues := []tree.Datum{tree.NewDInt(10)}
+		secondaryValues := []tree.Datum{value}
+		tableDesc, colMap := makeTableDescForTest(
+			indexKeyTest{50, nil, nil,
+				primaryValues, secondaryValues,
+			})
+		for i := range tableDesc.Indexes {
+			tableDesc.Indexes[i].Version = version
+		}
+
+		testValues := append(primaryValues, secondaryValues...)
+
+		codec := keys.SystemSQLCodec
+
+		secondaryIndexEntries, err := EncodeSecondaryIndex(
+			codec, tableDesc, &tableDesc.Indexes[0], colMap, testValues, true /* includeEmpty */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(secondaryIndexEntries) != expectedKeys {
+			t.Fatalf("For %s expected %d index entries, got %d. got %#v",
+				value, expectedKeys, len(secondaryIndexEntries), secondaryIndexEntries,
+			)
+		}
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("TestInvertedIndexKey %d", i), func(t *testing.T) {
+			runTest(test.value, test.expectedKeys, descpb.EmptyArraysInInvertedIndexesVersion)
+			runTest(test.value, test.expectedKeysExcludingEmptyArray, descpb.SecondaryIndexFamilyFormatVersion)
+		})
 	}
 }
 
