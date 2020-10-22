@@ -13,12 +13,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -76,120 +73,6 @@ func registerBackup(r *testRegistry) {
 				t.Status(`running backup`)
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`'"`)
-				return nil
-			})
-			m.Wait()
-		},
-	})
-
-	KMSSpec := makeClusterSpec(3)
-	r.Add(testSpec{
-		Name:       fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
-		Owner:      OwnerBulkIO,
-		Cluster:    KMSSpec,
-		MinVersion: "v20.2.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			if cloud == gce {
-				t.Skip("backupKMS roachtest is only configured to run on AWS", "")
-			}
-
-			// ~10GiB - which is 30Gib replicated.
-			rows := 976562
-			dest := importBankData(ctx, rows, t, c)
-
-			conn := c.Conn(ctx, 1)
-			m := newMonitor(ctx, c)
-			m.Go(func(ctx context.Context) error {
-				_, err := conn.ExecContext(ctx, `
-					CREATE DATABASE restoreA;
-					CREATE DATABASE restoreB;
-				`)
-				return err
-			})
-			m.Wait()
-
-			var kmsURIA, kmsURIB string
-			var err error
-			m = newMonitor(ctx, c)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`running encrypted backup`)
-				kmsURIA, err = getAWSKMSURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
-				if err != nil {
-					return err
-				}
-
-				kmsURIB, err = getAWSKMSURI(KMSRegionBEnvVar, KMSKeyARNBEnvVar)
-				if err != nil {
-					return err
-				}
-
-				kmsOptions := fmt.Sprintf("KMS=('%s', '%s')", kmsURIA, kmsURIB)
-				_, err := conn.ExecContext(ctx,
-					`BACKUP bank.bank TO 'nodelocal://1/kmsbackup/`+dest+`' WITH `+kmsOptions)
-				return err
-			})
-			m.Wait()
-
-			// Restore the encrypted BACKUP using each of KMS URI A and B separately.
-			m = newMonitor(ctx, c)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`restore using KMSURIA`)
-				if _, err := conn.ExecContext(ctx,
-					`RESTORE bank.bank FROM $1 WITH into_db=restoreA, kms=$2`,
-					`nodelocal://1/kmsbackup/`+dest, kmsURIA,
-				); err != nil {
-					return err
-				}
-
-				t.Status(`restore using KMSURIB`)
-				if _, err := conn.ExecContext(ctx,
-					`RESTORE bank.bank FROM $1 WITH into_db=restoreB, kms=$2`,
-					`nodelocal://1/kmsbackup/`+dest, kmsURIB,
-				); err != nil {
-					return err
-				}
-
-				t.Status(`fingerprint`)
-				fingerprint := func(db string) (string, error) {
-					var b strings.Builder
-
-					query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
-					rows, err := conn.QueryContext(ctx, query)
-					if err != nil {
-						return "", err
-					}
-					defer rows.Close()
-					for rows.Next() {
-						var name, fp string
-						if err := rows.Scan(&name, &fp); err != nil {
-							return "", err
-						}
-						fmt.Fprintf(&b, "%s: %s\n", name, fp)
-					}
-
-					return b.String(), rows.Err()
-				}
-
-				originalBank, err := fingerprint("bank")
-				if err != nil {
-					return err
-				}
-				restoreA, err := fingerprint("restoreA")
-				if err != nil {
-					return err
-				}
-				restoreB, err := fingerprint("restoreB")
-				if err != nil {
-					return err
-				}
-
-				if originalBank != restoreA {
-					return errors.Errorf("got %s, expected %s while comparing restoreA with originalBank", restoreA, originalBank)
-				}
-				if originalBank != restoreB {
-					return errors.Errorf("got %s, expected %s while comparing restoreB with originalBank", restoreB, originalBank)
-				}
-
 				return nil
 			})
 			m.Wait()
@@ -403,32 +286,4 @@ func registerBackup(r *testRegistry) {
 		},
 	})
 
-}
-
-func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
-	q := make(url.Values)
-	expect := map[string]string{
-		"AWS_ACCESS_KEY_ID":     cloudimpl.AWSAccessKeyParam,
-		"AWS_SECRET_ACCESS_KEY": cloudimpl.AWSSecretParam,
-		regionEnvVariable:       cloudimpl.KMSRegionParam,
-	}
-	for env, param := range expect {
-		v := os.Getenv(env)
-		if v == "" {
-			return "", errors.Newf("env variable %s must be present to run the KMS test", env)
-		}
-		q.Add(param, v)
-	}
-
-	// Get AWS Key ARN from env variable.
-	keyARN := os.Getenv(keyIDEnvVariable)
-	if keyARN == "" {
-		return "", errors.Newf("env variable %s must be present to run the KMS test", keyIDEnvVariable)
-	}
-
-	// Set AUTH to implicit
-	q.Add(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
-	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-
-	return correctURI, nil
 }

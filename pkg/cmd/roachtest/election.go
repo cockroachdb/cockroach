@@ -26,7 +26,6 @@ func registerElectionAfterRestart(r *testRegistry) {
 		Cluster: makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			skip.UnderRace(t, "race builds make this test exceed its timeout")
-
 			t.Status("starting up")
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx, t)

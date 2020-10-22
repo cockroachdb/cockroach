@@ -608,7 +608,7 @@ func loadTPCCBench(
 		c.Wipe(ctx, roachNodes)
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
-		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {
+		string(pqErr.Code) == pgcode.InvalidCatalogName) {
 		return err
 	}
 
