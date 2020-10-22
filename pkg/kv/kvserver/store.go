@@ -1034,12 +1034,6 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 	s.draining.Store(drain)
 	if !drain {
-		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-			r.mu.Lock()
-			r.mu.draining = false
-			r.mu.Unlock()
-			return true
-		})
 		return
 	}
 
@@ -1109,10 +1103,6 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 						return
 					default:
 					}
-
-					r.mu.Lock()
-					r.mu.draining = true
-					r.mu.Unlock()
 
 					var drainingLease roachpb.Lease
 					for {
