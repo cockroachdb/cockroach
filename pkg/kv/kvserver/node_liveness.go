@@ -259,6 +259,22 @@ type NodeLivenessOptions struct {
 	OnNodeDecommissioned func(kvserverpb.Liveness)
 }
 
+// NodeLivenessTestingKnobs allows tests to override some node liveness
+// controls. When set, fields ultimately affect the NodeLivenessOptions used by
+// the cluster.
+type NodeLivenessTestingKnobs struct {
+	// LivenessDuration overrides a liveness record's life time.
+	LivenessDuration time.Duration
+	// RenewalDuration specifies how long before the expiration a record is
+	// heartbeated. If LivenessDuration is set, this should probably be set too.
+	RenewalDuration time.Duration
+}
+
+var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (NodeLivenessTestingKnobs) ModuleTestingKnobs() {}
+
 // NewNodeLiveness returns a new instance of NodeLiveness configured
 // with the specified gossip instance.
 func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
