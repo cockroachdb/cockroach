@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 

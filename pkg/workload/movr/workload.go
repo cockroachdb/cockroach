@@ -296,7 +296,9 @@ func (m *movrWorker) generateWorkSimulation() func(context.Context) error {
 }
 
 // Ops implements the Opser interface
-func (m *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (m *movr) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	// Initialize the faker in case it hasn't been setup already.
 	m.fakerOnce.Do(func() {
 		m.faker = faker.NewFaker()

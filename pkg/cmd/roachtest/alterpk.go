@@ -88,8 +88,7 @@ func registerAlterPK(r *testRegistry) {
 	}
 
 	// runAlterPKTPCC runs a primary key change while the TPCC workload runs.
-	runAlterPKTPCC := func(ctx context.Context, t *test, c *cluster) {
-		const warehouses = 500
+	runAlterPKTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int, expensiveChecks bool) {
 		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
@@ -151,9 +150,14 @@ func registerAlterPK(r *testRegistry) {
 		m.Wait()
 
 		// Run the verification checks of the TPCC workload post primary key change.
+		expensiveChecksArg := ""
+		if expensiveChecks {
+			expensiveChecksArg = "--expensive-checks"
+		}
 		checkCmd := fmt.Sprintf(
-			"./workload check tpcc --warehouses %d --expensive-checks {pgurl%s}",
+			"./workload check tpcc --warehouses %d %s {pgurl%s}",
 			warehouses,
+			expensiveChecksArg,
 			c.Node(roachNodes[0]),
 		)
 		t.Status("beginning database verification")
@@ -170,12 +174,25 @@ func registerAlterPK(r *testRegistry) {
 		Run:        runAlterPKBank,
 	})
 	r.Add(testSpec{
-		Name:  "alterpk-tpcc",
+		Name:  "alterpk-tpcc-250",
+		Owner: OwnerSQLSchema,
+		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
+		// workload driver node.
+		MinVersion: "v20.1.0",
+		Cluster:    makeClusterSpec(4, cpu(32)),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
+		},
+	})
+	r.Add(testSpec{
+		Name:  "alterpk-tpcc-500",
 		Owner: OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
-		Run:        runAlterPKTPCC,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runAlterPKTPCC(ctx, t, c, 500 /* warehouses */, false /* expensiveChecks */)
+		},
 	})
 }

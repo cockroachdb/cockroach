@@ -16,8 +16,10 @@ import (
 	"regexp"
 )
 
-var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(\.(?P<point>\d+))?$`)
 var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
+
+var djangoSupportedTag = "cockroach-3.1.x"
 
 func registerDjango(r *testRegistry) {
 	runDjango := func(
@@ -59,15 +61,15 @@ func registerDjango(r *testRegistry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3.6 libpq-dev python3.6-dev gcc python3-setuptools python-setuptools build-essential`,
+			`sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "set python3.6 as default", `
+			ctx, c, node, "set python3.7 as default", `
     		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.6 2
+    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
     		sudo update-alternatives --config python3`,
 		); err != nil {
 			t.Fatal(err)
@@ -75,7 +77,7 @@ func registerDjango(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.6`,
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -103,14 +105,15 @@ func registerDjango(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest Django release is %s.", djangoLatestTag)
+		c.l.Printf("Supported Django release is %s.", djangoSupportedTag)
 
 		if err := repeatGitCloneE(
 			ctx,
 			t.l,
 			c,
-			"https://github.com/django/django/",
+			"https://github.com/timgraham/django/",
 			"/mnt/data1/django",
-			djangoLatestTag,
+			djangoSupportedTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -130,7 +133,7 @@ func registerDjango(r *testRegistry) {
 			c,
 			"https://github.com/cockroachdb/django-cockroachdb",
 			"/mnt/data1/django/tests/django-cockroachdb",
-			djangoCockroachDBLatestTag,
+			"master",
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -165,21 +168,21 @@ func registerDjango(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := djangoBlacklists.getLists(version)
+		blocklistName, expectedFailureList, ignoredlistName, ignoredlist := djangoBlocklists.getLists(version)
 		if expectedFailureList == nil {
-			t.Fatalf("No django blacklist defined for cockroach version %s", version)
+			t.Fatalf("No django blocklist defined for cockroach version %s", version)
 		}
 		if ignoredlist == nil {
 			t.Fatalf("No django ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s, using ignoredlist %s",
-			version, blacklistName, ignoredlistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+			version, blocklistName, ignoredlistName)
 
 		// TODO (rohany): move this to a file backed buffer if the output becomes
 		//  too large.
 		var fullTestResults []byte
 		for _, testName := range enabledDjangoTests {
-			t.Status("Running django test app", testName)
+			t.Status("Running django test app ", testName)
 			// Running the test suite is expected to error out, so swallow the error.
 			rawResults, _ := c.RunWithBuffer(
 				ctx, t.l, node, fmt.Sprintf(djangoRunTestCmd, testName))
@@ -197,13 +200,12 @@ func registerDjango(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parsePythonUnitTestOutput(fullTestResults, expectedFailureList, ignoredlist)
 		results.summarizeAll(
-			t, "django" /* ormName */, blacklistName,
-			expectedFailureList, version, djangoLatestTag,
+			t, "django" /* ormName */, blocklistName, expectedFailureList, version, djangoSupportedTag,
 		)
 	}
 
 	r.Add(testSpec{
-		MinVersion: "v19.2.0",
+		MinVersion: "v20.1.0",
 		Name:       "django",
 		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1, cpu(16)),
@@ -217,22 +219,43 @@ func registerDjango(r *testRegistry) {
 // Test results are only in stderr, so stdout is redirected and printed later.
 const djangoRunTestCmd = `
 cd /mnt/data1/django/tests &&
-python3 runtests.py %[1]s --settings cockroach_settings --parallel 1 -v 2 > %[1]s.stdout
+RUNNING_COCKROACH_BACKEND_TESTS=1 python3 runtests.py %[1]s --settings cockroach_settings --parallel 1 -v 2 > %[1]s.stdout
 `
 
 const cockroachDjangoSettings = `
+from django.test.runner import DiscoverRunner
+
+
 DATABASES = {
     'default': {
         'ENGINE': 'django_cockroachdb',
-        'NAME' : 'django_tests',
-        'USER' : 'root',
-        'PASSWORD' : '',
+        'NAME': 'django_tests',
+        'USER': 'root',
+        'PASSWORD': '',
         'HOST': 'localhost',
-        'PORT' : 26257,
+        'PORT': 26257,
+    },
+    'other': {
+        'ENGINE': 'django_cockroachdb',
+        'NAME': 'django_tests2',
+        'USER': 'root',
+        'PASSWORD': '',
+        'HOST': 'localhost',
+        'PORT': 26257,
     },
 }
 SECRET_KEY = 'django_tests_secret_key'
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',
 ]
+TEST_RUNNER = '.cockroach_settings.NonDescribingDiscoverRunner'
+
+class NonDescribingDiscoverRunner(DiscoverRunner):
+    def get_test_runner_kwargs(self):
+        return {
+            'failfast': self.failfast,
+            'resultclass': self.get_resultclass(),
+            'verbosity': self.verbosity,
+            'descriptions': False,
+        }
 `

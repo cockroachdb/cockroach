@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
@@ -53,7 +53,10 @@ type tpcc struct {
 	waitFraction float64
 	workers      int
 	fks          bool
-	dbOverride   string
+	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
+	// due to origin index restrictions being lifted.
+	deprecatedFkIndexes bool
+	dbOverride          string
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -138,7 +141,7 @@ var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
 		` using a rich schema of multiple tables`,
-	Version:      `2.1.0`,
+	Version:      `2.2.0`,
 	PublicFacing: true,
 	New: func() workload.Generator {
 		g := &tpcc{}
@@ -164,6 +167,7 @@ var tpccMeta = workload.Meta{
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+		g.flags.BoolVar(&g.deprecatedFkIndexes, `deprecated-fk-indexes`, true, `Add deprecated foreign keys (needed when running against v20.1 or below clusters)`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 
 		g.flags.StringVar(&g.mix, `mix`,
@@ -326,10 +330,18 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 				for _, fkStmt := range fkStmts {
 					if _, err := db.Exec(fkStmt); err != nil {
-						// If the statement failed because the fk already exists,
-						// ignore it. Return the error for any other reason.
 						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
-						if !strings.Contains(err.Error(), duplFKErr) {
+						const idxErr = "foreign key requires an existing index on columns"
+						switch {
+						case strings.Contains(err.Error(), idxErr):
+							fmt.Println(errors.WithHint(err, "try using the --deprecated-fk-indexes flag"))
+							// If the statement failed because of a missing FK index, suggest
+							// to use the deprecated-fks flag.
+							return errors.WithHint(err, "try using the --deprecated-fk-indexes flag")
+						case strings.Contains(err.Error(), duplFKErr):
+							// If the statement failed because the fk already exists,
+							// ignore it. Return the error for any other reason.
+						default:
 							return err
 						}
 					}
@@ -470,9 +482,9 @@ func (w *tpcc) Tables() []workload.Table {
 	history := workload.Table{
 		Name: `history`,
 		Schema: maybeAddFkSuffix(
-			w.fks,
+			w.deprecatedFkIndexes,
 			tpccHistorySchemaBase,
-			tpccHistorySchemaFkSuffix,
+			deprecatedTpccHistorySchemaFkSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numHistoryPerWarehouse * w.warehouses,
@@ -528,9 +540,9 @@ func (w *tpcc) Tables() []workload.Table {
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
 			maybeAddFkSuffix(
-				w.fks,
+				w.deprecatedFkIndexes,
 				tpccStockSchemaBase,
-				tpccStockSchemaFkSuffix,
+				deprecatedTpccStockSchemaFkSuffix,
 			),
 			tpccStockSchemaInterleaveSuffix,
 		),
@@ -545,9 +557,9 @@ func (w *tpcc) Tables() []workload.Table {
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
 			maybeAddFkSuffix(
-				w.fks,
+				w.deprecatedFkIndexes,
 				tpccOrderLineSchemaBase,
-				tpccOrderLineSchemaFkSuffix,
+				deprecatedTpccOrderLineSchemaFkSuffix,
 			),
 			tpccOrderLineSchemaInterleaveSuffix,
 		),
@@ -563,7 +575,9 @@ func (w *tpcc) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *tpcc) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	// It would be nice to remove the need for this and to require that
 	// partitioning and scattering occurs only when the PostLoad hook is
 	// run, but to maintain backward compatibility, it's easiest to allow
@@ -679,7 +693,7 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
-			worker, err := newWorker(context.TODO(), w, db, reg.GetHandle(), warehouse)
+			worker, err := newWorker(ctx, w, db, reg.GetHandle(), warehouse)
 			if err == nil {
 				ql.WorkerFns[idx] = worker.run
 			}

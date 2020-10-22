@@ -192,7 +192,7 @@ func registerKVContention(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("kv/contention/nodes=%d", nodes),
 		Owner:      OwnerKV,
-		MinVersion: "v19.2.0",
+		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(nodes + 1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
@@ -202,14 +202,7 @@ func registerKVContention(r *testRegistry) {
 			// If requests ever get stuck on a transaction that was abandoned
 			// then it will take 10m for them to get unstuck, at which point the
 			// QPS threshold check in the test is guaranteed to fail.
-			//
-			// Additionally, ensure that even transactions that issue a 1PC
-			// batch begin heartbeating. This ensures that if they end up in
-			// part of a dependency cycle, they can never be expire without
-			// being actively aborted.
-			args := startArgs(
-				"--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600 COCKROACH_TXN_HEARTBEAT_DURING_1PC=true",
-			)
+			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
 			c.Start(ctx, t, args, c.Range(1, nodes))
 
 			conn := c.Conn(ctx, 1)
@@ -254,9 +247,9 @@ func registerKVContention(r *testRegistry) {
 
 				// Assert that the average throughput stayed above a certain
 				// threshold. In this case, assert that max throughput only
-				// dipped below 100 qps for 5% of the time.
-				const minQPS = 100
-				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.05)
+				// dipped below 50 qps for 10% of the time.
+				const minQPS = 50
+				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.1)
 				return nil
 			})
 			m.Wait()
@@ -333,6 +326,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				// other earlier kv invocation's footsteps.
 				run(kv+" --seed 2 {pgurl:1}", true)
 			})
+			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector, even if test fails below
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
 				t.Fatalf(
@@ -341,17 +335,17 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				)
 			}
 			t.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
-			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector
 		},
 	})
 }
 
 func registerKVGracefulDraining(r *testRegistry) {
 	r.Add(testSpec{
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/33501",
-		Name:    "kv/gracefuldraining/nodes=3",
-		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(4),
+		Name:        "kv/gracefuldraining/nodes=3",
+		Owner:       OwnerKV,
+		Cluster:     makeClusterSpec(4),
+		Skip:        "flaky",
+		SkipDetails: "https://github.com/cockroachdb/cockroach/issues/53760",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			nodes := c.spec.NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
@@ -596,7 +590,7 @@ func registerKVRangeLookups(r *testRegistry) {
 			}
 			close(doneInit)
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			duration := " --duration=" + ifLocal("10s", "10m")
+			duration := " --duration=10m"
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
 			// expected to create `result is ambiguous (replica removed)` errors.
@@ -644,7 +638,7 @@ func registerKVRangeLookups(r *testRegistry) {
 							EXPERIMENTAL_RELOCATE
 								SELECT ARRAY[$1, $2, $3], CAST(floor(random() * 9223372036854775808) AS INT)
 						`, newReplicas[0]+1, newReplicas[1]+1, newReplicas[2]+1)
-						if err != nil && !pgerror.IsSQLRetryableError(err) && !isExpectedRelocateError(err) {
+						if err != nil && !pgerror.IsSQLRetryableError(err) && !IsExpectedRelocateError(err) {
 							return err
 						}
 					default:

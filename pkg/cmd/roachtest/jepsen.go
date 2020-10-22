@@ -241,7 +241,8 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				// downloading logs.
 				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure" `+
 				// And sometimes the analysis succeeds and yet we still get an error code for some reason.
-				`-e "Everything looks good"`,
+				`-e "Everything looks good" `+
+				`-e "RuntimeException: Connection to"`, // timeout
 		); err == nil {
 			t.l.Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
 				"Ignoring it and considering the test successful. " +
@@ -311,8 +312,10 @@ func registerJepsen(r *testRegistry) {
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
 			spec := testSpec{
-				Name:  fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
-				Owner: OwnerKV,
+				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
+				// We don't run jepsen on older releases due to the high rate of flakes.
+				MinVersion: "v20.1.0",
+				Owner:      OwnerKV,
 				// The Jepsen tests do funky things to machines, like muck with the
 				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when

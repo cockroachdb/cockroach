@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -47,10 +47,11 @@ type indexes struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed    int64
-	idxs    int
-	unique  bool
-	payload int
+	seed        int64
+	idxs        int
+	unique      bool
+	payload     int
+	cycleLength uint64
 }
 
 func init() {
@@ -68,6 +69,8 @@ var indexesMeta = workload.Meta{
 		g.flags.IntVar(&g.idxs, `secondary-indexes`, 1, `Number of indexes to add to the table.`)
 		g.flags.BoolVar(&g.unique, `unique-indexes`, false, `Use UNIQUE secondary indexes.`)
 		g.flags.IntVar(&g.payload, `payload`, 64, `Size of the unindexed payload column.`)
+		g.flags.Uint64Var(&g.cycleLength, `cycle-length`, math.MaxUint64,
+			`Number of keys repeatedly accessed by each writer through upserts.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -141,8 +144,9 @@ func (w *indexes) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *indexes) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
-	ctx := context.Background()
+func (w *indexes) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -183,10 +187,10 @@ type indexesOp struct {
 }
 
 func (o *indexesOp) run(ctx context.Context) error {
-	keyHi, keyLo := o.rand.Uint64(), o.rand.Uint64()
+	keyLo := o.rand.Uint64() % o.config.cycleLength
 	_, _ = o.rand.Read(o.buf[:])
 	args := []interface{}{
-		uuid.FromUint128(uint128.FromInts(keyHi, keyLo)).String(), // key
+		uuid.FromUint128(uint128.FromInts(0, keyLo)).String(), // key
 		int64(keyLo + 0), // col0
 		int64(keyLo + 1), // col1
 		int64(keyLo + 2), // col2

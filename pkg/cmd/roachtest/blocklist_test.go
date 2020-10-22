@@ -19,27 +19,29 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
 
 const githubAPITokenEnv = "GITHUB_API_TOKEN"
-const runBlacklistEnv = "RUN_BLACKLIST_TEST"
+const runBlocklistEnv = "RUN_BLOCKLIST_TEST"
 
-func TestBlacklists(t *testing.T) {
-	if _, ok := os.LookupEnv(runBlacklistEnv); !ok {
-		t.Skipf("Blackist test is only run if %s is set", runBlacklistEnv)
+func TestBlocklists(t *testing.T) {
+	if _, ok := os.LookupEnv(runBlocklistEnv); !ok {
+		skip.IgnoreLintf(t, "Blocklist test is only run if %s is set", runBlocklistEnv)
 	}
 
-	blacklists := map[string]blacklist{
-		"hibernate":  hibernateBlackList20_1,
-		"pgjdbc":     pgjdbcBlackList20_1,
-		"psycopg":    psycopgBlackList20_1,
-		"django":     djangoBlacklist20_1,
-		"sqlAlchemy": sqlAlchemyBlacklist20_1,
-		"libpq":      libPQBlacklist20_1,
-		"gopg":       gopgBlackList20_1,
-		"pgx":        pgxBlacklist20_1,
+	blocklists := map[string]blocklist{
+		"hibernate":    hibernateBlockList20_2,
+		"pgjdbc":       pgjdbcBlockList20_2,
+		"psycopg":      psycopgBlockList20_2,
+		"django":       djangoBlocklist20_2,
+		"sqlAlchemy":   sqlAlchemyBlocklist20_2,
+		"libpq":        libPQBlocklist20_2,
+		"gopg":         gopgBlockList20_2,
+		"pgx":          pgxBlocklist20_2,
+		"activerecord": activeRecordBlockList20_2,
 	}
 	type reasonCount struct {
 		reason string
@@ -48,7 +50,7 @@ func TestBlacklists(t *testing.T) {
 	}
 
 	var failureMap = make(map[string]*reasonCount, 200)
-	for suite, bl := range blacklists {
+	for suite, bl := range blocklists {
 		for _, reason := range bl {
 			if _, ok := failureMap[reason]; !ok {
 				failureMap[reason] = &reasonCount{
@@ -106,6 +108,6 @@ func TestBlacklists(t *testing.T) {
 	}
 
 	if anyClosed {
-		t.Fatal("Some closed issues appear in blacklists")
+		t.Fatal("Some closed issues appear in blocklists")
 	}
 }

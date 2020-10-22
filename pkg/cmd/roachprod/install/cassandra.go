@@ -45,9 +45,11 @@ func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 			if err != nil {
 				return err
 			}
-			defer session.Close()
+			defer func() {
+				_ = session.Close()
+			}()
 
-			cmd := c.Env + `env ROACHPROD=true cassandra` +
+			cmd := `env ` + c.Env + ` ROACHPROD=true cassandra` +
 				` -Dcassandra.config=file://${PWD}/cassandra.yaml` +
 				` -Dcassandra.ring_delay_ms=3000` +
 				` > cassandra.stdout 2> cassandra.stderr`
@@ -63,7 +65,9 @@ func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 				if err != nil {
 					return false, err
 				}
-				defer session.Close()
+				defer func() {
+					_ = session.Close()
+				}()
 
 				cmd := `nc -z $(hostname) 9042`
 				if _, err := session.CombinedOutput(cmd); err != nil {

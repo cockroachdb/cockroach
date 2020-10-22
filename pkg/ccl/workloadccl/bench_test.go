@@ -16,6 +16,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
@@ -48,9 +49,7 @@ func benchmarkImportFixture(b *testing.B, gen workload.Generator) {
 }
 
 func BenchmarkImportFixture(b *testing.B) {
-	if testing.Short() {
-		b.Skip("skipping long benchmark")
-	}
+	skip.UnderShort(b, "skipping long benchmark")
 
 	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {
 		benchmarkImportFixture(b, tpcc.FromWarehouses(1))

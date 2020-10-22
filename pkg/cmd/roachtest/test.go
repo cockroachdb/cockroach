@@ -17,12 +17,11 @@ import (
 	"io"
 	// For the debug http handlers.
 	_ "net/http/pprof"
-	"os/exec"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -234,22 +233,35 @@ func (t *test) WorkerProgress(frac float64) {
 	t.progress(goid.Get(), frac)
 }
 
-// Skip records msg into t.spec.Skip and calls runtime.Goexit() - thus
-// interrupting the running of the test.
-func (t *test) Skip(msg string, details string) {
-	t.spec.Skip = msg
-	t.spec.SkipDetails = details
-	runtime.Goexit()
+var _ skip.SkippableTest = (*test)(nil)
+
+// Skip skips the test. The first argument if any is the main message.
+// The remaining argument, if any, form the details.
+// This implements the skip.SkippableTest interface.
+func (t *test) Skip(args ...interface{}) {
+	if len(args) > 0 {
+		t.spec.Skip = fmt.Sprint(args[0])
+		args = args[1:]
+	}
+	t.spec.SkipDetails = fmt.Sprint(args...)
+	panic(errTestFatal)
+}
+
+// Skipf skips the test. The formatted message becomes the skip reason.
+// This implements the skip.SkippableTest interface.
+func (t *test) Skipf(format string, args ...interface{}) {
+	t.spec.Skip = fmt.Sprintf(format, args...)
+	panic(errTestFatal)
 }
 
 // Fatal marks the test as failed, prints the args to t.l, and calls
-// runtime.GoExit(). It can be called multiple times.
+// panic(errTestFatal). It can be called multiple times.
 //
 // If the only argument is an error, it is formatted by "%+v", so it will show
 // stack traces and such.
 //
-// ATTENTION: Since this calls runtime.GoExit(), it should only be called from a
-// test's closure. The test runner itself should never call this.
+// ATTENTION: Since this calls panic(errTestFatal), it should only be called
+// from a test's closure. The test runner itself should never call this.
 func (t *test) Fatal(args ...interface{}) {
 	t.fatalfInner("" /* format */, args...)
 }
@@ -276,7 +288,7 @@ func (t *test) fatalfInner(format string, args ...interface{}) {
 	} else {
 		t.printAndFail(2 /* skip */, args...)
 	}
-	runtime.Goexit()
+	panic(errTestFatal)
 }
 
 // FatalIfErr calls t.Fatal() if err != nil.
@@ -454,39 +466,6 @@ func teamCityEscape(s string) string {
 
 func teamCityNameEscape(name string) string {
 	return strings.Replace(name, ",", "_", -1)
-}
-
-// getAuthorEmail retrieves the author of a line of code. Returns the empty
-// string if the author cannot be determined. Some test tags override this
-// behavior and have a hardcoded author email.
-func getAuthorEmail(tags []string, file string, line int) string {
-	for _, tag := range tags {
-		if tag == `orm` || tag == `driver` {
-			return `rafi@cockroachlabs.com`
-		}
-	}
-	const repo = "github.com/cockroachdb/cockroach/"
-	i := strings.Index(file, repo)
-	if i == -1 {
-		return ""
-	}
-	file = file[i+len(repo):]
-
-	cmd := exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`git blame --porcelain -L%d,+1 $(git rev-parse --show-toplevel)/%s | grep author-mail`,
-			line, file))
-	// This command returns output such as:
-	// author-mail <jordan@cockroachlabs.com>
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return ""
-	}
-	re := regexp.MustCompile("author-mail <(.*)>")
-	matches := re.FindSubmatch(out)
-	if matches == nil {
-		return ""
-	}
-	return string(matches[1])
 }
 
 type testWithCount struct {

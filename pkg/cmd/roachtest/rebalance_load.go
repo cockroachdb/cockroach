@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -73,7 +74,7 @@ func registerRebalanceLoad(r *testRegistry) {
 				"./workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
 					"--duration=%v {pgurl:1-%d}",
 				concurrency, maxDuration, len(roachNodes)))
-			if ctx.Err() == context.Canceled {
+			if errors.Is(ctx.Err(), context.Canceled) {
 				// We got canceled either because lease balance was achieved or the
 				// other worker hit an error. In either case, it's not this worker's
 				// fault.
@@ -125,7 +126,7 @@ func registerRebalanceLoad(r *testRegistry) {
 	concurrency := 128
 
 	r.Add(testSpec{
-		Name:       `rebalance-leases-by-load`,
+		Name:       `rebalance/by-load/leases`,
 		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(4), // the last node is just used to generate load
 		MinVersion: "v2.1.0",
@@ -138,7 +139,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       `rebalance-replicas-by-load`,
+		Name:       `rebalance/by-load/replicas`,
 		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(7), // the last node is just used to generate load
 		MinVersion: "v2.1.0",

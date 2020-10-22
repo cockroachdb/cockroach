@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Owner is a valid entry for the Owners field of a roachtest. They should be
@@ -44,22 +44,55 @@ const (
 type OwnerMetadata struct {
 	SlackRoom    string
 	ContactEmail string
+	// TriageColumnID is the column id of the project column the team uses to
+	// triage issues. Unfortunately, there appears to be no way to retrieve this
+	// programmatically from the API.
+	//
+	// To find the triage column for a project, run the following curl command:
+	// curl -u yourusername:githubaccesstoken -H "Accept: application/vnd.githubinertia-preview+json" \
+	// https://api.github.com/repos/cockroachdb/cockroach/projects
+	//
+	// Then, for the project you care about, curl its columns URL, which looks
+	// like this:
+	// https://api.github.com/projects/3842382/columns
+	//
+	// Find the triage column you want, and pick its ID field.
+	TriageColumnID int
 }
 
 // roachtestOwners maps an owner in code (as specified on a roachtest spec) to
 // metadata used for github issue posting/slack rooms, etc.
 var roachtestOwners = map[Owner]OwnerMetadata{
-	OwnerAppDev:       {SlackRoom: `app-dev`, ContactEmail: `rafi@cockroachlabs.com`},
-	OwnerBulkIO:       {SlackRoom: `bulk-io`, ContactEmail: `david@cockroachlabs.com`},
-	OwnerCDC:          {SlackRoom: `cdc`, ContactEmail: `ajwerner@cockroachlabs.com`},
-	OwnerKV:           {SlackRoom: `kv`, ContactEmail: `andrei@cockroachlabs.com`},
-	OwnerPartitioning: {SlackRoom: `partitioning`, ContactEmail: `andrei@cockroachlabs.com`},
-	OwnerSQLExec:      {SlackRoom: `sql-execution-team`, ContactEmail: `jordan@cockroachlabs.com`},
-	OwnerSQLSchema:    {SlackRoom: `sql-schema`, ContactEmail: `lucy@cockroachlabs.com`},
-	OwnerStorage:      {SlackRoom: `storage`, ContactEmail: `peter@cockroachlabs.com`},
+	OwnerAppDev: {SlackRoom: `app-dev`, ContactEmail: `rafi@cockroachlabs.com`,
+		TriageColumnID: 7259065,
+	},
+	OwnerBulkIO: {SlackRoom: `bulk-io`, ContactEmail: `david@cockroachlabs.com`,
+		TriageColumnID: 3097123,
+	},
+	OwnerCDC: {SlackRoom: `cdc`, ContactEmail: `ajwerner@cockroachlabs.com`,
+		TriageColumnID: 3570120,
+	},
+	OwnerKV: {SlackRoom: `kv`, ContactEmail: `andrei@cockroachlabs.com`,
+		TriageColumnID: 3550674,
+	},
+	OwnerPartitioning: {SlackRoom: `partitioning`, ContactEmail: `andrei@cockroachlabs.com`,
+		// Partitioning issues get sent to the KV triage column for now.
+		TriageColumnID: 3550674,
+	},
+	OwnerSQLExec: {SlackRoom: `sql-execution-team`, ContactEmail: `alfonso@cockroachlabs.com`,
+		TriageColumnID: 6837155,
+	},
+	OwnerSQLSchema: {SlackRoom: `sql-schema`, ContactEmail: `lucy@cockroachlabs.com`,
+		TriageColumnID: 8946818,
+	},
+	OwnerStorage: {SlackRoom: `storage`, ContactEmail: `peter@cockroachlabs.com`,
+		TriageColumnID: 6668367,
+	},
 	// Only for use in roachtest package unittests.
 	`unittest`: {},
 }
+
+const defaultTag = "default"
 
 type testRegistry struct {
 	m map[string]*testSpec
@@ -133,6 +166,10 @@ func (r *testRegistry) prepareSpec(spec *testSpec) error {
 	if _, ok := roachtestOwners[spec.Owner]; !ok {
 		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
 	}
+	if len(spec.Tags) == 0 {
+		spec.Tags = []string{defaultTag}
+	}
+	spec.Tags = append(spec.Tags, "owner-"+string(spec.Owner))
 
 	return nil
 }
@@ -211,8 +248,8 @@ func newFilter(filter []string) *testFilter {
 	}
 
 	if len(tag) == 0 {
-		tag = []string{"default"}
-		rawTag = []string{"tag:default"}
+		tag = []string{defaultTag}
+		rawTag = []string{"tag:" + defaultTag}
 	}
 
 	makeRE := func(strs []string) *regexp.Regexp {

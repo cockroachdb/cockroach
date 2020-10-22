@@ -1390,9 +1390,6 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/sql/opt/optgen/exprgen/custom_funcs.go:.* func .* is unused`),
 				// Using deprecated method to COPY.
 				stream.GrepNot(`pkg/cli/nodelocal.go:.* stmt.Exec is deprecated: .*`),
-				// TODO(adityamaru): Delete when working on #51897.
-				stream.GrepNot(`pkg/testutils/skip/skip.go`),
-				stream.GrepNot(`pkg/testutils/skip/stress.go`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {

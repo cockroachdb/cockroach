@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/pgtype"
-	"github.com/pkg/errors"
 	"golang.org/x/exp/rand"
 )
 

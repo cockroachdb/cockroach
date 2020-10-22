@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -171,9 +171,9 @@ func (w *querylog) Hooks() workload.Hooks {
 }
 
 // Ops implements the Opser interface.
-func (w *querylog) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
-	ctx := context.Background()
-
+func (w *querylog) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -494,7 +494,7 @@ func (w *worker) generatePlaceholders(
 // getTableNames fetches the names of all the tables in db and stores them in
 // w.state.
 func (w *querylog) getTableNames(db *gosql.DB) error {
-	rows, err := db.Query(`SHOW TABLES`)
+	rows, err := db.Query(`SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`)
 	if err != nil {
 		return err
 	}
@@ -991,7 +991,7 @@ func printPlaceholder(i interface{}) string {
 	case nil:
 		return fmt.Sprintf("NULL")
 	default:
-		panic(fmt.Sprintf("unsupported type: %T", i))
+		panic(errors.AssertionFailedf("unsupported type: %T", i))
 	}
 }
 
