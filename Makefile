@@ -450,7 +450,6 @@ override xgo := GOFLAGS= GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $
 endif
 
 C_DEPS_DIR := $(abspath c-deps)
-CRYPTOPP_SRC_DIR := $(C_DEPS_DIR)/cryptopp
 JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
 PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 GEOS_SRC_DIR     := $(C_DEPS_DIR)/geos
@@ -477,7 +476,6 @@ ifdef host-is-mingw
 BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
-CRYPTOPP_DIR := $(BUILD_DIR)/cryptopp$(if $(use-msan),_msan)
 JEMALLOC_DIR := $(BUILD_DIR)/jemalloc$(if $(use-msan),_msan)
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf$(if $(use-msan),_msan)
 GEOS_DIR     := $(BUILD_DIR)/geos$(if $(use-msan),_msan)
@@ -488,7 +486,6 @@ KRB5_DIR     := $(BUILD_DIR)/krb5$(if $(use-msan),_msan)
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 
-LIBCRYPTOPP := $(CRYPTOPP_DIR)/libcryptopp.a
 LIBJEMALLOC := $(JEMALLOC_DIR)/lib/libjemalloc.a
 LIBPROTOBUF := $(PROTOBUF_DIR)/libprotobuf.a
 LIBEDIT     := $(LIBEDIT_DIR)/src/.libs/libedit.a
@@ -514,7 +511,7 @@ C_LIBS_COMMON = \
 	$(LIBPROJ) $(LIBGEOS) $(LIBROACH)
 C_LIBS_SHORT = $(C_LIBS_COMMON)
 C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBPROTOBUF)
-C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBPROTOBUF)
+C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBPROTOBUF)
 
 # We only include krb5 on linux, non-musl builds.
 ifeq "$(findstring linux-gnu,$(TARGET_TRIPLE))" "linux-gnu"
@@ -570,7 +567,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
 vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
@@ -602,19 +599,6 @@ vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submo
 # only rebuild the affected objects, but in practice dependencies on configure
 # flags are not tracked correctly, and these stale artifacts can cause
 # particularly hard-to-debug errors.
-#
-# Flags needed to make cryptopp to runtime detection of AES cpu instruction sets.
-# pclmul and ssse3 need to be defined for the overall AES switch but are only used
-# in GCM mode (not currently in use by cockroach).
-$(CRYPTOPP_DIR)/Makefile: aes := $(if $(findstring x86_64,$(TARGET_TRIPLE)),-maes -mpclmul -mssse3)
-$(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild | bin/.submodules-initialized
-	rm -rf $(CRYPTOPP_DIR)
-	mkdir -p $(CRYPTOPP_DIR)
-	@# NOTE: If you change the CMake flags below, bump the version in
-	@# $(C_DEPS_DIR)/cryptopp-rebuild. See above for rationale.
-	cd $(CRYPTOPP_DIR) && CFLAGS+=" $(aes)" && CXXFLAGS+=" $(aes)" cmake $(xcmake-flags) $(CRYPTOPP_SRC_DIR) \
-	  -DCMAKE_BUILD_TYPE=Release
-
 $(JEMALLOC_SRC_DIR)/configure.ac: | bin/.submodules-initialized
 
 $(JEMALLOC_SRC_DIR)/configure: $(JEMALLOC_SRC_DIR)/configure.ac
@@ -727,9 +711,6 @@ $(LIBEDIT_DIR)/Makefile: $(C_DEPS_DIR)/libedit-rebuild $(LIBEDIT_SRC_DIR)/config
 $(PROTOC): $(PROTOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD | $(LIBPROTOBUF)
 	@uptodate $@ $(PROTOBUF_SRC_DIR) || $(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
 
-$(LIBCRYPTOPP): $(CRYPTOPP_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
-	@uptodate $@ $(CRYPTOPP_SRC_DIR) || $(MAKE) --no-print-directory -C $(CRYPTOPP_DIR) static
-
 $(LIBJEMALLOC): $(JEMALLOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(JEMALLOC_SRC_DIR) || $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
 
@@ -786,9 +767,8 @@ $(LIBKRB5): $(KRB5_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(KRB5_SRC_DIR)/src || $(MAKE) --no-print-directory -C $(KRB5_DIR)
 
 # Convenient names for maintainers. Not used by other targets in the Makefile.
-.PHONY: protoc libcryptopp libjemalloc libprotobuf libgeos libproj libroach libkrb5
+.PHONY: protoc libjemalloc libprotobuf libgeos libproj libroach libkrb5
 protoc:      $(PROTOC)
-libcryptopp: $(LIBCRYPTOPP)
 libedit:     $(LIBEDIT)
 libjemalloc: $(LIBJEMALLOC)
 libprotobuf: $(LIBPROTOBUF)
@@ -1594,7 +1574,6 @@ c-deps-fmt:
 
 .PHONY: clean-c-deps
 clean-c-deps:
-	rm -rf $(CRYPTOPP_DIR)
 	rm -rf $(JEMALLOC_DIR)
 	rm -rf $(PROTOBUF_DIR)
 	rm -rf $(GEOS_DIR)
@@ -1604,7 +1583,6 @@ clean-c-deps:
 
 .PHONY: unsafe-clean-c-deps
 unsafe-clean-c-deps:
-	git -C $(CRYPTOPP_SRC_DIR) clean -dxf
 	git -C $(JEMALLOC_SRC_DIR) clean -dxf
 	git -C $(PROTOBUF_SRC_DIR) clean -dxf
 	git -C $(GEOS_SRC_DIR)     clean -dxf
