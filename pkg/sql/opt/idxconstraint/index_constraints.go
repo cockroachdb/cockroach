@@ -1288,6 +1288,7 @@ func (ic *Instance) Init(
 	optionalFilters memo.FiltersExpr,
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
+	computedCols map[opt.ColumnID]opt.ScalarExpr,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
@@ -1302,7 +1303,7 @@ func (ic *Instance) Init(
 		ic.allFilters = requiredFilters[:len(requiredFilters):len(requiredFilters)]
 		ic.allFilters = append(ic.allFilters, optionalFilters...)
 	}
-	ic.indexConstraintCtx.init(columns, notNullCols, isInverted, evalCtx, factory)
+	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, isInverted, evalCtx, factory)
 	if isInverted {
 		tight, constraints := ic.makeInvertedIndexSpansForExpr(
 			&ic.allFilters, nil /* constraints */, false,
@@ -1384,6 +1385,8 @@ type indexConstraintCtx struct {
 
 	notNullCols opt.ColSet
 
+	computedCols map[opt.ColumnID]opt.ScalarExpr
+
 	// isInverted indicates if the index is an inverted index (e.g. JSONB).
 	// An inverted index behaves differently than a normal index because a PK
 	// can appear in multiple index entries. For example, `a @> x AND a @> y` is
@@ -1402,6 +1405,7 @@ type indexConstraintCtx struct {
 func (c *indexConstraintCtx) init(
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
+	computedCols map[opt.ColumnID]opt.ScalarExpr,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
@@ -1409,6 +1413,7 @@ func (c *indexConstraintCtx) init(
 	c.md = factory.Metadata()
 	c.columns = columns
 	c.notNullCols = notNullCols
+	c.computedCols = computedCols
 	c.isInverted = isInverted
 	c.evalCtx = evalCtx
 	c.factory = factory
@@ -1424,6 +1429,9 @@ func (c *indexConstraintCtx) init(
 // corresponds to index column <offset>.
 func (c *indexConstraintCtx) isIndexColumn(nd opt.Expr, offset int) bool {
 	if v, ok := nd.(*memo.VariableExpr); ok && v.Col == c.columns[offset].ID() {
+		return true
+	}
+	if c.computedCols != nil && nd == c.computedCols[c.columns[offset].ID()] {
 		return true
 	}
 	return false
