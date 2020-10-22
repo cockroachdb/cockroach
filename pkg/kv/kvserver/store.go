@@ -850,6 +850,9 @@ func NewStore(
 	// Pebble's compaction picker is aware of range deletions and will account
 	// for them during compaction picking, so don't create a compactor for
 	// Pebble.
+	//
+	// TODO(bilal): Delete this and all compactor-related code, now that Pebble is
+	// the only storage engine.
 	if s.engine.Type() != enginepb.EngineTypePebble {
 		s.compactor = compactor.NewCompactor(
 			s.cfg.Settings,
@@ -2279,9 +2282,6 @@ func (s *Store) DB() *kv.DB { return s.cfg.DB }
 
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.cfg.Gossip }
-
-// Compactor accessor.
-func (s *Store) Compactor() *compactor.Compactor { return s.compactor }
 
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }

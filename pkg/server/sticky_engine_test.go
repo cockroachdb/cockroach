@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -27,20 +26,19 @@ func TestStickyEngines(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	engineType := enginepb.EngineTypeRocksDB
 	attrs := roachpb.Attributes{}
 	cacheSize := int64(1 << 20)
 
-	engine1, err := getOrCreateStickyInMemEngine(ctx, "engine1", engineType, attrs, cacheSize)
+	engine1, err := getOrCreateStickyInMemEngine(ctx, "engine1", attrs, cacheSize)
 	require.NoError(t, err)
 	require.False(t, engine1.Closed())
 
-	engine2, err := getOrCreateStickyInMemEngine(ctx, "engine2", engineType, attrs, cacheSize)
+	engine2, err := getOrCreateStickyInMemEngine(ctx, "engine2", attrs, cacheSize)
 	require.NoError(t, err)
 	require.False(t, engine2.Closed())
 
 	// Regetting the engine whilst it is not closed will fail.
-	_, err = getOrCreateStickyInMemEngine(ctx, "engine1", engineType, attrs, cacheSize)
+	_, err = getOrCreateStickyInMemEngine(ctx, "engine1", attrs, cacheSize)
 	require.EqualError(t, err, "sticky engine engine1 has not been closed")
 
 	// Close the engine, which allows it to be refetched.
@@ -49,7 +47,7 @@ func TestStickyEngines(t *testing.T) {
 	require.False(t, engine1.(*stickyInMemEngine).Engine.Closed())
 
 	// Refetching the engine should give back the same engine.
-	engine1Refetched, err := getOrCreateStickyInMemEngine(ctx, "engine1", engineType, attrs, cacheSize)
+	engine1Refetched, err := getOrCreateStickyInMemEngine(ctx, "engine1", attrs, cacheSize)
 	require.NoError(t, err)
 	require.Equal(t, engine1, engine1Refetched)
 	require.False(t, engine1.Closed())
@@ -64,7 +62,7 @@ func TestStickyEngines(t *testing.T) {
 	require.True(t, engine1.Closed())
 	require.True(t, engine1.(*stickyInMemEngine).Engine.Closed())
 
-	newEngine1, err := getOrCreateStickyInMemEngine(ctx, "engine1", engineType, attrs, cacheSize)
+	newEngine1, err := getOrCreateStickyInMemEngine(ctx, "engine1", attrs, cacheSize)
 	require.NoError(t, err)
 	require.NotEqual(t, engine1, newEngine1)
 
