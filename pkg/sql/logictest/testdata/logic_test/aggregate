@@ -2801,3 +2801,19 @@ FROM blog b, blog_properties p WHERE b.id = p.blog_id
 GROUP BY b.name
 ----
 {"Test Blog": {"Admin Email": "admin@email.com", "Application Name": "Twitter", "Blog Name": "Wordpress Blog", "KeepAlive": "true", "Session Timeout": "1000ms"}}
+
+# Regression test for incorrectly handling DISTINCT ordered aggregation in the
+# vectorized engine (#55776).
+statement ok
+CREATE TABLE t55776 (i INT8 PRIMARY KEY, y FLOAT8, x FLOAT8);
+INSERT INTO t55776 (i, y, x) VALUES
+  (1, 1.0, 1),
+  (2, 2.0, 2),
+  (3, 1.0, 2),
+  (4, 1.0, 2),
+  (5, 3.0, 2);
+
+query FI
+SELECT corr(DISTINCT y, x), count(DISTINCT y) FROM t55776
+----
+0.522232967867094 3
