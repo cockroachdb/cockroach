@@ -658,6 +658,9 @@ func runTPCHVec(
 	c.Start(ctx, t)
 
 	conn := c.Conn(ctx, 1)
+	// We will disable range merges in order to remove a possible source of
+	// random query latency spikes during perf runs.
+	disableRangeMerges(t, conn)
 	disableAutoStats(t, conn)
 	disableVectorizeRowCountThresholdHeuristic(t, conn)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
