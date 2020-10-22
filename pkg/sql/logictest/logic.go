@@ -2725,22 +2725,24 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			}
 			return errors.Newf("%s", buf.String())
 		}
-		if len(query.expectedResults) == 0 || len(actualResults) == 0 {
-			if len(query.expectedResults) != len(actualResults) {
-				return makeError()
-			}
-		} else {
-			for i, colT := range query.colTypes {
-				expected, actual := query.expectedResults[i], actualResults[i]
-				resultMatches := expected == actual
-				if !resultMatches && colT == 'F' {
+		if len(query.expectedResults) != len(actualResults) {
+			return makeError()
+		}
+		for i := range query.expectedResults {
+			expected, actual := query.expectedResults[i], actualResults[i]
+			resultMatches := expected == actual
+			// Results are flattened into columns for each row.
+			// To find the coltype for the given result, mod the result number
+			// by the number of coltypes.
+			colT := query.colTypes[i%len(query.colTypes)]
+			if !resultMatches {
+				if colT == 'F' {
 					var err error
 					resultMatches, err = floatsMatch(expected, actual)
 					if err != nil {
 						return errors.CombineErrors(makeError(), err)
 					}
-				}
-				if !resultMatches {
+				} else {
 					return makeError()
 				}
 			}
