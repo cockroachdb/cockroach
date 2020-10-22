@@ -59,26 +59,26 @@ func (a *defaultHashAgg) Compute(
 	// and not for the intermediate results of aggregation since the aggregate
 	// function itself does the latter.
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// We don't need to check whether sel is non-nil because the hash
-		// aggregator always uses non-nil sel to specify the tuples to be
-		// aggregated. Also, the hash aggregator converts the batch "sparsely",
-		// so converted values are at the same positions as the original ones.
-		var convertedTupleIdx int
-		for _, origTupleIdx := range sel[:inputLen] {
-			convertedTupleIdx = origTupleIdx
-			// Go around unused warning.
-			_ = origTupleIdx
-			// Note that the only function that takes no arguments is COUNT_ROWS, and
-			// it has an optimized implementation, so we don't need to check whether
-			// len(inputIdxs) is at least 1.
-			firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[convertedTupleIdx]
-			for j, colIdx := range inputIdxs[1:] {
-				a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[convertedTupleIdx]
-			}
-			if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
-				colexecerror.ExpectedError(err)
-			}
+		{
+			// We don't need to check whether sel is non-nil in case of the
+			// hash aggregator because it always uses non-nil sel to specify
+			// the tuples to be aggregated.
+			// Both aggregators convert the batch "sparsely" - without
+			// deselection - so converted values are at the same positions as
+			// the original ones.
+			for _, tupleIdx := range sel[:inputLen] {
+				// Note that the only function that takes no arguments is COUNT_ROWS, and
+				// it has an optimized implementation, so we don't need to check whether
+				// len(inputIdxs) is at least 1.
+				firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[tupleIdx]
+				for j, colIdx := range inputIdxs[1:] {
+					a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
+				}
+				if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
+					colexecerror.ExpectedError(err)
+				}
 
+			}
 		}
 	})
 }
