@@ -4,6 +4,7 @@ go_library(
     name = "schemachange",
     srcs = [
         "deck.go",
+        "error_code_set.go",
         "operation_generator.go",
         "optype_string.go",
         "schemachange.go",
