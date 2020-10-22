@@ -109,11 +109,12 @@ InitPut /Table/54/2/1/0/0 -> /BYTES/
 InitPut /Table/54/2/7/0/0 -> /BYTES/
 InitPut /Table/54/2/10/0/0 -> /BYTES/
 
-# Make sure that empty arrays do not emit any keys at all.
+# Make sure that empty arrays emit a key.
 query T kvtrace
 INSERT INTO e VALUES(1, ARRAY[])
 ----
 CPut /Table/54/1/1/0 -> /TUPLE/
+InitPut /Table/54/2/[]/1/0 -> /BYTES/
 
 # Make sure that NULL arrays do not emit any keys at all.
 query T kvtrace
@@ -144,6 +145,7 @@ query T kvtrace
 INSERT INTO f VALUES(1, ARRAY[])
 ----
 CPut /Table/55/1/1/0 -> /TUPLE/
+InitPut /Table/55/2/[]/1/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO f VALUES(2, NULL)

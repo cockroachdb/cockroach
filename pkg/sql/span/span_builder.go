@@ -186,7 +186,7 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 	return s.index.Unique && len(s.table.Families) > 1 &&
 		(s.index.ID == s.table.PrimaryIndex.ID ||
 			// Secondary index specific checks.
-			(s.index.Version == descpb.SecondaryIndexFamilyFormatVersion &&
+			(s.index.Version >= descpb.SecondaryIndexFamilyFormatVersion &&
 				!containsNull &&
 				len(s.index.StoreColumnIDs) > 0 &&
 				s.index.Type == descpb.IndexDescriptor_FORWARD)) &&
@@ -304,7 +304,7 @@ func (s *Builder) encodeConstraintKey(
 		}
 
 		if s.index.Type == descpb.IndexDescriptor_INVERTED {
-			keys, err := rowenc.EncodeInvertedIndexTableKeys(val, key)
+			keys, err := rowenc.EncodeInvertedIndexTableKeys(val, key, s.index.Version)
 			if err != nil {
 				return nil, false, err
 			}

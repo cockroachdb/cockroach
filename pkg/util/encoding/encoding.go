@@ -100,6 +100,8 @@ const (
 	box2DMarker            = arrayKeyDescendingMarker + 1
 	geoInvertedIndexMarker = box2DMarker + 1
 
+	emptyArray = geoInvertedIndexMarker + 1
+
 	arrayKeyTerminator           byte = 0x00
 	arrayKeyDescendingTerminator byte = 0xFF
 	// We use different null encodings for nulls within key arrays.
@@ -768,6 +770,11 @@ func AddJSONPathTerminator(b []byte) []byte {
 // EncodeJSONEmptyObject returns a byte array b with a byte to signify an empty JSON object.
 func EncodeJSONEmptyObject(b []byte) []byte {
 	return append(b, escape, escapedTerm, jsonEmptyObject)
+}
+
+// EncodeEmptyArray returns a byte array b with a byte to signify an empty array.
+func EncodeEmptyArray(b []byte) []byte {
+	return append(b, emptyArray)
 }
 
 // EncodeStringDescending is the descending version of EncodeStringAscending.
@@ -1725,7 +1732,8 @@ func PeekLength(b []byte) (int, error) {
 	m := b[0]
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
-		floatNaN, floatNaNDesc, floatZero, decimalZero, byte(True), byte(False):
+		floatNaN, floatNaNDesc, floatZero, decimalZero, byte(True), byte(False),
+		emptyArray:
 		// interleavedSentinel also falls into this path. Since it
 		// contains the same byte value as encodedNotNullDesc, it
 		// cannot be included explicitly in the case statement.
@@ -2076,6 +2084,8 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 				return b[1:], "[]", nil
 			case jsonEmptyObject:
 				return b[1:], "{}", nil
+			case emptyArray:
+				return b[1:], "[]", nil
 			}
 		}
 		// This shouldn't ever happen, but if it does, return an empty slice.

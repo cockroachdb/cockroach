@@ -100,6 +100,10 @@ const (
 	// SecondaryIndexFamilyFormatVersion corresponds to the encoding of secondary indexes that
 	// use table level column family definitions.
 	SecondaryIndexFamilyFormatVersion
+	// EmptyArraysInInvertedIndexesVersion corresponds to the encoding of secondary indexes
+	// that is identical to SecondaryIndexFamilyFormatVersion, but also includes a key encoding
+	// for empty arrays in array inverted indexes.
+	EmptyArraysInInvertedIndexesVersion
 )
 
 // ColumnID is a custom type for ColumnDescriptor IDs.

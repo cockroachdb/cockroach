@@ -13,6 +13,7 @@ package cat
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -227,6 +228,9 @@ type Index interface {
 	// GeoConfig returns a geospatial index configuration. If non-nil, it
 	// describes the configuration for this geospatial inverted index.
 	GeoConfig() *geoindex.Config
+
+	// Version returns the IndexDescriptorVersion of the index.
+	Version() descpb.IndexDescriptorVersion
 }
 
 // IndexColumn describes a single column that is part of an index definition.

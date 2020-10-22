@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -930,6 +931,11 @@ func (ti *Index) InterleavedBy(i int) (table, index cat.StableID) {
 // GeoConfig is part of the cat.Index interface.
 func (ti *Index) GeoConfig() *geoindex.Config {
 	return ti.geoConfig
+}
+
+// Version is part of the cat.Index interface.
+func (ti *Index) Version() descpb.IndexDescriptorVersion {
+	return descpb.EmptyArraysInInvertedIndexesVersion
 }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.
