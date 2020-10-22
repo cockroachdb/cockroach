@@ -14,6 +14,7 @@ option go_package = "serverpb";
 
 import "config/zonepb/zone.proto";
 import "jobs/jobspb/jobs.proto";
+import "roachpb/metadata.proto";
 import "server/serverpb/status.proto";
 import "storage/enginepb/mvcc.proto";
 import "kv/kvserver/kvserverpb/liveness.proto";
@@ -455,6 +456,57 @@ message DecommissionStatusResponse {
   repeated Status status = 2 [(gogoproto.nullable) = false];
 }
 
+// TODO(irfansharif): Should all these definitions for the orchestrator process
+// sit in a new server entirely? They're pretty self contained. We've only
+// dumped them into the admin server out of laziness.
+
+// AckClusterVersionRequest is used to inform the target node of a cluster
+// version bump. The target node is responsible for durably persisting the
+// message and enabling the corresponding version gates.
+//
+// TODO(irfansharif): Implement custom stringer method for these.
+message AckClusterVersionRequest {
+  roachpb.Version version = 1;
+}
+
+// AckClusterVersionResponse is the response to an AckClusterVersionRequest.
+message AckClusterVersionResponse { }
+
+// An EveryNodeRequestUnion contains exactly one of the requests. The values
+// added here must match those in EveryNodeResponseUnion.
+message EveryNodeRequestUnion {
+  oneof value {
+    AckClusterVersionRequest ack_cluster_version = 1;
+  }
+}
+
+// An EveryNodeResponseUnion contains exactly one of the responses. The values
+// added here must match those in EveryNodeRequestUnion.
+message EveryNodeResponseUnion {
+  oneof value {
+    AckClusterVersionResponse ack_cluster_version = 1;
+  }
+}
+
+// An EveryNodeRequest contains a single request from the list defined in
+// EveryNodeRequestUnion. These requests will power the long running migrations
+// process where the orchestrator of these long running migrations may need to
+// run arbitrary operations across every node in the cluster (depending on the
+// specific migration being executed). One such example is the orchestrator
+// wanting to inform every node in the cluster that a certain cluster version is
+// now active, and that each node should enable the relevant version gates
+// corresponding to said version.
+//
+// TODO(irfansharif): Actually use these as outlined above.
+message EveryNodeRequest {
+  EveryNodeRequestUnion request = 1 [(gogoproto.nullable) = false];
+}
+
+// EveryNodeResponse is the response to an EveryNodeRequest.
+message EveryNodeResponse {
+  EveryNodeResponseUnion response = 1 [(gogoproto.nullable) = false];
+}
+
 // SettingsRequest inquires what are the current settings in the cluster.
 message SettingsRequest {
   // The array of setting names to retrieve.
@@ -862,6 +914,12 @@ service Admin {
   // If this ever becomes exposed via HTTP, ensure that it performs
   // authorization. See #42567.
   rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
+  }
+
+  // EveryNode is an RPC that powers the long running migrations infrastructure,
+  // and lets callers define and execute arbitrary commands across every node in
+  // the cluster. See comments above EveryNodeRequest for additional details.
+  rpc EveryNode(EveryNodeRequest) returns (EveryNodeResponse) {
   }
 
   // DecommissionStatus retrieves the decommissioning status of the specified nodes.

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1745,6 +1746,55 @@ func (s *adminServer) Decommission(
 		return nil, err
 	}
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
+}
+
+// EveryNode is an RPC that powers the long running migrations infrastructure,
+// and lets callers define and execute arbitrary commands across every node in
+// the cluster.
+//
+// TODO(irfansharif): Right now this isn't hooked up to anything. We'll
+// eventually want to rely on EveryNode(op=AckClusterVersion) to be the
+// mechanism through which we propagate cluster version bumps.
+func (s *adminServer) EveryNode(
+	ctx context.Context, req *serverpb.EveryNodeRequest,
+) (*serverpb.EveryNodeResponse, error) {
+	// TODO(irfansharif): We should write up something similar to the code
+	// generator for roachpb/batch_generated.go. Ditto for the response, this is
+	// pretty unwieldy to write by hand. Right now we're unconditionally pulling
+	// out the AckPendingVersion request, seeing as how it's the only one
+	// defined.
+	ackReq := req.Request.GetAckClusterVersion()
+	if ackReq == nil {
+		return nil, errors.Newf("unsupported req=%s", req.Request)
+	}
+
+	prevCV, err := kvserver.SynthesizeClusterVersionFromEngines(
+		ctx, s.server.engines, s.server.ClusterSettings().Version.BinaryVersion(),
+		s.server.ClusterSettings().Version.BinaryMinSupportedVersion(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Infof(ctx, "received op=ack-cluster-version, args=%s, prev=%s", ackReq.Version, prevCV.Version)
+
+	if prevCV.Version.Less(*ackReq.Version) {
+		cv := clusterversion.ClusterVersion{Version: *ackReq.Version}
+		if err := kvserver.WriteClusterVersionToEngines(ctx, s.server.engines, cv); err != nil {
+			return nil, err
+		}
+
+		// TODO(irfansharif): We'll eventually want to bump the local version
+		// gate here. On 21.1 nodes we'll no longer be using gossip to propagate
+		// cluster version bumps. We'll still have probably disseminate it
+		// through gossip (do we actually have to?), but we won't listen to it.
+		//
+		//  _ = s.server.ClusterSettings().<...>.Set(ctx, ackReq.Version)
+	}
+
+	ackResp := &serverpb.AckClusterVersionResponse{}
+	ackRespU := &serverpb.EveryNodeResponseUnion_AckClusterVersion{AckClusterVersion: ackResp}
+	return &serverpb.EveryNodeResponse{Response: serverpb.EveryNodeResponseUnion{Value: ackRespU}}, nil
 }
 
 // DataDistribution returns a count of replicas on each node for each table.
