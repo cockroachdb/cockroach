@@ -128,6 +128,48 @@ type Iterator interface {
 	SupportsPrev() bool
 }
 
+// EngineIterator is an iterator over key-value pairs where the key is
+// an EngineKey.
+//lint:ignore U1001 unused
+type EngineIterator interface {
+	// Close frees up resources held by the iterator.
+	Close()
+	// Valid must be called after any call to Seek(), Next(), Prev(), or
+	// similar methods. It returns (true, nil) if the iterator points to
+	// a valid key (it is undefined to call Key(), Value(), or similar
+	// methods unless Valid() has returned (true, nil)). It returns
+	// (false, nil) if the iterator has moved past the end of the valid
+	// range, or (false, err) if an error has occurred. Valid() will
+	// never return true with a non-nil error.
+	Valid() (bool, error)
+	// UnsafeKey returns the same value as Key, but the memory is invalidated on
+	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	UnsafeKey() EngineKey
+	// UnsafeValue returns the same value as Value, but the memory is
+	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	UnsafeValue() []byte
+	// Key returns the current key.
+	Key() MVCCKey
+	// Value returns the current value as a byte slice.
+	Value() []byte
+	// SeekGE advances the iterator to the first key in the engine which
+	// is >= the provided key.
+	SeekGE(key EngineKey)
+	// SeekLT advances the iterator to the first key in the engine which
+	// is < the provided key.
+	SeekLT(key EngineKey)
+	// Next advances the iterator to the next key/value in the
+	// iteration. After this call, Valid() will be true if the
+	// iterator was not positioned at the last key.
+	Next()
+	// Prev moves the iterator backward to the previous key/value
+	// in the iteration. After this call, Valid() will be true if the
+	// iterator was not positioned at the first key.
+	Prev()
+	// SetUpperBound installs a new upper bound for this iterator.
+	SetUpperBound(roachpb.Key)
+}
+
 // MVCCIterator is an interface that extends Iterator and provides concrete
 // implementations for MVCCGet and MVCCScan operations. It is used by instances
 // of the interface backed by RocksDB iterators to avoid cgo hops.
