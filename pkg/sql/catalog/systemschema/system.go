@@ -352,7 +352,7 @@ func pk(name string) descpb.IndexDescriptor {
 		ColumnNames:      []string{name},
 		ColumnDirections: singleASC,
 		ColumnIDs:        singleID1,
-		Version:          descpb.SecondaryIndexFamilyFormatVersion,
+		Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 	}
 }
 
@@ -416,7 +416,7 @@ var (
 			ColumnNames:      []string{"parentID", "name"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -462,7 +462,7 @@ var (
 			ColumnNames:      []string{"parentID", "parentSchemaID", "name"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2, 3},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -557,7 +557,7 @@ var (
 			ColumnNames:      []string{"id"},
 			ColumnDirections: singleASC,
 			ColumnIDs:        []descpb.ColumnID{keys.ZonesTablePrimaryIndexID},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextFamilyID: 3,
 		NextIndexID:  2,
@@ -697,7 +697,7 @@ var (
 			ColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2, 4, 3},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextFamilyID: 1,
 		NextIndexID:  2,
@@ -739,7 +739,7 @@ var (
 			ColumnNames:      []string{"timestamp", "uniqueID"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 6},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextFamilyID: 6,
 		NextIndexID:  2,
@@ -783,7 +783,7 @@ var (
 			ColumnNames:      []string{"timestamp", "uniqueID"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 7},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextFamilyID: 7,
 		NextIndexID:  2,
@@ -877,7 +877,7 @@ var (
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				ColumnIDs:        []descpb.ColumnID{2, 3},
 				ExtraColumnIDs:   []descpb.ColumnID{1},
-				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 			},
 			{
 				Name:             "jobs_created_by_type_created_by_id_idx",
@@ -889,7 +889,7 @@ var (
 				StoreColumnIDs:   []descpb.ColumnID{2},
 				StoreColumnNames: []string{"status"},
 				ExtraColumnIDs:   []descpb.ColumnID{1},
-				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 			},
 		},
 		NextIndexID: 4,
@@ -945,7 +945,7 @@ var (
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				ColumnIDs:        []descpb.ColumnID{5},
 				ExtraColumnIDs:   []descpb.ColumnID{1},
-				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 			},
 			{
 				Name:             "web_sessions_createdAt_idx",
@@ -955,7 +955,7 @@ var (
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				ColumnIDs:        []descpb.ColumnID{4},
 				ExtraColumnIDs:   []descpb.ColumnID{1},
-				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 			},
 		},
 		NextIndexID: 4,
@@ -1010,7 +1010,7 @@ var (
 			ColumnNames:      []string{"tableID", "statisticID"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1051,7 +1051,7 @@ var (
 			ColumnNames:      []string{"localityKey", "localityValue"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1096,7 +1096,7 @@ var (
 			ColumnNames:      []string{"role", "member"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		Indexes: []descpb.IndexDescriptor{
 			{
@@ -1107,7 +1107,7 @@ var (
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				ColumnIDs:        []descpb.ColumnID{1},
 				ExtraColumnIDs:   []descpb.ColumnID{2},
-				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 			},
 			{
 				Name:             "role_members_member_idx",
@@ -1117,7 +1117,7 @@ var (
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				ColumnIDs:        []descpb.ColumnID{2},
 				ExtraColumnIDs:   []descpb.ColumnID{1},
-				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 			},
 		},
 		NextIndexID: 4,
@@ -1153,7 +1153,7 @@ var (
 			ColumnNames:      []string{"type", "object_id", "sub_id"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2, 3},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: newCommentPrivilegeDescriptor(
@@ -1191,7 +1191,7 @@ var (
 				descpb.IndexDescriptor_ASC,
 			},
 			ColumnIDs: []descpb.ColumnID{1},
-			Version:   descpb.SecondaryIndexFamilyFormatVersion,
+			Version:   descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1246,7 +1246,7 @@ var (
 				descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
 			},
 			ColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
-			Version:   descpb.SecondaryIndexFamilyFormatVersion,
+			Version:   descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1296,7 +1296,7 @@ var (
 				descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
 			},
 			ColumnIDs: []descpb.ColumnID{1, 2, 3},
-			Version:   descpb.SecondaryIndexFamilyFormatVersion,
+			Version:   descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1349,7 +1349,7 @@ var (
 			ColumnNames:      []string{"zone_id", "subzone_id"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1395,7 +1395,7 @@ var (
 		PrimaryIndex: descpb.IndexDescriptor{
 			Name:        "primary",
 			ID:          1,
-			Version:     1,
+			Version:     descpb.EmptyArraysInInvertedIndexesVersion,
 			Unique:      true,
 			ColumnNames: []string{"singleton"},
 			ColumnIDs:   []descpb.ColumnID{1},
@@ -1437,7 +1437,7 @@ var (
 		PrimaryIndex: descpb.IndexDescriptor{
 			Name:        "primary",
 			ID:          1,
-			Version:     1,
+			Version:     descpb.EmptyArraysInInvertedIndexesVersion,
 			Unique:      true,
 			ColumnNames: []string{"id"},
 			ColumnIDs:   []descpb.ColumnID{1},
@@ -1481,7 +1481,7 @@ var (
 			ColumnNames:      []string{"username", "option"},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			ColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1554,7 +1554,7 @@ var (
 				ColumnIDs:        []descpb.ColumnID{2, 1},
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				StoreColumnIDs:   []descpb.ColumnID{3},
-				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 			},
 		},
 		NextIndexID: 3,
@@ -1645,7 +1645,7 @@ var (
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				ColumnIDs:        []descpb.ColumnID{5},
 				ExtraColumnIDs:   []descpb.ColumnID{1},
-				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
 			},
 		},
 		NextIndexID: 3,
