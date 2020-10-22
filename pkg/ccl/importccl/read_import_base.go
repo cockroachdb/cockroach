@@ -345,6 +345,18 @@ type inputConverter interface {
 		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user string) error
 }
 
+// formatHasNamedColumns returns true if the data in the input files can be
+// mapped specifically to a particular data column.
+func formatHasNamedColumns(format roachpb.IOFileFormat_FileFormat) bool {
+	switch format {
+	case roachpb.IOFileFormat_Avro,
+		roachpb.IOFileFormat_Mysqldump,
+		roachpb.IOFileFormat_PgDump:
+		return true
+	}
+	return false
+}
+
 func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
 	switch format {
 	case roachpb.IOFileFormat_Mysqldump,
