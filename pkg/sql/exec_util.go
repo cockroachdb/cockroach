@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -58,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -303,9 +303,9 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"default vectorize mode",
 	"on",
 	map[int64]string{
-		int64(sessiondata.VectorizeOff):     "off",
-		int64(sessiondata.Vectorize201Auto): "201auto",
-		int64(sessiondata.VectorizeOn):      "on",
+		int64(sessiondatapb.VectorizeOff):     "off",
+		int64(sessiondatapb.Vectorize201Auto): "201auto",
+		int64(sessiondatapb.VectorizeOn):      "on",
 	},
 )
 
@@ -1997,12 +1997,12 @@ func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.paramStatusUpdater.BufferParamStatusUpdate("application_name", appName)
 }
 
-func (m *sessionDataMutator) SetBytesEncodeFormat(val lex.BytesEncodeFormat) {
-	m.data.DataConversion.BytesEncodeFormat = val
+func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondatapb.BytesEncodeFormat) {
+	m.data.DataConversionConfig.BytesEncodeFormat = val
 }
 
-func (m *sessionDataMutator) SetExtraFloatDigits(val int) {
-	m.data.DataConversion.ExtraFloatDigits = val
+func (m *sessionDataMutator) SetExtraFloatDigits(val int32) {
+	m.data.DataConversionConfig.ExtraFloatDigits = val
 }
 
 func (m *sessionDataMutator) SetDatabase(dbName string) {
@@ -2021,7 +2021,7 @@ func (m *sessionDataMutator) SetTemporarySchemaIDForDatabase(dbID uint32, tempSc
 	m.data.DatabaseIDToTempSchemaID[dbID] = tempSchemaID
 }
 
-func (m *sessionDataMutator) SetDefaultIntSize(size int) {
+func (m *sessionDataMutator) SetDefaultIntSize(size int32) {
 	m.data.DefaultIntSize = size
 }
 
@@ -2071,7 +2071,7 @@ func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
 	m.data.ReorderJoinsLimit = val
 }
 
-func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
+func (m *sessionDataMutator) SetVectorize(val sessiondatapb.VectorizeExecMode) {
 	m.data.VectorizeMode = val
 }
 
@@ -2120,7 +2120,7 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 }
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
-	m.data.DataConversion.Location = loc
+	m.data.Location = loc
 	m.paramStatusUpdater.BufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
 }
 

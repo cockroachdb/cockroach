@@ -12,6 +12,7 @@ package pgwire
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -19,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -46,8 +47,9 @@ const (
 type commandResult struct {
 	// conn is the parent connection of this commandResult.
 	conn *conn
-	// conv indicates the conversion settings for SQL values.
-	conv sessiondata.DataConversionConfig
+	// conv and location indicate the conversion settings for SQL values.
+	conv     sessiondatapb.DataConversionConfig
+	location *time.Location
 	// pos identifies the position of the command within the connection.
 	pos sql.CmdPos
 
@@ -201,7 +203,7 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	}
 	r.rowsAffected++
 
-	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.types)
+	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.location, r.types)
 	var err error
 	if r.bufferingDisabled {
 		err = r.conn.Flush(r.pos)
@@ -325,7 +327,8 @@ func (c *conn) newCommandResult(
 	pos sql.CmdPos,
 	stmt tree.Statement,
 	formatCodes []pgwirebase.FormatCode,
-	conv sessiondata.DataConversionConfig,
+	conv sessiondatapb.DataConversionConfig,
+	location *time.Location,
 	limit int,
 	portalName string,
 	implicitTxn bool,
@@ -334,6 +337,7 @@ func (c *conn) newCommandResult(
 	*r = commandResult{
 		conn:           c,
 		conv:           conv,
+		location:       location,
 		pos:            pos,
 		typ:            commandComplete,
 		cmdCompleteTag: stmt.StatementTag(),

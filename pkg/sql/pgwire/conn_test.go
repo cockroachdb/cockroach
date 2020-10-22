@@ -29,12 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -547,11 +547,10 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	return pgwireConn, nil
 }
 
-func makeTestingConvCfg() sessiondata.DataConversionConfig {
-	return sessiondata.DataConversionConfig{
-		Location:          time.UTC,
-		BytesEncodeFormat: lex.BytesEncodeHex,
-	}
+func makeTestingConvCfg() (sessiondatapb.DataConversionConfig, *time.Location) {
+	return sessiondatapb.DataConversionConfig{
+		BytesEncodeFormat: sessiondatapb.BytesEncodeHex,
+	}, time.UTC
 }
 
 // sendResult serializes a set of rows in pgwire format and sends them on a
@@ -566,12 +565,12 @@ func sendResult(
 		return err
 	}
 
-	defaultConv := makeTestingConvCfg()
+	defaultConv, defaultLoc := makeTestingConvCfg()
 	for _, row := range rows {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 		c.msgBuilder.putInt16(int16(len(row)))
 		for i, col := range row {
-			c.msgBuilder.writeTextDatum(ctx, col, defaultConv, cols[i].Typ)
+			c.msgBuilder.writeTextDatum(ctx, col, defaultConv, defaultLoc, cols[i].Typ)
 		}
 
 		if err := c.msgBuilder.finishMsg(c.conn); err != nil {

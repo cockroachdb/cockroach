@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -434,18 +435,13 @@ type ConnectionHandler struct {
 // GetUnqualifiedIntSize implements pgwire.sessionDataProvider and returns
 // the type that INT should be parsed as.
 func (h ConnectionHandler) GetUnqualifiedIntSize() *types.T {
-	var size int
+	var size int32
 	if h.ex != nil {
 		// The executor will be nil in certain testing situations where
 		// no server is actually present.
 		size = h.ex.sessionData.DefaultIntSize
 	}
-	switch size {
-	case 4, 32:
-		return types.Int4
-	default:
-		return types.Int
-	}
+	return parser.NakedIntTypeFromDefaultIntSize(size)
 }
 
 // GetParamStatus retrieves the configured value of the session
@@ -484,9 +480,13 @@ func (s *Server) ServeConn(
 // newSessionData a SessionData that can be passed to newConnExecutor.
 func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
-		User:              args.User,
-		RemoteAddr:        args.RemoteAddr,
-		ResultsBufferSize: args.ConnResultsBufferSize,
+		SessionData: sessiondatapb.SessionData{
+			User: args.User,
+		},
+		LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+			RemoteAddr:        args.RemoteAddr,
+			ResultsBufferSize: args.ConnResultsBufferSize,
+		},
 	}
 	s.populateMinimalSessionData(sd)
 	return sd
@@ -509,10 +509,8 @@ func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
 	if sd.SequenceState == nil {
 		sd.SequenceState = sessiondata.NewSequenceState()
 	}
-	if sd.DataConversion == (sessiondata.DataConversionConfig{}) {
-		sd.DataConversion = sessiondata.DataConversionConfig{
-			Location: time.UTC,
-		}
+	if sd.Location == nil {
+		sd.Location = time.UTC
 	}
 	if len(sd.SearchPath.GetPathArray()) == 0 {
 		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User)
@@ -1431,7 +1429,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				NeedRowDesc,
 				pos,
 				nil, /* formatCodes */
-				ex.sessionData.DataConversion,
+				ex.sessionData.DataConversionConfig,
+				ex.sessionData.GetLocation(),
 				0,  /* limit */
 				"", /* portalName */
 				ex.implicitTxn(),
@@ -1502,7 +1501,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				// needed.
 				DontNeedRowDesc,
 				pos, portal.OutFormats,
-				ex.sessionData.DataConversion,
+				ex.sessionData.DataConversionConfig,
+				ex.sessionData.GetLocation(),
 				tcmd.Limit,
 				portalName,
 				ex.implicitTxn(),
