@@ -65,7 +65,7 @@ func (x StacksType) String() string {
 	return proto.EnumName(StacksType_name, int32(x))
 }
 func (StacksType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{0}
 }
 
 // Represents the type of file.
@@ -92,7 +92,7 @@ func (x FileType) String() string {
 	return proto.EnumName(FileType_name, int32(x))
 }
 func (FileType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{1}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{1}
 }
 
 // We use an enum to allow reporting of client certs and potential others (eg:
@@ -129,7 +129,7 @@ func (x CertificateDetails_CertificateType) String() string {
 	return proto.EnumName(CertificateDetails_CertificateType_name, int32(x))
 }
 func (CertificateDetails_CertificateType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{1, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{1, 0}
 }
 
 type ProfileRequest_Type int32
@@ -152,7 +152,7 @@ func (x ProfileRequest_Type) String() string {
 	return proto.EnumName(ProfileRequest_Type_name, int32(x))
 }
 func (ProfileRequest_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{37, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{37, 0}
 }
 
 // Enum for phase of execution.
@@ -176,7 +176,7 @@ func (x ActiveQuery_Phase) String() string {
 	return proto.EnumName(ActiveQuery_Phase_name, int32(x))
 }
 func (ActiveQuery_Phase) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{45, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{45, 0}
 }
 
 type CertificatesRequest struct {
@@ -189,7 +189,7 @@ func (m *CertificatesRequest) Reset()         { *m = CertificatesRequest{} }
 func (m *CertificatesRequest) String() string { return proto.CompactTextString(m) }
 func (*CertificatesRequest) ProtoMessage()    {}
 func (*CertificatesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{0}
 }
 func (m *CertificatesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -228,7 +228,7 @@ func (m *CertificateDetails) Reset()         { *m = CertificateDetails{} }
 func (m *CertificateDetails) String() string { return proto.CompactTextString(m) }
 func (*CertificateDetails) ProtoMessage()    {}
 func (*CertificateDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{1}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{1}
 }
 func (m *CertificateDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -269,7 +269,7 @@ func (m *CertificateDetails_Fields) Reset()         { *m = CertificateDetails_Fi
 func (m *CertificateDetails_Fields) String() string { return proto.CompactTextString(m) }
 func (*CertificateDetails_Fields) ProtoMessage()    {}
 func (*CertificateDetails_Fields) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{1, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{1, 0}
 }
 func (m *CertificateDetails_Fields) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -302,7 +302,7 @@ func (m *CertificatesResponse) Reset()         { *m = CertificatesResponse{} }
 func (m *CertificatesResponse) String() string { return proto.CompactTextString(m) }
 func (*CertificatesResponse) ProtoMessage()    {}
 func (*CertificatesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{2}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{2}
 }
 func (m *CertificatesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -339,7 +339,7 @@ func (m *DetailsRequest) Reset()         { *m = DetailsRequest{} }
 func (m *DetailsRequest) String() string { return proto.CompactTextString(m) }
 func (*DetailsRequest) ProtoMessage()    {}
 func (*DetailsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{3}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{3}
 }
 func (m *DetailsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -376,7 +376,7 @@ func (m *SystemInfo) Reset()         { *m = SystemInfo{} }
 func (m *SystemInfo) String() string { return proto.CompactTextString(m) }
 func (*SystemInfo) ProtoMessage()    {}
 func (*SystemInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{4}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{4}
 }
 func (m *SystemInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -413,7 +413,7 @@ func (m *DetailsResponse) Reset()         { *m = DetailsResponse{} }
 func (m *DetailsResponse) String() string { return proto.CompactTextString(m) }
 func (*DetailsResponse) ProtoMessage()    {}
 func (*DetailsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{5}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{5}
 }
 func (m *DetailsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -438,6 +438,9 @@ func (m *DetailsResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DetailsResponse proto.InternalMessageInfo
 
+// NodesRequest requests a copy of the node information as known to gossip
+// and the KV layer.
+// API: PUBLIC ALPHA
 type NodesRequest struct {
 }
 
@@ -445,7 +448,7 @@ func (m *NodesRequest) Reset()         { *m = NodesRequest{} }
 func (m *NodesRequest) String() string { return proto.CompactTextString(m) }
 func (*NodesRequest) ProtoMessage()    {}
 func (*NodesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{6}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{6}
 }
 func (m *NodesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -470,8 +473,12 @@ func (m *NodesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_NodesRequest proto.InternalMessageInfo
 
+// NodesResponse describe the nodes in the cluster.
 type NodesResponse struct {
-	Nodes            []statuspb.NodeStatus                                                                 `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes"`
+	// nodes carries the status payloads for all nodes in the cluster.
+	// API: PUBLIC ALPHA
+	Nodes []statuspb.NodeStatus `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes"`
+	// liveness_by_node_id maps each node ID to a liveness status.
 	LivenessByNodeID map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]kvserverpb.NodeLivenessStatus `protobuf:"bytes,2,rep,name=liveness_by_node_id,json=livenessByNodeId,proto3,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"liveness_by_node_id" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=cockroach.kv.kvserver.storagepb.NodeLivenessStatus"`
 }
 
@@ -479,7 +486,7 @@ func (m *NodesResponse) Reset()         { *m = NodesResponse{} }
 func (m *NodesResponse) String() string { return proto.CompactTextString(m) }
 func (*NodesResponse) ProtoMessage()    {}
 func (*NodesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{7}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{7}
 }
 func (m *NodesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -514,7 +521,7 @@ func (m *NodeRequest) Reset()         { *m = NodeRequest{} }
 func (m *NodeRequest) String() string { return proto.CompactTextString(m) }
 func (*NodeRequest) ProtoMessage()    {}
 func (*NodeRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{8}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{8}
 }
 func (m *NodeRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -559,7 +566,7 @@ func (m *RaftState) Reset()         { *m = RaftState{} }
 func (m *RaftState) String() string { return proto.CompactTextString(m) }
 func (*RaftState) ProtoMessage()    {}
 func (*RaftState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{9}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{9}
 }
 func (m *RaftState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -596,7 +603,7 @@ func (m *RaftState_Progress) Reset()         { *m = RaftState_Progress{} }
 func (m *RaftState_Progress) String() string { return proto.CompactTextString(m) }
 func (*RaftState_Progress) ProtoMessage()    {}
 func (*RaftState_Progress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{9, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{9, 0}
 }
 func (m *RaftState_Progress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -641,7 +648,7 @@ func (m *RangeProblems) Reset()         { *m = RangeProblems{} }
 func (m *RangeProblems) String() string { return proto.CompactTextString(m) }
 func (*RangeProblems) ProtoMessage()    {}
 func (*RangeProblems) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{10}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{10}
 }
 func (m *RangeProblems) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -677,7 +684,7 @@ func (m *RangeStatistics) Reset()         { *m = RangeStatistics{} }
 func (m *RangeStatistics) String() string { return proto.CompactTextString(m) }
 func (*RangeStatistics) ProtoMessage()    {}
 func (*RangeStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{11}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{11}
 }
 func (m *RangeStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -711,7 +718,7 @@ func (m *PrettySpan) Reset()         { *m = PrettySpan{} }
 func (m *PrettySpan) String() string { return proto.CompactTextString(m) }
 func (*PrettySpan) ProtoMessage()    {}
 func (*PrettySpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{12}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{12}
 }
 func (m *PrettySpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -757,7 +764,7 @@ func (m *RangeInfo) Reset()         { *m = RangeInfo{} }
 func (m *RangeInfo) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo) ProtoMessage()    {}
 func (*RangeInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{13}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{13}
 }
 func (m *RangeInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -793,7 +800,7 @@ func (m *RangesRequest) Reset()         { *m = RangesRequest{} }
 func (m *RangesRequest) String() string { return proto.CompactTextString(m) }
 func (*RangesRequest) ProtoMessage()    {}
 func (*RangesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{14}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{14}
 }
 func (m *RangesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -826,7 +833,7 @@ func (m *RangesResponse) Reset()         { *m = RangesResponse{} }
 func (m *RangesResponse) String() string { return proto.CompactTextString(m) }
 func (*RangesResponse) ProtoMessage()    {}
 func (*RangesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{15}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{15}
 }
 func (m *RangesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -861,7 +868,7 @@ func (m *GossipRequest) Reset()         { *m = GossipRequest{} }
 func (m *GossipRequest) String() string { return proto.CompactTextString(m) }
 func (*GossipRequest) ProtoMessage()    {}
 func (*GossipRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{16}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{16}
 }
 func (m *GossipRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -896,7 +903,7 @@ func (m *EngineStatsInfo) Reset()         { *m = EngineStatsInfo{} }
 func (m *EngineStatsInfo) String() string { return proto.CompactTextString(m) }
 func (*EngineStatsInfo) ProtoMessage()    {}
 func (*EngineStatsInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{17}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{17}
 }
 func (m *EngineStatsInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -931,7 +938,7 @@ func (m *EngineStatsRequest) Reset()         { *m = EngineStatsRequest{} }
 func (m *EngineStatsRequest) String() string { return proto.CompactTextString(m) }
 func (*EngineStatsRequest) ProtoMessage()    {}
 func (*EngineStatsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{18}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{18}
 }
 func (m *EngineStatsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -964,7 +971,7 @@ func (m *EngineStatsResponse) Reset()         { *m = EngineStatsResponse{} }
 func (m *EngineStatsResponse) String() string { return proto.CompactTextString(m) }
 func (*EngineStatsResponse) ProtoMessage()    {}
 func (*EngineStatsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{19}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{19}
 }
 func (m *EngineStatsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -998,7 +1005,7 @@ func (m *TraceEvent) Reset()         { *m = TraceEvent{} }
 func (m *TraceEvent) String() string { return proto.CompactTextString(m) }
 func (*TraceEvent) ProtoMessage()    {}
 func (*TraceEvent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{20}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{20}
 }
 func (m *TraceEvent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1032,7 +1039,7 @@ func (m *AllocatorDryRun) Reset()         { *m = AllocatorDryRun{} }
 func (m *AllocatorDryRun) String() string { return proto.CompactTextString(m) }
 func (*AllocatorDryRun) ProtoMessage()    {}
 func (*AllocatorDryRun) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{21}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{21}
 }
 func (m *AllocatorDryRun) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1065,7 +1072,7 @@ func (m *AllocatorRangeRequest) Reset()         { *m = AllocatorRangeRequest{} }
 func (m *AllocatorRangeRequest) String() string { return proto.CompactTextString(m) }
 func (*AllocatorRangeRequest) ProtoMessage()    {}
 func (*AllocatorRangeRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{22}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{22}
 }
 func (m *AllocatorRangeRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1101,7 +1108,7 @@ func (m *AllocatorRangeResponse) Reset()         { *m = AllocatorRangeResponse{}
 func (m *AllocatorRangeResponse) String() string { return proto.CompactTextString(m) }
 func (*AllocatorRangeResponse) ProtoMessage()    {}
 func (*AllocatorRangeResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{23}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{23}
 }
 func (m *AllocatorRangeResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1135,7 +1142,7 @@ func (m *AllocatorRequest) Reset()         { *m = AllocatorRequest{} }
 func (m *AllocatorRequest) String() string { return proto.CompactTextString(m) }
 func (*AllocatorRequest) ProtoMessage()    {}
 func (*AllocatorRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{24}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{24}
 }
 func (m *AllocatorRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1168,7 +1175,7 @@ func (m *AllocatorResponse) Reset()         { *m = AllocatorResponse{} }
 func (m *AllocatorResponse) String() string { return proto.CompactTextString(m) }
 func (*AllocatorResponse) ProtoMessage()    {}
 func (*AllocatorResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{25}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{25}
 }
 func (m *AllocatorResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1201,7 +1208,7 @@ func (m *JSONResponse) Reset()         { *m = JSONResponse{} }
 func (m *JSONResponse) String() string { return proto.CompactTextString(m) }
 func (*JSONResponse) ProtoMessage()    {}
 func (*JSONResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{26}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{26}
 }
 func (m *JSONResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1237,7 +1244,7 @@ func (m *ResponseError) Reset()         { *m = ResponseError{} }
 func (m *ResponseError) String() string { return proto.CompactTextString(m) }
 func (*ResponseError) ProtoMessage()    {}
 func (*ResponseError) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{27}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{27}
 }
 func (m *ResponseError) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1289,7 +1296,7 @@ func (m *LogsRequest) Reset()         { *m = LogsRequest{} }
 func (m *LogsRequest) String() string { return proto.CompactTextString(m) }
 func (*LogsRequest) ProtoMessage()    {}
 func (*LogsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{28}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{28}
 }
 func (m *LogsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1322,7 +1329,7 @@ func (m *LogEntriesResponse) Reset()         { *m = LogEntriesResponse{} }
 func (m *LogEntriesResponse) String() string { return proto.CompactTextString(m) }
 func (*LogEntriesResponse) ProtoMessage()    {}
 func (*LogEntriesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{29}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{29}
 }
 func (m *LogEntriesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1357,7 +1364,7 @@ func (m *LogFilesListRequest) Reset()         { *m = LogFilesListRequest{} }
 func (m *LogFilesListRequest) String() string { return proto.CompactTextString(m) }
 func (*LogFilesListRequest) ProtoMessage()    {}
 func (*LogFilesListRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{30}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{30}
 }
 func (m *LogFilesListRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1390,7 +1397,7 @@ func (m *LogFilesListResponse) Reset()         { *m = LogFilesListResponse{} }
 func (m *LogFilesListResponse) String() string { return proto.CompactTextString(m) }
 func (*LogFilesListResponse) ProtoMessage()    {}
 func (*LogFilesListResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{31}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{31}
 }
 func (m *LogFilesListResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1438,7 +1445,7 @@ func (m *LogFileRequest) Reset()         { *m = LogFileRequest{} }
 func (m *LogFileRequest) String() string { return proto.CompactTextString(m) }
 func (*LogFileRequest) ProtoMessage()    {}
 func (*LogFileRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{32}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{32}
 }
 func (m *LogFileRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1474,7 +1481,7 @@ func (m *StacksRequest) Reset()         { *m = StacksRequest{} }
 func (m *StacksRequest) String() string { return proto.CompactTextString(m) }
 func (*StacksRequest) ProtoMessage()    {}
 func (*StacksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{33}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{33}
 }
 func (m *StacksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1510,7 +1517,7 @@ func (m *File) Reset()         { *m = File{} }
 func (m *File) String() string { return proto.CompactTextString(m) }
 func (*File) ProtoMessage()    {}
 func (*File) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{34}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{34}
 }
 func (m *File) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1554,7 +1561,7 @@ func (m *GetFilesRequest) Reset()         { *m = GetFilesRequest{} }
 func (m *GetFilesRequest) String() string { return proto.CompactTextString(m) }
 func (*GetFilesRequest) ProtoMessage()    {}
 func (*GetFilesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{35}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{35}
 }
 func (m *GetFilesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1587,7 +1594,7 @@ func (m *GetFilesResponse) Reset()         { *m = GetFilesResponse{} }
 func (m *GetFilesResponse) String() string { return proto.CompactTextString(m) }
 func (*GetFilesResponse) ProtoMessage()    {}
 func (*GetFilesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{36}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{36}
 }
 func (m *GetFilesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1625,7 +1632,7 @@ func (m *ProfileRequest) Reset()         { *m = ProfileRequest{} }
 func (m *ProfileRequest) String() string { return proto.CompactTextString(m) }
 func (*ProfileRequest) ProtoMessage()    {}
 func (*ProfileRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{37}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{37}
 }
 func (m *ProfileRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1660,7 +1667,7 @@ func (m *MetricsRequest) Reset()         { *m = MetricsRequest{} }
 func (m *MetricsRequest) String() string { return proto.CompactTextString(m) }
 func (*MetricsRequest) ProtoMessage()    {}
 func (*MetricsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{38}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{38}
 }
 func (m *MetricsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1694,7 +1701,7 @@ func (m *RaftRangeNode) Reset()         { *m = RaftRangeNode{} }
 func (m *RaftRangeNode) String() string { return proto.CompactTextString(m) }
 func (*RaftRangeNode) ProtoMessage()    {}
 func (*RaftRangeNode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{39}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{39}
 }
 func (m *RaftRangeNode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1727,7 +1734,7 @@ func (m *RaftRangeError) Reset()         { *m = RaftRangeError{} }
 func (m *RaftRangeError) String() string { return proto.CompactTextString(m) }
 func (*RaftRangeError) ProtoMessage()    {}
 func (*RaftRangeError) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{40}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{40}
 }
 func (m *RaftRangeError) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1762,7 +1769,7 @@ func (m *RaftRangeStatus) Reset()         { *m = RaftRangeStatus{} }
 func (m *RaftRangeStatus) String() string { return proto.CompactTextString(m) }
 func (*RaftRangeStatus) ProtoMessage()    {}
 func (*RaftRangeStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{41}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{41}
 }
 func (m *RaftRangeStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1795,7 +1802,7 @@ func (m *RaftDebugRequest) Reset()         { *m = RaftDebugRequest{} }
 func (m *RaftDebugRequest) String() string { return proto.CompactTextString(m) }
 func (*RaftDebugRequest) ProtoMessage()    {}
 func (*RaftDebugRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{42}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{42}
 }
 func (m *RaftDebugRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1829,7 +1836,7 @@ func (m *RaftDebugResponse) Reset()         { *m = RaftDebugResponse{} }
 func (m *RaftDebugResponse) String() string { return proto.CompactTextString(m) }
 func (*RaftDebugResponse) ProtoMessage()    {}
 func (*RaftDebugResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{43}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{43}
 }
 func (m *RaftDebugResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1887,7 +1894,7 @@ func (m *TxnInfo) Reset()         { *m = TxnInfo{} }
 func (m *TxnInfo) String() string { return proto.CompactTextString(m) }
 func (*TxnInfo) ProtoMessage()    {}
 func (*TxnInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{44}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{44}
 }
 func (m *TxnInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1935,7 +1942,7 @@ func (m *ActiveQuery) Reset()         { *m = ActiveQuery{} }
 func (m *ActiveQuery) String() string { return proto.CompactTextString(m) }
 func (*ActiveQuery) ProtoMessage()    {}
 func (*ActiveQuery) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{45}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{45}
 }
 func (m *ActiveQuery) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1970,7 +1977,7 @@ func (m *ListSessionsRequest) Reset()         { *m = ListSessionsRequest{} }
 func (m *ListSessionsRequest) String() string { return proto.CompactTextString(m) }
 func (*ListSessionsRequest) ProtoMessage()    {}
 func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{46}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{46}
 }
 func (m *ListSessionsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2029,7 +2036,7 @@ func (m *Session) Reset()         { *m = Session{} }
 func (m *Session) String() string { return proto.CompactTextString(m) }
 func (*Session) ProtoMessage()    {}
 func (*Session) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{47}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{47}
 }
 func (m *Session) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2066,7 +2073,7 @@ func (m *ListSessionsError) Reset()         { *m = ListSessionsError{} }
 func (m *ListSessionsError) String() string { return proto.CompactTextString(m) }
 func (*ListSessionsError) ProtoMessage()    {}
 func (*ListSessionsError) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{48}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{48}
 }
 func (m *ListSessionsError) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2103,7 +2110,7 @@ func (m *ListSessionsResponse) Reset()         { *m = ListSessionsResponse{} }
 func (m *ListSessionsResponse) String() string { return proto.CompactTextString(m) }
 func (*ListSessionsResponse) ProtoMessage()    {}
 func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{49}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{49}
 }
 func (m *ListSessionsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2149,7 +2156,7 @@ func (m *CancelQueryRequest) Reset()         { *m = CancelQueryRequest{} }
 func (m *CancelQueryRequest) String() string { return proto.CompactTextString(m) }
 func (*CancelQueryRequest) ProtoMessage()    {}
 func (*CancelQueryRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{50}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{50}
 }
 func (m *CancelQueryRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2186,7 +2193,7 @@ func (m *CancelQueryResponse) Reset()         { *m = CancelQueryResponse{} }
 func (m *CancelQueryResponse) String() string { return proto.CompactTextString(m) }
 func (*CancelQueryResponse) ProtoMessage()    {}
 func (*CancelQueryResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{51}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{51}
 }
 func (m *CancelQueryResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2228,7 +2235,7 @@ func (m *CancelSessionRequest) Reset()         { *m = CancelSessionRequest{} }
 func (m *CancelSessionRequest) String() string { return proto.CompactTextString(m) }
 func (*CancelSessionRequest) ProtoMessage()    {}
 func (*CancelSessionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{52}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{52}
 }
 func (m *CancelSessionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2262,7 +2269,7 @@ func (m *CancelSessionResponse) Reset()         { *m = CancelSessionResponse{} }
 func (m *CancelSessionResponse) String() string { return proto.CompactTextString(m) }
 func (*CancelSessionResponse) ProtoMessage()    {}
 func (*CancelSessionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{53}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{53}
 }
 func (m *CancelSessionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2297,7 +2304,7 @@ func (m *SpanStatsRequest) Reset()         { *m = SpanStatsRequest{} }
 func (m *SpanStatsRequest) String() string { return proto.CompactTextString(m) }
 func (*SpanStatsRequest) ProtoMessage()    {}
 func (*SpanStatsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{54}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{54}
 }
 func (m *SpanStatsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2332,7 +2339,7 @@ func (m *SpanStatsResponse) Reset()         { *m = SpanStatsResponse{} }
 func (m *SpanStatsResponse) String() string { return proto.CompactTextString(m) }
 func (*SpanStatsResponse) ProtoMessage()    {}
 func (*SpanStatsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{55}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{55}
 }
 func (m *SpanStatsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2366,7 +2373,7 @@ func (m *ProblemRangesRequest) Reset()         { *m = ProblemRangesRequest{} }
 func (m *ProblemRangesRequest) String() string { return proto.CompactTextString(m) }
 func (*ProblemRangesRequest) ProtoMessage()    {}
 func (*ProblemRangesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{56}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{56}
 }
 func (m *ProblemRangesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2401,7 +2408,7 @@ func (m *ProblemRangesResponse) Reset()         { *m = ProblemRangesResponse{} }
 func (m *ProblemRangesResponse) String() string { return proto.CompactTextString(m) }
 func (*ProblemRangesResponse) ProtoMessage()    {}
 func (*ProblemRangesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{57}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{57}
 }
 func (m *ProblemRangesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2442,7 +2449,7 @@ func (m *ProblemRangesResponse_NodeProblems) Reset()         { *m = ProblemRange
 func (m *ProblemRangesResponse_NodeProblems) String() string { return proto.CompactTextString(m) }
 func (*ProblemRangesResponse_NodeProblems) ProtoMessage()    {}
 func (*ProblemRangesResponse_NodeProblems) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{57, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{57, 0}
 }
 func (m *ProblemRangesResponse_NodeProblems) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2469,8 +2476,7 @@ var xxx_messageInfo_ProblemRangesResponse_NodeProblems proto.InternalMessageInfo
 
 // HotRangesRequest queries one or more cluster nodes for a list
 // of ranges currently considered “hot” by the node(s).
-//
-// The server responds with a HotRangesResponse payload.
+// API: PUBLIC ALPHA
 type HotRangesRequest struct {
 	// NodeID indicates which node to query for a hot range report.
 	// It is posssible to populate any node ID; if the node receiving
@@ -2479,6 +2485,7 @@ type HotRangesRequest struct {
 	//
 	// If left empty, the request is forwarded to every node
 	// in the cluster.
+	// API: PUBLIC ALPHA
 	NodeID string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 }
 
@@ -2486,7 +2493,7 @@ func (m *HotRangesRequest) Reset()         { *m = HotRangesRequest{} }
 func (m *HotRangesRequest) String() string { return proto.CompactTextString(m) }
 func (*HotRangesRequest) ProtoMessage()    {}
 func (*HotRangesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{58}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{58}
 }
 func (m *HotRangesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2513,12 +2520,15 @@ var xxx_messageInfo_HotRangesRequest proto.InternalMessageInfo
 
 // HotRangesResponse is the payload produced in response
 // to a HotRangesRequest.
+// API: PUBLIC ALPHA
 type HotRangesResponse struct {
 	// NodeID is the node that received the HotRangesRequest and
 	// forwarded requests to the selected target node(s).
+	// API: PUBLIC ALPHA
 	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
 	// HotRangesByNodeID contains a hot range report for each selected
 	// target node ID in the HotRangesRequest.
+	// API: PUBLIC ALPHA
 	HotRangesByNodeID map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]HotRangesResponse_NodeResponse `protobuf:"bytes,2,rep,name=hot_ranges_by_node_id,json=hotRangesByNodeId,proto3,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"hot_ranges_by_node_id" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
@@ -2526,7 +2536,7 @@ func (m *HotRangesResponse) Reset()         { *m = HotRangesResponse{} }
 func (m *HotRangesResponse) String() string { return proto.CompactTextString(m) }
 func (*HotRangesResponse) ProtoMessage()    {}
 func (*HotRangesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{59}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{59}
 }
 func (m *HotRangesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2553,16 +2563,17 @@ var xxx_messageInfo_HotRangesResponse proto.InternalMessageInfo
 
 // HotRange is a hot range report for a single store on one of the
 // target node(s) selected in a HotRangesRequest.
+// API: PUBLIC ALPHA
 type HotRangesResponse_HotRange struct {
 	// Desc is the descriptor of the range for which the report
 	// was produced.
 	//
-	// Note: this field is generally RESERVED and will likely be removed
-	// or replaced in a later version.
+	// TODO(knz): This field should be removed.
 	// See: https://github.com/cockroachdb/cockroach/issues/53212
 	Desc roachpb.RangeDescriptor `protobuf:"bytes,1,opt,name=desc,proto3" json:"desc"`
 	// QueriesPerSecond is the recent number of queries per second
 	// on this range.
+	// API: PUBLIC ALPHA
 	QueriesPerSecond float64 `protobuf:"fixed64,2,opt,name=queries_per_second,json=queriesPerSecond,proto3" json:"queries_per_second,omitempty"`
 }
 
@@ -2570,7 +2581,7 @@ func (m *HotRangesResponse_HotRange) Reset()         { *m = HotRangesResponse_Ho
 func (m *HotRangesResponse_HotRange) String() string { return proto.CompactTextString(m) }
 func (*HotRangesResponse_HotRange) ProtoMessage()    {}
 func (*HotRangesResponse_HotRange) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{59, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{59, 0}
 }
 func (m *HotRangesResponse_HotRange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2597,12 +2608,15 @@ var xxx_messageInfo_HotRangesResponse_HotRange proto.InternalMessageInfo
 
 // StoreResponse contains the part of a hot ranges report that
 // pertains to a single store on a target node.
+// API: PUBLIC ALPHA
 type HotRangesResponse_StoreResponse struct {
 	// StoreID identifies the store for which the report was
 	// produced.
+	// API: PUBLIC ALPHA
 	StoreID github_com_cockroachdb_cockroach_pkg_roachpb.StoreID `protobuf:"varint,1,opt,name=store_id,json=storeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.StoreID" json:"store_id,omitempty"`
 	// HotRanges is the hot ranges report for this store
 	// on the target node.
+	// API: PUBLIC ALPHA
 	HotRanges []HotRangesResponse_HotRange `protobuf:"bytes,2,rep,name=hot_ranges,json=hotRanges,proto3" json:"hot_ranges"`
 }
 
@@ -2610,7 +2624,7 @@ func (m *HotRangesResponse_StoreResponse) Reset()         { *m = HotRangesRespon
 func (m *HotRangesResponse_StoreResponse) String() string { return proto.CompactTextString(m) }
 func (*HotRangesResponse_StoreResponse) ProtoMessage()    {}
 func (*HotRangesResponse_StoreResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{59, 1}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{59, 1}
 }
 func (m *HotRangesResponse_StoreResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2636,15 +2650,18 @@ func (m *HotRangesResponse_StoreResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_HotRangesResponse_StoreResponse proto.InternalMessageInfo
 
 // NodeResponse is a hot range report for a single target node.
+// API: PUBLIC ALPHA
 type HotRangesResponse_NodeResponse struct {
 	// ErrorMessage is set to a non-empty string if this target
 	// node was unable to produce a hot range report.
 	//
 	// The contents of this string indicates the cause of the failure.
+	// API: PUBLIC ALPHA
 	ErrorMessage string `protobuf:"bytes,1,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	// Stores contains the hot ranges report if no error was encountered.
 	// There is one part to the report for each store in the
 	// target node.
+	// API: PUBLIC ALPHA
 	Stores []*HotRangesResponse_StoreResponse `protobuf:"bytes,2,rep,name=stores,proto3" json:"stores,omitempty"`
 }
 
@@ -2652,7 +2669,7 @@ func (m *HotRangesResponse_NodeResponse) Reset()         { *m = HotRangesRespons
 func (m *HotRangesResponse_NodeResponse) String() string { return proto.CompactTextString(m) }
 func (*HotRangesResponse_NodeResponse) ProtoMessage()    {}
 func (*HotRangesResponse_NodeResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{59, 2}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{59, 2}
 }
 func (m *HotRangesResponse_NodeResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2685,7 +2702,7 @@ func (m *RangeRequest) Reset()         { *m = RangeRequest{} }
 func (m *RangeRequest) String() string { return proto.CompactTextString(m) }
 func (*RangeRequest) ProtoMessage()    {}
 func (*RangeRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{60}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{60}
 }
 func (m *RangeRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2721,7 +2738,7 @@ func (m *RangeResponse) Reset()         { *m = RangeResponse{} }
 func (m *RangeResponse) String() string { return proto.CompactTextString(m) }
 func (*RangeResponse) ProtoMessage()    {}
 func (*RangeResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{61}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{61}
 }
 func (m *RangeResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2756,7 +2773,7 @@ func (m *RangeResponse_NodeResponse) Reset()         { *m = RangeResponse_NodeRe
 func (m *RangeResponse_NodeResponse) String() string { return proto.CompactTextString(m) }
 func (*RangeResponse_NodeResponse) ProtoMessage()    {}
 func (*RangeResponse_NodeResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{61, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{61, 0}
 }
 func (m *RangeResponse_NodeResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2792,7 +2809,7 @@ func (m *DiagnosticsRequest) Reset()         { *m = DiagnosticsRequest{} }
 func (m *DiagnosticsRequest) String() string { return proto.CompactTextString(m) }
 func (*DiagnosticsRequest) ProtoMessage()    {}
 func (*DiagnosticsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{62}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{62}
 }
 func (m *DiagnosticsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2827,7 +2844,7 @@ func (m *StoresRequest) Reset()         { *m = StoresRequest{} }
 func (m *StoresRequest) String() string { return proto.CompactTextString(m) }
 func (*StoresRequest) ProtoMessage()    {}
 func (*StoresRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{63}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{63}
 }
 func (m *StoresRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2870,7 +2887,7 @@ func (m *StoreDetails) Reset()         { *m = StoreDetails{} }
 func (m *StoreDetails) String() string { return proto.CompactTextString(m) }
 func (*StoreDetails) ProtoMessage()    {}
 func (*StoreDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{64}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{64}
 }
 func (m *StoreDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2903,7 +2920,7 @@ func (m *StoresResponse) Reset()         { *m = StoresResponse{} }
 func (m *StoresResponse) String() string { return proto.CompactTextString(m) }
 func (*StoresResponse) ProtoMessage()    {}
 func (*StoresResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{65}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{65}
 }
 func (m *StoresResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2936,7 +2953,7 @@ func (m *StatementsRequest) Reset()         { *m = StatementsRequest{} }
 func (m *StatementsRequest) String() string { return proto.CompactTextString(m) }
 func (*StatementsRequest) ProtoMessage()    {}
 func (*StatementsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{66}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{66}
 }
 func (m *StatementsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2977,7 +2994,7 @@ func (m *StatementsResponse) Reset()         { *m = StatementsResponse{} }
 func (m *StatementsResponse) String() string { return proto.CompactTextString(m) }
 func (*StatementsResponse) ProtoMessage()    {}
 func (*StatementsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{67}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{67}
 }
 func (m *StatementsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3015,7 +3032,7 @@ func (m *StatementsResponse_ExtendedStatementStatisticsKey) String() string {
 }
 func (*StatementsResponse_ExtendedStatementStatisticsKey) ProtoMessage() {}
 func (*StatementsResponse_ExtendedStatementStatisticsKey) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{67, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{67, 0}
 }
 func (m *StatementsResponse_ExtendedStatementStatisticsKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3054,7 +3071,7 @@ func (m *StatementsResponse_CollectedStatementStatistics) String() string {
 }
 func (*StatementsResponse_CollectedStatementStatistics) ProtoMessage() {}
 func (*StatementsResponse_CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{67, 1}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{67, 1}
 }
 func (m *StatementsResponse_CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3092,7 +3109,7 @@ func (m *StatementsResponse_ExtendedCollectedTransactionStatistics) String() str
 }
 func (*StatementsResponse_ExtendedCollectedTransactionStatistics) ProtoMessage() {}
 func (*StatementsResponse_ExtendedCollectedTransactionStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{67, 2}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{67, 2}
 }
 func (m *StatementsResponse_ExtendedCollectedTransactionStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3129,7 +3146,7 @@ func (m *StatementDiagnosticsReport) Reset()         { *m = StatementDiagnostics
 func (m *StatementDiagnosticsReport) String() string { return proto.CompactTextString(m) }
 func (*StatementDiagnosticsReport) ProtoMessage()    {}
 func (*StatementDiagnosticsReport) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{68}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{68}
 }
 func (m *StatementDiagnosticsReport) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3164,7 +3181,7 @@ func (m *CreateStatementDiagnosticsReportRequest) Reset() {
 func (m *CreateStatementDiagnosticsReportRequest) String() string { return proto.CompactTextString(m) }
 func (*CreateStatementDiagnosticsReportRequest) ProtoMessage()    {}
 func (*CreateStatementDiagnosticsReportRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{69}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{69}
 }
 func (m *CreateStatementDiagnosticsReportRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3199,7 +3216,7 @@ func (m *CreateStatementDiagnosticsReportResponse) Reset() {
 func (m *CreateStatementDiagnosticsReportResponse) String() string { return proto.CompactTextString(m) }
 func (*CreateStatementDiagnosticsReportResponse) ProtoMessage()    {}
 func (*CreateStatementDiagnosticsReportResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{70}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{70}
 }
 func (m *CreateStatementDiagnosticsReportResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3231,7 +3248,7 @@ func (m *StatementDiagnosticsReportsRequest) Reset()         { *m = StatementDia
 func (m *StatementDiagnosticsReportsRequest) String() string { return proto.CompactTextString(m) }
 func (*StatementDiagnosticsReportsRequest) ProtoMessage()    {}
 func (*StatementDiagnosticsReportsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{71}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{71}
 }
 func (m *StatementDiagnosticsReportsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3264,7 +3281,7 @@ func (m *StatementDiagnosticsReportsResponse) Reset()         { *m = StatementDi
 func (m *StatementDiagnosticsReportsResponse) String() string { return proto.CompactTextString(m) }
 func (*StatementDiagnosticsReportsResponse) ProtoMessage()    {}
 func (*StatementDiagnosticsReportsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{72}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{72}
 }
 func (m *StatementDiagnosticsReportsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3300,7 +3317,7 @@ func (m *StatementDiagnostics) Reset()         { *m = StatementDiagnostics{} }
 func (m *StatementDiagnostics) String() string { return proto.CompactTextString(m) }
 func (*StatementDiagnostics) ProtoMessage()    {}
 func (*StatementDiagnostics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{73}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{73}
 }
 func (m *StatementDiagnostics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3333,7 +3350,7 @@ func (m *StatementDiagnosticsRequest) Reset()         { *m = StatementDiagnostic
 func (m *StatementDiagnosticsRequest) String() string { return proto.CompactTextString(m) }
 func (*StatementDiagnosticsRequest) ProtoMessage()    {}
 func (*StatementDiagnosticsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{74}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{74}
 }
 func (m *StatementDiagnosticsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3366,7 +3383,7 @@ func (m *StatementDiagnosticsResponse) Reset()         { *m = StatementDiagnosti
 func (m *StatementDiagnosticsResponse) String() string { return proto.CompactTextString(m) }
 func (*StatementDiagnosticsResponse) ProtoMessage()    {}
 func (*StatementDiagnosticsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{75}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{75}
 }
 func (m *StatementDiagnosticsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3399,7 +3416,7 @@ func (m *JobRegistryStatusRequest) Reset()         { *m = JobRegistryStatusReque
 func (m *JobRegistryStatusRequest) String() string { return proto.CompactTextString(m) }
 func (*JobRegistryStatusRequest) ProtoMessage()    {}
 func (*JobRegistryStatusRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{76}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{76}
 }
 func (m *JobRegistryStatusRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3433,7 +3450,7 @@ func (m *JobRegistryStatusResponse) Reset()         { *m = JobRegistryStatusResp
 func (m *JobRegistryStatusResponse) String() string { return proto.CompactTextString(m) }
 func (*JobRegistryStatusResponse) ProtoMessage()    {}
 func (*JobRegistryStatusResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{77}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{77}
 }
 func (m *JobRegistryStatusResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3466,7 +3483,7 @@ func (m *JobRegistryStatusResponse_Job) Reset()         { *m = JobRegistryStatus
 func (m *JobRegistryStatusResponse_Job) String() string { return proto.CompactTextString(m) }
 func (*JobRegistryStatusResponse_Job) ProtoMessage()    {}
 func (*JobRegistryStatusResponse_Job) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{77, 0}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{77, 0}
 }
 func (m *JobRegistryStatusResponse_Job) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3499,7 +3516,7 @@ func (m *JobStatusRequest) Reset()         { *m = JobStatusRequest{} }
 func (m *JobStatusRequest) String() string { return proto.CompactTextString(m) }
 func (*JobStatusRequest) ProtoMessage()    {}
 func (*JobStatusRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{78}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{78}
 }
 func (m *JobStatusRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3532,7 +3549,7 @@ func (m *JobStatusResponse) Reset()         { *m = JobStatusResponse{} }
 func (m *JobStatusResponse) String() string { return proto.CompactTextString(m) }
 func (*JobStatusResponse) ProtoMessage()    {}
 func (*JobStatusResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_fdd87e929f38276a, []int{79}
+	return fileDescriptor_status_0a3e72b0cdc5b0fe, []int{79}
 }
 func (m *JobStatusResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3701,21 +3718,39 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type StatusClient interface {
+	// Certificates retrieves a copy of the TLS certificates.
 	Certificates(ctx context.Context, in *CertificatesRequest, opts ...grpc.CallOption) (*CertificatesResponse, error)
+	// Details retrieves details about the nodes in the cluster.
 	Details(ctx context.Context, in *DetailsRequest, opts ...grpc.CallOption) (*DetailsResponse, error)
+	// Nodes retrieves an overview of the nodes in the cluster.
+	// API: PUBLIC ALPHA
+	//
 	// Don't introduce additional usages of this RPC. See #50707 for more details.
 	// The underlying response type is something we're looking to get rid of.
 	Nodes(ctx context.Context, in *NodesRequest, opts ...grpc.CallOption) (*NodesResponse, error)
+	// Node retrieves details about a single node.
+	// API: PUBLIC ALPHA
 	Node(ctx context.Context, in *NodeRequest, opts ...grpc.CallOption) (*statuspb.NodeStatus, error)
+	// RaftDebug requests internal details about Raft.
 	RaftDebug(ctx context.Context, in *RaftDebugRequest, opts ...grpc.CallOption) (*RaftDebugResponse, error)
+	// Ranges requests internal details about ranges on a given node.
 	Ranges(ctx context.Context, in *RangesRequest, opts ...grpc.CallOption) (*RangesResponse, error)
+	// Gossip retrieves gossip-level details about a given node.
 	Gossip(ctx context.Context, in *GossipRequest, opts ...grpc.CallOption) (*gossip.InfoStatus, error)
+	// EngineStats retrieves statistics about a storage engine.
 	EngineStats(ctx context.Context, in *EngineStatsRequest, opts ...grpc.CallOption) (*EngineStatsResponse, error)
+	// Allocator retrieves statistics about the replica allocator.
 	Allocator(ctx context.Context, in *AllocatorRequest, opts ...grpc.CallOption) (*AllocatorResponse, error)
+	// AllocatorRange retrieves statistics about the replica allocator given
+	// a specific range.
 	AllocatorRange(ctx context.Context, in *AllocatorRangeRequest, opts ...grpc.CallOption) (*AllocatorRangeResponse, error)
+	// ListSessions retrieves the SQL sessions across the entire cluster.
 	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
+	// ListLocalSessions retrieves the SQL sessions on this node.
 	ListLocalSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
+	// CancelQuery cancels a SQL query given its ID.
 	CancelQuery(ctx context.Context, in *CancelQueryRequest, opts ...grpc.CallOption) (*CancelQueryResponse, error)
+	// CancelSessions forcefully terminates a SQL session given its ID.
 	CancelSession(ctx context.Context, in *CancelSessionRequest, opts ...grpc.CallOption) (*CancelSessionResponse, error)
 	// SpanStats accepts a key span and node ID, and returns a set of stats
 	// summed from all ranges on the stores on that node which contain keys
@@ -3723,13 +3758,25 @@ type StatusClient interface {
 	// it will be called with the highest/lowest key for a SQL table, and return
 	// information about the resources on a node used by that table.
 	SpanStats(ctx context.Context, in *SpanStatsRequest, opts ...grpc.CallOption) (*SpanStatsResponse, error)
+	// Stacks retrieves the stack traces of all goroutines on a given node.
 	Stacks(ctx context.Context, in *StacksRequest, opts ...grpc.CallOption) (*JSONResponse, error)
+	// Profile retrieves a CPU profile on a given node.
 	Profile(ctx context.Context, in *ProfileRequest, opts ...grpc.CallOption) (*JSONResponse, error)
+	// Metrics retrieves the node metrics for a given node.
+	//
+	// Note: this is a “reserved” API and should not be relied upon to
+	// build external tools. No guarantee is made about its
+	// availability and stability in external uses.
 	Metrics(ctx context.Context, in *MetricsRequest, opts ...grpc.CallOption) (*JSONResponse, error)
+	// GetFiles retrieves heap or goroutine dump files from a given node.
 	GetFiles(ctx context.Context, in *GetFilesRequest, opts ...grpc.CallOption) (*GetFilesResponse, error)
+	// LogFilesList retrieves a list of log files on a given node.
 	LogFilesList(ctx context.Context, in *LogFilesListRequest, opts ...grpc.CallOption) (*LogFilesListResponse, error)
+	// LogFile retrieves a given log file.
 	LogFile(ctx context.Context, in *LogFileRequest, opts ...grpc.CallOption) (*LogEntriesResponse, error)
+	// Logs retrieves individual log entries.
 	Logs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogEntriesResponse, error)
+	// ProblemRanges retrieves the list of “problem ranges”.
 	ProblemRanges(ctx context.Context, in *ProblemRangesRequest, opts ...grpc.CallOption) (*ProblemRangesResponse, error)
 	HotRanges(ctx context.Context, in *HotRangesRequest, opts ...grpc.CallOption) (*HotRangesResponse, error)
 	Range(ctx context.Context, in *RangeRequest, opts ...grpc.CallOption) (*RangeResponse, error)
@@ -4050,21 +4097,39 @@ func (c *statusClient) JobStatus(ctx context.Context, in *JobStatusRequest, opts
 
 // StatusServer is the server API for Status service.
 type StatusServer interface {
+	// Certificates retrieves a copy of the TLS certificates.
 	Certificates(context.Context, *CertificatesRequest) (*CertificatesResponse, error)
+	// Details retrieves details about the nodes in the cluster.
 	Details(context.Context, *DetailsRequest) (*DetailsResponse, error)
+	// Nodes retrieves an overview of the nodes in the cluster.
+	// API: PUBLIC ALPHA
+	//
 	// Don't introduce additional usages of this RPC. See #50707 for more details.
 	// The underlying response type is something we're looking to get rid of.
 	Nodes(context.Context, *NodesRequest) (*NodesResponse, error)
+	// Node retrieves details about a single node.
+	// API: PUBLIC ALPHA
 	Node(context.Context, *NodeRequest) (*statuspb.NodeStatus, error)
+	// RaftDebug requests internal details about Raft.
 	RaftDebug(context.Context, *RaftDebugRequest) (*RaftDebugResponse, error)
+	// Ranges requests internal details about ranges on a given node.
 	Ranges(context.Context, *RangesRequest) (*RangesResponse, error)
+	// Gossip retrieves gossip-level details about a given node.
 	Gossip(context.Context, *GossipRequest) (*gossip.InfoStatus, error)
+	// EngineStats retrieves statistics about a storage engine.
 	EngineStats(context.Context, *EngineStatsRequest) (*EngineStatsResponse, error)
+	// Allocator retrieves statistics about the replica allocator.
 	Allocator(context.Context, *AllocatorRequest) (*AllocatorResponse, error)
+	// AllocatorRange retrieves statistics about the replica allocator given
+	// a specific range.
 	AllocatorRange(context.Context, *AllocatorRangeRequest) (*AllocatorRangeResponse, error)
+	// ListSessions retrieves the SQL sessions across the entire cluster.
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	// ListLocalSessions retrieves the SQL sessions on this node.
 	ListLocalSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	// CancelQuery cancels a SQL query given its ID.
 	CancelQuery(context.Context, *CancelQueryRequest) (*CancelQueryResponse, error)
+	// CancelSessions forcefully terminates a SQL session given its ID.
 	CancelSession(context.Context, *CancelSessionRequest) (*CancelSessionResponse, error)
 	// SpanStats accepts a key span and node ID, and returns a set of stats
 	// summed from all ranges on the stores on that node which contain keys
@@ -4072,13 +4137,25 @@ type StatusServer interface {
 	// it will be called with the highest/lowest key for a SQL table, and return
 	// information about the resources on a node used by that table.
 	SpanStats(context.Context, *SpanStatsRequest) (*SpanStatsResponse, error)
+	// Stacks retrieves the stack traces of all goroutines on a given node.
 	Stacks(context.Context, *StacksRequest) (*JSONResponse, error)
+	// Profile retrieves a CPU profile on a given node.
 	Profile(context.Context, *ProfileRequest) (*JSONResponse, error)
+	// Metrics retrieves the node metrics for a given node.
+	//
+	// Note: this is a “reserved” API and should not be relied upon to
+	// build external tools. No guarantee is made about its
+	// availability and stability in external uses.
 	Metrics(context.Context, *MetricsRequest) (*JSONResponse, error)
+	// GetFiles retrieves heap or goroutine dump files from a given node.
 	GetFiles(context.Context, *GetFilesRequest) (*GetFilesResponse, error)
+	// LogFilesList retrieves a list of log files on a given node.
 	LogFilesList(context.Context, *LogFilesListRequest) (*LogFilesListResponse, error)
+	// LogFile retrieves a given log file.
 	LogFile(context.Context, *LogFileRequest) (*LogEntriesResponse, error)
+	// Logs retrieves individual log entries.
 	Logs(context.Context, *LogsRequest) (*LogEntriesResponse, error)
+	// ProblemRanges retrieves the list of “problem ranges”.
 	ProblemRanges(context.Context, *ProblemRangesRequest) (*ProblemRangesResponse, error)
 	HotRanges(context.Context, *HotRangesRequest) (*HotRangesResponse, error)
 	Range(context.Context, *RangeRequest) (*RangeResponse, error)
@@ -22442,10 +22519,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/serverpb/status.proto", fileDescriptor_status_fdd87e929f38276a)
+	proto.RegisterFile("server/serverpb/status.proto", fileDescriptor_status_0a3e72b0cdc5b0fe)
 }
 
-var fileDescriptor_status_fdd87e929f38276a = []byte{
+var fileDescriptor_status_0a3e72b0cdc5b0fe = []byte{
 	// 6184 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x7c, 0x5d, 0x6c, 0x5b, 0x47,
 	0x76, 0xbf, 0x2f, 0x49, 0x51, 0xe4, 0xa1, 0x3e, 0xa8, 0xd1, 0x87, 0x69, 0xda, 0x91, 0x9c, 0xeb,
