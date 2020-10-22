@@ -17,3 +17,6 @@ ALTER DATABASE new_db DROP REGION "us-west-1"
 
 statement error implementation pending
 SHOW REGIONS
+
+statement error implementation pending
+ALTER TABLE a SET REGIONAL AFFINITY TO NONE
