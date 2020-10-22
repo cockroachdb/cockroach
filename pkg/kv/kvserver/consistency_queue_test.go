@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -566,14 +567,17 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	const sysCountGarbage = 123000
 
 	func() {
-		cache := storage.NewRocksDBCache(1 << 20)
-		defer cache.Release()
-		eng, err := storage.NewRocksDB(storage.RocksDBConfig{
+		cache := pebble.NewCache(1 << 20)
+		defer cache.Unref()
+		opts := storage.DefaultPebbleOptions()
+		opts.Cache = cache
+		eng, err := storage.NewPebble(ctx, storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Dir:       path,
 				MustExist: true,
 			},
-		}, cache)
+			Opts: opts,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}

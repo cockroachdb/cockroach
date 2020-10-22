@@ -65,9 +65,9 @@ func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValu
 	return kvs
 }
 
-func makeRocksSST(t testing.TB, kvs []storage.MVCCKeyValue) []byte {
-	w, err := storage.MakeRocksDBSstFileWriter()
-	require.NoError(t, err)
+func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue) []byte {
+	memFile := &storage.MemFile{}
+	w := storage.MakeIngestionSSTWriter(memFile)
 	defer w.Close()
 
 	for i := range kvs {
@@ -75,9 +75,8 @@ func makeRocksSST(t testing.TB, kvs []storage.MVCCKeyValue) []byte {
 			t.Fatal(err)
 		}
 	}
-	sst, err := w.Finish()
-	require.NoError(t, err)
-	return sst
+	require.NoError(t, w.Finish())
+	return memFile.Data()
 }
 
 func TestAddBatched(t *testing.T) {
@@ -294,7 +293,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	kvs = kvs[:numKeys]
 
 	// Create a large SST.
-	sst := makeRocksSST(t, kvs)
+	sst := makePebbleSST(t, kvs)
 
 	var splits []roachpb.Key
 	for i := range kvs {

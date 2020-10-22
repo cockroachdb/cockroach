@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/errors"
 )
 
 func TestMaxImportBatchSize(t *testing.T) {
@@ -73,31 +72,40 @@ func slurpSSTablesLatestKey(
 	defer batch.Close()
 
 	for _, path := range paths {
-		sst := storage.MakeRocksDBSstFileReader()
+		sst, err := storage.NewSSTIterator(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer sst.Close()
 
-		fileContents, err := ioutil.ReadFile(filepath.Join(dir, path))
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
-		if err := sst.IngestExternalFile(fileContents); err != nil {
-			t.Fatalf("%+v", err)
-		}
-		if err := sst.Iterate(start.Key, end.Key, func(kv storage.MVCCKeyValue) error {
+		sst.SeekGE(start)
+		for {
+			if valid, err := sst.Valid(); !valid || err != nil {
+				if err != nil {
+					t.Fatal(err)
+				}
+				break
+			}
+			if !sst.UnsafeKey().Less(end) {
+				break
+			}
 			var ok bool
-			kv.Key.Key, ok = kr.rewriteKey(kv.Key.Key)
+			var newKv storage.MVCCKeyValue
+			key := sst.UnsafeKey()
+			newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
+			newKv.Key.Key = append(newKv.Key.Key, key.Key...)
+			newKv.Key.Timestamp = key.Timestamp
+			newKv.Key.Key, ok = kr.rewriteKey(newKv.Key.Key)
 			if !ok {
-				return errors.Errorf("could not rewrite key: %s", kv.Key.Key)
+				t.Fatalf("could not rewrite key: %s", newKv.Key.Key)
 			}
-			v := roachpb.Value{RawBytes: kv.Value}
+			v := roachpb.Value{RawBytes: newKv.Value}
 			v.ClearChecksum()
-			v.InitChecksum(kv.Key.Key)
-			if err := batch.Put(kv.Key, v.RawBytes); err != nil {
-				return err
+			v.InitChecksum(newKv.Key.Key)
+			if err := batch.Put(newKv.Key, v.RawBytes); err != nil {
+				t.Fatal(err)
 			}
-			return nil
-		}); err != nil {
-			t.Fatalf("%+v", err)
+			sst.Next()
 		}
 	}
 

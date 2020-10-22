@@ -30,10 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -986,14 +984,6 @@ func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
 // Fails the test if they do not match.
 func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []int64) {
 	t.Helper()
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
 	testutils.SucceedsSoon(t, func() error {
 		actual := tc.readIntFromStores(key)
 		if !reflect.DeepEqual(expected, actual) {

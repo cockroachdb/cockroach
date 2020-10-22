@@ -25,14 +25,10 @@ func (e *EngineType) String() string { return redact.StringWithoutMarkers(e) }
 // SafeFormat implements the refact.SafeFormatter interface.
 func (e *EngineType) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch *e {
-	case EngineTypeRocksDB:
-		p.SafeString("rocksdb")
 	case EngineTypeDefault:
 		p.SafeString("default")
 	case EngineTypePebble:
 		p.SafeString("pebble")
-	case EngineTypeTeePebbleRocksDB:
-		p.SafeString("pebble+rocksdb")
 	default:
 		p.Printf("<unknown engine %d>", int32(*e))
 	}
@@ -43,12 +39,8 @@ func (e *EngineType) Set(s string) error {
 	switch s {
 	case "default":
 		*e = EngineTypeDefault
-	case "rocksdb":
-		*e = EngineTypeRocksDB
 	case "pebble":
 		*e = EngineTypePebble
-	case "pebble+rocksdb":
-		*e = EngineTypeTeePebbleRocksDB
 	default:
 		return fmt.Errorf("invalid storage engine: %s "+
 			"(possible values: rocksdb, pebble)", s)

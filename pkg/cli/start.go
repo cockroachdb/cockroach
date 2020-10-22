@@ -1082,7 +1082,6 @@ func setupAndInitializeLoggingAndProfiling(
 				// for the storage engines. We need to do this at the end
 				// because we need to register the loggers.
 				stopper.AddCloser(storage.InitPebbleLogger(ctx))
-				stopper.AddCloser(storage.InitRocksDBLogger(ctx))
 			}
 		}()
 	}

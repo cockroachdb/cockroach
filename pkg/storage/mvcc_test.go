@@ -79,12 +79,6 @@ var (
 	}...)
 )
 
-// createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
-// storage capacity.
-func createTestRocksDBEngine() Engine {
-	return newRocksDBInMem(roachpb.Attributes{}, 1<<20)
-}
-
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() Engine {
 	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
@@ -94,7 +88,6 @@ var mvccEngineImpls = []struct {
 	name   string
 	create func() Engine
 }{
-	{"rocksdb", createTestRocksDBEngine},
 	{"pebble", createTestPebbleEngine},
 }
 

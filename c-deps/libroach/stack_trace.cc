@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 #include "stack_trace.h"
+#include "libroach.h"
 
 #if defined(OS_LINUX) && defined(__GLIBC__)
 
@@ -19,6 +20,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
@@ -326,8 +328,23 @@ std::string DumpThreadStacks() {
 
 #else  // !defined(OS_LINUX) || !defined(__GLIBC__)
 
+#include <stdlib.h>
+
 std::string DumpThreadStacks() {
   return "thread stacks only available on Linux/Glibc";
 }
 
 #endif // !defined(OS_LINUX) || !defined(__GLIBC__)
+
+// ToDBString converts a std::string to a DBString.
+inline DBString ToDBString(const std::string& s) {
+  DBString result;
+  result.len = s.size();
+  result.data = static_cast<char*>(malloc(result.len));
+  memcpy(result.data, s.data(), s.size());
+  return result;
+}
+
+DBString DBDumpThreadStacks() {
+  return ToDBString(DumpThreadStacks());
+}

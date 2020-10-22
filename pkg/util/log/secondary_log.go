@@ -127,8 +127,3 @@ func (l *SecondaryLogger) LogfDepth(
 ) {
 	l.output(ctx, depth+1, Severity_INFO, format, args...)
 }
-
-// LogSev logs an event at the specified severity on a secondary logger.
-func (l *SecondaryLogger) LogSev(ctx context.Context, sev Severity, args ...interface{}) {
-	l.output(ctx, 1, Severity_INFO, "", args...)
-}

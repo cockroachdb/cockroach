@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,14 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-#pragma once
+// +build 386 amd64p32 arm armbe  mips mipsle mips64p32 mips64p32le ppc sparc
 
-#include <libroach.h>
-#include <memory>
-#include <mutex>
-#include <rocksdb/cache.h>
+package storage
 
-struct DBCache {
-  std::mutex mu;
-  std::shared_ptr<rocksdb::Cache> rep;
-};
+const (
+	// MaxArrayLen is a safe maximum length for slices on this architecture.
+	MaxArrayLen = 1<<31 - 1
+)

@@ -84,14 +84,12 @@ const (
 // the desired ordering as these keys do not sort lexicographically correctly.
 // Note that the encoding of these keys needs to match up with the encoding in
 // rocksdb/db.cc:EncodeKey().
+//
+// TODO(bilal): This struct exists mostly as a historic artifact. Transition
+// the remaining few test uses of this struct over to pebble.Batch, and remove
+// it entirely.
 type RocksDBBatchBuilder struct {
-	batch   pebble.Batch
-	logData bool
-}
-
-func (b *RocksDBBatchBuilder) reset() {
-	b.batch.Reset()
-	b.logData = false
+	batch pebble.Batch
 }
 
 // Finish returns the constructed batch representation. After calling Finish,
@@ -99,7 +97,7 @@ func (b *RocksDBBatchBuilder) reset() {
 // is only valid until the next builder method is called.
 func (b *RocksDBBatchBuilder) Finish() []byte {
 	repr := b.batch.Repr()
-	b.reset()
+	b.batch.Reset()
 
 	return repr
 }
@@ -111,11 +109,6 @@ func (b *RocksDBBatchBuilder) Len() int {
 
 var _ = (*RocksDBBatchBuilder).Len
 
-// getRepr constructs the batch representation and returns it.
-func (b *RocksDBBatchBuilder) getRepr() []byte {
-	return b.batch.Repr()
-}
-
 // Put sets the given key to the value provided.
 //
 // It is safe to modify the contents of the arguments after Put returns.
@@ -126,70 +119,6 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 	copy(deferredOp.Value, value)
 	// NB: the batch is not indexed, obviating the need to call
 	// deferredOp.Finish.
-}
-
-// Merge is a high-performance write operation used for values which are
-// accumulated over several writes. Multiple values can be merged sequentially
-// into a single key; a subsequent read will return a "merged" value which is
-// computed from the original merged values.
-//
-// It is safe to modify the contents of the arguments after Merge returns.
-func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
-	keyLen := key.Len()
-	deferredOp := b.batch.MergeDeferred(keyLen, len(value))
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
-	copy(deferredOp.Value, value)
-	// NB: the batch is not indexed, obviating the need to call
-	// deferredOp.Finish.
-}
-
-// Clear removes the item from the db with the given key.
-//
-// It is safe to modify the contents of the arguments after Clear returns.
-func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
-	keyLen := key.Len()
-	deferredOp := b.batch.DeleteDeferred(keyLen)
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
-	// NB: the batch is not indexed, obviating the need to call
-	// deferredOp.Finish.
-}
-
-// SingleClear removes the most recent item from the db with the given key.
-//
-// It is safe to modify the contents of the arguments after SingleClear returns.
-func (b *RocksDBBatchBuilder) SingleClear(key MVCCKey) {
-	keyLen := key.Len()
-	deferredOp := b.batch.SingleDeleteDeferred(keyLen)
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
-	// NB: the batch is not indexed, obviating the need to call
-	// deferredOp.Finish.
-}
-
-// LogData adds a blob of log data to the batch. It will be written to the WAL,
-// but otherwise uninterpreted by RocksDB.
-//
-// It is safe to modify the contents of the arguments after LogData returns.
-func (b *RocksDBBatchBuilder) LogData(data []byte) {
-	_ = b.batch.LogData(data, nil)
-	b.logData = true
-}
-
-// ApplyRepr applies the mutations in repr to the current batch.
-//
-// It is safe to modify the contents of the arguments after ApplyRepr
-// returns.
-func (b *RocksDBBatchBuilder) ApplyRepr(repr []byte) error {
-	b2 := &pebble.Batch{}
-	if err := b2.SetRepr(repr); err != nil {
-		return err
-	}
-
-	return b.batch.Apply(b2, nil)
-}
-
-// Count returns the count of memtable-modifying operations in this batch.
-func (b *RocksDBBatchBuilder) Count() uint32 {
-	return b.batch.Count()
 }
 
 // EncodeKey encodes an engine.MVCC key into the RocksDB representation. This

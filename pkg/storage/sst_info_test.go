@@ -73,40 +73,44 @@ func TestReadAmplification(t *testing.T) {
 	}
 }
 
+func stringToKey(s string) MVCCKey {
+	return MakeMVCCMetadataKey([]byte(s))
+}
+
 func createTestSSTableInfos() SSTableInfos {
 	ssti := SSTableInfos{
 		// Level 0.
-		{Level: 0, Size: 20, Start: key("a"), End: key("z")},
-		{Level: 0, Size: 15, Start: key("a"), End: key("k")},
+		{Level: 0, Size: 20, Start: stringToKey("a"), End: stringToKey("z")},
+		{Level: 0, Size: 15, Start: stringToKey("a"), End: stringToKey("k")},
 		// Level 1.
-		{Level: 1, Size: 200, Start: key("a"), End: key("j")},
-		{Level: 1, Size: 100, Start: key("k"), End: key("o")},
-		{Level: 1, Size: 100, Start: key("r"), End: key("t")},
+		{Level: 1, Size: 200, Start: stringToKey("a"), End: stringToKey("j")},
+		{Level: 1, Size: 100, Start: stringToKey("k"), End: stringToKey("o")},
+		{Level: 1, Size: 100, Start: stringToKey("r"), End: stringToKey("t")},
 		// Level 2.
-		{Level: 2, Size: 201, Start: key("a"), End: key("c")},
-		{Level: 2, Size: 200, Start: key("d"), End: key("f")},
-		{Level: 2, Size: 300, Start: key("h"), End: key("r")},
-		{Level: 2, Size: 405, Start: key("s"), End: key("z")},
+		{Level: 2, Size: 201, Start: stringToKey("a"), End: stringToKey("c")},
+		{Level: 2, Size: 200, Start: stringToKey("d"), End: stringToKey("f")},
+		{Level: 2, Size: 300, Start: stringToKey("h"), End: stringToKey("r")},
+		{Level: 2, Size: 405, Start: stringToKey("s"), End: stringToKey("z")},
 		// Level 3.
-		{Level: 3, Size: 667, Start: key("a"), End: key("c")},
-		{Level: 3, Size: 230, Start: key("d"), End: key("f")},
-		{Level: 3, Size: 332, Start: key("h"), End: key("i")},
-		{Level: 3, Size: 923, Start: key("k"), End: key("n")},
-		{Level: 3, Size: 143, Start: key("n"), End: key("o")},
-		{Level: 3, Size: 621, Start: key("p"), End: key("s")},
-		{Level: 3, Size: 411, Start: key("u"), End: key("x")},
+		{Level: 3, Size: 667, Start: stringToKey("a"), End: stringToKey("c")},
+		{Level: 3, Size: 230, Start: stringToKey("d"), End: stringToKey("f")},
+		{Level: 3, Size: 332, Start: stringToKey("h"), End: stringToKey("i")},
+		{Level: 3, Size: 923, Start: stringToKey("k"), End: stringToKey("n")},
+		{Level: 3, Size: 143, Start: stringToKey("n"), End: stringToKey("o")},
+		{Level: 3, Size: 621, Start: stringToKey("p"), End: stringToKey("s")},
+		{Level: 3, Size: 411, Start: stringToKey("u"), End: stringToKey("x")},
 		// Level 4.
-		{Level: 4, Size: 215, Start: key("a"), End: key("b")},
-		{Level: 4, Size: 211, Start: key("b"), End: key("d")},
-		{Level: 4, Size: 632, Start: key("e"), End: key("f")},
-		{Level: 4, Size: 813, Start: key("f"), End: key("h")},
-		{Level: 4, Size: 346, Start: key("h"), End: key("j")},
-		{Level: 4, Size: 621, Start: key("j"), End: key("l")},
-		{Level: 4, Size: 681, Start: key("m"), End: key("o")},
-		{Level: 4, Size: 521, Start: key("o"), End: key("r")},
-		{Level: 4, Size: 135, Start: key("r"), End: key("t")},
-		{Level: 4, Size: 622, Start: key("t"), End: key("v")},
-		{Level: 4, Size: 672, Start: key("x"), End: key("z")},
+		{Level: 4, Size: 215, Start: stringToKey("a"), End: stringToKey("b")},
+		{Level: 4, Size: 211, Start: stringToKey("b"), End: stringToKey("d")},
+		{Level: 4, Size: 632, Start: stringToKey("e"), End: stringToKey("f")},
+		{Level: 4, Size: 813, Start: stringToKey("f"), End: stringToKey("h")},
+		{Level: 4, Size: 346, Start: stringToKey("h"), End: stringToKey("j")},
+		{Level: 4, Size: 621, Start: stringToKey("j"), End: stringToKey("l")},
+		{Level: 4, Size: 681, Start: stringToKey("m"), End: stringToKey("o")},
+		{Level: 4, Size: 521, Start: stringToKey("o"), End: stringToKey("r")},
+		{Level: 4, Size: 135, Start: stringToKey("r"), End: stringToKey("t")},
+		{Level: 4, Size: 622, Start: stringToKey("t"), End: stringToKey("v")},
+		{Level: 4, Size: 672, Start: stringToKey("x"), End: stringToKey("z")},
 	}
 	sort.Sort(ssti)
 	return ssti
