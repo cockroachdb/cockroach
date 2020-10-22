@@ -828,9 +828,7 @@ func TestDTimeTZ(t *testing.T) {
 
 	ctx := &tree.EvalContext{
 		SessionData: &sessiondata.SessionData{
-			DataConversion: sessiondata.DataConversionConfig{
-				Location: time.UTC,
-			},
+			Location: time.UTC,
 		},
 	}
 
