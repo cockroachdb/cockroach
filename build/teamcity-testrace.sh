@@ -55,7 +55,6 @@ for pkg in $pkgspec; do
     PKG="$pkg" \
     TESTTIMEOUT="${TESTTIMEOUT}" \
     TESTFLAGS="-v $TESTFLAGS" \
-    ENABLE_ROCKSDB_ASSERTIONS=1 \
     ENABLE_LIBROACH_ASSERTIONS=1
   tc_end_block "Run ${pkg} under race detector"
 done
