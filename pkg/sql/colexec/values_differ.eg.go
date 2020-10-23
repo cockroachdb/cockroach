@@ -22,6 +22,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ coldataext.Datum
+	_ tree.AggType
+)
+
 // valuesDiffer takes in two ColVecs as well as values indices to check whether
 // the values differ. This function pays attention to NULLs, and two NULL
 // values do *not* differ.

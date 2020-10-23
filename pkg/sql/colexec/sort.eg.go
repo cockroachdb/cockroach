@@ -24,6 +24,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ coldataext.Datum
+	_ tree.AggType
+)
+
 func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bool {
 	switch dir {
 	case execinfrapb.Ordering_Column_ASC:

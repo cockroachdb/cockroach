@@ -22,7 +22,9 @@ package colexec
 import (
 	"context"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -31,7 +33,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
+)
+
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ apd.Context
+	_ duration.Duration
+	_ coldataext.Datum
 )
 
 // Remove unused warnings.
