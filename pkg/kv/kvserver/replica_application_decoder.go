@@ -140,7 +140,11 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		if cmd.IsLocal() {
-			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(cmd.proposal.ctx, opName)
+			cmd.sp = tracing.ForkSpan(cmd.proposal.ctx, opName)
+			// Wipe the cancelation from cmd.proposal.ctx, if any. Command application
+			// is not cancelable; nobody should be checking for this ctx's
+			// cancelation, but let's not tempt the users.
+			cmd.ctx = d.r.AnnotateCtx(opentracing.ContextWithSpan(context.Background(), cmd.sp))
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
 			// the span context and start a server-side span.

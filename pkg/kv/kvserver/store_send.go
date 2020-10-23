@@ -40,6 +40,27 @@ import (
 // be used to update the client transaction object.
 func (s *Store) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	// Run the request as a task so that it blocks the closing of the stopper
+	// (e.g. we can't allow the storage engine to be closed while we're
+	// evaluationg requests).
+	// Note that, because of this WithCancelOnQuiescence(), async operations that
+	// need to outlive this request needs to pay attention to not inherit this
+	// context cancelation.
+	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+	var br *roachpb.BatchResponse
+	var pErr *roachpb.Error
+	if err := s.stopper.RunTask(ctx, "BatchRequest", func(ctx context.Context) {
+		br, pErr = s.sendInner(ctx, ba)
+	}); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	return br, pErr
+}
+
+func (s *Store) sendInner(
+	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
