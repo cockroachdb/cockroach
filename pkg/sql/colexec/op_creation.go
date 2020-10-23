@@ -38,7 +38,7 @@ type NewColOperatorArgs struct {
 	ProcessorConstructor execinfra.ProcessorConstructor
 	DiskQueueCfg         colcontainer.DiskQueueCfg
 	FDSemaphore          semaphore.Semaphore
-	ExprHelper           ExprHelper
+	ExprHelper           *ExprHelper
 	TestingKnobs         struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be

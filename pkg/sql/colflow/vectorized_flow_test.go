@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -228,8 +227,8 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
 		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{},
-		nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil,
-		colexec.DefaultExprDeserialization, nil, /* typeResolver */
+		nil /* nodeDialer */, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		nil /* fdSemaphore */, nil, /* typeResolver */
 	)
 
 	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, flowinfra.FuseNormally)
