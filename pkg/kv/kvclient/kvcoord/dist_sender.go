@@ -135,7 +135,7 @@ var CanSendToFollower = func(
 
 const (
 	// The default limit for asynchronous senders.
-	defaultSenderConcurrency = 500
+	defaultSenderConcurrency = 1024
 	// The maximum number of range descriptors to prefetch during range lookups.
 	rangeLookupPrefetchCount = 8
 	// The maximum number of times a replica is retried when it repeatedly returns
@@ -152,7 +152,7 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 var senderConcurrencyLimit = settings.RegisterNonNegativeIntSetting(
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
-	max(defaultSenderConcurrency, int64(32*runtime.NumCPU())),
+	max(defaultSenderConcurrency, int64(64*runtime.NumCPU())),
 )
 
 func max(a, b int64) int64 {
