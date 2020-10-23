@@ -293,10 +293,10 @@ group-by
  │    ├── left ordering: +3
  │    ├── right ordering: +10
  │    ├── fd: (3)==(10), (10)==(3)
- │    ├── scan r@rides_vehicle_id_idx
+ │    ├── scan rides@rides_vehicle_id_idx [as=r]
  │    │    ├── columns: vehicle_id:3
  │    │    └── ordering: +3
- │    ├── scan v@vehicles_id_idx
+ │    ├── scan vehicles@vehicles_id_idx [as=v]
  │    │    ├── columns: v.id:10!null owner_id:13
  │    │    └── ordering: +10
  │    └── filters (true)

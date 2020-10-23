@@ -492,11 +492,11 @@ semi-join (hash)
  ├── columns: k:1!null i:2 f:3 s:4 arr:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── scan a1
+ ├── scan a [as=a1]
  │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    └── columns: a2.i:8
  └── filters
       └── a1.i:2 = a2.i:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
@@ -532,11 +532,11 @@ semi-join (hash)
  ├── columns: k:1!null i:2 f:3 s:4 arr:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── scan a1
+ ├── scan a [as=a1]
  │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    └── columns: a2.i:8
  └── filters
       └── a1.i:2 = a2.i:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
@@ -548,11 +548,11 @@ anti-join (hash)
  ├── columns: k:1!null i:2 f:3 s:4 arr:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── scan a1
+ ├── scan a [as=a1]
  │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    └── columns: a2.i:8
  └── filters
       └── a1.i:2 = a2.i:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
@@ -1353,7 +1353,7 @@ project
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  │    │    ├── key: (7)
  │    │    ├── fd: (1)==(7), (7)==(1)
- │    │    ├── scan b
+ │    │    ├── scan a [as=b]
  │    │    │    ├── columns: b.k:1!null
  │    │    │    └── key: (1)
  │    │    ├── scan a
@@ -1390,7 +1390,7 @@ project
  │    │         ├── columns: b.k:1!null b.i:2 a.k:7 a.i:8
  │    │         ├── key: (1,7)
  │    │         ├── fd: (1)-->(2), (7)-->(8)
- │    │         ├── scan b
+ │    │         ├── scan a [as=b]
  │    │         │    ├── columns: b.k:1!null b.i:2
  │    │         │    ├── key: (1)
  │    │         │    └── fd: (1)-->(2)
@@ -1473,14 +1473,14 @@ project
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  │    │    ├── key: (7)
  │    │    ├── fd: ()-->(19,22), (1)==(7), (7)==(1)
- │    │    ├── scan c
+ │    │    ├── scan a [as=c]
  │    │    │    ├── columns: c.k:1!null
  │    │    │    └── key: (1)
  │    │    ├── project
  │    │    │    ├── columns: canary:22!null array:19 b.k:7!null
  │    │    │    ├── key: (7)
  │    │    │    ├── fd: ()-->(19,22)
- │    │    │    ├── scan b
+ │    │    │    ├── scan a [as=b]
  │    │    │    │    ├── columns: b.k:7!null
  │    │    │    │    └── key: (7)
  │    │    │    └── projections
@@ -1516,7 +1516,7 @@ project
  │    │    ├── columns: c.k:1!null array:20 canary:24
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(20,24)
- │    │    ├── scan c
+ │    │    ├── scan a [as=c]
  │    │    │    ├── columns: c.k:1!null
  │    │    │    └── key: (1)
  │    │    ├── project
@@ -1544,7 +1544,7 @@ project
  │    │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    │    ├── key: ()
  │    │    │    │    │    │    ├── fd: ()-->(7)
- │    │    │    │    │    │    ├── scan b
+ │    │    │    │    │    │    ├── scan a [as=b]
  │    │    │    │    │    │    │    ├── columns: b.k:7!null
  │    │    │    │    │    │    │    └── key: (7)
  │    │    │    │    │    │    └── filters
@@ -1643,7 +1643,7 @@ project
  ├── columns: array:69
  ├── inner-join-apply
  │    ├── columns: rel.oid:1 array_agg:66 array:67
- │    ├── scan rel
+ │    ├── scan pg_class [as=rel]
  │    │    └── columns: rel.oid:1
  │    ├── inner-join-apply
  │    │    ├── columns: array_agg:66 array:67
@@ -1683,9 +1683,9 @@ project
  │    │    │    │    │         ├── inner-join (hash)
  │    │    │    │    │         │    ├── columns: inhrelid:31 inhparent:32!null inhseqno:33 c.oid:36!null c.relname:37!null
  │    │    │    │    │         │    ├── fd: (32)==(36), (36)==(32)
- │    │    │    │    │         │    ├── scan i
+ │    │    │    │    │         │    ├── scan pg_inherits [as=i]
  │    │    │    │    │         │    │    └── columns: inhrelid:31 inhparent:32 inhseqno:33
- │    │    │    │    │         │    ├── scan c
+ │    │    │    │    │         │    ├── scan pg_class [as=c]
  │    │    │    │    │         │    │    └── columns: c.oid:36 c.relname:37!null
  │    │    │    │    │         │    └── filters
  │    │    │    │    │         │         └── c.oid:36 = inhparent:32 [outer=(32,36), constraints=(/32: (/NULL - ]; /36: (/NULL - ]), fd=(32)==(36), (36)==(32)]

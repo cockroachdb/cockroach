@@ -863,9 +863,9 @@ scalar-group-by
  ├── project
  │    └── inner-join (cross)
  │         ├── columns: a.k:1!null a.v:2 a.w:3 a.s:4 a.crdb_internal_mvcc_timestamp:5 b.k:6!null b.v:7 b.w:8 b.s:9 b.crdb_internal_mvcc_timestamp:10
- │         ├── scan a
+ │         ├── scan kv [as=a]
  │         │    └── columns: a.k:1!null a.v:2 a.w:3 a.s:4 a.crdb_internal_mvcc_timestamp:5
- │         ├── scan b
+ │         ├── scan kv [as=b]
  │         │    └── columns: b.k:6!null b.v:7 b.w:8 b.s:9 b.crdb_internal_mvcc_timestamp:10
  │         └── filters (true)
  └── aggregations
@@ -2012,11 +2012,11 @@ project
  │         ├── columns: column12:12 b2.b:4
  │         ├── inner-join (cross)
  │         │    ├── columns: b1.b:1 b1.rowid:2!null b1.crdb_internal_mvcc_timestamp:3 b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6 a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
- │         │    ├── scan b1
+ │         │    ├── scan bools [as=b1]
  │         │    │    └── columns: b1.b:1 b1.rowid:2!null b1.crdb_internal_mvcc_timestamp:3
  │         │    ├── inner-join (cross)
  │         │    │    ├── columns: b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6 a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
- │         │    │    ├── scan b2
+ │         │    │    ├── scan bools [as=b2]
  │         │    │    │    └── columns: b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6
  │         │    │    ├── scan abc
  │         │    │    │    └── columns: a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
@@ -2044,11 +2044,11 @@ project
  │         ├── columns: column12:12 b2.b:4
  │         ├── inner-join (cross)
  │         │    ├── columns: b1.b:1 b1.rowid:2!null b1.crdb_internal_mvcc_timestamp:3 b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6 a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
- │         │    ├── scan b1
+ │         │    ├── scan bools [as=b1]
  │         │    │    └── columns: b1.b:1 b1.rowid:2!null b1.crdb_internal_mvcc_timestamp:3
  │         │    ├── inner-join (cross)
  │         │    │    ├── columns: b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6 a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
- │         │    │    ├── scan b2
+ │         │    │    ├── scan bools [as=b2]
  │         │    │    │    └── columns: b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6
  │         │    │    ├── scan abc
  │         │    │    │    └── columns: a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
@@ -2146,9 +2146,9 @@ project
  │         ├── columns: column9:9 b.baz:6
  │         ├── inner-join (cross)
  │         │    ├── columns: a.bar:1 a.baz:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
- │         │    ├── scan a
+ │         │    ├── scan foo [as=a]
  │         │    │    └── columns: a.bar:1 a.baz:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
- │         │    ├── scan b
+ │         │    ├── scan foo [as=b]
  │         │    │    └── columns: b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
  │         │    └── filters (true)
  │         └── projections
@@ -2173,9 +2173,9 @@ project
  │         ├── columns: column9:9 b.baz:6
  │         ├── inner-join (cross)
  │         │    ├── columns: a.bar:1 a.baz:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
- │         │    ├── scan a
+ │         │    ├── scan foo [as=a]
  │         │    │    └── columns: a.bar:1 a.baz:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
- │         │    ├── scan b
+ │         │    ├── scan foo [as=b]
  │         │    │    └── columns: b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
  │         │    └── filters (true)
  │         └── projections
@@ -2200,9 +2200,9 @@ project
  │         ├── columns: column5:5 column6:6
  │         ├── inner-join (cross)
  │         │    ├── columns: a.t:1!null a.crdb_internal_mvcc_timestamp:2 b.t:3!null b.crdb_internal_mvcc_timestamp:4
- │         │    ├── scan a
+ │         │    ├── scan times [as=a]
  │         │    │    └── columns: a.t:1!null a.crdb_internal_mvcc_timestamp:2
- │         │    ├── scan b
+ │         │    ├── scan times [as=b]
  │         │    │    └── columns: b.t:3!null b.crdb_internal_mvcc_timestamp:4
  │         │    └── filters (true)
  │         └── projections
@@ -3698,7 +3698,7 @@ project
       │    ├── grouping columns: t.y:4
       │    ├── project
       │    │    ├── columns: t.x:3 t.y:4
-      │    │    └── scan t
+      │    │    └── scan abxy [as=t]
       │    │         └── columns: t.a:1!null t.b:2!null t.x:3 t.y:4 t.crdb_internal_mvcc_timestamp:5
       │    └── aggregations
       │         └── sum [as=sum:6]
@@ -3709,7 +3709,7 @@ project
                      ├── columns: "?column?":13!null
                      ├── select
                      │    ├── columns: t2.a:7!null t2.b:8!null t2.x:9 t2.y:10 t2.crdb_internal_mvcc_timestamp:11
-                     │    ├── scan t2
+                     │    ├── scan abxy [as=t2]
                      │    │    └── columns: t2.a:7!null t2.b:8!null t2.x:9 t2.y:10 t2.crdb_internal_mvcc_timestamp:11
                      │    └── filters
                      │         └── sum:6 = 1
@@ -3753,7 +3753,7 @@ select
  │    ├── grouping columns: a.ten:5
  │    ├── project
  │    │    ├── columns: a.four:4 a.ten:5
- │    │    └── scan a
+ │    │    └── scan onek [as=a]
  │    │         └── columns: a.unique1:1 a.unique2:2 a.two:3 a.four:4 a.ten:5 a.twenty:6 a.hundred:7 a.thousand:8 a.twothousand:9 a.fivethous:10 a.tenthous:11 a.odd:12 a.even:13 a.stringu1:14 a.stringu2:15 a.string4:16 a.rowid:17!null a.crdb_internal_mvcc_timestamp:18
  │    └── aggregations
  │         └── agg-distinct [as=sum:19]
@@ -3765,7 +3765,7 @@ select
                 ├── columns: "?column?":39!null
                 ├── select
                 │    ├── columns: b.unique1:20 b.unique2:21 b.two:22 b.four:23!null b.ten:24 b.twenty:25 b.hundred:26 b.thousand:27 b.twothousand:28 b.fivethous:29 b.tenthous:30 b.odd:31 b.even:32 b.stringu1:33 b.stringu2:34 b.string4:35 b.rowid:36!null b.crdb_internal_mvcc_timestamp:37
-                │    ├── scan b
+                │    ├── scan onek [as=b]
                 │    │    └── columns: b.unique1:20 b.unique2:21 b.two:22 b.four:23 b.ten:24 b.twenty:25 b.hundred:26 b.thousand:27 b.twothousand:28 b.fivethous:29 b.tenthous:30 b.odd:31 b.even:32 b.stringu1:33 b.stringu2:34 b.string4:35 b.rowid:36!null b.crdb_internal_mvcc_timestamp:37
                 │    └── filters
                 │         └── sum:19 = b.four:23
@@ -3797,7 +3797,7 @@ project
  │    ├── columns: sum:17
  │    ├── project
  │    │    ├── columns: x:16
- │    │    ├── scan t1
+ │    │    ├── scan abxy [as=t1]
  │    │    │    └── columns: t1.a:1!null t1.b:2!null t1.x:3 t1.y:4 t1.crdb_internal_mvcc_timestamp:5
  │    │    └── projections
  │    │         └── t1.x:3 [as=x:16]
@@ -3812,9 +3812,9 @@ project
                      ├── columns: t2.a:6!null
                      └── inner-join (cross)
                           ├── columns: t2.a:6!null t2.b:7!null t2.x:8 t2.y:9 t2.crdb_internal_mvcc_timestamp:10 t3.a:11!null t3.b:12!null t3.x:13!null t3.y:14 t3.crdb_internal_mvcc_timestamp:15
-                          ├── scan t2
+                          ├── scan abxy [as=t2]
                           │    └── columns: t2.a:6!null t2.b:7!null t2.x:8 t2.y:9 t2.crdb_internal_mvcc_timestamp:10
-                          ├── scan t3
+                          ├── scan abxy [as=t3]
                           │    └── columns: t3.a:11!null t3.b:12!null t3.x:13 t3.y:14 t3.crdb_internal_mvcc_timestamp:15
                           └── filters
                                └── sum:17 = t3.x:13

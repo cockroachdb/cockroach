@@ -547,7 +547,7 @@ project
  ├── fd: ()-->(20)
  ├── left-join-apply
  │    ├── columns: ref_0.s:4 exists:19
- │    ├── scan ref_0
+ │    ├── scan a [as=ref_0]
  │    │    └── columns: ref_0.s:4
  │    ├── project
  │    │    ├── columns: exists:19!null
@@ -561,7 +561,7 @@ project
  │    │    │    ├── left-join (cross)
  │    │    │    │    ├── columns: ref_1.k:6!null true:17
  │    │    │    │    ├── outer: (4)
- │    │    │    │    ├── scan ref_1
+ │    │    │    │    ├── scan a [as=ref_1]
  │    │    │    │    │    ├── columns: ref_1.k:6!null
  │    │    │    │    │    └── key: (6)
  │    │    │    │    ├── project
