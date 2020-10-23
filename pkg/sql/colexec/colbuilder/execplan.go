@@ -57,8 +57,9 @@ func wrapRowSources(
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	factory coldata.ColumnFactory,
-) (*colexec.Columnarizer, error) {
+) (*colexec.Columnarizer, []execinfra.Releasable, error) {
 	var toWrapInputs []execinfra.RowSource
+	var releasable []execinfra.Releasable
 	for i, input := range inputs {
 		// Optimization: if the input is a Columnarizer, its input is necessarily a
 		// execinfra.RowSource, so remove the unnecessary conversion.
@@ -79,18 +80,22 @@ func wrapRowSources(
 				nil, /* cancelFlow */
 			)
 			if err != nil {
-				return nil, err
+				return nil, releasable, err
 			}
+			releasable = append(releasable, toWrapInput)
 			toWrapInputs = append(toWrapInputs, toWrapInput)
 		}
 	}
 
 	toWrap, err := newToWrap(toWrapInputs)
 	if err != nil {
-		return nil, err
+		return nil, releasable, err
 	}
 
-	return colexec.NewColumnarizer(ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap)
+	op, err := colexec.NewColumnarizer(
+		ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+	)
+	return op, releasable, err
 }
 
 type opResult struct {
@@ -421,7 +426,7 @@ func (r opResult) createAndWrapRowSource(
 			return causeToWrap
 		}
 	}
-	c, err := wrapRowSources(
+	c, releasable, err := wrapRowSources(
 		ctx,
 		flowCtx,
 		inputs,
@@ -458,6 +463,7 @@ func (r opResult) createAndWrapRowSource(
 		},
 		factory,
 	)
+	r.Releasable = append(r.Releasable, releasable...)
 	if err != nil {
 		return err
 	}
@@ -495,8 +501,9 @@ func (r opResult) createAndWrapRowSource(
 // NewColOperator creates a new columnar operator according to the given spec.
 func NewColOperator(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, args *colexec.NewColOperatorArgs,
-) (r colexec.NewColOperatorResult, err error) {
-	result := opResult{NewColOperatorResult: &r}
+) (_ *colexec.NewColOperatorResult, err error) {
+	result := opResult{NewColOperatorResult: colexec.GetNewColOperatorResult()}
+	r := result.NewColOperatorResult
 	// Make sure that we clean up memory monitoring infrastructure in case of an
 	// error or a panic.
 	defer func() {
@@ -524,6 +531,7 @@ func NewColOperator(
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	if args.ExprHelper == nil {
 		args.ExprHelper = colexec.NewDefaultExprHelper()
+		r.Releasable = append(r.Releasable, args.ExprHelper)
 	}
 
 	if log.V(2) {
@@ -535,7 +543,7 @@ func NewColOperator(
 
 	// resultPreSpecPlanningStateShallowCopy is a shallow copy of the result
 	// before any specs are planned. Used if there is a need to backtrack.
-	resultPreSpecPlanningStateShallowCopy := r
+	resultPreSpecPlanningStateShallowCopy := *r
 
 	if err = isSupported(spec); err != nil {
 		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
@@ -625,6 +633,7 @@ func NewColOperator(
 			result.Op = scanOp
 			result.IOReader = scanOp
 			result.MetadataSources = append(result.MetadataSources, scanOp)
+			result.Releasable = append(result.Releasable, scanOp)
 			// colBatchScan is wrapped with a cancel checker below, so we need to
 			// log its creation separately.
 			if log.V(1) {

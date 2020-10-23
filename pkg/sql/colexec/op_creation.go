@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -26,7 +27,7 @@ import (
 // We inject this at test time, so tests can use NewColOperator from colexec
 // package.
 var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args *NewColOperatorArgs,
-) (r NewColOperatorResult, err error)
+) (r *NewColOperatorResult, err error)
 
 // NewColOperatorArgs is a helper struct that encompasses all of the input
 // arguments to NewColOperator call.
@@ -83,4 +84,31 @@ type NewColOperatorResult struct {
 	ToClose    []colexecbase.Closer
 	OpMonitors []*mon.BytesMonitor
 	OpAccounts []*mon.BoundAccount
+	Releasable []execinfra.Releasable
+}
+
+var _ execinfra.Releasable = &NewColOperatorResult{}
+
+var newColOperatorResultPool = sync.Pool{
+	New: func() interface{} {
+		return &NewColOperatorResult{}
+	},
+}
+
+// GetNewColOperatorResult returns a new NewColOperatorResult.
+func GetNewColOperatorResult() *NewColOperatorResult {
+	return newColOperatorResultPool.Get().(*NewColOperatorResult)
+}
+
+// Release implements the execinfra.Releasable interface.
+func (r *NewColOperatorResult) Release() {
+	*r = NewColOperatorResult{
+		ColumnTypes:     r.ColumnTypes[:0],
+		MetadataSources: r.MetadataSources[:0],
+		ToClose:         r.ToClose[:0],
+		OpMonitors:      r.OpMonitors[:0],
+		OpAccounts:      r.OpAccounts[:0],
+		Releasable:      r.Releasable[:0],
+	}
+	newColOperatorResultPool.Put(r)
 }
