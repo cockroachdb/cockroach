@@ -1,0 +1,57 @@
+-- 2.1-sql-20 is a library of significant queries for benchmarking SQL execution
+-- during the 2.1 release cycle. These are intended to be run against the TPC-H
+-- dataset.
+--
+-- To load the data:
+--   > CREATE DATABASE tpch;
+--   > RESTORE workload.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'tpch';
+--
+-- To run the queries using the querybench workload:
+--   $ workload run querybench --concurrency 1 --max-ops 20 --db tpch --query-file 2.1-sql-20
+--
+-- Table sizes:
+--   supplier:    10,000 rows
+--   customer:   150,000 rows
+--   lineitem: 6,001,215 rows
+
+-- count(*)
+SELECT count(*) FROM lineitem
+
+-- count(*) with filter on non-indexed column
+SELECT count(*) FROM lineitem WHERE l_linenumber = 1
+
+-- SELECT *
+SELECT * FROM customer
+
+-- SELECT * ordered on non-indexed, non-sorted column
+SELECT * FROM customer ORDER BY c_address
+
+-- GROUP BY with COUNT
+SELECT l_linenumber, count(*) FROM lineitem GROUP BY 1 ORDER BY 1
+
+-- GROUP BY with MAX
+SELECT l_linenumber, max(l_quantity) FROM lineitem GROUP BY 1 ORDER BY 1
+
+-- GROUP BY with SUM
+SELECT l_linenumber, sum(l_quantity) FROM lineitem GROUP BY 1 ORDER BY 1
+
+-- DISTINCT
+SELECT count(DISTINCT l_suppkey) FROM lineitem
+
+-- Hash join
+SELECT count(*) FROM lineitem JOIN supplier ON l_suppkey = s_suppkey
+
+-- Merge join
+SELECT count(*) FROM lineitem@l_sk JOIN supplier@primary ON l_suppkey = s_suppkey
+
+-- count(col)
+SELECT count(c_name) FROM customer
+
+-- Index join
+SELECT count(c_name) FROM customer@primary
+
+-- Filter with expression evaluation
+SELECT count(*) FROM lineitem WHERE l_discount * l_extendedprice > 10000
+
+-- Hash join with expression evaluation
+SELECT count(*) FROM supplier s1 JOIN supplier s2 ON s1.s_suppkey + 1 = s2.s_suppkey
