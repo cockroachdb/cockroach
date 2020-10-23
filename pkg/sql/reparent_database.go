@@ -276,13 +276,30 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	return p.createDropDatabaseJob(
+	if err := p.createDropDatabaseJob(
 		ctx,
 		n.db.ID,
 		nil, /* schemasToDrop */
 		nil, /* tableDropDetails */
 		nil, /* typesToDrop */
 		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Log Rename Database event. This is an auditable log event and is recorded
+	// in the same transaction as the table descriptor update.
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		ctx,
+		p.txn,
+		EventLogConvertToSchema,
+		int32(n.db.ID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			DatabaseName    string
+			NewDatabaseName string
+			User            string
+		}{n.db.Name, n.newParent.Name, p.SessionData().User},
 	)
 }
 
