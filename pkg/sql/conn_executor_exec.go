@@ -530,25 +530,37 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens.
 
 	if os.ImplicitTxn.Get() {
-		asOfTs, err := p.isAsOf(ctx, ast)
+		asOfTs, timestampType, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)
 		}
 		if asOfTs != nil {
-			p.semaCtx.AsOfTimestamp = asOfTs
-			p.extendedEvalCtx.SetTxnTimestamp(asOfTs.GoTime())
-			ex.state.setHistoricalTimestamp(ctx, *asOfTs)
+			switch timestampType {
+			case transactionTimestamp:
+				p.semaCtx.AsOfTimestamp = asOfTs
+				p.extendedEvalCtx.SetTxnTimestamp(asOfTs.GoTime())
+				ex.state.setHistoricalTimestamp(ctx, *asOfTs)
+			case backfillTimestamp:
+				p.semaCtx.AsOfTimestampForBackfill = asOfTs
+			}
 		}
 	} else {
 		// If we're in an explicit txn, we allow AOST but only if it matches with
 		// the transaction's timestamp. This is useful for running AOST statements
 		// using the InternalExecutor inside an external transaction; one might want
 		// to do that to force p.avoidCachedDescriptors to be set below.
-		ts, err := p.isAsOf(ctx, ast)
+		ts, timestampType, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)
 		}
 		if ts != nil {
+			if timestampType == backfillTimestamp {
+				// Can't handle this: we don't know how to do a CTAS with a historical
+				// read timestamp and a present write timestamp.
+				err = unimplemented.NewWithIssueDetailf(35712, "historical ctas in explicit txn",
+					"historical CREATE TABLE AS unsupported in explicit transaction")
+				return makeErrEvent(err)
+			}
 			if readTs := ex.state.getReadTimestamp(); *ts != readTs {
 				err = pgerror.Newf(pgcode.Syntax,
 					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", readTs)
@@ -619,6 +631,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+
+	// Now actually execute the statement!
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err
 	}
@@ -759,12 +773,38 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	ex.statsCollector.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
 
+	var originalTxn *kv.Txn
+	if planner.semaCtx.AsOfTimestampForBackfill != nil {
+		// If we've been tasked with backfilling a schema change operation at a
+		// particular system time, it's important that we do planning for the
+		// operation at the timestamp that we're expecting to perform the backfill
+		// at, in case the schema of the objects that we read have changed in
+		// between the present transaction timestamp and the user-defined backfill
+		// timestamp.
+		//
+		// Set the planner's transaction to a new historical transaction pinned at
+		// that timestamp. We'll restore it after planning.
+		historicalTxn := kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
+		historicalTxn.SetFixedTimestamp(ctx, *planner.semaCtx.AsOfTimestampForBackfill)
+		originalTxn = planner.txn
+		planner.txn = historicalTxn
+	}
 	// Prepare the plan. Note, the error is processed below. Everything
 	// between here and there needs to happen even if there's an error.
+	//
+	// As a note about planning in a historical context (happens if we enter the
+	// stanza above due to an AOST backfill query), we don't ever expect a retry
+	// error to come out of planning.
 	err := ex.makeExecPlan(ctx, planner)
 	// We'll be closing the plan manually below after execution; this
 	// defer is a catch-all in case some other return path is taken.
 	defer planner.curPlan.close(ctx)
+
+	if originalTxn != nil {
+		// Reset the planner's transaction to the current-timestamp, original
+		// transaction.
+		planner.txn = originalTxn
+	}
 
 	if planner.autoCommit {
 		planner.curPlan.flags.Set(planFlagImplicitTxn)
@@ -852,7 +892,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	default:
 		planner.curPlan.flags.Set(planFlagNotDistributed)
 	}
+
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
+	// Dispatch the query to the execution engine.
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementType(), res, distributePlan.WillDistribute(), progAtomic,
 	)

@@ -291,6 +291,11 @@ func (n *createTableNode) startExec(params runParams) error {
 			// newTableDescIfAs does it automatically).
 			asCols = asCols[:len(asCols)-1]
 		}
+		// Set creationTime to the AS OF SYSTEM TIME that was stored in our As clause
+		// if there was one.
+		if params.p.semaCtx.AsOfTimestampForBackfill != nil {
+			creationTime = *params.p.semaCtx.AsOfTimestampForBackfill
+		}
 
 		desc, err = newTableDescIfAs(params,
 			n.n, n.dbDesc.GetID(), schemaID, id, creationTime, asCols, privs, params.p.EvalContext())
@@ -387,6 +392,14 @@ func (n *createTableNode) startExec(params runParams) error {
 	// If we are in an explicit txn or the source has placeholders, we execute the
 	// CTAS query synchronously.
 	if n.n.As() && !params.p.ExtendedEvalContext().TxnImplicit {
+		// If we're doing an explicit transaction, we can't do a historical CTAS
+		// so we should bail out.
+		if params.p.semaCtx.AsOfTimestampForBackfill != nil {
+			// We shouldn't get here in normal operation, but we'll check just in
+			// case.
+			return errors.AssertionFailedf("CTAS AS OF timestamp set in explicit txn")
+		}
+
 		err = func() error {
 			// The data fill portion of CREATE AS must operate on a read snapshot,
 			// so that it doesn't end up observing its own writes.
@@ -1105,7 +1118,7 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 	f.Close()
 
 	// Substitute placeholders with their values.
-	ctx := tree.NewFmtCtx(tree.FmtSerializable)
+	ctx := tree.NewFmtCtx(tree.FmtSerializable | tree.FmtSkipAsOfSystemTimeClauses)
 	ctx.SetPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 		d, err := placeholder.Eval(evalCtx)
 		if err != nil {
