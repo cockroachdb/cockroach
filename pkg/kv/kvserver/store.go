@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/compactor"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -401,10 +400,9 @@ type Store struct {
 	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg                StoreConfig
 	db                 *kv.DB
-	engine             storage.Engine       // The underlying key-value store
-	compactor          *compactor.Compactor // Schedules compaction of the engine
-	tsCache            tscache.Cache        // Most recent timestamps for keys / key ranges
-	allocator          Allocator            // Makes allocation decisions
+	engine             storage.Engine // The underlying key-value store
+	tsCache            tscache.Cache  // Most recent timestamps for keys / key ranges
+	allocator          Allocator      // Makes allocation decisions
 	replRankings       *replicaRankings
 	storeRebalancer    *StoreRebalancer
 	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
@@ -846,27 +844,6 @@ func NewStore(
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
-
-	// Pebble's compaction picker is aware of range deletions and will account
-	// for them during compaction picking, so don't create a compactor for
-	// Pebble.
-	//
-	// TODO(bilal): Delete this and all compactor-related code, now that Pebble is
-	// the only storage engine.
-	if s.engine.Type() != enginepb.EngineTypePebble {
-		s.compactor = compactor.NewCompactor(
-			s.cfg.Settings,
-			s.engine,
-			func() (roachpb.StoreCapacity, error) {
-				return s.Capacity(ctx, false /* useCached */)
-			},
-			func(ctx context.Context) {
-				s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
-			},
-		)
-		s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
-	}
-
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
 	s.renewableLeasesSignal = make(chan struct{})
@@ -1597,11 +1574,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer = NewStoreRebalancer(
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings)
 		s.storeRebalancer.Start(ctx, s.stopper)
-	}
-
-	// Start the storage engine compactor.
-	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) && s.compactor != nil {
-		s.compactor.Start(s.AnnotateCtx(context.Background()), s.stopper)
 	}
 
 	// Set the started flag (for unittests).

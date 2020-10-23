@@ -114,7 +114,6 @@ go_library(
         "//pkg/kv/kvserver/closedts/container",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/closedts/storage",
-        "//pkg/kv/kvserver/compactor",
         "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/constraint",
         "//pkg/kv/kvserver/gc",

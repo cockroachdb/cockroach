@@ -391,8 +391,6 @@ type Engine interface {
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
-	// GetSSTables retrieves metadata about this engine's live sstables.
-	GetSSTables() SSTableInfos
 	// GetCompactionStats returns the internal RocksDB compaction stats. See
 	// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
 	GetCompactionStats() string
