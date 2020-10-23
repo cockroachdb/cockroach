@@ -11,7 +11,10 @@
 package colexec
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,6 +25,7 @@ import (
 // ExprHelper is a utility interface that helps with expression handling in
 // the vectorized engine.
 type ExprHelper interface {
+	execinfra.Releasable
 	// ProcessExpr processes the given expression and returns a well-typed
 	// expression.
 	ProcessExpr(execinfrapb.Expression, *tree.SemaContext, *tree.EvalContext, []*types.T) (tree.TypedExpr, error)
@@ -46,14 +50,20 @@ const (
 func NewExprHelper(exprDeserialization ExprDeserialization) ExprHelper {
 	switch exprDeserialization {
 	case DefaultExprDeserialization:
-		return &defaultExprHelper{}
+		return NewDefaultExprHelper()
 	case ForcedExprDeserialization:
-		return &forcedDeserializationExprHelper{}
+		return forcedDeserializationExprHelperPool.Get().(*forcedDeserializationExprHelper)
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unexpected ExprDeserialization %d", exprDeserialization))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
+}
+
+var defaultExprHelperPool = sync.Pool{
+	New: func() interface{} {
+		return &defaultExprHelper{}
+	},
 }
 
 // defaultExprHelper is an ExprHelper that takes advantage of already present
@@ -67,7 +77,7 @@ var _ ExprHelper = &defaultExprHelper{}
 // NewDefaultExprHelper returns an ExprHelper that takes advantage of an already
 // well-typed expression in LocalExpr when set.
 func NewDefaultExprHelper() ExprHelper {
-	return &defaultExprHelper{}
+	return defaultExprHelperPool.Get().(*defaultExprHelper)
 }
 
 func (h *defaultExprHelper) ProcessExpr(
@@ -82,6 +92,17 @@ func (h *defaultExprHelper) ProcessExpr(
 	h.helper.Types = typs
 	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
 	return execinfrapb.DeserializeExpr(expr.Expr, semaCtx, evalCtx, &tempVars)
+}
+
+func (h *defaultExprHelper) Release() {
+	*h = defaultExprHelper{}
+	defaultExprHelperPool.Put(h)
+}
+
+var forcedDeserializationExprHelperPool = sync.Pool{
+	New: func() interface{} {
+		return &forcedDeserializationExprHelper{}
+	},
 }
 
 // forcedDeserializationExprHelper is an ExprHelper that always deserializes
@@ -102,6 +123,11 @@ func (h *forcedDeserializationExprHelper) ProcessExpr(
 	h.helper.Types = typs
 	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
 	return execinfrapb.DeserializeExpr(expr.Expr, semaCtx, evalCtx, &tempVars)
+}
+
+func (h *forcedDeserializationExprHelper) Release() {
+	*h = forcedDeserializationExprHelper{}
+	forcedDeserializationExprHelperPool.Put(h)
 }
 
 // Remove unused warning.

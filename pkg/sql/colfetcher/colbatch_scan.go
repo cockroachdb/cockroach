@@ -12,6 +12,7 @@ package colfetcher
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -61,6 +62,7 @@ type ColBatchScan struct {
 }
 
 var _ execinfra.IOReader = &ColBatchScan{}
+var _ execinfra.Releasable = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init() {
@@ -126,6 +128,18 @@ func (s *ColBatchScan) GetRowsRead() int64 {
 	return s.rowsRead
 }
 
+var colBatchScanPool = sync.Pool{
+	New: func() interface{} {
+		return &ColBatchScan{}
+	},
+}
+
+var cFetcherPool = sync.Pool{
+	New: func() interface{} {
+		return &cFetcher{}
+	},
+}
+
 // NewColBatchScan creates a new ColBatchScan operator.
 func NewColBatchScan(
 	ctx context.Context,
@@ -184,35 +198,36 @@ func NewColBatchScan(
 
 	neededColumns := helper.NeededColumns()
 
-	fetcher := cFetcher{}
+	fetcher := cFetcherPool.Get().(*cFetcher)
 	if spec.IsCheck {
 		// cFetchers don't support these checks.
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, &fetcher, table, int(spec.IndexIdx), columnIdxMap,
+		flowCtx.Codec(), allocator, fetcher, table, int(spec.IndexIdx), columnIdxMap,
 		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
 		sysColDescs,
 	); err != nil {
 		return nil, err
 	}
 
-	nSpans := len(spec.Spans)
-	spans := make(roachpb.Spans, nSpans)
-	for i := range spans {
-		spans[i] = spec.Spans[i].Span
+	s := colBatchScanPool.Get().(*ColBatchScan)
+	spans := s.spans[:0]
+	for i := range spec.Spans {
+		spans = append(spans, spec.Spans[i].Span)
 	}
-	return &ColBatchScan{
+	*s = ColBatchScan{
 		ctx:       ctx,
 		spans:     spans,
 		flowCtx:   flowCtx,
-		rf:        &fetcher,
+		rf:        fetcher,
 		limitHint: limitHint,
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		parallelize: spec.Parallelize && limitHint == 0,
 		ResultTypes: typs,
-	}, nil
+	}
+	return s, nil
 }
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
@@ -257,4 +272,14 @@ func initCRowFetcher(
 	}
 
 	return index, isSecondaryIndex, nil
+}
+
+// Release implements the execinfra.Releasable interface.
+func (s *ColBatchScan) Release() {
+	*s.rf = cFetcher{}
+	cFetcherPool.Put(s.rf)
+	*s = ColBatchScan{
+		spans: s.spans[:0],
+	}
+	colBatchScanPool.Put(s)
 }
