@@ -358,15 +358,3 @@ func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {
 		r.mu.raftLogLastCheckSize = 0
 	}
 }
-
-func (r *Replica) handleSuggestedCompactionsResult(
-	ctx context.Context, scs []kvserverpb.SuggestedCompaction,
-) {
-	// Pebble Stores don't use a compactor.
-	if r.store.compactor == nil {
-		return
-	}
-	for _, sc := range scs {
-		r.store.compactor.Suggest(ctx, sc)
-	}
-}

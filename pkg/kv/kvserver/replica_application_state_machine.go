@@ -1156,11 +1156,6 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		rResult.RaftLogDelta = 0
 	}
 
-	if rResult.SuggestedCompactions != nil {
-		sm.r.handleSuggestedCompactionsResult(ctx, rResult.SuggestedCompactions)
-		rResult.SuggestedCompactions = nil
-	}
-
 	// The rest of the actions are "nontrivial" and may have large effects on the
 	// in-memory and on-disk ReplicaStates. If any of these actions are present,
 	// we want to assert that these two states do not diverge.
