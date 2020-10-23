@@ -86,8 +86,8 @@ func (w *indexes) Flags() workload.Flags { return w.flags }
 func (w *indexes) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.idxs < 0 || w.idxs > 10 {
-				return errors.Errorf(`--secondary-indexes must be in range [0, 10]`)
+			if w.idxs < 0 || w.idxs > 99 {
+				return errors.Errorf(`--secondary-indexes must be in range [0, 99]`)
 			}
 			if w.payload < 1 {
 				return errors.Errorf(`--payload size must be equal to or greater than 1`)
@@ -133,7 +133,12 @@ func (w *indexes) Tables() []workload.Table {
 	var b strings.Builder
 	b.WriteString(schemaBase)
 	for i := 0; i < w.idxs; i++ {
-		fmt.Fprintf(&b, ",\n\t\t%sINDEX idx%d (col%d)", unique, i, i)
+		col1, col2 := i/10, i%10
+		if col1 == col2 {
+			fmt.Fprintf(&b, ",\n\t\t%sINDEX idx%d (col%d)", unique, i, col1)
+		} else {
+			fmt.Fprintf(&b, ",\n\t\t%sINDEX idx%d (col%d, col%d)", unique, i, col1, col2)
+		}
 	}
 	b.WriteString("\n)")
 
