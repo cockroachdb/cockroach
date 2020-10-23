@@ -49,10 +49,27 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 		return err
 	}
 
-	return params.p.writeNonDropDatabaseChange(
+	if err := params.p.writeNonDropDatabaseChange(
 		params.ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Log Alter Database Owner event. This is an auditable log event and is recorded
+	// in the same transaction as the table descriptor update.
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogAlterDatabaseOwner,
+		int32(n.desc.GetID()),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			DatabaseName string
+			Owner        string
+			User         string
+		}{n.n.Name.String(), newOwner, params.p.SessionData().User},
 	)
 }
 

@@ -22,6 +22,8 @@ export const CREATE_DATABASE = "create_database";
 export const DROP_DATABASE = "drop_database";
 // Recorded when a database is renamed.
 export const RENAME_DATABASE = "rename_database";
+// Recorded when a database's owner is changed.
+export const ALTER_DATABASE_OWNER = "alter_database_owner";
 // Recorded when a table is created.
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
@@ -85,6 +87,8 @@ export const DROP_SCHEMA = "drop_schema";
 export const RENAME_SCHEMA = "rename_schema";
 // Recorded when a schema's owner is changed.
 export const ALTER_SCHEMA_OWNER = "alter_schema_owner";
+// Recorded when a database is converted to a schema.
+export const CONVERT_TO_SCHEMA = "convert_to_schema";
 
 // Node Event Types
 export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONING, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
