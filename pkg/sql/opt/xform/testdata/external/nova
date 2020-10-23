@@ -275,7 +275,7 @@ project
       │    ├── key: (27)
       │    ├── fd: (27)-->(28-32), (28,30)-->(27,29,31,32)
       │    ├── ordering: +30
-      │    └── scan flavor_extra_specs_1
+      │    └── scan flavor_extra_specs [as=flavor_extra_specs_1]
       │         ├── columns: flavor_extra_specs_1.id:27!null key:28!null value:29 flavor_extra_specs_1.flavor_id:30!null flavor_extra_specs_1.created_at:31 flavor_extra_specs_1.updated_at:32
       │         ├── key: (27)
       │         └── fd: (27)-->(28-32), (28,30)-->(27,29,31,32)
@@ -352,7 +352,7 @@ sort
            ├── immutable, has-placeholder
            ├── key: (1,37)
            ├── fd: ()-->(11), (1)-->(2-10,12,14,15,35), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), (37)-->(38-42), (38,40)-->(37,39,41,42)
-           ├── scan flavor_extra_specs_1
+           ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
            │    ├── columns: flavor_extra_specs_1.id:37!null key:38!null value:39 flavor_extra_specs_1.flavor_id:40!null flavor_extra_specs_1.created_at:41 flavor_extra_specs_1.updated_at:42
            │    ├── key: (37)
            │    └── fd: (37)-->(38-42), (38,40)-->(37,39,41,42)
@@ -612,7 +612,7 @@ sort
            │    ├── has-placeholder
            │    ├── key: (30)
            │    ├── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
-           │    ├── scan instance_type_extra_specs_1
+           │    ├── scan instance_type_extra_specs [as=instance_type_extra_specs_1]
            │    │    ├── columns: instance_type_extra_specs_1.id:30!null key:31 value:32 instance_type_extra_specs_1.instance_type_id:33!null instance_type_extra_specs_1.deleted:34 instance_type_extra_specs_1.deleted_at:35 instance_type_extra_specs_1.created_at:36 instance_type_extra_specs_1.updated_at:37
            │    │    ├── key: (30)
            │    │    └── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
@@ -789,7 +789,7 @@ sort
            │    ├── has-placeholder
            │    ├── key: (18)
            │    ├── fd: (18)-->(19-25), (19,21,22)~~>(18,20,23-25)
-           │    ├── scan instance_type_extra_specs_1
+           │    ├── scan instance_type_extra_specs [as=instance_type_extra_specs_1]
            │    │    ├── columns: instance_type_extra_specs_1.id:18!null key:19 value:20 instance_type_extra_specs_1.instance_type_id:21!null instance_type_extra_specs_1.deleted:22 instance_type_extra_specs_1.deleted_at:23 instance_type_extra_specs_1.created_at:24 instance_type_extra_specs_1.updated_at:25
            │    │    ├── key: (18)
            │    │    └── fd: (18)-->(19-25), (19,21,22)~~>(18,20,23-25)
@@ -957,7 +957,7 @@ project
       │    ├── has-placeholder
       │    ├── key: (30)
       │    ├── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
-      │    ├── scan instance_type_extra_specs_1
+      │    ├── scan instance_type_extra_specs [as=instance_type_extra_specs_1]
       │    │    ├── columns: instance_type_extra_specs_1.id:30!null key:31 value:32 instance_type_extra_specs_1.instance_type_id:33!null instance_type_extra_specs_1.deleted:34 instance_type_extra_specs_1.deleted_at:35 instance_type_extra_specs_1.created_at:36 instance_type_extra_specs_1.updated_at:37
       │    │    ├── key: (30)
       │    │    └── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
@@ -1138,7 +1138,7 @@ project
       │    ├── has-placeholder
       │    ├── key: (30)
       │    ├── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
-      │    ├── scan instance_type_extra_specs_1
+      │    ├── scan instance_type_extra_specs [as=instance_type_extra_specs_1]
       │    │    ├── columns: instance_type_extra_specs_1.id:30!null key:31 value:32 instance_type_extra_specs_1.instance_type_id:33!null instance_type_extra_specs_1.deleted:34 instance_type_extra_specs_1.deleted_at:35 instance_type_extra_specs_1.created_at:36 instance_type_extra_specs_1.updated_at:37
       │    │    ├── key: (30)
       │    │    └── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
@@ -1306,7 +1306,7 @@ project
       ├── immutable, has-placeholder
       ├── key: (1,27)
       ├── fd: (1)-->(2-12,14,15,25), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (27)-->(28-32), (28,30)-->(27,29,31,32)
-      ├── scan flavor_extra_specs_1
+      ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
       │    ├── columns: flavor_extra_specs_1.id:27!null key:28!null value:29 flavor_extra_specs_1.flavor_id:30!null flavor_extra_specs_1.created_at:31 flavor_extra_specs_1.updated_at:32
       │    ├── key: (27)
       │    └── fd: (27)-->(28-32), (28,30)-->(27,29,31,32)
@@ -1465,7 +1465,7 @@ project
       ├── immutable, has-placeholder
       ├── key: (1,27)
       ├── fd: (1)-->(2-12,14,15,25), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (27)-->(28-32), (28,30)-->(27,29,31,32)
-      ├── scan flavor_extra_specs_1
+      ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
       │    ├── columns: flavor_extra_specs_1.id:27!null key:28!null value:29 flavor_extra_specs_1.flavor_id:30!null flavor_extra_specs_1.created_at:31 flavor_extra_specs_1.updated_at:32
       │    ├── key: (27)
       │    └── fd: (27)-->(28-32), (28,30)-->(27,29,31,32)
@@ -1634,7 +1634,7 @@ sort
            ├── immutable, has-placeholder
            ├── key: (1,27)
            ├── fd: (1)-->(2-12,14,15,25), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (27)-->(28-32), (28,30)-->(27,29,31,32)
-           ├── scan flavor_extra_specs_1
+           ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
            │    ├── columns: flavor_extra_specs_1.id:27!null key:28!null value:29 flavor_extra_specs_1.flavor_id:30!null flavor_extra_specs_1.created_at:31 flavor_extra_specs_1.updated_at:32
            │    ├── key: (27)
            │    └── fd: (27)-->(28-32), (28,30)-->(27,29,31,32)
@@ -1824,7 +1824,7 @@ sort
            │    ├── has-placeholder
            │    ├── key: (30)
            │    ├── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
-           │    ├── scan instance_type_extra_specs_1
+           │    ├── scan instance_type_extra_specs [as=instance_type_extra_specs_1]
            │    │    ├── columns: instance_type_extra_specs_1.id:30!null key:31 value:32 instance_type_extra_specs_1.instance_type_id:33!null instance_type_extra_specs_1.deleted:34 instance_type_extra_specs_1.deleted_at:35 instance_type_extra_specs_1.created_at:36 instance_type_extra_specs_1.updated_at:37
            │    │    ├── key: (30)
            │    │    └── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
@@ -2013,7 +2013,7 @@ project
       │    ├── has-placeholder
       │    ├── key: (30)
       │    ├── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
-      │    ├── scan instance_type_extra_specs_1
+      │    ├── scan instance_type_extra_specs [as=instance_type_extra_specs_1]
       │    │    ├── columns: instance_type_extra_specs_1.id:30!null key:31 value:32 instance_type_extra_specs_1.instance_type_id:33!null instance_type_extra_specs_1.deleted:34 instance_type_extra_specs_1.deleted_at:35 instance_type_extra_specs_1.created_at:36 instance_type_extra_specs_1.updated_at:37
       │    │    ├── key: (30)
       │    │    └── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
@@ -2169,7 +2169,7 @@ sort
            ├── has-placeholder
            ├── key: (1,17)
            ├── fd: (1)-->(2-12,14,15,32), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (17)-->(18-22), (18,20)-->(17,19,21,22)
-           ├── scan flavor_extra_specs_1
+           ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
            │    ├── columns: flavor_extra_specs_1.id:17!null key:18!null value:19 flavor_extra_specs_1.flavor_id:20!null flavor_extra_specs_1.created_at:21 flavor_extra_specs_1.updated_at:22
            │    ├── key: (17)
            │    └── fd: (17)-->(18-22), (18,20)-->(17,19,21,22)
@@ -2333,7 +2333,7 @@ sort
            │    ├── has-placeholder
            │    ├── key: (30)
            │    ├── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
-           │    ├── scan instance_type_extra_specs_1
+           │    ├── scan instance_type_extra_specs [as=instance_type_extra_specs_1]
            │    │    ├── columns: instance_type_extra_specs_1.id:30!null key:31 value:32 instance_type_extra_specs_1.instance_type_id:33!null instance_type_extra_specs_1.deleted:34 instance_type_extra_specs_1.deleted_at:35 instance_type_extra_specs_1.created_at:36 instance_type_extra_specs_1.updated_at:37
            │    │    ├── key: (30)
            │    │    └── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
@@ -2516,7 +2516,7 @@ sort
            ├── immutable, has-placeholder
            ├── key: (1,27)
            ├── fd: (1)-->(2-12,14,15,25), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (27)-->(28-32), (28,30)-->(27,29,31,32)
-           ├── scan flavor_extra_specs_1
+           ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
            │    ├── columns: flavor_extra_specs_1.id:27!null key:28!null value:29 flavor_extra_specs_1.flavor_id:30!null flavor_extra_specs_1.created_at:31 flavor_extra_specs_1.updated_at:32
            │    ├── key: (27)
            │    └── fd: (27)-->(28-32), (28,30)-->(27,29,31,32)
@@ -2691,7 +2691,7 @@ project
  ├── key: (1,42)
  ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), (42)-->(43-49), (43,45,46)~~>(42,44,47-49)
  ├── ordering: +7,+1 opt(11) [actual: +7,+1]
- └── left-join (lookup instance_type_extra_specs)
+ └── left-join (lookup instance_type_extra_specs [as=instance_type_extra_specs_1])
       ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:40 instance_type_extra_specs_1.id:42 key:43 value:44 instance_type_extra_specs_1.instance_type_id:45 instance_type_extra_specs_1.deleted:46 instance_type_extra_specs_1.deleted_at:47 instance_type_extra_specs_1.created_at:48 instance_type_extra_specs_1.updated_at:49
       ├── key columns: [42] = [42]
       ├── lookup columns are key
@@ -2699,7 +2699,7 @@ project
       ├── key: (1,42)
       ├── fd: ()-->(11), (1)-->(2-10,12-16,40), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), (42)-->(43-49), (43,45,46)~~>(42,44,47-49)
       ├── ordering: +7,+1 opt(11) [actual: +7,+1]
-      ├── left-join (lookup instance_type_extra_specs@secondary)
+      ├── left-join (lookup instance_type_extra_specs@secondary [as=instance_type_extra_specs_1])
       │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 true_agg:40 instance_type_extra_specs_1.id:42 key:43 instance_type_extra_specs_1.instance_type_id:45 instance_type_extra_specs_1.deleted:46
       │    ├── key columns: [1] = [45]
       │    ├── immutable, has-placeholder
@@ -2977,7 +2977,7 @@ sort
            │    ├── has-placeholder
            │    ├── key: (30)
            │    ├── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
-           │    ├── scan instance_type_extra_specs_1
+           │    ├── scan instance_type_extra_specs [as=instance_type_extra_specs_1]
            │    │    ├── columns: instance_type_extra_specs_1.id:30!null key:31 value:32 instance_type_extra_specs_1.instance_type_id:33!null instance_type_extra_specs_1.deleted:34 instance_type_extra_specs_1.deleted_at:35 instance_type_extra_specs_1.created_at:36 instance_type_extra_specs_1.updated_at:37
            │    │    ├── key: (30)
            │    │    └── fd: (30)-->(31-37), (31,33,34)~~>(30,32,35-37)
@@ -3153,7 +3153,7 @@ project
       ├── immutable, has-placeholder
       ├── key: (1,27)
       ├── fd: (1)-->(2-12,14,15,25), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (27)-->(28-32), (28,30)-->(27,29,31,32)
-      ├── scan flavor_extra_specs_1
+      ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
       │    ├── columns: flavor_extra_specs_1.id:27!null key:28!null value:29 flavor_extra_specs_1.flavor_id:30!null flavor_extra_specs_1.created_at:31 flavor_extra_specs_1.updated_at:32
       │    ├── key: (27)
       │    └── fd: (27)-->(28-32), (28,30)-->(27,29,31,32)
@@ -3321,7 +3321,7 @@ sort
            ├── immutable, has-placeholder
            ├── key: (1,27)
            ├── fd: (1)-->(2-15,25), (7)-->(1-6,8-15), (2)-->(1,3-15), (27)-->(28-32), (28,30)-->(27,29,31,32)
-           ├── scan flavor_extra_specs_1
+           ├── scan flavor_extra_specs [as=flavor_extra_specs_1]
            │    ├── columns: flavor_extra_specs_1.id:27!null key:28!null value:29 flavor_extra_specs_1.flavor_id:30!null flavor_extra_specs_1.created_at:31 flavor_extra_specs_1.updated_at:32
            │    ├── key: (27)
            │    └── fd: (27)-->(28-32), (28,30)-->(27,29,31,32)

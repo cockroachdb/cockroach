@@ -11,9 +11,9 @@ project
  ├── columns: x:1 y:4
  └── inner-join (cross)
       ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters (true)
 
@@ -42,9 +42,9 @@ project
       │         └── 1 [as=x:1]
       ├── inner-join (cross)
       │    ├── columns: a.x:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7
-      │    ├── scan a
+      │    ├── scan onecolumn [as=a]
       │    │    └── columns: a.x:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-      │    ├── scan b
+      │    ├── scan onecolumn [as=b]
       │    │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7
       │    └── filters (true)
       └── filters (true)
@@ -56,9 +56,9 @@ project
  ├── columns: x:1!null y:4!null
  └── inner-join (hash)
       ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4!null b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4
@@ -73,9 +73,9 @@ sort
       ├── columns: a.x:1!null
       └── inner-join (hash)
            ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4!null b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-           ├── scan a
+           ├── scan onecolumn [as=a]
            │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           ├── scan b
+           ├── scan onecolumn [as=b]
            │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            └── filters
                 └── a.x:1 = b.x:4
@@ -87,9 +87,9 @@ project
  ├── columns: x:1!null
  └── inner-join (hash)
       ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4!null b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── a.x:1 = b.x:4
@@ -101,9 +101,9 @@ project
  ├── columns: x:1 y:4
  └── left-join (hash)
       ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4
@@ -118,9 +118,9 @@ sort
       ├── columns: a.x:1
       └── left-join (hash)
            ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           ├── scan a
+           ├── scan onecolumn [as=a]
            │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           ├── scan b
+           ├── scan onecolumn [as=b]
            │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            └── filters
                 └── a.x:1 = b.x:4
@@ -159,9 +159,9 @@ project
  ├── columns: x:1
  └── left-join (hash)
       ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── a.x:1 = b.x:4
@@ -173,9 +173,9 @@ project
  ├── columns: x:1 y:4
  └── right-join (hash)
       ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4
@@ -190,9 +190,9 @@ sort
       ├── columns: b.x:4
       └── right-join (hash)
            ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-           ├── scan a
+           ├── scan onecolumn [as=a]
            │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           ├── scan b
+           ├── scan onecolumn [as=b]
            │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            └── filters
                 └── a.x:1 = b.x:4
@@ -204,9 +204,9 @@ project
  ├── columns: x:4
  └── right-join (hash)
       ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── a.x:1 = b.x:4
@@ -222,9 +222,9 @@ project
  ├── columns: x:1 w:4
  └── inner-join (cross)
       ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 w:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn_w [as=b]
       │    └── columns: w:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters (true)
 
@@ -242,9 +242,9 @@ sort
       ├── columns: a.x:1 b.x:4
       └── full-join (hash)
            ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           ├── scan a
+           ├── scan onecolumn [as=a]
            │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           ├── scan b
+           ├── scan othercolumn [as=b]
            │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            └── filters
                 └── a.x:1 = b.x:4
@@ -261,9 +261,9 @@ sort
            ├── columns: x:7 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
            ├── full-join (hash)
            │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           │    ├── scan a
+           │    ├── scan onecolumn [as=a]
            │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           │    ├── scan b
+           │    ├── scan othercolumn [as=b]
            │    │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            │    └── filters
            │         └── a.x:1 = b.x:4
@@ -284,9 +284,9 @@ sort
            ├── columns: x:7 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
            ├── full-join (hash)
            │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           │    ├── scan a
+           │    ├── scan onecolumn [as=a]
            │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           │    ├── scan b
+           │    ├── scan othercolumn [as=b]
            │    │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            │    └── filters
            │         └── a.x:1 = b.x:4
@@ -305,9 +305,9 @@ sort
            ├── columns: x:7 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
            ├── full-join (hash)
            │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           │    ├── scan a
+           │    ├── scan onecolumn [as=a]
            │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           │    ├── scan b
+           │    ├── scan othercolumn [as=b]
            │    │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            │    └── filters
            │         └── a.x:1 = b.x:4
@@ -349,9 +349,9 @@ project
  ├── columns: x:1 y:4
  └── inner-join (cross)
       ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan empty [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters (true)
 
@@ -362,9 +362,9 @@ project
  ├── columns: x:1 x:4
  └── inner-join (cross)
       ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan empty [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters (true)
 
@@ -375,9 +375,9 @@ project
  ├── columns: x:1!null y:4!null
  └── inner-join (hash)
       ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4!null b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan empty [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4
@@ -389,9 +389,9 @@ project
  ├── columns: x:1!null
  └── inner-join (hash)
       ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4!null b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan empty [as=b]
       │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── a.x:1 = b.x:4
@@ -403,9 +403,9 @@ project
  ├── columns: x:1!null y:4!null
  └── inner-join (hash)
       ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4!null b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan empty [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4
@@ -417,9 +417,9 @@ project
  ├── columns: x:1!null
  └── inner-join (hash)
       ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4!null b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan empty [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── a.x:1 = b.x:4
@@ -434,9 +434,9 @@ sort
       ├── columns: x:1 y:4
       └── left-join (hash)
            ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           ├── scan a
+           ├── scan onecolumn [as=a]
            │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           ├── scan b
+           ├── scan empty [as=b]
            │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            └── filters
                 └── x:1 = y:4
@@ -451,9 +451,9 @@ sort
       ├── columns: a.x:1
       └── left-join (hash)
            ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           ├── scan a
+           ├── scan onecolumn [as=a]
            │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           ├── scan b
+           ├── scan empty [as=b]
            │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            └── filters
                 └── a.x:1 = b.x:4
@@ -465,9 +465,9 @@ project
  ├── columns: x:1 y:4
  └── left-join (hash)
       ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan empty [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4
@@ -479,9 +479,9 @@ project
  ├── columns: x:1
  └── left-join (hash)
       ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan empty [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── a.x:1 = b.x:4
@@ -493,9 +493,9 @@ project
  ├── columns: x:1 y:4
  └── right-join (hash)
       ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan empty [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4
@@ -507,9 +507,9 @@ project
  ├── columns: x:4
  └── right-join (hash)
       ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan empty [as=b]
       │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── a.x:1 = b.x:4
@@ -524,9 +524,9 @@ sort
       ├── columns: x:1 y:4
       └── full-join (hash)
            ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           ├── scan a
+           ├── scan empty [as=a]
            │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           ├── scan b
+           ├── scan onecolumn [as=b]
            │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            └── filters
                 └── x:1 = y:4
@@ -543,9 +543,9 @@ sort
            ├── columns: x:7 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
            ├── full-join (hash)
            │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           │    ├── scan a
+           │    ├── scan empty [as=a]
            │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           │    ├── scan b
+           │    ├── scan onecolumn [as=b]
            │    │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            │    └── filters
            │         └── a.x:1 = b.x:4
@@ -562,9 +562,9 @@ sort
       ├── columns: x:1 y:4
       └── full-join (hash)
            ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           ├── scan a
+           ├── scan onecolumn [as=a]
            │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           ├── scan b
+           ├── scan empty [as=b]
            │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            └── filters
                 └── x:1 = y:4
@@ -581,9 +581,9 @@ sort
            ├── columns: x:7 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
            ├── full-join (hash)
            │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 b.x:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
-           │    ├── scan a
+           │    ├── scan onecolumn [as=a]
            │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-           │    ├── scan b
+           │    ├── scan empty [as=b]
            │    │    └── columns: b.x:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
            │    └── filters
            │         └── a.x:1 = b.x:4
@@ -630,9 +630,9 @@ project
  ├── columns: x:1!null y:2 x:5 y:6!null
  └── inner-join (hash)
       ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5 b.y:6!null b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
-      ├── scan a
+      ├── scan twocolumn [as=a]
       │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-      ├── scan b
+      ├── scan twocolumn [as=b]
       │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
       └── filters
            └── a.x:1 = b.y:6
@@ -644,9 +644,9 @@ project
  ├── columns: x:1!null y:2!null x:5 y:6
  └── inner-join (cross)
       ├── columns: a.x:1!null a.y:2!null a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
-      ├── scan a
+      ├── scan twocolumn [as=a]
       │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-      ├── scan b
+      ├── scan twocolumn [as=b]
       │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
       └── filters
            └── a.x:1 = a.y:2
@@ -658,9 +658,9 @@ project
  ├── columns: x:1!null x:4 y:5!null
  └── inner-join (hash)
       ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 b.x:4 y:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan twocolumn [as=b]
       │    └── columns: b.x:4 y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7
       └── filters
            └── a.x:1 = y:5
@@ -687,9 +687,9 @@ project
  ├── columns: x:1!null y:2 x:5 y:6
  └── inner-join (cross)
       ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
-      ├── scan a
+      ├── scan twocolumn [as=a]
       │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-      ├── scan b
+      ├── scan twocolumn [as=b]
       │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
       └── filters
            └── a.x:1 = 44
@@ -701,9 +701,9 @@ project
  ├── columns: x:1!null y:5!null
  └── inner-join (cross)
       ├── columns: o.x:1!null o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 t.x:4!null y:5!null t.rowid:6!null t.crdb_internal_mvcc_timestamp:7
-      ├── scan o
+      ├── scan onecolumn [as=o]
       │    └── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3
-      ├── scan t
+      ├── scan twocolumn [as=t]
       │    └── columns: t.x:4 y:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7
       └── filters
            └── (o.x:1 = t.x:4) AND (y:5 = 53)
@@ -716,9 +716,9 @@ project
  ├── columns: x:1 y:5
  └── left-join (cross)
       ├── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 t.x:4 y:5 t.rowid:6 t.crdb_internal_mvcc_timestamp:7
-      ├── scan o
+      ├── scan onecolumn [as=o]
       │    └── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3
-      ├── scan t
+      ├── scan twocolumn [as=t]
       │    └── columns: t.x:4 y:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7
       └── filters
            └── (o.x:1 = t.x:4) AND (y:5 = 53)
@@ -730,9 +730,9 @@ project
  ├── columns: x:1 y:5
  └── left-join (cross)
       ├── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 t.x:4 y:5 t.rowid:6 t.crdb_internal_mvcc_timestamp:7
-      ├── scan o
+      ├── scan onecolumn [as=o]
       │    └── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3
-      ├── scan t
+      ├── scan twocolumn [as=t]
       │    └── columns: t.x:4 y:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7
       └── filters
            └── (o.x:1 = t.x:4) AND (o.x:1 = 44)
@@ -744,9 +744,9 @@ project
  ├── columns: x:1 y:5
  └── left-join (cross)
       ├── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 t.x:4 y:5 t.rowid:6 t.crdb_internal_mvcc_timestamp:7
-      ├── scan o
+      ├── scan onecolumn [as=o]
       │    └── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3
-      ├── scan t
+      ├── scan twocolumn [as=t]
       │    └── columns: t.x:4 y:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7
       └── filters
            └── (o.x:1 = t.x:4) AND (t.x:4 = 44)
@@ -877,11 +877,11 @@ limit
  │              │    │    ├── scan twocolumn
  │              │    │    │    └── columns: twocolumn.x:4 y:5 twocolumn.rowid:6!null twocolumn.crdb_internal_mvcc_timestamp:7
  │              │    │    └── filters (true)
- │              │    ├── scan a
+ │              │    ├── scan onecolumn [as=a]
  │              │    │    └── columns: b:8 a.rowid:9!null a.crdb_internal_mvcc_timestamp:10
  │              │    └── filters
  │              │         └── b:8 = twocolumn.x:4
- │              ├── scan c
+ │              ├── scan twocolumn [as=c]
  │              │    └── columns: d:11 e:12 c.rowid:13!null c.crdb_internal_mvcc_timestamp:14
  │              └── filters
  │                   └── (b:8 = d:11) AND (d:11 = onecolumn.x:1)
@@ -967,13 +967,13 @@ limit
  │              ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5!null b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 c.x:9!null c.y:10 c.rowid:11!null c.crdb_internal_mvcc_timestamp:12
  │              ├── inner-join (hash)
  │              │    ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5!null b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
- │              │    ├── scan a
+ │              │    ├── scan twocolumn [as=a]
  │              │    │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
- │              │    ├── scan b
+ │              │    ├── scan twocolumn [as=b]
  │              │    │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
  │              │    └── filters
  │              │         └── a.x:1 = b.x:5
- │              ├── scan c
+ │              ├── scan twocolumn [as=c]
  │              │    └── columns: c.x:9 c.y:10 c.rowid:11!null c.crdb_internal_mvcc_timestamp:12
  │              └── filters
  │                   └── a.x:1 = c.x:9
@@ -991,13 +991,13 @@ sort
            ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5!null b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 c.x:9!null c.y:10 c.rowid:11!null c.crdb_internal_mvcc_timestamp:12
            ├── inner-join (hash)
            │    ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5!null b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
-           │    ├── scan a
+           │    ├── scan twocolumn [as=a]
            │    │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-           │    ├── scan b
+           │    ├── scan twocolumn [as=b]
            │    │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
            │    └── filters
            │         └── a.x:1 = b.x:5
-           ├── scan c
+           ├── scan twocolumn [as=c]
            │    └── columns: c.x:9 c.y:10 c.rowid:11!null c.crdb_internal_mvcc_timestamp:12
            └── filters
                 └── a.x:1 = c.x:9
@@ -1065,9 +1065,9 @@ project
       │         └── onecolumn.x:1 = othercolumn.x:4
       ├── inner-join (hash)
       │    ├── columns: a.x:7!null a.rowid:8!null a.crdb_internal_mvcc_timestamp:9 b.x:10!null b.rowid:11!null b.crdb_internal_mvcc_timestamp:12
-      │    ├── scan a
+      │    ├── scan onecolumn [as=a]
       │    │    └── columns: a.x:7 a.rowid:8!null a.crdb_internal_mvcc_timestamp:9
-      │    ├── scan b
+      │    ├── scan othercolumn [as=b]
       │    │    └── columns: b.x:10 b.rowid:11!null b.crdb_internal_mvcc_timestamp:12
       │    └── filters
       │         └── a.x:7 = b.x:10
@@ -1098,9 +1098,9 @@ project
  ├── columns: x:1 y:6
  └── inner-join (cross)
       ├── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
-      ├── scan a
+      ├── scan twocolumn [as=a]
       │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-      ├── scan b
+      ├── scan twocolumn [as=b]
       │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
       └── filters (true)
 
@@ -1111,9 +1111,9 @@ project
  ├── columns: y:6
  └── inner-join (hash)
       ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5!null b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
-      ├── scan a
+      ├── scan twocolumn [as=a]
       │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-      ├── scan b
+      ├── scan twocolumn [as=b]
       │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
       └── filters
            └── a.x:1 = b.x:5
@@ -1125,9 +1125,9 @@ project
  ├── columns: y:6
  └── inner-join (hash)
       ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5!null b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
-      ├── scan a
+      ├── scan twocolumn [as=a]
       │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-      ├── scan b
+      ├── scan twocolumn [as=b]
       │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
       └── filters
            └── a.x:1 = b.x:5
@@ -1139,9 +1139,9 @@ project
  ├── columns: x:1!null
  └── inner-join (cross)
       ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.x:5 b.y:6!null b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
-      ├── scan a
+      ├── scan twocolumn [as=a]
       │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
-      ├── scan b
+      ├── scan twocolumn [as=b]
       │    └── columns: b.x:5 b.y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
       └── filters
            └── a.x:1 < b.y:6
@@ -1569,9 +1569,9 @@ project
  ├── columns: a:1!null b:2!null c:3!null d:4 a:6!null b:7!null c:8!null d:9
  └── inner-join (cross)
       ├── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5 r.a:6!null r.b:7!null r.c:8!null r.d:9 r.crdb_internal_mvcc_timestamp:10
-      ├── scan l
+      ├── scan pkba [as=l]
       │    └── columns: l.a:1!null l.b:2!null l.c:3 l.d:4 l.crdb_internal_mvcc_timestamp:5
-      ├── scan r
+      ├── scan pkbc [as=r]
       │    └── columns: r.a:6 r.b:7!null r.c:8!null r.d:9 r.crdb_internal_mvcc_timestamp:10
       └── filters
            └── ((l.a:1 = r.a:6) AND (l.b:2 = r.b:7)) AND (l.c:3 = r.c:8)
@@ -1600,9 +1600,9 @@ project
  ├── columns: a:1!null b:2!null c:3!null d:4 d:9
  └── inner-join (hash)
       ├── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5 r.a:6!null r.b:7!null r.c:8!null r.d:9 r.crdb_internal_mvcc_timestamp:10
-      ├── scan l
+      ├── scan pkbac [as=l]
       │    └── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5
-      ├── scan r
+      ├── scan pkbac [as=r]
       │    └── columns: r.a:6!null r.b:7!null r.c:8!null r.d:9 r.crdb_internal_mvcc_timestamp:10
       └── filters
            ├── l.a:1 = r.a:6
@@ -1616,9 +1616,9 @@ project
  ├── columns: a:1!null b:2!null c:3!null d:4 a:6!null b:7!null c:8 d:9!null
  └── inner-join (cross)
       ├── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5 r.a:6!null r.b:7!null r.c:8 r.d:9!null r.crdb_internal_mvcc_timestamp:10
-      ├── scan l
+      ├── scan pkbac [as=l]
       │    └── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5
-      ├── scan r
+      ├── scan pkbad [as=r]
       │    └── columns: r.a:6!null r.b:7!null r.c:8 r.d:9!null r.crdb_internal_mvcc_timestamp:10
       └── filters
            └── ((l.c:3 = r.d:9) AND (l.a:1 = r.a:6)) AND (l.b:2 = r.b:7)
@@ -2429,9 +2429,9 @@ project
  └── inner-join (hash)
       ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 y:4!null b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       ├── flags: force merge join
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4
@@ -2449,9 +2449,9 @@ project
  └── full-join (hash)
       ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 y:4 b.rowid:5 b.crdb_internal_mvcc_timestamp:6
       ├── flags: force hash join (store right side)
-      ├── scan a
+      ├── scan onecolumn [as=a]
       │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3
-      ├── scan b
+      ├── scan onecolumn [as=b]
       │    └── columns: y:4 b.rowid:5!null b.crdb_internal_mvcc_timestamp:6
       └── filters
            └── x:1 = y:4

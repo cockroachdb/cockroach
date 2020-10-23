@@ -95,7 +95,7 @@ project
  │    │    ├── left-join-apply
  │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":38
  │    │    │    ├── fd: (20)-->(2-12,19)
- │    │    │    ├── scan sa
+ │    │    │    ├── scan pg_stat_activity [as=sa]
  │    │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null
  │    │    │    │    ├── key: (20)
  │    │    │    │    └── fd: (20)-->(2-12,19)
@@ -105,7 +105,7 @@ project
  │    │    │    │    ├── select
  │    │    │    │    │    ├── columns: oid:22 rolname:23!null rolsuper:24
  │    │    │    │    │    ├── fd: ()-->(23)
- │    │    │    │    │    ├── scan r
+ │    │    │    │    │    ├── scan pg_roles [as=r]
  │    │    │    │    │    │    └── columns: oid:22 rolname:23 rolsuper:24
  │    │    │    │    │    └── filters
  │    │    │    │    │         └── rolname:23 = 'opttester' [outer=(23), constraints=(/23: [/'opttester' - /'opttester']; tight), fd=()-->(23)]
