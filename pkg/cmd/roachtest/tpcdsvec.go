@@ -127,17 +127,17 @@ func registerTPCDSVec(r *testRegistry) {
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
 		firstNodeURL := c.ExternalPGUrl(ctx, firstNode)[0]
-		openNewConnections := func() (map[string]cmpconn.Conn, func()) {
-			conns := map[string]cmpconn.Conn{}
+		openNewConnections := func() (map[string]*cmpconn.Conn, func()) {
+			conns := map[string]*cmpconn.Conn{}
 			vecOffConn, err := cmpconn.NewConn(
-				firstNodeURL, setStmtTimeout+"SET vectorize=off; USE tpcds;",
+				firstNodeURL, nil, nil, setStmtTimeout+"SET vectorize=off; USE tpcds;",
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
 			conns["vectorize=OFF"] = vecOffConn
 			vecOnConn, err := cmpconn.NewConn(
-				firstNodeURL, setStmtTimeout+"SET vectorize=on; USE tpcds;",
+				firstNodeURL, nil, nil, setStmtTimeout+"SET vectorize=on; USE tpcds;",
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -146,9 +146,7 @@ func registerTPCDSVec(r *testRegistry) {
 			// A sanity check that we have different values of 'vectorize'
 			// session variable on two connections and that the comparator will
 			// emit an error because of that difference.
-			if err := cmpconn.CompareConns(
-				ctx, timeout, conns, "", "SHOW vectorize;", false, /* ignoreSQLErrors */
-			); err == nil {
+			if err := cmpconn.CompareConns(ctx, timeout, conns, "", "SHOW vectorize;"); err == nil {
 				t.Fatal("unexpectedly SHOW vectorize didn't trigger an error on comparison")
 			}
 			return conns, func() {
@@ -185,8 +183,7 @@ func registerTPCDSVec(r *testRegistry) {
 				conns, cleanup := openNewConnections()
 				start := timeutil.Now()
 				if err := cmpconn.CompareConns(
-					ctx, 3*timeout, conns, "", query, false, /* ignoreSQLErrors */
-				); err != nil {
+					ctx, 3*timeout, conns, "", query); err != nil {
 					t.Status(fmt.Sprintf("encountered an error: %s\n", err))
 					errToReport = errors.CombineErrors(errToReport, err)
 				} else {
