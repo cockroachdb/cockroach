@@ -58,6 +58,12 @@ type SemaContext struct {
 	// globally for the entire txn and this field would not be needed.
 	AsOfTimestamp *hlc.Timestamp
 
+	// AsOfTimestampForBackfill is set to non-nil if the query contains a backfill
+	// operation that is expected to perform at a user-defined timestamp. It's
+	// distinct from AsOfTimestamp above, which is used to denote a user-defined
+	// *transaction* timestamp.
+	AsOfTimestampForBackfill *hlc.Timestamp
+
 	Properties SemaProperties
 }
 
