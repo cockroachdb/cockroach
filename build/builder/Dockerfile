@@ -251,7 +251,8 @@ RUN apt-get install -y --no-install-recommends \
     openssh-client \
     yarn \
     google-chrome-stable \
-    unzip
+    unzip \
+    && cp /usr/bin/bazel-3.7.0 /usr/bin/bazel
 
 # awscli - roachtests
 # NB: we don't use apt-get because we need an up to date version of awscli
