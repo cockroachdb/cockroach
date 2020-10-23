@@ -242,7 +242,11 @@ func TestPebbleMapClose(t *testing.T) {
 	// Verify we have a single sstable.
 	var buf bytes.Buffer
 	fileNums := map[pebble.FileNum]bool{}
-	for l, ssts := range e.db.SSTables() {
+	sstInfos, err := e.db.SSTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for l, ssts := range sstInfos {
 		for _, sst := range ssts {
 			sm := bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix)
 			la := bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix)
@@ -271,7 +275,11 @@ func TestPebbleMapClose(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		lsmBuf.Reset()
 		stillExistBuf.Reset()
-		for l, ssts := range e.db.SSTables() {
+		sstInfos, err := e.db.SSTables()
+		if err != nil {
+			return err
+		}
+		for l, ssts := range sstInfos {
 			if len(ssts) == 0 {
 				continue
 			}
