@@ -57,8 +57,9 @@ func wrapRowSources(
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	factory coldata.ColumnFactory,
-) (*colexec.Columnarizer, error) {
+) (*colexec.Columnarizer, []execinfra.Releasable, error) {
 	var toWrapInputs []execinfra.RowSource
+	var releasable []execinfra.Releasable
 	for i, input := range inputs {
 		// Optimization: if the input is a Columnarizer, its input is necessarily a
 		// execinfra.RowSource, so remove the unnecessary conversion.
@@ -79,18 +80,22 @@ func wrapRowSources(
 				nil, /* cancelFlow */
 			)
 			if err != nil {
-				return nil, err
+				return nil, releasable, err
 			}
+			releasable = append(releasable, toWrapInput)
 			toWrapInputs = append(toWrapInputs, toWrapInput)
 		}
 	}
 
 	toWrap, err := newToWrap(toWrapInputs)
 	if err != nil {
-		return nil, err
+		return nil, releasable, err
 	}
 
-	return colexec.NewColumnarizer(ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap)
+	op, err := colexec.NewColumnarizer(
+		ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+	)
+	return op, releasable, err
 }
 
 type opResult struct {
@@ -437,7 +442,7 @@ func (r opResult) createAndWrapRowSource(
 			return causeToWrap
 		}
 	}
-	c, err := wrapRowSources(
+	c, releasable, err := wrapRowSources(
 		ctx,
 		flowCtx,
 		inputs,
@@ -474,6 +479,7 @@ func (r opResult) createAndWrapRowSource(
 		},
 		factory,
 	)
+	r.Releasable = append(r.Releasable, releasable...)
 	if err != nil {
 		return err
 	}
@@ -648,6 +654,7 @@ func NewColOperator(
 			result.Op, result.IsStreaming = scanOp, true
 			result.IOReader = scanOp
 			result.MetadataSources = append(result.MetadataSources, scanOp)
+			result.Releasable = append(result.Releasable, scanOp)
 			// colBatchScan is wrapped with a cancel checker below, so we need to
 			// log its creation separately.
 			log.VEventf(ctx, 1, "made op %T\n", result.Op)

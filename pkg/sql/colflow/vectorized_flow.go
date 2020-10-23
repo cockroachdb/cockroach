@@ -108,6 +108,9 @@ type vectorizedFlow struct {
 	// accounts are the accounts that are tracking the dynamic memory and disk
 	// usage of the buffering components.
 	accounts []*mon.BoundAccount
+	// releasable contains all components that should be released back to their
+	// pools during the flow cleanup.
+	releasable []execinfra.Releasable
 
 	tempStorage struct {
 		// path is the path to this flow's temporary storage directory.
@@ -250,6 +253,7 @@ func (f *vectorizedFlow) Setup(
 		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
 		f.monitors = append(f.monitors, creator.monitors...)
 		f.accounts = append(f.accounts, creator.accounts...)
+		f.releasable = append(f.releasable, creator.releasable...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return ctx, nil
 	}
@@ -264,6 +268,9 @@ func (f *vectorizedFlow) Setup(
 	}
 	for _, mon := range creator.monitors {
 		mon.Stop(ctx)
+	}
+	for _, r := range creator.releasable {
+		r.Release()
 	}
 	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
 	return ctx, err
@@ -286,7 +293,15 @@ func (f *vectorizedFlow) ConcurrentTxnUse() bool {
 
 // Release releases this vectorizedFlow back to the pool.
 func (f *vectorizedFlow) Release() {
-	*f = vectorizedFlow{}
+	for _, r := range f.releasable {
+		r.Release()
+	}
+	*f = vectorizedFlow{
+		streamingMemAccounts: f.streamingMemAccounts[:0],
+		monitors:             f.monitors[:0],
+		accounts:             f.accounts[:0],
+		releasable:           f.releasable[:0],
+	}
 	vectorizedFlowPool.Put(f)
 }
 
@@ -480,6 +495,11 @@ type vectorizedFlowCreator struct {
 	// accounts contains all monitors (for both memory and disk usage) of the
 	// buffering components in the vectorized flow.
 	accounts []*mon.BoundAccount
+	// releasable contains all components that should be released back to their
+	// pools during the flow cleanup. If the flow setup is successful, the
+	// responsibility of releasing the components is transferred to
+	// vectorizedFlow.
+	releasable []execinfra.Releasable
 
 	diskQueueCfg colcontainer.DiskQueueCfg
 	fdSemaphore  semaphore.Semaphore
@@ -1024,6 +1044,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			// them for a proper cleanup.
 			s.monitors = append(s.monitors, result.OpMonitors...)
 			s.accounts = append(s.accounts, result.OpAccounts...)
+			s.releasable = append(s.releasable, result.Releasable...)
 			if err != nil {
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return

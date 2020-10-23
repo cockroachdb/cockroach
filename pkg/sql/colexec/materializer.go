@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -49,7 +50,7 @@ type Materializer struct {
 	// row is the memory used for the output row.
 	row rowenc.EncDatumRow
 
-	// ouputRow stores the returned results of next() to be passed through an
+	// outputRow stores the returned results of next() to be passed through an
 	// adapter.
 	outputRow rowenc.EncDatumRow
 
@@ -121,6 +122,12 @@ func (d *drainHelper) ConsumerClosed() {}
 
 const materializerProcName = "materializer"
 
+var materializerPool = sync.Pool{
+	New: func() interface{} {
+		return &Materializer{}
+	},
+}
+
 // NewMaterializer creates a new Materializer processor which processes the
 // columnar data coming from input to return it as rows.
 // Arguments:
@@ -149,7 +156,8 @@ func NewMaterializer(
 	for i := range vecIdxsToConvert {
 		vecIdxsToConvert[i] = i
 	}
-	m := &Materializer{
+	m := materializerPool.Get().(*Materializer)
+	*m = Materializer{
 		input:       input,
 		typs:        typs,
 		drainHelper: newDrainHelper(metadataSourcesQueue),
@@ -184,6 +192,8 @@ func NewMaterializer(
 }
 
 var _ execinfra.OpNode = &Materializer{}
+var _ execinfra.Processor = &Materializer{}
+var _ execinfra.Releasable = &Materializer{}
 
 // ChildCount is part of the exec.OpNode interface.
 func (m *Materializer) ChildCount(verbose bool) int {
@@ -277,4 +287,13 @@ func (m *Materializer) close() {
 // ConsumerClosed is part of the execinfra.RowSource interface.
 func (m *Materializer) ConsumerClosed() {
 	m.close()
+}
+
+// Release releases this Materializer back to the pool.
+func (m *Materializer) Release() {
+	m.ProcessorBase.Reset()
+	*m = Materializer{
+		ProcessorBase: m.ProcessorBase,
+	}
+	materializerPool.Put(m)
 }

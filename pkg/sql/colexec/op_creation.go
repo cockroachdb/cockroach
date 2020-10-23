@@ -84,4 +84,5 @@ type NewColOperatorResult struct {
 	IsStreaming bool
 	OpMonitors  []*mon.BytesMonitor
 	OpAccounts  []*mon.BoundAccount
+	Releasable  []execinfra.Releasable
 }

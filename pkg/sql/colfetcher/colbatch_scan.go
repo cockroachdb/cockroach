@@ -12,6 +12,7 @@ package colfetcher
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -61,6 +62,7 @@ type ColBatchScan struct {
 }
 
 var _ execinfra.IOReader = &ColBatchScan{}
+var _ execinfra.Releasable = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init() {
@@ -124,6 +126,12 @@ func (s *ColBatchScan) GetBytesRead() int64 {
 // GetRowsRead is part of the execinfra.IOReader interface.
 func (s *ColBatchScan) GetRowsRead() int64 {
 	return s.rowsRead
+}
+
+var colBatchScanPool = sync.Pool{
+	New: func() interface{} {
+		return &ColBatchScan{}
+	},
 }
 
 // NewColBatchScan creates a new ColBatchScan operator.
@@ -197,12 +205,12 @@ func NewColBatchScan(
 		return nil, err
 	}
 
-	nSpans := len(spec.Spans)
-	spans := make(roachpb.Spans, nSpans)
-	for i := range spans {
-		spans[i] = spec.Spans[i].Span
+	s := colBatchScanPool.Get().(*ColBatchScan)
+	spans := s.spans[:0]
+	for i := range spec.Spans {
+		spans = append(spans, spec.Spans[i].Span)
 	}
-	return &ColBatchScan{
+	*s = ColBatchScan{
 		ctx:       ctx,
 		spans:     spans,
 		flowCtx:   flowCtx,
@@ -212,7 +220,8 @@ func NewColBatchScan(
 		// just in case.
 		parallelize: spec.Parallelize && limitHint == 0,
 		ResultTypes: typs,
-	}, nil
+	}
+	return s, nil
 }
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
@@ -257,4 +266,12 @@ func initCRowFetcher(
 	}
 
 	return index, isSecondaryIndex, nil
+}
+
+// Release releases this ColBatchScan back to the pool.
+func (s *ColBatchScan) Release() {
+	*s = ColBatchScan{
+		spans: s.spans[:0],
+	}
+	colBatchScanPool.Put(s)
 }
