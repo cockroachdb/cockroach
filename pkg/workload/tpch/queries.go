@@ -455,6 +455,9 @@ WHERE
 	AND l_shipdate < DATE '1995-09-01' + INTERVAL '1' MONTH;
 `
 
+	// Note that the main query has been adjusted to go around issues with
+	// floating point computations when the order of summation is different
+	// (see #53946 for more details).
 	query15 = `
 CREATE VIEW revenue0 (supplier_no, total_revenue) AS
 	SELECT
@@ -479,12 +482,12 @@ FROM
 	revenue0
 WHERE
 	s_suppkey = supplier_no
-	AND total_revenue = (
+	AND abs(total_revenue - (
 		SELECT
 			max(total_revenue)
 		FROM
 			revenue0
-	)
+	)) < 0.001
 ORDER BY
 	s_suppkey;
 

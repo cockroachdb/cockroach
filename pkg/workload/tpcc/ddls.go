@@ -154,7 +154,7 @@ const (
 		s_remote_cnt integer,
 		s_data       varchar(50),
 		primary key (s_w_id, s_i_id)`
-	tpccStockSchemaFkSuffix = `
+	deprecatedTpccStockSchemaFkSuffix = `
 		index stock_item_fk_idx (s_i_id)`
 	tpccStockSchemaInterleaveSuffix = `
 		interleave in parent warehouse (s_w_id)`

@@ -312,7 +312,7 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 					})
 				},
 				Duration:  length,
-				SetupType: usingFixture,
+				SetupType: usingImport,
 			})
 		},
 		MinVersion: "v19.1.0",
@@ -457,7 +457,7 @@ func makeSchemaChangeDuringTPCC(spec clusterSpec, warehouses int, length time.Du
 					})
 				},
 				Duration:  length,
-				SetupType: usingFixture,
+				SetupType: usingImport,
 			})
 		},
 		MinVersion: "v19.1.0",

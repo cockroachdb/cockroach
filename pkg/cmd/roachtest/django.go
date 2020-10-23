@@ -19,7 +19,7 @@ import (
 var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(\.(?P<point>\d+))?$`)
 var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
 
-var djangoSupportedTag = "cockroach-3.0.x"
+var djangoSupportedTag = "cockroach-3.1.x"
 
 func registerDjango(r *testRegistry) {
 	runDjango := func(
@@ -205,7 +205,7 @@ func registerDjango(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		MinVersion: "v19.2.0",
+		MinVersion: "v20.1.0",
 		Name:       "django",
 		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1, cpu(16)),

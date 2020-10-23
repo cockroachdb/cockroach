@@ -12,14 +12,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 )
 
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
-
-// TODO(rafi): use a release tag once the commit below appears in a release.
-var supportedPsycopgTag = "cecff195fc17a83d593dd62c239aa188883a844e"
+var supportedPsycopgTag = "2_8_6"
 
 // This test runs psycopg full test suite against a single cockroach node.
 func registerPsycopg(r *testRegistry) {
@@ -81,20 +78,8 @@ func registerPsycopg(r *testRegistry) {
 			c,
 			"https://github.com/psycopg/psycopg2.git",
 			"/mnt/data1/psycopg",
-			"master",
+			supportedPsycopgTag,
 			node,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		// TODO(rafi): once there's a real release, change the clone step above, and
-		// remove this.
-		if err := repeatRunE(
-			ctx,
-			c,
-			node,
-			"checkout supported tag",
-			fmt.Sprintf(`cd /mnt/data1/psycopg/ && git fetch --depth=10000 && git checkout %s`, supportedPsycopgTag),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -144,7 +129,7 @@ func registerPsycopg(r *testRegistry) {
 		Name:       "psycopg",
 		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1),
-		MinVersion: "v19.1.0",
+		MinVersion: "v19.2.0",
 		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runPsycopg(ctx, t, c)
