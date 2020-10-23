@@ -156,9 +156,11 @@ func explainGetDistributedAndVectorized(
 			thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
 			for scheduledOnNodeID, flow := range flows {
 				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
-				if _, err := colflow.SupportsVectorized(
+				_, cleanup, err := colflow.SupportsVectorized(
 					params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
-				); err != nil {
+				)
+				cleanup()
+				if err != nil {
 					willVectorize = false
 					break
 				}

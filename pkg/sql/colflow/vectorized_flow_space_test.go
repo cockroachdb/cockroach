@@ -240,7 +240,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				// streaming memory account.
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
 				var (
-					result colexec.NewColOperatorResult
+					result *colexec.NewColOperatorResult
 					err    error
 				)
 				// The memory error can occur either during planning or during
@@ -257,11 +257,13 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						result.Op.Next(ctx)
 					})
 				}
-				for _, memAccount := range result.OpAccounts {
-					memAccount.Close(ctx)
-				}
-				for _, memMonitor := range result.OpMonitors {
-					memMonitor.Stop(ctx)
+				if result != nil {
+					for _, memAccount := range result.OpAccounts {
+						memAccount.Close(ctx)
+					}
+					for _, memMonitor := range result.OpMonitors {
+						memMonitor.Stop(ctx)
+					}
 				}
 				if expectNoMemoryError {
 					require.NoError(t, err, "expected success, found: ", err)
