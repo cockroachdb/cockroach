@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "systembench",
+    srcs = [
+        "cpu_bench.go",
+        "disk_bench.go",
+        "network_test_client.go",
+        "network_test_common.go",
+        "network_test_server.go",
+        "systembench_common.go",
+        "tests.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/systembench",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/systembench/systembenchpb",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/codahale/hdrhistogram",
+        "//vendor/github.com/dustin/go-humanize",
+        "//vendor/golang.org/x/sync/errgroup",
+        "//vendor/google.golang.org/grpc",
+    ],
+)

@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "teamcity-trigger_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/teamcity-trigger",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/cmdutil",
+        "//vendor/github.com/abourget/teamcity",
+        "//vendor/github.com/kisielk/gotool",
+    ],
+)
+
+go_binary(
+    name = "teamcity-trigger",
+    embed = [":teamcity-trigger_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "teamcity-trigger_test",
+    srcs = ["main_test.go"],
+    embed = [":teamcity-trigger_lib"],
+)

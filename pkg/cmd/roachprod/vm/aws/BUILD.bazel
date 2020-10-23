@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "aws",
+    srcs = [
+        "aws.go",
+        "config.go",
+        "embedded.go",
+        "keys.go",
+        "support.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/vm",
+        "//pkg/cmd/roachprod/vm/flagstub",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/spf13/pflag",
+        "//vendor/golang.org/x/sync/errgroup",
+        "//vendor/golang.org/x/time/rate",
+    ],
+)

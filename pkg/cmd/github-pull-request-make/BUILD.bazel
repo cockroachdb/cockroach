@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "github-pull-request-make_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/github-pull-request-make",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/testutils/buildutil",
+        "//vendor/github.com/google/go-github/github",
+        "//vendor/golang.org/x/oauth2",
+    ],
+)
+
+go_binary(
+    name = "github-pull-request-make",
+    embed = [":github-pull-request-make_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "github-pull-request-make_test",
+    srcs = ["main_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":github-pull-request-make_lib"],
+    deps = [
+        "//pkg/testutils/skip",
+        "//vendor/github.com/kr/pretty",
+    ],
+)

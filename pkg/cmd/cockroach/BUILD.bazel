@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "cockroach_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cockroach",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/ccl",
+        "//pkg/ccl/cliccl",
+        "//pkg/cli",
+        "//pkg/ui/distccl",
+    ],
+)
+
+go_binary(
+    name = "cockroach",
+    embed = [":cockroach_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,50 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "testutils",
+    srcs = [
+        "base.go",
+        "dir.go",
+        "error.go",
+        "files.go",
+        "keys.go",
+        "net.go",
+        "pprof.go",
+        "soon.go",
+        "sort.go",
+        "subtest.go",
+        "trace.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/fileutil",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "testutils_test",
+    srcs = [
+        "net_test.go",
+        "soon_test.go",
+    ],
+    embed = [":testutils"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/grpcutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/netutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

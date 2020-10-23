@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "simulation",
+    srcs = ["network.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/gossip/simulation",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/gossip/resolver",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/settings/cluster",
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/netutil",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "//vendor/google.golang.org/grpc",
+    ],
+)

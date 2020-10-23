@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metric",
+    srcs = [
+        "doc.go",
+        "graphite_exporter.go",
+        "metric.go",
+        "metric.pb.go",
+        "prometheus_exporter.go",
+        "registry.go",
+        "sliding_histogram.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/metric",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/VividCortex/ewma",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/codahale/hdrhistogram",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/prometheus/client_golang/prometheus",
+        "//vendor/github.com/prometheus/client_golang/prometheus/graphite",
+        "//vendor/github.com/prometheus/client_model/go",
+        "//vendor/github.com/prometheus/common/expfmt",
+        "//vendor/github.com/rcrowley/go-metrics",
+    ],
+)
+
+go_test(
+    name = "metric_test",
+    srcs = [
+        "metric_test.go",
+        "prometheus_exporter_test.go",
+        "registry_test.go",
+    ],
+    embed = [":metric"],
+    deps = [
+        "//pkg/util/log",
+        "//vendor/github.com/kr/pretty",
+        "//vendor/github.com/prometheus/client_model/go",
+    ],
+)

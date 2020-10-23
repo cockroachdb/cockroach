@@ -1,0 +1,63 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "colrpc",
+    srcs = [
+        "inbox.go",
+        "outbox.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/colserde",
+        "//pkg/roachpb",
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/types",
+        "//pkg/util/log",
+        "//vendor/github.com/apache/arrow/go/arrow/array",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/logtags",
+    ],
+)
+
+go_test(
+    name = "colrpc_test",
+    srcs = [
+        "colrpc_test.go",
+        "inbox_test.go",
+        "main_test.go",
+        "outbox_test.go",
+    ],
+    embed = [":colrpc"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldatatestutils",
+        "//pkg/col/colserde",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/types",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/logtags",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/google.golang.org/grpc",
+    ],
+)

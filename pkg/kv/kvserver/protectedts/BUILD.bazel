@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "protectedts",
+    srcs = [
+        "protectedts.go",
+        "settings.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/util/hlc",
+        "//pkg/util/stop",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "protectedts_test",
+    srcs = ["protectedts_test.go"],
+    embed = [":protectedts"],
+)

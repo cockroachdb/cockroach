@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "nocopy",
+    srcs = ["nocopy.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/golang.org/x/tools/go/analysis",
+        "//vendor/golang.org/x/tools/go/analysis/passes/inspect",
+        "//vendor/golang.org/x/tools/go/ast/inspector",
+    ],
+)
+
+go_test(
+    name = "nocopy_test",
+    srcs = ["nocopy_test.go"],
+    deps = [
+        ":nocopy",
+        "//pkg/testutils/skip",
+        "//vendor/golang.org/x/tools/go/analysis/analysistest",
+    ],
+)

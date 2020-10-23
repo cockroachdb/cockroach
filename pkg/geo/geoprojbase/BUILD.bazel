@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "geoprojbase",
+    srcs = [
+        "geoprojbase.go",
+        "projections.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geoprojbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geographiclib",
+        "//pkg/geo/geopb",
+    ],
+)
+
+go_test(
+    name = "geoprojbase_test",
+    srcs = ["projections_test.go"],
+    embed = [":geoprojbase"],
+    deps = ["//vendor/github.com/stretchr/testify/require"],
+)

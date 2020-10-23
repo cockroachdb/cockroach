@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "geogfn",
+    srcs = [
+        "azimuth.go",
+        "best_projection.go",
+        "covers.go",
+        "distance.go",
+        "dwithin.go",
+        "geogfn.go",
+        "geographiclib.go",
+        "intersects.go",
+        "segmentize.go",
+        "topology_operations.go",
+        "unary_operators.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geogfn",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geodist",
+        "//pkg/geo/geographiclib",
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase",
+        "//pkg/geo/geosegmentize",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/golang/geo/r3",
+        "//vendor/github.com/golang/geo/s1",
+        "//vendor/github.com/golang/geo/s2",
+        "//vendor/github.com/twpayne/go-geom",
+    ],
+)
+
+go_test(
+    name = "geogfn_test",
+    srcs = [
+        "azimuth_test.go",
+        "best_projection_test.go",
+        "covers_test.go",
+        "distance_test.go",
+        "dwithin_test.go",
+        "geogfn_test.go",
+        "intersects_test.go",
+        "segmentize_test.go",
+        "topology_operations_test.go",
+        "unary_operators_test.go",
+    ],
+    embed = [":geogfn"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geoprojbase",
+        "//vendor/github.com/golang/geo/s1",
+        "//vendor/github.com/golang/geo/s2",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/github.com/twpayne/go-geom",
+    ],
+)

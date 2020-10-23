@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "provider",
+    srcs = ["provider.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/provider",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/logtags",
+    ],
+)
+
+go_test(
+    name = "provider_test",
+    srcs = ["provider_test.go"],
+    deps = [
+        ":provider",
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/provider/testutils",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/logtags",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/golang.org/x/sync/errgroup",
+    ],
+)

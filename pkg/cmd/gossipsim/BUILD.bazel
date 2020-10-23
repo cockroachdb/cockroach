@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "gossipsim_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/gossipsim",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/gossip/simulation",
+        "//pkg/roachpb",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+    ],
+)
+
+go_binary(
+    name = "gossipsim",
+    embed = [":gossipsim_lib"],
+    visibility = ["//visibility:public"],
+)
