@@ -74,6 +74,12 @@ var useTBI = settings.RegisterBoolSetting(
 	true,
 )
 
+var includeStats = settings.RegisterBoolSetting(
+	"backup.table_statistics.enabled",
+	"include current cached table statistics BACKUP",
+	true,
+)
+
 var backupOptionExpectValues = map[string]sql.KVStringOptValidate{
 	backupOptRevisionHistory: sql.KVStringOptRequireNoValue,
 	backupOptEncPassphrase:   sql.KVStringOptRequireValue,
@@ -363,13 +369,15 @@ func backupPlanHook(
 				}
 				tables = append(tables, tableDesc)
 
-				// Collect all the table stats for this table.
-				tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
-				if err != nil {
-					return err
-				}
-				for i := range tableStatisticsAcc {
-					tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
+				if includeStats.Get(&p.ExecCfg().Settings.SV) {
+					// Collect all the table stats for this table.
+					tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
+					if err != nil {
+						return err
+					}
+					for i := range tableStatisticsAcc {
+						tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
+					}
 				}
 			}
 		}
