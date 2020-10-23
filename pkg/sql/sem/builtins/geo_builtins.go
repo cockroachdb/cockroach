@@ -4980,6 +4980,26 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_unaryunion": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				res, err := geomfn.UnaryUnion(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(res), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Similar to ST_Union, but does dissolve boundaries between components of a multipolygon (invalid) and does perform union between the components of a geometrycollection.
+Each components of the input geometry is assumed to be valid, so you won't get a valid multipolygon out of a bow-tie polygon (invalid).
+You may use this function to node a set of linestrings.
+				`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// BoundingBox
@@ -5624,7 +5644,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_subdivide":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49048}),
 	"st_tileenvelope":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
 	"st_transscale":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49061}),
-	"st_unaryunion":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49062}),
 	"st_voronoilines":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49065}),
 	"st_voronoipolygons":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49066}),
 	"st_wrapx":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),

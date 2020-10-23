@@ -2182,6 +2182,10 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="st_translate"></a><code>st_translate(g: geometry, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry translated by the given deltas.</p>
 </span></td></tr>
+<tr><td><a name="st_unaryunion"></a><code>st_unaryunion(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Similar to ST_Union, but does dissolve boundaries between components of a multipolygon (invalid) and does perform union between the components of a geometrycollection.
+Each components of the input geometry is assumed to be valid, so you won’t get a valid multipolygon out of a bow-tie polygon (invalid).
+You may use this function to node a set of linestrings.</p>
+</span></td></tr>
 <tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
