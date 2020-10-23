@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -233,7 +234,6 @@ func (f *vectorizedFlow) Setup(
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
-		colexec.DefaultExprDeserialization,
 		flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
 	)
 	if f.testingKnobs.onSetupFlow != nil {
@@ -455,7 +455,7 @@ type vectorizedFlowCreator struct {
 	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
-	exprHelper                     colexec.ExprHelper
+	exprHelper                     *colexec.ExprHelper
 	typeResolver                   *descs.DistSQLTypeResolver
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
@@ -496,6 +496,7 @@ var vectorizedFlowCreatorPool = sync.Pool{
 	New: func() interface{} {
 		return &vectorizedFlowCreator{
 			streamIDToInputOp: make(map[execinfrapb.StreamID]opDAGWithMetaSources),
+			exprHelper:        colexec.NewExprHelper(),
 		}
 	},
 }
@@ -510,7 +511,6 @@ func newVectorizedFlowCreator(
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	exprDeserialization colexec.ExprDeserialization,
 	typeResolver *descs.DistSQLTypeResolver,
 ) *vectorizedFlowCreator {
 	creator := vectorizedFlowCreatorPool.Get().(*vectorizedFlowCreator)
@@ -524,7 +524,7 @@ func newVectorizedFlowCreator(
 		syncFlowConsumer:               syncFlowConsumer,
 		nodeDialer:                     nodeDialer,
 		flowID:                         flowID,
-		exprHelper:                     colexec.NewExprHelper(exprDeserialization),
+		exprHelper:                     creator.exprHelper,
 		typeResolver:                   typeResolver,
 		leaves:                         creator.leaves,
 		streamingMemAccounts:           creator.streamingMemAccounts,
@@ -554,13 +554,13 @@ func (s *vectorizedFlowCreator) Release() {
 	for k := range s.streamIDToInputOp {
 		delete(s.streamIDToInputOp, k)
 	}
-	s.exprHelper.Release()
 	for _, r := range s.releasables {
 		r.Release()
 	}
 	*s = vectorizedFlowCreator{
 		streamIDToInputOp:              s.streamIDToInputOp,
 		vectorizedStatsCollectorsQueue: s.vectorizedStatsCollectorsQueue[:0],
+		exprHelper:                     s.exprHelper,
 		leaves:                         s.leaves[:0],
 		streamingMemAccounts:           s.streamingMemAccounts[:0],
 		monitors:                       s.monitors[:0],
@@ -1286,53 +1286,41 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
 }
 
-// SupportsVectorized checks whether flow is supported by the vectorized engine
-// and returns an error if it isn't. Note that it does so by setting up the
-// full flow without running the components asynchronously.
-// It returns a list of the leaf operators of all flows for the purposes of
-// EXPLAIN output as well as a non-nil cleanup function that releases all
-// execinfra.Releasable objects. Note that the cleanup can *only* be performed
-// once leaves are no longer needed.
-// Note that passed-in output can be nil, but if it is non-nil, only Types()
-// method on it might be called (nothing will actually get Push()'ed into it).
-// - scheduledOnRemoteNode indicates whether the flow that processorSpecs
-// represent is scheduled to be run on a remote node (different from the one
-// performing this check).
-func SupportsVectorized(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	processorSpecs []execinfrapb.ProcessorSpec,
-	isPlanLocal bool,
-	output execinfra.RowReceiver,
-	scheduledOnRemoteNode bool,
-) (leaves []execinfra.OpNode, cleanup func(), err error) {
-	if output == nil {
-		output = &execinfra.RowChannel{}
+// IsSupported returns whether a flow specified by spec can be vectorized.
+func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpec) error {
+	for _, p := range spec.Processors {
+		if err := colbuilder.IsSupported(mode, &p); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// ConvertToVecTree converts the flow to a tree of vectorized operators
+// returning a list of the leap operators or an error if the flow vectorization
+// is not supported. Note that it does so by setting up the full flow without
+// running the components asynchronously, so it is pretty expensive.
+// It also returns a non-nil cleanup function that releases all
+// execinfra.Releasable objects which can *only* be performed once leaves are
+// no longer needed.
+func ConvertToVecTree(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, flow *execinfrapb.FlowSpec, isPlanLocal bool,
+) (leaves []execinfra.OpNode, cleanup func(), err error) {
 	fuseOpt := flowinfra.FuseNormally
 	if isPlanLocal {
 		fuseOpt = flowinfra.FuseAggressively
 	}
-	exprDeserialization := colexec.DefaultExprDeserialization
-	if scheduledOnRemoteNode {
-		// We want to force the expression deserialization if this flow is actually
-		// scheduled to be on the remote node in order to make sure that during
-		// actual execution the remote node will be able to deserialize the
-		// expressions without an error.
-		exprDeserialization = colexec.ForcedExprDeserialization
-	}
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
-		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, exprDeserialization,
-		flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
+		nil, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		flowCtx.Cfg.VecFDSemaphore, flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
 	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed
 	// case).
 	memoryMonitor := mon.NewMonitor(
-		"supports-vectorized",
+		"convert-to-vec-tree",
 		mon.MemoryResource,
 		nil,           /* curCount */
 		nil,           /* maxHist */
@@ -1343,7 +1331,7 @@ func SupportsVectorized(
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	defer creator.cleanup(ctx)
-	leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt)
+	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, fuseOpt)
 	return leaves, creator.Release, err
 }
 

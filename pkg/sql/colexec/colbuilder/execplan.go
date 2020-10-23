@@ -151,29 +151,43 @@ func needHashAggregator(aggSpec *execinfrapb.AggregatorSpec) (bool, error) {
 	return false, nil
 }
 
-// isSupported checks whether we have a columnar operator equivalent to a
+// IsSupported returns an error if the given spec is not supported by the
+// vectorized engine (neither natively nor by wrapping the corresponding row
+// execution processor).
+func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
+	err := supportedNatively(spec)
+	if err != nil {
+		if wrapErr := canWrap(mode, spec); wrapErr == nil {
+			// We don't support this spec natively, but we can wrap the row
+			// execution processor.
+			return nil
+		}
+	}
+	return err
+}
+
+// supportedNatively checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
-func isSupported(spec *execinfrapb.ProcessorSpec) error {
-	core := spec.Core
+func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 	switch {
-	case core.Noop != nil:
+	case spec.Core.Noop != nil:
 		return nil
 
-	case core.Values != nil:
-		if core.Values.NumRows != 0 {
+	case spec.Core.Values != nil:
+		if spec.Core.Values.NumRows != 0 {
 			return errors.Newf("values core only with zero rows supported")
 		}
 		return nil
 
-	case core.TableReader != nil:
-		if core.TableReader.IsCheck {
+	case spec.Core.TableReader != nil:
+		if spec.Core.TableReader.IsCheck {
 			return errors.Newf("scrub table reader is unsupported in vectorized")
 		}
 		return nil
 
-	case core.Aggregator != nil:
-		aggSpec := core.Aggregator
+	case spec.Core.Aggregator != nil:
+		aggSpec := spec.Core.Aggregator
 		needHash, err := needHashAggregator(aggSpec)
 		if err != nil {
 			return err
@@ -185,20 +199,20 @@ func isSupported(spec *execinfrapb.ProcessorSpec) error {
 		}
 		return nil
 
-	case core.Distinct != nil:
-		if core.Distinct.NullsAreDistinct {
+	case spec.Core.Distinct != nil:
+		if spec.Core.Distinct.NullsAreDistinct {
 			return errors.Newf("distinct with unique nulls not supported")
 		}
-		if core.Distinct.ErrorOnDup != "" {
+		if spec.Core.Distinct.ErrorOnDup != "" {
 			return errors.Newf("distinct with error on duplicates not supported")
 		}
 		return nil
 
-	case core.Ordinality != nil:
+	case spec.Core.Ordinality != nil:
 		return nil
 
-	case core.HashJoiner != nil:
-		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != descpb.InnerJoin {
+	case spec.Core.HashJoiner != nil:
+		if !spec.Core.HashJoiner.OnExpr.Empty() && spec.Core.HashJoiner.Type != descpb.InnerJoin {
 			return errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
 		leftInput, rightInput := spec.Input[0], spec.Input[1]
@@ -212,18 +226,18 @@ func isSupported(spec *execinfrapb.ProcessorSpec) error {
 		}
 		return nil
 
-	case core.MergeJoiner != nil:
-		if !core.MergeJoiner.OnExpr.Empty() &&
-			core.MergeJoiner.Type != descpb.InnerJoin {
+	case spec.Core.MergeJoiner != nil:
+		if !spec.Core.MergeJoiner.OnExpr.Empty() &&
+			spec.Core.MergeJoiner.Type != descpb.InnerJoin {
 			return errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
 		return nil
 
-	case core.Sorter != nil:
+	case spec.Core.Sorter != nil:
 		return nil
 
-	case core.Windower != nil:
-		for _, wf := range core.Windower.WindowFns {
+	case spec.Core.Windower != nil:
+		for _, wf := range spec.Core.Windower.WindowFns {
 			if wf.Frame != nil {
 				frame, err := wf.Frame.ConvertToAST()
 				if err != nil {
@@ -247,8 +261,101 @@ func isSupported(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	default:
-		return errors.Newf("unsupported processor core %q", core)
+		return errCoreUnsupportedNatively
 	}
+}
+
+var (
+	errCoreUnsupportedNatively        = errors.New("unsupported processor core")
+	errLocalPlanNodeWrap              = errors.New("core.LocalPlanNode is not supported")
+	errMetadataTestSenderWrap         = errors.New("core.MetadataTestSender is not supported")
+	errMetadataTestReceiverWrap       = errors.New("core.MetadataTestReceiver is not supported")
+	errChangeAggregatorWrap           = errors.New("core.ChangeAggregator is not supported")
+	errChangeFrontierWrap             = errors.New("core.ChangeFrontier is not supported")
+	errInvertedFiltererWrap           = errors.New("core.InvertedFilterer is not supported")
+	errBackfillerWrap                 = errors.New("core.Backfiller is not supported (not an execinfra.RowSource)")
+	errReadImportWrap                 = errors.New("core.ReadImport is not supported (not an execinfra.RowSource)")
+	errCSVWriterWrap                  = errors.New("core.CSVWriter is not supported (not an execinfra.RowSource)")
+	errSamplerWrap                    = errors.New("core.Sampler is not supported (not an execinfra.RowSource)")
+	errSampleAggregatorWrap           = errors.New("core.SampleAggregator is not supported (not an execinfra.RowSource)")
+	errBackupDataWrap                 = errors.New("core.BackupData is not supported (not an execinfra.RowSource)")
+	errSplitAndScatterWrap            = errors.New("core.SplitAndScatter is not supported (not an execinfra.RowSource)")
+	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader core is prohibited in vectorize=experimental_always")
+)
+
+func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
+	if spec.Core.JoinReader == nil && mode == sessiondatapb.VectorizeExperimentalAlways {
+		return errExperimentalWrappingProhibited
+	}
+	switch {
+	case spec.Core.Noop != nil:
+	case spec.Core.TableReader != nil:
+	case spec.Core.JoinReader != nil:
+	case spec.Core.Sorter != nil:
+	case spec.Core.Aggregator != nil:
+	case spec.Core.Distinct != nil:
+	case spec.Core.MergeJoiner != nil:
+	case spec.Core.HashJoiner != nil:
+	case spec.Core.Values != nil:
+	case spec.Core.Backfiller != nil:
+		return errBackfillerWrap
+	case spec.Core.ReadImport != nil:
+		return errReadImportWrap
+	case spec.Core.CSVWriter != nil:
+		return errCSVWriterWrap
+	case spec.Core.Sampler != nil:
+		return errSamplerWrap
+	case spec.Core.SampleAggregator != nil:
+		return errSampleAggregatorWrap
+	case spec.Core.MetadataTestSender != nil:
+		// We do not wrap MetadataTestSender because of the way metadata is
+		// propagated through the vectorized flow - it is drained at the flow
+		// shutdown unlike these test processors expect.
+		return errMetadataTestSenderWrap
+	case spec.Core.MetadataTestReceiver != nil:
+		// We do not wrap MetadataTestReceiver because of the way metadata is
+		// propagated through the vectorized flow - it is drained at the flow
+		// shutdown unlike these test processors expect.
+		return errMetadataTestReceiverWrap
+	case spec.Core.ZigzagJoiner != nil:
+	case spec.Core.ProjectSet != nil:
+	case spec.Core.Windower != nil:
+	case spec.Core.LocalPlanNode != nil:
+		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
+		// around a planNode) because it creates complications, and a flow with
+		// such processor probably will not benefit from the vectorization.
+		return errLocalPlanNodeWrap
+	case spec.Core.ChangeAggregator != nil:
+		// We do not wrap ChangeAggregator because this processor is very
+		// row-oriented and the Columnarizer might block indefinitely while
+		// buffering coldata.BatchSize() tuples to emit as a single batch.
+		return errChangeAggregatorWrap
+	case spec.Core.ChangeFrontier != nil:
+		// We do not wrap ChangeFrontier because this processor is very
+		// row-oriented and the Columnarizer might block indefinitely while
+		// buffering coldata.BatchSize() tuples to emit as a single batch.
+		return errChangeFrontierWrap
+	case spec.Core.Ordinality != nil:
+	case spec.Core.BulkRowWriter != nil:
+	case spec.Core.InvertedFilterer != nil:
+		// We do not wrap InvertedFilterer because that processor just happen
+		// to work due to the inverted data not being decoded by
+		// rowexec.tableReader which the ColBatchScan will attempt to do and
+		// will fail. The inverted column is not of the same type as the
+		// original column that was indexed (e.g. for geometry, the inverted
+		// column contains an int, and for arrays the inverted column contains
+		// the array element type). See #50695.
+		return errInvertedFiltererWrap
+	case spec.Core.InvertedJoiner != nil:
+	case spec.Core.BackupData != nil:
+		return errBackupDataWrap
+	case spec.Core.SplitAndScatter != nil:
+		return errSplitAndScatterWrap
+	case spec.Core.RestoreData != nil:
+	default:
+		return errors.AssertionFailedf("unexpected processor core %q", spec.Core)
+	}
+	return nil
 }
 
 // createDiskBackedSort creates a new disk-backed operator that sorts the input
@@ -454,7 +561,7 @@ func (r opResult) createAndWrapRowSource(
 				ok bool
 			)
 			if rs, ok = proc.(execinfra.RowSource); !ok {
-				return nil, errors.Newf(
+				return nil, errors.AssertionFailedf(
 					"processor %s is not an execinfra.RowSource", spec.Core.String(),
 				)
 			}
@@ -530,8 +637,7 @@ func NewColOperator(
 	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	if args.ExprHelper == nil {
-		args.ExprHelper = colexec.NewDefaultExprHelper()
-		r.Releasables = append(r.Releasables, args.ExprHelper)
+		args.ExprHelper = colexec.NewExprHelper()
 	}
 
 	if log.V(2) {
@@ -545,43 +651,9 @@ func NewColOperator(
 	// before any specs are planned. Used if there is a need to backtrack.
 	resultPreSpecPlanningStateShallowCopy := *r
 
-	if err = isSupported(spec); err != nil {
-		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
-		// around a planNode) because it creates complications, and a flow with
-		// such processor probably will not benefit from the vectorization.
-		if core.LocalPlanNode != nil {
-			return r, errors.Newf("core.LocalPlanNode is not supported")
-		}
-		// We also do not wrap MetadataTest{Sender,Receiver} because of the way
-		// metadata is propagated through the vectorized flow - it is drained at
-		// the flow shutdown unlike these test processors expect.
-		if core.MetadataTestSender != nil {
-			return r, errors.Newf("core.MetadataTestSender is not supported")
-		}
-		if core.MetadataTestReceiver != nil {
-			return r, errors.Newf("core.MetadataTestReceiver is not supported")
-		}
-		// We do not wrap Change{Aggregator,Frontier} because these processors
-		// are very row-oriented and the Columnarizer might block indefinitely
-		// while buffering coldata.BatchSize() tuples to emit as a single
-		// batch.
-		if core.ChangeAggregator != nil {
-			return r, errors.Newf("core.ChangeAggregator is not supported")
-		}
-		if core.ChangeFrontier != nil {
-			return r, errors.Newf("core.ChangeFrontier is not supported")
-		}
-		// We do not wrap InvertedFilterer because that processor just happen
-		// to work due to the inverted data not being decoded which the
-		// ColBatchScan will attempt to do and will fail. See #50695.
-		if core.InvertedFilterer != nil {
-			// colfetcher.cfetcher currently tries to decode the inverted
-			// column needed for inverted filtering, but that inverted column is
-			// not of the same type as the original column that was indexed (e.g.
-			// for geometry, the inverted column contains an int, and for arrays
-			// the inverted column contains the array element type).
-			// For now, we do not vectorize flows with inverted filterers.
-			return r, errors.Newf("core.InvertedFilterer is not supported")
+	if err = supportedNatively(spec); err != nil {
+		if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
+			return r, err
 		}
 		if log.V(1) {
 			log.Infof(ctx, "planning a wrapped processor because %s", err.Error())
@@ -1056,7 +1128,7 @@ func NewColOperator(
 			}
 
 		default:
-			return r, errors.Newf("unsupported processor core %q", core)
+			return r, errors.AssertionFailedf("unsupported processor core %q", core)
 		}
 	}
 
@@ -1385,7 +1457,7 @@ func (r *postProcessResult) planFilterExpr(
 	filter execinfrapb.Expression,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
-	helper colexec.ExprHelper,
+	helper *colexec.ExprHelper,
 ) error {
 	var selectionInternalMem int
 	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
