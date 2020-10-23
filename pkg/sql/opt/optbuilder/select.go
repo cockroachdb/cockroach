@@ -1299,14 +1299,19 @@ func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 		panic(err)
 	}
 
-	if b.semaCtx.AsOfTimestamp == nil {
+	if b.semaCtx.AsOfTimestamp != nil {
+		if *b.semaCtx.AsOfTimestamp != ts {
+			panic(unimplementedWithIssueDetailf(35712, "",
+				"cannot specify AS OF SYSTEM TIME with different timestamps"))
+		}
+	} else if b.semaCtx.AsOfTimestampForBackfill != nil {
+		if *b.semaCtx.AsOfTimestampForBackfill != ts {
+			panic(unimplementedWithIssueDetailf(35712, "",
+				"cannot specify AS OF SYSTEM TIME with different timestamps"))
+		}
+	} else {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
-	}
-
-	if *b.semaCtx.AsOfTimestamp != ts {
-		panic(unimplementedWithIssueDetailf(35712, "",
-			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}
 }
 
