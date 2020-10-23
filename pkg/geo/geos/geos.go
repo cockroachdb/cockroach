@@ -504,6 +504,19 @@ func Intersection(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// UnaryUnion Returns an EWKB which is a union of input geometry components.
+func UnaryUnion(a geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var unionEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_UnaryUnion(g, goToCSlice(a), &unionEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(unionEWKB), nil
+}
+
 // Union returns an EWKB which is a union of shapes A and B.
 func Union(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
 	g, err := ensureInitInternal()

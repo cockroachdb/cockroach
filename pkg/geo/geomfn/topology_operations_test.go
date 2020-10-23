@@ -449,3 +449,44 @@ func TestSharedPaths(t *testing.T) {
 	}
 
 }
+
+func TestUnaryUnion(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  geo.Geometry
+		want geo.Geometry
+	}{
+		{
+			"linstring",
+			geo.MustParseGeometry("LINESTRING(0 0, 10 10, 0 10, 10 0)"),
+			geo.MustParseGeometry("MULTILINESTRING((0 0,5 5),(5 5,10 10,0 10,5 5),(5 5,10 0))"),
+		},
+		{
+			"linestring, nothing to union",
+			geo.MustParseGeometry("LINESTRING(0 0, -10 10, 0 10)"),
+			geo.MustParseGeometry("LINESTRING(0 0, -10 10, 0 10)"),
+		},
+		{
+			"multipolygon to dissolve",
+			geo.MustParseGeometry("MULTIPOLYGON(((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)), ((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)))"),
+			geo.MustParseGeometry("MULTIPOLYGON(((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)),((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)))"),
+		},
+		{
+			"geometry collection of different types",
+			geo.MustParseGeometry("GEOMETRYCOLLECTION(POINT(1 0),POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)))"),
+			geo.MustParseGeometry("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"),
+		},
+		{
+			"geometry collection with duplicates",
+			geo.MustParseGeometry("GEOMETRYCOLLECTION(POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)),POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)))"),
+			geo.MustParseGeometry("POLYGON((1 0,0 0,0 1,1 1,1 0))"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := UnaryUnion(tt.arg)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
