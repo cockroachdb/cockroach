@@ -100,9 +100,10 @@ func (n *explainVecNode) startExec(params runParams) error {
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
 		scheduledOnRemoteNode := flow.nodeID != thisNodeID
-		opChains, err := colflow.SupportsVectorized(
+		opChains, cleanup, err := colflow.SupportsVectorized(
 			params.ctx, flowCtx, flow.flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
 		)
+		defer cleanup()
 		if err != nil {
 			return err
 		}

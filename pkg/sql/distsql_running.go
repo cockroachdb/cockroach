@@ -175,9 +175,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 
 			for scheduledOnNodeID, spec := range flows {
 				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
-				if _, err := colflow.SupportsVectorized(
+				_, cleanup, err := colflow.SupportsVectorized(
 					ctx, &flowCtx, spec.Processors, localState.IsLocal, recv, scheduledOnRemoteNode,
-				); err != nil {
+				)
+				cleanup()
+				if err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
 					if evalCtx.SessionData.VectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
