@@ -96,7 +96,7 @@ require (
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.2.0
 	github.com/kisielk/gotool v1.0.0
-	github.com/knz/go-libedit v1.10.1
+	github.com/knz/go-libedit v0.0.0-00010101000000-000000000000
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.2.1
 	github.com/kr/text v0.2.0
@@ -183,3 +183,5 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v2.2.0-rc.1.0.20180830
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641
 
 replace go.etcd.io/etcd => github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955
+
+replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201016212517-2c66cfe9603c
