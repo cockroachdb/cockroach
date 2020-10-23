@@ -132,7 +132,7 @@ project
       │         │              ├── columns: kv2.k:9!null
       │         │              └── select
       │         │                   ├── columns: kv2.k:9!null kv2.v:10 kv2.w:11 kv2.f:12 kv2.d:13 kv2.s:14 kv2.b:15 kv2.crdb_internal_mvcc_timestamp:16
-      │         │                   ├── scan kv2
+      │         │                   ├── scan kv [as=kv2]
       │         │                   │    └── columns: kv2.k:9!null kv2.v:10 kv2.w:11 kv2.f:12 kv2.d:13 kv2.s:14 kv2.b:15 kv2.crdb_internal_mvcc_timestamp:16
       │         │                   └── filters
       │         │                        └── kv2.k:9 = kv.k:1

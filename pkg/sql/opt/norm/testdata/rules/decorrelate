@@ -1525,7 +1525,7 @@ semi-join-apply
  │    ├── inner-join (cross)
  │    │    ├── columns: uv2.u:13!null
  │    │    ├── scan uv
- │    │    ├── scan uv2
+ │    │    ├── scan uv [as=uv2]
  │    │    │    ├── columns: uv2.u:13!null
  │    │    │    └── key: (13)
  │    │    └── filters (true)
@@ -2071,7 +2071,7 @@ with &1 (w0)
       ├── fd: ()-->(65)
       ├── semi-join-apply
       │    ├── columns: t0._string:6
-      │    ├── scan t0
+      │    ├── scan tab_orig [as=t0]
       │    │    └── columns: t0._string:6
       │    ├── inner-join (hash)
       │    │    ├── columns: tab_orig.rowid:15!null t1._decimal:21!null t1.rowid:23!null t2._bool:28!null t2.rowid:31!null t3._int2:33!null t3._timestamptz:35!null t3.rowid:39!null t4._int8:49!null t4._timestamptz:50!null t5._decimal:60!null
@@ -2099,7 +2099,7 @@ with &1 (w0)
       │    │    │    │    │    │    ├── columns: t1._decimal:21 t1.rowid:23!null t2._bool:28 t2.rowid:31!null t3._int2:33 t3._timestamptz:35 t3.rowid:39!null
       │    │    │    │    │    │    ├── key: (23,31,39)
       │    │    │    │    │    │    ├── fd: (23)-->(21), (31)-->(28), (39)-->(33,35)
-      │    │    │    │    │    │    ├── scan t1
+      │    │    │    │    │    │    ├── scan tab_orig [as=t1]
       │    │    │    │    │    │    │    ├── columns: t1._decimal:21 t1.rowid:23!null
       │    │    │    │    │    │    │    ├── key: (23)
       │    │    │    │    │    │    │    └── fd: (23)-->(21)
@@ -2107,11 +2107,11 @@ with &1 (w0)
       │    │    │    │    │    │    │    ├── columns: t2._bool:28 t2.rowid:31!null t3._int2:33 t3._timestamptz:35 t3.rowid:39!null
       │    │    │    │    │    │    │    ├── key: (31,39)
       │    │    │    │    │    │    │    ├── fd: (31)-->(28), (39)-->(33,35)
-      │    │    │    │    │    │    │    ├── scan t2
+      │    │    │    │    │    │    │    ├── scan tab_orig [as=t2]
       │    │    │    │    │    │    │    │    ├── columns: t2._bool:28 t2.rowid:31!null
       │    │    │    │    │    │    │    │    ├── key: (31)
       │    │    │    │    │    │    │    │    └── fd: (31)-->(28)
-      │    │    │    │    │    │    │    ├── scan t3
+      │    │    │    │    │    │    │    ├── scan tab_orig [as=t3]
       │    │    │    │    │    │    │    │    ├── columns: t3._int2:33 t3._timestamptz:35 t3.rowid:39!null
       │    │    │    │    │    │    │    │    ├── key: (39)
       │    │    │    │    │    │    │    │    └── fd: (39)-->(33,35)
@@ -2128,12 +2128,12 @@ with &1 (w0)
       │    │    │    │         │    └── t3._timestamptz:35
       │    │    │    │         └── const-agg [as=t1._decimal:21, outer=(21)]
       │    │    │    │              └── t1._decimal:21
-      │    │    │    ├── scan t4
+      │    │    │    ├── scan tab_orig [as=t4]
       │    │    │    │    └── columns: t4._int8:49 t4._timestamptz:50
       │    │    │    └── filters
       │    │    │         ├── t3._timestamptz:35 = t4._timestamptz:50 [outer=(35,50), constraints=(/35: (/NULL - ]; /50: (/NULL - ]), fd=(35)==(50), (50)==(35)]
       │    │    │         └── t3._int2:33 = t4._int8:49 [outer=(33,49), constraints=(/33: (/NULL - ]; /49: (/NULL - ]), fd=(33)==(49), (49)==(33)]
-      │    │    ├── scan t5
+      │    │    ├── scan tab_orig [as=t5]
       │    │    │    └── columns: t5._decimal:60
       │    │    └── filters
       │    │         ├── t2._bool:28 [outer=(28), constraints=(/28: [/true - /true]; tight), fd=()-->(28)]
@@ -2622,7 +2622,7 @@ project
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,7,10,13), (7)-->(10)
- │    │    ├── scan a2
+ │    │    ├── scan a [as=a2]
  │    │    │    ├── columns: a2.k:1!null a2.i:2
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2)
@@ -5139,7 +5139,7 @@ limit
  │         │    │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 unnest:11
  │         │    │    ├── immutable
  │         │    │    ├── fd: (1)-->(2-9)
- │         │    │    ├── scan a0
+ │         │    │    ├── scan articles [as=a0]
  │         │    │    │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9
  │         │    │    │    ├── key: (1)
  │         │    │    │    └── fd: (1)-->(2-9)
@@ -5676,7 +5676,7 @@ project
  │    │    │    ├── columns: version:7 rownum:12!null
  │    │    │    ├── key: (12)
  │    │    │    ├── fd: (12)-->(7)
- │    │    │    └── scan information_schema.tables
+ │    │    │    └── scan tables
  │    │    │         └── columns: version:7
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:8!null y:9

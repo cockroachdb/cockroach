@@ -725,11 +725,11 @@ sort
       │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:45!null n1.n_name:46!null n2.n_nationkey:50!null n2.n_name:51!null
       │    │    │    │    │    │    │    ├── key: (45,50)
       │    │    │    │    │    │    │    ├── fd: (45)-->(46), (50)-->(51)
-      │    │    │    │    │    │    │    ├── scan n1
+      │    │    │    │    │    │    │    ├── scan nation [as=n1]
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:45!null n1.n_name:46!null
       │    │    │    │    │    │    │    │    ├── key: (45)
       │    │    │    │    │    │    │    │    └── fd: (45)-->(46)
-      │    │    │    │    │    │    │    ├── scan n2
+      │    │    │    │    │    │    │    ├── scan nation [as=n2]
       │    │    │    │    │    │    │    │    ├── columns: n2.n_nationkey:50!null n2.n_name:51!null
       │    │    │    │    │    │    │    │    ├── key: (50)
       │    │    │    │    │    │    │    │    └── fd: (50)-->(51)
@@ -845,7 +845,7 @@ sort
       │    │    │    │    │    │    │    ├── key columns: [55] = [49]
       │    │    │    │    │    │    │    ├── key: (46)
       │    │    │    │    │    │    │    ├── fd: ()-->(66), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49)
-      │    │    │    │    │    │    │    ├── inner-join (lookup nation@n_rk)
+      │    │    │    │    │    │    │    ├── inner-join (lookup nation@n_rk [as=n1])
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:55!null n1.n_regionkey:57!null r_regionkey:65!null r_name:66!null
       │    │    │    │    │    │    │    │    ├── key columns: [65] = [57]
       │    │    │    │    │    │    │    │    ├── key: (55)
@@ -895,7 +895,7 @@ sort
       │    │    │    │    │    │         └── o_custkey:37 = c_custkey:46 [outer=(37,46), constraints=(/37: (/NULL - ]; /46: (/NULL - ]), fd=(37)==(46), (46)==(37)]
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── s_suppkey:11 = l_suppkey:21 [outer=(11,21), constraints=(/11: (/NULL - ]; /21: (/NULL - ]), fd=(11)==(21), (21)==(11)]
-      │    │    │    │    ├── scan n2
+      │    │    │    │    ├── scan nation [as=n2]
       │    │    │    │    │    ├── columns: n2.n_nationkey:60!null n2.n_name:61!null
       │    │    │    │    │    ├── key: (60)
       │    │    │    │    │    └── fd: (60)-->(61)
@@ -2320,20 +2320,20 @@ limit
  │         │    ├── key columns: [9] = [26]
  │         │    ├── lookup columns are key
  │         │    ├── fd: ()-->(28,37), (1)-->(2,4), (9)==(26), (26)==(9), (1)==(11), (11)==(1), (4)==(36), (36)==(4)
- │         │    ├── anti-join (lookup lineitem)
+ │         │    ├── anti-join (lookup lineitem [as=l3])
  │         │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
  │         │    │    ├── key columns: [9] = [58]
  │         │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
- │         │    │    ├── semi-join (lookup lineitem)
+ │         │    │    ├── semi-join (lookup lineitem [as=l2])
  │         │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
  │         │    │    │    ├── key columns: [9] = [41]
  │         │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
- │         │    │    │    ├── inner-join (lookup lineitem)
+ │         │    │    │    ├── inner-join (lookup lineitem [as=l1])
  │         │    │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
  │         │    │    │    │    ├── key columns: [9 12] = [9 12]
  │         │    │    │    │    ├── lookup columns are key
  │         │    │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
- │         │    │    │    │    ├── inner-join (lookup lineitem@l_sk)
+ │         │    │    │    │    ├── inner-join (lookup lineitem@l_sk [as=l1])
  │         │    │    │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_linenumber:12!null n_nationkey:36!null n_name:37!null
  │         │    │    │    │    │    ├── key columns: [1] = [11]
  │         │    │    │    │    │    ├── key: (9,12)

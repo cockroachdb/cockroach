@@ -193,12 +193,12 @@ sort
            ├── columns: boroname:2 neighborhoods.name:3 neighborhoods.geom:4!null subways.name:9!null subways.geom:21!null
            ├── immutable
            ├── fd: ()-->(9)
-           ├── scan neighborhoods
+           ├── scan nyc_neighborhoods [as=neighborhoods]
            │    └── columns: boroname:2 neighborhoods.name:3 neighborhoods.geom:4
            ├── select
            │    ├── columns: subways.name:9!null subways.geom:21
            │    ├── fd: ()-->(9)
-           │    ├── scan subways
+           │    ├── scan nyc_subway_stations [as=subways]
            │    │    └── columns: subways.name:9 subways.geom:21
            │    └── filters
            │         └── subways.name:9 = 'Broad St' [outer=(9), constraints=(/9: [/'Broad St' - /'Broad St']; tight), fd=()-->(9)]
@@ -246,12 +246,12 @@ sort
       │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4!null popn_total:8 popn_white:9 popn_black:10 census.geom:15!null
       │    │    ├── immutable
       │    │    ├── fd: ()-->(2)
-      │    │    ├── scan census
+      │    │    ├── scan nyc_census_blocks [as=census]
       │    │    │    └── columns: popn_total:8 popn_white:9 popn_black:10 census.geom:15
       │    │    ├── select
       │    │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4
       │    │    │    ├── fd: ()-->(2)
-      │    │    │    ├── scan neighborhoods
+      │    │    │    ├── scan nyc_neighborhoods [as=neighborhoods]
       │    │    │    │    └── columns: neighborhoods.boroname:2 name:3 neighborhoods.geom:4
       │    │    │    └── filters
       │    │    │         └── neighborhoods.boroname:2 = 'Manhattan' [outer=(2), constraints=(/2: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(2)]
@@ -296,12 +296,12 @@ project
  │    ├── inner-join (cross)
  │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:22 subways.geom:27!null
  │    │    ├── immutable
- │    │    ├── scan census
+ │    │    ├── scan nyc_census_blocks [as=census]
  │    │    │    └── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10
  │    │    ├── select
  │    │    │    ├── columns: routes:22 subways.geom:27
  │    │    │    ├── immutable
- │    │    │    ├── scan subways
+ │    │    │    ├── scan nyc_subway_stations [as=subways]
  │    │    │    │    └── columns: routes:22 subways.geom:27
  │    │    │    └── filters
  │    │    │         └── strpos(routes:22, 'A') > 0 [outer=(22), immutable]
@@ -361,13 +361,13 @@ sort
       │    │    ├── inner-join (cross)
       │    │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:22 subways.geom:27!null
       │    │    │    ├── immutable
-      │    │    │    ├── scan census
+      │    │    │    ├── scan nyc_census_blocks [as=census]
       │    │    │    │    └── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10
-      │    │    │    ├── scan subways
+      │    │    │    ├── scan nyc_subway_stations [as=subways]
       │    │    │    │    └── columns: routes:22 subways.geom:27
       │    │    │    └── filters
       │    │    │         └── st_dwithin(census.geom:10, subways.geom:27, 200.0) [outer=(10,27), immutable, constraints=(/10: (/NULL - ]; /27: (/NULL - ])]
-      │    │    ├── scan lines
+      │    │    ├── scan subway_lines [as=lines]
       │    │    │    └── columns: route:29
       │    │    └── filters
       │    │         └── strpos(routes:22, route:29) > 0 [outer=(22,29), immutable]
@@ -400,12 +400,12 @@ project
       ├── columns: s.name:4 routes:11 s.geom:16!null n.name:20!null n.geom:21!null
       ├── immutable
       ├── fd: ()-->(20)
-      ├── scan s
+      ├── scan nyc_subway_stations [as=s]
       │    └── columns: s.name:4 routes:11 s.geom:16
       ├── select
       │    ├── columns: n.name:20!null n.geom:21
       │    ├── fd: ()-->(20)
-      │    ├── scan n
+      │    ├── scan nyc_neighborhoods [as=n]
       │    │    └── columns: n.name:20 n.geom:21
       │    └── filters
       │         └── n.name:20 = 'Little Italy' [outer=(20), constraints=(/20: [/'Little Italy' - /'Little Italy']; tight), fd=()-->(20)]
@@ -441,11 +441,11 @@ sort
            ├── select
            │    ├── columns: routes:11 s.geom:16
            │    ├── immutable
-           │    ├── scan s
+           │    ├── scan nyc_subway_stations [as=s]
            │    │    └── columns: routes:11 s.geom:16
            │    └── filters
            │         └── strpos(routes:11, '6') > 0 [outer=(11), immutable]
-           ├── scan n
+           ├── scan nyc_neighborhoods [as=n]
            │    └── columns: boroname:19 n.name:20 n.geom:21
            └── filters
                 └── st_contains(n.geom:21, s.geom:16) [outer=(16,21), immutable, constraints=(/16: (/NULL - ]; /21: (/NULL - ])]
@@ -471,12 +471,12 @@ scalar-group-by
  │    ├── columns: name:3!null n.geom:4!null popn_total:8 c.geom:15!null
  │    ├── immutable
  │    ├── fd: ()-->(3)
- │    ├── scan c
+ │    ├── scan nyc_census_blocks [as=c]
  │    │    └── columns: popn_total:8 c.geom:15
  │    ├── select
  │    │    ├── columns: name:3!null n.geom:4
  │    │    ├── fd: ()-->(3)
- │    │    ├── scan n
+ │    │    ├── scan nyc_neighborhoods [as=n]
  │    │    │    └── columns: name:3 n.geom:4
  │    │    └── filters
  │    │         └── name:3 = 'Battery Park' [outer=(3), constraints=(/3: [/'Battery Park' - /'Battery Park']; tight), fd=()-->(3)]
@@ -519,11 +519,11 @@ sort
       │    ├── inner-join (cross)
       │    │    ├── columns: popn_total:3 c.geom:10!null name:14!null n.geom:15!null
       │    │    ├── immutable
-      │    │    ├── scan c
+      │    │    ├── scan nyc_census_blocks [as=c]
       │    │    │    └── columns: popn_total:3 c.geom:10
       │    │    ├── select
       │    │    │    ├── columns: name:14!null n.geom:15
-      │    │    │    ├── scan n
+      │    │    │    ├── scan nyc_neighborhoods [as=n]
       │    │    │    │    └── columns: name:14 n.geom:15
       │    │    │    └── filters
       │    │    │         └── (name:14 = 'Upper West Side') OR (name:14 = 'Upper East Side') [outer=(14), constraints=(/14: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
@@ -553,12 +553,12 @@ project
       ├── columns: blkid:2 blocks.geom:10!null name:15!null subways.geom:27!null
       ├── immutable
       ├── fd: ()-->(15)
-      ├── scan blocks
+      ├── scan nyc_census_blocks [as=blocks]
       │    └── columns: blkid:2 blocks.geom:10
       ├── select
       │    ├── columns: name:15!null subways.geom:27
       │    ├── fd: ()-->(15)
-      │    ├── scan subways
+      │    ├── scan nyc_subway_stations [as=subways]
       │    │    └── columns: name:15 subways.geom:27
       │    └── filters
       │         └── name:15 = 'Broad St' [outer=(15), constraints=(/15: [/'Broad St' - /'Broad St']; tight), fd=()-->(15)]

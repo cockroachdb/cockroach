@@ -128,7 +128,7 @@ sort
       │    │    │    │    │    │    │    ├── stats: [rows=1.33333333, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0, distinct(46,51)=1.33333333, null(46,51)=0]
       │    │    │    │    │    │    │    ├── key: (45,50)
       │    │    │    │    │    │    │    ├── fd: (45)-->(46), (50)-->(51)
-      │    │    │    │    │    │    │    ├── scan n1
+      │    │    │    │    │    │    │    ├── scan nation [as=n1]
       │    │    │    │    │    │    │    │    ├── save-table-name: q7_scan_11
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:45(int!null) n1.n_name:46(char!null)
       │    │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(45)=25, null(45)=0, distinct(46)=25, null(46)=0]
@@ -138,7 +138,7 @@ sort
       │    │    │    │    │    │    │    │    │                 <--- 'ALGERIA' ---- 'VIETNAM'
       │    │    │    │    │    │    │    │    ├── key: (45)
       │    │    │    │    │    │    │    │    └── fd: (45)-->(46)
-      │    │    │    │    │    │    │    ├── scan n2
+      │    │    │    │    │    │    │    ├── scan nation [as=n2]
       │    │    │    │    │    │    │    │    ├── save-table-name: q7_scan_12
       │    │    │    │    │    │    │    │    ├── columns: n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
       │    │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(50)=25, null(50)=0, distinct(51)=25, null(51)=0]

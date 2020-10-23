@@ -894,7 +894,7 @@ project
  │    │    │    │    ├── scan b
  │    │    │    │    │    ├── columns: b.x:5!null
  │    │    │    │    │    └── key: (5)
- │    │    │    │    ├── scan b2
+ │    │    │    │    ├── scan b [as=b2]
  │    │    │    │    └── filters
  │    │    │    │         └── c.x:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
  │    │    │    ├── select
@@ -966,7 +966,7 @@ project
  │    │    │    │    │    └── key: (11)
  │    │    │    │    └── filters
  │    │    │    │         └── k:5 = b.x:11 [outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
- │    │    │    ├── scan b2
+ │    │    │    ├── scan b [as=b2]
  │    │    │    └── filters
  │    │    │         └── c.x:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
  │    │    └── filters (true)
@@ -1654,7 +1654,7 @@ inner-join (hash)
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (7)
  ├── fd: (7)-->(8-11), (1)-->(2-5), (1)==(7), (7)==(1)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
@@ -1700,7 +1700,7 @@ inner-join (hash)
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (7)
  ├── fd: (7)-->(8-11), (1)-->(2-5), (3)==(9), (9)==(3), (1)==(7), (7)==(1)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
@@ -1721,7 +1721,7 @@ inner-join (hash)
  ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── immutable
  ├── fd: (8)-->(9-12), (3)==(10), (10)==(3)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
@@ -1753,7 +1753,7 @@ inner-join (hash)
  │    │    ├── columns: a.k:7!null a.i:8 a.f:9!null a.s:10 a.j:11
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(8-11)
- │    ├── scan a2
+ │    ├── scan a [as=a2]
  │    │    ├── columns: a2.k:13!null a2.i:14 a2.f:15!null a2.s:16 a2.j:17
  │    │    ├── key: (13)
  │    │    └── fd: (13)-->(14-17)
@@ -2131,7 +2131,7 @@ full-join (cross)
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
@@ -2150,7 +2150,7 @@ full-join (hash)
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
@@ -2170,7 +2170,7 @@ full-join (hash)
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
@@ -2214,7 +2214,7 @@ full-join (cross)
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
@@ -2234,7 +2234,7 @@ full-join (hash)
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
@@ -2265,7 +2265,7 @@ full-join (hash)
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(8)
  │    └── filters (true)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:10!null a2.i:11 a2.f:12!null a2.s:13 a2.j:14
  │    ├── key: (10)
  │    └── fd: (10)-->(11-14)
@@ -2357,7 +2357,7 @@ scan c
 norm expect=EliminateSemiJoin
 SELECT * FROM a a1 WHERE EXISTS (SELECT * FROM a a2 WHERE a1.k = a2.k)
 ----
-scan a1
+scan a [as=a1]
  ├── columns: k:1!null i:2 f:3!null s:4 j:5
  ├── key: (1)
  └── fd: (1)-->(2-5)
@@ -3321,22 +3321,22 @@ INNER JOIN uv AS uv2 ON xy.x=uv2.u
 INNER JOIN uv AS uv3 ON xy.x=uv3.u
 ----
 inner-join (cross)
- ├── scan xy3
+ ├── scan xy [as=xy3]
  ├── inner-join (cross)
- │    ├── scan xy2
+ │    ├── scan xy [as=xy2]
  │    ├── inner-join (cross)
- │    │    ├── scan xy1
+ │    │    ├── scan xy [as=xy1]
  │    │    ├── inner-join (hash)
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── inner-join (hash)
  │    │    │    │    │    ├── scan xy
- │    │    │    │    │    ├── scan uv1
+ │    │    │    │    │    ├── scan uv [as=uv1]
  │    │    │    │    │    └── filters
  │    │    │    │    │         └── xy.x = uv1.u
- │    │    │    │    ├── scan uv2
+ │    │    │    │    ├── scan uv [as=uv2]
  │    │    │    │    └── filters
  │    │    │    │         └── xy.x = uv2.u
- │    │    │    ├── scan uv3
+ │    │    │    ├── scan uv [as=uv3]
  │    │    │    └── filters
  │    │    │         └── xy.x = uv3.u
  │    │    └── filters (true)
@@ -3454,7 +3454,7 @@ inner-join (hash)
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
@@ -3470,7 +3470,7 @@ inner-join (hash)
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (7)
  ├── fd: (7)-->(8-11), (1)-->(2-5), (1)==(7), (7)==(1)
- ├── scan a2
+ ├── scan a [as=a2]
  │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)

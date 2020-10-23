@@ -53,11 +53,11 @@ project
  │    │    │    └── inner-join (hash)
  │    │    │         ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null
  │    │    │         ├── fd: (4)==(34), (34)==(4)
- │    │    │         ├── scan t
+ │    │    │         ├── scan pg_type [as=t]
  │    │    │         │    └── columns: t.oid:2!null t.typname:3!null t.typnamespace:4 t.typtype:8 t.typbasetype:26
  │    │    │         ├── select
  │    │    │         │    ├── columns: n.oid:34 nspname:35!null
- │    │    │         │    ├── scan n
+ │    │    │         │    ├── scan pg_namespace [as=n]
  │    │    │         │    │    └── columns: n.oid:34 nspname:35!null
  │    │    │         │    └── filters
  │    │    │         │         └── nspname:35 != 'pg_catalog' [outer=(35), constraints=(/35: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
@@ -65,7 +65,7 @@ project
  │    │    │              └── t.typnamespace:4 = n.oid:34 [outer=(4,34), constraints=(/4: (/NULL - ]; /34: (/NULL - ]), fd=(4)==(34), (34)==(4)]
  │    │    ├── project
  │    │    │    ├── columns: case:70!null pg_catalog.pg_type.oid:39!null
- │    │    │    ├── scan pg_catalog.pg_type
+ │    │    │    ├── scan pg_type
  │    │    │    │    └── columns: pg_catalog.pg_type.oid:39!null pg_catalog.pg_type.typname:40!null
  │    │    │    └── projections
  │    │    │         └── CASE WHEN pg_catalog.pg_type.typname:40 = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [as=case:70, outer=(40)]
@@ -176,7 +176,7 @@ sort
       │    │    │    ├── left ordering: +60
       │    │    │    ├── right ordering: +38
       │    │    │    ├── fd: ()-->(3,52), (2)==(9), (9)==(2), (7)==(36), (36)==(7), (38)==(60), (60)==(38)
-      │    │    │    ├── scan t@secondary
+      │    │    │    ├── scan pg_type@secondary [as=t]
       │    │    │    │    ├── columns: t.oid:60!null typtype:66 typnotnull:83 typbasetype:84 typtypmod:85
       │    │    │    │    └── ordering: +60
       │    │    │    ├── sort
@@ -191,7 +191,7 @@ sort
       │    │    │    │         │    ├── fd: ()-->(3,52), (7)==(36), (36)==(7), (2)==(9), (9)==(2)
       │    │    │    │         │    ├── select
       │    │    │    │         │    │    ├── columns: adrelid:93!null adnum:94!null adbin:95
-      │    │    │    │         │    │    ├── scan def
+      │    │    │    │         │    │    ├── scan pg_attrdef [as=def]
       │    │    │    │         │    │    │    └── columns: adrelid:93!null adnum:94 adbin:95
       │    │    │    │         │    │    └── filters
       │    │    │    │         │    │         └── adnum:94 > 0 [outer=(94), constraints=(/94: [/1 - ]; tight)]
@@ -200,11 +200,11 @@ sort
       │    │    │    │         │    │    ├── fd: ()-->(3,52), (7)==(36), (36)==(7), (2)==(9), (9)==(2)
       │    │    │    │         │    │    ├── select
       │    │    │    │         │    │    │    ├── columns: objoid:98 classoid:99 objsubid:100!null description:101
-      │    │    │    │         │    │    │    ├── scan dsc
+      │    │    │    │         │    │    │    ├── scan pg_description [as=dsc]
       │    │    │    │         │    │    │    │    └── columns: objoid:98 classoid:99 objsubid:100 description:101
       │    │    │    │         │    │    │    └── filters
       │    │    │    │         │    │    │         └── objsubid:100 > 0 [outer=(100), constraints=(/100: [/1 - ]; tight)]
-      │    │    │    │         │    │    ├── inner-join (lookup pg_attribute@secondary)
+      │    │    │    │         │    │    ├── inner-join (lookup pg_attribute@secondary [as=a])
       │    │    │    │         │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:36!null attname:37 atttypid:38 attlen:40 attnum:41!null atttypmod:44 a.attnotnull:48 attisdropped:52!null
       │    │    │    │         │    │    │    ├── key columns: [7] = [36]
       │    │    │    │         │    │    │    ├── fd: ()-->(3,52), (2)==(9), (9)==(2), (7)==(36), (36)==(7)
@@ -213,7 +213,7 @@ sort
       │    │    │    │         │    │    │    │    ├── fd: ()-->(3), (2)==(9), (9)==(2)
       │    │    │    │         │    │    │    │    ├── select
       │    │    │    │         │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null
-      │    │    │    │         │    │    │    │    │    ├── scan c
+      │    │    │    │         │    │    │    │    │    ├── scan pg_class [as=c]
       │    │    │    │         │    │    │    │    │    │    └── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24
       │    │    │    │         │    │    │    │    │    └── filters
       │    │    │    │         │    │    │    │    │         ├── c.relkind:24 IN ('f', 'm', 'p', 'r', 'v') [outer=(24), constraints=(/24: [/'f' - /'f'] [/'m' - /'m'] [/'p' - /'p'] [/'r' - /'r'] [/'v' - /'v']; tight)]
@@ -221,7 +221,7 @@ sort
       │    │    │    │         │    │    │    │    ├── select
       │    │    │    │         │    │    │    │    │    ├── columns: n.oid:2 n.nspname:3!null
       │    │    │    │         │    │    │    │    │    ├── fd: ()-->(3)
-      │    │    │    │         │    │    │    │    │    ├── scan n
+      │    │    │    │         │    │    │    │    │    ├── scan pg_namespace [as=n]
       │    │    │    │         │    │    │    │    │    │    └── columns: n.oid:2 n.nspname:3!null
       │    │    │    │         │    │    │    │    │    └── filters
       │    │    │    │         │    │    │    │    │         └── n.nspname:3 LIKE 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
@@ -242,14 +242,14 @@ sort
       │    │    │    │         │    ├── select
       │    │    │    │         │    │    ├── columns: dc.oid:103!null dc.relname:104!null dc.relnamespace:105
       │    │    │    │         │    │    ├── fd: ()-->(104)
-      │    │    │    │         │    │    ├── scan dc
+      │    │    │    │         │    │    ├── scan pg_class [as=dc]
       │    │    │    │         │    │    │    └── columns: dc.oid:103!null dc.relname:104!null dc.relnamespace:105
       │    │    │    │         │    │    └── filters
       │    │    │    │         │    │         └── dc.relname:104 = 'pg_class' [outer=(104), constraints=(/104: [/'pg_class' - /'pg_class']; tight), fd=()-->(104)]
       │    │    │    │         │    ├── select
       │    │    │    │         │    │    ├── columns: dn.oid:132 dn.nspname:133!null
       │    │    │    │         │    │    ├── fd: ()-->(133)
-      │    │    │    │         │    │    ├── scan dn
+      │    │    │    │         │    │    ├── scan pg_namespace [as=dn]
       │    │    │    │         │    │    │    └── columns: dn.oid:132 dn.nspname:133!null
       │    │    │    │         │    │    └── filters
       │    │    │    │         │    │         └── dn.nspname:133 = 'pg_catalog' [outer=(133), constraints=(/133: [/'pg_catalog' - /'pg_catalog']; tight), fd=()-->(133)]
