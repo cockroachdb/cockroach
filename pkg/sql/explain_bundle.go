@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 )
@@ -126,8 +127,8 @@ func traceToJSON(trace tracing.Recording) (tree.Datum, string, error) {
 	return d, str, nil
 }
 
-func normalizeSpan(s tracing.RecordedSpan, trace tracing.Recording) tracing.NormalizedSpan {
-	var n tracing.NormalizedSpan
+func normalizeSpan(s tracingpb.RecordedSpan, trace tracing.Recording) tracingpb.NormalizedSpan {
+	var n tracingpb.NormalizedSpan
 	n.Operation = s.Operation
 	n.StartTime = s.StartTime
 	n.Duration = s.Duration

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
@@ -27,11 +28,11 @@ func TestRecordingString(t *testing.T) {
 	tr2 := NewTracer()
 
 	root := tr.StartSpan("root", Recordable)
-	rootSp := root.(*span)
+	rootSp := root.(*Span)
 	StartRecording(root, SnowballRecording)
-	root.LogFields(otlog.String(LogMessageField, "root 1"))
+	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 1"))
 	// Hackily fix the timing on the first log message, so that we can check it later.
-	rootSp.mu.recording.recordedLogs[0].Timestamp = rootSp.startTime.Add(time.Millisecond)
+	rootSp.crdb.mu.recording.recordedLogs[0].Timestamp = rootSp.crdb.startTime.Add(time.Millisecond)
 	// Sleep a bit so that everything that comes afterwards has higher timestamps
 	// than the one we just assigned. Otherwise the sorting will be screwed up.
 	time.Sleep(10 * time.Millisecond)
@@ -41,8 +42,8 @@ func TestRecordingString(t *testing.T) {
 	require.NoError(t, err)
 	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
 	remoteChild := tr2.StartSpan("remote child", opentracing.FollowsFrom(wireContext))
-	root.LogFields(otlog.String(LogMessageField, "root 2"))
-	remoteChild.LogFields(otlog.String(LogMessageField, "remote child 1"))
+	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 2"))
+	remoteChild.LogFields(otlog.String(tracingpb.LogMessageField, "remote child 1"))
 	require.NoError(t, err)
 	remoteChild.Finish()
 	remoteRec := GetRecording(remoteChild)
@@ -50,31 +51,32 @@ func TestRecordingString(t *testing.T) {
 	require.NoError(t, err)
 	root.Finish()
 
-	root.LogFields(otlog.String(LogMessageField, "root 3"))
+	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 3"))
 
-	ch2 := StartChildSpan("local child", root, nil /* logTags */, false /* separateRecording */)
-	root.LogFields(otlog.String(LogMessageField, "root 4"))
-	ch2.LogFields(otlog.String(LogMessageField, "local child 1"))
+	ch2 := tr.StartChildSpan("local child", root.(*Span).SpanContext(), nil /* logTags */, false /* recordable */, false /* separateRecording */)
+	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 4"))
+	ch2.LogFields(otlog.String(tracingpb.LogMessageField, "local child 1"))
 	ch2.Finish()
 
-	root.LogFields(otlog.String(LogMessageField, "root 5"))
+	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 5"))
 	root.Finish()
 
 	rec := GetRecording(root)
 	// Sanity check that the recording looks like we want. Note that this is not
 	// its String() representation; this just list all the spans in order.
 	err = TestingCheckRecordedSpans(rec, `
-span root:
+Span root:
 	tags: sb=1
 	event: root 1
 	event: root 2
 	event: root 3
 	event: root 4
 	event: root 5
-span remote child:
+Span remote child:
 	tags: sb=1
 	event: remote child 1
-span local child:
+Span local child:
+	tags: sb=1
 	event: local child 1
 `)
 	require.NoError(t, err)
@@ -85,7 +87,7 @@ event:root 1
     event:remote child 1
 event:root 2
 event:root 3
-    === operation:local child
+    === operation:local child sb:1
     event:local child 1
 event:root 4
 event:root 5
@@ -155,19 +157,19 @@ func TestRecordingInRecording(t *testing.T) {
 
 	rootRec := GetRecording(root)
 	require.NoError(t, TestingCheckRecordedSpans(rootRec, `
-span root:
+Span root:
 	tags: sb=1
-span child:
+Span child:
 	tags: sb=1
-span grandchild:
+Span grandchild:
 	tags: sb=1
 `))
 
 	childRec := GetRecording(child)
 	require.NoError(t, TestingCheckRecordedSpans(childRec, `
-span child:
+Span child:
 	tags: sb=1
-span grandchild:
+Span grandchild:
 	tags: sb=1
 `))
 

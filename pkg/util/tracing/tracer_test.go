@@ -22,30 +22,30 @@ func TestTracerRecording(t *testing.T) {
 	tr := NewTracer()
 
 	noop1 := tr.StartSpan("noop")
-	if _, noop := noop1.(*noopSpan); !noop {
-		t.Error("expected noop span")
+	if !noop1.(*Span).isNoop() {
+		t.Error("expected noop Span")
 	}
 	noop1.LogKV("hello", "void")
 
 	noop2 := tr.StartSpan("noop2", opentracing.ChildOf(noop1.Context()))
-	if _, noop := noop2.(*noopSpan); !noop {
-		t.Error("expected noop child span")
+	if !noop2.(*Span).isNoop() {
+		t.Error("expected noop child Span")
 	}
 	noop2.Finish()
 	noop1.Finish()
 
 	s1 := tr.StartSpan("a", Recordable)
-	if _, noop := s1.(*noopSpan); noop {
-		t.Error("Recordable (but not recording) span should not be noop")
+	if s1.(*Span).isNoop() {
+		t.Error("Recordable (but not recording) Span should not be noop")
 	}
 	if !IsBlackHoleSpan(s1) {
-		t.Error("Recordable span should be black hole")
+		t.Error("Recordable Span should be black hole")
 	}
 
 	// Unless recording is actually started, child spans are still noop.
 	noop3 := tr.StartSpan("noop3", opentracing.ChildOf(s1.Context()))
-	if _, noop := noop3.(*noopSpan); !noop {
-		t.Error("expected noop child span")
+	if !noop3.(*Span).isNoop() {
+		t.Error("expected noop child Span")
 	}
 	noop3.Finish()
 
@@ -54,15 +54,15 @@ func TestTracerRecording(t *testing.T) {
 	s1.LogKV("x", 2)
 	s2 := tr.StartSpan("b", opentracing.ChildOf(s1.Context()))
 	if IsBlackHoleSpan(s2) {
-		t.Error("recording span should not be black hole")
+		t.Error("recording Span should not be black hole")
 	}
 	s2.LogKV("x", 3)
 
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
-		span a:
+		Span a:
 			tags: unfinished=
 			x: 2
-		span b:
+		Span b:
 			tags: unfinished=
 			x: 3
 	`); err != nil {
@@ -70,7 +70,7 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	if err := TestingCheckRecordedSpans(GetRecording(s2), `
-		span b:
+		Span b:
 			tags: unfinished=
 			x: 3
 	`); err != nil {
@@ -84,12 +84,12 @@ func TestTracerRecording(t *testing.T) {
 	s2.Finish()
 
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
-		span a:
+		Span a:
 			tags: unfinished=
 			x: 2
-		span b:
+		Span b:
 			x: 3
-		span c:
+		Span c:
 			tags: tag=val unfinished=
 			x: 4
 	`); err != nil {
@@ -97,12 +97,12 @@ func TestTracerRecording(t *testing.T) {
 	}
 	s3.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
-		span a:
+		Span a:
       tags: unfinished=
 			x: 2
-		span b:
+		Span b:
 			x: 3
-		span c:
+		Span c:
 			tags: tag=val
 			x: 4
 	`); err != nil {
@@ -114,10 +114,10 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The child span is still recording.
+	// The child Span is still recording.
 	s3.LogKV("x", 5)
 	if err := TestingCheckRecordedSpans(GetRecording(s3), `
-		span c:
+		Span c:
 			tags: tag=val
 			x: 4
 			x: 5
@@ -131,42 +131,42 @@ func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
 	sp1 := tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 := StartChildSpan("child", sp1, nil /* logTags */, false /*separateRecording*/)
+	sp2 := tr.StartChildSpan("child", sp1.(*Span).SpanContext(), nil /* logTags */, false /* recordable */, false /*separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
-		span parent:
-			span child:
+		Span parent:
+			Span child:
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	sp1 = tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 = StartChildSpan("child", sp1, nil /* logTags */, true /*separateRecording*/)
+	sp2 = tr.StartChildSpan("child", sp1.(*Span).SpanContext(), nil /* logTags */, false /* recordable */, true /*separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
-		span parent:
+		Span parent:
 	`); err != nil {
 		t.Fatal(err)
 	}
 	if err := TestingCheckRecordedSpans(GetRecording(sp2), `
-		span child:
+		Span child:
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	sp1 = tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 = StartChildSpan(
-		"child", sp1, logtags.SingleTagBuffer("key", "val"), false, /*separateRecording*/
+	sp2 = tr.StartChildSpan(
+		"child", sp1.(*Span).SpanContext(), logtags.SingleTagBuffer("key", "val"), false /* recordable */, false, /*separateRecording*/
 	)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
-		span parent:
-			span child:
+		Span parent:
+			Span child:
 				tags: key=val
 	`); err != nil {
 		t.Fatal(err)
@@ -180,27 +180,27 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that noop spans become noop spans on the remote side.
 
 	noop1 := tr.StartSpan("noop")
-	if _, noop := noop1.(*noopSpan); !noop {
-		t.Fatalf("expected noop span: %+v", noop1)
+	if !noop1.(*Span).isNoop() {
+		t.Fatalf("expected noop Span: %+v", noop1)
 	}
 	carrier := make(opentracing.HTTPHeadersCarrier)
 	if err := tr.Inject(noop1.Context(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
 	if len(carrier) != 0 {
-		t.Errorf("noop span has carrier: %+v", carrier)
+		t.Errorf("noop Span has carrier: %+v", carrier)
 	}
 
 	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, noopCtx := wireContext.(noopSpanContext); !noopCtx {
+	if !wireContext.(*SpanContext).isNoop() {
 		t.Errorf("expected noop context: %v", wireContext)
 	}
 	noop2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
-	if _, noop := noop2.(*noopSpan); !noop {
-		t.Fatalf("expected noop span: %+v", noop2)
+	if !noop2.(*Span).isNoop() {
+		t.Fatalf("expected noop Span: %+v", noop2)
 	}
 	noop1.Finish()
 	noop2.Finish()
@@ -223,8 +223,8 @@ func TestTracerInjectExtract(t *testing.T) {
 	s2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
 
 	// Compare TraceIDs
-	trace1 := s1.Context().(*spanContext).TraceID
-	trace2 := s2.Context().(*spanContext).TraceID
+	trace1 := s1.Context().(*SpanContext).TraceID
+	trace2 := s2.Context().(*SpanContext).TraceID
 	if trace1 != trace2 {
 		t.Errorf("TraceID doesn't match: parent %d child %d", trace1, trace2)
 	}
@@ -234,7 +234,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that recording was started automatically.
 	rec := GetRecording(s2)
 	if err := TestingCheckRecordedSpans(rec, `
-		span remote op:
+		Span remote op:
 			tags: sb=1
 			x: 1
 	`); err != nil {
@@ -242,7 +242,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	}
 
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
-		span a:
+		Span a:
 			tags: sb=1 unfinished=
 	`); err != nil {
 		t.Fatal(err)
@@ -254,9 +254,9 @@ func TestTracerInjectExtract(t *testing.T) {
 	s1.Finish()
 
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
-		span a:
+		Span a:
 			tags: sb=1
-		span remote op:
+		Span remote op:
 			tags: sb=1
 			x: 1
 	`); err != nil {
@@ -295,7 +295,7 @@ func TestLightstepContext(t *testing.T) {
 	}
 
 	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext))
-	s2Ctx := s2.(*span).shadowSpan.Context()
+	s2Ctx := s2.(*Span).ot.shadowSpan.Context()
 
 	// Verify that the baggage is correct in both the tracer context and in the
 	// lightstep context.

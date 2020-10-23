@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
@@ -1433,8 +1434,8 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 }
 
 // getRecording returns the recorded spans of the current trace.
-func (st *SessionTracing) getRecording() []tracing.RecordedSpan {
-	var spans []tracing.RecordedSpan
+func (st *SessionTracing) getRecording() []tracingpb.RecordedSpan {
+	var spans []tracingpb.RecordedSpan
 	if st.firstTxnSpan != nil {
 		spans = append(spans, tracing.GetRecording(st.firstTxnSpan)...)
 	}
@@ -1553,7 +1554,7 @@ func (st *SessionTracing) StopTracing() error {
 	st.showResults = false
 	st.recordingType = tracing.NoRecording
 
-	var spans []tracing.RecordedSpan
+	var spans []tracingpb.RecordedSpan
 
 	if st.firstTxnSpan != nil {
 		spans = append(spans, tracing.GetRecording(st.firstTxnSpan)...)
@@ -1726,7 +1727,7 @@ var logMessageRE = regexp.MustCompile(
 //
 // Note that what's described above is not the order in which SHOW TRACE FOR SESSION
 // displays the information: SHOW TRACE will sort by the age column.
-func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error) {
+func generateSessionTraceVTable(spans []tracingpb.RecordedSpan) ([]traceRow, error) {
 	// Get all the log messages, in the right order.
 	var allLogs []logRecordRow
 
@@ -1831,7 +1832,7 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 // getOrderedChildSpans returns all the spans in allSpans that are children of
 // spanID. It assumes the input is ordered by start time, in which case the
 // output is also ordered.
-func getOrderedChildSpans(spanID uint64, allSpans []tracing.RecordedSpan) []spanWithIndex {
+func getOrderedChildSpans(spanID uint64, allSpans []tracingpb.RecordedSpan) []spanWithIndex {
 	children := make([]spanWithIndex, 0)
 	for i := range allSpans {
 		if allSpans[i].ParentSpanID == spanID {
@@ -1853,7 +1854,7 @@ func getOrderedChildSpans(spanID uint64, allSpans []tracing.RecordedSpan) []span
 // seenSpans is modified to record all the spans that are part of the subtrace
 // rooted at span.
 func getMessagesForSubtrace(
-	span spanWithIndex, allSpans []tracing.RecordedSpan, seenSpans map[uint64]struct{},
+	span spanWithIndex, allSpans []tracingpb.RecordedSpan, seenSpans map[uint64]struct{},
 ) ([]logRecordRow, error) {
 	if _, ok := seenSpans[span.SpanID]; ok {
 		return nil, errors.Errorf("duplicate span %d", span.SpanID)
@@ -1940,7 +1941,7 @@ type logRecordRow struct {
 }
 
 type spanWithIndex struct {
-	*tracing.RecordedSpan
+	*tracingpb.RecordedSpan
 	index int
 }
 
