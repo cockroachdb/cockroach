@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.util.tracing;
-option go_package = "tracing";
+package cockroach.util.tracing.tracingpb;
+option go_package = "tracingpb";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/any.proto";

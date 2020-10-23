@@ -60,7 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"go.etcd.io/etcd/raft"
@@ -562,7 +562,7 @@ func (s *statusServer) Allocator(
 	return output, nil
 }
 
-func recordedSpansToTraceEvents(spans []tracing.RecordedSpan) []*serverpb.TraceEvent {
+func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.TraceEvent {
 	var output []*serverpb.TraceEvent
 	var buf bytes.Buffer
 	for _, sp := range spans {

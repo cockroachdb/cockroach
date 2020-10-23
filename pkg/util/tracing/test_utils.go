@@ -10,10 +10,14 @@
 
 package tracing
 
-import "strings"
+import (
+	"strings"
 
-// FindMsgInRecording returns the index of the first span containing msg in its
-// logs, or -1 if no span is found.
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+)
+
+// FindMsgInRecording returns the index of the first Span containing msg in its
+// logs, or -1 if no Span is found.
 func FindMsgInRecording(recording Recording, msg string) int {
 	for i, sp := range recording {
 		if LogsContainMsg(sp, msg) {
@@ -23,8 +27,8 @@ func FindMsgInRecording(recording Recording, msg string) int {
 	return -1
 }
 
-// LogsContainMsg returns true if a span's logs contain the given message.
-func LogsContainMsg(sp RecordedSpan, msg string) bool {
+// LogsContainMsg returns true if a Span's logs contain the given message.
+func LogsContainMsg(sp tracingpb.RecordedSpan, msg string) bool {
 	for _, l := range sp.Logs {
 		// NOTE: With out logs, each LogRecord has a single field ("event") and
 		// value.

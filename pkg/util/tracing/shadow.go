@@ -10,8 +10,8 @@
 //
 // A "shadow" tracer can be any opentracing.Tracer implementation that is used
 // in addition to the normal functionality of our tracer. It works by attaching
-// a shadow span to every span, and attaching a shadow context to every span
-// context. When injecting a span context, we encapsulate the shadow context
+// a shadow Span to every Span, and attaching a shadow context to every Span
+// context. When injecting a Span context, we encapsulate the shadow context
 // inside ours.
 
 package tracing
@@ -69,29 +69,29 @@ func (st *shadowTracer) Close() {
 	st.manager.Close(st)
 }
 
-// linkShadowSpan creates and links a Shadow span to the passed-in span (i.e.
+// linkShadowSpan creates and links a Shadow Span to the passed-in Span (i.e.
 // fills in s.shadowTr and s.shadowSpan). This should only be called when
 // shadow tracing is enabled.
 //
-// The Shadow span will have a parent if parentShadowCtx is not nil.
+// The Shadow Span will have a parent if parentShadowCtx is not nil.
 // parentType is ignored if parentShadowCtx is nil.
 //
-// The tags (including logTags) from s are copied to the Shadow span.
+// The tags (including logTags) from s are copied to the Shadow Span.
 func linkShadowSpan(
-	s *span,
+	s *Span,
 	shadowTr *shadowTracer,
 	parentShadowCtx opentracing.SpanContext,
 	parentType opentracing.SpanReferenceType,
 ) {
-	// Create the shadow lightstep span.
+	// Create the shadow lightstep Span.
 	var opts []opentracing.StartSpanOption
 	// Replicate the options, using the lightstep context in the reference.
-	opts = append(opts, opentracing.StartTime(s.startTime))
-	if s.logTags != nil {
-		opts = append(opts, LogTags(s.logTags))
+	opts = append(opts, opentracing.StartTime(s.crdb.startTime))
+	if s.crdb.logTags != nil {
+		opts = append(opts, LogTags(s.crdb.logTags))
 	}
-	if s.mu.tags != nil {
-		opts = append(opts, s.mu.tags)
+	if s.crdb.mu.tags != nil {
+		opts = append(opts, s.crdb.mu.tags)
 	}
 	if parentShadowCtx != nil {
 		opts = append(opts, opentracing.SpanReference{
@@ -99,8 +99,8 @@ func linkShadowSpan(
 			ReferencedContext: parentShadowCtx,
 		})
 	}
-	s.shadowTr = shadowTr
-	s.shadowSpan = shadowTr.StartSpan(s.operation, opts...)
+	s.ot.shadowTr = shadowTr
+	s.ot.shadowSpan = shadowTr.StartSpan(s.crdb.operation, opts...)
 }
 
 func createLightStepTracer(token string) (shadowTracerManager, opentracing.Tracer) {

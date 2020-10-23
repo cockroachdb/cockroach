@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -113,7 +114,7 @@ func countKvBatchRequestsInRecording(r tracing.Recording) int {
 	return countKvBatchRequestsInSpan(r, root)
 }
 
-func countKvBatchRequestsInSpan(r tracing.Recording, sp tracing.RecordedSpan) int {
+func countKvBatchRequestsInSpan(r tracing.Recording, sp tracingpb.RecordedSpan) int {
 	count := 0
 	// Count the number of OpTxnCoordSender operations while traversing the
 	// tree of spans.

@@ -17,14 +17,14 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
-// LogTagsOption is a StartSpanOption that uses log tags to populate the span tags.
+// LogTagsOption is a StartSpanOption that uses log tags to populate the Span tags.
 type logTagsOption logtags.Buffer
 
 var _ opentracing.StartSpanOption = &logTagsOption{}
 
 // Apply is part of the opentracing.StartSpanOption interface.
 //
-// The tags in the buffer go through the log tag -> span tag remapping (see
+// The tags in the buffer go through the log tag -> Span tag remapping (see
 // tagName()).
 //
 // Note that our tracer does not call Apply() for this options. Instead, it
@@ -46,14 +46,14 @@ func (lt *logTagsOption) Apply(o *opentracing.StartSpanOptions) {
 	}
 }
 
-// LogTags returns a StartSpanOption that sets the span tags to the given log
-// tags. When applied, the returned option will apply any logtag name->span tag
+// LogTags returns a StartSpanOption that sets the Span tags to the given log
+// tags. When applied, the returned option will apply any logtag name->Span tag
 // name remapping that has been registered via RegisterTagRemapping.
 func LogTags(tags *logtags.Buffer) opentracing.StartSpanOption {
 	return (*logTagsOption)(tags)
 }
 
-// LogTagsFromCtx returns a StartSpanOption that sets the span tags to the log
+// LogTagsFromCtx returns a StartSpanOption that sets the Span tags to the log
 // tags in the context.
 func LogTagsFromCtx(ctx context.Context) opentracing.StartSpanOption {
 	return (*logTagsOption)(logtags.FromContext(ctx))
@@ -62,7 +62,7 @@ func LogTagsFromCtx(ctx context.Context) opentracing.StartSpanOption {
 // tagRemap is a map that records desired conversions
 var tagRemap = make(map[string]string)
 
-// RegisterTagRemapping sets the span tag name that corresponds to the given log
+// RegisterTagRemapping sets the Span tag name that corresponds to the given log
 // tag name. Should be called as part of an init() function.
 func RegisterTagRemapping(logTag, spanTag string) {
 	tagRemap[logTag] = spanTag
