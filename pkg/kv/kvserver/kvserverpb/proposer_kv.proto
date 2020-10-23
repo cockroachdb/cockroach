@@ -157,17 +157,12 @@ message ReplicatedEvalResult {
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 
-  // suggested_compactions are sent to the engine's compactor to
-  // reclaim storage space after garbage collection or cleared /
-  // rebalanced ranges.
-  repeated SuggestedCompaction suggested_compactions = 19 [(gogoproto.nullable) = false];
-
   // This is the proposal timestamp for the active lease while evaluating a lease request.
   // It will be used to make sure we know if a lease was extended after we sent out the request
   // but before we tried to apply it.
   util.hlc.Timestamp prev_lease_proposal = 20;
 
-  reserved 1, 5, 7, 9, 14, 15, 16, 10001 to 10013;
+  reserved 1, 5, 7, 9, 14, 15, 16, 19, 10001 to 10013;
 }
 
 // WriteBatch is the serialized representation of a RocksDB write
