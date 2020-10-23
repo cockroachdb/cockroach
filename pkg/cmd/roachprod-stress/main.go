@@ -138,6 +138,16 @@ func run() error {
 		return err
 	}
 
+	const localLibDir = "lib.docker_amd64/"
+	if fi, err := os.Stat(localLibDir); err == nil && fi.IsDir() {
+		cmd = exec.Command("roachprod", "put", cluster, localLibDir, "lib")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+
 	cmd = exec.Command("roachprod", "run", cluster, "mkdir -p "+pkg)
 	if err := cmd.Run(); err != nil {
 		return err

@@ -89,13 +89,12 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 	// is necessary after every release. For example, the day `master` becomes
 	// the 20.2 release, this test will fail because it is missing a fixture for
 	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
-	// Check it in (instructions are on the 'checkpointer' struct) and off we
-	// go.
+	// Check it in (instructions will be logged below) and off we go.
 	if false {
 		// The version to create/update the fixture for. Must be released (i.e.
 		// can download it from the homepage); if that is not the case use the
 		// empty string which uses the local cockroach binary.
-		newV := "19.2.6"
+		newV := "20.1.7"
 		predV, err := PredecessorVersion(*version.MustParse("v" + newV))
 		if err != nil {
 			t.Fatal(err)
@@ -501,8 +500,15 @@ func makeVersionFixtureAndFatal(
 			// compatible).
 			name := checkpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, c.All())
-			c.Run(ctx, c.All(), cockroach, "debug", "rocksdb", "--db={store-dir}",
-				"checkpoint", "--checkpoint_dir={store-dir}/"+name)
+
+			c.Run(ctx, c.All(), cockroach, "debug", "pebble", "db", "checkpoint",
+				"{store-dir}", "{store-dir}/"+name)
+			// The `cluster-bootstrapped` marker can already be found within
+			// store-dir, but the rocksdb checkpoint step above does not pick it
+			// up as it isn't recognized by RocksDB. We copy the marker
+			// manually, it's necessary for roachprod created clusters. See
+			// #54761.
+			c.Run(ctx, c.Node(1), "cp", "{store-dir}/cluster-bootstrapped", "{store-dir}/"+name)
 			c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
 			t.Fatalf(`successfully created checkpoints; failing test on purpose.
 
@@ -511,7 +517,7 @@ result:
 
 for i in 1 2 3 4; do
   mkdir -p pkg/cmd/roachtest/fixtures/${i} && \
-  mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
+  mv artifacts/acceptance/version-upgrade/run_1/logs/${i}.unredacted/checkpoint-*.tgz \
      pkg/cmd/roachtest/fixtures/${i}/
 done
 `)

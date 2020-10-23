@@ -80,7 +80,7 @@ var (
 	listMine          bool
 	clusterType       = "cockroach"
 	secure            = false
-	nodeEnv           = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
+	nodeEnv           = []string{"COCKROACH_ENABLE_RPC_COMPRESSION=false"}
 	nodeArgs          []string
 	tag               string
 	external          = false
@@ -175,7 +175,7 @@ Available clusters:
 	}
 	c.Nodes = nodes
 	c.Secure = secure
-	c.Env = nodeEnv
+	c.Env = strings.Join(nodeEnv, " ")
 	c.Args = nodeArgs
 	if tag != "" {
 		c.Tag = "/" + tag
@@ -1209,7 +1209,7 @@ the 'zfs rollback' command:
 			}
 			fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
 		case "ext4":
-			fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o discard,defaults /dev/sdb /mnt/data1`
+			fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
 		default:
 			return fmt.Errorf("unknown filesystem %q", fs)
 		}
@@ -1777,7 +1777,7 @@ func main() {
 				"start nodes sequentially so node IDs match hostnames")
 			cmd.Flags().StringArrayVarP(
 				&nodeArgs, "args", "a", nil, "node arguments")
-			cmd.Flags().StringVarP(
+			cmd.Flags().StringArrayVarP(
 				&nodeEnv, "env", "e", nodeEnv, "node environment variables")
 			cmd.Flags().StringVarP(
 				&clusterType, "type", "t", clusterType, `cluster type ("cockroach" or "cassandra")`)

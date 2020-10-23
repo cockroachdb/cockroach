@@ -19,13 +19,19 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
+	"github.com/lib/pq/oid"
 	"github.com/spf13/pflag"
 )
 
@@ -36,7 +42,7 @@ import (
 // includes table creation but note that the tables contain no data.
 //
 // Example usage:
-// `bin/workload run schemachange --init --concurrency=2 --verbose=false --max-ops=1000`
+// `bin/workload run schemachange --init --concurrency=2 --verbose=0 --max-ops-per-worker=1000`
 // will execute up to 1000 schema change operations per txn in two concurrent txns.
 //
 // TODO(peter): This is still work in progress, we need to
@@ -56,6 +62,7 @@ import (
 const (
 	defaultMaxOpsPerWorker = 5
 	defaultExistingPct     = 10
+	defaultEnumPct         = 10
 )
 
 type schemaChange struct {
@@ -64,6 +71,7 @@ type schemaChange struct {
 	concurrency     int
 	maxOpsPerWorker int
 	existingPct     int
+	enumPct         int
 	verbose         int
 	dryRun          bool
 }
@@ -83,6 +91,8 @@ var schemaChangeMeta = workload.Meta{
 			`Number of operations to execute in a single transaction`)
 		s.flags.IntVar(&s.existingPct, `existing-pct`, defaultExistingPct,
 			`Percentage of times to use existing name`)
+		s.flags.IntVar(&s.enumPct, `enum-pct`, defaultEnumPct,
+			`Percentage of times when picking a type that an enum type is picked`)
 		s.flags.IntVarP(&s.verbose, `verbose`, `v`, 0, ``)
 		s.flags.BoolVarP(&s.dryRun, `dry-run`, `n`, false, ``)
 		return s
@@ -105,6 +115,8 @@ const (
 	createTable    // CREATE TABLE <table> <def>
 	createTableAs  // CREATE TABLE <table> AS <def>
 	createView     // CREATE VIEW <view> AS <def>
+	createEnum     // CREATE TYPE <type> ENUM AS <def>
+	createSchema   // CREATE SCHEMA <schema>
 
 	dropColumn        // ALTER TABLE <table> DROP COLUMN <column>
 	dropColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
@@ -115,6 +127,7 @@ const (
 	dropSequence      // DROP SEQUENCE <sequence>
 	dropTable         // DROP TABLE <table>
 	dropView          // DROP VIEW <view>
+	dropSchema        // DROP SCHEMA <schema>
 
 	renameColumn   // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
 	renameIndex    // ALTER TABLE <table> RENAME CONSTRAINT <constraint> TO <constraint>
@@ -125,6 +138,10 @@ const (
 	setColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> SET DEFAULT <expr>
 	setColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> SET NOT NULL
 	setColumnType    // ALTER TABLE <table> ALTER [COLUMN] <column> [SET DATA] TYPE <type>
+
+	insertRow // INSERT INTO <table> (<cols>) VALUES (<values>)
+
+	validate // validate all table descriptors
 )
 
 var opWeights = []int{
@@ -135,6 +152,8 @@ var opWeights = []int{
 	createTable:       1,
 	createTableAs:     1,
 	createView:        1,
+	createEnum:        1,
+	createSchema:      1,
 	dropColumn:        1,
 	dropColumnDefault: 1,
 	dropColumnNotNull: 1,
@@ -144,6 +163,7 @@ var opWeights = []int{
 	dropSequence:      1,
 	dropTable:         1,
 	dropView:          1,
+	dropSchema:        1,
 	renameColumn:      1,
 	renameIndex:       1,
 	renameSequence:    1,
@@ -152,6 +172,8 @@ var opWeights = []int{
 	setColumnDefault:  0, // TODO(spaskob): unimplemented
 	setColumnNotNull:  1,
 	setColumnType:     1,
+	insertRow:         1,
+	validate:          2, // validate twice more often
 }
 
 // Meta implements the workload.Generator interface.
@@ -198,6 +220,7 @@ func (s *schemaChange) Ops(
 			dryRun:          s.dryRun,
 			maxOpsPerWorker: s.maxOpsPerWorker,
 			existingPct:     s.existingPct,
+			enumPct:         s.enumPct,
 			rng:             rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 			ops:             ops,
 			pool:            pool,
@@ -239,6 +262,7 @@ type schemaChangeWorker struct {
 	dryRun          bool
 	maxOpsPerWorker int
 	existingPct     int
+	enumPct         int
 	rng             *rand.Rand
 	ops             *deck
 	pool            *workload.MultiConnPool
@@ -383,6 +407,12 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 		case createView:
 			stmt, err = w.createView(tx)
 
+		case createEnum:
+			stmt, err = w.createEnum(tx)
+
+		case createSchema:
+			stmt, err = w.createSchema(tx)
+
 		case dropColumn:
 			stmt, err = w.dropColumn(tx)
 
@@ -410,6 +440,9 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 		case dropView:
 			stmt, err = w.dropView(tx)
 
+		case dropSchema:
+			stmt, err = w.dropSchema(tx)
+
 		case renameColumn:
 			stmt, err = w.renameColumn(tx)
 
@@ -433,6 +466,12 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 
 		case setColumnType:
 			stmt, err = w.setColumnType(tx)
+
+		case insertRow:
+			stmt, err = w.insertRow(tx)
+
+		case validate:
+			stmt, err = w.validate(tx)
 		}
 
 		// TODO(spaskob): use more fine-grained error reporting.
@@ -450,17 +489,21 @@ func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnName, err := w.randColumn(tx, tableName, w.existingPct)
+	columnName, err := w.randColumn(tx, tableName.String(), w.existingPct)
+	if err != nil {
+		return "", err
+	}
+	typ, err := w.randType(tx)
 	if err != nil {
 		return "", err
 	}
 
 	def := &tree.ColumnTableDef{
 		Name: tree.Name(columnName),
-		Type: rowenc.RandSortingType(w.rng),
+		Type: typ,
 	}
 	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
-	return fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
+	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
 }
 
 func (w *schemaChangeWorker) addConstraint(tx *pgx.Tx) (string, error) {
@@ -475,19 +518,19 @@ func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnNames, err := w.tableColumnsShuffled(tx, tableName)
+	columnNames, err := w.tableColumnsShuffled(tx, tableName.String())
 	if err != nil {
 		return "", err
 	}
 
-	indexName, err := w.randIndex(tx, tableName, w.existingPct)
+	indexName, err := w.randIndex(tx, tableName.String(), w.existingPct)
 	if err != nil {
 		return "", err
 	}
 
 	def := &tree.CreateIndex{
 		Name:        tree.Name(indexName),
-		Table:       tree.MakeUnqualifiedTableName(tree.Name(tableName)),
+		Table:       *tableName,
 		Unique:      w.rng.Intn(4) == 0,  // 25% UNIQUE
 		Inverted:    w.rng.Intn(10) == 0, // 10% INVERTED
 		IfNotExists: w.rng.Intn(2) == 0,  // 50% IF NOT EXISTS
@@ -521,8 +564,17 @@ func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
 	}
 
 	stmt := rowenc.RandCreateTable(w.rng, "table", int(atomic.AddInt64(w.seqNum, 1)))
-	stmt.Table = tree.MakeUnqualifiedTableName(tree.Name(tableName))
+	stmt.Table = *tableName
 	stmt.IfNotExists = w.rng.Intn(2) == 0
+	return tree.Serialize(stmt), nil
+}
+
+func (w *schemaChangeWorker) createEnum(tx *pgx.Tx) (string, error) {
+	typName, err := w.randEnum(tx, w.existingPct)
+	if err != nil {
+		return "", err
+	}
+	stmt := rowenc.RandCreateType(w.rng, typName.String(), "asdf")
 	return tree.Serialize(stmt), nil
 }
 
@@ -532,7 +584,7 @@ func (w *schemaChangeWorker) createTableAs(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnNames, err := w.tableColumnsShuffled(tx, tableName)
+	columnNames, err := w.tableColumnsShuffled(tx, tableName.String())
 	if err != nil {
 		return "", err
 	}
@@ -548,7 +600,7 @@ func (w *schemaChangeWorker) createTableAs(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`CREATE TABLE "%s" AS SELECT %s FROM "%s"`,
+	return fmt.Sprintf(`CREATE TABLE %s AS SELECT %s FROM %s`,
 		destTableName, tree.Serialize(&names), tableName), nil
 }
 
@@ -558,7 +610,7 @@ func (w *schemaChangeWorker) createView(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnNames, err := w.tableColumnsShuffled(tx, tableName)
+	columnNames, err := w.tableColumnsShuffled(tx, tableName.String())
 	if err != nil {
 		return "", err
 	}
@@ -575,7 +627,7 @@ func (w *schemaChangeWorker) createView(tx *pgx.Tx) (string, error) {
 	}
 
 	// TODO(peter): Create views that are dependent on multiple tables.
-	return fmt.Sprintf(`CREATE VIEW "%s" AS SELECT %s FROM "%s"`,
+	return fmt.Sprintf(`CREATE VIEW %s AS SELECT %s FROM %s`,
 		destViewName, tree.Serialize(&names), tableName), nil
 }
 
@@ -584,11 +636,12 @@ func (w *schemaChangeWorker) dropColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+
+	columnName, err := w.randColumn(tx, tableName.String(), 100)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" DROP COLUMN "%s"`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) dropColumnDefault(tx *pgx.Tx) (string, error) {
@@ -596,11 +649,11 @@ func (w *schemaChangeWorker) dropColumnDefault(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(tx, tableName.String(), 100)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) dropColumnNotNull(tx *pgx.Tx) (string, error) {
@@ -608,11 +661,11 @@ func (w *schemaChangeWorker) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(tx, tableName.String(), 100)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) dropColumnStored(tx *pgx.Tx) (string, error) {
@@ -620,11 +673,12 @@ func (w *schemaChangeWorker) dropColumnStored(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+
+	columnName, err := w.randColumn(tx, tableName.String(), 100)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP STORED`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) dropConstraint(tx *pgx.Tx) (string, error) {
@@ -632,11 +686,12 @@ func (w *schemaChangeWorker) dropConstraint(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	constraintName, err := w.randConstraint(tx, tableName)
+
+	constraintName, err := w.randConstraint(tx, tableName.String())
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" DROP CONSTRAINT "%s"`, tableName, constraintName), nil
+	return fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName), nil
 }
 
 func (w *schemaChangeWorker) dropIndex(tx *pgx.Tx) (string, error) {
@@ -644,11 +699,12 @@ func (w *schemaChangeWorker) dropIndex(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	indexName, err := w.randIndex(tx, tableName, 100)
+
+	indexName, err := w.randIndex(tx, tableName.String(), 100)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP INDEX "%s"@"%s"`, tableName, indexName), nil
+	return fmt.Sprintf(`DROP INDEX %s@"%s"`, tableName, indexName), nil
 }
 
 func (w *schemaChangeWorker) dropSequence(tx *pgx.Tx) (string, error) {
@@ -664,7 +720,7 @@ func (w *schemaChangeWorker) dropTable(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP TABLE "%s"`, tableName), nil
+	return fmt.Sprintf(`DROP TABLE %s`, tableName), nil
 }
 
 func (w *schemaChangeWorker) dropView(tx *pgx.Tx) (string, error) {
@@ -672,7 +728,7 @@ func (w *schemaChangeWorker) dropView(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP VIEW "%s"`, viewName), nil
+	return fmt.Sprintf(`DROP VIEW %s`, viewName), nil
 }
 
 func (w *schemaChangeWorker) renameColumn(tx *pgx.Tx) (string, error) {
@@ -681,17 +737,17 @@ func (w *schemaChangeWorker) renameColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	srcColumnName, err := w.randColumn(tx, tableName, 100)
+	srcColumnName, err := w.randColumn(tx, tableName.String(), 100)
 	if err != nil {
 		return "", err
 	}
 
-	destColumnName, err := w.randColumn(tx, tableName, 50)
+	destColumnName, err := w.randColumn(tx, tableName.String(), 50)
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER TABLE "%s" RENAME COLUMN "%s" TO "%s"`,
+	return fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "%s" TO "%s"`,
 		tableName, srcColumnName, destColumnName), nil
 }
 
@@ -701,17 +757,17 @@ func (w *schemaChangeWorker) renameIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	srcIndexName, err := w.randIndex(tx, tableName, w.existingPct)
+	srcIndexName, err := w.randIndex(tx, tableName.String(), w.existingPct)
 	if err != nil {
 		return "", err
 	}
 
-	destIndexName, err := w.randIndex(tx, tableName, 50)
+	destIndexName, err := w.randIndex(tx, tableName.String(), 50)
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER TABLE "%s" RENAME CONSTRAINT "%s" TO "%s"`,
+	return fmt.Sprintf(`ALTER TABLE %s RENAME CONSTRAINT "%s" TO "%s"`,
 		tableName, srcIndexName, destIndexName), nil
 }
 
@@ -740,7 +796,7 @@ func (w *schemaChangeWorker) renameTable(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER TABLE "%s" RENAME TO "%s"`, srcTableName, destTableName), nil
+	return fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName), nil
 }
 
 func (w *schemaChangeWorker) renameView(tx *pgx.Tx) (string, error) {
@@ -754,7 +810,7 @@ func (w *schemaChangeWorker) renameView(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER VIEW "%s" RENAME TO "%s"`, srcViewName, destViewName), nil
+	return fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName), nil
 }
 
 func (w *schemaChangeWorker) setColumnDefault(tx *pgx.Tx) (string, error) {
@@ -767,11 +823,12 @@ func (w *schemaChangeWorker) setColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+
+	columnName, err := w.randColumn(tx, tableName.String(), 100)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName), nil
 }
 
 func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
@@ -779,12 +836,128 @@ func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(tx, tableName.String(), 100)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" SET DATA TYPE %s`,
-		tableName, columnName, rowenc.RandSortingType(w.rng)), nil
+	typ, err := w.randType(tx)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
+		tableName, columnName, typ), nil
+}
+
+func (w *schemaChangeWorker) insertRow(tx *pgx.Tx) (string, error) {
+	tableName, err := w.randTable(tx, 100)
+	if err != nil {
+		return "", errors.Wrapf(err, "error getting random table name")
+	}
+	cols, err := w.getTableColumns(tx, tableName.String())
+	if err != nil {
+		return "", errors.Wrapf(err, "error getting table columns for insert row")
+	}
+	colNames := []string{}
+	rows := []string{}
+	for _, col := range cols {
+		colNames = append(colNames, fmt.Sprintf(`"%s"`, col.name))
+	}
+	numRows := w.rng.Intn(10) + 1
+	for i := 0; i < numRows; i++ {
+		var row []string
+		for _, col := range cols {
+			d := rowenc.RandDatum(w.rng, col.typ, col.nullable)
+			row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
+		}
+		rows = append(rows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
+	}
+	return fmt.Sprintf(
+		`INSERT INTO %s (%s) VALUES %s`,
+		tableName,
+		strings.Join(colNames, ","),
+		strings.Join(rows, ","),
+	), nil
+}
+
+func (w *schemaChangeWorker) validate(tx *pgx.Tx) (string, error) {
+	validateStmt := "SELECT 'validating all objects'"
+	rows, err := tx.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
+	if err != nil {
+		return validateStmt, err
+	}
+	defer rows.Close()
+
+	var errs []string
+	for rows.Next() {
+		var id int64
+		var dbName, schemaName, objName, errStr string
+		if err := rows.Scan(&id, &dbName, &schemaName, &objName, &errStr); err != nil {
+			return validateStmt, err
+		}
+		errs = append(
+			errs,
+			fmt.Sprintf("id %d, db %s, schema %s, name %s: %s", id, dbName, schemaName, objName, errStr),
+		)
+	}
+
+	if rows.Err() != nil {
+		return "", errors.Wrap(rows.Err(), "querying for validation erors failed")
+	}
+
+	if len(errs) == 0 {
+		return validateStmt, nil
+	}
+	return validateStmt, errors.Errorf("Validation FAIL:\n%s", strings.Join(errs, "\n"))
+}
+
+type column struct {
+	name     string
+	typ      *types.T
+	nullable bool
+}
+
+func (w *schemaChangeWorker) getTableColumns(tx *pgx.Tx, tableName string) ([]column, error) {
+	q := fmt.Sprintf(`
+  SELECT column_name, data_type, is_nullable
+    FROM [SHOW COLUMNS FROM %s]
+`, tableName)
+	rows, err := tx.Query(q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var typNames []string
+	var ret []column
+	for rows.Next() {
+		var c column
+		var typName string
+		err := rows.Scan(&c.name, &typName, &c.nullable)
+		if err != nil {
+			return nil, err
+		}
+		typNames = append(typNames, typName)
+		ret = append(ret, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range ret {
+		c := &ret[i]
+		stmt, err := parser.ParseOne(fmt.Sprintf("SELECT 'otan wuz here'::%s", typNames[i]))
+		if err != nil {
+			return nil, err
+		}
+		c.typ, err = tree.ResolveType(
+			context.Background(),
+			stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.CastExpr).Type,
+			&txTypeResolver{tx: tx},
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return ret, nil
 }
 
 func (w *schemaChangeWorker) randColumn(
@@ -798,7 +971,7 @@ func (w *schemaChangeWorker) randColumn(
 	}
 	q := fmt.Sprintf(`
   SELECT column_name
-    FROM [SHOW COLUMNS FROM "%s"]
+    FROM [SHOW COLUMNS FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -812,7 +985,7 @@ ORDER BY random()
 func (w *schemaChangeWorker) randConstraint(tx *pgx.Tx, tableName string) (string, error) {
 	q := fmt.Sprintf(`
   SELECT constraint_name
-    FROM [SHOW CONSTRAINTS FROM "%s"]
+    FROM [SHOW CONSTRAINTS FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -835,7 +1008,7 @@ func (w *schemaChangeWorker) randIndex(
 	}
 	q := fmt.Sprintf(`
   SELECT index_name
-    FROM [SHOW INDEXES FROM "%s"]
+    FROM [SHOW INDEXES FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -864,46 +1037,104 @@ ORDER BY random()
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randTable(tx *pgx.Tx, pctExisting int) (string, error) {
+func (w *schemaChangeWorker) randEnum(tx *pgx.Tx, pctExisting int) (tree.UnresolvedName, error) {
 	if w.rng.Intn(100) >= pctExisting {
-		return fmt.Sprintf("table%d", atomic.AddInt64(w.seqNum, 1)), nil
+		randSchema, err := w.randSchema(tx, 100-pctExisting)
+		if err != nil {
+			return tree.MakeUnresolvedName(), err
+		}
+		return tree.MakeUnresolvedName(randSchema, fmt.Sprintf("enum%d", atomic.AddInt64(w.seqNum, 1))), nil
 	}
 	const q = `
-  SELECT table_name
+  SELECT schema, name
+    FROM [SHOW ENUMS]
+   WHERE name LIKE 'enum%'
+ORDER BY random()
+   LIMIT 1;
+`
+	var schemaName string
+	var typName string
+	if err := tx.QueryRow(q).Scan(&schemaName, &typName); err != nil {
+		return tree.MakeUnresolvedName(), err
+	}
+	return tree.MakeUnresolvedName(schemaName, typName), nil
+}
+
+// randTable returns a schema name along with a table name
+func (w *schemaChangeWorker) randTable(tx *pgx.Tx, pctExisting int) (*tree.TableName, error) {
+	if w.rng.Intn(100) >= pctExisting {
+		randSchema, err := w.randSchema(tx, 100-pctExisting)
+
+		if err != nil {
+			treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+			return &treeTableName, err
+		}
+
+		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(randSchema),
+			ExplicitSchema: true,
+		}, tree.Name(fmt.Sprintf("table%d", atomic.AddInt64(w.seqNum, 1))))
+		return &treeTableName, nil
+	}
+
+	const q = `
+  SELECT schema_name, table_name
     FROM [SHOW TABLES]
    WHERE table_name LIKE 'table%'
 ORDER BY random()
    LIMIT 1;
 `
-	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
-		return "", err
+	var schemaName string
+	var tableName string
+	if err := tx.QueryRow(q).Scan(&schemaName, &tableName); err != nil {
+		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+		return &treeTableName, err
 	}
-	return name, nil
+
+	treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(schemaName),
+		ExplicitSchema: true,
+	}, tree.Name(tableName))
+	return &treeTableName, nil
 }
 
-func (w *schemaChangeWorker) randView(tx *pgx.Tx, pctExisting int) (string, error) {
+func (w *schemaChangeWorker) randView(tx *pgx.Tx, pctExisting int) (*tree.TableName, error) {
 	if w.rng.Intn(100) >= pctExisting {
-		return fmt.Sprintf("view%d", atomic.AddInt64(w.seqNum, 1)), nil
+		randSchema, err := w.randSchema(tx, 100-pctExisting)
+		if err != nil {
+			treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+			return &treeViewName, err
+		}
+		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(randSchema),
+			ExplicitSchema: true,
+		}, tree.Name(fmt.Sprintf("view%d", atomic.AddInt64(w.seqNum, 1))))
+		return &treeViewName, nil
 	}
 	const q = `
-  SELECT table_name
+  SELECT schema_name, table_name
     FROM [SHOW TABLES]
    WHERE table_name LIKE 'view%'
 ORDER BY random()
    LIMIT 1;
 `
-	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
-		return "", err
+	var schemaName string
+	var viewName string
+	if err := tx.QueryRow(q).Scan(&schemaName, &viewName); err != nil {
+		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+		return &treeViewName, err
 	}
-	return name, nil
+	treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(schemaName),
+		ExplicitSchema: true,
+	}, tree.Name(viewName))
+	return &treeViewName, nil
 }
 
 func (w *schemaChangeWorker) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
-FROM [SHOW COLUMNS FROM "%s"];
+FROM [SHOW COLUMNS FROM %s];
 `, tableName)
 
 	rows, err := tx.Query(q)
@@ -933,3 +1164,113 @@ FROM [SHOW COLUMNS FROM "%s"];
 	}
 	return columnNames, nil
 }
+
+func (w *schemaChangeWorker) randType(tx *pgx.Tx) (tree.ResolvableTypeReference, error) {
+	if w.rng.Intn(100) <= w.enumPct {
+		// TODO(ajwerner): Support arrays of enums.
+		typName, err := w.randEnum(tx, 100)
+		if err != nil {
+			return nil, err
+		}
+		return typName.ToUnresolvedObjectName(tree.NoAnnotation)
+	}
+	return rowenc.RandSortingType(w.rng), nil
+}
+
+func (w *schemaChangeWorker) createSchema(tx *pgx.Tx) (string, error) {
+	schemaName, err := w.randSchema(tx, 10)
+	if err != nil {
+		return "", err
+	}
+
+	// TODO(jayshrivastava): Support authorization
+	stmt := rowenc.MakeSchemaName(w.rng.Intn(2) == 0, schemaName, "")
+	return tree.Serialize(stmt), nil
+}
+
+func (w *schemaChangeWorker) randSchema(tx *pgx.Tx, pctExisting int) (string, error) {
+	if w.rng.Intn(100) >= pctExisting {
+		return fmt.Sprintf("schema%d", atomic.AddInt64(w.seqNum, 1)), nil
+	}
+	const q = `
+  SELECT schema_name
+    FROM information_schema.schemata
+   WHERE schema_name
+    LIKE 'schema%'
+      OR schema_name = 'public'
+ORDER BY random()
+   LIMIT 1;
+`
+	var name string
+	if err := tx.QueryRow(q).Scan(&name); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+func (w *schemaChangeWorker) dropSchema(tx *pgx.Tx) (string, error) {
+	schemaName, err := w.randSchema(tx, 100)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName), nil
+}
+
+// txTypeResolver is a minimal type resolver to support writing enum values to
+// columns.
+type txTypeResolver struct {
+	tx *pgx.Tx
+}
+
+func (t txTypeResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	rows, err := t.tx.Query(`
+  SELECT enumlabel, enumsortorder
+    FROM pg_enum AS pge, pg_type AS pgt, pg_namespace AS pgn
+   WHERE (pgt.typnamespace = pgn.oid AND pgt.oid = pge.enumtypid)
+         AND typcategory = 'E'
+         AND typname = $1
+ORDER BY enumsortorder`, name.Object())
+	if err != nil {
+		return nil, err
+	}
+	var logicalReps []string
+	var physicalReps [][]byte
+	var readOnly []bool
+	for rows.Next() {
+		var logicalRep string
+		var order int64
+		if err := rows.Scan(&logicalRep, &order); err != nil {
+			return nil, err
+		}
+		logicalReps = append(logicalReps, logicalRep)
+		physicalReps = append(physicalReps, encoding.EncodeUntaggedIntValue(nil, order))
+		readOnly = append(readOnly, false)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// TODO(ajwerner): Fill in some more fields here to generate better errors
+	// down the line.
+	n := types.UserDefinedTypeName{Name: name.Object()}
+	return &types.T{
+		InternalType: types.InternalType{
+			Family: types.EnumFamily,
+		},
+		TypeMeta: types.UserDefinedTypeMetadata{
+			Name: &n,
+			EnumData: &types.EnumMetadata{
+				LogicalRepresentations:  logicalReps,
+				PhysicalRepresentations: physicalReps,
+				IsMemberReadOnly:        readOnly,
+			},
+		},
+	}, nil
+}
+
+func (t txTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+	return nil, pgerror.Newf(pgcode.UndefinedObject, "type %d does not exist", oid)
+}
+
+var _ tree.TypeReferenceResolver = (*txTypeResolver)(nil)

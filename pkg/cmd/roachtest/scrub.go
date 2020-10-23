@@ -82,7 +82,7 @@ func makeScrubTPCCTest(
 					return nil
 				},
 				Duration:  length,
-				SetupType: usingFixture,
+				SetupType: usingImport,
 			})
 		},
 		MinVersion: "v19.1.0",
