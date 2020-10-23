@@ -382,5 +382,9 @@ message Version {
   // The unstable version is used to migrate during development.
   // Users of stable, public releases will only use binaries
   // with unstable set to 0.
+  //
+  // TODO(irfansharif): We'll now use `unstable` to tack on long running
+  // migrations. Should we rename this to `intermediate` or something similar?
+  // We should at least motivate the purpose of this field a bit better.
   optional int32 unstable = 4 [(gogoproto.nullable) = false];
 }

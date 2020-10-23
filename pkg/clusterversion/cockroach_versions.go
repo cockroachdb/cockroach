@@ -76,6 +76,7 @@ const (
 	VersionHBAForNonTLS
 	Version20_2
 	VersionStart21_1
+	VersionNoopMigration
 
 	// Add new versions here (step one of two).
 )
@@ -431,6 +432,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionStart21_1 demarcates work towards CockroachDB v21.1.
 		Key:     VersionStart21_1,
 		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 1},
+	},
+	{
+		// VersionNoopMigration is a placeholder version for the introduction of
+		// pkg/clusterversion/migration.
+		//
+		// TODO(irfansharif): Remove and replace this with something real.
+		Key:     VersionNoopMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 2},
 	},
 
 	// Add new versions here (step two of two).
