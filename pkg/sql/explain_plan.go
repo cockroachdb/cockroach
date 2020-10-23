@@ -130,7 +130,6 @@ func explainGetDistributedAndVectorized(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
 	)
-	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, plan.subqueryPlans, distribution)
 	defer func() {
@@ -153,14 +152,8 @@ func explainGetDistributedAndVectorized(
 			willVectorize = false
 		} else {
 			willVectorize = true
-			thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
-			for scheduledOnNodeID, flow := range flows {
-				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
-				_, cleanup, err := colflow.SupportsVectorized(
-					params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
-				)
-				cleanup()
-				if err != nil {
+			for _, flow := range flows {
+				if err := colflow.IsSupported(ctxSessionData.VectorizeMode, flow); err != nil {
 					willVectorize = false
 					break
 				}
