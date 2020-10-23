@@ -490,12 +490,6 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade:      true,
 	},
 	{
-		name:              "local-vec-auto",
-		numNodes:          1,
-		overrideAutoStats: "false",
-		overrideVectorize: "201auto",
-	},
-	{
 		name:                "local-mixed-19.2-20.1",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
@@ -536,24 +530,6 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize:   "off",
 	},
 	{
-		name:                "fakedist-vec-auto",
-		numNodes:            3,
-		useFakeSpanResolver: true,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		overrideVectorize:   "201auto",
-	},
-	{
-		name:                "fakedist-vec-auto-disk",
-		numNodes:            3,
-		useFakeSpanResolver: true,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		overrideVectorize:   "201auto",
-		sqlExecUseDisk:      true,
-		skipShort:           true,
-	},
-	{
 		name:                       "fakedist-metadata",
 		numNodes:                   3,
 		useFakeSpanResolver:        true,
@@ -584,22 +560,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-	},
-	{
-		name:                "5node-vec-auto",
-		numNodes:            5,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		overrideVectorize:   "201auto",
-	},
-	{
-		name:                "5node-vec-disk-auto",
-		numNodes:            5,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		overrideVectorize:   "201auto",
-		sqlExecUseDisk:      true,
-		skipShort:           true,
 	},
 	{
 		name:                       "5node-metadata",
@@ -733,12 +693,9 @@ var (
 	defaultConfigNames = []string{
 		"local",
 		"local-vec-off",
-		"local-vec-auto",
 		"local-spec-planning",
 		"fakedist",
 		"fakedist-vec-off",
-		"fakedist-vec-auto",
-		"fakedist-vec-auto-disk",
 		"fakedist-metadata",
 		"fakedist-disk",
 		"fakedist-spec-planning",
@@ -747,8 +704,6 @@ var (
 	fiveNodeDefaultConfigName  = "5node-default-configs"
 	fiveNodeDefaultConfigNames = []string{
 		"5node",
-		"5node-vec-auto",
-		"5node-vec-disk-auto",
 		"5node-metadata",
 		"5node-disk",
 		"5node-spec-planning",

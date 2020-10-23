@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1034,11 +1033,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
 				result.Op = colexec.NewPanicInjector(result.Op)
 			}
-			if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondatapb.Vectorize201Auto &&
-				!result.IsStreaming {
-				err = errors.Errorf("non-streaming operator encountered when vectorize=201auto")
-				return
-			}
 			// We created a streaming memory account when calling NewColOperator above,
 			// so there is definitely at least one memory account, and it doesn't
 			// matter which one we grow.
@@ -1076,14 +1070,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 				}
 			}
 
-			if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondatapb.Vectorize201Auto) &&
-				pspec.Output[0].Type == execinfrapb.OutputRouterSpec_BY_HASH {
-				// colexec.HashRouter is not supported when vectorize=auto since it can
-				// buffer an unlimited number of tuples, even though it falls back to
-				// disk. vectorize=on does support this.
-				err = errors.Errorf("hash router encountered when vectorize=201auto")
-				return
-			}
 			if err = s.setupOutput(
 				ctx, flowCtx, pspec, op, result.ColumnTypes, metadataSourcesQueue, toClose, factory,
 			); err != nil {

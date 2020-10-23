@@ -149,7 +149,7 @@ func explainGetDistributedAndVectorized(
 		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
 		if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
 			willVectorize = false
-		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondatapb.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOn) {
+		} else if !vectorizedThresholdMet && ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOn {
 			willVectorize = false
 		} else {
 			willVectorize = true
