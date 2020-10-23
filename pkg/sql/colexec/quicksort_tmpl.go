@@ -18,7 +18,18 @@
 
 package colexec
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+)
 
 // This file is copied from the the Go standard library's sort
 // implementation, found in https://golang.org/src/sort/sort.go. The only

@@ -24,7 +24,10 @@ import (
 // ROW_NUMBER. outputColIdx specifies in which coldata.Vec the operator should
 // put its output (if there is no such column, a new column is appended).
 func NewRowNumberOperator(
-	allocator *colmem.Allocator, input colexecbase.Operator, outputColIdx int, partitionColIdx int,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
+	outputColIdx int,
+	partitionColIdx int,
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	base := rowNumberBase{

@@ -22,11 +22,19 @@ package colexec
 import (
 	"context"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
@@ -87,7 +95,10 @@ var _ InternalMemoryOperator = &mergeJoin_JOIN_TYPE_STRINGOp{}
 // {{/*
 // This code snippet is the "meat" of the probing phase.
 func _PROBE_SWITCH(
-	_JOIN_TYPE joinTypeInfo, _SEL_PERMUTATION selPermutation, _L_HAS_NULLS bool, _R_HAS_NULLS bool,
+	_JOIN_TYPE joinTypeInfo,
+	_SEL_PERMUTATION selPermutation,
+	_L_HAS_NULLS bool,
+	_R_HAS_NULLS bool,
 ) { // */}}
 	// {{define "probeSwitch"}}
 	// {{$sel := $.SelPermutation}}
@@ -1169,7 +1180,11 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 // not expanded but directly copied numRepeats times.
 // SIDE EFFECTS: writes into o.output.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroupsFromBatch(
-	rightGroups []group, colOffset int, input *mergeJoinInput, batch coldata.Batch, destStartIdx int,
+	rightGroups []group,
+	colOffset int,
+	input *mergeJoinInput,
+	batch coldata.Batch,
+	destStartIdx int,
 ) {
 	initialBuilderState := o.builderState.right
 	sel := batch.Selection()

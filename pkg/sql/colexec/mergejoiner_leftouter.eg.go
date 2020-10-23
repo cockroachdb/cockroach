@@ -37032,7 +37032,11 @@ func (o *mergeJoinLeftOuterOp) buildLeftBufferedGroup(
 // not expanded but directly copied numRepeats times.
 // SIDE EFFECTS: writes into o.output.
 func (o *mergeJoinLeftOuterOp) buildRightGroupsFromBatch(
-	rightGroups []group, colOffset int, input *mergeJoinInput, batch coldata.Batch, destStartIdx int,
+	rightGroups []group,
+	colOffset int,
+	input *mergeJoinInput,
+	batch coldata.Batch,
+	destStartIdx int,
 ) {
 	initialBuilderState := o.builderState.right
 	sel := batch.Selection()
