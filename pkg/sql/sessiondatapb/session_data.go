@@ -82,8 +82,6 @@ func (m VectorizeExecMode) String() string {
 	switch m {
 	case VectorizeOff:
 		return "off"
-	case Vectorize201Auto:
-		return "201auto"
 	case VectorizeOn:
 		return "on"
 	case VectorizeExperimentalAlways:
@@ -100,8 +98,6 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	switch strings.ToUpper(val) {
 	case "OFF":
 		m = VectorizeOff
-	case "201AUTO":
-		m = Vectorize201Auto
 	case "ON":
 		m = VectorizeOn
 	case "EXPERIMENTAL_ALWAYS":
