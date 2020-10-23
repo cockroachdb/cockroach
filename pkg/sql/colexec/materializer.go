@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -49,7 +50,7 @@ type Materializer struct {
 	// row is the memory used for the output row.
 	row rowenc.EncDatumRow
 
-	// ouputRow stores the returned results of next() to be passed through an
+	// outputRow stores the returned results of next() to be passed through an
 	// adapter.
 	outputRow rowenc.EncDatumRow
 
@@ -70,17 +71,24 @@ type Materializer struct {
 // trailing metadata state, which is meant only for internal metadata
 // generation.
 type drainHelper struct {
-	execinfrapb.MetadataSources
+	sources      execinfrapb.MetadataSources
 	ctx          context.Context
 	bufferedMeta []execinfrapb.ProducerMetadata
 }
 
 var _ execinfra.RowSource = &drainHelper{}
+var _ execinfra.Releasable = &drainHelper{}
+
+var drainHelperPool = sync.Pool{
+	New: func() interface{} {
+		return &drainHelper{}
+	},
+}
 
 func newDrainHelper(sources execinfrapb.MetadataSources) *drainHelper {
-	return &drainHelper{
-		MetadataSources: sources,
-	}
+	d := drainHelperPool.Get().(*drainHelper)
+	d.sources = sources
+	return d
 }
 
 // OutputTypes implements the RowSource interface.
@@ -99,7 +107,7 @@ func (d *drainHelper) Start(ctx context.Context) context.Context {
 // Next implements the RowSource interface.
 func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if d.bufferedMeta == nil {
-		d.bufferedMeta = d.DrainMeta(d.ctx)
+		d.bufferedMeta = d.sources.DrainMeta(d.ctx)
 		if d.bufferedMeta == nil {
 			// Still nil, avoid more calls to DrainMeta.
 			d.bufferedMeta = []execinfrapb.ProducerMetadata{}
@@ -119,7 +127,19 @@ func (d *drainHelper) ConsumerDone() {}
 // ConsumerClosed implements the RowSource interface.
 func (d *drainHelper) ConsumerClosed() {}
 
+// Release implements the execinfra.Releasable interface.
+func (d *drainHelper) Release() {
+	*d = drainHelper{}
+	drainHelperPool.Put(d)
+}
+
 const materializerProcName = "materializer"
+
+var materializerPool = sync.Pool{
+	New: func() interface{} {
+		return &Materializer{}
+	},
+}
 
 // NewMaterializer creates a new Materializer processor which processes the
 // columnar data coming from input to return it as rows.
@@ -149,13 +169,15 @@ func NewMaterializer(
 	for i := range vecIdxsToConvert {
 		vecIdxsToConvert[i] = i
 	}
-	m := &Materializer{
-		input:       input,
-		typs:        typs,
-		drainHelper: newDrainHelper(metadataSourcesQueue),
-		converter:   colconv.NewVecToDatumConverter(len(typs), vecIdxsToConvert),
-		row:         make(rowenc.EncDatumRow, len(typs)),
-		closers:     toClose,
+	m := materializerPool.Get().(*Materializer)
+	*m = Materializer{
+		ProcessorBase: m.ProcessorBase,
+		input:         input,
+		typs:          typs,
+		drainHelper:   newDrainHelper(metadataSourcesQueue),
+		converter:     colconv.NewVecToDatumConverter(len(typs), vecIdxsToConvert),
+		row:           make(rowenc.EncDatumRow, len(typs)),
+		closers:       toClose,
 	}
 
 	if err := m.ProcessorBase.Init(
@@ -169,7 +191,8 @@ func NewMaterializer(
 		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
-			InputsToDrain: []execinfra.RowSource{m.drainHelper},
+			// We append drainHelper to inputs to drain below in order to reuse
+			// the same underlying slice from the pooled materializer.
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				m.close()
 				return nil
@@ -178,12 +201,15 @@ func NewMaterializer(
 	); err != nil {
 		return nil, err
 	}
+	m.AddInputToDrain(m.drainHelper)
 	m.FinishTrace = outputStatsToTrace
 	m.cancelFlow = cancelFlow
 	return m, nil
 }
 
 var _ execinfra.OpNode = &Materializer{}
+var _ execinfra.Processor = &Materializer{}
+var _ execinfra.Releasable = &Materializer{}
 
 // ChildCount is part of the exec.OpNode interface.
 func (m *Materializer) ChildCount(verbose bool) int {
@@ -277,4 +303,17 @@ func (m *Materializer) close() {
 // ConsumerClosed is part of the execinfra.RowSource interface.
 func (m *Materializer) ConsumerClosed() {
 	m.close()
+}
+
+// Release implements the execinfra.Releasable interface.
+func (m *Materializer) Release() {
+	m.drainHelper.Release()
+	m.ProcessorBase.Reset()
+	*m = Materializer{
+		// We're keeping the reference to the same ProcessorBase since it
+		// allows us to reuse some of the slices as well as ProcOutputHelper
+		// struct.
+		ProcessorBase: m.ProcessorBase,
+	}
+	materializerPool.Put(m)
 }
