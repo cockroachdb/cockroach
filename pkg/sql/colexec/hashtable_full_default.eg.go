@@ -20,6 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ coldataext.Datum
+	_ tree.AggType
+)
+
 // checkCol determines if the current key column in the groupID buckets matches
 // the specified equality column key. If there is no match, then the key is
 // added to differs. If the bucket has reached the end, the key is rejected. If

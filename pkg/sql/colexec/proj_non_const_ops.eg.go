@@ -30,6 +30,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ duration.Duration
+	_ coldataext.Datum
+	_ sqltelemetry.EnumTelemetryType
+	_ telemetry.Counter
+)
+
 // projConstOpBase contains all of the fields for projections with a constant,
 // except for the constant itself.
 // NOTE: this struct should be declared in proj_const_ops_tmpl.go, but if we do
