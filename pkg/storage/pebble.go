@@ -882,7 +882,11 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 	}
 
 	sstSizes := make(map[pebble.FileNum]uint64)
-	for _, ssts := range p.db.SSTables() {
+	sstInfos, err := p.db.SSTables()
+	if err != nil {
+		return nil, err
+	}
+	for _, ssts := range sstInfos {
 		for _, sst := range ssts {
 			sstSizes[sst.FileNum] = sst.Size
 		}
