@@ -160,7 +160,8 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			p, ok := it.tabMeta.PartialIndexPredicates[ord]
 			if !ok {
 				// A partial index predicate expression was not built for the
-				// partial index. Implication cannot be proven so it must be
+				// partial index. See Builder.buildScan for details on when this
+				// can occur. Implication cannot be proven so it must be
 				// skipped.
 				continue
 			}
