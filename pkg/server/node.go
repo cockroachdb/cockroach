@@ -552,7 +552,7 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 }
 
 func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
-	cv, err := store.GetClusterVersion(context.TODO())
+	cv, err := kvserver.ReadClusterVersion(context.TODO(), store.Engine())
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
