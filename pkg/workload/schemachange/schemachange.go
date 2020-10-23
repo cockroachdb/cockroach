@@ -410,9 +410,6 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 		case createEnum:
 			stmt, err = w.createEnum(tx)
 
-		case createSchema:
-			stmt, err = w.createSchema(tx)
-
 		case dropColumn:
 			stmt, err = w.dropColumn(tx)
 
@@ -1175,17 +1172,6 @@ func (w *schemaChangeWorker) randType(tx *pgx.Tx) (tree.ResolvableTypeReference,
 		return typName.ToUnresolvedObjectName(tree.NoAnnotation)
 	}
 	return rowenc.RandSortingType(w.rng), nil
-}
-
-func (w *schemaChangeWorker) createSchema(tx *pgx.Tx) (string, error) {
-	schemaName, err := w.randSchema(tx, 10)
-	if err != nil {
-		return "", err
-	}
-
-	// TODO(jayshrivastava): Support authorization
-	stmt := rowenc.MakeSchemaName(w.rng.Intn(2) == 0, schemaName, "")
-	return tree.Serialize(stmt), nil
 }
 
 func (w *schemaChangeWorker) randSchema(tx *pgx.Tx, pctExisting int) (string, error) {
