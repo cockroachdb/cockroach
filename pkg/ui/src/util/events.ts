@@ -30,6 +30,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Database Dropped: User ${info.User} dropped database ${info.DatabaseName}. ${tableDropText}`;
     case eventTypes.RENAME_DATABASE:
       return `Database Renamed: User ${info.User} renamed database ${info.DatabaseName} to ${info.NewDatabaseName}`;
+    case eventTypes.ALTER_DATABASE_OWNER:
+      return `Database Owner Altered: User ${info.User} altered the owner of database ${info.SchemaName} to ${info.Owner}`;
     case eventTypes.CREATE_TABLE:
       return `Table Created: User ${info.User} created table ${info.TableName}`;
     case eventTypes.DROP_TABLE:
@@ -95,6 +97,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Schema Renamed: User ${info.User} renamed schema ${info.SchemaName} to ${info.NewSchemaName}`;
     case eventTypes.ALTER_SCHEMA_OWNER:
       return `Schema Owner Altered: User ${info.User} altered the owner of schema ${info.SchemaName} to ${info.Owner}`;
+    case eventTypes.CONVERT_TO_SCHEMA:
+      return `Database Converted: User ${info.User} converted database ${info.DatabaseName} to a schema with parent database ${info.NewDatabaseName}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
   }

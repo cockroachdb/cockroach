@@ -383,6 +383,41 @@ WHERE "eventType" = 'rename_database'
 statement ok
 SET DATABASE = test
 
+# set owner of database.
+##################
+
+statement ok
+CREATE USER u
+
+statement ok
+ALTER DATABASE eventlogtonewname OWNER TO u
+
+query ITT
+SELECT "reportingID", info::JSONB->>'DatabaseName', info::JSONB->>'Owner'
+FROM system.eventlog
+WHERE "eventType" = 'alter_database_owner'
+----
+1  eventlogtonewname  u
+
+# convert database to schema
+##################
+
+statement ok
+ALTER DATABASE eventlogtonewname CONVERT TO SCHEMA WITH PARENT test
+
+query ITT
+SELECT "reportingID", info::JSONB->>'DatabaseName', info::JSONB->>'NewDatabaseName'
+FROM system.eventlog
+WHERE "eventType" = 'convert_to_schema'
+----
+1  eventlogtonewname  test
+
+statement ok
+DROP SCHEMA eventlogtonewname
+
+statement ok
+DROP USER u
+
 ##################
 # Cluster Settings
 ##################
@@ -586,5 +621,6 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_schema'
 ORDER BY 2
 ----
+1 eventlogtonewname
 1 s
 1 t
