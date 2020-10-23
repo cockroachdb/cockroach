@@ -23,6 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ apd.Context
+	_ duration.Duration
+	_ encoding.Direction
+)
+
 // EncDatumRowsToColVec converts one column from EncDatumRows to a column
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.
 func EncDatumRowsToColVec(
