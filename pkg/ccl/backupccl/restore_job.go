@@ -794,6 +794,10 @@ type restoreResumer struct {
 	descriptorCoverage tree.DescriptorCoverage
 	latestStats        []*stats.TableStatisticProto
 	execCfg            *sql.ExecutorConfig
+
+	testingKnobs struct {
+		afterPublishingDescriptors func() error
+	}
 }
 
 // remapRelevantStatistics changes the table ID references in the stats
@@ -909,6 +913,11 @@ func createImportingTables(
 
 	log.Eventf(ctx, "starting restore for %d tables", len(tables))
 
+	if details.PrepareCompleted {
+		// If we are resuming, just use TableDesc from the details
+		return databases, details.TableDescs, oldTableIDs, spans, nil
+	}
+
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
 	if err := RewriteTableDescs(tables, details.TableRewrites, details.OverrideDB); err != nil {
@@ -921,24 +930,22 @@ func createImportingTables(
 		desc.OfflineReason = "restoring"
 	}
 
-	if !details.PrepareCompleted {
-		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			// Write the new TableDescriptors which are set in the OFFLINE state.
-			if err := WriteTableDescs(ctx, txn, databases, tables, details.DescriptorCoverage, r.job.Payload().Username, r.settings, nil /* extra */); err != nil {
-				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
-			}
-
-			details.PrepareCompleted = true
-			details.TableDescs = tables
-
-			// Update the job once all descs have been prepared for ingestion.
-			err := r.job.WithTxn(txn).SetDetails(ctx, details)
-
-			return err
-		})
-		if err != nil {
-			return nil, nil, nil, nil, err
+	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Write the new TableDescriptors which are set in the OFFLINE state.
+		if err := WriteTableDescs(ctx, txn, databases, tables, details.DescriptorCoverage, r.job.Payload().Username, r.settings, nil /* extra */); err != nil {
+			return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 		}
+
+		details.PrepareCompleted = true
+		details.TableDescs = tables
+
+		// Update the job once all descs have been prepared for ingestion.
+		err := r.job.WithTxn(txn).SetDetails(ctx, details)
+
+		return err
+	})
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
 
 	return databases, tables, oldTableIDs, spans, nil
@@ -974,6 +981,12 @@ func (r *restoreResumer) Resume(
 		// we can return without importing any data.
 		log.Warning(ctx, "no tables to restore")
 		return nil
+	}
+
+	if r.testingKnobs.afterPublishingDescriptors != nil {
+		if err := r.testingKnobs.afterPublishingDescriptors(); err != nil {
+			return err
+		}
 	}
 
 	numClusterNodes := clusterNodeCount(p.ExecCfg().Gossip)
