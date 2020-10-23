@@ -373,7 +373,7 @@ project
  ├── stats: [rows=0.883402167, distinct(1)=0.88327337, null(1)=0, distinct(5)=0.586626389, null(5)=0, distinct(6)=0.848861501, null(6)=0.26502065]
  ├── key: ()
  ├── fd: ()-->(1,5,6)
- └── scan "order"@order_idx
+ └── scan order@order_idx
       ├── save-table-name: order_status_03_scan_2
       ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
       ├── constraint: /3/2/4/-1: [/4/3/10 - /4/3/10]
@@ -915,7 +915,7 @@ group-by
  ├── key: (2,3)
  ├── fd: (2,3)-->(10)
  ├── ordering: +3,+2
- ├── scan "order"@order_idx
+ ├── scan order@order_idx
  │    ├── save-table-name: consistency_04_scan_2
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
  │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
@@ -1077,7 +1077,7 @@ group-by
  ├── key: (2,3)
  ├── fd: (2,3)-->(10)
  ├── ordering: +3,+2
- ├── scan "order"
+ ├── scan order
  │    ├── save-table-name: consistency_06_scan_2
  │    ├── columns: o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
  │    ├── stats: [rows=300000, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0, distinct(2,3)=100, null(2,3)=0]
@@ -1200,7 +1200,7 @@ except-all
            │   histogram(10)=
            ├── key: (5-7)
            ├── fd: ()-->(10)
-           ├── scan "order"@order_idx
+           ├── scan order@order_idx
            │    ├── save-table-name: consistency_08_scan_5
            │    ├── columns: o_id:5(int!null) o_d_id:6(int!null) o_w_id:7(int!null) o_carrier_id:10(int)
            │    ├── stats: [rows=300000, distinct(5)=2999, null(5)=0, distinct(6)=10, null(6)=0, distinct(7)=10, null(7)=0, distinct(10)=11, null(10)=90000]
@@ -1302,7 +1302,7 @@ except-all
  │         │   histogram(6)=
  │         ├── key: (1-3)
  │         ├── fd: ()-->(6)
- │         ├── scan "order"@order_idx
+ │         ├── scan order@order_idx
  │         │    ├── save-table-name: consistency_09_scan_4
  │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
  │         │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=11, null(6)=90000]
@@ -1412,7 +1412,7 @@ except-all
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── right columns: ol_w_id:12(int) ol_d_id:11(int) ol_o_id:10(int) count_rows:21(int)
  ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
- ├── scan "order"
+ ├── scan order
  │    ├── save-table-name: consistency_10_scan_2
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
  │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
@@ -1542,7 +1542,7 @@ except-all
  │    │    └── ordering: +3,+2,-1
  │    └── aggregations
  │         └── count-rows [as=count_rows:12, type=int]
- └── scan "order"
+ └── scan order
       ├── save-table-name: consistency_11_scan_4
       ├── columns: o_id:13(int!null) o_d_id:14(int!null) o_w_id:15(int!null) o_ol_cnt:19(int)
       ├── stats: [rows=300000, distinct(13)=2999, null(13)=0, distinct(14)=10, null(14)=0, distinct(15)=10, null(15)=0, distinct(19)=11, null(19)=0]
@@ -1679,7 +1679,7 @@ scalar-group-by
  │    │    │         │   histogram(6)=
  │    │    │         ├── key: (1-3)
  │    │    │         ├── fd: ()-->(6)
- │    │    │         ├── scan "order"@order_idx
+ │    │    │         ├── scan order@order_idx
  │    │    │         │    ├── save-table-name: consistency_12_scan_9
  │    │    │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
  │    │    │         │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=11, null(6)=90000]

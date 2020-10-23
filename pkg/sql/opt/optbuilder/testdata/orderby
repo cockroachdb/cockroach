@@ -998,7 +998,7 @@ sort
  ├── ordering: +2,-3,+4,+1
  └── project
       ├── columns: a:1!null b:2 c:3 d:4
-      └── scan t.public.abcd
+      └── scan abcd
            └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
@@ -1009,7 +1009,7 @@ sort
  ├── ordering: +2,-3,+4,+1
  └── project
       ├── columns: a:1!null b:2 c:3 d:4
-      └── scan t.public.abcd
+      └── scan abcd
            └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
@@ -1020,7 +1020,7 @@ sort
  ├── ordering: +2,-3,+4,+1
  └── project
       ├── columns: a:1!null b:2 c:3 d:4
-      └── scan public.abcd
+      └── scan abcd
            └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build

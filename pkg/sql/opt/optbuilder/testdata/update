@@ -221,7 +221,7 @@ update abcde
 build
 UPDATE abcde AS foo SET a=foo.b, b=foo.c
 ----
-update foo
+update abcde [as=foo]
  ├── columns: <none>
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  ├── update-mapping:
@@ -231,7 +231,7 @@ update foo
  │    └── b:9 => e:5
  └── project
       ├── columns: column15:15 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
-      ├── scan foo
+      ├── scan abcde [as=foo]
       │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    └── computed column expressions
       │         ├── d:11
@@ -602,7 +602,7 @@ UPDATE abcde AS foo SET a=2 WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
 ----
 project
  ├── columns: "?column?":17!null "?column?":18
- ├── update foo
+ ├── update abcde [as=foo]
  │    ├── columns: a:1!null b:2 c:3 d:4 e:5!null rowid:6!null
  │    ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  │    ├── update-mapping:
@@ -615,7 +615,7 @@ project
  │         │    ├── columns: a_new:15!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │         │    ├── select
  │         │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
- │         │    │    ├── scan foo
+ │         │    │    ├── scan abcde [as=foo]
  │         │    │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │         │    │    │    └── computed column expressions
  │         │    │    │         ├── d:11
@@ -1179,7 +1179,7 @@ UPDATE abcde AS abcde1 SET b=(SELECT b FROM abcde AS abcde2 WHERE abcde2.rowid=a
 ----
 project
  ├── columns: a:1!null b:2 c:3 d:4 e:5!null
- └── update abcde1
+ └── update abcde [as=abcde1]
       ├── columns: abcde1.a:1!null abcde1.b:2 abcde1.c:3 abcde1.d:4 abcde1.e:5!null abcde1.rowid:6!null
       ├── fetch columns: abcde1.a:8 abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13
       ├── update-mapping:
@@ -1190,7 +1190,7 @@ project
            ├── columns: column23:23 abcde1.a:8!null abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13!null abcde1.crdb_internal_mvcc_timestamp:14 b_new:22
            ├── project
            │    ├── columns: b_new:22 abcde1.a:8!null abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13!null abcde1.crdb_internal_mvcc_timestamp:14
-           │    ├── scan abcde1
+           │    ├── scan abcde [as=abcde1]
            │    │    ├── columns: abcde1.a:8!null abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13!null abcde1.crdb_internal_mvcc_timestamp:14
            │    │    └── computed column expressions
            │    │         ├── abcde1.d:11
@@ -1205,7 +1205,7 @@ project
            │                        ├── columns: abcde2.b:16
            │                        └── select
            │                             ├── columns: abcde2.a:15!null abcde2.b:16 abcde2.c:17 abcde2.d:18 abcde2.e:19 abcde2.rowid:20!null abcde2.crdb_internal_mvcc_timestamp:21
-           │                             ├── scan abcde2
+           │                             ├── scan abcde [as=abcde2]
            │                             │    ├── columns: abcde2.a:15!null abcde2.b:16 abcde2.c:17 abcde2.d:18 abcde2.e:19 abcde2.rowid:20!null abcde2.crdb_internal_mvcc_timestamp:21
            │                             │    └── computed column expressions
            │                             │         ├── abcde2.d:18

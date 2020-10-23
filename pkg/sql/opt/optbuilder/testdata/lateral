@@ -123,7 +123,7 @@ project
  ├── columns: a:1!null
  └── select
       ├── columns: o.a:1!null o.crdb_internal_mvcc_timestamp:2
-      ├── scan o
+      ├── scan x [as=o]
       │    └── columns: o.a:1!null o.crdb_internal_mvcc_timestamp:2
       └── filters
            └── exists
@@ -278,7 +278,7 @@ project
       │                             ├── columns: members:7
       │                             ├── select
       │                             │    ├── columns: j2.id:4!null j2.j:5 j2.crdb_internal_mvcc_timestamp:6
-      │                             │    ├── scan j2
+      │                             │    ├── scan j [as=j2]
       │                             │    │    └── columns: j2.id:4!null j2.j:5 j2.crdb_internal_mvcc_timestamp:6
       │                             │    └── filters
       │                             │         └── (j2.j:5->>'name') = (j.j:2->>'name')

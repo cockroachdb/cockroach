@@ -201,7 +201,7 @@ project
  │         │    ├── columns: c.id:5(string!null)
  │         │    ├── stats: [rows=10, distinct(5)=1, null(5)=0]
  │         │    ├── fd: ()-->(5)
- │         │    ├── scan c
+ │         │    ├── scan test [as=c]
  │         │    │    ├── columns: c.id:5(string)
  │         │    │    └── stats: [rows=1000, distinct(5)=100, null(5)=10]
  │         │    └── filters

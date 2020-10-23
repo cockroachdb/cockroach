@@ -670,7 +670,7 @@ project
       │    │    ├── columns: c0:7!null c1:8!null
       │    │    ├── immutable
       │    │    ├── limit hint: 321.00
-      │    │    ├── scan crdb_internal.public.zones
+      │    │    ├── scan zones
       │    │    │    ├── columns: crdb_internal.public.zones.zone_id:1!null
       │    │    │    └── limit hint: 321.00
       │    │    └── projections
@@ -690,7 +690,7 @@ project
       │              │    │         │    │    │    └── select
       │              │    │         │    │    │         ├── columns: ref_1.config_yaml:11!null
       │              │    │         │    │    │         ├── outer: (7)
-      │              │    │         │    │    │         ├── scan ref_1
+      │              │    │         │    │    │         ├── scan zones [as=ref_1]
       │              │    │         │    │    │         │    └── columns: ref_1.config_yaml:11!null
       │              │    │         │    │    │         └── filters
       │              │    │         │    │    │              └── c0:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]

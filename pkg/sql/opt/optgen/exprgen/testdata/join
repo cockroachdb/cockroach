@@ -46,7 +46,7 @@ expr
   [ (Gt (Var "a") (Var "e")) ]
 )
 ----
-left-join (lookup abc@ab)
+left-join (lookup t.public.abc@ab)
  ├── columns: t.public.abc.a:6(int) t.public.abc.b:7(int)
  ├── key columns: [6] = [6]
  ├── stats: [rows=3333.33333, distinct(6)=100, null(6)=33.3333333]

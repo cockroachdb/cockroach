@@ -731,14 +731,14 @@ project
  ├── immutable
  ├── key: ()
  ├── fd: ()-->(4,7-9,12,14,18-20,22,23,25,26,29-32,35,36,39-43,47-50,53,54,56-60)
- ├── inner-join (lookup zip_code)
+ ├── inner-join (lookup zip_code [as=zca])
  │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:18!null co_st_id:19!null co_name:20!null co_sp_rate:22!null co_ceo:23!null co_ad_id:24!null co_desc:25!null co_open_date:26!null ca.ad_id:28!null ca.ad_line1:29 ca.ad_line2:30 ca.ad_zc_code:31!null ca.ad_ctry:32 zca.zc_code:34!null zca.zc_town:35!null zca.zc_div:36!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    ├── key columns: [31] = [34]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,34-36,38-44,46-50,52-54)
- │    ├── inner-join (lookup address)
+ │    ├── inner-join (lookup address [as=ca])
  │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:18!null co_st_id:19!null co_name:20!null co_sp_rate:22!null co_ceo:23!null co_ad_id:24!null co_desc:25!null co_open_date:26!null ca.ad_id:28!null ca.ad_line1:29 ca.ad_line2:30 ca.ad_zc_code:31!null ca.ad_ctry:32 ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    │    ├── key columns: [24] = [28]
  │    │    ├── lookup columns are key
@@ -752,14 +752,14 @@ project
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(1,4-16,18-20,22-26,38-44,46-50,52-54)
- │    │    │    ├── inner-join (lookup zip_code)
+ │    │    │    ├── inner-join (lookup zip_code [as=zea])
  │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    │    │    │    ├── key columns: [49] = [52]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50,52-54)
- │    │    │    │    ├── inner-join (lookup address)
+ │    │    │    │    ├── inner-join (lookup address [as=ea])
  │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50
  │    │    │    │    │    ├── key columns: [44] = [46]
  │    │    │    │    │    ├── lookup columns are key

@@ -111,7 +111,7 @@ SELECT * FROM t AS t2 FOR UPDATE
 ----
 project
  ├── columns: a:1!null b:2
- └── scan t2
+ └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
       └── locking: for-update
 
@@ -125,7 +125,7 @@ SELECT * FROM t AS t2 FOR UPDATE OF t2
 ----
 project
  ├── columns: a:1!null b:2
- └── scan t2
+ └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
       └── locking: for-update
 
@@ -166,7 +166,7 @@ SELECT * FROM v FOR UPDATE
 ----
 project
  ├── columns: a:1!null
- └── scan t2
+ └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
       └── locking: for-update
 
@@ -175,7 +175,7 @@ SELECT * FROM v FOR UPDATE OF v
 ----
 project
  ├── columns: a:1!null
- └── scan t2
+ └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
       └── locking: for-update
 
@@ -203,7 +203,7 @@ SELECT * FROM v AS v2 FOR UPDATE
 ----
 project
  ├── columns: a:1!null
- └── scan t2
+ └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
       └── locking: for-update
 
@@ -217,7 +217,7 @@ SELECT * FROM v AS v2 FOR UPDATE OF v2
 ----
 project
  ├── columns: a:1!null
- └── scan t2
+ └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
       └── locking: for-update
 
@@ -653,10 +653,10 @@ project
  ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
-      ├── scan t2
+      ├── scan t [as=t2]
       │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
       │    └── locking: for-update
-      ├── scan u2
+      ├── scan u [as=u2]
       │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
       │    └── locking: for-share
       └── filters
@@ -721,10 +721,10 @@ project
  ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
-      ├── scan t2
+      ├── scan t [as=t2]
       │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
       │    └── locking: for-update
-      ├── scan u2
+      ├── scan u [as=u2]
       │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
@@ -752,10 +752,10 @@ project
  ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
-      ├── scan t2
+      ├── scan t [as=t2]
       │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
       │    └── locking: for-update
-      ├── scan u2
+      ├── scan u [as=u2]
       │    └── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
       └── filters
            └── t2.a:1 = u2.a:4
@@ -767,9 +767,9 @@ project
  ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
-      ├── scan t2
+      ├── scan t [as=t2]
       │    └── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
-      ├── scan u2
+      ├── scan u [as=u2]
       │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
@@ -782,10 +782,10 @@ project
  ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
-      ├── scan t2
+      ├── scan t [as=t2]
       │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3
       │    └── locking: for-update
-      ├── scan u2
+      ├── scan u [as=u2]
       │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
@@ -806,7 +806,7 @@ project
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
       │    └── locking: for-update
-      ├── scan u2
+      ├── scan u [as=u2]
       │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
@@ -837,7 +837,7 @@ project
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3
       │    └── locking: for-update
-      ├── scan u2
+      ├── scan u [as=u2]
       │    ├── columns: u2.a:4!null c:5 u2.crdb_internal_mvcc_timestamp:6
       │    └── locking: for-update
       └── filters

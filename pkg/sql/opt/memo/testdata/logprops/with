@@ -203,7 +203,7 @@ project
  ├── inner-join (cross)
  │    ├── scan t40930
  │    │    └── unfiltered-cols: (5-7)
- │    ├── scan tab_10102
+ │    ├── scan t40930 [as=tab_10102]
  │    │    └── unfiltered-cols: (1-3)
  │    └── filters (true)
  └── projections
