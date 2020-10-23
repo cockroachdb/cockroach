@@ -15,5 +15,10 @@ ALTER DATABASE new_db ADD REGION "us-west-1"
 statement error implementation pending
 ALTER DATABASE new_db DROP REGION "us-west-1"
 
-statement error implementation pending
+query TT colnames
 SHOW REGIONS
+----
+region  availability_zones
+test1   {test1-az1,test1-az2,test1-az3}
+test2   {test2-az1,test2-az2,test2-az3}
+test3   {test3-az1,test3-az2,test3-az3}

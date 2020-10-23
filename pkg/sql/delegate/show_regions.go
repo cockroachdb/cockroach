@@ -13,11 +13,17 @@ package delegate
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // delegateShowRanges implements the SHOW REGIONS statement.
 func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Regions)
-	return nil, unimplemented.New("show regions", "implementation pending")
+	query := `SELECT
+        substring (locality, 'region=([^,]*)') AS region,
+        array_agg(COALESCE (substring (locality, 'az=([^,]*)'),
+                substring (locality, 'availability-zone=([^,]*)'))) AS availability_zones
+        FROM crdb_internal.gossip_nodes
+        group by region ORDER BY region`
+
+	return parse(query)
 }
