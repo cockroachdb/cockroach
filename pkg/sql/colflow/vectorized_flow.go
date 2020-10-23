@@ -175,7 +175,9 @@ func (f *vectorizedFlow) Setup(
 	if err != nil {
 		return ctx, err
 	}
-	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
+	if log.V(1) {
+		log.Infof(ctx, "setting up vectorize flow %s", f.ID.Short())
+	}
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		recordingStats = true
@@ -249,7 +251,9 @@ func (f *vectorizedFlow) Setup(
 		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
 		f.monitors = append(f.monitors, creator.monitors...)
 		f.accounts = append(f.accounts, creator.accounts...)
-		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
+		if log.V(1) {
+			log.Info(ctx, "vectorized flow setup succeeded")
+		}
 		return ctx, nil
 	}
 	// It is (theoretically) possible that some of the memory monitoring
@@ -264,7 +268,9 @@ func (f *vectorizedFlow) Setup(
 	for _, mon := range creator.monitors {
 		mon.Stop(ctx)
 	}
-	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+	if log.V(1) {
+		log.Infof(ctx, "failed to vectorize: %s", err)
+	}
 	return ctx, err
 }
 
