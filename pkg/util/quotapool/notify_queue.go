@@ -41,36 +41,58 @@ func initializeNotifyQueue(q *notifyQueue) {
 
 var defaultNotifyQueueNodePool = newNotifyQueueNodePool()
 
-// enqueue adds c to the end of the queue and returns the address of the added
+// pushBack adds c to the end of the queue and returns the address of the added
 // notifyee.
-func (q *notifyQueue) enqueue(c chan struct{}) (n *notifyee) {
-	if q.head == nil {
-		q.head = q.pool.pool.Get().(*node)
-		q.head.prev = q.head
-		q.head.next = q.head
-	}
+func (q *notifyQueue) pushBack(c chan struct{}) (n *notifyee) {
+	q.maybeInitHead()
 	tail := q.head.prev
-	if n = tail.enqueue(c); n == nil {
+	if n = tail.pushBack(c); n == nil {
 		newTail := q.pool.pool.Get().(*node)
 		tail.next = newTail
 		q.head.prev = newTail
 		newTail.prev = tail
 		newTail.next = q.head
-		if n = newTail.enqueue(c); n == nil {
-			panic("failed to enqueue into a fresh buffer")
+		if n = newTail.pushBack(c); n == nil {
+			panic("failed to pushBack into a fresh buffer")
 		}
 	}
 	q.len++
 	return n
 }
 
-// dequeue removes the current head of the queue which can be accessed with
+func (q *notifyQueue) pushFront(c chan struct{}) (n *notifyee) {
+	q.maybeInitHead()
+	head := q.head
+	if n = head.pushFront(c); n == nil {
+		newHead := q.pool.pool.Get().(*node)
+		newHead.next = head
+		newHead.prev = head.prev
+		head.prev = newHead
+		q.head = newHead
+		if n = newHead.pushFront(c); n == nil {
+			panic("failed to pushBack into a fresh buffer")
+		}
+	}
+	q.len++
+	return n
+}
+
+func (q *notifyQueue) maybeInitHead() {
+	if q.head != nil {
+		return
+	}
+	q.head = q.pool.pool.Get().(*node)
+	q.head.prev = q.head
+	q.head.next = q.head
+}
+
+// popFront removes the current head of the queue which can be accessed with
 // peek().
-func (q *notifyQueue) dequeue() {
+func (q *notifyQueue) popFront() {
 	if q.head == nil {
 		return
 	}
-	q.head.dequeue()
+	q.head.popFront()
 	if q.head.len == 0 {
 		oldHead := q.head
 		if oldHead.next == oldHead {
@@ -88,7 +110,7 @@ func (q *notifyQueue) dequeue() {
 
 // peek returns the current head of the queue or nil if the queue is empty.
 // It does not modify the queue. It is illegal to use the returned pointer after
-// the next call to dequeue.
+// the next call to popFront.
 func (q *notifyQueue) peek() *notifyee {
 	if q.head == nil {
 		return nil
@@ -124,7 +146,7 @@ type node struct {
 }
 
 type notifyee struct {
-	c chan struct{}
+	c chan struct{} // set to nil after the notifyee is done
 }
 
 type ringBuf struct {
@@ -133,7 +155,7 @@ type ringBuf struct {
 	len  int64
 }
 
-func (rb *ringBuf) enqueue(c chan struct{}) *notifyee {
+func (rb *ringBuf) pushBack(c chan struct{}) *notifyee {
 	if rb.len == bufferSize {
 		return nil
 	}
@@ -143,10 +165,22 @@ func (rb *ringBuf) enqueue(c chan struct{}) *notifyee {
 	return &rb.buf[i]
 }
 
-func (rb *ringBuf) dequeue() {
+func (rb *ringBuf) pushFront(c chan struct{}) *notifyee {
+	if rb.len == bufferSize {
+		return nil
+	}
+	if rb.head--; rb.head == -1 {
+		rb.head += bufferSize
+	}
+	rb.buf[rb.head] = notifyee{c: c}
+	rb.len++
+	return &rb.buf[rb.head]
+}
+
+func (rb *ringBuf) popFront() {
 	// NB: the notifyQueue never contains an empty ringBuf.
 	if rb.len == 0 {
-		panic("cannot dequeue from an empty buffer")
+		panic("cannot popFront from an empty buffer")
 	}
 	rb.buf[rb.head] = notifyee{}
 	rb.head++

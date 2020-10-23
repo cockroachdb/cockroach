@@ -38,7 +38,7 @@ func testNotifyQueue(t testing.TB, N int) {
 	initializeNotifyQueue(&q)
 	n := q.peek()
 	assert.Nil(t, n)
-	q.dequeue()
+	q.popFront()
 	assert.Equal(t, 0, int(q.len))
 	chans := make([]chan struct{}, N)
 	for i := 0; i < N; i++ {
@@ -60,7 +60,7 @@ func testNotifyQueue(t testing.TB, N int) {
 	for _, op := range ops {
 		switch op {
 		case enqueue:
-			q.enqueue(in[0])
+			q.pushBack(in[0])
 			in = in[1:]
 			if b == nil {
 				l++
@@ -70,21 +70,21 @@ func testNotifyQueue(t testing.TB, N int) {
 			if b == nil {
 				if n := q.peek(); n != nil {
 					out = append(out, n.c)
-					q.dequeue()
+					q.popFront()
 					l--
 					assert.Equal(t, l, int(q.len))
 				}
 			} else {
 				if n := q.peek(); n != nil {
 					out = append(out, n.c)
-					q.dequeue()
+					q.popFront()
 				}
 			}
 		}
 	}
 	for n := q.peek(); n != nil; n = q.peek() {
 		out = append(out, n.c)
-		q.dequeue()
+		q.popFront()
 	}
 	if b != nil {
 		b.StopTimer()
