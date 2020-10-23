@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "enginepbccl",
+    srcs = [
+        "key_registry.pb.go",
+        "stats.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/sortkeys",
+    ],
+)

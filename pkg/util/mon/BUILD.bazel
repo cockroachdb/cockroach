@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mon",
+    srcs = [
+        "bytes_usage.go",
+        "resource.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/mon",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util",
+        "//pkg/util/envutil",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "mon_test",
+    srcs = ["bytes_usage_test.go"],
+    embed = [":mon"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+    ],
+)

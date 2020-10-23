@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "retry",
+    srcs = ["retry.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/retry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "retry_test",
+    srcs = [
+        "main_test.go",
+        "retry_test.go",
+    ],
+    embed = [":retry"],
+    deps = [
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

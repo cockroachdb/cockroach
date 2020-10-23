@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "geospatial",
+    srcs = ["geospatial.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/geospatial",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/types",
+        "//pkg/workload",
+    ],
+)

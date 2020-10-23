@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "keysutils",
+    srcs = ["pretty_scanner.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/keysutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/encoding",
+        "//pkg/util/keysutil",
+    ],
+)
+
+go_test(
+    name = "keysutils_test",
+    srcs = ["pretty_scanner_test.go"],
+    embed = [":keysutils"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/encoding",
+    ],
+)

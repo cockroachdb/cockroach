@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "a",
+    srcs = ["a.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe/testdata/src/a",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/go.etcd.io/etcd/raft",
+    ],
+)
+
+go_test(
+    name = "a_test",
+    srcs = ["a_test.go"],
+    embed = [":a"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)

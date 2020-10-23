@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rditer",
+    srcs = [
+        "replica_data_iter.go",
+        "stats.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/bufalloc",
+    ],
+)
+
+go_test(
+    name = "rditer_test",
+    srcs = ["replica_data_iter_test.go"],
+    embed = [":rditer"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/spanset",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/uuid",
+    ],
+)

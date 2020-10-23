@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "a",
+    srcs = ["a.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal/testdata/src/a",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/catalog/descpb"],
+)

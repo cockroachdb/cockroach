@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "filetable",
+    srcs = ["file_table_read_writer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/sql",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/storage/cloud",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "schemadesc",
+    srcs = ["schema_desc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/redact",
+    ],
+)
+
+go_test(
+    name = "schemadesc_test",
+    srcs = ["schema_desc_test.go"],
+    deps = [
+        ":schemadesc",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)

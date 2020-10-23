@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "container",
+    srcs = [
+        "container.go",
+        "noop.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/minprop",
+        "//pkg/kv/kvserver/closedts/provider",
+        "//pkg/kv/kvserver/closedts/storage",
+        "//pkg/kv/kvserver/closedts/transport",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/stop",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/google.golang.org/grpc",
+    ],
+)
+
+go_test(
+    name = "container_test",
+    srcs = ["container_test.go"],
+    deps = [
+        ":container",
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/provider/testutils",
+        "//pkg/kv/kvserver/closedts/transport/testutils",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/kr/pretty",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

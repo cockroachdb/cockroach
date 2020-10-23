@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "transform",
+    srcs = [
+        "aggregates.go",
+        "expr_transform.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/transform",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+    ],
+)

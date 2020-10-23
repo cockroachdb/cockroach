@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "timer",
+    srcs = ["timer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/golang.org/x/tools/go/analysis",
+        "//vendor/golang.org/x/tools/go/analysis/passes/inspect",
+        "//vendor/golang.org/x/tools/go/ast/inspector",
+    ],
+)
+
+go_test(
+    name = "timer_test",
+    srcs = ["timer_test.go"],
+    deps = [
+        ":timer",
+        "//pkg/testutils/skip",
+        "//vendor/golang.org/x/tools/go/analysis/analysistest",
+    ],
+)

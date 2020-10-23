@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "schemafeed",
+    srcs = [
+        "schema_feed.go",
+        "table_event_filter.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/storage",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "schemafeed_test",
+    srcs = [
+        "schema_feed_test.go",
+        "table_event_filter_test.go",
+    ],
+    embed = [":schemafeed"],
+    deps = [
+        "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

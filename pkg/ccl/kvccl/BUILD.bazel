@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvccl",
+    srcs = ["kvccl.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/kvccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/kvccl/kvfollowerreadsccl",
+        "//pkg/ccl/kvccl/kvtenantccl",
+    ],
+)

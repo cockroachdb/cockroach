@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ssh",
+    srcs = [
+        "shell.go",
+        "ssh.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/config",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/golang.org/x/crypto/ssh",
+        "//vendor/golang.org/x/crypto/ssh/agent",
+        "//vendor/golang.org/x/crypto/ssh/knownhosts",
+    ],
+)

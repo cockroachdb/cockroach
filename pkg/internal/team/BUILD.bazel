@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "team",
+    srcs = ["team.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/team",
+    visibility = ["//pkg:__subpackages__"],
+    deps = [
+        "//pkg/internal/gopath",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "team_test",
+    srcs = ["team_test.go"],
+    embed = [":team"],
+    deps = ["//vendor/github.com/stretchr/testify/require"],
+)

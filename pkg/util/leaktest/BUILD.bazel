@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "leaktest",
+    srcs = ["leaktest.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/leaktest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/petermattis/goid",
+    ],
+)

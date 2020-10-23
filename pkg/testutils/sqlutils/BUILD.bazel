@@ -1,0 +1,50 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sqlutils",
+    srcs = [
+        "name_resolution_testutils.go",
+        "pg_url.go",
+        "pretty.go",
+        "scrub.go",
+        "sql_runner.go",
+        "table_gen.go",
+        "table_id.go",
+        "zone.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/sqlutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/sql/lex",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils",
+        "//pkg/util/fileutil",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "sqlutils_test",
+    srcs = [
+        "main_test.go",
+        "sql_runner_test.go",
+        "table_gen_test.go",
+    ],
+    embed = [":sqlutils"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+    ],
+)

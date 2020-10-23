@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "fmtsafe",
+    srcs = [
+        "fmtsafe.go",
+        "functions.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/golang.org/x/tools/go/analysis",
+        "//vendor/golang.org/x/tools/go/analysis/passes/inspect",
+        "//vendor/golang.org/x/tools/go/ast/inspector",
+        "//vendor/golang.org/x/tools/go/types/typeutil",
+    ],
+)
+
+go_test(
+    name = "fmtsafe_test",
+    srcs = ["fmtsafe_test.go"],
+    deps = [
+        ":fmtsafe",
+        "//pkg/testutils/skip",
+        "//vendor/golang.org/x/tools/go/analysis/analysistest",
+    ],
+)

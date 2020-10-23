@@ -1,0 +1,53 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvtenantccl",
+    srcs = ["connector.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/util/contextutil",
+        "//pkg/util/grpcutil",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/google.golang.org/grpc",
+        "//vendor/google.golang.org/grpc/codes",
+        "//vendor/google.golang.org/grpc/status",
+    ],
+)
+
+go_test(
+    name = "kvtenantccl_test",
+    srcs = ["connector_test.go"],
+    embed = [":kvtenantccl"],
+    deps = [
+        "//pkg/config",
+        "//pkg/gossip",
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/testutils",
+        "//pkg/util",
+        "//pkg/util/grpcutil",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/netutil",
+        "//pkg/util/protoutil",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

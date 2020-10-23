@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvclientutils",
+    srcs = [
+        "api.go",
+        "txn_recovery.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/tracing",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

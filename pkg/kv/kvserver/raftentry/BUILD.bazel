@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "raftentry",
+    srcs = [
+        "cache.go",
+        "metrics.go",
+        "ring_buffer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/go.etcd.io/etcd/raft/raftpb",
+    ],
+)
+
+go_test(
+    name = "raftentry_test",
+    srcs = ["cache_test.go"],
+    embed = [":raftentry"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+        "//vendor/go.etcd.io/etcd/raft/raftpb",
+    ],
+)

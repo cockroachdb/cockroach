@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "utilccl",
+    srcs = [
+        "jobutils.go",
+        "license_check.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/utilccl/licenseccl",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/types",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/redact",
+    ],
+)
+
+go_test(
+    name = "utilccl_test",
+    srcs = [
+        "license_check_test.go",
+        "license_test.go",
+    ],
+    embed = [":utilccl"],
+    deps = [
+        "//pkg/ccl/utilccl/licenseccl",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+    ],
+)

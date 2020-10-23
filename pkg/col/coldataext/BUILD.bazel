@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "coldataext",
+    srcs = [
+        "datum_vec.go",
+        "extended_column_factory.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/coldataext",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/typeconv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "coldataext_test",
+    srcs = ["datum_vec_test.go"],
+    embed = [":coldataext"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/json",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

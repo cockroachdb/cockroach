@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "roachvet_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachvet",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/testutils/lint/passes/descriptormarshal",
+        "//pkg/testutils/lint/passes/errcmp",
+        "//pkg/testutils/lint/passes/fmtsafe",
+        "//pkg/testutils/lint/passes/hash",
+        "//pkg/testutils/lint/passes/nocopy",
+        "//pkg/testutils/lint/passes/returnerrcheck",
+        "//pkg/testutils/lint/passes/timer",
+        "//pkg/testutils/lint/passes/unconvert",
+        "//vendor/golang.org/x/tools/go/analysis/passes/asmdecl",
+        "//vendor/golang.org/x/tools/go/analysis/passes/assign",
+        "//vendor/golang.org/x/tools/go/analysis/passes/atomic",
+        "//vendor/golang.org/x/tools/go/analysis/passes/bools",
+        "//vendor/golang.org/x/tools/go/analysis/passes/buildtag",
+        "//vendor/golang.org/x/tools/go/analysis/passes/cgocall",
+        "//vendor/golang.org/x/tools/go/analysis/passes/composite",
+        "//vendor/golang.org/x/tools/go/analysis/passes/copylock",
+        "//vendor/golang.org/x/tools/go/analysis/passes/errorsas",
+        "//vendor/golang.org/x/tools/go/analysis/passes/httpresponse",
+        "//vendor/golang.org/x/tools/go/analysis/passes/loopclosure",
+        "//vendor/golang.org/x/tools/go/analysis/passes/lostcancel",
+        "//vendor/golang.org/x/tools/go/analysis/passes/nilfunc",
+        "//vendor/golang.org/x/tools/go/analysis/passes/printf",
+        "//vendor/golang.org/x/tools/go/analysis/passes/shadow",
+        "//vendor/golang.org/x/tools/go/analysis/passes/shift",
+        "//vendor/golang.org/x/tools/go/analysis/passes/stdmethods",
+        "//vendor/golang.org/x/tools/go/analysis/passes/structtag",
+        "//vendor/golang.org/x/tools/go/analysis/passes/tests",
+        "//vendor/golang.org/x/tools/go/analysis/passes/unmarshal",
+        "//vendor/golang.org/x/tools/go/analysis/passes/unreachable",
+        "//vendor/golang.org/x/tools/go/analysis/passes/unsafeptr",
+        "//vendor/golang.org/x/tools/go/analysis/passes/unusedresult",
+        "//vendor/golang.org/x/tools/go/analysis/unitchecker",
+    ],
+)
+
+go_binary(
+    name = "roachvet",
+    embed = [":roachvet_lib"],
+    visibility = ["//visibility:public"],
+)

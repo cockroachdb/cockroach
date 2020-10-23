@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "unimplemented",
+    srcs = ["unimplemented.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "unimplemented_test",
+    srcs = ["unimplemented_test.go"],
+    embed = [":unimplemented"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)

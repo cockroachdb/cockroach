@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "docgen_lib",
+    srcs = [
+        "diagrams.go",
+        "funcs.go",
+        "http.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/docgen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/docgen/extract",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/envutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/golang-commonmark/markdown",
+        "//vendor/github.com/spf13/cobra",
+    ],
+)
+
+go_binary(
+    name = "docgen",
+    embed = [":docgen_lib"],
+    visibility = ["//visibility:public"],
+)

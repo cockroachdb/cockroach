@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvserverpb",
+    srcs = [
+        "lease_status.pb.go",
+        "liveness.go",
+        "liveness.pb.go",
+        "log.go",
+        "log.pb.go",
+        "proposer_kv.go",
+        "proposer_kv.pb.go",
+        "state.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/sortkeys",
+        "//vendor/github.com/gogo/protobuf/types",
+        "//vendor/google.golang.org/grpc/codes",
+        "//vendor/google.golang.org/grpc/status",
+    ],
+)

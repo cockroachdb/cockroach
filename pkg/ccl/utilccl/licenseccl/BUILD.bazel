@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "licenseccl",
+    srcs = [
+        "license.go",
+        "license.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/protoutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
+)

@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "colinfo",
+    srcs = [
+        "col_type_info.go",
+        "column_resolver.go",
+        "column_type_properties.go",
+        "data_source.go",
+        "doc.go",
+        "ordering.go",
+        "result_columns.go",
+        "system_columns.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/lib/pq/oid",
+        "//vendor/golang.org/x/text/language",
+    ],
+)
+
+go_test(
+    name = "colinfo_test",
+    srcs = ["result_columns_test.go"],
+    embed = [":colinfo"],
+    deps = ["//pkg/sql/types"],
+)

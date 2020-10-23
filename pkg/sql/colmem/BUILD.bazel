@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "colmem",
+    srcs = ["allocator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colmem",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/typeconv",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/duration",
+        "//pkg/util/mon",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "reducesql",
+    srcs = ["reducesql.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/reduce",
+    ],
+)
+
+go_test(
+    name = "reducesql_test",
+    srcs = ["reducesql_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":reducesql",
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/server",
+        "//pkg/testutils/reduce",
+        "//pkg/testutils/skip",
+        "//vendor/github.com/jackc/pgx",
+    ],
+)

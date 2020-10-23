@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pgdate",
+    srcs = [
+        "field_extract.go",
+        "field_string.go",
+        "fields.go",
+        "math.go",
+        "parsemode_string.go",
+        "parsing.go",
+        "pgdate.go",
+        "setters.go",
+        "zone_cache.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/arith",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "pgdate_test",
+    srcs = [
+        "field_extract_test.go",
+        "fields_test.go",
+        "parsing_test.go",
+        "pgdate_test.go",
+    ],
+    embed = [":pgdate"],
+    deps = [
+        "//pkg/util/timeutil",
+        "//vendor/github.com/lib/pq",
+    ],
+)

@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "replicaoracle",
+    srcs = ["oracle.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlerrors",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "replicaoracle_test",
+    srcs = ["oracle_test.go"],
+    embed = [":replicaoracle"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+    ],
+)

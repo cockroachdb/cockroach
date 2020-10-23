@@ -1,2 +1,3 @@
 *.pb.* -diff
 *.eg.go -diff
+DEPS.bzl -diff

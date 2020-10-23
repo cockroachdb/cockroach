@@ -1,0 +1,11 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pgcode",
+    srcs = [
+        "codes.go",
+        "doc.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode",
+    visibility = ["//visibility:public"],
+)

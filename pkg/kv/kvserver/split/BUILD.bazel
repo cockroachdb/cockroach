@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "split",
+    srcs = [
+        "decider.go",
+        "finder.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/split",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "split_test",
+    srcs = [
+        "decider_test.go",
+        "finder_test.go",
+    ],
+    embed = [":split"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/util/encoding",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

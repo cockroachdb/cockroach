@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "serverutils",
+    srcs = [
+        "test_cluster_shim.go",
+        "test_server_shim.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/serverutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/hlc",
+        "//pkg/util/httputil",
+        "//pkg/util/protoutil",
+        "//pkg/util/stop",
+        "//pkg/util/uuid",
+    ],
+)

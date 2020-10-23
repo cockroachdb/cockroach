@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ledger",
+    srcs = [
+        "balance.go",
+        "ddls.go",
+        "deposit.go",
+        "generate.go",
+        "ledger.go",
+        "ops_util.go",
+        "random.go",
+        "reversal.go",
+        "withdrawal.go",
+        "worker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/ledger",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/types",
+        "//pkg/util/timeutil",
+        "//pkg/util/uint128",
+        "//pkg/util/uuid",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//vendor/github.com/cockroachdb/cockroach-go/crdb",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/spf13/pflag",
+        "//vendor/golang.org/x/sync/syncmap",
+    ],
+)

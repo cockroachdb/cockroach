@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "geosegmentize",
+    srcs = ["geosegmentize.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geosegmentize",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/twpayne/go-geom",
+    ],
+)

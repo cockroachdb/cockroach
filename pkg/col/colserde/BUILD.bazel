@@ -1,0 +1,61 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "colserde",
+    srcs = [
+        "arrowbatchconverter.go",
+        "file.go",
+        "record_batch.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/colserde",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/colserde/arrowserde",
+        "//pkg/col/typeconv",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/types",
+        "//pkg/util/duration",
+        "//vendor/github.com/apache/arrow/go/arrow",
+        "//vendor/github.com/apache/arrow/go/arrow/array",
+        "//vendor/github.com/apache/arrow/go/arrow/memory",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/edsrzf/mmap-go",
+        "//vendor/github.com/google/flatbuffers/go",
+    ],
+)
+
+go_test(
+    name = "colserde_test",
+    srcs = [
+        "arrowbatchconverter_test.go",
+        "file_test.go",
+        "main_test.go",
+        "record_batch_test.go",
+    ],
+    deps = [
+        ":colserde",
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
+        "//pkg/col/typeconv",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/types",
+        "//pkg/testutils",
+        "//pkg/util/encoding",
+        "//pkg/util/leaktest",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/apache/arrow/go/arrow",
+        "//vendor/github.com/apache/arrow/go/arrow/array",
+        "//vendor/github.com/apache/arrow/go/arrow/memory",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

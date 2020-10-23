@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "grpcutil",
+    srcs = [
+        "grpc_util.go",
+        "log.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/grpcutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/netutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/google.golang.org/grpc",
+        "//vendor/google.golang.org/grpc/codes",
+        "//vendor/google.golang.org/grpc/connectivity",
+        "//vendor/google.golang.org/grpc/grpclog",
+        "//vendor/google.golang.org/grpc/status",
+    ],
+)
+
+go_test(
+    name = "grpcutil_test",
+    srcs = [
+        "grpc_util_test.go",
+        "log_test.go",
+    ],
+    embed = [":grpcutil"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/google.golang.org/grpc",
+        "//vendor/google.golang.org/grpc/health/grpc_health_v1",
+    ],
+)

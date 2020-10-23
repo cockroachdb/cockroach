@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "version",
+    srcs = ["version.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/version",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)
+
+go_test(
+    name = "version_test",
+    srcs = ["version_test.go"],
+    embed = [":version"],
+)

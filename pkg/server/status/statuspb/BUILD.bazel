@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "statuspb",
+    srcs = ["status.pb.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/status/statuspb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/roachpb",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/sortkeys",
+    ],
+)

@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqlutil",
+    srcs = ["internal_executor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+    ],
+)
