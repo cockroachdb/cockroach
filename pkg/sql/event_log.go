@@ -31,6 +31,8 @@ const (
 	EventLogDropDatabase EventLogType = "drop_database"
 	// EventLogRenameDatabase is recorded when a database is renamed.
 	EventLogRenameDatabase EventLogType = "rename_database"
+	// EventLogAlterDatabaseOwner is recorded when a database's owner is changed.
+	EventLogAlterDatabaseOwner EventLogType = "alter_database_owner"
 
 	// EventLogCreateSchema is recorded when a schema is created.
 	EventLogCreateSchema EventLogType = "create_schema"
@@ -38,8 +40,10 @@ const (
 	EventLogDropSchema EventLogType = "drop_schema"
 	// EventLogRenameSchema is recorded when a schema is renamed.
 	EventLogRenameSchema EventLogType = "rename_schema"
-	// EventLogChangeSchemaOwner is recorded when a schema's owner is changed.
+	// EventLogAlterSchemaOwner is recorded when a schema's owner is changed.
 	EventLogAlterSchemaOwner EventLogType = "alter_schema_owner"
+	// EventLogConvertToSchema is recorded when a database is converted to a schema.
+	EventLogConvertToSchema EventLogType = "convert_to_schema"
 
 	// EventLogCreateTable is recorded when a table is created.
 	EventLogCreateTable EventLogType = "create_table"
