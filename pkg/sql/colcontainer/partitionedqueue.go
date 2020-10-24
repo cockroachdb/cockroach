@@ -139,12 +139,6 @@ func NewPartitionedDiskQueue(
 	partitionerStrategy PartitionerStrategy,
 	diskAcc *mon.BoundAccount,
 ) *PartitionedDiskQueue {
-	if len(typs) == 0 {
-		// DiskQueues cannot serialize zero length schemas, so catch this error
-		// early.
-		// TODO(asubiotto): We could support this, but not sure we need to.
-		colexecerror.InternalError(errors.AssertionFailedf("zero length schema unsupported"))
-	}
 	return &PartitionedDiskQueue{
 		typs:                     typs,
 		strategy:                 partitionerStrategy,

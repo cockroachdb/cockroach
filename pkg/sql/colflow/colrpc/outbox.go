@@ -248,7 +248,7 @@ func (o *Outbox) sendBatches(
 			if err != nil {
 				colexecerror.InternalError(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
 			}
-			if _, _, err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
+			if _, _, err := o.serializer.Serialize(o.scratch.buf, d, o.batch.Length()); err != nil {
 				colexecerror.InternalError(errors.Wrap(err, "Outbox Serialize data error"))
 			}
 			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()

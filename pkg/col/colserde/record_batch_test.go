@@ -214,11 +214,6 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 func TestRecordBatchSerializer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Run("UnsupportedSchema", func(t *testing.T) {
-		_, err := colserde.NewRecordBatchSerializer([]*types.T{})
-		require.True(t, testutils.IsError(err, "zero length"), err)
-	})
-
 	// Serializing and Deserializing an invalid schema is undefined.
 
 	t.Run("SerializeDifferentColumnLengths", func(t *testing.T) {
@@ -229,7 +224,7 @@ func TestRecordBatchSerializer(t *testing.T) {
 		firstCol := b.NewArray().Data()
 		b.AppendValues([]int64{3}, nil /* valid */)
 		secondCol := b.NewArray().Data()
-		_, _, err = s.Serialize(&bytes.Buffer{}, []*array.Data{firstCol, secondCol})
+		_, _, err = s.Serialize(&bytes.Buffer{}, []*array.Data{firstCol, secondCol}, firstCol.Len())
 		require.True(t, testutils.IsError(err, "mismatched data lengths"), err)
 	})
 }
@@ -265,13 +260,14 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	// Run Serialize/Deserialize in a loop to test reuse.
 	for i := 0; i < 2; i++ {
 		buf.Reset()
-		_, _, err := s.Serialize(&buf, data)
+		_, _, err := s.Serialize(&buf, data, dataLen)
 		require.NoError(t, err)
 		if buf.Len()%8 != 0 {
 			t.Fatal("message length must align to 8 byte boundary")
 		}
 		var deserializedData []*array.Data
-		require.NoError(t, s.Deserialize(&deserializedData, buf.Bytes()))
+		_, err = s.Deserialize(&deserializedData, buf.Bytes())
+		require.NoError(t, err)
 
 		// Check the fields we care most about. We can't use require.Equal directly
 		// due to some unimportant differences (e.g. mutability of underlying
@@ -317,7 +313,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {
 				buf.Reset()
-				if _, _, err := s.Serialize(&buf, data); err != nil {
+				if _, _, err := s.Serialize(&buf, data, dataLen); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -326,7 +322,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 		// buf should still have the result of the last serialization. It is still
 		// empty in cases in which we run only the Deserialize benchmarks.
 		if buf.Len() == 0 {
-			if _, _, err := s.Serialize(&buf, data); err != nil {
+			if _, _, err := s.Serialize(&buf, data, dataLen); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -334,7 +330,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 		b.Run(fmt.Sprintf("Deserialize/dataLen=%d", dataLen), func(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {
-				if err := s.Deserialize(&deserializedData, buf.Bytes()); err != nil {
+				if _, err := s.Deserialize(&deserializedData, buf.Bytes()); err != nil {
 					b.Fatal(err)
 				}
 				deserializedData = deserializedData[:0]

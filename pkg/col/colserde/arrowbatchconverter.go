@@ -246,12 +246,12 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 //
 // The passed in data is also mutated (we store nulls differently than arrow and
 // the adjustment is done in place).
-func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) error {
+func (c *ArrowBatchConverter) ArrowToBatch(
+	data []*array.Data, batchLength int, b coldata.Batch,
+) error {
 	if len(data) != len(c.typs) {
 		return errors.Errorf("mismatched data and schema length: %d != %d", len(data), len(c.typs))
 	}
-	// Assume > 0 length data.
-	n := data[0].Len()
 
 	for i, typ := range c.typs {
 		vec := b.ColVec(i)
@@ -392,12 +392,12 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		}
 		arrowBitmap := arr.NullBitmapBytes()
 		if len(arrowBitmap) != 0 {
-			vec.Nulls().SetNullBitmap(arrowBitmap, n)
+			vec.Nulls().SetNullBitmap(arrowBitmap, batchLength)
 		} else {
 			vec.Nulls().UnsetNulls()
 		}
 		b.SetSelection(false)
 	}
-	b.SetLength(n)
+	b.SetLength(batchLength)
 	return nil
 }
