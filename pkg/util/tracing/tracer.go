@@ -366,21 +366,6 @@ func (t *Tracer) startSpanGeneric(
 		},
 	}
 	s.crdb.mu.duration = -1 // unfinished
-	s.crdb.mu.tags = tags
-
-	// Copy baggage from parent.
-	//
-	// NB: this could be optimized.
-	for k, v := range parentContext.Baggage {
-		s.SetBaggageItem(k, v)
-	}
-
-	traceID := parentContext.TraceID
-	if traceID == 0 {
-		traceID = uint64(rand.Int63())
-	}
-	s.crdb.TraceID = traceID
-	s.crdb.SpanID = uint64(rand.Int63())
 
 	// We use the shadowTr from the parent context over that of our
 	// tracer because the tracer's might have changed and be incompatible.
@@ -400,6 +385,27 @@ func (t *Tracer) startSpanGeneric(
 			}
 		}
 	}
+
+	// Set initial tags.
+	//
+	// NB: this could be optimized.
+	for k, v := range tags {
+		s.SetTag(k, v)
+	}
+
+	// Copy baggage from parent.
+	//
+	// NB: this could be optimized.
+	for k, v := range parentContext.Baggage {
+		s.SetBaggageItem(k, v)
+	}
+
+	traceID := parentContext.TraceID
+	if traceID == 0 {
+		traceID = uint64(rand.Int63())
+	}
+	s.crdb.TraceID = traceID
+	s.crdb.SpanID = uint64(rand.Int63())
 
 	// Start recording if necessary.
 	if parentContext.recordingType != NoRecording {
