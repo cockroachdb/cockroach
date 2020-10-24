@@ -1548,7 +1548,7 @@ update checks
  ├── update-mapping:
  │    ├── b_new:11 => b:2
  │    └── column12:12 => d:4
- ├── check columns: check1:13 check2:14
+ ├── check columns: check1:13
  └── project
       ├── columns: check1:13 check2:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 b_new:11!null column12:12
       ├── project
