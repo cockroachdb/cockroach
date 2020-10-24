@@ -59,9 +59,11 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&stmt.Table)
 
-	// Assume that every table in the "system" or "information_schema" catalog
-	// is a virtual table. This is a simplified assumption for testing purposes.
-	if stmt.Table.CatalogName == "system" || stmt.Table.SchemaName == "information_schema" {
+	// Assume that every table in the "system", "information_schema" or
+	// "pg_catalog" catalog is a virtual table. This is a simplified assumption
+	// for testing purposes.
+	if stmt.Table.CatalogName == "system" || stmt.Table.SchemaName == "information_schema" ||
+		stmt.Table.SchemaName == "pg_catalog" {
 		return tc.createVirtualTable(stmt)
 	}
 
@@ -286,6 +288,18 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 	}
 
 	tab.addPrimaryColumnIndex(string(tab.Columns[0].ColName()))
+
+	// Search for index definitions.
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.IndexTableDef:
+			tab.addIndex(def, nonUniqueIndex)
+		}
+	}
+
+	// Add the new table to the catalog.
+	tc.AddTable(tab)
+
 	return tab
 }
 
@@ -643,6 +657,27 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 				Direction: tree.Ascending,
 			}
 			idx.addColumn(tt, elem, nonKeyCol, false /* isLastIndexCol */)
+		}
+	}
+	if tt.IsVirtual {
+		// All indexes of virtual tables automatically STORE all other columns in
+		// the table.
+		idxCols := idx.Columns
+		for _, col := range tt.Columns {
+			found := false
+			for _, idxCol := range idxCols {
+				if col.ColName() == idxCol.ColName() {
+					found = true
+					break
+				}
+			}
+			if !found {
+				elem := tree.IndexElem{
+					Column:    col.ColName(),
+					Direction: tree.Ascending,
+				}
+				idx.addColumn(tt, elem, nonKeyCol, false /* isLastIndexCol */)
+			}
 		}
 	}
 
