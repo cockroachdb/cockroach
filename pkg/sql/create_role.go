@@ -229,7 +229,17 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	return nil
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogCreateRole,
+		0, /* no target */
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			RoleName string
+			User     string
+		}{normalizedUsername, params.SessionData().User},
+	)
 }
 
 // Next implements the planNode interface.

@@ -13,6 +13,8 @@ package sql
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -330,7 +332,22 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	return nil
+	normalizedUsernames := make([]string, 0, len(userNames))
+	for normalizedUsername := range userNames {
+		normalizedUsernames = append(normalizedUsernames, normalizedUsername)
+	}
+	sort.Strings(normalizedUsernames)
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogDropRole,
+		0, /* no target */
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			RoleName string
+			User     string
+		}{strings.Join(normalizedUsernames, ", "), params.SessionData().User},
+	)
 }
 
 // Next implements the planNode interface.
