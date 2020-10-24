@@ -3423,9 +3423,10 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.create_tenant": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryMultiTenancy,
-			NullableArgs: true,
-			Undocumented: true,
+			Category:         categoryMultiTenancy,
+			NullableArgs:     true,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3452,8 +3453,9 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.destroy_tenant": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryMultiTenancy,
-			Undocumented: true,
+			Category:         categoryMultiTenancy,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3476,7 +3478,10 @@ may increase either contention or retry errors, or both.`,
 	),
 
 	"crdb_internal.encode_key": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlocklist: true,
+		},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"table_id", types.Int},
@@ -4228,6 +4233,31 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info:       "Checks is given sqlliveness session id is not expired",
 			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	"crdb_internal.gc_tenant": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categoryMultiTenancy,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sTenID := int64(tree.MustBeDInt(args[0]))
+				if sTenID <= 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				}
+				if err := ctx.Tenant.GCTenant(ctx.Context, uint64(sTenID)); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Garbage collects a tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 
