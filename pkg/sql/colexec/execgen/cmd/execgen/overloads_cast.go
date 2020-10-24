@@ -58,15 +58,28 @@ func populateCastOverloads() {
 		}, castTypeCustomizers)
 }
 
-func intToDecimal(to, from, _ string) string {
+// toDecimal returns the templated code that performs the cast to a decimal. It
+// first will execute whatever is passed in 'conv' (the main conversion) and
+// then will perform the rounding of 'to' variable according to 'toType'.
+func toDecimal(conv, to, toType string) string {
 	convStr := `
-   %[1]s = *apd.New(int64(%[2]s), 0)
- `
-	return fmt.Sprintf(convStr, to, from)
+		%[1]s
+		if err := tree.LimitDecimalWidth(&%[2]s, int(%[3]s.Precision()), int(%[3]s.Scale())); err != nil {
+			colexecerror.ExpectedError(err)
+		}
+	`
+	return fmt.Sprintf(convStr, conv, to, toType)
 }
 
-func intToFloat() func(string, string, string) string {
-	return func(to, from, _ string) string {
+func intToDecimal(to, from, _, toType string) string {
+	conv := `
+		%[1]s.SetInt64(int64(%[2]s))
+	`
+	return toDecimal(fmt.Sprintf(conv, to, from), to, toType)
+}
+
+func intToFloat() func(string, string, string, string) string {
+	return func(to, from, _, _ string) string {
 		convStr := `
 			%[1]s = float64(%[2]s)
 			`
@@ -74,29 +87,29 @@ func intToFloat() func(string, string, string) string {
 	}
 }
 
-func intToInt16(to, from, _ string) string {
+func intToInt16(to, from, _, _ string) string {
 	convStr := `
-   %[1]s = int16(%[2]s)
- `
+		%[1]s = int16(%[2]s)
+	`
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func intToInt32(to, from, _ string) string {
+func intToInt32(to, from, _, _ string) string {
 	convStr := `
-   %[1]s = int32(%[2]s)
- `
+		%[1]s = int32(%[2]s)
+	`
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func intToInt64(to, from, _ string) string {
+func intToInt64(to, from, _, _ string) string {
 	convStr := `
-   %[1]s = int64(%[2]s)
- `
+		%[1]s = int64(%[2]s)
+	`
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func floatToInt(intWidth, floatWidth int32) func(string, string, string) string {
-	return func(to, from, _ string) string {
+func floatToInt(intWidth, floatWidth int32) func(string, string, string, string) string {
+	return func(to, from, _, _ string) string {
 		convStr := `
 			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
 				colexecerror.ExpectedError(tree.ErrIntOutOfRange)
@@ -110,28 +123,31 @@ func floatToInt(intWidth, floatWidth int32) func(string, string, string) string 
 	}
 }
 
-func numToBool(to, from, _ string) string {
+func numToBool(to, from, _, _ string) string {
 	convStr := `
 		%[1]s = %[2]s != 0
 	`
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func floatToDecimal(to, from, _ string) string {
+func floatToDecimal(to, from, _, toType string) string {
 	convStr := `
-		{
-			var tmpDec apd.Decimal
-			_, tmpErr := tmpDec.SetFloat64(float64(%[2]s))
-			if tmpErr != nil {
-				colexecerror.ExpectedError(tmpErr)
-			}
-			%[1]s = tmpDec
+		if _, err := %[1]s.SetFloat64(float64(%[2]s)); err != nil {
+			colexecerror.ExpectedError(err)
 		}
 	`
-	return fmt.Sprintf(convStr, to, from)
+	return toDecimal(fmt.Sprintf(convStr, to, from), to, toType)
 }
 
-func datumToBool(to, from, fromCol string) string {
+func decimalToBool(to, from, _, _ string) string {
+	return fmt.Sprintf("%[1]s = %[2]s.Sign() != 0", to, from)
+}
+
+func decimalToDecimal(to, from, _, toType string) string {
+	return toDecimal(fmt.Sprintf(`%[1]s.Set(&%[2]s)`, to, from), to, toType)
+}
+
+func datumToBool(to, from, fromCol, _ string) string {
 	convStr := `
 		{
 			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, types.Bool)
@@ -142,6 +158,19 @@ func datumToBool(to, from, fromCol string) string {
 		}
 	`
 	return fmt.Sprintf(convStr, to, from, fromCol)
+}
+
+func datumToDatum(to, from, fromCol, toType string) string {
+	convStr := `
+		{
+			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, %[4]s)
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			%[1]s = _castedDatum
+		}
+	`
+	return fmt.Sprintf(convStr, to, from, fromCol, toType)
 }
 
 // castTypeCustomizer is a type customizer that changes how the templater
@@ -175,11 +204,11 @@ func registerCastTypeCustomizers() {
 	// Identity casts.
 	//
 	// Note that we're using the same "vanilla" type customizers since identity
-	// casts are the default behavior of the CastFunc.
+	// casts are the default behavior of the CastFunc (except for decimals and
+	// datum-backed types which are handled separately).
 	registerCastTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.BoolFamily, anyWidth}, boolCustomizer{})
 	// TODO(yuzefovich): add casts between types that have types.BytesFamily as
 	// their canonical type family.
-	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}, decimalCustomizer{})
 	registerCastTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}, floatCustomizer{})
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		registerCastTypeCustomizer(typePair{types.IntFamily, intWidth, types.IntFamily, intWidth}, intCustomizer{width: intWidth})
@@ -194,7 +223,10 @@ func registerCastTypeCustomizers() {
 	}
 
 	// Casts from decimal.
-	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.BoolFamily, anyWidth}, decimalCastCustomizer{})
+	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.BoolFamily, anyWidth}, decimalCastCustomizer{toFamily: types.BoolFamily})
+	// Note that we have the decimal "identity" cast here in order to handle
+	// possible rounding of the precision.
+	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}, decimalCastCustomizer{toFamily: types.DecimalFamily})
 
 	// Casts from ints.
 	for _, fromIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -219,13 +251,16 @@ func registerCastTypeCustomizers() {
 
 	// Casts from datum-backed types.
 	registerCastTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.BoolFamily, anyWidth}, datumCastCustomizer{toFamily: types.BoolFamily})
+	registerCastTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, datumCastCustomizer{toFamily: typeconv.DatumVecCanonicalTypeFamily})
 }
 
 // boolCastCustomizer specifies casts from booleans.
 type boolCastCustomizer struct{}
 
 // decimalCastCustomizer specifies casts from decimals.
-type decimalCastCustomizer struct{}
+type decimalCastCustomizer struct {
+	toFamily types.Family
+}
 
 // floatCastCustomizer specifies casts from floats.
 type floatCastCustomizer struct {
@@ -246,7 +281,7 @@ type datumCastCustomizer struct {
 }
 
 func (boolCastCustomizer) getCastFunc() castFunc {
-	return func(to, from, _ string) string {
+	return func(to, from, _, _ string) string {
 		convStr := `
 			%[1]s = 0
 			if %[2]s {
@@ -257,10 +292,16 @@ func (boolCastCustomizer) getCastFunc() castFunc {
 	}
 }
 
-func (decimalCastCustomizer) getCastFunc() castFunc {
-	return func(to, from, _ string) string {
-		return fmt.Sprintf("%[1]s = %[2]s.Sign() != 0", to, from)
+func (c decimalCastCustomizer) getCastFunc() castFunc {
+	switch c.toFamily {
+	case types.BoolFamily:
+		return decimalToBool
+	case types.DecimalFamily:
+		return decimalToDecimal
 	}
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find a cast from decimal to %s", c.toFamily))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 func (c floatCastCustomizer) getCastFunc() castFunc {
@@ -304,6 +345,8 @@ func (c datumCastCustomizer) getCastFunc() castFunc {
 	switch c.toFamily {
 	case types.BoolFamily:
 		return datumToBool
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return datumToDatum
 	}
 	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find a cast from datum-backed type to %s", c.toFamily))
 	// This code is unreachable, but the compiler cannot infer that.
