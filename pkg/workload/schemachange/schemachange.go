@@ -56,6 +56,7 @@ const (
 	defaultMaxOpsPerWorker = 5
 	defaultErrorRate       = 10
 	defaultEnumPct         = 10
+	defaultMaxSourceTables = 3
 )
 
 type schemaChange struct {
@@ -67,6 +68,7 @@ type schemaChange struct {
 	enumPct         int
 	verbose         int
 	dryRun          bool
+	maxSourceTables int
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -88,6 +90,8 @@ var schemaChangeMeta = workload.Meta{
 			`Percentage of times when picking a type that an enum type is picked`)
 		s.flags.IntVarP(&s.verbose, `verbose`, `v`, 0, ``)
 		s.flags.BoolVarP(&s.dryRun, `dry-run`, `n`, false, ``)
+		s.flags.IntVar(&s.maxSourceTables, `max-source-tables`, defaultMaxSourceTables,
+			`Maximum tables or views that a newly created tables or views can depend on`)
 		return s
 	},
 }
@@ -138,11 +142,12 @@ func (s *schemaChange) Ops(
 	for i := 0; i < s.concurrency; i++ {
 
 		opGeneratorParams := operationGeneratorParams{
-			seqNum:    seqNum,
-			errorRate: s.errorRate,
-			enumPct:   s.enumPct,
-			rng:       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
-			ops:       ops,
+			seqNum:          seqNum,
+			errorRate:       s.errorRate,
+			enumPct:         s.enumPct,
+			rng:             rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+			ops:             ops,
+			maxSourceTables: s.maxSourceTables,
 		}
 
 		w := &schemaChangeWorker{

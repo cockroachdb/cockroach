@@ -27,6 +27,15 @@ func tableExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
    )`, tableName.Schema(), tableName.Object())
 }
 
+func viewExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(tx, `SELECT EXISTS (
+	SELECT table_name
+    FROM information_schema.views 
+   WHERE table_schema = $1
+     AND table_name = $2
+   )`, tableName.Schema(), tableName.Object())
+}
+
 func columnExistsOnTable(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
 	return scanBool(tx, `SELECT EXISTS (
 	SELECT column_name
@@ -56,4 +65,12 @@ func tableHasRows(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
 func scanBool(tx *pgx.Tx, query string, args ...interface{}) (b bool, err error) {
 	err = tx.QueryRow(query, args...).Scan(&b)
 	return b, err
+}
+
+func schemaExists(tx *pgx.Tx, schemaName string) (bool, error) {
+	return scanBool(tx, `SELECT EXISTS (
+	SELECT schema_name
+		FROM information_schema.schemata
+   WHERE schema_name = $1
+	)`, schemaName)
 }

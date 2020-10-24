@@ -31,11 +31,12 @@ import (
 // seqNum may be shared across multiple instances of this, so it should only
 // be change atomically.
 type operationGeneratorParams struct {
-	seqNum    *int64
-	errorRate int
-	enumPct   int
-	rng       *rand.Rand
-	ops       *deck
+	seqNum          *int64
+	errorRate       int
+	enumPct         int
+	rng             *rand.Rand
+	ops             *deck
+	maxSourceTables int
 }
 
 // The OperationBuilder has the sole responsibility of generating ops
@@ -71,7 +72,9 @@ type opType int
 // opsWithErrorScreening stores ops which currently check for exec
 // errors and update expectedExecErrors in the op generator state
 var opsWithExecErrorScreening = map[opType]bool{
-	addColumn: true,
+	addColumn:     true,
+	createTableAs: true,
+	createView:    true,
 }
 
 func opScreensForExecErrors(op opType) bool {
@@ -396,56 +399,202 @@ func (og *operationGenerator) createEnum(tx *pgx.Tx) (string, error) {
 }
 
 func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
-	tableName, err := og.randTable(tx, og.pctExisting(true), "")
-	if err != nil {
-		return "", err
+	numSourceTables := og.randIntn(og.params.maxSourceTables) + 1
+
+	sourceTableNames := make([]tree.TableExpr, numSourceTables)
+	sourceTableExistence := make([]bool, numSourceTables)
+
+	uniqueTableNames := map[string]bool{}
+	duplicateSourceTables := false
+
+	for i := 0; i < numSourceTables; i++ {
+		var tableName *tree.TableName
+		var err error
+		var sourceTableExists bool
+
+		switch randInt := og.randIntn(1); randInt {
+		case 0:
+			tableName, err = og.randTable(tx, og.pctExisting(true), "")
+			if err != nil {
+				return "", err
+			}
+			sourceTableExists, err = tableExists(tx, tableName)
+			if err != nil {
+				return "", err
+			}
+
+		case 1:
+			tableName, err = og.randView(tx, og.pctExisting(true), "")
+			if err != nil {
+				return "", err
+			}
+			sourceTableExists, err = viewExists(tx, tableName)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		sourceTableNames[i] = tableName
+		sourceTableExistence[i] = sourceTableExists
+		if _, exists := uniqueTableNames[tableName.String()]; exists {
+			duplicateSourceTables = true
+		} else {
+			uniqueTableNames[tableName.String()] = true
+		}
 	}
 
-	columnNames, err := og.tableColumnsShuffled(tx, tableName.String())
-	if err != nil {
-		return "", err
+	selectStatement := tree.SelectClause{
+		From: tree.From{Tables: sourceTableNames},
 	}
-	columnNames = columnNames[:1+og.randIntn(len(columnNames))]
 
-	names := make(tree.NameList, len(columnNames))
-	for i := range names {
-		names[i] = tree.Name(columnNames[i])
+	for i := 0; i < numSourceTables; i++ {
+		tableName := sourceTableNames[i]
+		tableExists := sourceTableExistence[i]
+
+		if tableExists {
+			columnNamesForTable, err := og.tableColumnsShuffled(tx, tableName.(*tree.TableName).String())
+			if err != nil {
+				return "", err
+			}
+			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
+
+			for i := range columnNamesForTable {
+				colItem := tree.ColumnItem{
+					ColumnName: tree.Name(columnNamesForTable[i]),
+				}
+				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+			}
+		} else {
+			og.expectedExecErrors.add(pgcode.UndefinedTable)
+			colItem := tree.ColumnItem{
+				ColumnName: tree.Name("IrrelevantColumnName"),
+			}
+			selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+		}
 	}
 
 	destTableName, err := og.randTable(tx, og.pctExisting(false), "")
 	if err != nil {
 		return "", err
 	}
+	schemaExists, err := schemaExists(tx, destTableName.Schema())
+	if err != nil {
+		return "", err
+	}
+	tableExists, err := tableExists(tx, destTableName)
+	if err != nil {
+		return "", err
+	}
 
-	return fmt.Sprintf(`CREATE TABLE %s AS SELECT %s FROM %s`,
-		destTableName, tree.Serialize(&names), tableName), nil
+	codesWithConditions{
+		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
+		{code: pgcode.DuplicateRelation, condition: tableExists},
+		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
+		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
+	}.add(og.expectedExecErrors)
+
+	return fmt.Sprintf(`CREATE TABLE %s AS %s`,
+		destTableName, selectStatement.String()), nil
 }
 
 func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
-	tableName, err := og.randTable(tx, og.pctExisting(true), "")
-	if err != nil {
-		return "", err
+
+	numSourceTables := og.randIntn(og.params.maxSourceTables) + 1
+
+	sourceTableNames := make([]tree.TableExpr, numSourceTables)
+	sourceTableExistence := make([]bool, numSourceTables)
+
+	uniqueTableNames := map[string]bool{}
+	duplicateSourceTables := false
+
+	for i := 0; i < numSourceTables; i++ {
+		var tableName *tree.TableName
+		var err error
+		var sourceTableExists bool
+
+		switch randInt := og.randIntn(1); randInt {
+		case 0:
+			tableName, err = og.randTable(tx, og.pctExisting(true), "")
+			if err != nil {
+				return "", err
+			}
+			sourceTableExists, err = tableExists(tx, tableName)
+			if err != nil {
+				return "", err
+			}
+
+		case 1:
+			tableName, err = og.randView(tx, og.pctExisting(true), "")
+			if err != nil {
+				return "", err
+			}
+			sourceTableExists, err = viewExists(tx, tableName)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		sourceTableNames[i] = tableName
+		sourceTableExistence[i] = sourceTableExists
+		if _, exists := uniqueTableNames[tableName.String()]; exists {
+			duplicateSourceTables = true
+		} else {
+			uniqueTableNames[tableName.String()] = true
+		}
 	}
 
-	columnNames, err := og.tableColumnsShuffled(tx, tableName.String())
-	if err != nil {
-		return "", err
+	selectStatement := tree.SelectClause{
+		From: tree.From{Tables: sourceTableNames},
 	}
-	columnNames = columnNames[:1+og.randIntn(len(columnNames))]
 
-	names := make(tree.NameList, len(columnNames))
-	for i := range names {
-		names[i] = tree.Name(columnNames[i])
+	for i := 0; i < numSourceTables; i++ {
+		tableName := sourceTableNames[i]
+		tableExists := sourceTableExistence[i]
+
+		if tableExists {
+			columnNamesForTable, err := og.tableColumnsShuffled(tx, tableName.(*tree.TableName).String())
+			if err != nil {
+				return "", err
+			}
+			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
+
+			for i := range columnNamesForTable {
+				colItem := tree.ColumnItem{
+					ColumnName: tree.Name(columnNamesForTable[i]),
+				}
+				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+			}
+		} else {
+			og.expectedExecErrors.add(pgcode.UndefinedTable)
+			colItem := tree.ColumnItem{
+				ColumnName: tree.Name("IrrelevantColumnName"),
+			}
+			selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+		}
 	}
 
 	destViewName, err := og.randView(tx, og.pctExisting(false), "")
 	if err != nil {
 		return "", err
 	}
+	schemaExists, err := schemaExists(tx, destViewName.Schema())
+	if err != nil {
+		return "", err
+	}
+	viewExists, err := viewExists(tx, destViewName)
+	if err != nil {
+		return "", err
+	}
 
-	// TODO(peter): Create views that are dependent on multiple tables.
-	return fmt.Sprintf(`CREATE VIEW %s AS SELECT %s FROM %s`,
-		destViewName, tree.Serialize(&names), tableName), nil
+	codesWithConditions{
+		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
+		{code: pgcode.DuplicateRelation, condition: viewExists},
+		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
+		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
+	}.add(og.expectedExecErrors)
+
+	return fmt.Sprintf(`CREATE VIEW %s AS %s`,
+		destViewName, selectStatement.String()), nil
 }
 
 func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
@@ -1046,7 +1195,9 @@ FROM [SHOW COLUMNS FROM %s];
 		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
-		columnNames = append(columnNames, name)
+		if name != "rowid" {
+			columnNames = append(columnNames, name)
+		}
 	}
 	if rows.Err() != nil {
 		return nil, rows.Err()
