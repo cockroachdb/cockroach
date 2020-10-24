@@ -20,18 +20,14 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
-	"github.com/lib/pq/oid"
 	"github.com/spf13/pflag"
 )
 
@@ -62,7 +58,6 @@ import (
 const (
 	defaultMaxOpsPerWorker = 5
 	defaultExistingPct     = 10
-	defaultEnumPct         = 10
 )
 
 type schemaChange struct {
@@ -71,7 +66,6 @@ type schemaChange struct {
 	concurrency     int
 	maxOpsPerWorker int
 	existingPct     int
-	enumPct         int
 	verbose         int
 	dryRun          bool
 }
@@ -91,8 +85,6 @@ var schemaChangeMeta = workload.Meta{
 			`Number of operations to execute in a single transaction`)
 		s.flags.IntVar(&s.existingPct, `existing-pct`, defaultExistingPct,
 			`Percentage of times to use existing name`)
-		s.flags.IntVar(&s.enumPct, `enum-pct`, defaultEnumPct,
-			`Percentage of times when picking a type that an enum type is picked`)
 		s.flags.IntVarP(&s.verbose, `verbose`, `v`, 0, ``)
 		s.flags.BoolVarP(&s.dryRun, `dry-run`, `n`, false, ``)
 		return s
@@ -115,8 +107,6 @@ const (
 	createTable    // CREATE TABLE <table> <def>
 	createTableAs  // CREATE TABLE <table> AS <def>
 	createView     // CREATE VIEW <view> AS <def>
-	createEnum     // CREATE TYPE <type> ENUM AS <def>
-	createSchema   // CREATE SCHEMA <schema>
 
 	dropColumn        // ALTER TABLE <table> DROP COLUMN <column>
 	dropColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
@@ -152,8 +142,6 @@ var opWeights = []int{
 	createTable:       1,
 	createTableAs:     1,
 	createView:        1,
-	createEnum:        1,
-	createSchema:      1,
 	dropColumn:        1,
 	dropColumnDefault: 1,
 	dropColumnNotNull: 1,
@@ -220,7 +208,6 @@ func (s *schemaChange) Ops(
 			dryRun:          s.dryRun,
 			maxOpsPerWorker: s.maxOpsPerWorker,
 			existingPct:     s.existingPct,
-			enumPct:         s.enumPct,
 			rng:             rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 			ops:             ops,
 			pool:            pool,
@@ -262,7 +249,6 @@ type schemaChangeWorker struct {
 	dryRun          bool
 	maxOpsPerWorker int
 	existingPct     int
-	enumPct         int
 	rng             *rand.Rand
 	ops             *deck
 	pool            *workload.MultiConnPool
@@ -406,12 +392,6 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 
 		case createView:
 			stmt, err = w.createView(tx)
-
-		case createEnum:
-			stmt, err = w.createEnum(tx)
-
-		case createSchema:
-			stmt, err = w.createSchema(tx)
 
 		case dropColumn:
 			stmt, err = w.dropColumn(tx)
@@ -563,18 +543,9 @@ func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	stmt := rowenc.RandCreateTable(w.rng, "table", int(atomic.AddInt64(w.seqNum, 1)))
+	stmt := sqlbase.RandCreateTable(w.rng, "table", int(atomic.AddInt64(w.seqNum, 1)))
 	stmt.Table = *tableName
 	stmt.IfNotExists = w.rng.Intn(2) == 0
-	return tree.Serialize(stmt), nil
-}
-
-func (w *schemaChangeWorker) createEnum(tx *pgx.Tx) (string, error) {
-	typName, err := w.randEnum(tx, w.existingPct)
-	if err != nil {
-		return "", err
-	}
-	stmt := rowenc.RandCreateType(w.rng, typName.String(), "asdf")
 	return tree.Serialize(stmt), nil
 }
 
@@ -866,7 +837,7 @@ func (w *schemaChangeWorker) insertRow(tx *pgx.Tx) (string, error) {
 	for i := 0; i < numRows; i++ {
 		var row []string
 		for _, col := range cols {
-			d := rowenc.RandDatum(w.rng, col.typ, col.nullable)
+			d := sqlbase.RandDatum(w.rng, col.typ, col.nullable)
 			row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
 		}
 		rows = append(rows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
@@ -947,14 +918,7 @@ func (w *schemaChangeWorker) getTableColumns(tx *pgx.Tx, tableName string) ([]co
 		if err != nil {
 			return nil, err
 		}
-		c.typ, err = tree.ResolveType(
-			context.Background(),
-			stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.CastExpr).Type,
-			&txTypeResolver{tx: tx},
-		)
-		if err != nil {
-			return nil, err
-		}
+		c.typ = stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.CastExpr).Type
 	}
 
 	return ret, nil
@@ -1037,40 +1001,17 @@ ORDER BY random()
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randEnum(tx *pgx.Tx, pctExisting int) (tree.UnresolvedName, error) {
-	if w.rng.Intn(100) >= pctExisting {
-		randSchema, err := w.randSchema(tx, 100-pctExisting)
-		if err != nil {
-			return tree.MakeUnresolvedName(), err
-		}
-		return tree.MakeUnresolvedName(randSchema, fmt.Sprintf("enum%d", atomic.AddInt64(w.seqNum, 1))), nil
-	}
-	const q = `
-  SELECT schema, name
-    FROM [SHOW ENUMS]
-   WHERE name LIKE 'enum%'
-ORDER BY random()
-   LIMIT 1;
-`
-	var schemaName string
-	var typName string
-	if err := tx.QueryRow(q).Scan(&schemaName, &typName); err != nil {
-		return tree.MakeUnresolvedName(), err
-	}
-	return tree.MakeUnresolvedName(schemaName, typName), nil
-}
-
 // randTable returns a schema name along with a table name
 func (w *schemaChangeWorker) randTable(tx *pgx.Tx, pctExisting int) (*tree.TableName, error) {
 	if w.rng.Intn(100) >= pctExisting {
 		randSchema, err := w.randSchema(tx, 100-pctExisting)
 
 		if err != nil {
-			treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+			treeTableName := tree.MakeTableNameFromPrefix(tree.TableNamePrefix{}, "")
 			return &treeTableName, err
 		}
 
-		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		treeTableName := tree.MakeTableNameFromPrefix(tree.TableNamePrefix{
 			SchemaName:     tree.Name(randSchema),
 			ExplicitSchema: true,
 		}, tree.Name(fmt.Sprintf("table%d", atomic.AddInt64(w.seqNum, 1))))
@@ -1087,11 +1028,11 @@ ORDER BY random()
 	var schemaName string
 	var tableName string
 	if err := tx.QueryRow(q).Scan(&schemaName, &tableName); err != nil {
-		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+		treeTableName := tree.MakeTableNameFromPrefix(tree.TableNamePrefix{}, "")
 		return &treeTableName, err
 	}
 
-	treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+	treeTableName := tree.MakeTableNameFromPrefix(tree.TableNamePrefix{
 		SchemaName:     tree.Name(schemaName),
 		ExplicitSchema: true,
 	}, tree.Name(tableName))
@@ -1102,10 +1043,10 @@ func (w *schemaChangeWorker) randView(tx *pgx.Tx, pctExisting int) (*tree.TableN
 	if w.rng.Intn(100) >= pctExisting {
 		randSchema, err := w.randSchema(tx, 100-pctExisting)
 		if err != nil {
-			treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+			treeViewName := tree.MakeTableNameFromPrefix(tree.TableNamePrefix{}, "")
 			return &treeViewName, err
 		}
-		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		treeViewName := tree.MakeTableNameFromPrefix(tree.TableNamePrefix{
 			SchemaName:     tree.Name(randSchema),
 			ExplicitSchema: true,
 		}, tree.Name(fmt.Sprintf("view%d", atomic.AddInt64(w.seqNum, 1))))
@@ -1121,10 +1062,10 @@ ORDER BY random()
 	var schemaName string
 	var viewName string
 	if err := tx.QueryRow(q).Scan(&schemaName, &viewName); err != nil {
-		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+		treeViewName := tree.MakeTableNameFromPrefix(tree.TableNamePrefix{}, "")
 		return &treeViewName, err
 	}
-	treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+	treeViewName := tree.MakeTableNameFromPrefix(tree.TableNamePrefix{
 		SchemaName:     tree.Name(schemaName),
 		ExplicitSchema: true,
 	}, tree.Name(viewName))
@@ -1165,27 +1106,8 @@ FROM [SHOW COLUMNS FROM %s];
 	return columnNames, nil
 }
 
-func (w *schemaChangeWorker) randType(tx *pgx.Tx) (tree.ResolvableTypeReference, error) {
-	if w.rng.Intn(100) <= w.enumPct {
-		// TODO(ajwerner): Support arrays of enums.
-		typName, err := w.randEnum(tx, 100)
-		if err != nil {
-			return nil, err
-		}
-		return typName.ToUnresolvedObjectName(tree.NoAnnotation)
-	}
-	return rowenc.RandSortingType(w.rng), nil
-}
-
-func (w *schemaChangeWorker) createSchema(tx *pgx.Tx) (string, error) {
-	schemaName, err := w.randSchema(tx, 10)
-	if err != nil {
-		return "", err
-	}
-
-	// TODO(jayshrivastava): Support authorization
-	stmt := rowenc.MakeSchemaName(w.rng.Intn(2) == 0, schemaName, "")
-	return tree.Serialize(stmt), nil
+func (w *schemaChangeWorker) randType(tx *pgx.Tx) (*types.T, error) {
+	return sqlbase.RandSortingType(w.rng), nil
 }
 
 func (w *schemaChangeWorker) randSchema(tx *pgx.Tx, pctExisting int) (string, error) {
@@ -1215,62 +1137,3 @@ func (w *schemaChangeWorker) dropSchema(tx *pgx.Tx) (string, error) {
 	}
 	return fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName), nil
 }
-
-// txTypeResolver is a minimal type resolver to support writing enum values to
-// columns.
-type txTypeResolver struct {
-	tx *pgx.Tx
-}
-
-func (t txTypeResolver) ResolveType(
-	ctx context.Context, name *tree.UnresolvedObjectName,
-) (*types.T, error) {
-	rows, err := t.tx.Query(`
-  SELECT enumlabel, enumsortorder
-    FROM pg_enum AS pge, pg_type AS pgt, pg_namespace AS pgn
-   WHERE (pgt.typnamespace = pgn.oid AND pgt.oid = pge.enumtypid)
-         AND typcategory = 'E'
-         AND typname = $1
-ORDER BY enumsortorder`, name.Object())
-	if err != nil {
-		return nil, err
-	}
-	var logicalReps []string
-	var physicalReps [][]byte
-	var readOnly []bool
-	for rows.Next() {
-		var logicalRep string
-		var order int64
-		if err := rows.Scan(&logicalRep, &order); err != nil {
-			return nil, err
-		}
-		logicalReps = append(logicalReps, logicalRep)
-		physicalReps = append(physicalReps, encoding.EncodeUntaggedIntValue(nil, order))
-		readOnly = append(readOnly, false)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	// TODO(ajwerner): Fill in some more fields here to generate better errors
-	// down the line.
-	n := types.UserDefinedTypeName{Name: name.Object()}
-	return &types.T{
-		InternalType: types.InternalType{
-			Family: types.EnumFamily,
-		},
-		TypeMeta: types.UserDefinedTypeMetadata{
-			Name: &n,
-			EnumData: &types.EnumMetadata{
-				LogicalRepresentations:  logicalReps,
-				PhysicalRepresentations: physicalReps,
-				IsMemberReadOnly:        readOnly,
-			},
-		},
-	}, nil
-}
-
-func (t txTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	return nil, pgerror.Newf(pgcode.UndefinedObject, "type %d does not exist", oid)
-}
-
-var _ tree.TypeReferenceResolver = (*txTypeResolver)(nil)
