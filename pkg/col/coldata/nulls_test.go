@@ -249,7 +249,7 @@ func TestNullsSet(t *testing.T) {
 							name := fmt.Sprintf("destStartIdx=%d,srcStartIdx=%d,toAppend=%d", destStartIdx,
 								srcStartIdx, toAppend)
 							t.Run(name, func(t *testing.T) {
-								n := nulls3.Copy()
+								n := nulls3.makeCopy()
 								args.Src.SetNulls(srcNulls)
 								args.DestIdx = destStartIdx
 								args.SrcStartIdx = srcStartIdx
