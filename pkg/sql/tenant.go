@@ -86,6 +86,29 @@ func CreateTenantRecord(
 	return nil
 }
 
+// deleteTenantRecord deletes a tenant row from system.tenants.
+func deleteTenantRecord(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64,
+) error {
+	const op = "delete"
+	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(tenID, op); err != nil {
+		return err
+	}
+
+	if num, err := execCfg.InternalExecutor.ExecEx(
+		ctx, "delete-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.tenants WHERE id = $1`, tenID,
+	); err != nil {
+		return errors.Wrapf(err, "deleting tenant %d", tenID)
+	} else if num != 1 {
+		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
+	}
+	return nil
+}
+
 // getTenantRecord retrieves a tenant in system.tenants.
 func getTenantRecord(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64,
@@ -211,10 +234,38 @@ func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, t
 	return nil
 }
 
+// GCTenant deletes the tenant's data and deletes its row in system.tenant.
+func GCTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64) error {
+	// TODO(nvanbenschoten): synchronously deleting very large amount of tenant
+	// data in the same transaction maybe problematic. Instead kick off a job
+	// that clears the tenant keyspace, and deletes the row in the
+	// system.tenants table. Tracked in #48775.
+	log.Infof(ctx, "clearing data for tenant %d", tenID)
+
+	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
+	prefixEnd := prefix.PrefixEnd()
+
+	log.VEventf(ctx, 2, "ClearRange %s - %s", prefix, prefixEnd)
+	// ClearRange cannot be run in a transaction, so create a non-transactional
+	// batch to send the request.
+	b := &kv.Batch{}
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{Key: prefix, EndKey: prefixEnd},
+	})
+
+	if err := execCfg.DB.Run(ctx, b); err != nil {
+		return errors.Wrapf(err, "clearing tenant %d data", tenID)
+	}
+
+	return errors.Wrapf(
+		deleteTenantRecord(ctx, execCfg, txn, tenID), "deleting tenant %d record", tenID,
+	)
+}
+
 // DestroyTenant implements the tree.TenantOperator interface.
-func DestroyTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64) error {
+func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
 	const op = "destroy"
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(tenID, op); err != nil {
@@ -222,27 +273,19 @@ func DestroyTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, te
 	}
 
 	// Retrieve the tenant's info.
-	info, err := getTenantRecord(ctx, execCfg, txn, tenID)
+	info, err := getTenantRecord(ctx, p.execCfg, p.txn, tenID)
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
 
-	// Mark the tenant as dropping.
-	info.State = descpb.TenantInfo_DROP
-	if err := updateTenantRecord(ctx, execCfg, txn, info); err != nil {
-		return errors.Wrap(err, "destroying tenant")
+	if info.State == descpb.TenantInfo_DROP {
+		return errors.Errorf("tenant %d is already in state DROP", tenID)
 	}
 
-	// TODO(nvanbenschoten): actually clear tenant keyspace. We don't want to do
-	// this synchronously in the same transaction, because we could be deleting
-	// a very large amount of data. Instead, we should kick off a job that picks
-	// up the DROP state of the tenant, clears the tenant keyspace, and deletes
-	// the row in the system.tenants table. Tracked in #48775.
-
-	return nil
-}
-
-// DestroyTenant implements the tree.TenantOperator interface.
-func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
-	return DestroyTenant(ctx, p.ExecCfg(), p.Txn(), tenID)
+	// Mark the tenant as dropping.
+	info.State = descpb.TenantInfo_DROP
+	if err := updateTenantRecord(ctx, p.execCfg, p.txn, info); err != nil {
+		return errors.Wrap(err, "destroying tenant")
+	}
+	return GCTenant(ctx, p.ExecCfg(), p.Txn(), tenID)
 }

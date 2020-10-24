@@ -38,13 +38,14 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
-5   false   {"id": "5", "state": "DROP"}
 10  true    {"id": "10", "state": "ACTIVE"}
 
-# Try to recreate an existing tenant.
-
-query error pgcode 42710 tenant "5" already exists
+query I
 SELECT crdb_internal.create_tenant(5)
+----
+5
+
+# Try to recreate an existing tenant.
 
 query error pgcode 42710 tenant "10" already exists
 SELECT crdb_internal.create_tenant(10)
