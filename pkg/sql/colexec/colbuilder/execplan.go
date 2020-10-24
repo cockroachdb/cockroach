@@ -1594,22 +1594,6 @@ func planSelectionOperators(
 	}
 }
 
-func checkCastSupported(fromType, toType *types.T) error {
-	switch toType.Family() {
-	case types.DecimalFamily:
-		// If we're casting to a decimal, we're only allowing casting from the
-		// decimal of the same precision due to the fact that we're losing
-		// precision information once we start operating on coltypes.T. For
-		// such casts we will fallback to row-by-row engine.
-		// TODO(yuzefovich): coltypes.T type system has been removed,
-		// reevaluate the situation.
-		if !fromType.Identical(toType) {
-			return errors.New("decimal casts with rounding unsupported")
-		}
-	}
-	return nil
-}
-
 // planCastOperator plans a CAST operator that casts the column at index
 // 'inputIdx' coming from input of type 'fromType' into a column of type
 // 'toType' that will be output at index 'resultIdx'.
@@ -1623,9 +1607,6 @@ func planCastOperator(
 	toType *types.T,
 	factory coldata.ColumnFactory,
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, err error) {
-	if err := checkCastSupported(fromType, toType); err != nil {
-		return op, resultIdx, typs, err
-	}
 	outputIdx := len(columnTypes)
 	op, err = colexec.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType)
 	typs = appendOneType(columnTypes, toType)

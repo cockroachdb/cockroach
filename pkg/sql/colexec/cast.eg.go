@@ -59,6 +59,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.FloatFamily:
@@ -70,6 +71,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.IntFamily:
@@ -80,6 +82,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case 32:
 					return &castBoolInt32Op{
@@ -87,6 +90,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case -1:
 				default:
@@ -95,6 +99,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			}
@@ -104,17 +109,6 @@ func GetCastOperator(
 		case -1:
 		default:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-			case types.DecimalFamily:
-				switch rightType.Width() {
-				case -1:
-				default:
-					return &castDecimalDecimalOp{
-						oneInputCloserHelper: makeOneInputCloserHelper(input),
-						allocator:            allocator,
-						colIdx:               colIdx,
-						outputIdx:            resultIdx,
-					}, nil
-				}
 			case types.BoolFamily:
 				switch rightType.Width() {
 				case -1:
@@ -124,6 +118,19 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
+					}, nil
+				}
+			case types.DecimalFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return &castDecimalDecimalOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			}
@@ -140,6 +147,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case 32:
 					return &castInt16Int32Op{
@@ -147,6 +155,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case -1:
 				default:
@@ -155,6 +164,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.BoolFamily:
@@ -166,6 +176,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.DecimalFamily:
@@ -177,6 +188,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.FloatFamily:
@@ -188,6 +200,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			}
@@ -201,6 +214,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case 32:
 					return &castInt32Int32Op{
@@ -208,6 +222,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case -1:
 				default:
@@ -216,6 +231,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.BoolFamily:
@@ -227,6 +243,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.DecimalFamily:
@@ -238,6 +255,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.FloatFamily:
@@ -249,6 +267,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			}
@@ -263,6 +282,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case 32:
 					return &castInt64Int32Op{
@@ -270,6 +290,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case -1:
 				default:
@@ -278,6 +299,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.BoolFamily:
@@ -289,6 +311,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.DecimalFamily:
@@ -300,6 +323,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.FloatFamily:
@@ -311,6 +335,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			}
@@ -329,6 +354,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.BoolFamily:
@@ -340,6 +366,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.DecimalFamily:
@@ -351,6 +378,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			case types.IntFamily:
@@ -361,6 +389,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case 32:
 					return &castFloat64Int32Op{
@@ -368,6 +397,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				case -1:
 				default:
@@ -376,6 +406,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			}
@@ -394,6 +425,19 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
+					}, nil
+				}
+			case typeconv.DatumVecCanonicalTypeFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return &castDatumDatumOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 				}
 			}
@@ -462,6 +506,7 @@ type castBoolBoolOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castBoolBoolOp{}
@@ -486,65 +531,70 @@ func (c *castBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
 			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-							r = v
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-							r = v
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -559,6 +609,7 @@ type castBoolFloat64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castBoolFloat64Op{}
@@ -583,61 +634,64 @@ func (c *castBoolFloat64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
 			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-
-							r = 0
-							if v {
-								r = 1
-							}
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-
-							r = 0
-							if v {
-								r = 1
-							}
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r float64
 
 						r = 0
@@ -645,15 +699,17 @@ func (c *castBoolFloat64Op) Next(ctx context.Context) coldata.Batch {
 							r = 1
 						}
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r float64
 
 						r = 0
@@ -661,7 +717,7 @@ func (c *castBoolFloat64Op) Next(ctx context.Context) coldata.Batch {
 							r = 1
 						}
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -676,6 +732,7 @@ type castBoolInt16Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castBoolInt16Op{}
@@ -700,61 +757,64 @@ func (c *castBoolInt16Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
 			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-
-							r = 0
-							if v {
-								r = 1
-							}
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-
-							r = 0
-							if v {
-								r = 1
-							}
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int16
 
 						r = 0
@@ -762,15 +822,17 @@ func (c *castBoolInt16Op) Next(ctx context.Context) coldata.Batch {
 							r = 1
 						}
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int16
 
 						r = 0
@@ -778,7 +840,7 @@ func (c *castBoolInt16Op) Next(ctx context.Context) coldata.Batch {
 							r = 1
 						}
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -793,6 +855,7 @@ type castBoolInt32Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castBoolInt32Op{}
@@ -817,61 +880,64 @@ func (c *castBoolInt32Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
 			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-
-							r = 0
-							if v {
-								r = 1
-							}
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-
-							r = 0
-							if v {
-								r = 1
-							}
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int32
 
 						r = 0
@@ -879,15 +945,17 @@ func (c *castBoolInt32Op) Next(ctx context.Context) coldata.Batch {
 							r = 1
 						}
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int32
 
 						r = 0
@@ -895,7 +963,7 @@ func (c *castBoolInt32Op) Next(ctx context.Context) coldata.Batch {
 							r = 1
 						}
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -910,6 +978,7 @@ type castBoolInt64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castBoolInt64Op{}
@@ -934,61 +1003,23 @@ func (c *castBoolInt64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
 			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-
-							r = 0
-							if v {
-								r = 1
-							}
-
-							outputCol[i] = r
-						}
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-
-							r = 0
-							if v {
-								r = 1
-							}
-
-							outputCol[i] = r
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+						v := inputCol.Get(tupleIdx)
 						var r int64
 
 						r = 0
@@ -996,15 +1027,20 @@ func (c *castBoolInt64Op) Next(ctx context.Context) coldata.Batch {
 							r = 1
 						}
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
 						var r int64
 
 						r = 0
@@ -1012,104 +1048,45 @@ func (c *castBoolInt64Op) Next(ctx context.Context) coldata.Batch {
 							r = 1
 						}
 
-						outputCol[i] = r
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castDecimalDecimalOp struct {
-	oneInputCloserHelper
-
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
-}
-
-var _ ResettableOperator = &castDecimalDecimalOp{}
-var _ closableOperator = &castDecimalDecimalOp{}
-
-func (c *castDecimalDecimalOp) Init() {
-	c.input.Init()
-}
-
-func (c *castDecimalDecimalOp) reset(ctx context.Context) {
-	if r, ok := c.input.(resetter); ok {
-		r.reset(ctx)
-	}
-}
-
-func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.input.Next(ctx)
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Decimal()
-			outputCol := outputVec.Decimal()
-			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
-				if sel != nil {
-					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-							r = v
-							outputCol[i].Set(&r)
-						}
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-							r = v
-							outputCol[i].Set(&r)
-						}
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
-						var r apd.Decimal
-						r = v
-						outputCol[i].Set(&r)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
-						var r apd.Decimal
-						r = v
-						outputCol[i].Set(&r)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -1124,6 +1101,7 @@ type castDecimalBoolOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castDecimalBoolOp{}
@@ -1148,65 +1126,193 @@ func (c *castDecimalBoolOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Decimal()
 			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-							r = v.Sign() != 0
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+						r = v.Sign() != 0
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-							r = v.Sign() != 0
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+						r = v.Sign() != 0
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v.Sign() != 0
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v.Sign() != 0
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalDecimalOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ ResettableOperator = &castDecimalDecimalOp{}
+var _ closableOperator = &castDecimalDecimalOp{}
+
+func (c *castDecimalDecimalOp) Init() {
+	c.input.Init()
+}
+
+func (c *castDecimalDecimalOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.Set(&v)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.Set(&v)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.Set(&v)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.Set(&v)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			}
@@ -1221,6 +1327,7 @@ type castInt16Int16Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt16Int16Op{}
@@ -1245,65 +1352,70 @@ func (c *castInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
 			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-							r = v
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-							r = v
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int16
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int16
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -1318,6 +1430,7 @@ type castInt16Int32Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt16Int32Op{}
@@ -1342,73 +1455,78 @@ func (c *castInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
 			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-
-							r = int32(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						r = int32(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-
-							r = int32(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						r = int32(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int32
 
 						r = int32(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int32
 
 						r = int32(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -1423,6 +1541,7 @@ type castInt16Int64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt16Int64Op{}
@@ -1447,73 +1566,78 @@ func (c *castInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
 			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-
-							r = int64(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						r = int64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-
-							r = int64(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						r = int64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int64
 
 						r = int64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int64
 
 						r = int64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -1528,6 +1652,7 @@ type castInt16BoolOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt16BoolOp{}
@@ -1552,73 +1677,78 @@ func (c *castInt16BoolOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
 			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-
-							r = v != 0
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						r = v != 0
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-
-							r = v != 0
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						r = v != 0
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r bool
 
 						r = v != 0
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r bool
 
 						r = v != 0
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -1633,6 +1763,7 @@ type castInt16DecimalOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt16DecimalOp{}
@@ -1657,73 +1788,94 @@ func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
 			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-
-							r = *apd.New(int64(v), 0)
-
-							outputCol[i].Set(&r)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.SetInt64(int64(v))
+
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-
-							r = *apd.New(int64(v), 0)
-
-							outputCol[i].Set(&r)
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.SetInt64(int64(v))
+
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
-						r = *apd.New(int64(v), 0)
+						r.SetInt64(int64(v))
 
-						outputCol[i].Set(&r)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
-						r = *apd.New(int64(v), 0)
+						r.SetInt64(int64(v))
 
-						outputCol[i].Set(&r)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			}
@@ -1738,6 +1890,7 @@ type castInt16Float64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt16Float64Op{}
@@ -1762,73 +1915,78 @@ func (c *castInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
 			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-
-							r = float64(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-
-							r = float64(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r float64
 
 						r = float64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r float64
 
 						r = float64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -1843,6 +2001,7 @@ type castInt32Int16Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt32Int16Op{}
@@ -1867,73 +2026,78 @@ func (c *castInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
 			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-
-							r = int16(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						r = int16(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-
-							r = int16(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						r = int16(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int16
 
 						r = int16(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int16
 
 						r = int16(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -1948,6 +2112,7 @@ type castInt32Int32Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt32Int32Op{}
@@ -1972,65 +2137,70 @@ func (c *castInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
 			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-							r = v
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-							r = v
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int32
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int32
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -2045,6 +2215,7 @@ type castInt32Int64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt32Int64Op{}
@@ -2069,73 +2240,78 @@ func (c *castInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
 			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-
-							r = int64(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						r = int64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-
-							r = int64(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						r = int64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int64
 
 						r = int64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int64
 
 						r = int64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -2150,6 +2326,7 @@ type castInt32BoolOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt32BoolOp{}
@@ -2174,73 +2351,78 @@ func (c *castInt32BoolOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
 			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-
-							r = v != 0
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						r = v != 0
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-
-							r = v != 0
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						r = v != 0
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r bool
 
 						r = v != 0
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r bool
 
 						r = v != 0
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -2255,6 +2437,7 @@ type castInt32DecimalOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt32DecimalOp{}
@@ -2279,73 +2462,94 @@ func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
 			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-
-							r = *apd.New(int64(v), 0)
-
-							outputCol[i].Set(&r)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.SetInt64(int64(v))
+
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-
-							r = *apd.New(int64(v), 0)
-
-							outputCol[i].Set(&r)
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.SetInt64(int64(v))
+
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
-						r = *apd.New(int64(v), 0)
+						r.SetInt64(int64(v))
 
-						outputCol[i].Set(&r)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
-						r = *apd.New(int64(v), 0)
+						r.SetInt64(int64(v))
 
-						outputCol[i].Set(&r)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			}
@@ -2360,6 +2564,7 @@ type castInt32Float64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt32Float64Op{}
@@ -2384,73 +2589,78 @@ func (c *castInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
 			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-
-							r = float64(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-
-							r = float64(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r float64
 
 						r = float64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r float64
 
 						r = float64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -2465,6 +2675,7 @@ type castInt64Int16Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt64Int16Op{}
@@ -2489,73 +2700,78 @@ func (c *castInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
 			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-
-							r = int16(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						r = int16(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-
-							r = int16(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						r = int16(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int16
 
 						r = int16(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int16
 
 						r = int16(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -2570,6 +2786,7 @@ type castInt64Int32Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt64Int32Op{}
@@ -2594,73 +2811,78 @@ func (c *castInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
 			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-
-							r = int32(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						r = int32(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-
-							r = int32(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						r = int32(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int32
 
 						r = int32(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int32
 
 						r = int32(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -2675,6 +2897,7 @@ type castInt64Int64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt64Int64Op{}
@@ -2699,65 +2922,70 @@ func (c *castInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
 			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-							r = v
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-							r = v
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int64
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int64
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -2772,6 +3000,7 @@ type castInt64BoolOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt64BoolOp{}
@@ -2796,73 +3025,78 @@ func (c *castInt64BoolOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
 			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-
-							r = v != 0
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						r = v != 0
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-
-							r = v != 0
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						r = v != 0
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r bool
 
 						r = v != 0
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r bool
 
 						r = v != 0
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -2877,6 +3111,7 @@ type castInt64DecimalOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt64DecimalOp{}
@@ -2901,73 +3136,94 @@ func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
 			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-
-							r = *apd.New(int64(v), 0)
-
-							outputCol[i].Set(&r)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.SetInt64(int64(v))
+
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-
-							r = *apd.New(int64(v), 0)
-
-							outputCol[i].Set(&r)
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						r.SetInt64(int64(v))
+
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
-						r = *apd.New(int64(v), 0)
+						r.SetInt64(int64(v))
 
-						outputCol[i].Set(&r)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
-						r = *apd.New(int64(v), 0)
+						r.SetInt64(int64(v))
 
-						outputCol[i].Set(&r)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			}
@@ -2982,6 +3238,7 @@ type castInt64Float64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castInt64Float64Op{}
@@ -3006,73 +3263,78 @@ func (c *castInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
 			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-
-							r = float64(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-
-							r = float64(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r float64
 
 						r = float64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r float64
 
 						r = float64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -3087,6 +3349,7 @@ type castFloat64Float64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castFloat64Float64Op{}
@@ -3111,65 +3374,70 @@ func (c *castFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
 			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-							r = v
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r float64
-							r = v
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+						r = v
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r float64
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r float64
 						r = v
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -3184,6 +3452,7 @@ type castFloat64BoolOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castFloat64BoolOp{}
@@ -3208,73 +3477,78 @@ func (c *castFloat64BoolOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
 			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-
-							r = v != 0
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						r = v != 0
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
-
-							r = v != 0
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						r = v != 0
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r bool
 
 						r = v != 0
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r bool
 
 						r = v != 0
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -3289,6 +3563,7 @@ type castFloat64DecimalOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castFloat64DecimalOp{}
@@ -3313,101 +3588,102 @@ func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
 			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-
-							{
-								var tmpDec apd.Decimal
-								_, tmpErr := tmpDec.SetFloat64(float64(v))
-								if tmpErr != nil {
-									colexecerror.ExpectedError(tmpErr)
-								}
-								r = tmpDec
-							}
-
-							outputCol[i].Set(&r)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						if _, err := r.SetFloat64(float64(v)); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r apd.Decimal
-
-							{
-								var tmpDec apd.Decimal
-								_, tmpErr := tmpDec.SetFloat64(float64(v))
-								if tmpErr != nil {
-									colexecerror.ExpectedError(tmpErr)
-								}
-								r = tmpDec
-							}
-
-							outputCol[i].Set(&r)
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						if _, err := r.SetFloat64(float64(v)); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
-						{
-							var tmpDec apd.Decimal
-							_, tmpErr := tmpDec.SetFloat64(float64(v))
-							if tmpErr != nil {
-								colexecerror.ExpectedError(tmpErr)
-							}
-							r = tmpDec
+						if _, err := r.SetFloat64(float64(v)); err != nil {
+							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[i].Set(&r)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
-						{
-							var tmpDec apd.Decimal
-							_, tmpErr := tmpDec.SetFloat64(float64(v))
-							if tmpErr != nil {
-								colexecerror.ExpectedError(tmpErr)
-							}
-							r = tmpDec
+						if _, err := r.SetFloat64(float64(v)); err != nil {
+							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[i].Set(&r)
+						if err := tree.LimitDecimalWidth(&r, int(c.toType.Precision()), int(c.toType.Scale())); err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol[tupleIdx].Set(&r)
 					}
 				}
 			}
@@ -3422,6 +3698,7 @@ type castFloat64Int16Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castFloat64Int16Op{}
@@ -3446,61 +3723,64 @@ func (c *castFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
 			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-
-							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int16(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int16(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int16
-
-							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int16(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int16(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int16
 
 						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
@@ -3508,15 +3788,17 @@ func (c *castFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 						}
 						r = int16(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int16
 
 						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
@@ -3524,7 +3806,7 @@ func (c *castFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 						}
 						r = int16(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -3539,6 +3821,7 @@ type castFloat64Int32Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castFloat64Int32Op{}
@@ -3563,61 +3846,64 @@ func (c *castFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
 			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-
-							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int32(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int32(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int32
-
-							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int32(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int32(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int32
 
 						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
@@ -3625,15 +3911,17 @@ func (c *castFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 						}
 						r = int32(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int32
 
 						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
@@ -3641,7 +3929,7 @@ func (c *castFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 						}
 						r = int32(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -3656,6 +3944,7 @@ type castFloat64Int64Op struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castFloat64Int64Op{}
@@ -3680,61 +3969,64 @@ func (c *castFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
 			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-
-							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int64(v)
-
-							outputCol[i] = r
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r int64
-
-							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int64(v)
-
-							outputCol[i] = r
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
 						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int64(v)
+
+						outputCol[tupleIdx] = r
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
 						var r int64
 
 						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
@@ -3742,15 +4034,17 @@ func (c *castFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 						}
 						r = int64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
 						var r int64
 
 						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
@@ -3758,7 +4052,7 @@ func (c *castFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 						}
 						r = int64(v)
 
-						outputCol[i] = r
+						outputCol[tupleIdx] = r
 					}
 				}
 			}
@@ -3773,6 +4067,7 @@ type castDatumBoolOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &castDatumBoolOp{}
@@ -3797,36 +4092,174 @@ func (c *castDatumBoolOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
 			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
 
-							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-								if err != nil {
-									colexecerror.ExpectedError(err)
-								}
-								r = _castedDatum == tree.DBoolTrue
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							if err != nil {
+								colexecerror.ExpectedError(err)
 							}
+							r = _castedDatum == tree.DBoolTrue
+						}
 
-							outputCol[i] = r
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol.Slice(0, n)
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _castedDatum == tree.DBoolTrue
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _castedDatum == tree.DBoolTrue
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol.Slice(0, n)
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _castedDatum == tree.DBoolTrue
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumDatumOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ ResettableOperator = &castDatumDatumOp{}
+var _ closableOperator = &castDatumDatumOp{}
+
+func (c *castDatumDatumOp) Init() {
+	c.input.Init()
+}
+
+func (c *castDatumDatumOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castDatumDatumOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Datum()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r interface{}
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _castedDatum
+						}
+
+						outputCol.Set(tupleIdx, r)
+						// Casting to datum-backed vector might produce a null value on
+						// non-null tuple, so we need to check that case after the cast was
+						// performed.
+						if r == tree.DNull {
+							outputNulls.SetNull(tupleIdx)
 						}
 					}
 				} else {
@@ -3834,60 +4267,86 @@ func (c *castDatumBoolOp) Next(ctx context.Context) coldata.Batch {
 					inputCol = inputCol.Slice(0, n)
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r bool
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r interface{}
 
-							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-								if err != nil {
-									colexecerror.ExpectedError(err)
-								}
-								r = _castedDatum == tree.DBoolTrue
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
 							}
+							r = _castedDatum
+						}
 
-							outputCol[i] = r
+						outputCol.Set(tupleIdx, r)
+						// Casting to datum-backed vector might produce a null value on
+						// non-null tuple, so we need to check that case after the cast was
+						// performed.
+						if r == tree.DNull {
+							outputNulls.SetNull(tupleIdx)
 						}
 					}
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
 					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
-						var r bool
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r interface{}
 
 						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							r = _castedDatum == tree.DBoolTrue
+							r = _castedDatum
 						}
 
-						outputCol[i] = r
+						outputCol.Set(tupleIdx, r)
+						// Casting to datum-backed vector might produce a null value on
+						// non-null tuple, so we need to check that case after the cast was
+						// performed.
+						if r == tree.DNull {
+							outputNulls.SetNull(tupleIdx)
+						}
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					inputCol = inputCol.Slice(0, n)
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
+					var tupleIdx int
 					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
-						var r bool
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r interface{}
 
 						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							r = _castedDatum == tree.DBoolTrue
+							r = _castedDatum
 						}
 
-						outputCol[i] = r
+						outputCol.Set(tupleIdx, r)
+						// Casting to datum-backed vector might produce a null value on
+						// non-null tuple, so we need to check that case after the cast was
+						// performed.
+						if r == tree.DNull {
+							outputNulls.SetNull(tupleIdx)
+						}
 					}
 				}
 			}
