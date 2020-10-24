@@ -393,12 +393,23 @@ func (n *Nulls) Or(n2 *Nulls) *Nulls {
 	}
 }
 
-// Copy returns a copy of n which can be modified independently.
-func (n *Nulls) Copy() Nulls {
+// makeCopy returns a copy of n which can be modified independently.
+func (n *Nulls) makeCopy() Nulls {
 	c := Nulls{
 		maybeHasNulls: n.maybeHasNulls,
 		nulls:         make([]byte, len(n.nulls)),
 	}
 	copy(c.nulls, n.nulls)
 	return c
+}
+
+// Copy copies the contents of other into n.
+func (n *Nulls) Copy(other *Nulls) {
+	n.maybeHasNulls = other.maybeHasNulls
+	if cap(n.nulls) < len(other.nulls) {
+		n.nulls = make([]byte, len(other.nulls))
+	} else {
+		n.nulls = n.nulls[:len(other.nulls)]
+	}
+	copy(n.nulls, other.nulls)
 }

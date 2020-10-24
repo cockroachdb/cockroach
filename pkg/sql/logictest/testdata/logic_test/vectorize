@@ -746,8 +746,10 @@ CREATE TABLE t39417 (x int8);
 INSERT INTO t39417 VALUES (10);
 SET vectorize = experimental_always
 
-statement error .* decimal casts with rounding unsupported
-select (x/1) from t39417
+query R
+select x/1 from t39417
+----
+10
 
 # Regression tests for #39540, an issue caused by shallow copying decimals.
 # For now, we use the default vectorize setting for this query.
