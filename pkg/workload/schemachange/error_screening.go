@@ -33,6 +33,21 @@ func tableExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
 	return exists, nil
 }
 
+func viewExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	q := fmt.Sprintf(`SELECT EXISTS (
+	SELECT table_name
+    FROM information_schema.views 
+   WHERE table_schema = '%s'
+     AND table_name = '%s'
+   )`, tableName.SchemaName, tableName.ObjectName.String())
+
+	var exists bool
+	if err := tx.QueryRow(q).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func columnExistsOnTable(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
 	q := fmt.Sprintf(`SELECT EXISTS (
 	SELECT column_name
@@ -78,4 +93,19 @@ func tableHasRows(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func schemaExists(tx *pgx.Tx, schemaName string) (bool, error) {
+	q := fmt.Sprintf(`SELECT EXISTS (
+	SELECT schema_name
+		FROM information_schema.schemata
+   WHERE schema_name = '%s'
+	)`, schemaName)
+
+	var exists bool
+	if err := tx.QueryRow(q).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
+
 }
