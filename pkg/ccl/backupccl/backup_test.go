@@ -5773,6 +5773,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 // Ensure that backing up and restoring tenants succeeds.
 func TestBackupRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	const numAccounts = 1
 	ctx, tc, systemDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -5817,9 +5818,6 @@ func TestBackupRestoreTenant(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TENANT 11 TO 'nodelocal://1/t11'`)
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
 
-	// TODO(dt): test destroying a tenant and RESTORE'ing over a destroyed tenant
-	// once tenant destruction actually clears their key-space. See #48775.
-
 	t.Run("non-existent", func(t *testing.T) {
 		systemDB.ExpectErr(t, "tenant 123 does not exist", `BACKUP TENANT 123 TO 'nodelocal://1/t1'`)
 		systemDB.ExpectErr(t, "tenant 21 does not exist", `BACKUP TENANT 21 TO 'nodelocal://1/t20'`)
@@ -5847,11 +5845,45 @@ func TestBackupRestoreTenant(t *testing.T) {
 			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
 		)
 
+		ten10Stopper := stop.NewStopper()
 		restoreConn10 := serverutils.StartTenant(
+			t, restoreTC.Server(0), base.TestTenantArgs{
+				TenantID: roachpb.MakeTenantID(10), Existing: true, Stopper: ten10Stopper,
+			},
+		)
+		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
+		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+
+		// Stop the tenant process before destroying the tenant.
+		restoreConn10.Close()
+		ten10Stopper.Stop(ctx)
+		restoreConn10 = nil
+
+		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
+		restoreDB.CheckQueryResults(t,
+			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
+			[][]string{{`10`, `false`, `{"id": "10", "state": "DROP"}`}},
+		)
+
+		restoreDB.Exec(t, `SELECT crdb_internal.gc_tenant(10)`)
+		ten10Prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(10))
+		ten10PrefixEnd := ten10Prefix.PrefixEnd()
+		rows, err := restoreTC.Server(0).DB().Scan(ctx, ten10Prefix, ten10PrefixEnd, 0 /* maxRows */)
+		require.NoError(t, err)
+		require.Equal(t, []kv.KeyValue{}, rows)
+
+		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
+		restoreDB.CheckQueryResults(t,
+			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
+			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+		)
+
+		restoreConn10 = serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
 		)
 		defer restoreConn10.Close()
-		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
+		restoreTenant10 = sqlutils.MakeSQLRunner(restoreConn10)
 
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))

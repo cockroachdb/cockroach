@@ -233,4 +233,8 @@ type TestTenantArgs struct {
 	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
 	// server's codec, but nothing else (e.g. its certs). Used for testing.
 	TenantIDCodecOverride roachpb.TenantID
+
+	// Stopper, if not nil, is used to stop the tenant manually otherwise the
+	// TestServer stopper will be used.
+	Stopper *stop.Stopper
 }
