@@ -46,6 +46,16 @@ id  active  crdb_internal.pb_to_json
 query error pgcode 42710 tenant "5" already exists
 SELECT crdb_internal.create_tenant(5)
 
+query I
+SELECT crdb_internal.gc_tenant(5)
+----
+5
+
+query I
+SELECT crdb_internal.create_tenant(5)
+----
+5
+
 query error pgcode 42710 tenant "10" already exists
 SELECT crdb_internal.create_tenant(10)
 
