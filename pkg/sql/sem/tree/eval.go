@@ -3120,6 +3120,11 @@ type TenantOperator interface {
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
 	// It returns an error if the tenant does not exist.
 	DestroyTenant(ctx context.Context, tenantID uint64) error
+
+	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
+	// success it also removes the tenant record.
+	// It returns an error if the tenant does not exist.
+	GCTenant(ctx context.Context, tenantID uint64) error
 }
 
 // EvalContextTestingKnobs contains test knobs.

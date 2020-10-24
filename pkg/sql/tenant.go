@@ -86,6 +86,29 @@ func CreateTenantRecord(
 	return nil
 }
 
+// DeleteTenantRecord deletes a tenant row from system.tenants.
+func DeleteTenantRecord(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64,
+) error {
+	const op = "delete"
+	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(tenID, op); err != nil {
+		return err
+	}
+
+	if num, err := execCfg.InternalExecutor.ExecEx(
+		ctx, "delete-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.tenants WHERE id = $1`, tenID,
+	); err != nil {
+		return errors.Wrapf(err, "deleting tenant %d", tenID)
+	} else if num != 1 {
+		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
+	}
+	return nil
+}
+
 // getTenantRecord retrieves a tenant in system.tenants.
 func getTenantRecord(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64,
@@ -211,10 +234,28 @@ func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, t
 	return nil
 }
 
+// ClearTenant deletes the tenant's data.
+func ClearTenant(ctx context.Context, execCfg *ExecutorConfig, tenID uint64) error {
+	log.Infof(ctx, "clearing data for tenant %d", tenID)
+
+	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
+	prefixEnd := prefix.PrefixEnd()
+
+	log.VEventf(ctx, 2, "ClearRange %s - %s", prefix, prefixEnd)
+	// ClearRange cannot be run in a transaction, so create a non-transactional
+	// batch to send the request.
+	b := &kv.Batch{}
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{Key: prefix, EndKey: prefixEnd},
+	})
+
+	return errors.Wrapf(execCfg.DB.Run(ctx, b), "clearing tenant %d data", tenID)
+}
+
 // DestroyTenant implements the tree.TenantOperator interface.
-func DestroyTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64) error {
+func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
 	const op = "destroy"
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(tenID, op); err != nil {
@@ -222,27 +263,52 @@ func DestroyTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, te
 	}
 
 	// Retrieve the tenant's info.
-	info, err := getTenantRecord(ctx, execCfg, txn, tenID)
+	info, err := getTenantRecord(ctx, p.execCfg, p.txn, tenID)
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
 
-	// Mark the tenant as dropping.
-	info.State = descpb.TenantInfo_DROP
-	if err := updateTenantRecord(ctx, execCfg, txn, info); err != nil {
-		return errors.Wrap(err, "destroying tenant")
+	if info.State == descpb.TenantInfo_DROP {
+		return errors.Errorf("tenant %d is already in state DROP", tenID)
 	}
 
-	// TODO(nvanbenschoten): actually clear tenant keyspace. We don't want to do
-	// this synchronously in the same transaction, because we could be deleting
-	// a very large amount of data. Instead, we should kick off a job that picks
-	// up the DROP state of the tenant, clears the tenant keyspace, and deletes
-	// the row in the system.tenants table. Tracked in #48775.
-
-	return nil
+	// Mark the tenant as dropping.
+	info.State = descpb.TenantInfo_DROP
+	return errors.Wrap(updateTenantRecord(ctx, p.execCfg, p.txn, info), "destroying tenant")
 }
 
-// DestroyTenant implements the tree.TenantOperator interface.
-func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
-	return DestroyTenant(ctx, p.ExecCfg(), p.Txn(), tenID)
+// GCTenant implements the tree.TenantOperator interface.
+func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
+	if !p.ExtendedEvalContext().TxnImplicit {
+		return errors.Errorf("gc_tenant cannot be used inside a transaction")
+	}
+
+	const op = "gc"
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(tenID, op); err != nil {
+		return err
+	}
+
+	if err := p.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		info, err := getTenantRecord(ctx, p.execCfg, p.txn, tenID)
+		if err != nil {
+			return errors.Wrap(err, "get tenant record")
+		}
+		if info.State != descpb.TenantInfo_DROP {
+			return errors.Errorf("tenant %d is not in state DROP", tenID)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := ClearTenant(ctx, p.ExecCfg(), tenID); err != nil {
+		return errors.Wrap(err, "clear tenant")
+	}
+
+	return errors.Wrapf(
+		DeleteTenantRecord(ctx, p.ExecCfg(), p.txn, tenID), "deleting tenant %d record", tenID,
+	)
 }
