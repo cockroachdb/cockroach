@@ -128,6 +128,44 @@ type Iterator interface {
 	SupportsPrev() bool
 }
 
+// EngineIterator is an iterator over key-value pairs where the key is
+// an EngineKey.
+//lint:ignore U1001 unused
+type EngineIterator interface {
+	// Close frees up resources held by the iterator.
+	Close()
+	// SeekGE advances the iterator to the first key in the engine which
+	// is >= the provided key.
+	SeekGE(key EngineKey) (valid bool, err error)
+	// SeekLT advances the iterator to the first key in the engine which
+	// is < the provided key.
+	SeekLT(key EngineKey) (valid bool, err error)
+	// Next advances the iterator to the next key/value in the
+	// iteration. After this call, valid will be true if the
+	// iterator was not originally positioned at the last key.
+	Next() (valid bool, err error)
+	// Prev moves the iterator backward to the previous key/value
+	// in the iteration. After this call, valid will be true if the
+	// iterator was not originally positioned at the first key.
+	Prev() (valid bool, err error)
+	// UnsafeKey returns the same value as Key, but the memory is invalidated on
+	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	// REQUIRES: latest positioning function returned valid=true.
+	UnsafeKey() EngineKey
+	// UnsafeValue returns the same value as Value, but the memory is
+	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	// REQUIRES: latest positioning function returned valid=true.
+	UnsafeValue() []byte
+	// Key returns the current key.
+	// REQUIRES: latest positioning function returned valid=true.
+	Key() EngineKey
+	// Value returns the current value as a byte slice.
+	// REQUIRES: latest positioning function returned valid=true.
+	Value() []byte
+	// SetUpperBound installs a new upper bound for this iterator.
+	SetUpperBound(roachpb.Key)
+}
+
 // MVCCIterator is an interface that extends Iterator and provides concrete
 // implementations for MVCCGet and MVCCScan operations. It is used by instances
 // of the interface backed by RocksDB iterators to avoid cgo hops.
