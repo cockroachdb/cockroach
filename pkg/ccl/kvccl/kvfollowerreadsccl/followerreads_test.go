@@ -197,6 +197,8 @@ func TestOracleFactory(t *testing.T) {
 func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	skip.WithIssue(t, 50032, "temporary")
+
 	// This test sleeps for a few sec.
 	skip.UnderShort(t)
 
