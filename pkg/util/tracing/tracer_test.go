@@ -277,7 +277,7 @@ func TestLightstepContext(t *testing.T) {
 		UseGRPC:        true,
 	})
 	tr.setShadowTracer(lightStepManager{}, lsTr)
-	s := tr.StartSpan("test")
+	s := tr.StartSpan("test").(*Span)
 
 	const testBaggageKey = "test-baggage"
 	const testBaggageVal = "test-val"
@@ -294,8 +294,8 @@ func TestLightstepContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext))
-	s2Ctx := s2.(*Span).ot.shadowSpan.Context()
+	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext)).(*Span)
+	s2Ctx := s2.ot.shadowSpan.Context()
 
 	// Verify that the baggage is correct in both the tracer context and in the
 	// lightstep context.

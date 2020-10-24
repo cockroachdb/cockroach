@@ -745,7 +745,7 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 // this is true, any Span derived from this context will be a "black hole Span".
 //
 // You should never need to care about this method. It is exported for technical
-// rasons.
+// reasons.
 func IsNoopContext(spanCtx opentracing.SpanContext) bool {
 	sc := spanCtx.(*SpanContext)
 	return sc.isNoop()
@@ -759,6 +759,9 @@ func (sc *SpanContext) isNoop() bool {
 // the Span tags.
 func SetSpanStats(os opentracing.Span, stats SpanStats) {
 	s := os.(*Span)
+	if s.isNoop() {
+		return
+	}
 	s.crdb.mu.Lock()
 	s.crdb.mu.stats = stats
 	for name, value := range stats.Stats() {
@@ -774,6 +777,9 @@ func (s *Span) Finish() {
 
 // FinishWithOptions is part of the opentracing.Span interface.
 func (s *Span) FinishWithOptions(opts opentracing.FinishOptions) {
+	if s.isNoop() {
+		return
+	}
 	finishTime := opts.FinishTime
 	if finishTime.IsZero() {
 		finishTime = time.Now()
@@ -831,6 +837,9 @@ func (s *Span) SpanContext() SpanContext {
 
 // SetOperationName is part of the opentracing.Span interface.
 func (s *Span) SetOperationName(operationName string) opentracing.Span {
+	if s.isNoop() {
+		return s
+	}
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetOperationName(operationName)
 	}
@@ -840,6 +849,9 @@ func (s *Span) SetOperationName(operationName string) opentracing.Span {
 
 // SetTag is part of the opentracing.Span interface.
 func (s *Span) SetTag(key string, value interface{}) opentracing.Span {
+	if s.isNoop() {
+		return s
+	}
 	return s.setTagInner(key, value, false /* locked */)
 }
 
@@ -868,6 +880,9 @@ func (s *Span) setTagInner(key string, value interface{}, locked bool) opentraci
 
 // LogFields is part of the opentracing.Span interface.
 func (s *Span) LogFields(fields ...otlog.Field) {
+	if s.isNoop() {
+		return
+	}
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.LogFields(fields...)
 	}
@@ -908,6 +923,9 @@ func (s *crdbSpan) LogFields(fields ...otlog.Field) {
 
 // LogKV is part of the opentracing.Span interface.
 func (s *Span) LogKV(alternatingKeyValues ...interface{}) {
+	if s.isNoop() {
+		return
+	}
 	fields, err := otlog.InterleavedKVToFields(alternatingKeyValues...)
 	if err != nil {
 		s.LogFields(otlog.Error(err), otlog.String("function", "LogKV"))
@@ -918,6 +936,9 @@ func (s *Span) LogKV(alternatingKeyValues ...interface{}) {
 
 // SetBaggageItem is part of the opentracing.Span interface.
 func (s *Span) SetBaggageItem(restrictedKey, value string) opentracing.Span {
+	if s.isNoop() {
+		return s
+	}
 	s.crdb.SetBaggageItemAndTag(restrictedKey, value)
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetBaggageItem(restrictedKey, value)
@@ -971,11 +992,17 @@ func (s *Span) Tracer() opentracing.Tracer {
 
 // LogEvent is part of the opentracing.Span interface. Deprecated.
 func (s *Span) LogEvent(event string) {
+	if s.isNoop() {
+		return
+	}
 	s.LogFields(otlog.String(tracingpb.LogMessageField, event))
 }
 
 // LogEventWithPayload is part of the opentracing.Span interface. Deprecated.
 func (s *Span) LogEventWithPayload(event string, payload interface{}) {
+	if s.isNoop() {
+		return
+	}
 	s.LogFields(otlog.String(tracingpb.LogMessageField, event), otlog.Object("payload", payload))
 }
 
