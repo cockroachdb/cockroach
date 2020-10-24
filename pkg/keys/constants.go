@@ -52,8 +52,9 @@ var (
 	// key suffixes.
 	localSuffixLength = 4
 
-	// There are four types of local key data enumerated below: replicated
-	// range-ID, unreplicated range-ID, range local, and store-local keys.
+	// There are five types of local key data enumerated below: replicated
+	// range-ID, unreplicated range-ID, range local, range lock, and
+	// store-local keys.
 
 	// 1. Replicated Range-ID keys
 	//
@@ -155,7 +156,26 @@ var (
 	// (storage/engine/rocksdb/db.cc).
 	LocalTransactionSuffix = roachpb.RKey("txn-")
 
-	// 4. Store local keys
+	// 4. Lock table keys
+	//
+	// LocalRangeLockTablePrefix specifies the key prefix for the lock
+	// table. It is immediately followed by the LockTableSingleKeyInfix,
+	// and then the key being locked.
+	//
+	// The lock strength and txn UUID are not in the part of the key that
+	// the keys package deals with. They are in the versioned part of the
+	// key (see EngineKey.Version). This permits the storage engine to use
+	// bloom filters when searching for all locks for a lockable key.
+	//
+	// Different lock strengths may use different value types. The exclusive
+	// lock strength uses MVCCMetadata as the value type, since it does
+	// double duty as a reference to a provisional MVCC value.
+	// TODO(sumeer): remember to adjust this comment when adding locks of
+	// other strengths, or range locks.
+	LocalRangeLockTablePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("l")))
+	LockTableSingleKeyInfix   = []byte("k")
+
+	// 5. Store local keys
 	//
 	// localStorePrefix is the prefix identifying per-store data.
 	localStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
