@@ -157,16 +157,17 @@ func (a *arrowTestOperator) Next(ctx context.Context) coldata.Batch {
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	_, _, err = a.r.Serialize(&buf, arrowDataIn)
+	_, _, err = a.r.Serialize(&buf, arrowDataIn, batchIn.Length())
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
 	var arrowDataOut []*array.Data
-	if err := a.r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
+	batchLength, err := a.r.Deserialize(&arrowDataOut, buf.Bytes())
+	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	batchOut := testAllocator.NewMemBatchWithMaxCapacity(a.typs)
-	if err := a.c.ArrowToBatch(arrowDataOut, batchOut); err != nil {
+	batchOut := testAllocator.NewMemBatchWithFixedCapacity(a.typs, batchLength)
+	if err := a.c.ArrowToBatch(arrowDataOut, batchLength, batchOut); err != nil {
 		colexecerror.InternalError(err)
 	}
 	return batchOut
