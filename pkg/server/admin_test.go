@@ -1019,8 +1019,11 @@ func TestAdminAPIEvents(t *testing.T) {
 				}
 
 				isSettingChange := e.EventType == string(sql.EventLogSetClusterSetting)
+				isRoleChange := e.EventType == string(sql.EventLogCreateRole) ||
+					e.EventType == string(sql.EventLogDropRole) ||
+					e.EventType == string(sql.EventLogAlterRole)
 
-				if e.TargetID == 0 && !isSettingChange {
+				if e.TargetID == 0 && !isSettingChange && !isRoleChange {
 					t.Errorf("%d: missing/empty TargetID", i)
 				}
 				if e.ReportingID == 0 {
