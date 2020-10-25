@@ -8,6 +8,8 @@ go_library(
         "admin.pb.gw.go",
         "authentication.pb.go",
         "authentication.pb.gw.go",
+        "everynode.go",
+        "everynode_generated.go",
         "init.pb.go",
         "status.go",
         "status.pb.go",

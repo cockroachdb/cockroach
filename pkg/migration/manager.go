@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // Migration defines a program to be executed once every node in the cluster is
@@ -116,27 +117,26 @@ func (h *Helper) Log(event string) error {
 	return nil
 }
 
-// EveryNode lets migrations execute the given EveryNodeRequest across every
-// node in the cluster.
-func (h *Helper) EveryNode(ctx context.Context, req EveryNodeRequest) error {
+// EveryNode lets migrations execute the given EveryNodeOp across every node in
+// the cluster.
+func (h *Helper) EveryNode(ctx context.Context, op serverpb.EveryNodeOp) error {
 	nodeIDs, err := h.RequiredNodes(ctx)
 	if err != nil {
 		return err
 	}
 
 	// TODO(irfansharif): We can/should send out these RPCs in parallel.
-	log.Infof(ctx, "executing req=%s on nodes=%s", req, nodeIDs)
+	log.Infof(ctx, "executing op=%s on nodes=%s", redact.Safe(op.Op()), redact.Safe(nodeIDs))
 	for _, nodeID := range nodeIDs {
 		conn, err := h.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 		if err != nil {
 			return err
 		}
 
-		// TODO(irfansharif): This typecasting below is busted. We'll need
-		// wrapping/unwrapping code around the EveryNodeRequest internal union
-		// type.
+		req := &serverpb.EveryNodeRequest{}
+		req.Request.SetInner(op)
 		client := serverpb.NewAdminClient(conn)
-		if _, err := client.EveryNode(ctx, req.(*serverpb.EveryNodeRequest)); err != nil {
+		if _, err := client.EveryNode(ctx, req); err != nil {
 			return err
 		}
 	}
@@ -147,19 +147,12 @@ func (h *Helper) EveryNode(ctx context.Context, req EveryNodeRequest) error {
 	return nil
 }
 
-// EveryNodeRequest is an interface only satisfied by valid request types to the
-// EveryNode RPC.
-//
-// TODO(irfansharif): Make this so. Should probably be defined in
-// pkg/server/serverpb.
-type EveryNodeRequest interface{}
-
 // MigrateTo runs the set of migrations required to upgrade the cluster version
 // to the provided target version.
 func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error {
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
 	// for each migration, so they log distinctly? Do we need an AmbientContext?
-	ctx = logtags.AddTag(ctx, "migration-mgr", nil)
+	ctx = logtags.AddTag(ctx, "migration-mgr", redact.Safe(targetV))
 
 	// TODO(irfansharif): We'll need to acquire a lease here and refresh it
 	// throughout during the migration to ensure mutual exclusion.
@@ -176,7 +169,6 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	// TODO(irfansharif): After determining the last completed migration, if
 	// any, we'll be want to assemble the list of remaining migrations to step
 	// through to get to targetV. For now we've hard-coded this list.
-	_ = targetV
 	vs := []roachpb.Version{
 		cv.VersionByKey(cv.VersionNoopMigration),
 	}
@@ -188,8 +180,8 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 		// return. The migration associated with the specific version can assume
 		// that every node in the cluster has the corresponding version
 		// activated.
-		req := serverpb.AckClusterVersionRequest{Version: &version}
-		if err := h.EveryNode(ctx, req); err != nil {
+		op := &serverpb.AckClusterVersionRequest{Version: &version}
+		if err := h.EveryNode(ctx, op); err != nil {
 			return err
 		}
 
