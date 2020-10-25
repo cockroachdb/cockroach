@@ -15,12 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,10 +30,9 @@ import (
 // ToTableDescriptor returns the corresponding TableDescriptor for a workload
 // Table.
 func ToTableDescriptor(
-	t workload.Table, tableID descpb.ID, ts time.Time,
-) (*tabledesc.Immutable, error) {
+	t workload.Table, tableID sqlbase.ID, ts time.Time,
+) (*sqlbase.TableDescriptor, error) {
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
 	stmt, err := parser.ParseOne(fmt.Sprintf(`CREATE TABLE "%s" %s`, t.Name, t.Schema))
 	if err != nil {
 		return nil, err
@@ -43,13 +41,13 @@ func ToTableDescriptor(
 	if !ok {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
-	const parentID descpb.ID = keys.MaxReservedDescID
+	const parentID sqlbase.ID = keys.MaxReservedDescID
 	tableDesc, err := importccl.MakeSimpleTableDescriptor(
-		ctx, &semaCtx, nil /* settings */, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, ts.UnixNano())
+		ctx, nil /* settings */, createTable, parentID, tableID, importccl.NoFKs, ts.UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	return tableDesc.ImmutableCopy().(*tabledesc.Immutable), nil
+	return &tableDesc.TableDescriptor, nil
 }
 
 // ToSSTable constructs a single sstable with the kvs necessary to represent a
@@ -57,7 +55,7 @@ func ToTableDescriptor(
 // handing to AddSSTable or RocksDB's IngestExternalFile.
 //
 // TODO(dan): Finally remove sampledataccl in favor of this.
-func ToSSTable(t workload.Table, tableID descpb.ID, ts time.Time) ([]byte, error) {
+func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, error) {
 	ctx := context.Background()
 	tableDesc, err := ToTableDescriptor(t, tableID, ts)
 	if err != nil {
