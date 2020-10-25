@@ -11,6 +11,8 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
         "//pkg/server/serverpb",
         "//pkg/util/log",
         "//vendor/github.com/cockroachdb/errors",

@@ -435,7 +435,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		}
 	}
 
-	migrationMgr := migration.NewManager()
+	migrationMgr := migration.NewManager(cfg.nodeDialer)
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
