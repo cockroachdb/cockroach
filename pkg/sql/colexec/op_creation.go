@@ -31,8 +31,12 @@ var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, arg
 // NewColOperatorArgs is a helper struct that encompasses all of the input
 // arguments to NewColOperator call.
 type NewColOperatorArgs struct {
-	Spec                 *execinfrapb.ProcessorSpec
-	Inputs               []colexecbase.Operator
+	Spec   *execinfrapb.ProcessorSpec
+	Inputs []colexecbase.Operator
+	// OutputTypes (when non-nil) specifies the desired output schema of the
+	// columnar operator chain. The types will be checked for being identical
+	// (a stronger guarantee than equivalence).
+	OutputTypes          []*types.T
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	DiskQueueCfg         colcontainer.DiskQueueCfg
