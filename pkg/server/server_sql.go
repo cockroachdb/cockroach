@@ -111,7 +111,8 @@ type sqlServer struct {
 type sqlServerOptionalKVArgs struct {
 	// nodesStatusServer gives access to the NodesStatus service.
 	nodesStatusServer serverpb.OptionalNodesStatusServer
-	// Narrowed down version of *NodeLiveness. Used by jobs and DistSQLPlanner
+	// Narrowed down version of *NodeLiveness. Used by jobs, DistSQLPlanner, and
+	// migration manager.
 	nodeLiveness optionalnodeliveness.Container
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
 	// config, the DistSQL planner, the table statistics cache, the statements
@@ -425,8 +426,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	}
 
 	var isLive func(roachpb.NodeID) (bool, error)
-	if nl, ok := cfg.nodeLiveness.Optional(47900); ok {
-		isLive = nl.IsLive
+	nodeLiveness, ok := cfg.nodeLiveness.Optional(47900)
+	if ok {
+		isLive = nodeLiveness.IsLive
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
 		// schedule on - always returning true is fine.
@@ -435,7 +437,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		}
 	}
 
-	migrationMgr := migration.NewManager(cfg.nodeDialer)
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -462,10 +463,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
-		VersionUpgradeHook: func(ctx context.Context, targetV roachpb.Version) error {
-			return migrationMgr.MigrateTo(ctx, targetV)
-		},
-
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
 			execinfra.Version,
@@ -632,6 +629,23 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.Settings,
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
+
+	// TODO(irfansharif): There surely must be a better way to figure out if
+	// we're a SQL server running as part of a KV node.
+	//
+	// TODO(irfansharif): We're introducing a new usage of NodeLiveness in the
+	// SQL layer here. Looks like we've soured on doing so as of #48795. Given
+	// we're only expecting to be using this in system tenant servers, is this
+	// still appropriate?
+	if nodeLiveness != nil {
+		// We only need to attach a version upgrade hook if we're the system
+		// tenant. Regular tenants are disallowed from changing cluster
+		// versions.
+		migrationMgr := migration.NewManager(cfg.nodeDialer, nodeLiveness)
+		execCfg.VersionUpgradeHook = func(ctx context.Context, targetV roachpb.Version) error {
+			return migrationMgr.MigrateTo(ctx, targetV)
+		}
+	}
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
