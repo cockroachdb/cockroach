@@ -101,12 +101,19 @@ func (m *migrationServer) BumpClusterVersion(
 			return err
 		}
 
-		// TODO(irfansharif): We'll eventually want to bump the local version
-		// gate here. On 21.1 nodes we'll no longer be using gossip to propagate
-		// cluster version bumps. We'll still have probably disseminate it
-		// through gossip (do we actually have to?), but we won't listen to it.
+		// We bump the local version gate here.
 		//
-		//  _ = s.server.ClusterSettings().<...>.SetActiveVersion(ctx, newCV)
+		// NB: On 21.1 nodes we no longer use gossip to propagate cluster
+		// version bumps. We'll still disseminate it through gossip, but the
+		// actual (local) setting update happens here.
+		//
+		// TODO(irfansharif): We should stop disseminating cluster version
+		// bumps through gossip after 21.1 is cut. There will be no one
+		// listening in on it.
+		if err := m.server.ClusterSettings().Version.SetActiveVersion(ctx, newCV); err != nil {
+			return err
+		}
+		log.Infof(ctx, "active cluster version setting is now %s (up from %s)", newCV, prevCV)
 		return nil
 	}(); err != nil {
 		return nil, err

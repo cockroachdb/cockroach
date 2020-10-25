@@ -46,8 +46,10 @@ type Settings struct {
 	// is useful.
 	cpuProfiling int32 // atomic
 
-	// Version provides a read-only view to the active cluster version and this
-	// binary's version details.
+	// Version provides the interface through which which callers read/write to
+	// the active cluster version, and access this binary's version details.
+	// Setting the active cluster version has a very specific, intended usage
+	// pattern. Look towards the interface itself for more commentary.
 	Version clusterversion.Handle
 }
 

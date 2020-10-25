@@ -124,13 +124,6 @@ func (d *dummyVersionSettingImpl) SettingsListDefault() string {
 	panic("unimplemented")
 }
 
-// BeforeChange is part of the VersionSettingImpl interface.
-func (d *dummyVersionSettingImpl) BeforeChange(
-	ctx context.Context, encodedVal []byte, sv *settings.Values,
-) {
-	// No-op.
-}
-
 const mb = int64(1024 * 1024)
 
 var changes = struct {
@@ -142,7 +135,6 @@ var changes = struct {
 	duA      int
 	eA       int
 	byteSize int
-	mA       int
 }{}
 
 var boolTA = settings.RegisterBoolSetting("bool.t", "desc", true)
@@ -222,7 +214,6 @@ func TestCache(t *testing.T) {
 	duA.SetOnChange(sv, func() { changes.duA++ })
 	eA.SetOnChange(sv, func() { changes.eA++ })
 	byteSize.SetOnChange(sv, func() { changes.byteSize++ })
-	mA.SetOnChange(sv, func() { changes.mA++ })
 
 	t.Run("VersionSetting", func(t *testing.T) {
 		ctx := context.Background()
@@ -230,7 +221,8 @@ func TestCache(t *testing.T) {
 		mB := settings.TestingRegisterVersionSetting("local.m", "foo", &dummyVersionSettingImpl{})
 		// Version settings don't have defaults, so we need to start by setting
 		// it to something.
-		if err := u.Set("local.m", "default.X", "v"); err != nil {
+		defaultDummyV := dummyVersion{msg1: "default", growsbyone: "X"}
+		if err := setDummyVersion(defaultDummyV, mB, sv); err != nil {
 			t.Fatal(err)
 		}
 
@@ -265,7 +257,9 @@ func TestCache(t *testing.T) {
 		if _, err := mB.Validate(ctx, sv, []byte("takes.precedence"), precedenceX); err != nil {
 			t.Fatal(err)
 		}
-		if err := u.Set("local.m", "default.XX", "v"); err != nil {
+
+		newDummyV := dummyVersion{msg1: "default", growsbyone: "XX"}
+		if err := setDummyVersion(newDummyV, mB, sv); err != nil {
 			t.Fatal(err)
 		}
 		u.ResetRemaining()
@@ -434,15 +428,6 @@ func TestCache(t *testing.T) {
 		if err := u.Set("byteSize.Val", settings.EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
 		}
-		if expected, actual := 0, changes.mA; expected != actual {
-			t.Fatalf("expected %d, got %d", expected, actual)
-		}
-		if err := u.Set("v.1", "default.AB", "v"); err != nil {
-			t.Fatal(err)
-		}
-		if expected, actual := 1, changes.mA; expected != actual {
-			t.Fatalf("expected %d, got %d", expected, actual)
-		}
 		if expected, actual := 0, changes.eA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
@@ -455,6 +440,10 @@ func TestCache(t *testing.T) {
 		if expected, err := "strconv.Atoi: parsing \"notAValidValue\": invalid syntax",
 			u.Set("e", "notAValidValue", "e"); !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
+		}
+		defaultDummyV := dummyVersion{msg1: "default", growsbyone: "AB"}
+		if err := setDummyVersion(defaultDummyV, mA, sv); err != nil {
+			t.Fatal(err)
 		}
 		u.ResetRemaining()
 
@@ -668,20 +657,6 @@ func TestCache(t *testing.T) {
 		if expected, actual := beforeIVal, iVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-
-		beforeMarsh := mA.Get(sv)
-		{
-			u := settings.NewUpdater(sv)
-			if err := u.Set("v.1", "too.many.dots", "v"); !testutils.IsError(err,
-				"expected two parts",
-			) {
-				t.Fatal(err)
-			}
-			u.ResetRemaining()
-		}
-		if expected, actual := beforeMarsh, mA.Get(sv); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
 	})
 
 }
@@ -794,4 +769,16 @@ func TestOverride(t *testing.T) {
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
 	u.ResetRemaining()
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
+}
+
+func setDummyVersion(dv dummyVersion, vs *settings.VersionSetting, sv *settings.Values) error {
+	// This is a bit round about because the VersionSetting doesn't get updated
+	// through the updater, like most other settings. In order to set it, we set
+	// the internal encoded state by hand.
+	encoded, err := protoutil.Marshal(&dv)
+	if err != nil {
+		return err
+	}
+	vs.SetInternal(sv, encoded)
+	return nil
 }
