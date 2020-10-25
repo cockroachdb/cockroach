@@ -11,6 +11,8 @@
 package optionalnodeliveness
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -20,6 +22,7 @@ import (
 type Interface interface {
 	Self() (kvserverpb.Liveness, bool)
 	GetLivenesses() []kvserverpb.Liveness
+	GetLivenessesFromKV(ctx context.Context) ([]kvserverpb.Liveness, error)
 	IsLive(roachpb.NodeID) (bool, error)
 }
 
