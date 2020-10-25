@@ -25,6 +25,7 @@ import (
 	"context"
 
 	cv "github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -66,6 +67,7 @@ type Migration func(context.Context, *Helper) error
 // cluster.
 type Manager struct {
 	dialer *nodedialer.Dialer
+	nl     nodeLiveness
 }
 
 // Helper captures all the primitives required to fully specify a migration.
@@ -73,14 +75,21 @@ type Helper struct {
 	*Manager
 }
 
+// nodeLiveness is the subset of the interface satisfied by CRDB's node liveness
+// component that the migration manager relies upon.
+type nodeLiveness interface {
+	GetLivenessesFromKV(context.Context) ([]kvserverpb.Liveness, error)
+	IsLive(roachpb.NodeID) (bool, error)
+}
+
 // NewManager constructs a new Manager.
 //
 // TODO(irfansharif): We'll need to eventually plumb in a few things here. We'll
-// need a handle on node liveness, a lease manager, an internal executor, and a
-// kv.DB.
-func NewManager(dialer *nodedialer.Dialer) *Manager {
+// need a handle on a lease manager, an internal executor, and a kv.DB.
+func NewManager(dialer *nodedialer.Dialer, nl nodeLiveness) *Manager {
 	return &Manager{
 		dialer: dialer,
+		nl:     nl,
 	}
 }
 
@@ -102,11 +111,30 @@ func (h *Helper) IterateRangeDescriptors(f func(...roachpb.RangeDescriptor) erro
 // RequiredNodes returns the node IDs for all nodes that are currently part of
 // the cluster (i.e. they haven't been decommissioned away). Migrations have the
 // pre-requisite that all required nodes are up and running so that we're able
-// to execute all relevant node-level operations on them.
-//
-// TODO(irfansharif): Implement this.
+// to execute all relevant node-level operations on them. If any of the nodes
+// are found to be unavailable, an error is returned.
 func (h *Helper) RequiredNodes(ctx context.Context) ([]roachpb.NodeID, error) {
-	return []roachpb.NodeID{}, nil
+	var nodeIDs []roachpb.NodeID
+	livenesses, err := h.nl.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, liveness := range livenesses {
+		if liveness.Membership.Decommissioned() {
+			continue
+		}
+
+		live, err := h.nl.IsLive(liveness.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		if !live {
+			return nil, errors.Newf("n%d required, but unavailable", liveness.NodeID)
+		}
+		nodeIDs = append(nodeIDs, liveness.NodeID)
+	}
+
+	return nodeIDs, nil
 }
 
 // Log lets migrations insert arbitrary log events. These events are recorded in
