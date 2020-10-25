@@ -76,7 +76,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1153,33 +1152,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		// sequence.
 		s.gossip.AssertNotStarted(ctx)
 
-		// Serialize the callback through a mutex to make sure we're not
-		// clobbering the disk state if callback gets fired off concurrently.
-		var mu syncutil.Mutex
-		cb := func(ctx context.Context, newCV clusterversion.ClusterVersion) {
-			mu.Lock()
-			defer mu.Unlock()
-			v := s.cfg.Settings.Version
-			prevCV, err := kvserver.SynthesizeClusterVersionFromEngines(
-				ctx, s.engines, v.BinaryVersion(), v.BinaryMinSupportedVersion(),
-			)
-			if err != nil {
-				log.Fatalf(ctx, "%v", err)
-			}
-			if !prevCV.Version.Less(newCV.Version) {
-				// If nothing needs to be updated, don't do anything. The
-				// callbacks fire async (or at least we want to assume the worst
-				// case in which they do) and so an old update might happen
-				// after a new one.
-				return
-			}
-			if err := kvserver.WriteClusterVersionToEngines(ctx, s.engines, newCV); err != nil {
-				log.Fatalf(ctx, "%v", err)
-			}
-			log.Infof(ctx, "active cluster version is now %s (up from %s)", newCV, prevCV)
-		}
-		clusterversion.SetBeforeChange(ctx, &s.cfg.Settings.SV, cb)
-
 		diskClusterVersion := initServer.DiskClusterVersion()
 		// The version setting loaded from disk is the maximum cluster version
 		// seen on any engine. If new stores are being added to the server right
@@ -1566,6 +1538,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
 
+	// Listen in on the gossip for changes to cluster settings.
 	s.refreshSettings()
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {

@@ -24,7 +24,6 @@ package migration
 import (
 	"context"
 
-	cv "github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -197,9 +196,11 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	// TODO(irfansharif): After determining the last completed migration, if
 	// any, we'll be want to assemble the list of remaining migrations to step
 	// through to get to targetV. For now we've hard-coded this list.
-	vs := []roachpb.Version{
-		cv.VersionByKey(cv.VersionNoopMigration),
-	}
+	var vs []roachpb.Version
+
+	// Hacks to introduce fake migrations on the fly.
+	Registry[targetV] = GenerateFakeMigrationFor(targetV)
+	vs = append(vs, targetV)
 
 	for _, version := range vs {
 		h := &Helper{Manager: m}
@@ -208,6 +209,11 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 		// return. The migration associated with the specific version can assume
 		// that every node in the cluster has the corresponding version
 		// activated.
+		//
+		// TODO(irfansharif): Where exactly are we doing the validation that
+		// this version bump is an allowed one? We need to be careful here, we
+		// can't bump version gates before making sure we'd be able to for each
+		// node.
 		op := &serverpb.AckClusterVersionRequest{Version: &version}
 		if err := h.EveryNode(ctx, op); err != nil {
 			return err
