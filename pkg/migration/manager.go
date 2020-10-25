@@ -24,7 +24,11 @@ package migration
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -52,21 +56,37 @@ type Migration func(context.Context, *Helper) error
 
 // Manager is the instance responsible for executing migrations across the
 // cluster.
-type Manager struct{}
+type Manager struct {
+	dialer   *nodedialer.Dialer
+	nl       nodeLiveness
+	executor *sql.InternalExecutor
+	db       *kv.DB
+}
 
 // Helper captures all the primitives required to fully specify a migration.
 type Helper struct {
-	// TODO(irfansharif): We'll want to hold on to the Manager here, to
-	// have access to all of its constituent components.
+	*Manager
+}
+
+// nodeLiveness is the subset of the interface satisfied by CRDB's node liveness
+// component that the migration manager relies upon.
+type nodeLiveness interface {
+	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
+	IsLive(roachpb.NodeID) (bool, error)
 }
 
 // NewManager constructs a new Manager.
 //
-// TODO(irfansharif): We'll need to eventually plumb in a few things here. We'll
-// need a handle on node liveness, a node dialer, a lease manager, an internal
-// executor, and a kv.DB.
-func NewManager() *Manager {
-	return &Manager{}
+// TODO(irfansharif): We'll need to eventually plumb in on a lease manager here.
+func NewManager(
+	dialer *nodedialer.Dialer, nl nodeLiveness, executor *sql.InternalExecutor, db *kv.DB,
+) *Manager {
+	return &Manager{
+		dialer:   dialer,
+		executor: executor,
+		db:       db,
+		nl:       nl,
+	}
 }
 
 // MigrateTo runs the set of migrations required to upgrade the cluster version
@@ -97,7 +117,7 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	var vs []roachpb.Version
 
 	for _, version := range vs {
-		_ = &Helper{}
+		_ = &Helper{Manager: m}
 		// TODO(irfansharif): We'll want to out the version gate to every node
 		// in the cluster. Each node will want to persist the version, bump the
 		// local version gates, and then return. The migration associated with
