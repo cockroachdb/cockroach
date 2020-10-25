@@ -54,6 +54,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
 	"google.golang.org/grpc"
@@ -1758,43 +1760,49 @@ func (s *adminServer) Decommission(
 func (s *adminServer) EveryNode(
 	ctx context.Context, req *serverpb.EveryNodeRequest,
 ) (*serverpb.EveryNodeResponse, error) {
-	// TODO(irfansharif): We should write up something similar to the code
-	// generator for roachpb/batch_generated.go. Ditto for the response, this is
-	// pretty unwieldy to write by hand. Right now we're unconditionally pulling
-	// out the AckPendingVersion request, seeing as how it's the only one
-	// defined.
-	ackReq := req.Request.GetAckClusterVersion()
-	if ackReq == nil {
-		return nil, errors.Newf("unsupported req=%s", req.Request)
-	}
+	op := req.Request.GetInner()
+	ctx = logtags.AddTag(ctx, "every-node", redact.Safe(op.Op()))
 
-	prevCV, err := kvserver.SynthesizeClusterVersionFromEngines(
-		ctx, s.server.engines, s.server.ClusterSettings().Version.BinaryVersion(),
-		s.server.ClusterSettings().Version.BinaryMinSupportedVersion(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Infof(ctx, "received op=ack-cluster-version, args=%s, prev=%s", ackReq.Version, prevCV.Version)
-
-	if prevCV.Version.Less(*ackReq.Version) {
-		cv := clusterversion.ClusterVersion{Version: *ackReq.Version}
-		if err := kvserver.WriteClusterVersionToEngines(ctx, s.server.engines, cv); err != nil {
+	switch op.(type) {
+	case *serverpb.AckClusterVersionRequest:
+		versionSetting := s.server.ClusterSettings().Version
+		prevCV, err := kvserver.SynthesizeClusterVersionFromEngines(
+			ctx, s.server.engines, versionSetting.BinaryVersion(),
+			versionSetting.BinaryMinSupportedVersion(),
+		)
+		if err != nil {
 			return nil, err
 		}
 
-		// TODO(irfansharif): We'll eventually want to bump the local version
-		// gate here. On 21.1 nodes we'll no longer be using gossip to propagate
-		// cluster version bumps. We'll still have probably disseminate it
-		// through gossip (do we actually have to?), but we won't listen to it.
-		//
-		//  _ = s.server.ClusterSettings().<...>.Set(ctx, ackReq.Version)
-	}
+		ackReq := req.Request.GetAckClusterVersion()
+		newCV := clusterversion.ClusterVersion{Version: *ackReq.Version}
+		log.Infof(ctx, "received args=%s, prev=%s", newCV, prevCV)
 
-	ackResp := &serverpb.AckClusterVersionResponse{}
-	ackRespU := &serverpb.EveryNodeResponseUnion_AckClusterVersion{AckClusterVersion: ackResp}
-	return &serverpb.EveryNodeResponse{Response: serverpb.EveryNodeResponseUnion{Value: ackRespU}}, nil
+		// TODO(irfansharif): We'll want to serialize through a mutex here to
+		// make sure we're not clobbering the disk state if the RPC is being
+		// invoked concurrently.
+		if prevCV.Version.Less(*ackReq.Version) {
+			if err := kvserver.WriteClusterVersionToEngines(ctx, s.server.engines, newCV); err != nil {
+				return nil, err
+			}
+			log.Infof(ctx, "active cluster version persisted is now %s (up from %s)", newCV, prevCV)
+
+			// TODO(irfansharif): We'll eventually want to bump the local version
+			// gate here. On 21.1 nodes we'll no longer be using gossip to propagate
+			// cluster version bumps. We'll still have probably disseminate it
+			// through gossip (do we actually have to?), but we won't listen to it.
+			//
+			//  _ = s.server.ClusterSettings().<...>.SetActiveVersion(ctx, newCV)
+			// log.Infof(ctx, "active cluster version setting is now %s (up from %s)", newCV, prevCV)
+		}
+
+		ackResp := &serverpb.AckClusterVersionResponse{}
+		resp := &serverpb.EveryNodeResponse{}
+		resp.Response.SetInner(ackResp)
+		return resp, nil
+	default:
+		return nil, errors.Newf("unrecognized op=%s", op.Op())
+	}
 }
 
 // DataDistribution returns a count of replicas on each node for each table.
