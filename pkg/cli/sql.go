@@ -64,6 +64,9 @@ Query Buffer
   \r                during a multi-line statement, erase all the SQL entered so far.
   \| CMD            run an external command and run its output as SQL statements.
 
+Connection
+  \c, \connect [DB] connect to a new database
+
 Input/Output
   \echo [STRING]    write the provided string to standard output.
   \i                execute commands from the specified file.
@@ -1112,6 +1115,14 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			return cliRunStatement
 		}
 		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+
+	case `\connect`, `\c`:
+		if len(cmd) == 2 {
+			c.concatLines = `USE ` + cmd[1]
+			return cliRunStatement
+
+		}
+		return c.invalidSyntax(errState, `%s. Try \? for help`, c.lastInputLine)
 
 	case `\demo`:
 		return c.handleDemo(cmd[1:], loopState, errState)
