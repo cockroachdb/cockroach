@@ -112,7 +112,8 @@ type sqlServer struct {
 type sqlServerOptionalKVArgs struct {
 	// nodesStatusServer gives access to the NodesStatus service.
 	nodesStatusServer serverpb.OptionalNodesStatusServer
-	// Narrowed down version of *NodeLiveness. Used by jobs and DistSQLPlanner
+	// Narrowed down version of *NodeLiveness. Used by jobs, DistSQLPlanner, and
+	// migration manager.
 	nodeLiveness optionalnodeliveness.Container
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
 	// config, the DistSQL planner, the table statistics cache, the statements
@@ -430,8 +431,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	}
 
 	var isLive func(roachpb.NodeID) (bool, error)
-	if nl, ok := cfg.nodeLiveness.Optional(47900); ok {
-		isLive = nl.IsLive
+	nodeLiveness, ok := cfg.nodeLiveness.Optional(47900)
+	if ok {
+		isLive = nodeLiveness.IsLive
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
 		// schedule on - always returning true is fine.
@@ -440,7 +442,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		}
 	}
 
-	migrationMgr := migration.NewManager()
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -467,9 +468,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
-		VersionUpgradeHook: func(ctx context.Context, targetV roachpb.Version) error {
-			return migrationMgr.MigrateTo(ctx, targetV)
-		},
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
@@ -637,6 +635,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.Settings,
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
+
+	if cfg.TenantID == roachpb.SystemTenantID {
+		// We only need to attach a version upgrade hook if we're the system
+		// tenant. Regular tenants are disallowed from changing cluster
+		// versions.
+		migrationMgr := migration.NewManager(
+			cfg.nodeDialer,
+			nodeLiveness,
+			cfg.circularInternalExecutor,
+			cfg.db,
+		)
+		execCfg.VersionUpgradeHook = func(ctx context.Context, targetV roachpb.Version) error {
+			return migrationMgr.MigrateTo(ctx, targetV)
+		}
+	}
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,

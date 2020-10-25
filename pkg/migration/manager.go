@@ -24,7 +24,11 @@ package migration
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -52,21 +56,37 @@ type Migration func(context.Context, *Helper) error
 
 // Manager is the instance responsible for executing migrations across the
 // cluster.
-type Manager struct{}
+type Manager struct {
+	dialer   *nodedialer.Dialer
+	nl       nodeLiveness
+	executor *sql.InternalExecutor
+	db       *kv.DB
+}
 
 // Helper captures all the primitives required to fully specify a migration.
 type Helper struct {
-	// TODO(irfansharif): We'll want to hold on to the Manager here, to
-	// have access to all of its constituent components.
+	*Manager
+}
+
+// nodeLiveness is the subset of the interface satisfied by CRDB's node liveness
+// component that the migration manager relies upon.
+type nodeLiveness interface {
+	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
+	IsLive(roachpb.NodeID) (bool, error)
 }
 
 // NewManager constructs a new Manager.
 //
-// TODO(irfansharif): We'll need to eventually plumb in a few things here. We'll
-// need a handle on node liveness, a node dialer, a lease manager, an internal
-// executor, and a kv.DB.
-func NewManager() *Manager {
-	return &Manager{}
+// TODO(irfansharif): We'll need to eventually plumb in on a lease manager here.
+func NewManager(
+	dialer *nodedialer.Dialer, nl nodeLiveness, executor *sql.InternalExecutor, db *kv.DB,
+) *Manager {
+	return &Manager{
+		dialer:   dialer,
+		executor: executor,
+		db:       db,
+		nl:       nl,
+	}
 }
 
 // MigrateTo runs the set of migrations required to upgrade the cluster version
@@ -75,7 +95,7 @@ func NewManager() *Manager {
 // TODO(irfansharif): Do something real here.
 func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error {
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
-	// for each migration, so they log distinctly? Do we need an AmbientContext?
+	// for each migration, so they log distinctly?
 	_ = logtags.AddTag(ctx, "migration-mgr", nil)
 
 	// TODO(irfansharif): We'll need to acquire a lease here and refresh it
@@ -97,7 +117,7 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	var vs []roachpb.Version
 
 	for _, version := range vs {
-		_ = &Helper{}
+		_ = &Helper{Manager: m}
 		// TODO(irfansharif): We'll want to out the version gate to every node
 		// in the cluster. Each node will want to persist the version, bump the
 		// local version gates, and then return. The migration associated with
@@ -106,8 +126,9 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 
 		// TODO(irfansharif): We'll want to retrieve the right migration off of
 		// our registry of migrations, and execute it.
-		// TODO(irfansharif): We'll also want a testing override here to be able
-		// to stub out migrations as needed.
+		// TODO(irfansharif): We'll want to be able to override which migration
+		// is retrieved here within tests. We could make the registry be a part
+		// of the manager, and all tests to provide their own.
 		_ = Registry[version]
 	}
 
