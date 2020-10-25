@@ -1642,73 +1642,51 @@ FROM pg_class AS rel
 project
  ├── columns: array:69
  ├── inner-join-apply
- │    ├── columns: rel.oid:1 array_agg:66 array:67
+ │    ├── columns: rel.oid:1 inhrelid:31 array_agg:68
  │    ├── scan pg_class [as=rel]
  │    │    └── columns: rel.oid:1
- │    ├── inner-join-apply
- │    │    ├── columns: array_agg:66 array:67
+ │    ├── group-by
+ │    │    ├── columns: inhrelid:31 array_agg:68
+ │    │    ├── internal-ordering: +33 opt(31)
  │    │    ├── outer: (1)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(66,67)
- │    │    ├── project
- │    │    │    ├── columns: array_agg:66
+ │    │    ├── fd: ()-->(31,68)
+ │    │    ├── sort
+ │    │    │    ├── columns: inhrelid:31 inhparent:32 inhseqno:33 c.oid:36 c.relname:37
  │    │    │    ├── outer: (1)
- │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(66)
- │    │    │    ├── group-by
- │    │    │    │    ├── columns: inhrelid:31 array_agg:68
- │    │    │    │    ├── internal-ordering: +33 opt(31)
- │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(31,68)
- │    │    │    │    ├── sort
- │    │    │    │    │    ├── columns: inhrelid:31 inhparent:32 inhseqno:33 c.oid:36 c.relname:37
- │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    ├── cardinality: [1 - ]
- │    │    │    │    │    ├── fd: (32)==(36), (36)==(32)
- │    │    │    │    │    ├── ordering: +33 opt(31) [actual: +33]
- │    │    │    │    │    └── left-join (cross)
- │    │    │    │    │         ├── columns: inhrelid:31 inhparent:32 inhseqno:33 c.oid:36 c.relname:37
- │    │    │    │    │         ├── outer: (1)
- │    │    │    │    │         ├── cardinality: [1 - ]
- │    │    │    │    │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
- │    │    │    │    │         ├── fd: (32)==(36), (36)==(32)
- │    │    │    │    │         ├── values
- │    │    │    │    │         │    ├── cardinality: [1 - 1]
- │    │    │    │    │         │    ├── key: ()
- │    │    │    │    │         │    └── ()
- │    │    │    │    │         ├── inner-join (hash)
- │    │    │    │    │         │    ├── columns: inhrelid:31 inhparent:32!null inhseqno:33 c.oid:36!null c.relname:37!null
- │    │    │    │    │         │    ├── fd: (32)==(36), (36)==(32)
- │    │    │    │    │         │    ├── scan pg_inherits [as=i]
- │    │    │    │    │         │    │    └── columns: inhrelid:31 inhparent:32 inhseqno:33
- │    │    │    │    │         │    ├── scan pg_class [as=c]
- │    │    │    │    │         │    │    └── columns: c.oid:36 c.relname:37!null
- │    │    │    │    │         │    └── filters
- │    │    │    │    │         │         └── c.oid:36 = inhparent:32 [outer=(32,36), constraints=(/32: (/NULL - ]; /36: (/NULL - ]), fd=(32)==(36), (36)==(32)]
- │    │    │    │    │         └── filters
- │    │    │    │    │              └── inhrelid:31 = rel.oid:1 [outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
- │    │    │    │    └── aggregations
- │    │    │    │         ├── array-agg [as=array_agg:68, outer=(37)]
- │    │    │    │         │    └── c.relname:37
- │    │    │    │         └── any-not-null-agg [as=inhrelid:31, outer=(31)]
- │    │    │    │              └── inhrelid:31
- │    │    │    └── projections
- │    │    │         └── CASE WHEN inhrelid:31 IS NOT NULL THEN array_agg:68 ELSE CAST(NULL AS NAME[]) END [as=array_agg:66, outer=(31,68)]
- │    │    ├── values
- │    │    │    ├── columns: array:67
- │    │    │    ├── outer: (66)
- │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(67)
- │    │    │    └── (COALESCE(array_agg:66, ARRAY[]),)
- │    │    └── filters (true)
+ │    │    │    ├── cardinality: [1 - ]
+ │    │    │    ├── fd: (32)==(36), (36)==(32)
+ │    │    │    ├── ordering: +33 opt(31) [actual: +33]
+ │    │    │    └── left-join (cross)
+ │    │    │         ├── columns: inhrelid:31 inhparent:32 inhseqno:33 c.oid:36 c.relname:37
+ │    │    │         ├── outer: (1)
+ │    │    │         ├── cardinality: [1 - ]
+ │    │    │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ │    │    │         ├── fd: (32)==(36), (36)==(32)
+ │    │    │         ├── values
+ │    │    │         │    ├── cardinality: [1 - 1]
+ │    │    │         │    ├── key: ()
+ │    │    │         │    └── ()
+ │    │    │         ├── inner-join (hash)
+ │    │    │         │    ├── columns: inhrelid:31 inhparent:32!null inhseqno:33 c.oid:36!null c.relname:37!null
+ │    │    │         │    ├── fd: (32)==(36), (36)==(32)
+ │    │    │         │    ├── scan pg_inherits [as=i]
+ │    │    │         │    │    └── columns: inhrelid:31 inhparent:32 inhseqno:33
+ │    │    │         │    ├── scan pg_class [as=c]
+ │    │    │         │    │    └── columns: c.oid:36 c.relname:37!null
+ │    │    │         │    └── filters
+ │    │    │         │         └── c.oid:36 = inhparent:32 [outer=(32,36), constraints=(/32: (/NULL - ]; /36: (/NULL - ]), fd=(32)==(36), (36)==(32)]
+ │    │    │         └── filters
+ │    │    │              └── inhrelid:31 = rel.oid:1 [outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
+ │    │    └── aggregations
+ │    │         ├── array-agg [as=array_agg:68, outer=(37)]
+ │    │         │    └── c.relname:37
+ │    │         └── any-not-null-agg [as=inhrelid:31, outer=(31)]
+ │    │              └── inhrelid:31
  │    └── filters (true)
  └── projections
-      └── array:67 [as=array:69, outer=(67)]
+      └── COALESCE(CASE WHEN inhrelid:31 IS NOT NULL THEN array_agg:68 ELSE CAST(NULL AS NAME[]) END, ARRAY[]) [as=array:69, outer=(31,68)]
 
 # --------------------------------------------------
 # SimplifySameVarEqualities
