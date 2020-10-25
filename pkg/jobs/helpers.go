@@ -11,6 +11,8 @@
 package jobs
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -28,7 +30,7 @@ var FakeNodeID = func() *base.NodeIDContainer {
 }()
 
 // FakeNodeLiveness allows simulating liveness failures without the full
-// storage.NodeLiveness machinery.
+// liveness.NodeLiveness machinery.
 type FakeNodeLiveness struct {
 	mu struct {
 		syncutil.Mutex
@@ -62,7 +64,7 @@ func NewFakeNodeLiveness(nodeCount int) *FakeNodeLiveness {
 // ModuleTestingKnobs implements base.ModuleTestingKnobs.
 func (*FakeNodeLiveness) ModuleTestingKnobs() {}
 
-// Self implements the implicit storage.NodeLiveness interface. It uses NodeID
+// Self implements the implicit liveness.NodeLiveness interface. It uses NodeID
 // as the node ID. On every call, a nonblocking send is performed over nl.ch to
 // allow tests to execute a callback.
 func (nl *FakeNodeLiveness) Self() (livenesspb.Liveness, bool) {
@@ -75,7 +77,7 @@ func (nl *FakeNodeLiveness) Self() (livenesspb.Liveness, bool) {
 	return *nl.mu.livenessMap[FakeNodeID.Get()], true
 }
 
-// GetLivenesses implements the implicit storage.NodeLiveness interface.
+// GetLivenesses implements the implicit liveness.NodeLiveness interface.
 func (nl *FakeNodeLiveness) GetLivenesses() (out []livenesspb.Liveness) {
 	select {
 	case nl.GetLivenessesCalledCh <- struct{}{}:
@@ -87,6 +89,11 @@ func (nl *FakeNodeLiveness) GetLivenesses() (out []livenesspb.Liveness) {
 		out = append(out, *liveness)
 	}
 	return out
+}
+
+// GetLivenessesFromKV implements the implicit liveness.NodeLiveness interface.
+func (nl *FakeNodeLiveness) GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error) {
+	return nil, errors.New("FakeNodeLiveness.GetLivenessesFromKV is unimplemented")
 }
 
 // IsLive is unimplemented.
