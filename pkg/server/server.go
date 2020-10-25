@@ -77,7 +77,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1140,81 +1139,48 @@ func (s *Server) PreStart(ctx context.Context) error {
 		initServer = newInitServer(s.cfg.AmbientCtx, inspectedDiskState, initConfig)
 	}
 
+	initialDiskClusterVersion := initServer.DiskClusterVersion()
 	{
-		// Set up the callback that persists gossiped version bumps to the
-		// engines. The invariant we uphold here is that the bump needs to be
+		// The invariant we uphold here is that any version bump needs to be
 		// persisted on all engines before it becomes "visible" to the version
-		// setting. To this end,
+		// setting. To this end, we:
 		//
-		// a) make sure Gossip is not started yet, and
-		// b) set up the BeforeChange callback on the version setting to persist
-		//    incoming updates to all engines.
-		// c) write back the disk-loaded cluster version to all engines,
-		// d) initialize the version setting (with the disk-loaded version).
+		// a) write back the disk-loaded cluster version to all engines,
+		// b) initialize the version setting (using the disk-loaded version).
 		//
 		// Note that "all engines" means "all engines", not "all initialized
 		// engines". We cannot initialize engines this early in the boot
 		// sequence.
-		s.gossip.AssertNotStarted(ctx)
-
-		// Serialize the callback through a mutex to make sure we're not
-		// clobbering the disk state if callback gets fired off concurrently.
-		var mu syncutil.Mutex
-		cb := func(ctx context.Context, newCV clusterversion.ClusterVersion) {
-			mu.Lock()
-			defer mu.Unlock()
-			v := s.cfg.Settings.Version
-			prevCV, err := kvserver.SynthesizeClusterVersionFromEngines(
-				ctx, s.engines, v.BinaryVersion(), v.BinaryMinSupportedVersion(),
-			)
-			if err != nil {
-				log.Fatalf(ctx, "%v", err)
-			}
-			if !prevCV.Version.Less(newCV.Version) {
-				// If nothing needs to be updated, don't do anything. The
-				// callbacks fire async (or at least we want to assume the worst
-				// case in which they do) and so an old update might happen
-				// after a new one.
-				return
-			}
-			if err := kvserver.WriteClusterVersionToEngines(ctx, s.engines, newCV); err != nil {
-				log.Fatalf(ctx, "%v", err)
-			}
-			log.Infof(ctx, "active cluster version is now %s (up from %s)", newCV, prevCV)
-		}
-		clusterversion.SetBeforeChange(ctx, &s.cfg.Settings.SV, cb)
-
-		diskClusterVersion := initServer.DiskClusterVersion()
+		//
 		// The version setting loaded from disk is the maximum cluster version
 		// seen on any engine. If new stores are being added to the server right
 		// now, or if the process crashed earlier half-way through the callback,
 		// that version won't be on all engines. For that reason, we backfill
 		// once.
 		if err := kvserver.WriteClusterVersionToEngines(
-			ctx, s.engines, diskClusterVersion,
+			ctx, s.engines, initialDiskClusterVersion,
 		); err != nil {
 			return err
 		}
 
-		// NB: if we bootstrap a new server (in initServer.ServeAndWait below)
-		// we will call Initialize a second time, to eagerly move it to the
-		// bootstrap version (from the min supported version). Initialize()
-		// tolerates that. Note that in that case we know that the callback
-		// has not fired yet, since Gossip won't connect (to itself) until
-		// the server starts and so the callback will never fire prior to
-		// that second Initialize() call. Note also that at this point in
-		// the code we don't know if we'll bootstrap or join an existing
-		// cluster, so we have to conservatively go with the version from
-		// disk, which in the case of no initialized engines is the binary
-		// min supported version.
-		if err := clusterversion.Initialize(ctx, diskClusterVersion.Version, &s.cfg.Settings.SV); err != nil {
+		// Note that at this point in the code we don't know if we'll bootstrap
+		// or join an existing cluster, so we have to conservatively go with the
+		// version from disk. If there are no initialized engines, this is the
+		// binary min supported version.
+		if err := clusterversion.Initialize(ctx, initialDiskClusterVersion.Version, &s.cfg.Settings.SV); err != nil {
 			return err
 		}
 
 		// At this point, we've established the invariant: all engines hold the
-		// version currently visible to the setting. And we have the callback in
-		// place that will persist an incoming updated version on all engines
-		// before making it visible to the setting.
+		// version currently visible to the setting. Going forward whenever we
+		// set an active cluster version (`SetActiveClusterVersion`), we'll
+		// persist it to all the engines first (`WriteClusterVersionToEngines`).
+		// This happens at two places:
+		//
+		// - Right below, if we learn that we're the bootstrapping node, given
+		//   we'll be setting the active cluster version as the binary version.
+		// - Within the BumpClusterVersion RPC, when we're informed by another
+		//   node what our new active cluster version should be.
 	}
 
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
@@ -1403,6 +1369,31 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "invalid init state")
 	}
 
+	// TODO(irfansharif): Let's make this unconditional. We could avoid
+	// persisting + initializing the cluster version in response to being
+	// bootstrapped (within `ServeAndWait` above) and simply do it here, in the
+	// same way we're doing for when we join an existing cluster.
+	if state.clusterVersion != initialDiskClusterVersion {
+		// We just learned about a cluster version different from the one we
+		// found on/synthesized from disk. This indicates that we're either the
+		// bootstrapping node (and are using the binary version as the cluster
+		// version), or we're joining an existing cluster that just informed us
+		// to activate the given cluster version.
+		//
+		// Either way, we'll do so by first persisting the cluster version
+		// itself, and then informing the version setting about it (an invariant
+		// we must up hold whenever setting a new active version).
+		if err := kvserver.WriteClusterVersionToEngines(
+			ctx, s.engines, state.clusterVersion,
+		); err != nil {
+			return err
+		}
+
+		if err := s.ClusterSettings().Version.SetActiveVersion(ctx, state.clusterVersion); err != nil {
+			return err
+		}
+	}
+
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
 	s.rpcContext.NodeID.Set(ctx, state.nodeID)
 
@@ -1518,6 +1509,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
 
+	// Listen in on the gossip for changes to cluster settings.
 	s.refreshSettings()
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
