@@ -26,6 +26,8 @@ import (
 
 	cv "github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -61,21 +63,24 @@ type Migration func(context.Context, *Helper) error
 
 // Manager is the instance responsible for executing migrations across the
 // cluster.
-type Manager struct{}
+type Manager struct {
+	dialer *nodedialer.Dialer
+}
 
 // Helper captures all the primitives required to fully specify a migration.
 type Helper struct {
-	// TODO(irfansharif): We'll want to hold on to the Manager here, to
-	// have access to all of its constituent components.
+	*Manager
 }
 
 // NewManager constructs a new Manager.
 //
 // TODO(irfansharif): We'll need to eventually plumb in a few things here. We'll
-// need a handle on node liveness, a node dialer, a lease manager, an internal
-// executor, and a kv.DB.
-func NewManager() *Manager {
-	return &Manager{}
+// need a handle on node liveness, a lease manager, an internal executor, and a
+// kv.DB.
+func NewManager(dialer *nodedialer.Dialer) *Manager {
+	return &Manager{
+		dialer: dialer,
+	}
 }
 
 // IterateRangeDescriptors is a primitive for constructing migrations. It
@@ -119,11 +124,21 @@ func (h *Helper) EveryNode(ctx context.Context, req EveryNodeRequest) error {
 		return err
 	}
 
+	// TODO(irfansharif): We can/should send out these RPCs in parallel.
 	log.Infof(ctx, "executing req=%s on nodes=%s", req, nodeIDs)
 	for _, nodeID := range nodeIDs {
-		// TODO(irfansharif): Grab a dialer, dial out to the specific node, and
-		// invoke the EveryNode RPC with the given request.
-		_ = nodeID
+		conn, err := h.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+		if err != nil {
+			return err
+		}
+
+		// TODO(irfansharif): This typecasting below is busted. We'll need
+		// wrapping/unwrapping code around the EveryNodeRequest internal union
+		// type.
+		client := serverpb.NewAdminClient(conn)
+		if _, err := client.EveryNode(ctx, req.(*serverpb.EveryNodeRequest)); err != nil {
+			return err
+		}
 	}
 
 	// TODO(irfansharif): We'll need to check RequiredNodes again to make sure
@@ -167,7 +182,7 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	}
 
 	for _, version := range vs {
-		h := &Helper{}
+		h := &Helper{Manager: m}
 		// Push out the version gate to every node in the cluster. Each node
 		// will persist the version, bump the local version gates, and then
 		// return. The migration associated with the specific version can assume
