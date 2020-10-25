@@ -219,7 +219,8 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
 		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{},
-		nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil, colexec.DefaultExprDeserialization,
+		nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil,
+		colexec.DefaultExprDeserialization, nil, /* typeResolver */
 	)
 
 	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, flowinfra.FuseNormally)

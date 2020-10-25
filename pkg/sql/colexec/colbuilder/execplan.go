@@ -1094,10 +1094,6 @@ func NewColOperator(
 			}
 			result.resetToState(ctx, resultPreSpecPlanningStateShallowCopy)
 			err = result.createAndWrapRowSource(ctx, flowCtx, args, inputs, inputTypes, spec, factory, err)
-			if err != nil {
-				// There was an error wrapping the TableReader.
-				return r, err
-			}
 		} else {
 			err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, factory, err)
 		}
@@ -1105,6 +1101,32 @@ func NewColOperator(
 		// The result can be updated with the post process result.
 		result.updateWithPostProcessResult(ppr)
 	}
+	if err != nil {
+		return r, err
+	}
+
+	// Check that the actual output types are equal to the expected ones and
+	// plan casts if they are not.
+	if len(args.Spec.ResultTypes) != len(r.ColumnTypes) {
+		return r, errors.AssertionFailedf("unexpectedly different number of columns are output: expected %v, actual %v", args.Spec.ResultTypes, r.ColumnTypes)
+	}
+	projection := make([]uint32, len(args.Spec.ResultTypes))
+	for i := range args.Spec.ResultTypes {
+		expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
+		if !actual.Identical(expected) {
+			r.Op, err = colexec.GetCastOperator(
+				streamingAllocator, r.Op, i, len(r.ColumnTypes), actual, expected,
+			)
+			if err != nil {
+				return r, err
+			}
+			projection[i] = uint32(len(r.ColumnTypes))
+			r.ColumnTypes = appendOneType(r.ColumnTypes, expected)
+		} else {
+			projection[i] = uint32(i)
+		}
+	}
+	r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, projection)
 	return r, err
 }
 
@@ -1191,7 +1213,7 @@ func (r *postProcessResult) planPostProcessSpec(
 	}
 
 	if post.Projection {
-		r.addProjection(post.OutputColumns)
+		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, post.OutputColumns)
 	} else if post.RenderExprs != nil {
 		if log.V(2) {
 			log.Infof(ctx, "planning render expressions %+v", post.RenderExprs)
@@ -1370,16 +1392,16 @@ func (r *postProcessResult) planFilterExpr(
 	return nil
 }
 
-// addProjection adds a simple projection to r (Op and ColumnTypes are updated
-// accordingly).
-func (r *postProcessResult) addProjection(projection []uint32) {
-	r.Op = colexec.NewSimpleProjectOp(r.Op, len(r.ColumnTypes), projection)
-	// Update output ColumnTypes.
+// addProjection adds a simple projection on top of op according to projection
+// and returns the updated operator and type schema.
+func addProjection(
+	op colexecbase.Operator, typs []*types.T, projection []uint32,
+) (colexecbase.Operator, []*types.T) {
 	newTypes := make([]*types.T, len(projection))
 	for i, j := range projection {
-		newTypes[i] = r.ColumnTypes[j]
+		newTypes[i] = typs[j]
 	}
-	r.ColumnTypes = newTypes
+	return colexec.NewSimpleProjectOp(op, len(typs), projection), newTypes
 }
 
 func planSelectionOperators(
