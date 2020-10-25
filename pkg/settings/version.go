@@ -11,7 +11,6 @@
 package settings
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 )
@@ -25,6 +24,10 @@ import (
 // VersionSetting itself is then just the tiny shim that lets us hook into the
 // rest of the settings machinery (by interfacing with Values, to load and store
 // cluster versions).
+//
+// TODO(irfansharif): If the cluster version is no longer backed by gossip,
+// maybe we should stop pretending it's a regular gossip-backed cluster setting.
+// We could introduce new syntax here to motivate this shift.
 type VersionSetting struct {
 	impl VersionSettingImpl
 	common
@@ -57,10 +60,6 @@ type VersionSettingImpl interface {
 	// SettingsListDefault returns the value that should be presented by
 	// `./cockroach gen settings-list`
 	SettingsListDefault() string
-
-	// BeforeChange is called before an updated value for this setting is about
-	// to be set in the Values container.
-	BeforeChange(ctx context.Context, encodedVal []byte, sv *Values)
 }
 
 // ClusterVersionImpl is used to stub out the dependency on the ClusterVersion
@@ -155,30 +154,6 @@ func (v *VersionSetting) SetInternal(sv *Values, newVal interface{}) {
 	sv.setGeneric(v.getSlotIdx(), newVal)
 }
 
-// set lets the updater process set the provided value as the current version.
-//
-// TODO(irfansharif): This should really be folded into one of the Setting
-// interfaces. All writable settings satisfy it.
-func (v *VersionSetting) set(sv *Values, encodedVal []byte) error {
-	// We use ValidateBinaryVersions here since we're receiving this value from
-	// another node (that has already done the full validation elsewhere).
-	if err := v.impl.ValidateBinaryVersions(context.TODO(), sv, encodedVal); err != nil {
-		return err
-	}
-
-	curVal := v.GetInternal(sv)
-	if curVal != nil && bytes.Equal(curVal.([]byte), encodedVal) {
-		// We're already at the right version, there's nothing to do.
-		return nil
-	}
-
-	// Invoke the registered callback, if any.
-	v.impl.BeforeChange(context.TODO(), encodedVal, sv)
-
-	v.SetInternal(sv, encodedVal)
-	return nil
-}
-
 // setToDefault is part of the extendingSetting interface. This is a no-op for
 // VersionSetting. They don't have defaults that they can go back to at any
 // time.
@@ -199,4 +174,16 @@ func TestingRegisterVersionSetting(key, desc string, impl VersionSettingImpl) *V
 	setting := MakeVersionSetting(impl)
 	register(key, desc, &setting)
 	return &setting
+}
+
+// SetOnChange is part of the Setting interface, and is discouraged for use in
+// VersionSetting (we're implementing it here to not fall back on the embedded
+// `common` type definition).
+//
+// NB: VersionSetting is unique in more ways than one, and we might want to move
+// it out of the settings package before long (see TODO on the type itself). In
+// our current usage we don't rely on attaching pre-change triggers, so let's
+// not add it needlessly.
+func (v *VersionSetting) SetOnChange(_ *Values, _ func()) {
+	panic("unimplemented")
 }

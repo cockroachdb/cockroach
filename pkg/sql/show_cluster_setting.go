@@ -37,12 +37,13 @@ func (p *planner) showVersionSetting(
 	ctx context.Context, st *cluster.Settings, s *settings.VersionSetting, name string,
 ) (string, error) {
 	var res string
-	// For statemachine settings (at the time of writing, this is only the cluster version setting)
-	// we show the value from the KV store and additionally wait for the local Gossip instance to
-	// have observed the value as well. This makes sure that cluster version bumps become visible
-	// immediately while at the same time guaranteeing that a node reporting a certain version has
-	// also processed the corresponding Gossip update (which is important as only then does the node
-	// update its persisted state; see #22796).
+	// For the version setting we show the value from the KV store and
+	// additionally wait for the local setting instance to have observed the
+	// value as well (gets updated through the `BumpClusterVersion` RPC). This
+	// makes sure that cluster version bumps become visible immediately while at
+	// the same time guaranteeing that a node reporting a certain version has
+	// also processed the corresponding version bump (which is important as only
+	// then does the node update its persisted state; see #22796).
 	if err := contextutil.RunWithTimeout(ctx, fmt.Sprintf("show cluster setting %s", name), 2*time.Minute,
 		func(ctx context.Context) error {
 			tBegin := timeutil.Now()
@@ -72,11 +73,11 @@ func (p *planner) showVersionSetting(
 						return errors.AssertionFailedf("no value found for version setting")
 					}
 
-					gossipRawVal := []byte(s.Get(&st.SV))
-					if !bytes.Equal(gossipRawVal, kvRawVal) {
+					localRawVal := []byte(s.Get(&st.SV))
+					if !bytes.Equal(localRawVal, kvRawVal) {
 						return errors.Errorf(
-							"value differs between gossip (%v) and KV (%v); try again later (%v after %s)",
-							gossipRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))
+							"value differs between local setting (%v) and KV (%v); try again later (%v after %s)",
+							localRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))
 					}
 
 					val, err := s.Decode(kvRawVal)

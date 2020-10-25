@@ -241,11 +241,15 @@ func (s *initServer) ServeAndWait(
 			// version will be the bootstrap version (aka the binary version[1]),
 			// but the version setting does not know yet (it was initialized as
 			// BinaryMinSupportedVersion because the engines were all
-			// uninitialized). We *could* just let the server start, and it
-			// would populate system.settings, which is then gossiped, and then
-			// the callback would update the version, but we take this shortcut
-			// to avoid having every freshly bootstrapped cluster spend time at
-			// an old cluster version.
+			// uninitialized). Given that the bootstrap version was persisted to
+			// all the engines, it's now safe for us to bump the version setting
+			// itself and start operating at the latest cluster version.
+			//
+			// TODO(irfansharif): We're calling Initialize a second time here.
+			// There's no real reason to anymore, we can use
+			// SetActiveClusterVersion instead. This will let us make
+			// `Initialize` a bit stricter, which is a nice simplification to
+			// have.
 			//
 			// [1]: See the top-level comment in pkg/clusterversion to make
 			// sense of the many versions of ...versions.
@@ -255,6 +259,7 @@ func (s *initServer) ServeAndWait(
 
 			log.Infof(ctx, "cluster %s has been created", state.clusterID)
 			log.Infof(ctx, "allocated node ID: n%d (for self)", state.nodeID)
+			log.Infof(ctx, "active cluster version: %s", state.clusterVersion)
 
 			return state, true, nil
 		case result := <-joinCh:
@@ -277,13 +282,9 @@ func (s *initServer) ServeAndWait(
 
 			state := result.state
 
-			// TODO(irfansharif): We can try and initialize the the version
-			// setting to the active cluster version, in the same way we do when
-			// bootstrapping. We'd need to persis the cluster version to the
-			// engines here if we're looking to do so.
-
 			log.Infof(ctx, "joined cluster %s through join rpc", state.clusterID)
-			log.Infof(ctx, "received node ID %d", state.nodeID)
+			log.Infof(ctx, "received node ID: %d", state.nodeID)
+			log.Infof(ctx, "received cluster version: %s", state.clusterVersion)
 
 			return state, true, nil
 		case <-stopper.ShouldQuiesce():
