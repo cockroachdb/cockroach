@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -98,6 +99,8 @@ type adminServer struct {
 	*adminPrivilegeChecker
 	server     *Server
 	memMonitor *mon.BytesMonitor
+
+	everyNodeMu syncutil.Mutex
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
@@ -1753,10 +1756,6 @@ func (s *adminServer) Decommission(
 // EveryNode is an RPC that powers the long running migrations infrastructure,
 // and lets callers define and execute arbitrary commands across every node in
 // the cluster.
-//
-// TODO(irfansharif): Right now this isn't hooked up to anything. We'll
-// eventually want to rely on EveryNode(op=AckClusterVersion) to be the
-// mechanism through which we propagate cluster version bumps.
 func (s *adminServer) EveryNode(
 	ctx context.Context, req *serverpb.EveryNodeRequest,
 ) (*serverpb.EveryNodeResponse, error) {
@@ -1804,22 +1803,42 @@ func (s *adminServer) EveryNode(
 		newCV := clusterversion.ClusterVersion{Version: *ackReq.Version}
 		log.Infof(ctx, "received args=%s, prev=%s", newCV, prevCV)
 
-		// TODO(irfansharif): We'll want to serialize through a mutex here to
-		// make sure we're not clobbering the disk state if the RPC is being
-		// invoked concurrently.
-		if prevCV.Version.Less(*ackReq.Version) {
-			if err := kvserver.WriteClusterVersionToEngines(ctx, s.server.engines, newCV); err != nil {
-				return nil, err
+		if err := func() error {
+			if !prevCV.Version.Less(*ackReq.Version) {
+				// Nothing to do.
+				return nil
 			}
-			log.Infof(ctx, "active cluster version persisted is now %s (up from %s)", newCV, prevCV)
 
-			// TODO(irfansharif): We'll eventually want to bump the local version
-			// gate here. On 21.1 nodes we'll no longer be using gossip to propagate
-			// cluster version bumps. We'll still have probably disseminate it
-			// through gossip (do we actually have to?), but we won't listen to it.
+			s.everyNodeMu.Lock()
+			defer s.everyNodeMu.Unlock()
+
+			// TODO(irfansharif): We should probably capture this pattern of
+			// "persist the cluster version first" and only then bump the
+			// version setting in a better way.
+
+			// Whenever the version changes, we want to persist that update to
+			// wherever the CRDB process retrieved the initial version from
+			// (typically a collection of storage.Engines).
+			if err := kvserver.WriteClusterVersionToEngines(ctx, s.server.engines, newCV); err != nil {
+				return err
+			}
+
+			// We bump the local version gate here.
 			//
-			//  _ = s.server.ClusterSettings().<...>.SetActiveVersion(ctx, newCV)
-			// log.Infof(ctx, "active cluster version setting is now %s (up from %s)", newCV, prevCV)
+			// NB: On 21.1 nodes we no longer use gossip to propagate cluster
+			// version bumps. We'll still disseminate it through gossip, but the
+			// actual (local) setting update happens here.
+			//
+			// TODO(irfansharif): We should stop disseminating cluster version
+			// bumps through gossip after 21.1 is cut. There will be no one
+			// listening in on it.
+			if err := s.server.ClusterSettings().Version.SetActiveVersion(ctx, newCV); err != nil {
+				return err
+			}
+			log.Infof(ctx, "active cluster version setting is now %s (up from %s)", newCV, prevCV)
+			return nil
+		}(); err != nil {
+			return nil, err
 		}
 
 		ackResp := &serverpb.AckClusterVersionResponse{}

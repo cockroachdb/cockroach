@@ -24,7 +24,6 @@ package migration
 import (
 	"context"
 
-	cv "github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -199,9 +198,14 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	// TODO(irfansharif): After determining the last completed migration, if
 	// any, we'll be want to assemble the list of remaining migrations to step
 	// through to get to targetV. For now we've hard-coded this list.
-	vs := []roachpb.Version{
-		cv.VersionByKey(cv.VersionNoopMigration),
-	}
+	var vs []roachpb.Version
+
+	// Hacks to introduce fake migrations on the fly.
+	//
+	// TODO(irfansharif): Remove these, and remove purge VersionNoopMigration
+	// from history.
+	Registry[targetV] = GenerateFakeMigrationFor(targetV)
+	vs = append(vs, targetV)
 
 	for _, version := range vs {
 		h := &Helper{Manager: m}

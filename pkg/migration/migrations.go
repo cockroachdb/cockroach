@@ -12,9 +12,7 @@ package migration
 
 import (
 	"context"
-	"time"
 
-	cv "github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -25,13 +23,16 @@ import (
 var Registry = make(map[roachpb.Version]Migration)
 
 func init() {
-	Registry[cv.VersionByKey(cv.VersionNoopMigration)] = NoopMigration
+	// TODO(irfansharif): We'll want to register specific migrations here.
+	//
+	//  Registry[cv.VersionByKey(cv.VersionNoopMigration)] = NoopMigration
 }
 
-// NoopMigration is, well, a no-op migration. All it does is sleep for while
-// before returning.
-func NoopMigration(ctx context.Context, h *Helper) error {
-	time.Sleep(time.Second)
-	log.Info(ctx, "ran no-op migration")
-	return nil
+// GenerateFakeMigrationFor generates, well, fake migrations. All they do is log
+// the specific migration being executed.
+func GenerateFakeMigrationFor(v roachpb.Version) Migration {
+	return func(ctx context.Context, h *Helper) error {
+		log.Infof(ctx, "ran migration for %s", v)
+		return nil
+	}
 }

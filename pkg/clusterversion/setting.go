@@ -26,14 +26,14 @@ const KeyVersionSetting = "version"
 // version represents the cluster's "active version". This is a cluster setting,
 // but a special one. It can only advance to higher and higher versions. The
 // setting can be used to see if migrations are to be considered enabled or
-// disabled through the isActive() method. All external usage of the cluster
-// settings takes place through a Handle and `Initialize()`/`SetBeforeChange()`.
+// disabled through the `isActive()` method. All external usage of the cluster
+// settings takes place through a Handle and `Initialize()`.
 //
 // During the node startup sequence, an initial version (persisted to the
 // engines) is read and passed to `version.initialize`. It is only after that
-// that `version.{activeVersion,isActive} can be called. In turn, the node
-// usually registers itself as a callback to be notified of any further updates
-// to the setting, which are also persisted.
+// that `version.{activeVersion,isActive} can be called. Further updates to the
+// setting also need to be persisted before informing the setting itself about
+// it.
 //
 // This dance is necessary because we cannot determine a safe default value for
 // the version setting without looking at what's been persisted: The setting
@@ -45,12 +45,6 @@ const KeyVersionSetting = "version"
 // running in the same cluster. Hence, only once we get word of the "safe"
 // version to use can we allow moving parts that actually need to know what's
 // going on.
-//
-// Additionally, whenever the version changes, we want to persist that update to
-// wherever the caller to initialize() got the initial version from
-// (typically a collection of `engine.Engine`s), which the caller will do by
-// registering itself via setBeforeChange()`, which is invoked *before* exposing
-// the new version to callers of `activeVersion()` and `isActive()`.
 var version = registerClusterVersionSetting()
 
 // clusterVersionSetting is the implementation of the 'version' setting. Like all
@@ -153,24 +147,6 @@ func (cv *clusterVersionSetting) isActive(
 	return cv.activeVersion(ctx, sv).IsActive(versionKey)
 }
 
-// setBeforeChange registers a callback to be called before the cluster version
-// is updated. The new cluster version will only become "visible" after the
-// callback has returned.
-//
-// The callback can be set at most once.
-func (cv *clusterVersionSetting) setBeforeChange(
-	ctx context.Context, cb func(ctx context.Context, newVersion ClusterVersion), sv *settings.Values,
-) {
-	vh := sv.Opaque().(Handle)
-	h := vh.(*handleImpl)
-	h.beforeClusterVersionChangeMu.Lock()
-	defer h.beforeClusterVersionChangeMu.Unlock()
-	if h.beforeClusterVersionChangeMu.cb != nil {
-		log.Fatalf(ctx, "beforeClusterVersionChange already set")
-	}
-	h.beforeClusterVersionChangeMu.cb = cb
-}
-
 // Decode is part of the VersionSettingImpl interface.
 func (cv *clusterVersionSetting) Decode(val []byte) (settings.ClusterVersionImpl, error) {
 	var clusterVersion ClusterVersion
@@ -240,24 +216,6 @@ func (cv *clusterVersionSetting) ValidateBinaryVersions(
 // SettingsListDefault is part of the VersionSettingImpl interface.
 func (cv *clusterVersionSetting) SettingsListDefault() string {
 	return binaryVersion.String()
-}
-
-// BeforeChange is part of the VersionSettingImpl interface.
-func (cv *clusterVersionSetting) BeforeChange(
-	ctx context.Context, encodedVal []byte, sv *settings.Values,
-) {
-	var clusterVersion ClusterVersion
-	if err := protoutil.Unmarshal(encodedVal, &clusterVersion); err != nil {
-		log.Fatalf(ctx, "failed to unmarshall version: %s", err)
-	}
-
-	vh := sv.Opaque().(Handle)
-	h := vh.(*handleImpl)
-	h.beforeClusterVersionChangeMu.Lock()
-	if cb := h.beforeClusterVersionChangeMu.cb; cb != nil {
-		cb(ctx, clusterVersion)
-	}
-	h.beforeClusterVersionChangeMu.Unlock()
 }
 
 func (cv *clusterVersionSetting) validateBinaryVersions(
