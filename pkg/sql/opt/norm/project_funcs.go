@@ -99,6 +99,16 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	})
 }
 
+// MakeProjectionsFromValues converts single-row values into projections.
+func (c *CustomFuncs) MakeProjectionsFromValues(values *memo.ValuesExpr) memo.ProjectionsExpr {
+	projections := make(memo.ProjectionsExpr, 0, len(values.Cols))
+	for i, col := range values.Cols {
+		projections = append(projections,
+			c.f.ConstructProjectionsItem(values.Rows[0].(*memo.TupleExpr).Elems[i], col))
+	}
+	return projections
+}
+
 // CanUnnestTuplesFromValues returns true if the given single-column Values
 // operator has tuples that can be unfolded into multiple columns.
 // This is the case if:
