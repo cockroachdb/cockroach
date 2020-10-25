@@ -908,14 +908,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// node.
 		s.leaves = append(s.leaves, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
-		if s.syncFlowConsumer == nil {
-			return errors.New("syncFlowConsumer unset, unable to create materializer")
-		}
 		// Make the materializer, which will write to the given receiver.
-		columnTypes := s.syncFlowConsumer.Types()
-		if err := assertTypesMatch(columnTypes, opOutputTypes); err != nil {
-			return err
-		}
 		var outputStatsToTrace func()
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
@@ -931,7 +924,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			flowCtx,
 			pspec.ProcessorID,
 			op,
-			columnTypes,
+			opOutputTypes,
 			s.syncFlowConsumer,
 			metadataSourcesQueue,
 			toClose,
@@ -1114,11 +1107,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 					for k := range outputSpec.Input {
 						for l := range outputSpec.Input[k].Streams {
 							inputStream := outputSpec.Input[k].Streams[l]
-							if inputStream.StreamID == outputStream.StreamID {
-								if err = assertTypesMatch(outputSpec.Input[k].ColumnTypes, result.ColumnTypes); err != nil {
-									return
-								}
-							}
 							if inputStream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
 								// Remote streams are not present in streamIDToInputOp. The
 								// Inboxes that consume these streams are created at the same time
@@ -1144,19 +1132,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 		return s.leaves, vecErr
 	}
 	return s.leaves, err
-}
-
-// assertTypesMatch checks whether expected types match with actual types and
-// returns an error if not.
-func assertTypesMatch(expected []*types.T, actual []*types.T) error {
-	for i := range expected {
-		if !expected[i].Identical(actual[i]) {
-			return errors.Errorf("mismatched types at index %d: expected %v\tactual %v ",
-				i, expected, actual,
-			)
-		}
-	}
-	return nil
 }
 
 type vectorizedInboundStreamHandler struct {
