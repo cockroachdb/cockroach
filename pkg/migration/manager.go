@@ -24,6 +24,12 @@ package migration
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+
+	"github.com/cockroachdb/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -68,6 +74,59 @@ type Helper struct {
 	*Manager
 }
 
+// RequiredNodes returns the node IDs for all nodes that are currently part of
+// the cluster (i.e. they haven't been decommissioned away). Migrations have the
+// pre-requisite that all required nodes are up and running so that we're able
+// to execute all relevant node-level operations on them. If any of the nodes
+// are found to be unavailable, an error is returned.
+func (h *Helper) RequiredNodes(ctx context.Context) ([]roachpb.NodeID, error) {
+	var nodeIDs []roachpb.NodeID
+	ls, err := h.nl.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range ls {
+		if l.Membership.Decommissioned() {
+			continue
+		}
+		live, err := h.nl.IsLive(l.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		if !live {
+			return nil, errors.Newf("n%d required, but unavailable", l.NodeID)
+		}
+		nodeIDs = append(nodeIDs, l.NodeID)
+	}
+	return nodeIDs, nil
+}
+
+// EveryNode lets migrations execute the given EveryNodeOp across every node in
+// the cluster.
+func (h *Helper) EveryNode(ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error) error {
+	nodeIDs, err := h.RequiredNodes(ctx)
+	if err != nil {
+		return err
+	}
+
+	// TODO(irfansharif): We can/should send out these RPCs in parallel.
+	log.Infof(ctx, "executing op=%s on nodes=%s", op, nodeIDs)
+	for _, nodeID := range nodeIDs {
+		conn, err := h.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+		if err != nil {
+			return err
+		}
+		client := serverpb.NewMigrationClient(conn)
+		if err := fn(ctx, client); err != nil {
+			return err
+		}
+	}
+	// TODO(irfansharif): We'll need to check RequiredNodes again to make sure
+	// that no new nodes were added to the cluster in the interim, and loop back
+	// around if so.
+	return nil
+}
+
 // nodeLiveness is the subset of the interface satisfied by CRDB's node liveness
 // component that the migration manager relies upon.
 type nodeLiveness interface {
@@ -96,7 +155,7 @@ func NewManager(
 func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error {
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
 	// for each migration, so they log distinctly? Do we need an AmbientContext?
-	_ = logtags.AddTag(ctx, "migration-mgr", nil)
+	ctx = logtags.AddTag(ctx, "migration-mgr", nil)
 
 	// TODO(irfansharif): We'll need to acquire a lease here and refresh it
 	// throughout during the migration to ensure mutual exclusion.
@@ -113,16 +172,38 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	// TODO(irfansharif): After determining the last completed migration, if
 	// any, we'll be want to assemble the list of remaining migrations to step
 	// through to get to targetV.
-	_ = targetV
-	var vs []roachpb.Version
+	var vs = []roachpb.Version{targetV}
 
 	for _, version := range vs {
-		_ = &Helper{Manager: m}
-		// TODO(irfansharif): We'll want to out the version gate to every node
-		// in the cluster. Each node will want to persist the version, bump the
-		// local version gates, and then return. The migration associated with
-		// the specific version can then assume that every node in the cluster
-		// has the corresponding version activated.
+		h := &Helper{Manager: m}
+
+		// Push out the version gate to every node in the cluster. Each node
+		// will persist the version, bump the local version gates, and then
+		// return. The migration associated with the specific version can assume
+		// that every node in the cluster has the corresponding version
+		// activated.
+		{
+			// First sanity check that we'll actually be able to perform the
+			// cluster version bump, cluster-wide.
+			req := &serverpb.ValidateTargetClusterVersionRequest{Version: &version}
+			err := h.EveryNode(ctx, "validate-cv", func(ctx context.Context, client serverpb.MigrationClient) error {
+				_, err := client.ValidateTargetClusterVersion(ctx, req)
+				return err
+			})
+			if err != nil {
+				return err
+			}
+		}
+		{
+			req := &serverpb.BumpClusterVersionRequest{Version: &version}
+			err := h.EveryNode(ctx, "bump-cv", func(ctx context.Context, client serverpb.MigrationClient) error {
+				_, err := client.BumpClusterVersion(ctx, req)
+				return err
+			})
+			if err != nil {
+				return err
+			}
+		}
 
 		// TODO(irfansharif): We'll want to retrieve the right migration off of
 		// our registry of migrations, and execute it.

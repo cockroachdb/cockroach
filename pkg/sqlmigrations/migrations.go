@@ -1217,7 +1217,24 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return err
 	}
 
-	if err := r.execAsRoot(
+	// NB: We have to run with retry here due to the following "race" condition:
+	// - We're attempting to the set the cluster version at startup.
+	// - Setting the cluster version requires all nodes to be up and running, in
+	//   order to push out all relevant version gates.
+	// - This list of "all nodes" is gathered by looking at all the liveness
+	//   records in KV.
+	// - When starting a multi-node cluster all at once, nodes other than the
+	//   one being bootstrapped join the cluster using the join RPC.
+	// - The join RPC results in the creation of a liveness record for the
+	//   joining node, except it starts off in an expired state (leaving it to
+	//   the joining node to heartbeat it for the very first time).
+	//
+	// Attempting to set the cluster version at startup, while there also may be
+	// other nodes trying to join, could then result in failures where the
+	// migration infrastructure find expired liveness records and gives up. To
+	// that end we'll simply retry, expecting the joining nodes to "come live"
+	// before long.
+	if err := r.execAsRootWithRetry(
 		ctx, "set-setting", "SET CLUSTER SETTING version = $1", v.String(),
 	); err != nil {
 		return err
