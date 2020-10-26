@@ -3779,7 +3779,7 @@ may increase either contention or retry errors, or both.`,
 				}
 				return tree.DZero, nil
 			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Info:       "This function triggers a transaction retry, which can be useful for testing purposes.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
