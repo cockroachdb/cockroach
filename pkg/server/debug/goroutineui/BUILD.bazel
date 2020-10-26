@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "goroutineui",
+    srcs = [
+        "dump.go",
+        "html.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/maruel/panicparse/stack"],
+)
+
+go_test(
+    name = "goroutineui_test",
+    srcs = ["dump_test.go"],
+    embed = [":goroutineui"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//vendor/github.com/stretchr/testify/assert",
+    ],
+)

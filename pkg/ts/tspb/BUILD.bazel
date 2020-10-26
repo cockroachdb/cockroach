@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tspb",
+    srcs = [
+        "timeseries.go",
+        "timeseries.pb.go",
+        "timeseries.pb.gw.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ts/tspb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/golang/protobuf/descriptor",
+        "//vendor/github.com/golang/protobuf/proto",
+        "//vendor/github.com/grpc-ecosystem/grpc-gateway/runtime",
+        "//vendor/github.com/grpc-ecosystem/grpc-gateway/utilities",
+        "//vendor/google.golang.org/grpc",
+        "//vendor/google.golang.org/grpc/codes",
+        "//vendor/google.golang.org/grpc/grpclog",
+        "//vendor/google.golang.org/grpc/status",
+    ],
+)

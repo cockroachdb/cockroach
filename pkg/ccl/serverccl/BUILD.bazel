@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "serverccl",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/serverccl",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "serverccl_test",
+    srcs = [
+        "admin_test.go",
+        "main_test.go",
+        "role_authentication_test.go",
+        "server_sql_test.go",
+    ],
+    embed = [":serverccl"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/sql",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util",
+        "//pkg/util/httputil",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/lib/pq",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/golang.org/x/crypto/bcrypt",
+    ],
+)

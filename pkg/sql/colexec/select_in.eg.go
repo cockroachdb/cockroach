@@ -29,6 +29,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ apd.Context
+	_ duration.Duration
+	_ coldataext.Datum
+)
+
 // Remove unused warnings.
 var (
 	_ = colexecerror.InternalError

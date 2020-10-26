@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "intentresolver",
+    srcs = [
+        "intent_resolver.go",
+        "metrics.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/internal/client/requestbatcher",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvbase",
+        "//pkg/kv/kvserver/batcheval/result",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/txnwait",
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/util/contextutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/quotapool",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "intentresolver_test",
+    srcs = ["intent_resolver_test.go"],
+    embed = [":intentresolver"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvserver/batcheval/result",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/assert",
+    ],
+)

@@ -22,6 +22,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ coldataext.Datum
+	_ tree.AggType
+)
+
 // isBufferedGroupFinished checks to see whether or not the buffered group
 // corresponding to input continues in batch.
 func (o *mergeJoinBase) isBufferedGroupFinished(

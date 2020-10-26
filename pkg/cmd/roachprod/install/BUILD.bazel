@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "install",
+    srcs = [
+        "cassandra.go",
+        "cassandra_yaml.go",
+        "cluster_synced.go",
+        "cockroach.go",
+        "expander.go",
+        "install.go",
+        "iterm2.go",
+        "nodes.go",
+        "session.go",
+        "staging.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/config",
+        "//pkg/cmd/roachprod/errors",
+        "//pkg/cmd/roachprod/ssh",
+        "//pkg/cmd/roachprod/ui",
+        "//pkg/util/envutil",
+        "//pkg/util/httputil",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/version",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/golang.org/x/sync/errgroup",
+    ],
+)

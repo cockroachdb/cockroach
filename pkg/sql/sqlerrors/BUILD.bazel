@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqlerrors",
+    srcs = ["errors.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlerrors",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

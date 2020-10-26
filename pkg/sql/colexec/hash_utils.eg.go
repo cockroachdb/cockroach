@@ -25,6 +25,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ coldataext.Datum
+)
+
 // rehash takes an element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.

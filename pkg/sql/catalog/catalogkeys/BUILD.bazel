@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "catalogkeys",
+    srcs = ["keys.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/encoding",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "catalogkeys_test",
+    srcs = ["keys_test.go"],
+    embed = [":catalogkeys"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+    ],
+)

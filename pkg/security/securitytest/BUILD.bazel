@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "securitytest",
+    srcs = [
+        "embedded.go",
+        "securitytest.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/securitytest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

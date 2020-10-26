@@ -22,6 +22,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ coldataext.Datum
+	_ tree.AggType
+)
+
 // checkColDeleting determines if the current key column in the groupID buckets
 // matches the specified equality column key. If there is no match *or* the key
 // has been already used, then the key is added to differs. If the bucket has

@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "yacc",
+    srcs = [
+        "lex.go",
+        "node.go",
+        "parse.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc",
+    visibility = ["//pkg:__subpackages__"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)
+
+go_test(
+    name = "yacc_test",
+    srcs = ["parse_test.go"],
+    embed = [":yacc"],
+    deps = ["//pkg/util/log"],
+)

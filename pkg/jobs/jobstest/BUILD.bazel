@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "jobstest",
+    srcs = ["utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobstest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/scheduledjobs",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/util/syncutil",
+    ],
+)

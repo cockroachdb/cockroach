@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "minprop",
+    srcs = [
+        "doc.go",
+        "tracker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/minprop",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "minprop_test",
+    srcs = [
+        "doc_test.go",
+        "tracker_test.go",
+    ],
+    embed = [":minprop"],
+    deps = [
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/kr/pretty",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/golang.org/x/sync/errgroup",
+    ],
+)

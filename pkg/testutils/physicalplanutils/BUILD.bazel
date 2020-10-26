@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "physicalplanutils",
+    srcs = ["fake_resolver.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql/physicalplan",
+        "//pkg/testutils/serverutils",
+        "//pkg/util",
+    ],
+)

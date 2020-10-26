@@ -315,11 +315,21 @@ ifeq (, $(shell which ccache))
 $(info $(yellow)Warning: 'ccache' not found, consider installing it for faster builds$(term-reset))
 endif
 
+# Warn maintainers if bazel is not found.
+#
+# TODO(irfansharif): Assert here instead, on a fixed version of bazel (3.7.0). Something like:
+#
+#   $(error $(yellow)'bazel' not found (`brew install bazel` for macs)$(term-reset))
+ifeq (, $(shell which bazel))
+$(info $(yellow)Warning: 'bazel' not found (`brew install bazel` for macs)$(term-reset))
+endif
+
 # Force vendor directory to rebuild.
 .PHONY: vendor_rebuild
 vendor_rebuild: bin/.submodules-initialized
 	$(GO_INSTALL) -v github.com/goware/modvendor
 	./build/vendor_rebuild.sh
+	bazel run //:gazelle
 
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
 # modifies its target before failing, the target's timestamp will make it appear
@@ -1699,6 +1709,11 @@ fuzz: ## Run fuzz tests.
 fuzz: bin/fuzz
 	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
+# Short hand to re-generate all bazel BUILD files.
+bazel-generate: ## Generate all bazel BUILD files.
+	@echo 'Generating DEPS.bzl and BUILD files using gazelle'
+	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=DEPS.bzl%go_deps
+	@bazel run //:gazelle
 
 # No need to include all the dependency files if the user is just
 # requesting help or cleanup.
@@ -1749,3 +1764,4 @@ build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile bui
 include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
+

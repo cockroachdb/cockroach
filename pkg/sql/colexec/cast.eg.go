@@ -26,6 +26,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var _ coldataext.Datum
+
 func GetCastOperator(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,

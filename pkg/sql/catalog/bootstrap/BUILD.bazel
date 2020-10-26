@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "bootstrap",
+    srcs = ["metadata.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

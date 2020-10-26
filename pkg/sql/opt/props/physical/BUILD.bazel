@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "physical",
+    srcs = [
+        "ordering_choice.go",
+        "provided.go",
+        "required.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/props",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "physical_test",
+    srcs = [
+        "ordering_choice_test.go",
+        "required_test.go",
+    ],
+    deps = [
+        ":physical",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/props",
+    ],
+)

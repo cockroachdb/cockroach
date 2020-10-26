@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanlatch",
+    srcs = [
+        "doc.go",
+        "latch_interval_btree.go",
+        "list.go",
+        "manager.go",
+        "signal.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/spanset",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "spanlatch_test",
+    srcs = [
+        "latch_interval_btree_test.go",
+        "manager_test.go",
+        "signal_test.go",
+    ],
+    embed = [":spanlatch"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/spanset",
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

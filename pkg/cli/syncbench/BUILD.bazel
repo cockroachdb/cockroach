@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "syncbench",
+    srcs = ["syncbench.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/syncbench",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/codahale/hdrhistogram",
+    ],
+)

@@ -1,0 +1,73 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "geos",
+    srcs = [
+        "geos.cc",
+        "geos.go",
+        "geos.h",
+    ],
+    cgo = True,
+    clinkopts = select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:nacl": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "-ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "-ldl",
+        ],
+        "//conditions:default": [],
+    }),
+    cxxopts = ["-std=c++14"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geos",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "geos_test",
+    srcs = ["geos_test.go"],
+    embed = [":geos"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

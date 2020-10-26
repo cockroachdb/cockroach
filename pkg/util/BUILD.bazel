@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "util",
+    srcs = [
+        "constants.go",
+        "every_n.go",
+        "fast_int_map.go",
+        "fast_int_set.go",
+        "fast_int_set_str.go",
+        "hash.go",
+        "metamorphic_off.go",
+        "nocopy.go",
+        "pluralize.go",
+        "race_off.go",
+        "race_on.go",
+        "reflect.go",
+        "smalltrace.go",
+        "strings.go",
+        "testaddr_default.go",
+        "testaddr_random.go",
+        "topk.go",
+        "unresolved_addr.go",
+        "unresolved_addr.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/golang.org/x/tools/container/intsets",
+    ],
+)
+
+go_test(
+    name = "util_test",
+    srcs = [
+        "every_n_test.go",
+        "fast_int_map_test.go",
+        "fast_int_set_test.go",
+        "smalltrace_test.go",
+        "strings_test.go",
+        "topk_test.go",
+        "unresolved_addr_test.go",
+    ],
+    embed = [":util"],
+    deps = [
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

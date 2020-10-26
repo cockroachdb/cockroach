@@ -22,6 +22,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ coldataext.Datum
+	_ tree.AggType
+)
+
 // vecComparator is a helper for the ordered synchronizer. It stores multiple
 // column vectors of a single type and facilitates comparing values between
 // them.

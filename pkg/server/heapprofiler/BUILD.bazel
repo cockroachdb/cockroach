@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "heapprofiler",
+    srcs = [
+        "cgoprofiler.go",
+        "heapprofiler.go",
+        "profiler_common.go",
+        "profilestore.go",
+        "statsprofiler.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/heapprofiler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/dumpstore",
+        "//pkg/server/status",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "heapprofiler_test",
+    srcs = [
+        "profiler_common_test.go",
+        "profilestore_test.go",
+    ],
+    embed = [":heapprofiler"],
+    deps = [
+        "//pkg/server/dumpstore",
+        "//vendor/github.com/stretchr/testify/assert",
+    ],
+)

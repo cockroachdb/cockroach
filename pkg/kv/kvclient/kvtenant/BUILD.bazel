@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvtenant",
+    srcs = ["connector.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

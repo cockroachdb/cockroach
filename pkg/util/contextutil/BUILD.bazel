@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "contextutil",
+    srcs = ["context.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/contextutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "contextutil_test",
+    srcs = ["context_test.go"],
+    embed = [":contextutil"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/assert",
+    ],
+)

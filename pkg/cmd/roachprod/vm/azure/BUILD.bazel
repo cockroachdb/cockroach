@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "azure",
+    srcs = [
+        "auth.go",
+        "azure.go",
+        "doc.go",
+        "flags.go",
+        "ids.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/azure",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/vm",
+        "//pkg/cmd/roachprod/vm/flagstub",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/Azure/azure-sdk-for-go/profiles/latest/compute/mgmt/compute",
+        "//vendor/github.com/Azure/azure-sdk-for-go/profiles/latest/network/mgmt/network",
+        "//vendor/github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/resources",
+        "//vendor/github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/subscriptions",
+        "//vendor/github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute",
+        "//vendor/github.com/Azure/go-autorest/autorest",
+        "//vendor/github.com/Azure/go-autorest/autorest/azure/auth",
+        "//vendor/github.com/Azure/go-autorest/autorest/to",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/spf13/pflag",
+        "//vendor/golang.org/x/sync/errgroup",
+    ],
+)

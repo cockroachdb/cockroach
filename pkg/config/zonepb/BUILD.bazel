@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "zonepb",
+    srcs = [
+        "zone.go",
+        "zone.pb.go",
+        "zone_yaml.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/config/zonepb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/sem/tree",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "zonepb_test",
+    srcs = ["zone_test.go"],
+    embed = [":zonepb"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)

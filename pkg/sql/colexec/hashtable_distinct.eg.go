@@ -20,6 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ coldataext.Datum
+	_ tree.AggType
+)
+
 // checkColAgainstItself is similar to checkCol, but it probes the vector
 // against itself.
 func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel []int) {

@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "langgen_lib",
+    srcs = [
+        "exprs_gen.go",
+        "main.go",
+        "ops_gen.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/cmd/langgen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/sql/opt/optgen/lang",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_binary(
+    name = "langgen",
+    embed = [":langgen_lib"],
+    visibility = ["//visibility:public"],
+)

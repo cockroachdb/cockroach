@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "constraint",
+    srcs = ["analyzer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/roachpb",
+    ],
+)

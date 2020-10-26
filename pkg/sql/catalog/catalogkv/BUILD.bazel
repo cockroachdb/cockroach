@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "catalogkv",
+    srcs = [
+        "catalogkv.go",
+        "descriptorkind_string.go",
+        "namespace.go",
+        "physical_accessor.go",
+        "test_utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlerrors",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

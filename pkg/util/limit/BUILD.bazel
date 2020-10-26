@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "limit",
+    srcs = [
+        "limiter.go",
+        "rate_limiter.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/limit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/tracing",
+        "//vendor/github.com/marusama/semaphore",
+        "//vendor/golang.org/x/time/rate",
+    ],
+)
+
+go_test(
+    name = "limit_test",
+    srcs = [
+        "limiter_test.go",
+        "rate_limiter_test.go",
+    ],
+    embed = [":limit"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/golang.org/x/sync/errgroup",
+        "//vendor/golang.org/x/time/rate",
+    ],
+)

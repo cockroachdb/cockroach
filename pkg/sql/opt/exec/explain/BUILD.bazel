@@ -1,0 +1,68 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "explain",
+    srcs = [
+        "emit.go",
+        "explain_factory.go",
+        "flags.go",
+        "output.go",
+        "result_columns.go",
+        ":gen-explain-factory",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain",
+    visibility = ["//visibility:public"],
+    # Pin the dependencies used in auto-generated code.
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/opt",  # keep
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/exec",
+        "//pkg/sql/opt/invertedexpr",  # keep
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/errorutil",
+        "//pkg/util/treeprinter",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "explain_test",
+    srcs = [
+        "explain_factory_test.go",
+        "output_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":explain"],
+    deps = [
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/opt/exec",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "//pkg/util/treeprinter",
+        "//vendor/github.com/cockroachdb/datadriven",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)
+
+# Define a generator for factory explanation code.
+genrule(
+    name = "gen-explain-factory",
+    srcs = [
+        "//pkg/sql/opt:ops",
+        "//pkg/sql/opt/exec:defs",
+    ],
+    outs = ["explain_factory.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ execexplain $(locations //pkg/sql/opt/exec:defs)
+    """,
+    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)

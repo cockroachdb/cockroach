@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "faker",
+    srcs = [
+        "address.go",
+        "dict.go",
+        "faker.go",
+        "lorem.go",
+        "name.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/faker",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/golang.org/x/exp/rand"],
+)
+
+go_test(
+    name = "faker_test",
+    srcs = ["faker_test.go"],
+    embed = [":faker"],
+    deps = [
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/golang.org/x/exp/rand",
+    ],
+)

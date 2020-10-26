@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tenantrate",
+    srcs = [
+        "doc.go",
+        "factory.go",
+        "limiter.go",
+        "metrics.go",
+        "settings.go",
+        "system_limiter.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/quotapool",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "tenantrate_test",
+    srcs = [
+        "helpers_test.go",
+        "limiter_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":tenantrate"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/metric",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/datadriven",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)

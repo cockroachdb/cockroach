@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "doctor",
+    srcs = ["doctor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/doctor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/sortkeys",
+    ],
+)
+
+go_test(
+    name = "doctor_test",
+    srcs = ["doctor_test.go"],
+    deps = [
+        ":doctor",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/security",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

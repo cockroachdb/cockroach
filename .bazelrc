@@ -1,0 +1,9 @@
+# Bazel's usual sandboxing does not try to protect against accidental
+# dependencies on # files from the host filesystem. See [1]. This is a problem
+# for us, for when users have `proj` installed locally. They can run into
+# issues where bazel tries to use `/usr/local/include/proj_api.h` instead of
+# `bazel-build/.../c-deps/proj/lib`. The work around here, suggested by [1], is
+# to ensure the sandbox does not read /usr/local/include.
+#
+# [1]: https://github.com/bazelbuild/bazel/issues/8053.
+build --sandbox_block_path=/usr/local/include

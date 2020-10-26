@@ -1,0 +1,62 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rangefeed",
+    srcs = [
+        "filter.go",
+        "metrics.go",
+        "processor.go",
+        "registry.go",
+        "resolved_timestamp.go",
+        "task.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/bufalloc",
+        "//pkg/util/hlc",
+        "//pkg/util/interval",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/protoutil",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "rangefeed_test",
+    srcs = [
+        "processor_test.go",
+        "registry_test.go",
+        "resolved_timestamp_test.go",
+        "task_test.go",
+    ],
+    embed = [":rangefeed"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

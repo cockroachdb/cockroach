@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "schemaexpr",
+    srcs = [
+        "check_constraint.go",
+        "column.go",
+        "computed_column.go",
+        "computed_exprs.go",
+        "default_exprs.go",
+        "doc.go",
+        "expr.go",
+        "expr_filter.go",
+        "partial_index.go",
+        "select_name_resolution.go",
+        "table_col_set.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemaexpr",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/transform",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "schemaexpr_test",
+    srcs = [
+        "check_constraint_test.go",
+        "column_test.go",
+        "expr_test.go",
+        "partial_index_test.go",
+        "table_col_set_test.go",
+        "testutils_test.go",
+    ],
+    embed = [":schemaexpr"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+    ],
+)

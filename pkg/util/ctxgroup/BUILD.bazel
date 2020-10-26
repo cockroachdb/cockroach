@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ctxgroup",
+    srcs = ["ctxgroup.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxgroup",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/golang.org/x/sync/errgroup"],
+)
+
+go_test(
+    name = "ctxgroup_test",
+    srcs = ["ctxgroup_test.go"],
+    embed = [":ctxgroup"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

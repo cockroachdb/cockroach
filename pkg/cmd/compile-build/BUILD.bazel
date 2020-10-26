@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "compile-build_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/compile-build",
+    visibility = ["//visibility:private"],
+    deps = ["//pkg/release"],
+)
+
+go_binary(
+    name = "compile-build",
+    embed = [":compile-build_lib"],
+    visibility = ["//visibility:public"],
+)

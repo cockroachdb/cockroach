@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "gossiputil",
+    srcs = ["store_gossiper.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/gossiputil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/gossip",
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",
+    ],
+)
