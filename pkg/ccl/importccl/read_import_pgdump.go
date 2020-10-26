@@ -685,6 +685,14 @@ func (m *pgDumpReader) readFile(
 					conv.IsTargetCol[idx] = struct{}{}
 					targetColMapIdx[j] = idx
 				}
+				// For any missing columns, fill those to NULL.
+				// These will get filled in with the correct default / computed expression
+				// provided conv.IsTargetCol is not set for the given column index.
+				for idx := range conv.VisibleCols {
+					if _, ok := conv.IsTargetCol[idx]; !ok {
+						conv.Datums[idx] = tree.DNull
+					}
+				}
 			}
 			for _, tuple := range values.Rows {
 				count++
