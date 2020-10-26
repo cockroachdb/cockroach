@@ -351,7 +351,7 @@ func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	}
 	physPlan.AddProjection(projection)
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(
-		cols, nil /* colNames */, physPlan.ResultTypes, physPlan.ResultColumns,
+		cols, nil /* colNames */, physPlan.GetResultTypes(), physPlan.ResultColumns,
 	)
 	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
 	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
@@ -368,7 +368,7 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
 	}
 	physPlan.AddProjection(projection)
-	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.ResultTypes, physPlan.ResultColumns)
+	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.GetResultTypes(), physPlan.ResultColumns)
 	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
 	return plan, nil
 }
@@ -985,9 +985,9 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	resultColumns := getJoinResultColumns(joinType, leftPhysPlan.ResultColumns, rightPhysPlan.ResultColumns)
 	leftMap, rightMap := leftPhysPlan.PlanToStreamColMap, rightPhysPlan.PlanToStreamColMap
 	helper := &joinPlanningHelper{
-		numLeftOutCols:          len(leftPhysPlan.ResultTypes),
-		numRightOutCols:         len(rightPhysPlan.ResultTypes),
-		numAllLeftCols:          len(leftPhysPlan.ResultTypes),
+		numLeftOutCols:          len(leftPhysPlan.GetResultTypes()),
+		numRightOutCols:         len(rightPhysPlan.GetResultTypes()),
+		numAllLeftCols:          len(leftPhysPlan.GetResultTypes()),
 		leftPlanToStreamColMap:  leftMap,
 		rightPlanToStreamColMap: rightMap,
 	}

@@ -139,6 +139,7 @@ func TestClusterFlow(t *testing.T) {
 						{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 0, TargetNodeID: tc.Server(2).NodeID()},
 					},
 				}},
+				ResultTypes: rowenc.TwoIntCols,
 			}},
 		},
 	}
@@ -161,6 +162,7 @@ func TestClusterFlow(t *testing.T) {
 						{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 1, TargetNodeID: tc.Server(2).NodeID()},
 					},
 				}},
+				ResultTypes: rowenc.TwoIntCols,
 			}},
 		},
 	}
@@ -184,6 +186,7 @@ func TestClusterFlow(t *testing.T) {
 							{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 2},
 						},
 					}},
+					ResultTypes: rowenc.TwoIntCols,
 				},
 				{
 					ProcessorID: 4,
@@ -207,6 +210,7 @@ func TestClusterFlow(t *testing.T) {
 						Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
 						Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 					}},
+					ResultTypes: []*types.T{types.String},
 				},
 			},
 		},
@@ -440,6 +444,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 							{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 1},
 						},
 					}},
+					ResultTypes: typs,
 				},
 				// The right-hand Values processor in the diagram above.
 				{
@@ -452,6 +457,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 							{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 3},
 						},
 					}},
+					ResultTypes: typs,
 				},
 				// The MergeJoin processor.
 				{
@@ -479,6 +485,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 							{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 4},
 						},
 					}},
+					ResultTypes: typs,
 				},
 				// The final (Response) processor.
 				{
@@ -497,6 +504,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 						Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
 						Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 					}},
+					ResultTypes: typs,
 				},
 			},
 		},
@@ -753,6 +761,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 											{Type: streamType(i), StreamID: execinfrapb.StreamID(i), TargetNodeID: tc.Server(0).NodeID()},
 										},
 									}},
+									ResultTypes: rowenc.ThreeIntCols,
 								}},
 							},
 						}
@@ -781,6 +790,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 							Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
 							Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 						}},
+						ResultTypes: rowenc.ThreeIntCols,
 					}
 					if numNodes == 1 {
 						lastProc.Input[0].Type = execinfrapb.InputSyncSpec_UNORDERED

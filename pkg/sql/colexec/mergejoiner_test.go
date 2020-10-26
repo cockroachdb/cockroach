@@ -68,6 +68,14 @@ func createSpecForMergeJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 	for _, outCol := range tc.rightOutCols {
 		projection = append(projection, rColOffset+outCol)
 	}
+	var resultTypes []*types.T
+	for _, i := range projection {
+		if int(i) < len(tc.leftTypes) {
+			resultTypes = append(resultTypes, tc.leftTypes[i])
+		} else {
+			resultTypes = append(resultTypes, tc.rightTypes[i-rColOffset])
+		}
+	}
 	return &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{
 			{ColumnTypes: tc.leftTypes},
@@ -80,6 +88,7 @@ func createSpecForMergeJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 			Projection:    true,
 			OutputColumns: projection,
 		},
+		ResultTypes: resultTypes,
 	}
 }
 
