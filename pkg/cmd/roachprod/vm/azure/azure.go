@@ -476,7 +476,7 @@ final_message: "roachprod init completed"
 			fmt.Sprintf("chown -R %s /data1", remoteUser),
 		}
 		if opts.SSDOpts.NoExt4Barrier {
-			cmds = append(cmds, "mount -o remount,nobarrier /mnt/data")
+			cmds = append(cmds, "mount -o remount,nobarrier /mnt/data1")
 		}
 	} else {
 		// We define lun42 explicitly in the data disk request below.
@@ -586,7 +586,9 @@ mounts:
 		},
 	}
 	if !opts.SSDOpts.UseLocalSSD {
+		caching := compute.CachingTypesNone
 		var storageAccType compute.StorageAccountTypes
+
 		switch p.opts.networkDiskType {
 		case "premium-disk":
 			storageAccType = compute.StorageAccountTypesPremiumLRS
@@ -596,10 +598,23 @@ mounts:
 			err = errors.Newf("unsuported network disk type: %s", p.opts.networkDiskType)
 			return
 		}
+		switch p.opts.diskCaching {
+		case "read-only":
+			caching = compute.CachingTypesReadOnly
+		case "read-write":
+			caching = compute.CachingTypesReadWrite
+		case "none":
+			caching = compute.CachingTypesNone
+		default:
+			err = errors.Newf("unsupported caching behavior: %s", p.opts.diskCaching)
+			return
+		}
+
 		vm.VirtualMachineProperties.StorageProfile.DataDisks = &[]compute.DataDisk{
 			{
 				CreateOption: compute.DiskCreateOptionTypesEmpty,
-				DiskSizeGB:   to.Int32Ptr(100),
+				DiskSizeGB:   to.Int32Ptr(p.opts.networkDiskSize),
+				Caching:      caching,
 				Lun:          to.Int32Ptr(42),
 				ManagedDisk: &compute.ManagedDiskParameters{
 					StorageAccountType: storageAccType,
