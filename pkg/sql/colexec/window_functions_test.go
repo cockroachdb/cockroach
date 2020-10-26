@@ -292,6 +292,7 @@ func TestWindowFunctions(t *testing.T) {
 					Core: execinfrapb.ProcessorCoreUnion{
 						Windower: &tc.windowerSpec,
 					},
+					ResultTypes: append(ct, types.Int),
 				}
 				sem := colexecbase.NewTestingSemaphore(maxNumberFDs)
 				args := &NewColOperatorArgs{

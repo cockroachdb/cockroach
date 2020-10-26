@@ -1197,7 +1197,8 @@ func (r opResult) wrapPostProcessSpec(
 		Core: execinfrapb.ProcessorCoreUnion{
 			Noop: &execinfrapb.NoopCoreSpec{},
 		},
-		Post: *post,
+		Post:        *post,
+		ResultTypes: args.Spec.ResultTypes,
 	}
 	return r.createAndWrapRowSource(
 		ctx, flowCtx, args, []colexecbase.Operator{r.Op}, [][]*types.T{r.ColumnTypes},
