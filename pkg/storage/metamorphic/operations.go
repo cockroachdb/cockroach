@@ -138,7 +138,7 @@ func generateMVCCScan(
 }
 
 // Prints the key where an iterator is positioned, or valid = false if invalid.
-func printIterState(iter storage.Iterator) string {
+func printIterState(iter storage.MVCCIterator) string {
 	if ok, err := iter.Valid(); !ok || err != nil {
 		if err != nil {
 			return fmt.Sprintf("valid = %v, err = %s", ok, err.Error())

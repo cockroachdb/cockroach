@@ -90,7 +90,7 @@ func (p *pebbleResults) finish() [][]byte {
 // Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
 // one MVCCGet / MVCCScan call.
 type pebbleMVCCScanner struct {
-	parent  Iterator
+	parent  MVCCIterator
 	reverse bool
 	peeked  bool
 	// Iteration bounds. Does not contain MVCC timestamp.

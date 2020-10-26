@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue) {
+func runTestSSTIterator(t *testing.T, iter SimpleMVCCIterator, allKVs []MVCCKeyValue) {
 	// Drop the first kv so we can test Seek.
 	expected := allKVs[1:]
 

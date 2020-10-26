@@ -111,7 +111,7 @@ func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 
 // mvccGetGo is identical to MVCCGet except that it uses mvccGetInternal
-// instead of the C++ Iterator.MVCCGet. It is used to test mvccGetInternal
+// instead of the C++ MVCCIterator.MVCCGet. It is used to test mvccGetInternal
 // which is used by mvccPutInternal to avoid Cgo crossings. Simply using the
 // C++ MVCCGet in mvccPutInternal causes a significant performance hit to
 // conditional put operations.
@@ -5019,8 +5019,8 @@ type readWriterReturningSeekLTTrackingIterator struct {
 }
 
 // NewIterator injects a seekLTTrackingIterator over the engine's real iterator.
-func (rw *readWriterReturningSeekLTTrackingIterator) NewIterator(opts IterOptions) Iterator {
-	rw.it.Iterator = rw.ReadWriter.NewIterator(opts)
+func (rw *readWriterReturningSeekLTTrackingIterator) NewIterator(opts IterOptions) MVCCIterator {
+	rw.it.MVCCIterator = rw.ReadWriter.NewIterator(opts)
 	return &rw.it
 }
 
@@ -5028,12 +5028,12 @@ func (rw *readWriterReturningSeekLTTrackingIterator) NewIterator(opts IterOption
 // called.
 type seekLTTrackingIterator struct {
 	seekLTCalled int
-	Iterator
+	MVCCIterator
 }
 
 func (it *seekLTTrackingIterator) SeekLT(k MVCCKey) {
 	it.seekLTCalled++
-	it.Iterator.SeekLT(k)
+	it.MVCCIterator.SeekLT(k)
 }
 
 // TestMVCCGarbageCollectUsesSeekLTAppropriately ensures that the garbage

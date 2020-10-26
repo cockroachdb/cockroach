@@ -174,7 +174,7 @@ func (p *pebbleBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error
 }
 
 // NewIterator implements the Batch interface.
-func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
+func (p *pebbleBatch) NewIterator(opts IterOptions) MVCCIterator {
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
@@ -187,7 +187,7 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
 	}
 
 	if opts.MinTimestampHint != (hlc.Timestamp{}) {
-		// Iterators that specify timestamp bounds cannot be cached.
+		// MVCCIterators that specify timestamp bounds cannot be cached.
 		return newPebbleIterator(p.batch, opts)
 	}
 
@@ -263,7 +263,7 @@ func (p *pebbleBatch) ClearRange(start, end MVCCKey) error {
 }
 
 // Clear implements the Batch interface.
-func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
+func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}

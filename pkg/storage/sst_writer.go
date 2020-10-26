@@ -114,7 +114,7 @@ func (fw *SSTWriter) SingleClear(key MVCCKey) error {
 }
 
 // ClearIterRange implements the Writer interface.
-func (fw *SSTWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
+func (fw *SSTWriter) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearIterRange on a closed writer")
 	}

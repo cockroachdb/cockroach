@@ -37,8 +37,8 @@ type runnable interface {
 // The Processor can initialize its resolvedTimestamp once the scan completes
 // because it knows it is now tracking all intents in its key range.
 //
-// Iterator Contract:
-//   The provided Iterator must observe all intents in the Processor's keyspan.
+// MVCCIterator Contract:
+//   The provided MVCCIterator must observe all intents in the Processor's keyspan.
 //   An important implication of this is that if the iterator is a
 //   TimeBoundIterator, its MinTimestamp cannot be above the keyspan's largest
 //   known resolved timestamp, if one has ever been recorded. If one has never
@@ -46,10 +46,10 @@ type runnable interface {
 //
 type initResolvedTSScan struct {
 	p  *Processor
-	it storage.SimpleIterator
+	it storage.SimpleMVCCIterator
 }
 
-func newInitResolvedTSScan(p *Processor, it storage.SimpleIterator) runnable {
+func newInitResolvedTSScan(p *Processor, it storage.SimpleMVCCIterator) runnable {
 	return &initResolvedTSScan{p: p, it: it}
 }
 

@@ -18,9 +18,9 @@ import (
 
 const invalidIdxSentinel = -1
 
-// multiIterator multiplexes iteration over a number of Iterators.
+// multiIterator multiplexes iteration over a number of SimpleMVCCIterators.
 type multiIterator struct {
-	iters []SimpleIterator
+	iters []SimpleMVCCIterator
 	// The index into `iters` of the iterator currently being pointed at.
 	currentIdx int
 	// The indexes of every iterator with the same key as the one in currentIdx.
@@ -35,16 +35,16 @@ type multiIterator struct {
 	err error
 }
 
-var _ SimpleIterator = &multiIterator{}
+var _ SimpleMVCCIterator = &multiIterator{}
 
 // MakeMultiIterator creates an iterator that multiplexes
-// SimpleIterators. The caller is responsible for closing the passed
+// SimpleMVCCIterators. The caller is responsible for closing the passed
 // iterators after closing the returned multiIterator.
 //
 // If two iterators have an entry with exactly the same key and timestamp, the
 // one with a higher index in this constructor arg is preferred. The other is
 // skipped.
-func MakeMultiIterator(iters []SimpleIterator) SimpleIterator {
+func MakeMultiIterator(iters []SimpleMVCCIterator) SimpleMVCCIterator {
 	return &multiIterator{
 		iters:                        iters,
 		currentIdx:                   invalidIdxSentinel,

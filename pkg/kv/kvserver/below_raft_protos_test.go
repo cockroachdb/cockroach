@@ -113,7 +113,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 
 func init() {
 	// These are marshaled below Raft by the Pebble merge operator. The Pebble
-	// merge operator can be called below Raft whenever a Pebble Iterator is
+	// merge operator can be called below Raft whenever a Pebble MVCCIterator is
 	// used.
 	belowRaftGoldenProtos[reflect.TypeOf(&roachpb.InternalTimeSeriesData{})] = fixture{
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {

@@ -476,7 +476,7 @@ func createSplitSSTable(
 	db SSTSender,
 	start, splitKey roachpb.Key,
 	disallowShadowing bool,
-	iter storage.SimpleIterator,
+	iter storage.SimpleMVCCIterator,
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &storage.MemFile{}

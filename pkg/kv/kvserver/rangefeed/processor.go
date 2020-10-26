@@ -179,7 +179,7 @@ func NewProcessor(cfg Config) *Processor {
 
 // IteratorConstructor is used to construct an iterator. It should be called
 // from underneath a stopper task to ensure that the engine has not been closed.
-type IteratorConstructor func() storage.SimpleIterator
+type IteratorConstructor func() storage.SimpleMVCCIterator
 
 // Start launches a goroutine to process rangefeed events and send them to
 // registrations.
