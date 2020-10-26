@@ -224,7 +224,7 @@ func checkStoreRaftState(
 		return err
 	}
 
-	// Iterate over the entire range-id-local space.
+	// MVCCIterate over the entire range-id-local space.
 	start := roachpb.Key(keys.LocalRangeIDPrefix)
 	end := start.PrefixEnd()
 

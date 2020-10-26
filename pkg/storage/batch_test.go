@@ -201,7 +201,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			successTestCases := []func(){
 				func() { _, _ = ro.MVCCGet(a) },
 				func() { _, _, _, _ = ro.MVCCGetProto(a, getVal) },
-				func() { _ = ro.Iterate(a.Key, a.Key, func(MVCCKeyValue) error { return iterutil.StopIteration() }) },
+				func() { _ = ro.MVCCIterate(a.Key, a.Key, func(MVCCKeyValue) error { return iterutil.StopIteration() }) },
 				func() { ro.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
 					ro.NewIterator(IterOptions{
@@ -1014,7 +1014,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 				func() { _ = batch.ApplyBatchRepr(nil, false) },
 				func() { _, _ = batch.MVCCGet(a) },
 				func() { _, _, _, _ = batch.MVCCGetProto(a, nil) },
-				func() { _ = batch.Iterate(a.Key, a.Key, nil) },
+				func() { _ = batch.MVCCIterate(a.Key, a.Key, nil) },
 				func() { _ = batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}) },
 			}
 			for i, f := range testCases {

@@ -294,7 +294,7 @@ func (c *Compactor) fetchSuggestions(
 	delBatch := c.eng.NewBatch()
 	defer delBatch.Close()
 
-	err = c.eng.Iterate(
+	err = c.eng.MVCCIterate(
 		keys.LocalStoreSuggestedCompactionsMin,
 		keys.LocalStoreSuggestedCompactionsMax,
 		func(kv storage.MVCCKeyValue) error {
@@ -462,7 +462,7 @@ func (c *Compactor) aggregateCompaction(
 // BytesQueued gauge.
 func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 	var totalBytes int64
-	if err := c.eng.Iterate(
+	if err := c.eng.MVCCIterate(
 		keys.LocalStoreSuggestedCompactionsMin,
 		keys.LocalStoreSuggestedCompactionsMax,
 		func(kv storage.MVCCKeyValue) error {

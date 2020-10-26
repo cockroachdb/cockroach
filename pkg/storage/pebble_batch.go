@@ -165,8 +165,8 @@ func (p *pebbleBatch) MVCCGetProto(
 	return false, 0, 0, err
 }
 
-// Iterate implements the Batch interface.
-func (p *pebbleBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
+// MVCCIterate implements the Batch interface.
+func (p *pebbleBatch) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}

@@ -135,7 +135,7 @@ type MVCCIterator interface {
 // TODO:
 // x- Get => MVCCGet
 // x- MVCCGetProto => MVCCGetProto
-// - Iterate => MVCCIterate
+// x- MVCCIterate => MVCCIterate
 // - NewIterator => NewMVCCIterator
 // - ExportMVCCToSst
 
@@ -262,14 +262,14 @@ type Reader interface {
 	//
 	// Deprecated: use MVCCIterator.ValueProto instead.
 	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
-	// Iterate scans from the start key to the end key (exclusive), invoking the
+	// MVCCIterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan
 	// itself encounters an error, the iteration will stop and return the error.
 	// If the first result of f is true, the iteration stops and returns a nil
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error
+	MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error
 	// NewIterator returns a new instance of an MVCCIterator over this
 	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
@@ -619,7 +619,7 @@ func PutProto(
 // Specify max=0 for unbounded scans.
 func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.Iterate(start, end, func(kv MVCCKeyValue) error {
+	err := reader.MVCCIterate(start, end, func(kv MVCCKeyValue) error {
 		if max != 0 && int64(len(kvs)) >= max {
 			return iterutil.StopIteration()
 		}
@@ -757,10 +757,10 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.
 	return 0
 }
 
-// Helper function to implement Reader.Iterate().
+// Helper function to implement Reader.MVCCIterate().
 func iterateOnReader(reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if reader.Closed() {
-		return errors.New("cannot call Iterate on a closed batch")
+		return errors.New("cannot call MVCCIterate on a closed batch")
 	}
 	if start.Compare(end) >= 0 {
 		return nil

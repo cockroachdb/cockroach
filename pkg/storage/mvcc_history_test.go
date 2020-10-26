@@ -97,7 +97,7 @@ func TestMVCCHistories(t *testing.T) {
 
 				reportDataEntries := func(buf *bytes.Buffer) error {
 					hasData := false
-					err := engine.Iterate(
+					err := engine.MVCCIterate(
 						span.Key,
 						span.EndKey,
 						func(r MVCCKeyValue) error {
