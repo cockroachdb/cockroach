@@ -626,8 +626,8 @@ func (p *Pebble) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *Pebble) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (p *Pebble) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -1115,8 +1115,8 @@ func (p *pebbleReadOnly) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *pebbleReadOnly) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (p *pebbleReadOnly) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -1237,8 +1237,8 @@ func (p *pebbleSnapshot) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *pebbleSnapshot) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (p *pebbleSnapshot) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,

@@ -156,7 +156,7 @@ func evalExport(
 		maxSize = targetSize + uint64(allowedOverage)
 	}
 	for start := args.Key; start != nil; {
-		data, summary, resume, err := e.ExportToSst(start, args.EndKey, args.StartTime,
+		data, summary, resume, err := e.ExportMVCCToSst(start, args.EndKey, args.StartTime,
 			h.Timestamp, exportAllRevisions, targetSize, maxSize, io)
 		if err != nil {
 			return result.Result{}, err

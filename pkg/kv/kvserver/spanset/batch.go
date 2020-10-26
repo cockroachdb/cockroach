@@ -233,15 +233,15 @@ func (s spanSetReader) Closed() bool {
 	return s.r.Closed()
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (s spanSetReader) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (s spanSetReader) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	io storage.IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	return s.r.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
 func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {

@@ -226,7 +226,7 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// ExportToSst exports changes to the keyrange [startKey, endKey) over the
+	// ExportMVCCToSst exports changes to the keyrange [startKey, endKey) over the
 	// interval (startTS, endTS]. Passing exportAllRevisions exports
 	// every revision of a key for the interval, otherwise only the latest value
 	// within the interval is exported. Deletions are included if all revisions are
@@ -246,7 +246,7 @@ type Reader interface {
 	//
 	// This function looks at MVCC versions and intents, and returns an error if an
 	// intent is found.
-	ExportToSst(
+	ExportMVCCToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
 		exportAllRevisions bool, targetSize uint64, maxSize uint64,
 		io IterOptions,

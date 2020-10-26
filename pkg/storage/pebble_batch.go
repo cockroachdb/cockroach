@@ -89,8 +89,8 @@ func (p *pebbleBatch) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *pebbleBatch) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (p *pebbleBatch) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
