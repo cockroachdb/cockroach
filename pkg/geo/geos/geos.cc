@@ -107,6 +107,7 @@ typedef CR_GEOS_Geometry (*CR_GEOS_Difference_r)(CR_GEOS_Handle, CR_GEOS_Geometr
 typedef CR_GEOS_Geometry (*CR_GEOS_Simplify_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
 typedef CR_GEOS_Geometry (*CR_GEOS_TopologyPreserveSimplify_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                                double);
+typedef CR_GEOS_Geometry (*CR_GEOS_UnaryUnion_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_Union_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_Intersection_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                    CR_GEOS_Geometry);
@@ -215,6 +216,7 @@ struct CR_GEOS {
   CR_GEOS_Difference_r GEOSDifference_r;
   CR_GEOS_Simplify_r GEOSSimplify_r;
   CR_GEOS_TopologyPreserveSimplify_r GEOSTopologyPreserveSimplify_r;
+  CR_GEOS_UnaryUnion_r GEOSUnaryUnion_r;
   CR_GEOS_Union_r GEOSUnion_r;
   CR_GEOS_PointOnSurface_r GEOSPointOnSurface_r;
   CR_GEOS_Intersection_r GEOSIntersection_r;
@@ -313,6 +315,7 @@ struct CR_GEOS {
     INIT(GEOSConvexHull_r);
     INIT(GEOSSimplify_r);
     INIT(GEOSTopologyPreserveSimplify_r);
+    INIT(GEOSUnaryUnion_r);
     INIT(GEOSUnion_r);
     INIT(GEOSPointOnSurface_r);
     INIT(GEOSIntersection_r);
@@ -916,6 +919,25 @@ CR_GEOS_Status CR_GEOS_TopologyPreserveSimplify(CR_GEOS* lib, CR_GEOS_Slice a,
       lib->GEOSGeom_destroy_r(handle, simplifyGeom);
     }
     lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_UnaryUnion(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* unionEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto geomA = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  *unionEWKB = {.data = NULL, .len = 0};
+  if (geomA != nullptr) {
+    auto r = lib->GEOSUnaryUnion_r(handle, geomA);
+    if (r != NULL) {
+      auto srid = lib->GEOSGetSRID_r(handle, r);
+      CR_GEOS_writeGeomToEWKB(lib, handle, r, unionEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, r);
+    }
+    lib->GEOSGeom_destroy_r(handle, geomA);
   }
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
