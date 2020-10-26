@@ -214,6 +214,20 @@ type IterOptions struct {
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
 
+// MVCCIterKind is used to inform Reader about the kind of iteration desired
+// by the caller.
+type MVCCIterKind int
+
+const (
+	// Intents appear interleaved with keys, even if they are in a separated
+	// lock table.
+	MVCCKeyAndIntentsIterKind MVCCIterKind = iota
+	// Separated intents will not be seen. Any interleaved intents may be
+	// seen, but no correctness properties are derivable from such partial
+	// knowledge of intents.
+	MVCCKeyIterKind
+)
+
 // Reader is the read interface to an engine's data.
 type Reader interface {
 	// Close closes the reader, freeing up any outstanding resources. Note that
@@ -269,10 +283,12 @@ type Reader interface {
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
+	// TODO(sumeer): add MVCCIterKind parameter.
 	MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error
 	// NewIterator returns a new instance of an MVCCIterator over this
 	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
+	// TODO(sumeer): add MVCCIterKind parameter and rename to NewMVCCIterator.
 	NewIterator(opts IterOptions) MVCCIterator
 }
 
