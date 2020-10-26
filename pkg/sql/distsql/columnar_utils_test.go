@@ -47,7 +47,6 @@ type verifyColOperatorArgs struct {
 	colIdxsToCheckForEquality []int
 	inputTypes                [][]*types.T
 	inputs                    []rowenc.EncDatumRows
-	outputTypes               []*types.T
 	pspec                     *execinfrapb.ProcessorSpec
 	// forceDiskSpill, if set, will force the operator to spill to disk.
 	forceDiskSpill bool
@@ -168,7 +167,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		flowCtx,
 		int32(len(args.inputs))+2,
 		result.Op,
-		args.outputTypes,
+		args.pspec.ResultTypes,
 		nil, /* output */
 		result.MetadataSources,
 		result.ToClose,
@@ -185,9 +184,9 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	defer outColOp.ConsumerClosed()
 
 	printRowForChecking := func(r rowenc.EncDatumRow) []string {
-		res := make([]string, len(args.outputTypes))
+		res := make([]string, len(args.pspec.ResultTypes))
 		for i, col := range r {
-			res[i] = col.String(args.outputTypes[i])
+			res[i] = col.String(args.pspec.ResultTypes[i])
 		}
 		return res
 	}
@@ -295,7 +294,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 
 	colIdxsToCheckForEquality := args.colIdxsToCheckForEquality
 	if len(colIdxsToCheckForEquality) == 0 {
-		colIdxsToCheckForEquality = make([]int, len(args.outputTypes))
+		colIdxsToCheckForEquality = make([]int, len(args.pspec.ResultTypes))
 		for i := range colIdxsToCheckForEquality {
 			colIdxsToCheckForEquality[i] = i
 		}
@@ -310,7 +309,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 				}
 				foundDifference := false
 				for _, colIdx := range colIdxsToCheckForEquality {
-					match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.outputTypes[colIdx])
+					match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.pspec.ResultTypes[colIdx])
 					if err != nil {
 						return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
 							expStrRow, retStrRow, err.Error())
@@ -337,7 +336,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 			retStrRow := colOpRows[i]
 			// anyOrder is false, so the result rows must match in the same order.
 			for _, colIdx := range colIdxsToCheckForEquality {
-				match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.outputTypes[colIdx])
+				match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.pspec.ResultTypes[colIdx])
 				if err != nil {
 					return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
 						expStrRow, retStrRow, err.Error())

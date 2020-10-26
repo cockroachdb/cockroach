@@ -96,7 +96,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	funcInProgress *windowFuncHolder,
 ) (execinfrapb.WindowerSpec_WindowFn, *types.T, error) {
 	for _, argIdx := range funcInProgress.argsIdxs {
-		if argIdx >= uint32(len(s.plan.ResultTypes)) {
+		if argIdx >= uint32(len(s.plan.GetResultTypes())) {
 			return execinfrapb.WindowerSpec_WindowFn{}, nil, errors.Errorf("ColIdx out of range (%d)", argIdx)
 		}
 	}
@@ -107,7 +107,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	}
 	argTypes := make([]*types.T, len(funcInProgress.argsIdxs))
 	for i, argIdx := range funcInProgress.argsIdxs {
-		argTypes[i] = s.plan.ResultTypes[argIdx]
+		argTypes[i] = s.plan.GetResultTypes()[argIdx]
 	}
 	_, outputType, err := execinfrapb.GetWindowFunctionInfo(funcSpec, argTypes...)
 	if err != nil {
@@ -201,7 +201,7 @@ func (s *windowPlanState) addRenderingOrProjection() error {
 			renderExprs[i] = visitor.replace(render)
 		} else {
 			// render is nil meaning that a column is being passed through.
-			renderExprs[i] = tree.NewTypedOrdinalReference(passedThruColIdx, s.plan.ResultTypes[passedThruColIdx])
+			renderExprs[i] = tree.NewTypedOrdinalReference(passedThruColIdx, s.plan.GetResultTypes()[passedThruColIdx])
 			passedThruColIdx++
 		}
 		outputType := renderExprs[i].ResolvedType()
