@@ -2282,15 +2282,13 @@ func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error
 }
 
 func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []string) error {
-	if len((indexColNames)) > 1 {
-		return unimplemented.NewWithIssue(48100,
-			"indexing more than one column with an inverted index is not supported")
-	}
 	invalidColumns := make([]descpb.ColumnDescriptor, 0, len(indexColNames))
-	for _, indexCol := range indexColNames {
+	for i, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !colinfo.ColumnTypeIsInvertedIndexable(col.Type) {
+				lastCol := len(indexColNames) - 1
+				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.Type) ||
+					i < lastCol && !colinfo.ColumnTypeIsIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}

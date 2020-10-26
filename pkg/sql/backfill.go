@@ -1255,11 +1255,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			defer close(countReady[i])
 
 			start := timeutil.Now()
-			if len(idx.ColumnNames) != 1 {
-				panic(errors.AssertionFailedf("expected inverted index %s to have exactly 1 column, but found columns %+v",
-					idx.Name, idx.ColumnNames))
-			}
-			col := idx.ColumnNames[0]
+			col := idx.InvertedColumnName()
 
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 				ie := evalCtx.InternalExecutor.(*InternalExecutor)
@@ -1290,7 +1286,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "JSON column %s/%s expected inverted index count = %d, took %s",
+			log.Infof(ctx, "column %s/%s expected inverted index count = %d, took %s",
 				tableDesc.Name, col, expectedCount[i], timeutil.Since(start))
 			return nil
 		})
