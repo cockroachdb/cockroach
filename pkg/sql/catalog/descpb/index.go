@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // RunOverAllColumns applies its argument fn to each of the column IDs in desc.
@@ -173,4 +174,14 @@ func (desc *IndexDescriptor) IsValidReferencedIndex(referencedColIDs ColumnIDs) 
 // format (data encoded the same way as if they were in an implicit column).
 func (desc *IndexDescriptor) HasOldStoredColumns() bool {
 	return len(desc.ExtraColumnIDs) > 0 && len(desc.StoreColumnIDs) < len(desc.StoreColumnNames)
+}
+
+// InvertedColumnName returns the name of the inverted column of the inverted
+// index. This is always the last column in ColumnNames. Panics if the index is
+// not inverted.
+func (desc *IndexDescriptor) InvertedColumnName() string {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return desc.ColumnNames[len(desc.ColumnNames)-1]
 }

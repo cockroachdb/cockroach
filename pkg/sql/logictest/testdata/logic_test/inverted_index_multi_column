@@ -1,0 +1,40 @@
+# Err when experimental_enable_multi_column_inverted_index is not true.
+statement error indexing more than one column with an inverted index is not supported
+CREATE TABLE m_err (a INT, geom GEOMETRY, INVERTED INDEX (a, geom))
+
+# Err when experimental_enable_multi_column_inverted_index is not true.
+statement error indexing more than one column with an inverted index is not supported
+CREATE TABLE m_err (a INT, geom GEOMETRY);
+CREATE INVERTED INDEX m_err_idx ON m_err (a, geom);
+
+statement ok
+DROP TABLE m_err
+
+statement ok
+SET experimental_enable_multi_column_inverted_indexes=true
+
+# Err if the last column is not an invertable type.
+# TODO(mgartner): This error message should explain that it's not indexable as
+# the last column.
+statement error column b is of type int and thus is not indexable with an inverted index
+CREATE TABLE m_err (k INT PRIMARY KEY, a INT, b INT, geom GEOMETRY, INVERTED INDEX (a, b))
+
+# Err if a non-last column is not a non-invertable type.
+# TODO(mgartner): This error message should explain that it's not indexable as
+# a non-last column.
+statement error column j is of type jsonb and thus is not indexable with an inverted index
+CREATE TABLE m_err (k INT PRIMARY KEY, j JSON, geom GEOMETRY, INVERTED INDEX (j, geom))
+
+# Err if a non-last column is not a non-invertable type.
+# TODO(mgartner): This error message should explain that it's not indexable as
+# a non-last column.
+statement error column j is of type jsonb and thus is not indexable with an inverted index
+CREATE TABLE m_err (k INT PRIMARY KEY, a INT, j JSON, geom GEOMETRY, INVERTED INDEX (a, j, geom))
+
+statement ok
+CREATE TABLE m (k INT PRIMARY KEY, a INT, geom GEOMETRY, INVERTED INDEX (a, geom))
+
+statement ok
+CREATE TABLE n (k INT PRIMARY KEY, a INT, geom GEOMETRY);
+CREATE INVERTED INDEX n ON n (a, geom);
+

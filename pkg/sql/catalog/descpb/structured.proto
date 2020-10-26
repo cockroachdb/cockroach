@@ -373,7 +373,9 @@ message IndexDescriptor {
 
   // An ordered list of column names of which the index is comprised; these
   // columns do not include any additional stored columns (which are in
-  // stored_column_names). This list parallels the column_ids list.
+  // stored_column_names). This list parallels the column_ids list. If the index
+  // is an inverted index, the last column in the list is inverted and all
+  // others are not.
   //
   // Note: if duplicating the storage of the column names here proves to be
   // prohibitive, we could clear this field before saving and reconstruct it
@@ -390,7 +392,8 @@ message IndexDescriptor {
 
   // An ordered list of column IDs of which the index is comprised. This list
   // parallels the column_names list and does not include any additional stored
-  // columns.
+  // columns. If the index is an inverted index, the last column in the list is
+  // inverted and all others are not.
   repeated uint32 column_ids = 6 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
 

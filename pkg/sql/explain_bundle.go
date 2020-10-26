@@ -512,6 +512,8 @@ func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
 		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode},
+		// TODO(mgartner): remove this once multi-column inverted indexes are fully supported.
+		{sessionSetting: "experimental_enable_multi_column_inverted_indexes", clusterSetting: experimentalMultiColumnInvertedIndexesMode},
 	}
 
 	for _, s := range relevantSettings {
