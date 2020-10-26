@@ -10,10 +10,12 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRRRRRBBTIIR
-SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1), var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1), corr(1, 1) FROM kv
+query IIIIRRRRRRRRBBTIIRR
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1), var_samp(1),
+variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1), corr(1, 1), sqrdiff(1)
+FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Regression test for #29695
 query T
@@ -42,10 +44,12 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 ----
 NULL NULL NULL NULL
 
-query IIIIRRRRRRBBTR
-SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes), corr(v,k) FROM kv
+query IIIIRRRRRRRBBTRR
+SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), var_samp(v),
+bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes), corr(v,k), sqrdiff(v)
+FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT array_agg(v) FROM kv
@@ -63,10 +67,11 @@ SELECT jsonb_agg(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRRRBBTR
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1), var_pop(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 2)
+query IIIIRRRRRRRBBTRR
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1),
+var_pop(1), var_samp(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 2), sqrdiff(1)
 ----
-1  1  1  1  1  1  NULL  0  NULL  0  true  true  01  NULL
+1  1  1  1  1  1  NULL  0  NULL  0  NULL true  true  01  NULL 0
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -162,10 +167,12 @@ INSERT INTO kv VALUES
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
-query IIIIRRRRRRBBT
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), stddev_pop(1), variance(1)::float, var_pop(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')) FROM kv
+query IIIIRRRRRRRBBTR
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), stddev_pop(1), variance(1)::float,
+var_pop(1)::float, var_samp(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), sqrdiff(1)
+FROM kv
 ----
-1 6 1 6 1 6 0 0 0 0 true true 00
+1 6 1 6 1 6 0 0 0 0 0 true true 00 0
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 query T
@@ -831,6 +838,40 @@ true
 
 statement ok
 DROP TABLE xyz
+
+# SQRDIFF
+
+statement ok
+DROP TABLE IF EXISTS ifd;
+CREATE TABLE ifd
+(
+    i int,
+    f float,
+    d decimal
+);
+INSERT INTO ifd (i, f, d)
+VALUES (1, 1.1, 1.1),
+       (2, 2.2, 2.2),
+       (5, 3.0, 3.0),
+       (10, 7.8, 7.8),
+       (11, 9.0, 9.0),
+       (18, 11.2, 11.2);
+
+query FRF
+select sqrdiff(i), round(sqrdiff(f), 13), sqrdiff(d)
+from ifd
+----
+206.8333333333333333333334 86.2483333333333 86.24833333333333333333333
+
+query FRF
+SELECT sqrdiff(i), round(sqrdiff(f), 2), sqrdiff(d)
+FROM ifd
+where i < 10
+----
+8.666666666666666666666666 1.82 1.82
+
+statement ok
+DROP TABLE IF EXISTS sqrdiff
 
 # Numerical stability test for VARIANCE/STDDEV.
 # See https://www.johndcook.com/blog/2008/09/28/theoretical-explanation-for-numerical-results.
