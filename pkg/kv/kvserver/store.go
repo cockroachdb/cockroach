@@ -1576,6 +1576,22 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
+	// Storing suggested compactions in the store itself was deprecated with
+	// the removal of the Compactor in 21.1. See discussion in
+	// https://github.com/cockroachdb/cockroach/pull/55893
+	//
+	// TODO(bilal): Remove this code in versions after 21.1.
+	err = s.engine.MVCCIterate(
+		keys.StoreSuggestedCompactionKeyPrefix(),
+		keys.StoreSuggestedCompactionKeyPrefix().PrefixEnd(),
+		storage.MVCCKeyIterKind,
+		func(res storage.MVCCKeyValue) error {
+			return s.engine.Clear(res.Key)
+		})
+	if err != nil {
+		log.Warningf(ctx, "error when clearing compactor keys: %s", err)
+	}
+
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
 

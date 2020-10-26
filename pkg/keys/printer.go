@@ -193,14 +193,6 @@ var constSubKeyDict = []struct {
 	{"/suggestedCompaction", localStoreSuggestedCompactionSuffix},
 }
 
-func suggestedCompactionKeyPrint(key roachpb.Key) string {
-	start, end, err := DecodeStoreSuggestedCompactionKey(key)
-	if err != nil {
-		return fmt.Sprintf("<invalid: %s>", err)
-	}
-	return fmt.Sprintf("{%s-%s}", start, end)
-}
-
 func nodeTombstoneKeyPrint(key roachpb.Key) string {
 	nodeID, err := DecodeNodeTombstoneKey(key)
 	if err != nil {
@@ -212,11 +204,7 @@ func nodeTombstoneKeyPrint(key roachpb.Key) string {
 func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 	for _, v := range constSubKeyDict {
 		if bytes.HasPrefix(key, v.key) {
-			if v.key.Equal(localStoreSuggestedCompactionSuffix) {
-				return v.name + "/" + suggestedCompactionKeyPrint(
-					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
-				)
-			} else if v.key.Equal(localStoreNodeTombstoneSuffix) {
+			if v.key.Equal(localStoreNodeTombstoneSuffix) {
 				return v.name + "/" + nodeTombstoneKeyPrint(
 					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
 				)

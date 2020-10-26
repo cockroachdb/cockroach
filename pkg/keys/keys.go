@@ -97,38 +97,12 @@ func DecodeNodeTombstoneKey(key roachpb.Key) (roachpb.NodeID, error) {
 	return roachpb.NodeID(nodeID), err
 }
 
-// StoreSuggestedCompactionKey returns a store-local key for a
-// suggested compaction. It combines the specified start and end keys.
-func StoreSuggestedCompactionKey(start, end roachpb.Key) roachpb.Key {
-	var detail roachpb.RKey
-	detail = encoding.EncodeBytesAscending(detail, start)
-	detail = encoding.EncodeBytesAscending(detail, end)
-	return MakeStoreKey(localStoreSuggestedCompactionSuffix, detail)
-}
-
-// DecodeStoreSuggestedCompactionKey returns the start and end keys of
-// the suggested compaction's span.
-func DecodeStoreSuggestedCompactionKey(key roachpb.Key) (start, end roachpb.Key, err error) {
-	var suffix, detail roachpb.RKey
-	suffix, detail, err = DecodeStoreKey(key)
-	if err != nil {
-		return nil, nil, err
-	}
-	if !suffix.Equal(localStoreSuggestedCompactionSuffix) {
-		return nil, nil, errors.Errorf("key with suffix %q != %q", suffix, localStoreSuggestedCompactionSuffix)
-	}
-	detail, start, err = encoding.DecodeBytesAscending(detail, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	detail, end, err = encoding.DecodeBytesAscending(detail, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(detail) != 0 {
-		return nil, nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
-	}
-	return start, end, nil
+// StoreSuggestedCompactionKeyPrefix returns a store-local prefix for all
+// suggested compaction keys. These are unused in versions 21.1 and later.
+//
+// TODO(bilal): Delete this method along with any related uses of it after 21.1.
+func StoreSuggestedCompactionKeyPrefix() roachpb.Key {
+	return MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
 }
 
 // NodeLivenessKey returns the key for the node liveness record.
