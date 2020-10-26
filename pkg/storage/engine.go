@@ -36,10 +36,10 @@ func init() {
 	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "pebble"))
 }
 
-// SimpleIterator is an interface for iterating over key/value pairs in an
-// engine. SimpleIterator implementations are thread safe unless otherwise
-// noted. SimpleIterator is a subset of the functionality offered by MVCCIterator.
-type SimpleIterator interface {
+// SimpleMVCCIterator is an interface for iterating over key/value pairs in an
+// engine. SimpleMVCCIterator implementations are thread safe unless otherwise
+// noted. SimpleMVCCIterator is a subset of the functionality offered by MVCCIterator.
+type SimpleMVCCIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
 	// SeekGE advances the iterator to the first key in the engine which
@@ -84,7 +84,7 @@ type IteratorStats struct {
 //
 // MVCCIterator implementations are thread safe unless otherwise noted.
 type MVCCIterator interface {
-	SimpleIterator
+	SimpleMVCCIterator
 
 	// SeekLT advances the iterator to the first key in the engine which
 	// is < the provided key.

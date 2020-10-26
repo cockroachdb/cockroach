@@ -88,7 +88,7 @@ type MVCCIncrementalIterator struct {
 	meta enginepb.MVCCMetadata
 }
 
-var _ SimpleIterator = &MVCCIncrementalIterator{}
+var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {

@@ -55,7 +55,7 @@ type registration struct {
 	// Input.
 	span                   roachpb.Span
 	catchupTimestamp       hlc.Timestamp
-	catchupIterConstructor func() storage.SimpleIterator
+	catchupIterConstructor func() storage.SimpleMVCCIterator
 	withDiff               bool
 	metrics                *Metrics
 
@@ -86,7 +86,7 @@ type registration struct {
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchupIterConstructor func() storage.SimpleIterator,
+	catchupIterConstructor func() storage.SimpleMVCCIterator,
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,

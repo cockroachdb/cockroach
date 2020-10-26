@@ -3567,7 +3567,7 @@ func willOverflow(a, b int64) bool {
 // implemented in c++, so iter.ComputeStats will save several cgo calls per kv
 // processed. (Plus, on equal footing, the c++ implementation is slightly
 // faster.) ComputeStatsGo is here for codepaths that have a pure-go
-// implementation of SimpleIterator.
+// implementation of SimpleMVCCIterator.
 //
 // When optional callbacks are specified, they are invoked for each physical
 // key-value pair (i.e. not for implicit meta records), and iteration is aborted
@@ -3577,7 +3577,7 @@ func willOverflow(a, b int64) bool {
 //
 // This implementation must match engine/db.cc:MVCCComputeStatsInternal.
 func ComputeStatsGo(
-	iter SimpleIterator,
+	iter SimpleMVCCIterator,
 	start, end roachpb.Key,
 	nowNanos int64,
 	callbacks ...func(MVCCKey, []byte) error,

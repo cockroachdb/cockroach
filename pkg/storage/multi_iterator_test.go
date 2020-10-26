@@ -79,7 +79,7 @@ func TestMultiIterator(t *testing.T) {
 	for _, test := range tests {
 		name := fmt.Sprintf("%q", test.inputs)
 		t.Run(name, func(t *testing.T) {
-			var iters []SimpleIterator
+			var iters []SimpleMVCCIterator
 			for _, input := range test.inputs {
 				batch := pebble.NewBatch()
 				defer batch.Close()
@@ -112,10 +112,10 @@ func TestMultiIterator(t *testing.T) {
 			subtests := []struct {
 				name     string
 				expected string
-				fn       func(SimpleIterator)
+				fn       func(SimpleMVCCIterator)
 			}{
-				{"NextKey", test.expectedNextKey, (SimpleIterator).NextKey},
-				{"Next", test.expectedNext, (SimpleIterator).Next},
+				{"NextKey", test.expectedNextKey, (SimpleMVCCIterator).NextKey},
+				{"Next", test.expectedNext, (SimpleMVCCIterator).Next},
 			}
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {

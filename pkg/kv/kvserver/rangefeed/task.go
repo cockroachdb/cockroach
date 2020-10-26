@@ -46,10 +46,10 @@ type runnable interface {
 //
 type initResolvedTSScan struct {
 	p  *Processor
-	it storage.SimpleIterator
+	it storage.SimpleMVCCIterator
 }
 
-func newInitResolvedTSScan(p *Processor, it storage.SimpleIterator) runnable {
+func newInitResolvedTSScan(p *Processor, it storage.SimpleMVCCIterator) runnable {
 	return &initResolvedTSScan{p: p, it: it}
 }
 
