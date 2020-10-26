@@ -166,30 +166,6 @@ type EngineIterator interface {
 	SetUpperBound(roachpb.Key)
 }
 
-// MVCCIterator is an interface that extends Iterator and provides concrete
-// implementations for MVCCGet and MVCCScan operations. It is used by instances
-// of the interface backed by RocksDB iterators to avoid cgo hops.
-type MVCCIterator interface {
-	Iterator
-	// MVCCOpsSpecialized returns whether the iterator has a specialized
-	// implementation of MVCCGet and MVCCScan. This is exposed as a method
-	// so that wrapper types can defer to their wrapped iterators.
-	MVCCOpsSpecialized() bool
-	// MVCCGet is the internal implementation of the family of package-level
-	// MVCCGet functions.
-	MVCCGet(
-		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-	) (*roachpb.Value, *roachpb.Intent, error)
-	// MVCCScan is the internal implementation of the family of package-level
-	// MVCCScan functions. The notable difference is that key/value pairs are
-	// returned raw, as a series of buffers of length-prefixed slices,
-	// alternating from key to value, where numKVs specifies the number of pairs
-	// in the buffer.
-	MVCCScan(
-		start, end roachpb.Key, timestamp hlc.Timestamp, opts MVCCScanOptions,
-	) (MVCCScanResult, error)
-}
-
 // IterOptions contains options used to create an Iterator.
 //
 // For performance, every Iterator must specify either Prefix or UpperBound.

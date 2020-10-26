@@ -41,7 +41,6 @@ type Iterator struct {
 }
 
 var _ storage.Iterator = &Iterator{}
-var _ storage.MVCCIterator = &Iterator{}
 
 // NewIterator constructs an iterator that verifies access of the underlying
 // iterator against the given SpanSet. Timestamps associated with the spans
@@ -214,46 +213,6 @@ func (i *Iterator) Stats() storage.IteratorStats {
 // SupportsPrev is part of the engine.Iterator interface.
 func (i *Iterator) SupportsPrev() bool {
 	return i.i.SupportsPrev()
-}
-
-// MVCCOpsSpecialized is part of the engine.MVCCIterator interface.
-func (i *Iterator) MVCCOpsSpecialized() bool {
-	if mvccIt, ok := i.i.(storage.MVCCIterator); ok {
-		return mvccIt.MVCCOpsSpecialized()
-	}
-	return false
-}
-
-// MVCCGet is part of the engine.MVCCIterator interface.
-func (i *Iterator) MVCCGet(
-	key roachpb.Key, timestamp hlc.Timestamp, opts storage.MVCCGetOptions,
-) (*roachpb.Value, *roachpb.Intent, error) {
-	if i.spansOnly {
-		if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key}); err != nil {
-			return nil, nil, err
-		}
-	} else {
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: key}, timestamp); err != nil {
-			return nil, nil, err
-		}
-	}
-	return i.i.(storage.MVCCIterator).MVCCGet(key, timestamp, opts)
-}
-
-// MVCCScan is part of the engine.MVCCIterator interface.
-func (i *Iterator) MVCCScan(
-	start, end roachpb.Key, timestamp hlc.Timestamp, opts storage.MVCCScanOptions,
-) (storage.MVCCScanResult, error) {
-	if i.spansOnly {
-		if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
-			return storage.MVCCScanResult{}, err
-		}
-	} else {
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, timestamp); err != nil {
-			return storage.MVCCScanResult{}, err
-		}
-	}
-	return i.i.(storage.MVCCIterator).MVCCScan(start, end, timestamp, opts)
 }
 
 type spanSetReader struct {

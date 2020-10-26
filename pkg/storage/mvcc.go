@@ -826,11 +826,6 @@ func mvccGet(
 		return nil, nil, err
 	}
 
-	// If the iterator has a specialized implementation, defer to that.
-	if mvccIter, ok := iter.(MVCCIterator); ok && mvccIter.MVCCOpsSpecialized() {
-		return mvccIter.MVCCGet(key, timestamp, opts)
-	}
-
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	defer pebbleMVCCScannerPool.Put(mvccScanner)
 
@@ -2436,11 +2431,6 @@ func mvccScanToBytes(
 	if opts.MaxKeys < 0 || opts.TargetBytes < 0 {
 		resumeSpan := &roachpb.Span{Key: key, EndKey: endKey}
 		return MVCCScanResult{ResumeSpan: resumeSpan}, nil
-	}
-
-	// If the iterator has a specialized implementation, defer to that.
-	if mvccIter, ok := iter.(MVCCIterator); ok && mvccIter.MVCCOpsSpecialized() {
-		return mvccIter.MVCCScan(key, endKey, timestamp, opts)
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
