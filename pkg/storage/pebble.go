@@ -693,7 +693,7 @@ func (p *Pebble) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) err
 }
 
 // NewIterator implements the Engine interface.
-func (p *Pebble) NewIterator(opts IterOptions) Iterator {
+func (p *Pebble) NewIterator(opts IterOptions) MVCCIterator {
 	iter := newPebbleIterator(p.db, opts)
 	if iter == nil {
 		panic("couldn't create a new iterator")
@@ -743,7 +743,7 @@ func (p *Pebble) ClearRange(start, end MVCCKey) error {
 }
 
 // ClearIterRange implements the Engine interface.
-func (p *Pebble) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
+func (p *Pebble) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
 	// Write all the tombstones in one batch.
 	batch := p.NewWriteOnlyBatch()
 	defer batch.Close()
@@ -1149,13 +1149,13 @@ func (p *pebbleReadOnly) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) er
 	return iterateOnReader(p, start, end, f)
 }
 
-func (p *pebbleReadOnly) NewIterator(opts IterOptions) Iterator {
+func (p *pebbleReadOnly) NewIterator(opts IterOptions) MVCCIterator {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
 
 	if opts.MinTimestampHint != (hlc.Timestamp{}) {
-		// Iterators that specify timestamp bounds cannot be cached.
+		// MVCCIterators that specify timestamp bounds cannot be cached.
 		return newPebbleIterator(p.parent.db, opts)
 	}
 
@@ -1198,7 +1198,7 @@ func (p *pebbleReadOnly) ClearRange(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
@@ -1297,7 +1297,7 @@ func (p *pebbleSnapshot) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) er
 }
 
 // NewIterator implements the Reader interface.
-func (p pebbleSnapshot) NewIterator(opts IterOptions) Iterator {
+func (p pebbleSnapshot) NewIterator(opts IterOptions) MVCCIterator {
 	return newPebbleIterator(p.snapshot, opts)
 }
 

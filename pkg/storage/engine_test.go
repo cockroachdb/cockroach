@@ -158,7 +158,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// Iterator should not reuse its cached result.
+				// MVCCIterator should not reuse its cached result.
 				iter.SeekGE(key)
 
 				if ok, err := iter.Valid(); err != nil {
@@ -629,7 +629,7 @@ func TestEngineTimeBound(t *testing.T) {
 			batch := engine.NewBatch()
 			defer batch.Close()
 
-			check := func(t *testing.T, tbi Iterator, keys, ssts int) {
+			check := func(t *testing.T, tbi MVCCIterator, keys, ssts int) {
 				defer tbi.Close()
 				tbi.SeekGE(NilKey)
 
@@ -656,7 +656,7 @@ func TestEngineTimeBound(t *testing.T) {
 			}
 
 			testCases := []struct {
-				iter       Iterator
+				iter       MVCCIterator
 				keys, ssts int
 			}{
 				// Completely to the right, not touching.

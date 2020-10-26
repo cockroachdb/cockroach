@@ -18,7 +18,7 @@ import (
 
 const invalidIdxSentinel = -1
 
-// multiIterator multiplexes iteration over a number of Iterators.
+// multiIterator multiplexes iteration over a number of SimpleIterators.
 type multiIterator struct {
 	iters []SimpleIterator
 	// The index into `iters` of the iterator currently being pointed at.

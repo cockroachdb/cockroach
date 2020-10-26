@@ -83,7 +83,7 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 		return
 	}
 	if r.iter == nil {
-		// Iterator creation happens on the first Seek as it involves I/O.
+		// MVCCIterator creation happens on the first Seek as it involves I/O.
 		r.iter, r.err = r.sst.NewIter(nil /* lower */, nil /* upper */)
 		if r.err != nil {
 			return
