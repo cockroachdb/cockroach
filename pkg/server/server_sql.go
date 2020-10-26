@@ -13,11 +13,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"math"
-	"net"
-	"os"
-	"path/filepath"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
@@ -69,6 +64,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
+	"math"
+	"net"
+	"os"
+	"path/filepath"
 )
 
 type sqlServer struct {
@@ -353,7 +352,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		Executor:          cfg.circularInternalExecutor,
 		RPCContext:        cfg.rpcContext,
 		Stopper:           cfg.stopper,
-		NodesStatusServer: cfg.nodesStatusServer,
+
+		LatencyGetter:		 &serverpb.LatencyGetter{
+			NodesStatusServer: &cfg.nodesStatusServer,
+		},
 
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,

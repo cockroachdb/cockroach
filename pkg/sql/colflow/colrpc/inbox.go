@@ -13,8 +13,6 @@ package colrpc
 import (
 	"context"
 	"fmt"
-	"io"
-
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
+	"io"
 )
 
 // flowStreamServer is a utility interface used to mock out the RPC layer.

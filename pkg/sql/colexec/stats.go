@@ -13,7 +13,6 @@ package colexec
 import (
 	"context"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/opentracing/opentracing-go"
 )
 
 // The NetworkReader interface only exists to avoid an import cycle with
@@ -32,11 +32,15 @@ type NetworkReader interface {
 	GetLatency() int64
 }
 
-// VectorizedStatsCollector collects VectorizedStats on Operators.
-//
-// TODO(cathymw): refactor this class into a base and specialized stats
-// collectors.
-type VectorizedStatsCollector struct {
+// VectorizedStatsCollector exists so that the vectorizedStatsCollectorsQueue
+// in the colflow.vectorizedFlowCreator can hold both
+// VectorizedStatsCollectorBase and NetworkVectorizedStatsCollector types.
+type VectorizedStatsCollector interface {
+	OutputStats(ctx context.Context, flowID string, deterministicStats bool)
+}
+
+// VectorizedStatsCollectorBase collects VectorizedStats on Operators.
+type VectorizedStatsCollectorBase struct {
 	colexecbase.Operator
 	NonExplainable
 	execpb.VectorizedStats
@@ -52,32 +56,31 @@ type VectorizedStatsCollector struct {
 
 	// childStatsCollectors contains the stats collectors for all of the inputs
 	// to the wrapped operator.
-	childStatsCollectors []*VectorizedStatsCollector
+	childStatsCollectors []*VectorizedStatsCollectorBase
 
 	memMonitors  []*mon.BytesMonitor
 	diskMonitors []*mon.BytesMonitor
+}
 
+// NetworkVectorizedStatsCollector collects InbocVectorizedStats on Inbox.
+type NetworkVectorizedStatsCollector struct {
+	*VectorizedStatsCollectorBase
+	execpb.VectorizedInboxStats
 	networkReader NetworkReader
 }
 
-var _ colexecbase.Operator = &VectorizedStatsCollector{}
+var _ colexecbase.Operator = &VectorizedStatsCollectorBase{}
+var _ colexecbase.Operator = &NetworkVectorizedStatsCollector{}
 
-// NewVectorizedStatsCollector creates a new VectorizedStatsCollector which
-// wraps 'op' that corresponds to a component with either ProcessorID or
-// StreamID 'id' (with 'idTagKey' distinguishing between the two). 'ioReader'
-// is a component (either an operator or a wrapped processor) that performs
-// IO reads that is present in the chain of operators rooted at 'op'.
-func NewVectorizedStatsCollector(
+// initVectorizedStatsCollectorBase initializes the common fields
+// of VectorizedStatsCollectorBase for all VectorizedStatsCollectors
+func initVectorizedStatsCollectorBase(
 	op colexecbase.Operator,
 	ioReader execinfra.IOReader,
 	id int32,
 	idTagKey string,
 	inputWatch *timeutil.StopWatch,
-	memMonitors []*mon.BytesMonitor,
-	diskMonitors []*mon.BytesMonitor,
-	inputStatsCollectors []*VectorizedStatsCollector,
-	networkReader NetworkReader,
-) *VectorizedStatsCollector {
+) *VectorizedStatsCollectorBase {
 	if inputWatch == nil {
 		colexecerror.InternalError(errors.AssertionFailedf("input watch for VectorizedStatsCollector is nil"))
 	}
@@ -95,21 +98,59 @@ func NewVectorizedStatsCollector(
 			ioTime = false
 		}
 	}
-	return &VectorizedStatsCollector{
+
+	return &VectorizedStatsCollectorBase{
 		Operator:             op,
-		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime, OnStream: networkReader != nil},
+		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime},
 		idTagKey:             idTagKey,
 		ioReader:             ioReader,
 		stopwatch:            inputWatch,
-		memMonitors:          memMonitors,
-		diskMonitors:         diskMonitors,
-		childStatsCollectors: inputStatsCollectors,
-		networkReader:        networkReader,
+	}
+}
+
+// NewVectorizedStatsCollectorBase creates a new VectorizedStatsCollectorBase
+// which wraps 'op' that corresponds to a component with either ProcessorID or
+// StreamID 'id' (with 'idTagKey' distinguishing between the two). 'ioReader'
+// is a component (either an operator or a wrapped processor) that performs
+// IO reads that is present in the chain of operators rooted at 'op'.
+func NewVectorizedStatsCollectorBase(
+	op colexecbase.Operator,
+	ioReader execinfra.IOReader,
+	id int32,
+	idTagKey string,
+	inputWatch *timeutil.StopWatch,
+	memMonitors []*mon.BytesMonitor,
+	diskMonitors []*mon.BytesMonitor,
+	inputStatsCollectors []*VectorizedStatsCollectorBase,
+) *VectorizedStatsCollectorBase {
+	vsc := initVectorizedStatsCollectorBase(op, ioReader, id, idTagKey, inputWatch)
+	vsc.memMonitors = memMonitors
+	vsc.diskMonitors = diskMonitors
+	vsc.childStatsCollectors = inputStatsCollectors
+	return vsc
+}
+
+// NewNetworkVectorizedStatsCollector creates a new VectorizedStatsCollector
+// for streams. In addition to the base stats, NewNetworkVectorizedStatsCollector
+// collects the network latency for a stream.
+func NewNetworkVectorizedStatsCollector(
+	op colexecbase.Operator,
+	ioReader execinfra.IOReader,
+	id int32,
+	idTagKey string,
+	inputWatch *timeutil.StopWatch,
+	networkReader NetworkReader,
+) *NetworkVectorizedStatsCollector {
+	vscBase := initVectorizedStatsCollectorBase(op, ioReader, id, idTagKey, inputWatch)
+	return &NetworkVectorizedStatsCollector{
+		VectorizedStatsCollectorBase: vscBase,
+		VectorizedInboxStats:         execpb.VectorizedInboxStats{BaseVectorizedStats: &vscBase.VectorizedStats},
+		networkReader:                networkReader,
 	}
 }
 
 // Next is part of the Operator interface.
-func (vsc *VectorizedStatsCollector) Next(ctx context.Context) coldata.Batch {
+func (vsc *VectorizedStatsCollectorBase) Next(ctx context.Context) coldata.Batch {
 	var batch coldata.Batch
 	vsc.stopwatch.Start()
 	batch = vsc.Operator.Next(ctx)
@@ -123,7 +164,7 @@ func (vsc *VectorizedStatsCollector) Next(ctx context.Context) coldata.Batch {
 
 // finalizeStats records the time measured by the stop watch into the stats as
 // well as the memory and disk usage.
-func (vsc *VectorizedStatsCollector) finalizeStats() {
+func (vsc *VectorizedStatsCollectorBase) finalizeStats() {
 	vsc.Time = vsc.stopwatch.Elapsed()
 	// Subtract the time spent in each of the child stats collectors, to produce
 	// the amount of time that the wrapped operator spent doing work itself, not
@@ -147,13 +188,50 @@ func (vsc *VectorizedStatsCollector) finalizeStats() {
 		// themselves).
 		vsc.RowsRead = vsc.ioReader.GetRowsRead()
 	}
-	if vsc.networkReader != nil {
-		vsc.NetworkLatency = vsc.networkReader.GetLatency()
-	}
+}
+
+// finalizeStats records the stats for the VectorizedStatsCollectorBase and
+// network latency. It also adjusts the time recorded to be the Inbox
+// deserialization time.
+func (nvsc *NetworkVectorizedStatsCollector) finalizeStats() {
+	nvsc.VectorizedStatsCollectorBase.finalizeStats()
+	nvsc.NetworkLatency = nvsc.networkReader.GetLatency()
+}
+
+func createSpan(
+	ctx context.Context,
+	op colexecbase.Operator,
+	flowID string,
+	idTagKey string,
+	ID int32,
+) opentracing.Span {
+	// We're creating a new span for every component setting the appropriate
+	// tag so that it is displayed correctly on the flow diagram.
+	// TODO(yuzefovich): these spans are created and finished right away which
+	// is not the way they are supposed to be used, so this should be fixed.
+	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("%T", op))
+	span.SetTag(execinfrapb.FlowIDTagKey, flowID)
+	span.SetTag(idTagKey, ID)
+	return span
+}
+
+// setStatsToZero sets non-deterministic stats collected by vsc to zero.
+func (vsc *VectorizedStatsCollectorBase) setStatsToZero() {
+	vsc.VectorizedStats.Time = 0
+	vsc.MaxAllocatedMem = 0
+	vsc.MaxAllocatedDisk = 0
+	vsc.NumBatches = 0
+	vsc.BytesRead = 0
+}
+
+// setStatsToZero sets non-deterministic stats collected by nvsc to zero.
+func (nvsc *NetworkVectorizedStatsCollector) setStatsToZero() {
+	nvsc.VectorizedStatsCollectorBase.setStatsToZero()
+	nvsc.NetworkLatency = 0
 }
 
 // OutputStats outputs the vectorized stats collected by vsc into ctx.
-func (vsc *VectorizedStatsCollector) OutputStats(
+func (vsc *VectorizedStatsCollectorBase) OutputStats(
 	ctx context.Context, flowID string, deterministicStats bool,
 ) {
 	if vsc.ID < 0 {
@@ -161,22 +239,29 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		// component.
 		return
 	}
-	// We're creating a new span for every component setting the appropriate
-	// tag so that it is displayed correctly on the flow diagram.
-	// TODO(yuzefovich): these spans are created and finished right away which
-	// is not the way they are supposed to be used, so this should be fixed.
-	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("%T", vsc.Operator))
-	span.SetTag(execinfrapb.FlowIDTagKey, flowID)
-	span.SetTag(vsc.idTagKey, vsc.ID)
+	span := createSpan(ctx, vsc.Operator, flowID, vsc.idTagKey, vsc.ID)
 	vsc.finalizeStats()
 	if deterministicStats {
-		vsc.VectorizedStats.Time = 0
-		vsc.MaxAllocatedMem = 0
-		vsc.MaxAllocatedDisk = 0
-		vsc.NumBatches = 0
-		vsc.BytesRead = 0
-		vsc.NetworkLatency = 0
+		vsc.setStatsToZero()
 	}
 	tracing.SetSpanStats(span, &vsc.VectorizedStats)
+	span.Finish()
+}
+
+// OutputStats outputs the vectorized stats collected by nvsc into ctx.
+func (nvsc *NetworkVectorizedStatsCollector) OutputStats(
+	ctx context.Context, flowID string, deterministicStats bool,
+) {
+	if nvsc.ID < 0 {
+		// Ignore this stats collector since it is not associated with any
+		// component.
+		return
+	}
+	span := createSpan(ctx, nvsc.Operator, flowID, nvsc.idTagKey, nvsc.ID)
+	nvsc.finalizeStats()
+	if deterministicStats {
+		nvsc.setStatsToZero()
+	}
+	tracing.SetSpanStats(span, &nvsc.VectorizedInboxStats)
 	span.Finish()
 }

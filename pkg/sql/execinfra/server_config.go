@@ -148,7 +148,7 @@ type ServerConfig struct {
 	// user-defined types.
 	HydratedTables *hydratedtables.Cache
 
-	NodesStatusServer serverpb.OptionalNodesStatusServer
+	LatencyGetter *serverpb.LatencyGetter
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

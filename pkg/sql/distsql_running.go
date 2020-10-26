@@ -13,10 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"math"
-	"sync"
-	"sync/atomic"
-
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,6 +44,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
+	"math"
+	"sync"
+	"sync/atomic"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers

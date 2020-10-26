@@ -36,10 +36,12 @@ message VectorizedStats {
   // rows_read is the number of rows read from the disk. It is set only when
   // io is true.
   int64 rows_read = 9;
-  // on_stream indicates whether the stats are shown on a stream. This decides
-  // if network latency should be shown or not.
-  bool on_stream = 10;
+}
+
+message VectorizedInboxStats {
+  VectorizedStats base_vectorized_stats = 1;
+
   // network_latency is the latency time in nanoseconds between outbox and inbox.
   // It is set only when on_stream is true.
-  int64 network_latency = 11;
+  int64 network_latency = 2;
 }

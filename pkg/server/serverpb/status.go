@@ -12,8 +12,10 @@ package serverpb
 
 import (
 	context "context"
-
+	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"time"
 )
 
 // SQLStatusServer is a smaller version of the serverpb.StatusInterface which
@@ -61,3 +63,49 @@ func (s *OptionalNodesStatusServer) OptionalNodesStatusServer(
 	}
 	return v.(NodesStatusServer), nil
 }
+
+// LatencyGetter stores the map of latencies obtained from the NodesStatusServer.
+// These latencies are displayed on the streams of EXPLAIN ANALYZE diagrams.
+// This struct is put here to avoid import cycles.
+type LatencyGetter struct {
+	latencyMap map[roachpb.NodeID]map[roachpb.NodeID]int64
+	lastUpdatedTime time.Time
+	NodesStatusServer *OptionalNodesStatusServer
+}
+
+// GetLatency is a helper function that updates the latencies between nodes
+// if they have not been updated in more than one second. This function
+// returns the latency between the node with the Outbox and the node with
+// the Inbox.
+func (lg *LatencyGetter) GetLatency(
+	outboxNodeID roachpb.NodeID,
+	inboxNodeID roachpb.NodeID,
+	ctx context.Context,
+) int64 {
+	if time.Since(lg.lastUpdatedTime) > time.Second {
+		// update latencies in latencyMap
+		ss, err := lg.NodesStatusServer.OptionalNodesStatusServer(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+		if err == nil {
+			if lg.latencyMap == nil {
+				lg.latencyMap = make(map[roachpb.NodeID]map[roachpb.NodeID]int64)
+			}
+			response, _ := ss.Nodes(ctx, &NodesRequest{})
+			for _, sendingNode := range response.Nodes {
+				sendingNodeID := sendingNode.Desc.NodeID
+				if lg.latencyMap[sendingNodeID] == nil {
+					lg.latencyMap[sendingNodeID] = make(map[roachpb.NodeID]int64)
+				}
+				for _, receivingNode := range response.Nodes {
+					receivingNodeID := receivingNode.Desc.NodeID
+					if sendingNodeID != receivingNodeID {
+						lg.latencyMap[sendingNodeID][receivingNodeID] = sendingNode.Activity[receivingNodeID].Latency
+					}
+				}
+			}
+		}
+		fmt.Println(lg.latencyMap)
+		lg.lastUpdatedTime = time.Now()
+	}
+	return lg.latencyMap[outboxNodeID][inboxNodeID]
+}
+

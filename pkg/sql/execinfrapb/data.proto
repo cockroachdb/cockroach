@@ -241,7 +241,11 @@ message ProducerMessage {
 }
 
 // NetworkStats is a message that contains network metrics between an Outbox
-// and an Inbox.
+// and an Inbox. The latency metric is obtained from the node.Activity map
+// that the NodesStatusServer maintains for all the nodes in the cluster.
+// We send this stat from an Outbox to an Inbox because to retrieve the
+// latency, both the sending node ID and receiving node ID need to be known.
+// Unlike the Inbox, the Outbox has access to both these node IDs.
 message NetworkStats {
   optional int64 latency = 1 [(gogoproto.nullable) = false];
 }
