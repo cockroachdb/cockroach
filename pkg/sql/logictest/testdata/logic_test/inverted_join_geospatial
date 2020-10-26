@@ -165,7 +165,7 @@ AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0
 ----
 1  13
 
-# These queries perform semi-joins, which are converted to inner joins by the
+# These queries perform semi-joins, which are converted to paired joins by the
 # optimizer.
 query I
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))

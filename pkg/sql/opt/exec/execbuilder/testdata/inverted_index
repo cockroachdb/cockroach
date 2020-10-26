@@ -785,59 +785,36 @@ query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 WHERE EXISTS (SELECT * FROM geo_table@geom_index
 WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
-project
+semi-join (lookup geo_table)
  ├── columns: k:1 geom:2
+ ├── key columns: [5] = [5]
+ ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=10]
- ├── cost: 112690.199
+ ├── cost: 112684.05
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1)
- └── distinct-on
-      ├── columns: geo_table2.k:1 geo_table2.geom:2
-      ├── grouping columns: geo_table2.k:1
-      ├── internal-ordering: +1
-      ├── immutable
-      ├── stats: [rows=999.947218, distinct(1)=999.947218, null(1)=0]
-      ├── cost: 112690.089
-      ├── key: (1)
-      ├── fd: (1)-->(2)
-      ├── inner-join (lookup geo_table)
-      │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.geom:6
-      │    ├── key columns: [5] = [5]
-      │    ├── lookup columns are key
-      │    ├── immutable
-      │    ├── stats: [rows=9801, distinct(1)=999.947218, null(1)=0]
-      │    ├── cost: 112484.05
-      │    ├── fd: (1)-->(2)
-      │    ├── ordering: +1
-      │    ├── prune: (1)
-      │    ├── interesting orderings: (+1)
-      │    ├── inner-join (inverted-lookup geo_table@geom_index)
-      │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5
-      │    │    ├── inverted-expr
-      │    │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
-      │    │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0]
-      │    │    ├── cost: 41784.03
-      │    │    ├── key: (1,5)
-      │    │    ├── fd: (1)-->(2)
-      │    │    ├── ordering: +1
-      │    │    ├── scan geo_table2
-      │    │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
-      │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
-      │    │    │    ├── cost: 1084.02
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2)
-      │    │    │    ├── ordering: +1
-      │    │    │    ├── prune: (1,2)
-      │    │    │    ├── interesting orderings: (+1)
-      │    │    │    └── unfiltered-cols: (1-4)
-      │    │    └── filters (true)
-      │    └── filters
-      │         └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-      └── aggregations
-           └── const-agg [as=geo_table2.geom:2, outer=(2)]
-                └── geo_table2.geom:2
+ ├── inner-join (inverted-lookup geo_table@geom_index)
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
+ │    ├── inverted-expr
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0]
+ │    ├── cost: 41984.03
+ │    ├── key: (1,5)
+ │    ├── fd: (1)-->(2), (5)-->(11)
+ │    ├── scan geo_table2
+ │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
+ │    │    ├── cost: 1084.02
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── unfiltered-cols: (1-4)
+ │    └── filters (true)
+ └── filters
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 WHERE NOT EXISTS (SELECT * FROM geo_table@geom_index
