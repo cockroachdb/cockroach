@@ -3794,24 +3794,43 @@ func TestBackupRestoreShowJob(t *testing.T) {
 func TestBackupCreatedStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const numAccounts = 1
-	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
-	defer cleanupFn()
+	enableStats := []bool{true, false}
+	for _, statsEnabled := range enableStats {
+		testName := "stats-enabled"
+		if !statsEnabled {
+			testName = "stats-disabled"
+		}
+		t.Run(testName, func(t *testing.T) {
+			const numAccounts = 1
+			_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+			defer cleanupFn()
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+			// Stats are included in backups by default.
+			if !statsEnabled {
+				sqlDB.Exec(t, `SET CLUSTER SETTING backup.table_statistics.enabled = false`)
+			}
 
-	sqlDB.Exec(t, `CREATE TABLE data.foo (a INT PRIMARY KEY)`)
-	injectStats(t, sqlDB, "data.bank", "id")
-	injectStats(t, sqlDB, "data.foo", "a")
-	sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history`, localFoo)
-	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
-	sqlDB.Exec(t, `RESTORE data.bank, data.foo FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
-		localFoo, "data 2")
+			sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
-	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`),
-		sqlDB.QueryStr(t, getStatsQuery("data.bank")))
-	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".foo`),
-		sqlDB.QueryStr(t, getStatsQuery("data.foo")))
+			sqlDB.Exec(t, `CREATE TABLE data.foo (a INT PRIMARY KEY)`)
+			injectStats(t, sqlDB, "data.bank", "id")
+			injectStats(t, sqlDB, "data.foo", "a")
+			sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history`, localFoo)
+			sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+			sqlDB.Exec(t, `RESTORE data.bank, data.foo FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
+				localFoo, "data 2")
+
+			if statsEnabled {
+				sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`),
+					sqlDB.QueryStr(t, getStatsQuery("data.bank")))
+				sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".foo`),
+					sqlDB.QueryStr(t, getStatsQuery("data.foo")))
+			} else {
+				sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`), [][]string{})
+				sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".foo`), [][]string{})
+			}
+		})
+	}
 }
 
 // Ensure that backing up and restoring an empty database succeeds.
