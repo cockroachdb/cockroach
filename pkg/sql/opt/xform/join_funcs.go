@@ -447,19 +447,6 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
-		if joinType == opt.SemiJoinOp {
-			// We cannot use a non-covering index for semi join. Note that
-			// since the semi join doesn't pass through any columns, "non
-			// covering" here means that not all columns in the ON condition are
-			// available.
-			//
-			// For semi joins, we may still be able to generate an inverted join
-			// by converting it to an inner join using the ConvertSemiToInnerJoin
-			// rule. Any semi join that could use an inverted index would already be
-			// transformed into an inner join by ConvertSemiToInnerJoin, so semi
-			// joins can be ignored here.
-			return
-		}
 
 		if pkCols == nil {
 			tab := c.e.mem.Metadata().Table(scanPrivate.Table)
@@ -477,9 +464,9 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 
 		continuationCol := opt.ColumnID(0)
 		invertedJoinType := joinType
-		// Anti joins are converted to a pair consisting of a left join and
-		// anti join.
-		if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
+		// Anti/semi joins are converted to a pair consisting of a left join and
+		// anti/semi lookup join.
+		if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp || joinType == opt.SemiJoinOp {
 			continuationCol = c.constructContinuationColumnForPairedLeftJoin()
 			invertedJoinType = opt.LeftJoinOp
 		}
