@@ -951,6 +951,25 @@ END;
 			skipIssue: 53958,
 		},
 		{
+			name: "INSERT without specifying all column values",
+			typ:  "PGDUMP",
+			data: `
+					SET standard_conforming_strings = OFF;
+					BEGIN;
+					CREATE TABLE "bob" ("a" int, "b" int, c int default 2);
+					INSERT INTO "bob" ("a") VALUES (1), (5);
+					INSERT INTO "bob" ("c", "b") VALUES (3, 2);
+					COMMIT
+			`,
+			query: map[string][][]string{
+				`SELECT * FROM bob`: {
+					{"1", "NULL", "2"},
+					{"5", "NULL", "2"},
+					{"NULL", "2", "3"},
+				},
+			},
+		},
+		{
 			name: "ALTER COLUMN x SET NOT NULL",
 			typ:  "PGDUMP",
 			data: `
