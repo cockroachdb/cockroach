@@ -22,14 +22,14 @@ WHERE d_w_id = 10 AND d_id = 5
 RETURNING d_tax, d_next_o_id
 ----
 project
- ├── columns: d_tax:9!null d_next_o_id:11!null
+ ├── columns: d_tax:9 d_next_o_id:11
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(9,11)
  └── update district
-      ├── columns: d_id:1!null d_w_id:2!null d_tax:9!null d_next_o_id:11!null
-      ├── fetch columns: d_id:13 d_w_id:14 d_tax:21 d_next_o_id:23
+      ├── columns: d_id:1!null d_w_id:2!null d_tax:9 d_next_o_id:11
+      ├── fetch columns: d_id:13 d_w_id:14 d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
       ├── update-mapping:
       │    └── d_next_o_id_new:25 => d_next_o_id:11
       ├── cardinality: [0 - 1]
@@ -37,17 +37,17 @@ project
       ├── key: ()
       ├── fd: ()-->(1,2,9,11)
       └── project
-           ├── columns: d_next_o_id_new:25!null d_id:13!null d_w_id:14!null d_tax:21!null d_next_o_id:23!null
+           ├── columns: d_next_o_id_new:25 d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
-           ├── fd: ()-->(13,14,21,23,25)
+           ├── fd: ()-->(13-23,25)
            ├── scan district
-           │    ├── columns: d_id:13!null d_w_id:14!null d_tax:21!null d_next_o_id:23!null
+           │    ├── columns: d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
            │    ├── constraint: /14/13: [/10/5 - /10/5]
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
-           │    └── fd: ()-->(13,14,21,23)
+           │    └── fd: ()-->(13-23)
            └── projections
                 └── d_next_o_id:23 + 1 [as=d_next_o_id_new:25, outer=(23), immutable]
 
@@ -55,12 +55,12 @@ opt format=hide-qual
 SELECT w_tax FROM warehouse WHERE w_id = 10
 ----
 project
- ├── columns: w_tax:8!null
+ ├── columns: w_tax:8
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(8)
  └── scan warehouse
-      ├── columns: w_id:1!null w_tax:8!null
+      ├── columns: w_id:1!null w_tax:8
       ├── constraint: /1: [/10 - /10]
       ├── cardinality: [0 - 1]
       ├── key: ()
@@ -72,12 +72,12 @@ FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
 ----
 project
- ├── columns: c_discount:16!null c_last:6!null c_credit:14!null
+ ├── columns: c_discount:16 c_last:6 c_credit:14
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(6,14,16)
  └── scan customer
-      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_last:6!null c_credit:14!null c_discount:16!null
+      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_last:6 c_credit:14 c_discount:16
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
       ├── cardinality: [0 - 1]
       ├── key: ()
@@ -431,14 +431,14 @@ UPDATE warehouse SET w_ytd = w_ytd + 3860.61 WHERE w_id = 10
 RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip
 ----
 project
- ├── columns: w_name:2!null w_street_1:3!null w_street_2:4!null w_city:5!null w_state:6!null w_zip:7!null
+ ├── columns: w_name:2 w_street_1:3 w_street_2:4 w_city:5 w_state:6 w_zip:7
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(2-7)
  └── update warehouse
-      ├── columns: w_id:1!null w_name:2!null w_street_1:3!null w_street_2:4!null w_city:5!null w_state:6!null w_zip:7!null
-      ├── fetch columns: w_id:11 w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 warehouse.w_ytd:19
+      ├── columns: w_id:1!null w_name:2 w_street_1:3 w_street_2:4 w_city:5 w_state:6 w_zip:7
+      ├── fetch columns: w_id:11 w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
       ├── update-mapping:
       │    └── w_ytd:22 => warehouse.w_ytd:9
       ├── cardinality: [0 - 1]
@@ -446,17 +446,17 @@ project
       ├── key: ()
       ├── fd: ()-->(1-7)
       └── project
-           ├── columns: w_ytd:22 w_id:11!null w_name:12!null w_street_1:13!null w_street_2:14!null w_city:15!null w_state:16!null w_zip:17!null warehouse.w_ytd:19!null
+           ├── columns: w_ytd:22 w_id:11!null w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
-           ├── fd: ()-->(11-17,19,22)
+           ├── fd: ()-->(11-19,22)
            ├── scan warehouse
-           │    ├── columns: w_id:11!null w_name:12!null w_street_1:13!null w_street_2:14!null w_city:15!null w_state:16!null w_zip:17!null warehouse.w_ytd:19!null
+           │    ├── columns: w_id:11!null w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
            │    ├── constraint: /11: [/10 - /10]
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
-           │    └── fd: ()-->(11-17,19)
+           │    └── fd: ()-->(11-19)
            └── projections
                 └── crdb_internal.round_decimal_values(warehouse.w_ytd:19::DECIMAL + 3860.61, 2) [as=w_ytd:22, outer=(19), immutable]
 
@@ -465,14 +465,14 @@ UPDATE district SET d_ytd = d_ytd + 3860.61 WHERE (d_w_id = 10) AND (d_id = 5)
 RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip
 ----
 project
- ├── columns: d_name:3!null d_street_1:4!null d_street_2:5!null d_city:6!null d_state:7!null d_zip:8!null
+ ├── columns: d_name:3 d_street_1:4 d_street_2:5 d_city:6 d_state:7 d_zip:8
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(3-8)
  └── update district
-      ├── columns: d_id:1!null d_w_id:2!null d_name:3!null d_street_1:4!null d_street_2:5!null d_city:6!null d_state:7!null d_zip:8!null
-      ├── fetch columns: d_id:13 d_w_id:14 d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 district.d_ytd:22
+      ├── columns: d_id:1!null d_w_id:2!null d_name:3 d_street_1:4 d_street_2:5 d_city:6 d_state:7 d_zip:8
+      ├── fetch columns: d_id:13 d_w_id:14 d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
       ├── update-mapping:
       │    └── d_ytd:26 => district.d_ytd:10
       ├── cardinality: [0 - 1]
@@ -480,17 +480,17 @@ project
       ├── key: ()
       ├── fd: ()-->(1-8)
       └── project
-           ├── columns: d_ytd:26 d_id:13!null d_w_id:14!null d_name:15!null d_street_1:16!null d_street_2:17!null d_city:18!null d_state:19!null d_zip:20!null district.d_ytd:22!null
+           ├── columns: d_ytd:26 d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
-           ├── fd: ()-->(13-20,22,26)
+           ├── fd: ()-->(13-23,26)
            ├── scan district
-           │    ├── columns: d_id:13!null d_w_id:14!null d_name:15!null d_street_1:16!null d_street_2:17!null d_city:18!null d_state:19!null d_zip:20!null district.d_ytd:22!null
+           │    ├── columns: d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
            │    ├── constraint: /14/13: [/10/5 - /10/5]
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
-           │    └── fd: ()-->(13-20,22)
+           │    └── fd: ()-->(13-23)
            └── projections
                 └── crdb_internal.round_decimal_values(district.d_ytd:22::DECIMAL + 3860.61, 2) [as=d_ytd:26, outer=(22), immutable]
 
@@ -501,12 +501,12 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
 project
- ├── columns: c_id:1!null  [hidden: c_first:4!null]
+ ├── columns: c_id:1!null  [hidden: c_first:4]
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── ordering: +4
  └── scan customer@customer_idx
-      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4!null c_last:6!null
+      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_last:6!null
       ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4)
@@ -554,13 +554,13 @@ RETURNING
   CASE c_credit WHEN 'BC' THEN "left"(c_data, 200) ELSE '' END
 ----
 project
- ├── columns: c_first:4!null c_middle:5!null c_last:6!null c_street_1:7!null c_street_2:8!null c_city:9!null c_state:10!null c_zip:11!null c_phone:12!null c_since:13!null c_credit:14!null c_credit_lim:15!null c_discount:16!null c_balance:17!null case:51
+ ├── columns: c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 c_balance:17 case:51
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(4-17,51)
  ├── update customer
- │    ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4!null c_middle:5!null c_last:6!null c_street_1:7!null c_street_2:8!null c_city:9!null c_state:10!null c_zip:11!null c_phone:12!null c_since:13!null c_credit:14!null c_credit_lim:15!null c_discount:16!null customer.c_balance:17!null c_data:21!null
+ │    ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 customer.c_balance:17 c_data:21
  │    ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  │    ├── update-mapping:
  │    │    ├── c_balance:49 => customer.c_balance:17
@@ -572,13 +572,13 @@ project
  │    ├── key: ()
  │    ├── fd: ()-->(1-17,21)
  │    └── project
- │         ├── columns: c_balance:49 c_ytd_payment:50 c_payment_cnt_new:47!null c_data_new:48 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26!null c_middle:27!null c_last:28!null c_street_1:29!null c_street_2:30!null c_city:31!null c_state:32!null c_zip:33!null c_phone:34!null c_since:35!null c_credit:36!null c_credit_lim:37!null c_discount:38!null customer.c_balance:39!null customer.c_ytd_payment:40!null c_payment_cnt:41!null c_delivery_cnt:42!null c_data:43!null
+ │         ├── columns: c_balance:49 c_ytd_payment:50 c_payment_cnt_new:47 c_data_new:48 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
  │         ├── fd: ()-->(23-43,47-50)
  │         ├── scan customer
- │         │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26!null c_middle:27!null c_last:28!null c_street_1:29!null c_street_2:30!null c_city:31!null c_state:32!null c_zip:33!null c_phone:34!null c_since:35!null c_credit:36!null c_credit_lim:37!null c_discount:38!null customer.c_balance:39!null customer.c_ytd_payment:40!null c_payment_cnt:41!null c_delivery_cnt:42!null c_data:43!null
+ │         │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  │         │    ├── constraint: /25/24/23: [/10/5/1343 - /10/5/1343]
  │         │    ├── cardinality: [0 - 1]
  │         │    ├── key: ()
@@ -671,12 +671,12 @@ FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
 ----
 project
- ├── columns: c_balance:17!null c_first:4!null c_middle:5!null c_last:6!null
+ ├── columns: c_balance:17 c_first:4 c_middle:5 c_last:6
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(4-6,17)
  └── scan customer
-      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4!null c_middle:5!null c_last:6!null c_balance:17!null
+      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6 c_balance:17
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
       ├── cardinality: [0 - 1]
       ├── key: ()
@@ -689,17 +689,17 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
 project
- ├── columns: c_id:1!null c_balance:17!null c_first:4!null c_middle:5!null
+ ├── columns: c_id:1!null c_balance:17 c_first:4 c_middle:5
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
  └── index-join customer
-      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4!null c_middle:5!null c_last:6!null c_balance:17!null
+      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6!null c_balance:17
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
       ├── ordering: +4 opt(2,3,6) [actual: +4]
       └── scan customer@customer_idx
-           ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4!null c_last:6!null
+           ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_last:6!null
            ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
            ├── key: (1)
            ├── fd: ()-->(2,3,6), (1)-->(4)
@@ -877,20 +877,20 @@ WHERE c_w_id = 10 AND (c_d_id, c_id) IN (
 ----
 update customer
  ├── columns: <none>
- ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+ ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  ├── update-mapping:
  │    ├── c_balance:47 => customer.c_balance:17
  │    └── c_delivery_cnt_new:45 => c_delivery_cnt:20
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: c_balance:47 c_delivery_cnt_new:45!null c_id:23!null c_d_id:24!null c_w_id:25!null customer.c_balance:39!null c_ytd_payment:40!null c_payment_cnt:41!null c_delivery_cnt:42!null c_data:43!null
+      ├── columns: c_balance:47 c_delivery_cnt_new:45 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
       ├── cardinality: [0 - 10]
       ├── immutable
       ├── key: (23,24)
-      ├── fd: ()-->(25), (23,24)-->(39-43,47), (42)-->(45)
+      ├── fd: ()-->(25), (23,24)-->(26-43,47), (42)-->(45)
       ├── scan customer
-      │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null customer.c_balance:39!null c_ytd_payment:40!null c_payment_cnt:41!null c_delivery_cnt:42!null c_data:43!null
+      │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
       │    ├── constraint: /25/24/23
       │    │    ├── [/10/1/1405 - /10/1/1405]
       │    │    ├── [/10/2/137 - /10/2/137]
@@ -904,7 +904,7 @@ update customer
       │    │    └── [/10/10/417 - /10/10/417]
       │    ├── cardinality: [0 - 10]
       │    ├── key: (23,24)
-      │    └── fd: ()-->(25), (23,24)-->(39-43)
+      │    └── fd: ()-->(25), (23,24)-->(26-43)
       └── projections
            ├── crdb_internal.round_decimal_values(customer.c_balance:39::DECIMAL + CASE c_d_id:24 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END, 2) [as=c_balance:47, outer=(24,39), immutable]
            └── c_delivery_cnt:42 + 1 [as=c_delivery_cnt_new:45, outer=(42), immutable]
@@ -1006,12 +1006,12 @@ FROM district
 WHERE d_w_id = 10 AND d_id = 100
 ----
 project
- ├── columns: d_next_o_id:11!null
+ ├── columns: d_next_o_id:11
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(11)
  └── scan district
-      ├── columns: d_id:1!null d_w_id:2!null d_next_o_id:11!null
+      ├── columns: d_id:1!null d_w_id:2!null d_next_o_id:11
       ├── constraint: /2/1: [/10/100 - /10/100]
       ├── cardinality: [0 - 1]
       ├── key: ()
@@ -1083,18 +1083,18 @@ scalar-group-by
  │    ├── key: (12)
  │    ├── fd: (1)-->(9), (12)-->(23), (1)==(12), (12)==(1)
  │    ├── scan warehouse
- │    │    ├── columns: w_id:1!null w_ytd:9!null
+ │    │    ├── columns: w_id:1!null w_ytd:9
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
  │    │    └── ordering: +1
  │    ├── group-by
- │    │    ├── columns: d_w_id:12!null sum:23!null
+ │    │    ├── columns: d_w_id:12!null sum:23
  │    │    ├── grouping columns: d_w_id:12!null
  │    │    ├── key: (12)
  │    │    ├── fd: (12)-->(23)
  │    │    ├── ordering: +12
  │    │    ├── scan district
- │    │    │    ├── columns: d_w_id:12!null d_ytd:20!null
+ │    │    │    ├── columns: d_w_id:12!null d_ytd:20
  │    │    │    └── ordering: +12
  │    │    └── aggregations
  │    │         └── sum [as=sum:23, outer=(20)]
@@ -1110,7 +1110,7 @@ FROM district
 ORDER BY d_w_id, d_id
 ----
 scan district
- ├── columns: d_next_o_id:11!null  [hidden: d_id:1!null d_w_id:2!null]
+ ├── columns: d_next_o_id:11  [hidden: d_id:1!null d_w_id:2!null]
  ├── key: (1,2)
  ├── fd: (1,2)-->(11)
  └── ordering: +2,+1
