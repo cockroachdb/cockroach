@@ -23,12 +23,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func makeS3Storage(
+	ctx context.Context, uri string, user security.SQLUsername,
+) (cloud.ExternalStorage, error) {
+	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
+	if err != nil {
+		return nil, err
+	}
+
+	// Setup a sink for the given args.
+	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	s, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+		clientFactory, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return s, nil
+}
 
 func TestPutS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -66,7 +87,8 @@ func TestPutS3(t *testing.T) {
 		credentialsProvider := credentials.SharedCredentialsProvider{}
 		_, err := credentialsProvider.Retrieve()
 		if err != nil {
-			skip.IgnoreLint(t, err)
+			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+				"refer to https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 
 		testExportStore(t, fmt.Sprintf(
@@ -92,6 +114,70 @@ func TestPutS3(t *testing.T) {
 			),
 			user, nil, nil,
 		)
+	})
+
+	// Tests that we can put an object with server side encryption specified.
+	t.Run("server-side-encryption", func(t *testing.T) {
+		// You can create an IAM that can access S3
+		// in the AWS console, then set it up locally.
+		// https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html
+		// We only run this test if default role exists.
+		credentialsProvider := credentials.SharedCredentialsProvider{}
+		_, err := credentialsProvider.Retrieve()
+		if err != nil {
+			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+				"refer to https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+		}
+
+		testExportStore(t, fmt.Sprintf(
+			"s3://%s/%s?%s=%s&%s=%s",
+			bucket, "backup-test-sse-256",
+			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit, cloudimpl.AWSServerSideEncryptionMode,
+			"AES256",
+		), false, user, nil, nil)
+
+		v := os.Getenv("AWS_KMS_KEY_ARN_A")
+		if v == "" {
+			skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
+		}
+		testExportStore(t, fmt.Sprintf(
+			"s3://%s/%s?%s=%s&%s=%s&%s=%s",
+			bucket, "backup-test-sse-kms",
+			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit, cloudimpl.AWSServerSideEncryptionMode,
+			"aws:kms", cloudimpl.AWSServerSideEncryptionKMSID, v,
+		), false, user, nil, nil)
+	})
+
+	t.Run("server-side-encryption-invalid-params", func(t *testing.T) {
+		// You can create an IAM that can access S3
+		// in the AWS console, then set it up locally.
+		// https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html
+		// We only run this test if default role exists.
+		credentialsProvider := credentials.SharedCredentialsProvider{}
+		_, err := credentialsProvider.Retrieve()
+		if err != nil {
+			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+				"refer to https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+		}
+
+		// Unsupported server side encryption option.
+		invalidSSEModeURI := fmt.Sprintf(
+			"s3://%s/%s?%s=%s&%s=%s",
+			bucket, "backup-test-sse-256",
+			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit, cloudimpl.AWSServerSideEncryptionMode,
+			"unsupported-algorithm")
+
+		_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
+		require.True(t, testutils.IsError(err, "unsupported server encryption mode unsupported-algorithm. Supported values are `aws:kms` and `AES256"))
+
+		// Specify aws:kms encryption mode but don't specify kms ID.
+		invalidKMSURI := fmt.Sprintf(
+			"s3://%s/%s?%s=%s&%s=%s",
+			bucket, "backup-test-sse-256",
+			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit, cloudimpl.AWSServerSideEncryptionMode,
+			"aws:kms")
+		_, err = makeS3Storage(ctx, invalidKMSURI, user)
+		require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
 	})
 }
 

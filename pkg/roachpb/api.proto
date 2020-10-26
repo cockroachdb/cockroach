@@ -1328,6 +1328,8 @@ message ExternalStorage {
     string endpoint = 6;
     string region = 7;
     string auth = 8;
+    string server_enc_mode  = 9;
+    string server_kms_id = 10  [(gogoproto.customname) = "ServerKMSID"];
   }
   message GCS {
     option (gogoproto.equal) = true;
