@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "enum",
+    srcs = ["enum.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/enum",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "enum_test",
+    srcs = ["enum_test.go"],
+    embed = [":enum"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

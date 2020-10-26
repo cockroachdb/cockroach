@@ -1,0 +1,53 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pgerror",
+    srcs = [
+        "constraint_name.go",
+        "errors.go",
+        "errors.pb.go",
+        "flatten.go",
+        "internal_errors.go",
+        "pgcode.go",
+        "severity.go",
+        "with_candidate_code.go",
+        "wrap.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/docs",
+        "//pkg/sql/pgwire/pgcode",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/errorspb",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/lib/pq",
+    ],
+)
+
+go_test(
+    name = "pgerror_test",
+    srcs = [
+        "constraint_name_test.go",
+        "errors_test.go",
+        "flatten_test.go",
+        "internal_errors_test.go",
+        "main_test.go",
+        "pgcode_test.go",
+        "severity_test.go",
+        "wrap_test.go",
+    ],
+    embed = [":pgerror"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/testutils",
+        "//vendor/github.com/kr/pretty",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

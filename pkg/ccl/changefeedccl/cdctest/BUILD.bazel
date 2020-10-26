@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cdctest",
+    srcs = [
+        "nemeses.go",
+        "testfeed.go",
+        "validator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/sql",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/fsm",
+        "//pkg/util/hlc",
+        "//pkg/util/json",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "//pkg/util/retry",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/jackc/pgx",
+    ],
+)
+
+go_test(
+    name = "cdctest_test",
+    srcs = [
+        "main_test.go",
+        "validator_test.go",
+    ],
+    embed = [":cdctest"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/storageccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

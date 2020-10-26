@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "returnerrcheck",
+    srcs = ["returnerrcheck.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils/lint/passes/passesutil",
+        "//vendor/golang.org/x/tools/go/analysis",
+        "//vendor/golang.org/x/tools/go/analysis/passes/inspect",
+        "//vendor/golang.org/x/tools/go/ast/astutil",
+        "//vendor/golang.org/x/tools/go/ast/inspector",
+    ],
+)
+
+go_test(
+    name = "returnerrcheck_test",
+    srcs = ["returnerrcheck_test.go"],
+    deps = [
+        ":returnerrcheck",
+        "//pkg/testutils/skip",
+        "//vendor/golang.org/x/tools/go/analysis/analysistest",
+    ],
+)

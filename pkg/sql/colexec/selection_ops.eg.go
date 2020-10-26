@@ -28,6 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ apd.Context
+	_ duration.Duration
+	_ coldataext.Datum
+)
+
 // selConstOpBase contains all of the fields for binary selections with a
 // constant, except for the constant itself.
 type selConstOpBase struct {

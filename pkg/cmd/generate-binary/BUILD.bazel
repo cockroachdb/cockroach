@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "generate-binary_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-binary",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/cmp-protocol/pgconnect",
+        "//pkg/sql/pgwire/pgwirebase",
+    ],
+)
+
+go_binary(
+    name = "generate-binary",
+    embed = [":generate-binary_lib"],
+    visibility = ["//visibility:public"],
+)

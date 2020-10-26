@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "errorutil",
+    srcs = [
+        "catch.go",
+        "error.go",
+        "tenant.go",
+        "tenant_deprecated_wrapper.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/errorutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "errorutil_test",
+    srcs = ["error_test.go"],
+    embed = [":errorutil"],
+)

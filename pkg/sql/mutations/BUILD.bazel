@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mutations",
+    srcs = [
+        "mutations.go",
+        "mutations_util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/mutations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/parser",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/stats",
+        "//pkg/util",
+        "//pkg/util/encoding",
+    ],
+)
+
+go_test(
+    name = "mutations_test",
+    srcs = ["mutations_test.go"],
+    embed = [":mutations"],
+    deps = ["//pkg/util/randutil"],
+)

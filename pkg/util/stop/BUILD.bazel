@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "stop",
+    srcs = ["stopper.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/stop",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/util/caller",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/quotapool",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/opentracing/opentracing-go",
+    ],
+)
+
+go_test(
+    name = "stop_test",
+    srcs = [
+        "main_test.go",
+        "stopper_test.go",
+    ],
+    deps = [
+        ":stop",
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/quotapool",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

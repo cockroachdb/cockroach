@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "debug",
+    srcs = [
+        "debug.go",
+        "tpcc_results.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/debug",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/workload/cli",
+        "//pkg/workload/histogram",
+        "//pkg/workload/tpcc",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/spf13/cobra",
+    ],
+)

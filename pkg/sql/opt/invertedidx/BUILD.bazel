@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "invertedidx",
+    srcs = [
+        "geo.go",
+        "inverted_index_expr.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geogfn",
+        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/invertedexpr",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/golang/geo/r1",
+        "//vendor/github.com/golang/geo/s1",
+        "//vendor/github.com/golang/geo/s2",
+    ],
+)
+
+go_test(
+    name = "invertedidx_test",
+    srcs = ["geo_test.go"],
+    deps = [
+        ":invertedidx",
+        "//pkg/geo",
+        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/invertedexpr",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

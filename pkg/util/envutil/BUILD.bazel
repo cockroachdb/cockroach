@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "envutil",
+    srcs = ["env.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/envutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/humanizeutil",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "envutil_test",
+    srcs = ["env_test.go"],
+    embed = [":envutil"],
+)
