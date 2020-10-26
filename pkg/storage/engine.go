@@ -36,10 +36,10 @@ func init() {
 	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "pebble"))
 }
 
-// SimpleIterator is an interface for iterating over key/value pairs in an
-// engine. SimpleIterator implementations are thread safe unless otherwise
-// noted. SimpleIterator is a subset of the functionality offered by Iterator.
-type SimpleIterator interface {
+// SimpleMVCCIterator is an interface for iterating over key/value pairs in an
+// engine. SimpleMVCCIterator implementations are thread safe unless otherwise
+// noted. SimpleMVCCIterator is a subset of the functionality offered by MVCCIterator.
+type SimpleMVCCIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
 	// SeekGE advances the iterator to the first key in the engine which
@@ -70,17 +70,21 @@ type SimpleIterator interface {
 	UnsafeValue() []byte
 }
 
-// IteratorStats is returned from (Iterator).Stats.
+// IteratorStats is returned from (MVCCIterator).Stats.
 type IteratorStats struct {
 	InternalDeleteSkippedCount int
 	TimeBoundNumSSTs           int
 }
 
-// Iterator is an interface for iterating over key/value pairs in an
-// engine. Iterator implementations are thread safe unless otherwise
-// noted.
-type Iterator interface {
-	SimpleIterator
+// MVCCIterator is an interface for iterating over key/value pairs in an
+// engine. It is used for iterating over the key space that can have multiple
+// versions, and if often also used (due to historical reasons) for iterating
+// over the key space that never has multiple versions (i.e.,
+// MVCCKey.Timestamp == hlc.Timestamp{}).
+//
+// MVCCIterator implementations are thread safe unless otherwise noted.
+type MVCCIterator interface {
+	SimpleMVCCIterator
 
 	// SeekLT advances the iterator to the first key in the engine which
 	// is < the provided key.
@@ -111,7 +115,7 @@ type Iterator interface {
 	// chosen from the key ranges listed in keys.NoSplitSpans and will always
 	// sort equal to or after minSplitKey.
 	//
-	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
+	// DO NOT CALL directly (except in wrapper MVCCIterator implementations). Use the
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
 	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
@@ -123,7 +127,7 @@ type Iterator interface {
 	SetUpperBound(roachpb.Key)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
-	// SupportsPrev returns true if Iterator implementation supports reverse
+	// SupportsPrev returns true if MVCCIterator implementation supports reverse
 	// iteration with Prev() or SeekLT().
 	SupportsPrev() bool
 }
@@ -166,33 +170,9 @@ type EngineIterator interface {
 	SetUpperBound(roachpb.Key)
 }
 
-// MVCCIterator is an interface that extends Iterator and provides concrete
-// implementations for MVCCGet and MVCCScan operations. It is used by instances
-// of the interface backed by RocksDB iterators to avoid cgo hops.
-type MVCCIterator interface {
-	Iterator
-	// MVCCOpsSpecialized returns whether the iterator has a specialized
-	// implementation of MVCCGet and MVCCScan. This is exposed as a method
-	// so that wrapper types can defer to their wrapped iterators.
-	MVCCOpsSpecialized() bool
-	// MVCCGet is the internal implementation of the family of package-level
-	// MVCCGet functions.
-	MVCCGet(
-		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-	) (*roachpb.Value, *roachpb.Intent, error)
-	// MVCCScan is the internal implementation of the family of package-level
-	// MVCCScan functions. The notable difference is that key/value pairs are
-	// returned raw, as a series of buffers of length-prefixed slices,
-	// alternating from key to value, where numKVs specifies the number of pairs
-	// in the buffer.
-	MVCCScan(
-		start, end roachpb.Key, timestamp hlc.Timestamp, opts MVCCScanOptions,
-	) (MVCCScanResult, error)
-}
-
-// IterOptions contains options used to create an Iterator.
+// IterOptions contains options used to create an MVCCIterator.
 //
-// For performance, every Iterator must specify either Prefix or UpperBound.
+// For performance, every MVCCIterator must specify either Prefix or UpperBound.
 type IterOptions struct {
 	// If Prefix is true, Seek will use the user-key prefix of
 	// the supplied MVCC key to restrict which sstables are searched,
@@ -267,7 +247,7 @@ type Reader interface {
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value.
 	//
-	// Deprecated: use Iterator.ValueProto instead.
+	// Deprecated: use MVCCIterator.ValueProto instead.
 	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// Iterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan
@@ -277,10 +257,10 @@ type Reader interface {
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
 	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error
-	// NewIterator returns a new instance of an Iterator over this
-	// engine. The caller must invoke Iterator.Close() when finished
+	// NewIterator returns a new instance of an MVCCIterator over this
+	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
-	NewIterator(opts IterOptions) Iterator
+	NewIterator(opts IterOptions) MVCCIterator
 }
 
 // Writer is the write interface to an engine's data.
@@ -333,7 +313,7 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
-	ClearIterRange(iter Iterator, start, end roachpb.Key) error
+	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
@@ -422,7 +402,7 @@ type Engine interface {
 	//
 	// TODO(nvanbenschoten): remove this complexity when we're fully on Pebble
 	// and can guarantee that all iterators created from a read-only engine are
-	// consistent. To do this, we will want to add an Iterator.Clone method.
+	// consistent. To do this, we will want to add an MVCCIterator.Clone method.
 	NewReadOnly() ReadWriter
 	// NewWriteOnlyBatch returns a new instance of a batched engine which wraps
 	// this engine. A write-only batch accumulates all mutations and applies them

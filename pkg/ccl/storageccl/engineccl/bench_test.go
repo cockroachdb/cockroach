@@ -125,7 +125,7 @@ func loadTestData(
 func runIterate(
 	b *testing.B,
 	loadFactor float32,
-	makeIterator func(storage.Engine, hlc.Timestamp, hlc.Timestamp) storage.Iterator,
+	makeIterator func(storage.Engine, hlc.Timestamp, hlc.Timestamp) storage.MVCCIterator,
 ) {
 	const numKeys = 100000
 	const numBatches = 100
@@ -173,12 +173,12 @@ func BenchmarkTimeBoundIterate(b *testing.B) {
 	for _, loadFactor := range []float32{1.0, 0.5, 0.1, 0.05, 0.0} {
 		b.Run(fmt.Sprintf("LoadFactor=%.2f", loadFactor), func(b *testing.B) {
 			b.Run("NormalIterator", func(b *testing.B) {
-				runIterate(b, loadFactor, func(e storage.Engine, _, _ hlc.Timestamp) storage.Iterator {
+				runIterate(b, loadFactor, func(e storage.Engine, _, _ hlc.Timestamp) storage.MVCCIterator {
 					return e.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
 				})
 			})
 			b.Run("TimeBoundIterator", func(b *testing.B) {
-				runIterate(b, loadFactor, func(e storage.Engine, startTime, endTime hlc.Timestamp) storage.Iterator {
+				runIterate(b, loadFactor, func(e storage.Engine, startTime, endTime hlc.Timestamp) storage.MVCCIterator {
 					return e.NewIterator(storage.IterOptions{
 						MinTimestampHint: startTime,
 						MaxTimestampHint: endTime,

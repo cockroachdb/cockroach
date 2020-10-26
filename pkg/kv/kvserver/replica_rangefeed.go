@@ -112,12 +112,12 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 }
 
 type iteratorWithCloser struct {
-	storage.SimpleIterator
+	storage.SimpleMVCCIterator
 	close func()
 }
 
 func (i iteratorWithCloser) Close() {
-	i.SimpleIterator.Close()
+	i.SimpleMVCCIterator.Close()
 	i.close()
 }
 
@@ -199,7 +199,7 @@ func (r *Replica) RangeFeed(
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.IteratorConstructor
 	if usingCatchupIter {
-		catchUpIterFunc = func() storage.SimpleIterator {
+		catchUpIterFunc = func() storage.SimpleMVCCIterator {
 
 			innerIter := r.Engine().NewIterator(storage.IterOptions{
 				UpperBound: args.Span.EndKey,
@@ -213,8 +213,8 @@ func (r *Replica) RangeFeed(
 				// MinTimestampHint: args.Timestamp,
 			})
 			catchUpIter := iteratorWithCloser{
-				SimpleIterator: innerIter,
-				close:          iterSemRelease,
+				SimpleMVCCIterator: innerIter,
+				close:              iterSemRelease,
 			}
 			return catchUpIter
 		}
@@ -346,7 +346,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := func() storage.SimpleIterator {
+	rtsIter := func() storage.SimpleMVCCIterator {
 		return r.Engine().NewIterator(storage.IterOptions{
 			UpperBound: desc.EndKey.AsRawKey(),
 			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed

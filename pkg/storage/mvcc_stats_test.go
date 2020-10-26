@@ -1326,17 +1326,17 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 var mvccStatsTests = []struct {
 	name string
-	fn   func(Iterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
+	fn   func(MVCCIterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
 }{
 	{
 		name: "ComputeStats",
-		fn: func(iter Iterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 			return iter.ComputeStats(start, end, nowNanos)
 		},
 	},
 	{
 		name: "ComputeStatsGo",
-		fn: func(iter Iterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 			return ComputeStatsGo(iter, start, end, nowNanos)
 		},
 	},

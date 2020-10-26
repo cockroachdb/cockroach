@@ -651,7 +651,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	db2 := NewInMem(ctx, roachpb.Attributes{}, 10<<20)
 	defer db2.Close()
 
-	ingest := func(it Iterator, count int) {
+	ingest := func(it MVCCIterator, count int) {
 		memFile := &MemFile{}
 		sst := MakeIngestionSSTWriter(memFile)
 		defer sst.Close()

@@ -32,7 +32,7 @@ type instrumentedEngine struct {
 	// ... can be extended ...
 }
 
-func (ie *instrumentedEngine) NewIterator(opts storage.IterOptions) storage.Iterator {
+func (ie *instrumentedEngine) NewIterator(opts storage.IterOptions) storage.MVCCIterator {
 	if ie.onNewIterator != nil {
 		ie.onNewIterator(opts)
 	}
