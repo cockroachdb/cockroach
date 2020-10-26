@@ -1282,6 +1282,124 @@ func TestImportUserDefinedTypes(t *testing.T) {
 	}
 }
 
+func TestImportRowLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	tests := []struct {
+		name        string
+		create      string
+		typ         string
+		with        string
+		data        string
+		intoCols    string
+		verifyQuery string
+		err         string
+		expected    [][]string
+	}{
+		// Test CSV imports.
+		{
+			name:        "skip 1 row and limit 1 row",
+			create:      `a string, b string`,
+			with:        `WITH row_limit = '1', skip='1'`,
+			typ:         "CSV",
+			data:        "a string, b string\nfoo,normal\nbar,baz\nchocolate,cake\n",
+			verifyQuery: `SELECT * from t`,
+			expected:    [][]string{{"foo", "normal"}},
+		},
+		{
+			name:        "row limit 0",
+			create:      `a string, b string`,
+			with:        `WITH row_limit = '0', skip='1'`,
+			typ:         "CSV",
+			data:        "a string, b string\nfoo,normal\nbar,baz\nchocolate,cake\n",
+			verifyQuery: `SELECT * from t`,
+			err:         "pq: row_limit must be > 0",
+		},
+		{
+			name:        "row limit negative",
+			create:      `a string, b string`,
+			with:        `WITH row_limit = '-5', skip='1'`,
+			typ:         "CSV",
+			data:        "a string, b string\nfoo,normal\nbar,baz\nchocolate,cake\n",
+			verifyQuery: `SELECT * from t`,
+			err:         "pq: row_limit must be > 0",
+		},
+		{
+			name:        "invalid row limit",
+			create:      `a string, b string`,
+			with:        `WITH row_limit = 'abc', skip='1'`,
+			typ:         "CSV",
+			data:        "a string, b string\nfoo,normal\nbar,baz\nchocolate,cake\n",
+			verifyQuery: `SELECT * from t`,
+			err:         "invalid row_limit value",
+		},
+		{
+			name:        "row limit > max rows",
+			create:      `a string, b string`,
+			with:        `WITH row_limit = '13', skip='1'`,
+			typ:         "CSV",
+			data:        "a string, b string\nfoo,normal\nbar,baz\nchocolate,cake\n",
+			verifyQuery: `SELECT * from t`,
+			expected:    [][]string{{"foo", "normal"}, {"bar", "baz"}, {"chocolate", "cake"}},
+		},
+	}
+
+	srvURL := "nodelocal://0/test/data"
+
+	// Set up a directory for the data files.
+	err := os.Mkdir(filepath.Join(baseDir, "test"), 0777)
+	require.NoError(t, err)
+
+	for _, test := range tests {
+
+		t.Run(test.name, func(t *testing.T) {
+
+			// Create temporary file for test data.
+			err := ioutil.WriteFile(filepath.Join(baseDir, "test", "data"), []byte(test.data), 0666)
+			require.NoError(t, err)
+
+			importTableQuery := fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, test.create, test.typ, test.with)
+
+			if test.err != "" {
+				sqlDB.ExpectErr(t, test.err, importTableQuery, srvURL)
+
+			} else {
+				sqlDB.Exec(t, importTableQuery, srvURL)
+
+				// Ensure that the table data is as we expect.
+				sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
+				sqlDB.Exec(t, `DROP TABLE t`)
+
+			}
+
+		})
+	}
+
+	t.Run("row limit multiple csv", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE test; USE test`)
+		defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE test`))
+
+		testData := "31\n415"
+		err := ioutil.WriteFile(filepath.Join(baseDir, "test", "data"), []byte(testData), 0666)
+		require.NoError(t, err)
+
+		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) CSV DATA ($1, $1) WITH row_limit='1'`, srvURL)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"31"}, {"31"}})
+
+		sqlDB.Exec(t, "DROP TABLE t")
+
+	})
+}
+
 const (
 	testPgdumpCreateCities = `CREATE TABLE public.cities (
 	city VARCHAR(80) NOT NULL,
