@@ -28,6 +28,7 @@ type providerOpts struct {
 	vnetName         string
 	zone             string
 	networkDiskType  string
+	networkDiskSize  int32
 }
 
 var defaultLocations = []string{
@@ -55,6 +56,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.zone, ProviderName+"-availability-zone", "", fmt.Sprintf("Availability Zone to create VMs in"))
 	flags.StringVar(&o.networkDiskType, ProviderName+"-network-disk-type", "premium-disk",
 		"type of network disk [premium-disk, ultra-disk]. only used if local-ssd is false")
+	flags.Int32Var(&o.networkDiskSize, ProviderName+"-volume-size", 500,
+		"Size in GB of network disk volume, only used if local-ssd=false")
 }
 
 // ConfigureClusterFlags implements vm.ProviderFlags and is a no-op.
