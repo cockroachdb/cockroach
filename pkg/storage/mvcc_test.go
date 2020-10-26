@@ -867,7 +867,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Verify nothing is written to the engine.
-			if val, err := engine.Get(mvccKey(testKey1)); err != nil || val != nil {
+			if val, err := engine.MVCCGet(mvccKey(testKey1)); err != nil || val != nil {
 				t.Fatalf("expected no mvcc metadata after delete of a missing key; got %q: %+v", val, err)
 			}
 		})
@@ -1170,7 +1170,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 }
 
-// TestMVCCGetProtoInconsistent verifies the behavior of GetProto with
+// TestMVCCGetProtoInconsistent verifies the behavior of MVCCGetProto with
 // consistent set to false.
 func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -3470,7 +3470,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 			} else if value != nil {
 				t.Fatalf("expected the value to be empty: %s", value)
 			}
-			if meta, err := engine.Get(mvccKey(testKey1)); err != nil {
+			if meta, err := engine.MVCCGet(mvccKey(testKey1)); err != nil {
 				t.Fatal(err)
 			} else if len(meta) != 0 {
 				t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
@@ -3509,7 +3509,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if meta, err := engine.Get(mvccKey(testKey1)); err != nil {
+			if meta, err := engine.MVCCGet(mvccKey(testKey1)); err != nil {
 				t.Fatal(err)
 			} else if len(meta) != 0 {
 				t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
@@ -5230,7 +5230,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 			// Check that the intent was not cleared.
 			metaKey := mvccKey(testKey1)
 			meta := &enginepb.MVCCMetadata{}
-			ok, _, _, err := engine.GetProto(metaKey, meta)
+			ok, _, _, err := engine.MVCCGetProto(metaKey, meta)
 			if err != nil {
 				t.Fatal(err)
 			}

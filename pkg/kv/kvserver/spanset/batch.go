@@ -233,18 +233,18 @@ func (s spanSetReader) Closed() bool {
 	return s.r.Closed()
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (s spanSetReader) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (s spanSetReader) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	io storage.IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	return s.r.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
-func (s spanSetReader) Get(key storage.MVCCKey) ([]byte, error) {
+func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 			return nil, err
@@ -255,10 +255,10 @@ func (s spanSetReader) Get(key storage.MVCCKey) ([]byte, error) {
 		}
 	}
 	//lint:ignore SA1019 implementing deprecated interface function (Get) is OK
-	return s.r.Get(key)
+	return s.r.MVCCGet(key)
 }
 
-func (s spanSetReader) GetProto(
+func (s spanSetReader) MVCCGetProto(
 	key storage.MVCCKey, msg protoutil.Message,
 ) (bool, int64, int64, error) {
 	if s.spansOnly {
@@ -270,11 +270,13 @@ func (s spanSetReader) GetProto(
 			return false, 0, 0, err
 		}
 	}
-	//lint:ignore SA1019 implementing deprecated interface function (GetProto) is OK
-	return s.r.GetProto(key, msg)
+	//lint:ignore SA1019 implementing deprecated interface function (MVCCGetProto) is OK
+	return s.r.MVCCGetProto(key, msg)
 }
 
-func (s spanSetReader) Iterate(start, end roachpb.Key, f func(storage.MVCCKeyValue) error) error {
+func (s spanSetReader) MVCCIterate(
+	start, end roachpb.Key, f func(storage.MVCCKeyValue) error,
+) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 			return err
@@ -284,7 +286,7 @@ func (s spanSetReader) Iterate(start, end roachpb.Key, f func(storage.MVCCKeyVal
 			return err
 		}
 	}
-	return s.r.Iterate(start, end, f)
+	return s.r.MVCCIterate(start, end, f)
 }
 
 func (s spanSetReader) NewIterator(opts storage.IterOptions) storage.MVCCIterator {
