@@ -153,7 +153,52 @@ func checkDistAggregationInfo(
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(streamID)},
 				},
 			}},
+			ResultTypes: []*types.T{colType},
 		}
+	}
+
+	numIntermediary := len(info.LocalStage)
+	numFinal := len(info.FinalStage)
+	for _, finalInfo := range info.FinalStage {
+		if len(finalInfo.LocalIdxs) == 0 {
+			t.Fatalf("final stage must specify input local indices: %#v", info)
+		}
+		for _, localIdx := range finalInfo.LocalIdxs {
+			if localIdx >= uint32(numIntermediary) {
+				t.Fatalf("local index %d out of bounds of local stages: %#v", localIdx, info)
+			}
+		}
+	}
+
+	// The type(s) outputted by the local stage can be different than the input type
+	// (e.g. DECIMAL instead of INT).
+	intermediaryTypes := make([]*types.T, numIntermediary)
+	for i, fn := range info.LocalStage {
+		var err error
+		_, returnTyp, err := execinfrapb.GetAggregateInfo(fn, colType)
+		if err != nil {
+			t.Fatal(err)
+		}
+		intermediaryTypes[i] = returnTyp
+	}
+
+	// The type(s) outputted by the final stage can be different than the
+	// input type (e.g. DECIMAL instead of INT).
+	finalOutputTypes := make([]*types.T, numFinal)
+	// Passed into FinalIndexing as the indices for the IndexedVars inputs
+	// to the post processor.
+	varIdxs := make([]int, numFinal)
+	for i, finalInfo := range info.FinalStage {
+		inputTypes := make([]*types.T, len(finalInfo.LocalIdxs))
+		for i, localIdx := range finalInfo.LocalIdxs {
+			inputTypes[i] = intermediaryTypes[localIdx]
+		}
+		var err error
+		_, finalOutputTypes[i], err = execinfrapb.GetAggregateInfo(finalInfo.Fn, inputTypes...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		varIdxs[i] = i
 	}
 
 	txn := kv.NewTxn(ctx, srv.DB(), srv.NodeID())
@@ -180,39 +225,14 @@ func checkDistAggregationInfo(
 					{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE},
 				},
 			}},
+			ResultTypes: finalOutputTypes,
 		},
 	)
-
-	numIntermediary := len(info.LocalStage)
-	numFinal := len(info.FinalStage)
-	for _, finalInfo := range info.FinalStage {
-		if len(finalInfo.LocalIdxs) == 0 {
-			t.Fatalf("final stage must specify input local indices: %#v", info)
-		}
-		for _, localIdx := range finalInfo.LocalIdxs {
-			if localIdx >= uint32(numIntermediary) {
-				t.Fatalf("local index %d out of bounds of local stages: %#v", localIdx, info)
-			}
-		}
-	}
 
 	// Now run a flow with 4 separate table readers, each with its own local
 	// stage, all feeding into a single final stage.
 
 	numParallel := 4
-
-	// The type(s) outputted by the local stage can be different than the input type
-	// (e.g. DECIMAL instead of INT).
-	intermediaryTypes := make([]*types.T, numIntermediary)
-	for i, fn := range info.LocalStage {
-		var err error
-		_, returnTyp, err := execinfrapb.GetAggregateInfo(fn, colType)
-		if err != nil {
-			t.Fatal(err)
-		}
-		intermediaryTypes[i] = returnTyp
-	}
-
 	localAggregations := make([]execinfrapb.AggregatorSpec_Aggregation, numIntermediary)
 	for i, fn := range info.LocalStage {
 		// Local aggregations have the same input.
@@ -226,7 +246,6 @@ func checkDistAggregationInfo(
 			ColIdx: finalInfo.LocalIdxs,
 		}
 	}
-
 	if numParallel < numRows {
 		numParallel = numRows
 	}
@@ -244,25 +263,7 @@ func checkDistAggregationInfo(
 				{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE},
 			},
 		}},
-	}
-
-	// The type(s) outputted by the final stage can be different than the
-	// input type (e.g. DECIMAL instead of INT).
-	finalOutputTypes := make([]*types.T, numFinal)
-	// Passed into FinalIndexing as the indices for the IndexedVars inputs
-	// to the post processor.
-	varIdxs := make([]int, numFinal)
-	for i, finalInfo := range info.FinalStage {
-		inputTypes := make([]*types.T, len(finalInfo.LocalIdxs))
-		for i, localIdx := range finalInfo.LocalIdxs {
-			inputTypes[i] = intermediaryTypes[localIdx]
-		}
-		var err error
-		_, finalOutputTypes[i], err = execinfrapb.GetAggregateInfo(finalInfo.Fn, inputTypes...)
-		if err != nil {
-			t.Fatal(err)
-		}
-		varIdxs[i] = i
+		ResultTypes: finalOutputTypes,
 	}
 
 	var procs []execinfrapb.ProcessorSpec
@@ -285,6 +286,7 @@ func checkDistAggregationInfo(
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(2*i + 1)},
 				},
 			}},
+			ResultTypes: intermediaryTypes,
 		}
 		procs = append(procs, tr, agg)
 		finalProc.Input[0].Streams = append(finalProc.Input[0].Streams, execinfrapb.StreamEndpointSpec{

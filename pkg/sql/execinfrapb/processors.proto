@@ -25,6 +25,7 @@ import "sql/execinfrapb/processors_sql.proto";
 import "sql/execinfrapb/processors_bulk_io.proto";
 import "sql/execinfrapb/processors_changefeeds.proto";
 import "sql/execinfrapb/processors_table_stats.proto";
+import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 
 // Each processor has the following components:
@@ -72,6 +73,13 @@ message ProcessorSpec {
   // processors.
   optional int32 processor_id = 6 [(gogoproto.nullable) = false,
                                   (gogoproto.customname) = "ProcessorID"];
+
+  // Schema for the rows produced by this processor (after post-processing has
+  // been applied, if there is any).
+  //
+  // This can be aliased with InputSyncSpec.ColumnTypes, so it must not be
+  // modified in-place during planning.
+  repeated sql.sem.types.T result_types = 7;
 }
 
 message ProcessorCoreUnion {

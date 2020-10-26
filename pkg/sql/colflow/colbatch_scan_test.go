@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -80,6 +81,7 @@ func TestColBatchScanMeta(t *testing.T) {
 			Projection:    true,
 			OutputColumns: []uint32{0},
 		},
+		ResultTypes: rowenc.OneIntCol,
 	}
 
 	args := &colexec.NewColOperatorArgs{
@@ -138,6 +140,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 					Projection:    true,
 					OutputColumns: []uint32{0, 1},
 				},
+				ResultTypes: rowenc.TwoIntCols,
 			}
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -67,6 +68,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				Post: execinfrapb.PostProcessSpec{
 					RenderExprs: []execinfrapb.Expression{{Expr: "CASE WHEN @1 = 1 THEN 1 ELSE 2 END"}},
 				},
+				ResultTypes: rowenc.OneIntCol,
 			},
 		},
 		{
@@ -76,6 +78,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				Core: execinfrapb.ProcessorCoreUnion{
 					MergeJoiner: &execinfrapb.MergeJoinerSpec{},
 				},
+				ResultTypes: append(twoInputs[0].ColumnTypes, twoInputs[1].ColumnTypes...),
 			},
 		},
 	}
@@ -160,6 +163,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						},
 					},
 				},
+				ResultTypes: oneInput[0].ColumnTypes,
 			},
 			spillingSupported: true,
 		},
@@ -178,6 +182,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						},
 					},
 				},
+				ResultTypes: oneInput[0].ColumnTypes,
 			},
 		},
 		{
@@ -190,6 +195,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						RightEqColumns: []uint32{0},
 					},
 				},
+				ResultTypes: append(twoInputs[0].ColumnTypes, twoInputs[1].ColumnTypes...),
 			},
 			spillingSupported: true,
 		},
