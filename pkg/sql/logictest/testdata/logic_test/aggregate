@@ -162,10 +162,12 @@ INSERT INTO kv VALUES
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
-query IIIIRRRRRRBBT
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), stddev_pop(1), variance(1)::float, var_pop(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')) FROM kv
+query IIIIRRRRRRRBBTR
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), stddev_pop(1), variance(1)::float,
+var_pop(1)::float, var_samp(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), sqrdiff(1)
+FROM kv
 ----
-1 6 1 6 1 6 0 0 0 0 true true 00
+1 6 1 6 1 6 0 0 0 0 0 true true 00 0
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 query T
@@ -831,6 +833,40 @@ true
 
 statement ok
 DROP TABLE xyz
+
+# SQRDIFF
+
+statement ok
+DROP TABLE IF EXISTS ifd;
+CREATE TABLE ifd
+(
+    i int,
+    f float,
+    d decimal
+);
+INSERT INTO ifd (i, f, d)
+VALUES (1, 1.1, 1.1),
+       (2, 2.2, 2.2),
+       (5, 3.0, 3.0),
+       (10, 7.8, 7.8),
+       (11, 9.0, 9.0),
+       (18, 11.2, 11.2);
+
+query RRR
+select sqrdiff(i), round(sqrdiff(f), 13), sqrdiff(d)
+from ifd
+----
+206.8333333333333333333334 86.2483333333333 86.24833333333333333333333
+
+query RRR
+SELECT sqrdiff(i), round(sqrdiff(f), 2), sqrdiff(d)
+FROM ifd
+where i < 10
+----
+8.666666666666666666666666 1.82 1.82
+
+statement ok
+DROP TABLE ifd
 
 # Numerical stability test for VARIANCE/STDDEV.
 # See https://www.johndcook.com/blog/2008/09/28/theoretical-explanation-for-numerical-results.
