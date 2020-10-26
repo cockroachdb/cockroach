@@ -81,11 +81,16 @@ func runUserFileDelete(cmd *cobra.Command, args []string) error {
 
 	glob := args[0]
 
-	if err := deleteUserFile(context.Background(), conn, glob); err != nil {
+	var deletedFiles []string
+	if deletedFiles, err = deleteUserFile(context.Background(), conn, glob); err != nil {
 		return err
 	}
 
 	telemetry.Count("userfile.command.delete")
+	for _, file := range deletedFiles {
+		fmt.Printf("successfully deleted %s\n", file)
+	}
+
 	return nil
 }
 
@@ -101,11 +106,16 @@ func runUserFileList(cmd *cobra.Command, args []string) error {
 		glob = args[0]
 	}
 
-	if err := listUserFile(context.Background(), conn, glob); err != nil {
+	var files []string
+	if files, err = listUserFile(context.Background(), conn, glob); err != nil {
 		return err
 	}
 
 	telemetry.Count("userfile.command.list")
+	for _, file := range files {
+		fmt.Println(file)
+	}
+
 	return nil
 }
 
@@ -129,11 +139,14 @@ func runUserFileUpload(cmd *cobra.Command, args []string) error {
 	}
 	defer reader.Close()
 
-	if err := uploadUserFile(context.Background(), conn, reader, source, destination); err != nil {
+	var uploadedFile string
+	if uploadedFile, err = uploadUserFile(context.Background(), conn, reader, source,
+		destination); err != nil {
 		return err
 	}
 
 	telemetry.Count("userfile.command.upload")
+	fmt.Printf("successfully uploaded to %s\n", uploadedFile)
 	return nil
 }
 
@@ -225,66 +238,57 @@ func constructUserfileListURI(glob, user string) string {
 	return userfileURL.String()
 }
 
-func listUserFile(ctx context.Context, conn *sqlConn, glob string) error {
+func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, error) {
 	if err := conn.ensureConn(); err != nil {
-		return err
+		return nil, err
 	}
 
 	connURL, err := url.Parse(conn.url)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	userfileListURI := constructUserfileListURI(glob, connURL.User.Username())
 	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI,
 		connURL.User.Username())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
 		conn.conn.(cloud.SQLConnI))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	files, err := f.ListFiles(ctx, "")
-	if err != nil {
-		return err
-	}
-
-	for _, file := range files {
-		fmt.Println(file)
-	}
-
-	return nil
+	return f.ListFiles(ctx, "")
 }
 
-func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
+func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, error) {
 	if err := conn.ensureConn(); err != nil {
-		return err
+		return nil, err
 	}
 
 	connURL, err := url.Parse(conn.url)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	userfileListURI := constructUserfileListURI(glob, connURL.User.Username())
 	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI,
 		connURL.User.Username())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// We zero out the path so that we can provide explicit glob patterns to the
@@ -294,18 +298,19 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
 		conn.conn.(cloud.SQLConnI))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	userfileParsedURL, err := url.ParseRequestURI(unescapedUserfileListURI)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	files, err := f.ListFiles(ctx, userfileParsedURL.Path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var deletedFiles []string
 	for _, file := range files {
 		var deleteFileBasename string
 		if userfileParsedURL.Path == "" {
@@ -313,7 +318,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 			// parsing.
 			parsedFile, err := url.ParseRequestURI(file)
 			if err != nil {
-				return errors.WithDetailf(err, "deletion failed at %s", file)
+				return deletedFiles, errors.WithDetailf(err, "deletion failed at %s", file)
 			}
 			deleteFileBasename = parsedFile.Path
 		} else {
@@ -323,16 +328,16 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 		}
 		err = f.Delete(ctx, deleteFileBasename)
 		if err != nil {
-			return errors.WithDetail(err, fmt.Sprintf("deletion failed at %s", file))
+			return deletedFiles, errors.WithDetail(err, fmt.Sprintf("deletion failed at %s", file))
 		}
 
 		resolvedHost := defaultQualifiedNamePrefix + connURL.User.Username()
 		if userfileParsedURL.Host != "" {
 			resolvedHost = userfileParsedURL.Host
 		}
-		fmt.Printf("deleted userfile://%s%s\n", resolvedHost, deleteFileBasename)
+		deletedFiles = append(deletedFiles, fmt.Sprintf("userfile://%s%s", resolvedHost, deleteFileBasename))
 	}
-	return nil
+	return deletedFiles, nil
 }
 
 func renameUserFile(
@@ -378,21 +383,25 @@ func renameUserFile(
 	return nil
 }
 
+// uploadUserFile is responsible for uploading the local source file to the user
+// scoped storage referenced by destination.
+// This method returns the complete userfile URI representation to which the
+// file is uploaded to.
 func uploadUserFile(
 	ctx context.Context, conn *sqlConn, reader io.Reader, source, destination string,
-) error {
+) (string, error) {
 	if err := conn.ensureConn(); err != nil {
-		return err
+		return "", err
 	}
 
 	ex := conn.conn.(driver.ExecerContext)
 	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
-		return err
+		return "", err
 	}
 
 	connURL, err := url.Parse(conn.url)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Construct the userfile URI as the destination for the CopyIn stmt.
@@ -409,12 +418,12 @@ func uploadUserFile(
 	// the upload commits.
 	unescapedUserfileURL = unescapedUserfileURL + tmpSuffix
 	if err != nil {
-		return err
+		return "", err
 	}
 	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(unescapedUserfileURL, sql.CrdbInternalName,
 		sql.UserFileUploadTable))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	defer func() {
@@ -432,38 +441,36 @@ func uploadUserFile(
 			// supports it.
 			_, err = stmt.Exec([]driver.Value{string(send[:n])})
 			if err != nil {
-				return err
+				return "", err
 			}
 		} else if err == io.EOF {
 			break
 		} else if err != nil {
-			return err
+			return "", err
 		}
 	}
 	if err := stmt.Close(); err != nil {
-		return err
+		return "", err
 	}
 	stmt = nil
 
 	if _, err := ex.ExecContext(ctx, `COMMIT`, nil); err != nil {
-		return err
+		return "", err
 	}
 
 	// Drop the .tmp suffix from the filename uploaded to userfile, thereby
 	// indicating all chunks have been uploaded successfully.
 	tmpURL, err := url.Parse(unescapedUserfileURL)
 	if err != nil {
-		return err
+		return "", err
 	}
 	err = renameUserFile(ctx, conn, tmpURL.Path, strings.TrimSuffix(tmpURL.Path, tmpSuffix),
 		tmpURL.Host)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	fmt.Printf("successfully uploaded to %s\n",
-		strings.TrimSuffix(unescapedUserfileURL, tmpSuffix))
-	return nil
+	return strings.TrimSuffix(unescapedUserfileURL, tmpSuffix), nil
 }
 
 var userFileCmds = []*cobra.Command{

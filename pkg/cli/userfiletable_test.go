@@ -194,7 +194,7 @@ func checkDeletedFiles(t *testing.T, c cliTest, uri string, expectedFiles []stri
 	if cliOutput != "" {
 		deletedFiles = strings.Split(cliOutput, "\n")
 		for i, file := range deletedFiles {
-			deletedFiles[i] = strings.TrimPrefix(file, "deleted ")
+			deletedFiles[i] = strings.TrimPrefix(file, "successfully deleted ")
 		}
 	}
 

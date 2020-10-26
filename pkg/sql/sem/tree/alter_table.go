@@ -548,6 +548,26 @@ func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Stats)
 }
 
+// AlterTableRegionalAffinity represents an ALTER TABLE SET REGIONAL AFFINITY command.
+type AlterTableRegionalAffinity struct {
+	Name             *UnresolvedObjectName
+	IfExists         bool
+	RegionalAffinity RegionalAffinity
+}
+
+var _ Statement = &AlterTableRegionalAffinity{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableRegionalAffinity) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TABLE ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	node.Name.Format(ctx)
+	ctx.WriteString(" SET ")
+	node.RegionalAffinity.Format(ctx)
+}
+
 // AlterTableSetSchema represents an ALTER TABLE SET SCHEMA command.
 type AlterTableSetSchema struct {
 	Name           *UnresolvedObjectName

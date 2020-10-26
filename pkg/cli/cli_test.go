@@ -1417,6 +1417,7 @@ Available Commands:
 
   nodelocal         upload and delete nodelocal files
   userfile          upload, list and delete user scoped files
+  import            import a db or table from a local PGDUMP or MYSQLDUMP file
   demo              open a demo sql shell
   gen               generate auxiliary files
   version           output version information

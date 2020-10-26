@@ -555,8 +555,11 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
   return u.val.(tree.RefreshDataOption)
 }
+func (u *sqlSymUnion) regionAffinity() tree.RegionalAffinity {
+  return u.val.(tree.RegionalAffinity)
+}
 func (u *sqlSymUnion) survive() tree.Survive {
-    return u.val.(tree.Survive)
+  return u.val.(tree.Survive)
 }
 %}
 
@@ -577,7 +580,7 @@ func (u *sqlSymUnion) survive() tree.Survive {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
+%token <str> ABORT ACCESS ACTION ADD ADMIN AFFINITY AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
@@ -629,7 +632,7 @@ func (u *sqlSymUnion) survive() tree.Survive {
 %token <str> LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
-%token <str> LIST LOCAL LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
+%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
@@ -651,7 +654,7 @@ func (u *sqlSymUnion) survive() tree.Survive {
 %token <str> QUERIES QUERY
 
 %token <str> RANGE RANGES READ REAL REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
-%token <str> REGCLASS REGION REGIONS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
+%token <str> REGCLASS REGION REGIONAL REGIONS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
@@ -729,6 +732,7 @@ func (u *sqlSymUnion) survive() tree.Survive {
 %type <tree.Statement> alter_relocate_lease_stmt
 %type <tree.Statement> alter_zone_table_stmt
 %type <tree.Statement> alter_table_set_schema_stmt
+%type <tree.Statement> alter_table_regional_affinity_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -870,6 +874,7 @@ func (u *sqlSymUnion) survive() tree.Survive {
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_ranges_stmt
 %type <tree.Statement> show_range_for_row_stmt
+%type <tree.Statement> show_locality_stmt
 %type <tree.Statement> show_regions_stmt
 %type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_schemas_stmt
@@ -936,7 +941,10 @@ func (u *sqlSymUnion) survive() tree.Survive {
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 %type <tree.NameList> opt_regions_list
+%type <str> region_name
+%type <tree.NameList> region_name_list
 %type <tree.Survive> survive_clause opt_survive_clause
+%type <tree.RegionalAffinity> regional_affinity
 %type <int32> opt_connection_limit
 
 %type <tree.IsolationLevel> transaction_iso_level
@@ -1327,6 +1335,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... PARTITION BY NOTHING
 //   ALTER TABLE ... CONFIGURE ZONE <zoneconfig>
 //   ALTER TABLE ... SET SCHEMA <newschemaname>
+//   ALTER TABLE ... SET [REGIONAL AFFINITY [TO | AT] ... | LOCALITY [REGIONAL BY [TABLE IN <region> | ROW] | GLOBAL]]
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE [WITHOUT INDEX] | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
@@ -1351,6 +1360,7 @@ alter_table_stmt:
 | alter_zone_table_stmt
 | alter_rename_table_stmt
 | alter_table_set_schema_stmt
+| alter_table_regional_affinity_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
 | ALTER TABLE error     // SHOW HELP: ALTER TABLE
@@ -4274,7 +4284,8 @@ zone_value:
 // PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES, SHOW REGIONS,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
-// SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES
+// SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
+// SHOW LOCALITY
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -4290,6 +4301,7 @@ show_stmt:
 | show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
 | show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
+| show_locality_stmt
 | show_schedules_stmt       // EXTEND WITH HELP: SHOW SCHEDULES
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
@@ -5086,6 +5098,12 @@ show_regions_stmt:
     $$.val = &tree.ShowRegions{
       Database: tree.Name($5),
     }
+  }
+
+show_locality_stmt:
+  SHOW LOCALITY
+  {
+    $$.val = &tree.ShowVar{Name: "locality"}
   }
 
 show_fingerprints_stmt:
@@ -6973,6 +6991,102 @@ alter_table_set_schema_stmt:
     }
   }
 
+alter_table_regional_affinity_stmt:
+  ALTER TABLE relation_expr SET regional_affinity
+  {
+    $$.val = &tree.AlterTableRegionalAffinity{
+      Name: $3.unresolvedObjectName(),
+      RegionalAffinity: $5.regionAffinity(),
+      IfExists: false,
+    }
+  }
+| ALTER TABLE IF NOT EXISTS relation_expr SET regional_affinity
+  {
+    $$.val = &tree.AlterTableRegionalAffinity{
+      Name: $6.unresolvedObjectName(),
+      RegionalAffinity: $8.regionAffinity(),
+      IfExists: true,
+    }
+  }
+
+regional_affinity:
+  LOCALITY GLOBAL
+  {
+    $$.val = tree.RegionalAffinity{
+      RegionalAffinityLevel: tree.RegionalAffinityLevelGlobal,
+    }
+  }
+| LOCALITY REGIONAL BY TABLE IN region_name
+  {
+    $$.val = tree.RegionalAffinity{
+      TableRegion: tree.Name($6),
+      RegionalAffinityLevel: tree.RegionalAffinityLevelTable,
+    }
+  }
+| LOCALITY REGIONAL BY ROW
+  {
+    $$.val = tree.RegionalAffinity{
+      RegionalAffinityLevel: tree.RegionalAffinityLevelRowLevel,
+    }
+  }
+| REGIONAL AFFINITY TO NONE
+  {
+    $$.val = tree.RegionalAffinity{
+      RegionalAffinityLevel: tree.RegionalAffinityLevelGlobal,
+    }
+  }
+| REGIONAL AFFINITY TO region_name
+  {
+    $$.val = tree.RegionalAffinity{
+      TableRegion: tree.Name($4),
+      RegionalAffinityLevel: tree.RegionalAffinityLevelTable,
+    }
+  }
+| REGIONAL AFFINITY AT ROW LEVEL
+  {
+    $$.val = tree.RegionalAffinity{
+      RegionalAffinityLevel: tree.RegionalAffinityLevelRowLevel,
+    }
+  }
+| REGIONAL AFFINITY NONE
+  {
+    $$.val = tree.RegionalAffinity{
+      RegionalAffinityLevel: tree.RegionalAffinityLevelGlobal,
+    }
+  }
+| REGIONAL AFFINITY region_name
+  {
+    $$.val = tree.RegionalAffinity{
+      TableRegion: tree.Name($3),
+      RegionalAffinityLevel: tree.RegionalAffinityLevelTable,
+    }
+  }
+| REGIONAL AFFINITY ROW LEVEL
+  {
+    $$.val = tree.RegionalAffinity{
+      RegionalAffinityLevel: tree.RegionalAffinityLevelRowLevel,
+    }
+  }
+| NO REGIONAL AFFINITY
+  {
+    $$.val = tree.RegionalAffinity{
+      RegionalAffinityLevel: tree.RegionalAffinityLevelGlobal,
+    }
+  }
+| TABLE LEVEL REGIONAL AFFINITY TO region_name
+  {
+    $$.val = tree.RegionalAffinity{
+      TableRegion: tree.Name($6),
+      RegionalAffinityLevel: tree.RegionalAffinityLevelTable,
+    }
+  }
+| ROW LEVEL REGIONAL AFFINITY
+  {
+    $$.val = tree.RegionalAffinity{
+      RegionalAffinityLevel: tree.RegionalAffinityLevelRowLevel,
+    }
+  }
+
 alter_view_set_schema_stmt:
 	ALTER VIEW relation_expr SET SCHEMA schema_name
 	 {
@@ -7411,7 +7525,7 @@ create_database_stmt:
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
 
 opt_regions_list:
-  region_or_regions opt_equal name_list
+  region_or_regions opt_equal region_name_list
   {
     $$.val = $3.nameList()
   }
@@ -11435,6 +11549,13 @@ type_name:             db_object_name
 
 sequence_name:         db_object_name
 
+region_name:           name
+
+region_name_list:      name_list
+  {
+    $$.val = $1.nameList()
+  }
+
 schema_name:           name
 
 opt_schema_name:       opt_name
@@ -11646,6 +11767,7 @@ unreserved_keyword:
 | ACCESS
 | ADD
 | ADMIN
+| AFFINITY
 | AFTER
 | AGGREGATE
 | ALTER
@@ -11784,6 +11906,7 @@ unreserved_keyword:
 | LOCAL
 | LOCKED
 | LOGIN
+| LOCALITY
 | LOOKUP
 | LOW
 | MATCH
@@ -11872,6 +11995,7 @@ unreserved_keyword:
 | REF
 | REFRESH
 | REGION
+| REGIONAL
 | REGIONS
 | REINDEX
 | RELEASE
