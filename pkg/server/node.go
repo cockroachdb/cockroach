@@ -463,9 +463,7 @@ func (n *Node) start(
 		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
 	}
 
-	// Bootstrap any uninitialized stores and define a function for blocking
-	// until new stores are fully bootstrapped. This function remains a
-	// no-op unless we find ourselves bootstrapping new stores.
+	// Bootstrap uninitialized stores, if any.
 	if len(state.newEngines) > 0 {
 		// We need to bootstrap additional stores asynchronously. Consider the range that
 		// houses the store ID allocator. When restarting the set of nodes that holds a
