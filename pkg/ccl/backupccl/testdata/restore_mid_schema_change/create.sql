@@ -64,5 +64,5 @@ CREATE TABLE midprimarykeyswapcleanup AS SELECT * FROM generate_series(1,3) AS a
 -- This schema change is used to enable the primary key swap. The backup is not taken during this schema change.
 ALTER TABLE midprimarykeyswapcleanup ALTER COLUMN a SET NOT NULL;
 ALTER TABLE midprimarykeyswapcleanup ALTER PRIMARY KEY USING COLUMNS (a);
-BACKUP defaultdb.* TO 'nodelocal://1/midprimarykeyswapcleanuprestor';
+BACKUP defaultdb.* TO 'nodelocal://1/midprimarykeyswapcleanup';
 DROP TABLE midprimarykeyswapcleanup;
