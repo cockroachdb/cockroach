@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -521,6 +522,12 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 }
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
+	return tt.addIndexWithVersion(def, typ, descpb.EmptyArraysInInvertedIndexesVersion)
+}
+
+func (tt *Table) addIndexWithVersion(
+	def *tree.IndexTableDef, typ indexType, version descpb.IndexDescriptorVersion,
+) *Index {
 	// Add a unique constraint if this is a primary or unique index.
 	if typ != nonUniqueIndex {
 		tt.addUniqueConstraint(def.Name, def.Columns, false /* withoutIndex */)
@@ -533,6 +540,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		IdxZone:     &zonepb.ZoneConfig{},
 		table:       tt,
 		partitionBy: def.PartitionBy,
+		version:     version,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.
