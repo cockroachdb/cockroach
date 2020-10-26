@@ -5569,34 +5569,28 @@ opt_create_table_inherits:
   }
 
 opt_with_storage_parameter_list:
-  /* EMPTY */
   {
     $$.val = nil
   }
 | WITH '(' storage_parameter_list ')'
   {
-    /* SKIP DOC */
     $$.val = $3.storageParams()
   }
 
 opt_create_table_on_commit:
-  /* EMPTY */
   {
     $$.val = tree.CreateTableOnCommitUnset
   }
 | ON COMMIT PRESERVE ROWS
   {
-    /* SKIP DOC */
     $$.val = tree.CreateTableOnCommitPreserveRows
   }
 | ON COMMIT DELETE ROWS error
   {
-    /* SKIP DOC */
     return unimplementedWithIssueDetail(sqllex, 46556, "delete rows")
   }
 | ON COMMIT DROP error
   {
-    /* SKIP DOC */
     return unimplementedWithIssueDetail(sqllex, 46556, "drop")
   }
 
