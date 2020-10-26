@@ -96,7 +96,7 @@ type testRegistration struct {
 }
 
 func newTestRegistration(
-	span roachpb.Span, ts hlc.Timestamp, catchup storage.SimpleIterator, withDiff bool,
+	span roachpb.Span, ts hlc.Timestamp, catchup storage.SimpleMVCCIterator, withDiff bool,
 ) *testRegistration {
 	s := newTestStream()
 	errC := make(chan *roachpb.Error, 1)

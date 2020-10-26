@@ -181,7 +181,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		iter := batch.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 
-		// Iterators check boundaries on seek and next/prev
+		// MVCCIterators check boundaries on seek and next/prev
 		iter.SeekGE(outsideKey)
 		if _, err := iter.Valid(); !isReadSpanErr(err) {
 			t.Fatalf("Seek: unexpected error %v", err)

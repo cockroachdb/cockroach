@@ -27,7 +27,7 @@ type KeyRange struct {
 // The ranges keyRange slice specifies the key ranges which comprise
 // all of the range's data.
 //
-// A ReplicaDataIterator provides a subset of the engine.Iterator interface.
+// A ReplicaDataIterator provides a subset of the engine.MVCCIterator interface.
 //
 // TODO(tschottdorf): the API is awkward. By default, ReplicaDataIterator uses
 // a byte allocator which needs to be reset manually using `ResetAllocator`.
@@ -37,7 +37,7 @@ type KeyRange struct {
 type ReplicaDataIterator struct {
 	curIndex int
 	ranges   []KeyRange
-	it       storage.Iterator
+	it       storage.MVCCIterator
 	a        bufalloc.ByteAllocator
 }
 

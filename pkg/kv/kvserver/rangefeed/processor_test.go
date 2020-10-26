@@ -134,7 +134,7 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 const testProcessorEventCCap = 16
 
 func newTestProcessorWithTxnPusher(
-	rtsIter storage.SimpleIterator, txnPusher TxnPusher,
+	rtsIter storage.SimpleMVCCIterator, txnPusher TxnPusher,
 ) (*Processor, *stop.Stopper) {
 	stopper := stop.NewStopper()
 
@@ -158,14 +158,14 @@ func newTestProcessorWithTxnPusher(
 	return p, stopper
 }
 
-func makeIteratorConstructor(rtsIter storage.SimpleIterator) IteratorConstructor {
+func makeIteratorConstructor(rtsIter storage.SimpleMVCCIterator) IteratorConstructor {
 	if rtsIter == nil {
 		return nil
 	}
-	return func() storage.SimpleIterator { return rtsIter }
+	return func() storage.SimpleMVCCIterator { return rtsIter }
 }
 
-func newTestProcessor(rtsIter storage.SimpleIterator) (*Processor, *stop.Stopper) {
+func newTestProcessor(rtsIter storage.SimpleMVCCIterator) (*Processor, *stop.Stopper) {
 	return newTestProcessorWithTxnPusher(rtsIter, nil /* pusher */)
 }
 
