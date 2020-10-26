@@ -5946,3 +5946,103 @@ project
            ├── constraint: /2/1: [/2 - /2]
            ├── key: (1)
            └── fd: ()-->(2)
+
+exec-ddl
+CREATE INDEX idx_i ON p (i)
+----
+
+exec-ddl
+CREATE INDEX idx_f ON p (f) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+# Apply when one side of the disjunction can be "constrained" by an
+# unconstrained partial index scan with no remaining filters.
+opt expect=SplitDisjunctionAddKey
+SELECT * FROM p WHERE i = 10 OR s IN ('foo', 'bar', 'baz')
+----
+project
+ ├── columns: i:1 f:2 s:3 b:4
+ └── distinct-on
+      ├── columns: i:1 f:2 s:3 b:4 rowid:5!null
+      ├── grouping columns: rowid:5!null
+      ├── key: (5)
+      ├── fd: (5)-->(1-4)
+      ├── union-all
+      │    ├── columns: i:1 f:2 s:3 b:4 rowid:5!null
+      │    ├── left columns: i:1 f:2 s:3 b:4 rowid:5!null
+      │    ├── right columns: i:7 f:8 s:9 b:10 rowid:11
+      │    ├── index-join p
+      │    │    ├── columns: i:1!null f:2 s:3 b:4 rowid:5!null
+      │    │    ├── key: (5)
+      │    │    ├── fd: ()-->(1), (5)-->(2-4)
+      │    │    └── scan p@idx_i
+      │    │         ├── columns: i:1!null rowid:5!null
+      │    │         ├── constraint: /1/5: [/10 - /10]
+      │    │         ├── key: (5)
+      │    │         └── fd: ()-->(1)
+      │    └── index-join p
+      │         ├── columns: i:7 f:8 s:9!null b:10 rowid:11!null
+      │         ├── key: (11)
+      │         ├── fd: (11)-->(7-10)
+      │         └── scan p@idx_f,partial
+      │              ├── columns: f:8 rowid:11!null
+      │              ├── key: (11)
+      │              └── fd: (11)-->(8)
+      └── aggregations
+           ├── const-agg [as=i:1, outer=(1)]
+           │    └── i:1
+           ├── const-agg [as=f:2, outer=(2)]
+           │    └── f:2
+           ├── const-agg [as=s:3, outer=(3)]
+           │    └── s:3
+           └── const-agg [as=b:4, outer=(4)]
+                └── b:4
+
+# Apply when one side of the disjunction can be "constrained" by an
+# unconstrained partial index scan with remaining filters.
+opt expect=SplitDisjunctionAddKey
+SELECT * FROM p WHERE i = 10 OR s = 'foo'
+----
+project
+ ├── columns: i:1 f:2 s:3 b:4
+ └── distinct-on
+      ├── columns: i:1 f:2 s:3 b:4 rowid:5!null
+      ├── grouping columns: rowid:5!null
+      ├── key: (5)
+      ├── fd: (5)-->(1-4)
+      ├── union-all
+      │    ├── columns: i:1 f:2 s:3 b:4 rowid:5!null
+      │    ├── left columns: i:1 f:2 s:3 b:4 rowid:5!null
+      │    ├── right columns: i:7 f:8 s:9 b:10 rowid:11
+      │    ├── index-join p
+      │    │    ├── columns: i:1!null f:2 s:3 b:4 rowid:5!null
+      │    │    ├── key: (5)
+      │    │    ├── fd: ()-->(1), (5)-->(2-4)
+      │    │    └── scan p@idx_i
+      │    │         ├── columns: i:1!null rowid:5!null
+      │    │         ├── constraint: /1/5: [/10 - /10]
+      │    │         ├── key: (5)
+      │    │         └── fd: ()-->(1)
+      │    └── select
+      │         ├── columns: i:7 f:8 s:9!null b:10 rowid:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(9), (11)-->(7,8,10)
+      │         ├── index-join p
+      │         │    ├── columns: i:7 f:8 s:9 b:10 rowid:11!null
+      │         │    ├── key: (11)
+      │         │    ├── fd: (11)-->(7-10)
+      │         │    └── scan p@idx_f,partial
+      │         │         ├── columns: f:8 rowid:11!null
+      │         │         ├── key: (11)
+      │         │         └── fd: (11)-->(8)
+      │         └── filters
+      │              └── s:9 = 'foo' [outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
+      └── aggregations
+           ├── const-agg [as=i:1, outer=(1)]
+           │    └── i:1
+           ├── const-agg [as=f:2, outer=(2)]
+           │    └── f:2
+           ├── const-agg [as=s:3, outer=(3)]
+           │    └── s:3
+           └── const-agg [as=b:4, outer=(4)]
+                └── b:4

@@ -1649,7 +1649,8 @@ func (c *CustomFuncs) buildExprPairForSplitDisjunction(
 // obviously be improved by the rule.
 //
 // canMaybeConstrainIndexWithCols checks for an intersection between the input
-// columns and an index's columns. An intersection between column sets implies
+// columns and an index's columns (both indexed columns and columns referenced
+// in a partial index predicate). An intersection between column sets implies
 // that cols could constrain a scan on that index. For example, the columns "a"
 // would constrain a scan on an index over columns "a, b", because the "a" is a
 // subset of the index columns. Likewise, the columns "a" and "b" would
@@ -1684,12 +1685,29 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 	// intersect with the index's key columns.
 	for i := 0; i < tabMeta.Table.IndexCount(); i++ {
 		index := tabMeta.Table.Index(i)
-		for i, n := 0, index.KeyColumnCount(); i < n; i++ {
-			ord := index.Column(i).Ordinal()
-			if i == 0 && index.IsInverted() {
-				ord = index.Column(i).InvertedSourceColumnOrdinal()
+		for j, n := 0, index.KeyColumnCount(); j < n; j++ {
+			ord := index.Column(j).Ordinal()
+			if j == 0 && index.IsInverted() {
+				ord = index.Column(j).InvertedSourceColumnOrdinal()
 			}
 			if cols.Contains(tabMeta.MetaID.ColumnID(ord)) {
+				return true
+			}
+		}
+
+		// If a partial index's predicate references some of cols, it may be
+		// possible to generate an unconstrained partial index scan, which may
+		// lead to better query plans.
+		if _, isPartialIndex := index.Predicate(); isPartialIndex {
+			p, ok := tabMeta.PartialIndexPredicates[i]
+			if !ok {
+				// A partial index predicate expression was not built for the
+				// partial index. See Builder.buildScan for details on when this
+				// can occur.
+				continue
+			}
+			pred := *p.(*memo.FiltersExpr)
+			if pred.OuterCols(c.e.mem).Intersects(cols) {
 				return true
 			}
 		}
