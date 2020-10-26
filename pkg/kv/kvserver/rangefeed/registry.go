@@ -55,7 +55,7 @@ type registration struct {
 	// Input.
 	span                   roachpb.Span
 	catchupTimestamp       hlc.Timestamp
-	catchupIterConstructor func() storage.SimpleIterator
+	catchupIterConstructor func() storage.SimpleMVCCIterator
 	withDiff               bool
 	metrics                *Metrics
 
@@ -86,7 +86,7 @@ type registration struct {
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchupIterConstructor func() storage.SimpleIterator,
+	catchupIterConstructor func() storage.SimpleMVCCIterator,
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
@@ -295,7 +295,7 @@ func (r *registration) maybeRunCatchupScan() error {
 	startKey := storage.MakeMVCCMetadataKey(r.span.Key)
 	endKey := storage.MakeMVCCMetadataKey(r.span.EndKey)
 
-	// Iterator will encounter historical values for each key in
+	// MVCCIterator will encounter historical values for each key in
 	// reverse-chronological order. To output in chronological order, store
 	// events for the same key until a different key is encountered, then output
 	// the encountered values in reverse. This also allows us to buffer events

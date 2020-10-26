@@ -1346,7 +1346,7 @@ func IterateRangeDescriptors(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
-	// Iterator over all range-local key-based data.
+	// MVCCIterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
 
