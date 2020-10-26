@@ -68,12 +68,12 @@ func TestStorage(t *testing.T) {
 		stopper := stop.NewStopper()
 		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
 			dbName, timeSource.NewTimer)
-		storage.Start(ctx)
 		return clock, timeSource, settings, stopper, storage
 	}
 
 	t.Run("basic-insert-is-alive", func(t *testing.T) {
 		clock, _, _, stopper, storage := setup(t)
+		storage.Start(ctx)
 		defer stopper.Stop(ctx)
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
@@ -219,6 +219,7 @@ func TestStorage(t *testing.T) {
 	t.Run("delete-expired-on-is-alive", func(t *testing.T) {
 		clock, timeSource, _, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
+		storage.Start(ctx)
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
 		const id = "asdf"
@@ -266,7 +267,6 @@ func TestStorage(t *testing.T) {
 		_, timeSource, settings, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
 		storage.Start(ctx)
-
 		waitForGCTimer := func() (timer time.Time) {
 			testutils.SucceedsSoon(t, func() error {
 				timers := timeSource.Timers()
@@ -285,6 +285,7 @@ func TestStorage(t *testing.T) {
 		}
 		jitter := slstorage.GCJitter.Get(&settings.SV)
 		interval := slstorage.GCInterval.Get(&settings.SV)
+		storage.Start(ctx)
 		minTime := t0.Add(time.Duration((1 - jitter) * float64(interval.Nanoseconds()) * N))
 		maxTime := t0.Add(time.Duration((1 + jitter) * float64(interval.Nanoseconds()) * N))
 		noJitterTime := t0.Add(interval * N)
