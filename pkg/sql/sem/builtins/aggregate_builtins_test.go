@@ -256,6 +256,21 @@ func TestVarianceDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalVarianceAggregate, makeDecimalTestDatum(10))
 }
 
+func TestSqrDiffIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newIntSqrDiffAggregate, makeIntTestDatum(10))
+}
+
+func TestSqrDiffFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newFloatSqrDiffAggregate, makeFloatTestDatum(10))
+}
+
+func TestSqrDiffDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newDecimalSqrDiffAggregate, makeDecimalTestDatum(10))
+}
+
 func TestVarPopIntResultDeepCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newIntVarPopAggregate, makeIntTestDatum(10))
@@ -662,6 +677,30 @@ func BenchmarkVarianceAggregateDecimal(b *testing.B) {
 	for _, count := range []int{1000} {
 		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
 			runBenchmarkAggregate(b, newDecimalVarianceAggregate, makeDecimalTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkSqrDiffAggregateInt(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newIntSqrDiffAggregate, makeIntTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkSqrDiffAggregateFloat(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newFloatSqrDiffAggregate, makeFloatTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkSqrDiffAggregateDecimal(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newDecimalSqrDiffAggregate, makeDecimalTestDatum(count))
 		})
 	}
 }
