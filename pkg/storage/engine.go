@@ -134,7 +134,7 @@ type MVCCIterator interface {
 
 // TODO:
 // x- Get => MVCCGet
-// - GetProto => MVCCGetProto
+// x- MVCCGetProto => MVCCGetProto
 // - Iterate => MVCCIterate
 // - NewIterator => NewMVCCIterator
 // - ExportMVCCToSst
@@ -255,13 +255,13 @@ type Reader interface {
 	//
 	// Deprecated: use storage.MVCCGet instead.
 	MVCCGet(key MVCCKey) ([]byte, error)
-	// GetProto fetches the value at the specified key and unmarshals it
+	// MVCCGetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value.
 	//
 	// Deprecated: use MVCCIterator.ValueProto instead.
-	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
+	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// Iterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan
 	// itself encounters an error, the iteration will stop and return the error.

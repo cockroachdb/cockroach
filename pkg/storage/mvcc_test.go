@@ -1170,7 +1170,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 }
 
-// TestMVCCGetProtoInconsistent verifies the behavior of GetProto with
+// TestMVCCGetProtoInconsistent verifies the behavior of MVCCGetProto with
 // consistent set to false.
 func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -5230,7 +5230,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 			// Check that the intent was not cleared.
 			metaKey := mvccKey(testKey1)
 			meta := &enginepb.MVCCMetadata{}
-			ok, _, _, err := engine.GetProto(metaKey, meta)
+			ok, _, _, err := engine.MVCCGetProto(metaKey, meta)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -258,7 +258,7 @@ func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
 	return s.r.MVCCGet(key)
 }
 
-func (s spanSetReader) GetProto(
+func (s spanSetReader) MVCCGetProto(
 	key storage.MVCCKey, msg protoutil.Message,
 ) (bool, int64, int64, error) {
 	if s.spansOnly {
@@ -270,8 +270,8 @@ func (s spanSetReader) GetProto(
 			return false, 0, 0, err
 		}
 	}
-	//lint:ignore SA1019 implementing deprecated interface function (GetProto) is OK
-	return s.r.GetProto(key, msg)
+	//lint:ignore SA1019 implementing deprecated interface function (MVCCGetProto) is OK
+	return s.r.MVCCGetProto(key, msg)
 }
 
 func (s spanSetReader) Iterate(start, end roachpb.Key, f func(storage.MVCCKeyValue) error) error {

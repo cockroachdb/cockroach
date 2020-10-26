@@ -521,7 +521,7 @@ func cmdCheckIntent(e *evalCtx) error {
 	}
 	metaKey := mvccKey(key)
 	var meta enginepb.MVCCMetadata
-	ok, _, _, err := e.engine.GetProto(metaKey, &meta)
+	ok, _, _, err := e.engine.MVCCGetProto(metaKey, &meta)
 	if err != nil {
 		return err
 	}

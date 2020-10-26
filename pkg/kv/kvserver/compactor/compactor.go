@@ -488,8 +488,8 @@ func (c *Compactor) Suggest(ctx context.Context, sc kvserverpb.SuggestedCompacti
 	// Check whether a suggested compaction already exists for this key span.
 	key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
 	var existing kvserverpb.Compaction
-	//lint:ignore SA1019 historical usage of deprecated c.eng.GetProto is OK
-	ok, _, _, err := c.eng.GetProto(storage.MVCCKey{Key: key}, &existing)
+	//lint:ignore SA1019 historical usage of deprecated c.eng.MVCCGetProto is OK
+	ok, _, _, err := c.eng.MVCCGetProto(storage.MVCCKey{Key: key}, &existing)
 	if err != nil {
 		log.VErrEventf(ctx, 2, "unable to record suggested compaction: %s", err)
 		return

@@ -130,8 +130,8 @@ func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 	return ret, err
 }
 
-// GetProto implements the Batch interface.
-func (p *pebbleBatch) GetProto(
+// MVCCGetProto implements the Batch interface.
+func (p *pebbleBatch) MVCCGetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	r := pebble.Reader(p.batch)

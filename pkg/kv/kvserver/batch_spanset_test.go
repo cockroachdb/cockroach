@@ -123,9 +123,9 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		} else if !bytes.Equal(value, []byte("value")) {
 			t.Errorf("failed to read previously written value, got %q", value)
 		}
-		//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
-		if _, _, _, err := batch.GetProto(insideKey, nil); err != nil {
-			t.Errorf("GetProto: unexpected error %v", err)
+		//lint:ignore SA1019 historical usage of deprecated batch.MVCCGetProto is OK
+		if _, _, _, err := batch.MVCCGetProto(insideKey, nil); err != nil {
+			t.Errorf("MVCCGetProto: unexpected error %v", err)
 		}
 		if err := batch.Iterate(insideKey.Key, insideKey2.Key,
 			func(v storage.MVCCKeyValue) error {
@@ -146,9 +146,9 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if _, err := batch.MVCCGet(outsideKey); !isReadSpanErr(err) {
 			t.Errorf("Get: unexpected error %v", err)
 		}
-		//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
-		if _, _, _, err := batch.GetProto(outsideKey, nil); !isReadSpanErr(err) {
-			t.Errorf("GetProto: unexpected error %v", err)
+		//lint:ignore SA1019 historical usage of deprecated batch.MVCCGetProto is OK
+		if _, _, _, err := batch.MVCCGetProto(outsideKey, nil); !isReadSpanErr(err) {
+			t.Errorf("MVCCGetProto: unexpected error %v", err)
 		}
 		if err := batch.Iterate(outsideKey.Key, insideKey2.Key,
 			func(v storage.MVCCKeyValue) error {
@@ -164,9 +164,9 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if _, err := batch.MVCCGet(outsideKey3); !isReadSpanErr(err) {
 			t.Errorf("Get: unexpected error %v", err)
 		}
-		//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
-		if _, _, _, err := batch.GetProto(outsideKey3, nil); !isReadSpanErr(err) {
-			t.Errorf("GetProto: unexpected error %v", err)
+		//lint:ignore SA1019 historical usage of deprecated batch.MVCCGetProto is OK
+		if _, _, _, err := batch.MVCCGetProto(outsideKey3, nil); !isReadSpanErr(err) {
+			t.Errorf("MVCCGetProto: unexpected error %v", err)
 		}
 		if err := batch.Iterate(insideKey2.Key, outsideKey4.Key,
 			func(v storage.MVCCKeyValue) error {
@@ -366,9 +366,9 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 			t.Errorf("Get: unexpected error %v", err)
 		}
 
-		//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
-		if _, _, _, err := batch.GetProto(rkey, nil); !isReadSpanErr(err) {
-			t.Errorf("GetProto: unexpected error %v", err)
+		//lint:ignore SA1019 historical usage of deprecated batch.MVCCGetProto is OK
+		if _, _, _, err := batch.MVCCGetProto(rkey, nil); !isReadSpanErr(err) {
+			t.Errorf("MVCCGetProto: unexpected error %v", err)
 		}
 		if err := batch.Iterate(rkey.Key, rkey.Key,
 			func(v storage.MVCCKeyValue) error {
