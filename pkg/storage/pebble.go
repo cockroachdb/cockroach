@@ -626,8 +626,8 @@ func (p *Pebble) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *Pebble) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (p *Pebble) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -637,8 +637,8 @@ func (p *Pebble) ExportToSst(
 	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
-// Get implements the Engine interface.
-func (p *Pebble) Get(key MVCCKey) ([]byte, error) {
+// MVCCGet implements the Engine interface.
+func (p *Pebble) MVCCGet(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -663,8 +663,8 @@ func (p *Pebble) GetCompactionStats() string {
 	return "\n" + p.db.Metrics().String()
 }
 
-// GetProto implements the Engine interface.
-func (p *Pebble) GetProto(
+// MVCCGetProto implements the Engine interface.
+func (p *Pebble) MVCCGetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if len(key.Key) == 0 {
@@ -687,8 +687,8 @@ func (p *Pebble) GetProto(
 	return false, 0, 0, err
 }
 
-// Iterate implements the Engine interface.
-func (p *Pebble) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
+// MVCCIterate implements the Engine interface.
+func (p *Pebble) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(p, start, end, f)
 }
 
@@ -1115,8 +1115,8 @@ func (p *pebbleReadOnly) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *pebbleReadOnly) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (p *pebbleReadOnly) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -1126,23 +1126,23 @@ func (p *pebbleReadOnly) ExportToSst(
 	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
-func (p *pebbleReadOnly) Get(key MVCCKey) ([]byte, error) {
+func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
-	return p.parent.Get(key)
+	return p.parent.MVCCGet(key)
 }
 
-func (p *pebbleReadOnly) GetProto(
+func (p *pebbleReadOnly) MVCCGetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
-	return p.parent.GetProto(key, msg)
+	return p.parent.MVCCGetProto(key, msg)
 }
 
-func (p *pebbleReadOnly) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
+func (p *pebbleReadOnly) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -1237,8 +1237,8 @@ func (p *pebbleSnapshot) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *pebbleSnapshot) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (p *pebbleSnapshot) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -1249,7 +1249,7 @@ func (p *pebbleSnapshot) ExportToSst(
 }
 
 // Get implements the Reader interface.
-func (p *pebbleSnapshot) Get(key MVCCKey) ([]byte, error) {
+func (p *pebbleSnapshot) MVCCGet(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -1267,8 +1267,8 @@ func (p *pebbleSnapshot) Get(key MVCCKey) ([]byte, error) {
 	return ret, err
 }
 
-// GetProto implements the Reader interface.
-func (p *pebbleSnapshot) GetProto(
+// MVCCGetProto implements the Reader interface.
+func (p *pebbleSnapshot) MVCCGetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if len(key.Key) == 0 {
@@ -1291,8 +1291,8 @@ func (p *pebbleSnapshot) GetProto(
 	return false, 0, 0, err
 }
 
-// Iterate implements the Reader interface.
-func (p *pebbleSnapshot) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
+// MVCCIterate implements the Reader interface.
+func (p *pebbleSnapshot) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	return iterateOnReader(p, start, end, f)
 }
 

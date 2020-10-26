@@ -568,7 +568,7 @@ func TestCompactorThresholds(t *testing.T) {
 				// Read the remaining suggestions in the queue; verify compacted
 				// spans have been cleared and uncompacted spans remain.
 				var idx int
-				return we.Iterate(
+				return we.MVCCIterate(
 					keys.LocalStoreSuggestedCompactionsMin,
 					keys.LocalStoreSuggestedCompactionsMax,
 					func(kv storage.MVCCKeyValue) error {

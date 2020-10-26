@@ -89,8 +89,8 @@ func (p *pebbleBatch) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *pebbleBatch) ExportToSst(
+// ExportMVCCToSst is part of the engine.Reader interface.
+func (p *pebbleBatch) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -101,7 +101,7 @@ func (p *pebbleBatch) ExportToSst(
 }
 
 // Get implements the Batch interface.
-func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
+func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 	r := pebble.Reader(p.batch)
 	if !p.isDistinct {
 		if !p.batch.Indexed() {
@@ -130,8 +130,8 @@ func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
 	return ret, err
 }
 
-// GetProto implements the Batch interface.
-func (p *pebbleBatch) GetProto(
+// MVCCGetProto implements the Batch interface.
+func (p *pebbleBatch) MVCCGetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	r := pebble.Reader(p.batch)
@@ -165,8 +165,8 @@ func (p *pebbleBatch) GetProto(
 	return false, 0, 0, err
 }
 
-// Iterate implements the Batch interface.
-func (p *pebbleBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
+// MVCCIterate implements the Batch interface.
+func (p *pebbleBatch) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
