@@ -670,3 +670,61 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 		})
 	})
 }
+
+// testReaderProcessorDrain tests various scenarios in which a processor's
+// consumer is closed. It makes sure that that the trace metadata and the leaf
+// txn final state metadata are propagated, and it is the caller's
+// responsibility to set up all the necessary infrastructure. This method is
+// intended to be used by "reader" processors - those that read data from disk.
+func testReaderProcessorDrain(
+	ctx context.Context,
+	t *testing.T,
+	processorConstructor func(out execinfra.RowReceiver) (execinfra.Processor, error),
+) {
+	// ConsumerClosed verifies that when a processor's consumer is closed, the
+	// processor finishes gracefully.
+	t.Run("ConsumerClosed", func(t *testing.T) {
+		out := &distsqlutils.RowBuffer{}
+		out.ConsumerClosed()
+		p, err := processorConstructor(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.Run(ctx)
+	})
+
+	// ConsumerDone verifies that the producer drains properly by checking that
+	// metadata coming from the producer is still read when ConsumerDone is
+	// called on the consumer.
+	t.Run("ConsumerDone", func(t *testing.T) {
+		out := &distsqlutils.RowBuffer{}
+		out.ConsumerDone()
+		p, err := processorConstructor(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.Run(ctx)
+		var traceSeen, txnFinalStateSeen bool
+		for {
+			row, meta := out.Next()
+			if row != nil {
+				t.Fatalf("row was pushed unexpectedly")
+			}
+			if meta == nil {
+				break
+			}
+			if meta.TraceData != nil {
+				traceSeen = true
+			}
+			if meta.LeafTxnFinalState != nil {
+				txnFinalStateSeen = true
+			}
+		}
+		if !traceSeen {
+			t.Fatal("missing tracing trailing metadata")
+		}
+		if !txnFinalStateSeen {
+			t.Fatal("missing txn final state")
+		}
+	})
+}

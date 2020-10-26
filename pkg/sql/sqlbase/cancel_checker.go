@@ -28,6 +28,8 @@ type CancelChecker struct {
 }
 
 // NewCancelChecker returns a new CancelChecker.
+// TODO(yuzefovich): audit all processors to make sure that the ones that
+// should use the cancel checker actually do so.
 func NewCancelChecker(ctx context.Context) *CancelChecker {
 	return &CancelChecker{
 		ctx: ctx,
