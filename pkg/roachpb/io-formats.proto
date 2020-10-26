@@ -58,6 +58,9 @@ message CSVOptions {
   // If strict_quotes is true, a quote may NOT appear in an unquoted field and a
   // non-doubled quote may NOT appear in a quoted field.
   optional bool strict_quotes = 5 [(gogoproto.nullable) = false];
+  // Indicates the number of rows to import per CSV file.
+  // Must be a non-zero positive number. 
+  optional int64 row_limit = 6 [(gogoproto.nullable) = false];
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
