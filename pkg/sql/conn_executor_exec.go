@@ -963,9 +963,20 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	evalCtx := planner.ExtendedEvalContext()
 	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	planCtx.stmtType = recv.stmtType
-	if planner.collectBundle {
-		planCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
-			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
+	if planner.collectBundle || ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
+		if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
+			if fn := ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL); fn != nil {
+				planCtx.saveFlows = fn
+			}
+		} else {
+			planCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+				diagram, err := planCtx.flowSpecsToDiagram(ctx, flows)
+				if err != nil {
+					return err
+				}
+				planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
+				return nil
+			}
 		}
 	}
 

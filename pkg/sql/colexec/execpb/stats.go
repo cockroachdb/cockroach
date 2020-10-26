@@ -14,13 +14,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var _ tracing.SpanStats = &VectorizedStats{}
-var _ execinfrapb.DistSQLSpanStats = &VectorizedStats{}
 
 const (
 	batchesOutputTagSuffix     = "output.batches"

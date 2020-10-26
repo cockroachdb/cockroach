@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -339,30 +338,11 @@ func (dsp *DistSQLPlanner) Run(
 		return func() {}
 	}
 
-	if planCtx.saveDiagram != nil {
-		// Local flows might not have the UUID field set. We need it to be set to
-		// distinguish statistics for processors in subqueries vs the main query vs
-		// postqueries.
-		if len(flows) == 1 {
-			for _, f := range flows {
-				if f.FlowID == (execinfrapb.FlowID{}) {
-					f.FlowID.UUID = uuid.MakeV4()
-				}
-			}
-		}
-		log.VEvent(ctx, 1, "creating plan diagram")
-		var stmtStr string
-		if planCtx.planner != nil && planCtx.planner.stmt != nil {
-			stmtStr = planCtx.planner.stmt.String()
-		}
-		diagram, err := execinfrapb.GeneratePlanDiagram(
-			stmtStr, flows, planCtx.saveDiagramShowInputTypes,
-		)
-		if err != nil {
+	if planCtx.saveFlows != nil {
+		if err := planCtx.saveFlows(flows); err != nil {
 			recv.SetError(err)
 			return func() {}
 		}
-		planCtx.saveDiagram(diagram)
 	}
 
 	if logPlanDiagram {
@@ -873,8 +853,13 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.collectBundle {
-		subqueryPlanCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
+		subqueryPlanCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+			diagram, err := subqueryPlanCtx.flowSpecsToDiagram(ctx, flows)
+			if err != nil {
+				return err
+			}
 			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
+			return nil
 		}
 	}
 	// Don't close the top-level plan from subqueries - someone else will handle
@@ -1166,8 +1151,13 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
 	if planner.collectBundle {
-		postqueryPlanCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
+		postqueryPlanCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+			diagram, err := postqueryPlanCtx.flowSpecsToDiagram(ctx, flows)
+			if err != nil {
+				return err
+			}
 			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
+			return nil
 		}
 	}
 
