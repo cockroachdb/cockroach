@@ -73,6 +73,7 @@ type opType int
 // errors and update expectedExecErrors in the op generator state
 var opsWithExecErrorScreening = map[opType]bool{
 	addColumn:     true,
+	createTable:   true,
 	createTableAs: true,
 	createView:    true,
 }
@@ -386,6 +387,19 @@ func (og *operationGenerator) createTable(tx *pgx.Tx) (string, error) {
 	stmt := rowenc.RandCreateTable(og.params.rng, "table", tableIdx)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
+
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	schemaExists, err := schemaExists(tx, tableName.Schema())
+	if err != nil {
+		return "", err
+	}
+	og.expectedExecErrors.addWithConditions([]codeWithCond{
+		{code: pgcode.DuplicateRelation, condition: tableExists && !stmt.IfNotExists},
+		{code: pgcode.UndefinedSchema, condition: !schemaExists},
+	})
 	return tree.Serialize(stmt), nil
 }
 
