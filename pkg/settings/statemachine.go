@@ -63,6 +63,15 @@ type StateMachineSettingImpl interface {
 // The state machine as well as its encoding are represented by the
 // StateMachineSettingImpl backing this StateMachineSetting; it is in charge to
 // converting to/from strings and performing validations.
+//
+// TODO(irfansharif): The only use of this setting type is the cluster version
+// setting. As we move towards using direct RPCs to bump local version gates
+// (instead of relying on the usual gossip-based broadcast mechanism used for
+// other cluster settings), the only utility this abstraction provides is
+// registering the cluster version setting as a public, modifiable setting. We
+// should then hollow StateMachineSetting out, entrusting the version setting
+// itself to validate transitions. It all seems like unnecessary complexity as
+// written today, and should be more tightly coupled with clusterVersionSetting.
 type StateMachineSetting struct {
 	impl StateMachineSettingImpl
 	common
