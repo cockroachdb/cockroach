@@ -42,6 +42,13 @@ type s3Storage struct {
 
 var _ cloud.ExternalStorage = &s3Storage{}
 
+type serverSideEncMode string
+
+const (
+	kmsEnc    serverSideEncMode = "aws:kms"
+	aes256Enc serverSideEncMode = "AES256"
+)
+
 func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 	q := make(url.Values)
 	setIf := func(key, value string) {
@@ -55,6 +62,8 @@ func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 	setIf(AWSEndpointParam, conf.Endpoint)
 	setIf(S3RegionParam, conf.Region)
 	setIf(AuthParam, conf.Auth)
+	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
+	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 
 	return q.Encode()
 }
@@ -174,11 +183,32 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 	err := contextutil.RunWithTimeout(ctx, "put s3 object",
 		timeoutSetting.Get(&s.settings.SV),
 		func(ctx context.Context) error {
-			_, err := s.s3.PutObjectWithContext(ctx, &s3.PutObjectInput{
+			putObjectInput := s3.PutObjectInput{
 				Bucket: s.bucket,
 				Key:    aws.String(path.Join(s.prefix, basename)),
 				Body:   content,
-			})
+			}
+
+			// If a server side encryption mode is provided in the URI, we must set
+			// the header values to enable SSE before writing the file to the s3
+			// bucket.
+			if s.conf.ServerEncMode != "" {
+				switch s.conf.ServerEncMode {
+				case string(aes256Enc):
+					putObjectInput.SetServerSideEncryption(s.conf.ServerEncMode)
+				case string(kmsEnc):
+					if s.conf.ServerKMSID == "" {
+						return errors.New("AWS_SERVER_KMS_ID param must be set" +
+							" when using aws:kms server side encryption mode.")
+					}
+					putObjectInput.SetServerSideEncryption(s.conf.ServerEncMode)
+					putObjectInput.SetSSEKMSKeyId(s.conf.ServerKMSID)
+				default:
+					return errors.Newf("unsupported server encryption mode %s. "+
+						"Supported values are `aws:kms` and `AES256`.", s.conf.ServerEncMode)
+				}
+			}
+			_, err := s.s3.PutObjectWithContext(ctx, &putObjectInput)
 			return err
 		})
 	return errors.Wrap(err, "failed to put s3 object")
