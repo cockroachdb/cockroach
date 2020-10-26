@@ -807,6 +807,40 @@ true
 statement ok
 DROP TABLE xyz
 
+# SQRDIFF
+
+statement ok
+DROP TABLE IF EXISTS ifd;
+CREATE TABLE ifd
+(
+    i int,
+    f float,
+    d decimal
+);
+INSERT INTO ifd (i, f, d)
+VALUES (1, 1.1, 1.1),
+       (2, 2.2, 2.2),
+       (5, 3.0, 3.0),
+       (10, 7.8, 7.8),
+       (11, 9.0, 9.0),
+       (18, 11.2, 11.2);
+
+query RRR
+select sqrdiff(i), round(sqrdiff(f), 13), sqrdiff(d)
+from ifd
+----
+206.8333333333333333333334 86.2483333333333 86.24833333333333333333333
+
+query RRR
+SELECT sqrdiff(i), round(sqrdiff(f), 2), sqrdiff(d)
+FROM ifd
+where i < 10
+----
+8.666666666666666666666666 1.82 1.82
+
+statement ok
+DROP TABLE ifd
+
 # Numerical stability test for VARIANCE/STDDEV.
 # See https://www.johndcook.com/blog/2008/09/28/theoretical-explanation-for-numerical-results.
 # Avoid using random() since we do not have the deterministic option to specify a pseudo-random seed yet.
