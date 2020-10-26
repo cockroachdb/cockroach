@@ -21,14 +21,14 @@ SELECT w_tax FROM warehouse WHERE w_id = 1
 ----
 project
  ├── save-table-name: new_order_01_project_1
- ├── columns: w_tax:8(decimal!null)
+ ├── columns: w_tax:8(decimal)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(8)=1, null(8)=0]
  ├── key: ()
  ├── fd: ()-->(8)
  └── scan warehouse
       ├── save-table-name: new_order_01_scan_2
-      ├── columns: w_id:1(int!null) w_tax:8(decimal!null)
+      ├── columns: w_id:1(int!null) w_tax:8(decimal)
       ├── constraint: /1: [/1 - /1]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
@@ -54,14 +54,14 @@ WHERE c_w_id = 1 AND c_d_id = 1 AND c_id = 50
 ----
 project
  ├── save-table-name: new_order_02_project_1
- ├── columns: c_discount:16(decimal!null) c_last:6(varchar!null) c_credit:14(char!null)
+ ├── columns: c_discount:16(decimal) c_last:6(varchar) c_credit:14(char)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901673, null(16)=0]
  ├── key: ()
  ├── fd: ()-->(6,14,16)
  └── scan customer
       ├── save-table-name: new_order_02_scan_2
-      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(varchar!null) c_credit:14(char!null) c_discount:16(decimal!null)
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(varchar) c_credit:14(char) c_discount:16(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901673, null(16)=0, distinct(1-3)=1, null(1-3)=0]
@@ -202,14 +202,14 @@ ORDER BY c_first ASC
 ----
 project
  ├── save-table-name: payment_01_project_1
- ├── columns: c_id:1(int!null)  [hidden: c_first:4(varchar!null)]
+ ├── columns: c_id:1(int!null)  [hidden: c_first:4(varchar)]
  ├── stats: [rows=2.05079862, distinct(1)=2.05010459, null(1)=0, distinct(4)=2.0470416, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── ordering: +4
  └── scan customer@customer_idx
       ├── save-table-name: payment_01_scan_2
-      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar!null) c_last:6(varchar!null)
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
       ├── constraint: /3/2/6/4/1: [/1/1/'ANTIABLEABLE' - /1/1/'ANTIABLEABLE']
       ├── stats: [rows=2.05079862, distinct(1)=2.05010459, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.0470416, null(4)=0, distinct(6)=1, null(6)=0, distinct(2,3,6)=1, null(2,3,6)=0]
       │   histogram(2)=  0 2.0508
@@ -256,14 +256,14 @@ WHERE c_w_id = 1 AND c_d_id = 1 AND c_id = 50
 ----
 project
  ├── save-table-name: order_status_01_project_1
- ├── columns: c_balance:17(decimal!null) c_first:4(varchar!null) c_middle:5(char!null) c_last:6(varchar!null)
+ ├── columns: c_balance:17(decimal) c_first:4(varchar) c_middle:5(char) c_last:6(varchar)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(4)=0.999106141, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0]
  ├── key: ()
  ├── fd: ()-->(4-6,17)
  └── scan customer
       ├── save-table-name: order_status_01_scan_2
-      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar!null) c_middle:5(char!null) c_last:6(varchar!null) c_balance:17(decimal!null)
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_balance:17(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=0.999106141, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0, distinct(1-3)=1, null(1-3)=0]
@@ -300,14 +300,14 @@ ORDER BY c_first ASC
 ----
 project
  ├── save-table-name: order_status_02_project_1
- ├── columns: c_id:1(int!null) c_balance:17(decimal!null) c_first:4(varchar!null) c_middle:5(char!null)
+ ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(varchar) c_middle:5(char)
  ├── stats: [rows=2.12233702, distinct(1)=2.12159373, null(1)=0, distinct(4)=2.11831349, null(4)=0, distinct(5)=0.880249459, null(5)=0, distinct(17)=0.880249459, null(17)=0]
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
  └── index-join customer
       ├── save-table-name: order_status_02_index_join_2
-      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar!null) c_middle:5(char!null) c_last:6(varchar!null) c_balance:17(decimal!null)
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar!null) c_balance:17(decimal)
       ├── stats: [rows=2.12233702, distinct(1)=2.12159373, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.11831349, null(4)=0, distinct(5)=0.880249459, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=0.880249459, null(17)=0, distinct(2,3,6)=1, null(2,3,6)=0]
       │   histogram(2)=  0 2.1223
       │                <---- 2 --
@@ -320,7 +320,7 @@ project
       ├── ordering: +4 opt(2,3,6) [actual: +4]
       └── scan customer@customer_idx
            ├── save-table-name: order_status_02_scan_3
-           ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar!null) c_last:6(varchar!null)
+           ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
            ├── constraint: /3/2/6/4/1: [/2/2/'ANTIBARESE' - /2/2/'ANTIBARESE']
            ├── stats: [rows=2.12233702, distinct(1)=2.12159373, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.11831349, null(4)=0, distinct(6)=1, null(6)=0, distinct(2,3,6)=1, null(2,3,6)=0]
            │   histogram(1)=  0 0.00042447 0.0097628 0.00084893 0.010399 0.00084893 0.010399 0.00021223 0.009975 0.00084893 0.009975 0.0010612 0.010187 0.0010612 0.009975 0.0006367 0.010187 0.0012734 0.0097628 0.00084893 0.0097628 0.00084893 0.010399 0.0006367 0.010399 0.00042447 0.010187 0.0012734 0.010187 0.00084893 0.010399 0.0016979 0.010399 0.00084893 0.010399 0.0006367 0.009975 0.0006367 0.010187 0.00042447 0.010187 0.00084893 0.010399 0.0006367 0.010399 0.0012734 0.010399 0.00021223 0.009975 0.0006367 0.010187 0.0006367 0.010187 0.00084893 0.010399 0.00084893 0.0093383 0.0019101 0.0089138 0.0016979 0.010187 0.0014856 0.010187 0.0019101 0.0089138 0.0014856 0.009975 0.0010612 0.009975 0.0006367 0.0097628 0.0010612 0.0089138 0.0014856 0.010187 0.0006367 0.0097628 0.0006367 0.0097628 0.0010612 0.0097628 0.0006367 0.0097628 0.0006367 0.010187 0.00084893 0.010187 0.00042447 0.010187 0.00042447 0.009975 0.0006367 0.009975 0.00084893 0.009975 0.0010612 0.0097628 0.0012734 0.010187 0.0014856 0.010187 0.00021223 0.010187 0.0010612 0.0095505 0.0010612 0.0093383 0.0016979 0.0097628 0.0010612 0.010187 0.0006367 0.0095505 0.00084893 0.010187 0.00042447 0.0089138 0.0014856 0.010187 0.0010612 0.0097628 0.0010612 0.0095505 0.0010612 0.010187 0.0012734 0.0095505 0.00084893 0.0095505 0.00084893 0.009975 0.00084893 0.010187 0.0010612 0.009975 0.0010612 0.009975 0.0006367 0.009975 0.00084893 0.010187 0.0006367 0.0097628 0.0006367 0.009975 0.0006367 0.0093383 0.0014856 0.0095505 0.00084893 0.0097628 0.0006367 0.010187 0.0006367 0.010187 0.0006367 0.010187 0.00042447 0.0093383 0.0014856 0.010187 0.00042447 0.0097628 0.0014856 0.009975 0.0006367 0.0095505 0.0014856 0.010187 0.0012734 0.009975 0.00084893 0.009975 0.00084893 0.0097628 0.0010612 0.0097628 0.00084893 0.009975 0.0006367 0.010187 0.00084893 0.010187 0.00021223 0.010187 0.00021223 0.010187 0.0006367 0.009975 0.0010612 0.0095505 0.0010612 0.009126 0.0012734 0.0093383 0.0016979 0.0097628 0.0006367 0.0097628 0.0006367 0.009975 0.00042447 0.010187 0.00021223 0.009975 0.00084893 0.0097628 0.0016979 0.0095505 0.0012734 0.009975 0.00084893 0.009975 0.00042447 0.0097628 0.0012734 0.0095505 0.00084893 0.0093383 0.0010612 0.0097628 0.0006367 0.010187 0.00042447 0.0097628 0.0010612 0.009975 0.00084893 0.0097628 0.0006367 0.010187 0.00042447 0.0095505 0.00084893 0.010187 0.0006367 0.0093383 0.0010612 0.010187 0.0006367 0.0089138 0.0014856 0.010187 0.00084893 0.010187 0.0012734 0.009975 0.00042447 0.009126 0.0016979 0.010187 0.00042447 0.010187 0.0012734 0.0097628 0.0006367 0.009975 0.0006367 0.009975 0.00021223 0.0095505 0.0006367 0.009126 0.0014856 0.009975 0.00021223 0.0097628 0.0010612 0.009975 0.0006367 0.0093383 0.00084893 0.0097628 0.00084893 0.0093383 0.00084893 0.0097628 0.0012734 0.009975 0.00042447 0.009975 0.0010612 0.0087016 0.0019101 0.0087016 0.0023346 0.009126 0.0010612 0.0097628 0.00042447 0.009975 0.00084893 0.009975 0.00021223 0.0097628 0.0010612 0.0093383 0.00084893 0.0093383 0.00084893 0.0093383 0.0010612 0.009975 0.0006367 0.0097628 0.0006367 0.0097628 0.00042447 0.0097628 0.0014856 0.0095505 0.0006367 0.0097628 0.0006367 0.0097628 0.0006367 0.009126 0.0010612 0.0097628 0.00084893 0.0095505 0.0010612 0.0097628 0.0006367 0.009975 0.0006367 0.009975 0.00084893 0.009126 0.0012734 0.0095505 0.00084893 0.0095505 0.0010612 0.009126 0.0010612 0.0095505 0.0010612 0.0095505 0.0014856 0.009975 0.0014856 0.0095505 0.0006367 0.0097628 0.0014856 0.0097628 0.0010612 0.0093383 0.0006367 0.0095505 0.0006367 0.0097628 0.0006367 0.0097628 0.0006367 0.0087016 0.0012734 0.0095505 0.0014856 0.0097628 0.00021223 0.0089138 0.0014856 0.0095505 0.0010612 0.0087016 0.0012734 0.0097628 0.00084893 0.0095505 0.0012734 0.009126 0.0012734 0.0089138 0.00084893 0.0095505 0.00021223 0.0095505 0.0006367 0.0095505 0.00042447 0.0093383 0.0010612 0.0093383 0.00084893 0.0089138 0.0010612 0.0093383 0.00042447 0.0087016 0.0010612 0.0082771 0.0016979 0.0089138 0.0012734 0.0089138 0.00042447 0.0087016 0.00084893
@@ -567,14 +567,14 @@ WHERE d_w_id = 4 AND d_id = 9
 ----
 project
  ├── save-table-name: stock_level_01_project_1
- ├── columns: d_next_o_id:11(int!null)
+ ├── columns: d_next_o_id:11(int)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(11)=0.633967659, null(11)=0]
  ├── key: ()
  ├── fd: ()-->(11)
  └── scan district
       ├── save-table-name: stock_level_01_scan_2
-      ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_next_o_id:11(int!null)
+      ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_next_o_id:11(int)
       ├── constraint: /2/1: [/4/9 - /4/9]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(11)=0.633967659, null(11)=0, distinct(1,2)=1, null(1,2)=0]
@@ -729,7 +729,7 @@ scalar-group-by
  │    ├── fd: (1)-->(9), (12)-->(23), (1)==(12), (12)==(1)
  │    ├── scan warehouse
  │    │    ├── save-table-name: consistency_01_scan_3
- │    │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null)
+ │    │    ├── columns: w_id:1(int!null) w_ytd:9(decimal)
  │    │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(9)=1, null(9)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
@@ -740,7 +740,7 @@ scalar-group-by
  │    │    └── ordering: +1
  │    ├── group-by
  │    │    ├── save-table-name: consistency_01_group_by_4
- │    │    ├── columns: d_w_id:12(int!null) sum:23(decimal!null)
+ │    │    ├── columns: d_w_id:12(int!null) sum:23(decimal)
  │    │    ├── grouping columns: d_w_id:12(int!null)
  │    │    ├── stats: [rows=10, distinct(12)=10, null(12)=0, distinct(23)=10, null(23)=0]
  │    │    ├── key: (12)
@@ -748,7 +748,7 @@ scalar-group-by
  │    │    ├── ordering: +12
  │    │    ├── scan district
  │    │    │    ├── save-table-name: consistency_01_scan_5
- │    │    │    ├── columns: d_w_id:12(int!null) d_ytd:20(decimal!null)
+ │    │    │    ├── columns: d_w_id:12(int!null) d_ytd:20(decimal)
  │    │    │    ├── stats: [rows=100, distinct(12)=10, null(12)=0, distinct(20)=1, null(20)=0]
  │    │    │    │   histogram(12)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10
  │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
@@ -820,7 +820,7 @@ ORDER BY d_w_id, d_id
 ----
 scan district
  ├── save-table-name: consistency_02_scan_1
- ├── columns: d_next_o_id:11(int!null)  [hidden: d_id:1(int!null) d_w_id:2(int!null)]
+ ├── columns: d_next_o_id:11(int)  [hidden: d_id:1(int!null) d_w_id:2(int!null)]
  ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(11)=1, null(11)=0]
  │   histogram(1)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0  10
  │                <--- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10
