@@ -108,9 +108,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 
 	const warehouses = 1
 	c.Start(ctx, t, serverNodes)
-	c.Run(ctx, workerNode, fmt.Sprintf(
-		`./workload fixtures load tpcc --warehouses=%d {pgurl:1}`, warehouses,
-	))
+	c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
