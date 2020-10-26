@@ -254,8 +254,8 @@ func (b *stmtBundleBuilder) addExecPlan() {
 
 func (b *stmtBundleBuilder) addDistSQLDiagrams() {
 	for i, d := range b.plan.distSQLDiagrams {
-		d.AddSpans(b.trace)
-		_, url, err := d.ToURL()
+		d.diagram.AddSpans(b.trace)
+		_, url, err := d.diagram.ToURL()
 
 		var contents string
 		if err != nil {
@@ -268,9 +268,7 @@ func (b *stmtBundleBuilder) addDistSQLDiagrams() {
 		if len(b.plan.distSQLDiagrams) == 1 {
 			filename = "distsql.html"
 		} else {
-			// TODO(radu): it would be great if we could distinguish between
-			// subqueries/main query/postqueries here.
-			filename = fmt.Sprintf("distsql-%d.html", i+1)
+			filename = fmt.Sprintf("distsql-%d-%s.html", i, d.typ)
 		}
 		b.z.AddFile(filename, contents)
 	}

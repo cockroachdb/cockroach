@@ -635,6 +635,24 @@ func (p *PlanningCtx) EvaluateSubqueries() bool {
 	return !p.noEvalSubqueries
 }
 
+// getDefaultSaveFlowsFunc returns the default function used to save physical
+// plans and their diagrams.
+func (p *PlanningCtx) getDefaultSaveFlowsFunc(
+	ctx context.Context, planner *planner, typ queryType,
+) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+		planner.curPlan.flows = append(planner.curPlan.flows, annotatedFlows{typ: typ, flows: flows})
+		diagram, err := p.flowSpecsToDiagram(ctx, flows)
+		if err != nil {
+			return err
+		}
+		planner.curPlan.distSQLDiagrams = append(
+			planner.curPlan.distSQLDiagrams, annotatedFlowDiagram{typ: typ, diagram: diagram},
+		)
+		return nil
+	}
+}
+
 // flowSpecsToDiagram is a helper function used to convert flowSpecs into a
 // FlowDiagram using this PlanningCtx's information.
 func (p *PlanningCtx) flowSpecsToDiagram(
