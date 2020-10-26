@@ -638,7 +638,7 @@ func (p *Pebble) ExportToSst(
 }
 
 // Get implements the Engine interface.
-func (p *Pebble) Get(key MVCCKey) ([]byte, error) {
+func (p *Pebble) MVCCGet(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -1126,11 +1126,11 @@ func (p *pebbleReadOnly) ExportToSst(
 	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
-func (p *pebbleReadOnly) Get(key MVCCKey) ([]byte, error) {
+func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
-	return p.parent.Get(key)
+	return p.parent.MVCCGet(key)
 }
 
 func (p *pebbleReadOnly) GetProto(
@@ -1249,7 +1249,7 @@ func (p *pebbleSnapshot) ExportToSst(
 }
 
 // Get implements the Reader interface.
-func (p *pebbleSnapshot) Get(key MVCCKey) ([]byte, error) {
+func (p *pebbleSnapshot) MVCCGet(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}

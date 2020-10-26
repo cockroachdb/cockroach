@@ -132,6 +132,13 @@ type MVCCIterator interface {
 	SupportsPrev() bool
 }
 
+// TODO:
+// x- Get => MVCCGet
+// - GetProto => MVCCGetProto
+// - Iterate => MVCCIterate
+// - NewIterator => NewMVCCIterator
+// - ExportMVCCToSst
+
 // EngineIterator is an iterator over key-value pairs where the key is
 // an EngineKey.
 //lint:ignore U1001 unused
@@ -170,14 +177,15 @@ type EngineIterator interface {
 	SetUpperBound(roachpb.Key)
 }
 
-// IterOptions contains options used to create an MVCCIterator.
+// IterOptions contains options used to create an {MVCC,Engine}Iterator.
 //
-// For performance, every MVCCIterator must specify either Prefix or UpperBound.
+// For performance, every {MVCC,Engine}Iterator must specify either Prefix or
+// UpperBound.
 type IterOptions struct {
-	// If Prefix is true, Seek will use the user-key prefix of
-	// the supplied MVCC key to restrict which sstables are searched,
-	// but iteration (using Next) over keys without the same user-key
-	// prefix will not work correctly (keys may be skipped).
+	// If Prefix is true, Seek will use the user-key prefix of the supplied
+	// {MVCC,Engine}Key (the Key field) to restrict which sstables are searched,
+	// but iteration (using Next) over keys without the same user-key prefix
+	// will not work correctly (keys may be skipped).
 	Prefix bool
 	// LowerBound gives this iterator an inclusive lower bound. Attempts to
 	// SeekReverse or Prev to a key that is strictly less than the bound will
@@ -188,7 +196,7 @@ type IterOptions struct {
 	// the iterator. UpperBound must be provided unless Prefix is true, in which
 	// case the end of the prefix will be used as the upper bound.
 	UpperBound roachpb.Key
-	// If WithStats is true, the iterator accumulates RocksDB performance
+	// If WithStats is true, the iterator accumulates performance
 	// counters over its lifetime which can be queried via `Stats()`.
 	WithStats bool
 	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
@@ -201,6 +209,8 @@ type IterOptions struct {
 	// iterators with time bounds hints will frequently return keys outside of the
 	// [start, end] time range. If you must guarantee that you never see a key
 	// outside of the time bounds, perform your own filtering.
+	//
+	// These fields are only relevant for MVCCIterators.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
 
@@ -233,6 +243,9 @@ type Reader interface {
 	// returned sst. If it is the case that the versions of the last key will lead
 	// to an SST that exceeds maxSize, an error will be returned. This parameter
 	// exists to prevent creating SSTs which are too large to be used.
+	//
+	// This function looks at MVCC versions and intents, and returns an error if an
+	// intent is found.
 	ExportToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
 		exportAllRevisions bool, targetSize uint64, maxSize uint64,
@@ -240,8 +253,8 @@ type Reader interface {
 	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
 	// Get returns the value for the given key, nil otherwise.
 	//
-	// Deprecated: use MVCCGet instead.
-	Get(key MVCCKey) ([]byte, error)
+	// Deprecated: use storage.MVCCGet instead.
+	MVCCGet(key MVCCKey) ([]byte, error)
 	// GetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the

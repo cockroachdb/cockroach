@@ -101,7 +101,7 @@ func (p *pebbleBatch) ExportToSst(
 }
 
 // Get implements the Batch interface.
-func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
+func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 	r := pebble.Reader(p.batch)
 	if !p.isDistinct {
 		if !p.batch.Indexed() {

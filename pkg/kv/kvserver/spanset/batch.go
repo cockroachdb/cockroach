@@ -244,7 +244,7 @@ func (s spanSetReader) ExportToSst(
 	return s.r.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
-func (s spanSetReader) Get(key storage.MVCCKey) ([]byte, error) {
+func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 			return nil, err
@@ -255,7 +255,7 @@ func (s spanSetReader) Get(key storage.MVCCKey) ([]byte, error) {
 		}
 	}
 	//lint:ignore SA1019 implementing deprecated interface function (Get) is OK
-	return s.r.Get(key)
+	return s.r.MVCCGet(key)
 }
 
 func (s spanSetReader) GetProto(

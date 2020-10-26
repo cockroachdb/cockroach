@@ -199,7 +199,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			a := mvccKey("a")
 			getVal := &roachpb.Value{}
 			successTestCases := []func(){
-				func() { _, _ = ro.Get(a) },
+				func() { _, _ = ro.MVCCGet(a) },
 				func() { _, _, _, _ = ro.GetProto(a, getVal) },
 				func() { _ = ro.Iterate(a.Key, a.Key, func(MVCCKeyValue) error { return iterutil.StopIteration() }) },
 				func() { ro.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
@@ -409,7 +409,7 @@ func TestApplyBatchRepr(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if b, err := e.Get(key); err != nil {
+				if b, err := e.MVCCGet(key); err != nil {
 					t.Fatal(err)
 				} else if !reflect.DeepEqual(b, val) {
 					t.Fatalf("read %q from engine, expected %q", b, val)
@@ -465,7 +465,7 @@ func TestBatchGet(t *testing.T) {
 				{Key: mvccKey("d"), Value: []byte("after")},
 			}
 			for i, expKV := range expValues {
-				kv, err := b.Get(expKV.Key)
+				kv, err := b.MVCCGet(expKV.Key)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -523,7 +523,7 @@ func TestBatchMerge(t *testing.T) {
 			}
 
 			// Verify values.
-			val, err := b.Get(mvccKey("a"))
+			val, err := b.MVCCGet(mvccKey("a"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -531,7 +531,7 @@ func TestBatchMerge(t *testing.T) {
 				t.Error("mismatch of \"a\"")
 			}
 
-			val, err = b.Get(mvccKey("b"))
+			val, err = b.MVCCGet(mvccKey("b"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -539,7 +539,7 @@ func TestBatchMerge(t *testing.T) {
 				t.Error("mismatch of \"b\"")
 			}
 
-			val, err = b.Get(mvccKey("c"))
+			val, err = b.MVCCGet(mvccKey("c"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -790,7 +790,7 @@ func TestBatchConcurrency(t *testing.T) {
 			if err := b.Merge(mvccKey("a"), appender("bar")); err != nil {
 				t.Fatal(err)
 			}
-			val, err := b.Get(mvccKey("a"))
+			val, err := b.MVCCGet(mvccKey("a"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -802,7 +802,7 @@ func TestBatchConcurrency(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Now, read again and verify that the merge happens on top of the mod.
-			val, err = b.Get(mvccKey("a"))
+			val, err = b.MVCCGet(mvccKey("a"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -842,7 +842,7 @@ func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
 			defer distinct.Close()
 
 			// The distinct batch can see the earlier write to the batch.
-			v, err := distinct.Get(mvccKey("batchkey"))
+			v, err := distinct.MVCCGet(mvccKey("batchkey"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -875,7 +875,7 @@ func TestBatchDistinct(t *testing.T) {
 			}
 
 			// The original batch can see the writes to the batch.
-			if v, err := batch.Get(mvccKey("a")); err != nil {
+			if v, err := batch.MVCCGet(mvccKey("a")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "a" {
 				t.Fatalf("expected a, but got %s", v)
@@ -883,12 +883,12 @@ func TestBatchDistinct(t *testing.T) {
 
 			// The distinct batch will see previous writes to the batch.
 			distinct := batch.Distinct()
-			if v, err := distinct.Get(mvccKey("a")); err != nil {
+			if v, err := distinct.MVCCGet(mvccKey("a")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "a" {
 				t.Fatalf("expected a, but got %s", v)
 			}
-			if v, err := distinct.Get(mvccKey("b")); err != nil {
+			if v, err := distinct.MVCCGet(mvccKey("b")); err != nil {
 				t.Fatal(err)
 			} else if v != nil {
 				t.Fatalf("expected nothing, but got %s", v)
@@ -909,7 +909,7 @@ func TestBatchDistinct(t *testing.T) {
 			if err := distinct.Put(mvccKey("c"), []byte("c")); err != nil {
 				t.Fatal(err)
 			}
-			if v, err := distinct.Get(mvccKey("c")); err != nil {
+			if v, err := distinct.MVCCGet(mvccKey("c")); err != nil {
 				t.Fatal(err)
 			} else {
 				switch engineImpl.name {
@@ -931,7 +931,7 @@ func TestBatchDistinct(t *testing.T) {
 			distinct.Close()
 
 			// Writes to the distinct batch are reflected in the original batch.
-			if v, err := batch.Get(mvccKey("c")); err != nil {
+			if v, err := batch.MVCCGet(mvccKey("c")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "c" {
 				t.Fatalf("expected c, but got %s", v)
@@ -974,7 +974,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 			}
 			iter.Close()
 
-			if v, err := distinct.Get(mvccKey("b")); err != nil {
+			if v, err := distinct.MVCCGet(mvccKey("b")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "b" {
 				t.Fatalf("expected b, but got %s", v)
@@ -1012,7 +1012,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 				func() { _ = batch.Clear(a) },
 				func() { _ = batch.SingleClear(a) },
 				func() { _ = batch.ApplyBatchRepr(nil, false) },
-				func() { _, _ = batch.Get(a) },
+				func() { _, _ = batch.MVCCGet(a) },
 				func() { _, _, _, _ = batch.GetProto(a, nil) },
 				func() { _ = batch.Iterate(a.Key, a.Key, nil) },
 				func() { _ = batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}) },
@@ -1173,7 +1173,7 @@ func TestBatchCombine(t *testing.T) {
 						}
 
 						// Verify we can read the key we just wrote immediately.
-						if v, err := e.Get(mvccKey(k)); err != nil {
+						if v, err := e.MVCCGet(mvccKey(k)); err != nil {
 							errs <- errors.Wrap(err, "get failed")
 							return
 						} else if string(v) != k {
