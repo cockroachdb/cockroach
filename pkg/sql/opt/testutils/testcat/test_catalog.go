@@ -348,6 +348,19 @@ func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
 // catalog. This is used to test without spinning up a cluster.
 func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
+	return tc.ExecuteDDLWithIndexVersion(sql, descpb.EmptyArraysInInvertedIndexesVersion)
+}
+
+// ExecuteDDLWithIndexVersion parses the given DDL SQL statement and creates
+// objects in the test catalog. This is used to test without spinning up a
+// cluster.
+//
+// Any indexes created with CREATE INDEX will have the provided index
+// descriptor version (the version is ignored for indexes created as part of
+// a CREATE TABLE statement).
+func (tc *Catalog) ExecuteDDLWithIndexVersion(
+	sql string, indexVersion descpb.IndexDescriptorVersion,
+) (string, error) {
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
 		return "", err
@@ -359,7 +372,7 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", nil
 
 	case *tree.CreateIndex:
-		tc.CreateIndex(stmt)
+		tc.CreateIndex(stmt, indexVersion)
 		return "", nil
 
 	case *tree.CreateView:
@@ -782,6 +795,9 @@ type Index struct {
 	// geoConfig is the geospatial index configuration, if this is a geospatial
 	// inverted index. Otherwise geoConfig is nil.
 	geoConfig *geoindex.Config
+
+	// version is the index descriptor version of the index.
+	version descpb.IndexDescriptorVersion
 }
 
 // ID is part of the cat.Index interface.
@@ -955,7 +971,7 @@ func (ti *Index) GeoConfig() *geoindex.Config {
 
 // Version is part of the cat.Index interface.
 func (ti *Index) Version() descpb.IndexDescriptorVersion {
-	return descpb.EmptyArraysInInvertedIndexesVersion
+	return ti.version
 }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.
