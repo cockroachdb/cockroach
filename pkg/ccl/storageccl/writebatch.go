@@ -115,7 +115,7 @@ func clearExistingData(
 	// If this is a MVCCIterator, we have to unwrap it because
 	// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
 	// it itself because of import cycles).
-	if ssi, ok := iter.(*spanset.Iterator); ok {
+	if ssi, ok := iter.(*spanset.MVCCIterator); ok {
 		iter = ssi.Iterator()
 	}
 	// TODO(dan): Ideally, this would use `batch.ClearRange` but it doesn't

@@ -20,7 +20,7 @@ import (
 
 // MVCCIterator wraps an engine.MVCCIterator and ensures that it can
 // only be used to access spans in a SpanSet.
-type Iterator struct {
+type MVCCIterator struct {
 	i     storage.MVCCIterator
 	spans *SpanSet
 
@@ -40,33 +40,33 @@ type Iterator struct {
 	invalid bool
 }
 
-var _ storage.MVCCIterator = &Iterator{}
+var _ storage.MVCCIterator = &MVCCIterator{}
 
 // NewIterator constructs an iterator that verifies access of the underlying
 // iterator against the given SpanSet. Timestamps associated with the spans
 // in the spanset are not considered, only the span boundaries are checked.
-func NewIterator(iter storage.MVCCIterator, spans *SpanSet) *Iterator {
-	return &Iterator{i: iter, spans: spans, spansOnly: true}
+func NewIterator(iter storage.MVCCIterator, spans *SpanSet) *MVCCIterator {
+	return &MVCCIterator{i: iter, spans: spans, spansOnly: true}
 }
 
 // NewIteratorAt constructs an iterator that verifies access of the underlying
 // iterator against the given SpanSet at the given timestamp.
-func NewIteratorAt(iter storage.MVCCIterator, spans *SpanSet, ts hlc.Timestamp) *Iterator {
-	return &Iterator{i: iter, spans: spans, ts: ts}
+func NewIteratorAt(iter storage.MVCCIterator, spans *SpanSet, ts hlc.Timestamp) *MVCCIterator {
+	return &MVCCIterator{i: iter, spans: spans, ts: ts}
 }
 
 // Close is part of the engine.MVCCIterator interface.
-func (i *Iterator) Close() {
+func (i *MVCCIterator) Close() {
 	i.i.Close()
 }
 
-// MVCCIterator returns the underlying engine.MVCCIterator.
-func (i *Iterator) Iterator() storage.MVCCIterator {
+// Iterator returns the underlying engine.MVCCIterator.
+func (i *MVCCIterator) Iterator() storage.MVCCIterator {
 	return i.i
 }
 
 // Valid is part of the engine.MVCCIterator interface.
-func (i *Iterator) Valid() (bool, error) {
+func (i *MVCCIterator) Valid() (bool, error) {
 	if i.err != nil {
 		return false, i.err
 	}
@@ -78,13 +78,13 @@ func (i *Iterator) Valid() (bool, error) {
 }
 
 // SeekGE is part of the engine.MVCCIterator interface.
-func (i *Iterator) SeekGE(key storage.MVCCKey) {
+func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
 	i.i.SeekGE(key)
 	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
 }
 
 // SeekLT is part of the engine.MVCCIterator interface.
-func (i *Iterator) SeekLT(key storage.MVCCKey) {
+func (i *MVCCIterator) SeekLT(key storage.MVCCKey) {
 	i.i.SeekLT(key)
 	// CheckAllowed{At} supports the span representation of [,key), which
 	// corresponds to the span [key.Prev(),).
@@ -92,24 +92,24 @@ func (i *Iterator) SeekLT(key storage.MVCCKey) {
 }
 
 // Next is part of the engine.MVCCIterator interface.
-func (i *Iterator) Next() {
+func (i *MVCCIterator) Next() {
 	i.i.Next()
 	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
 }
 
 // Prev is part of the engine.MVCCIterator interface.
-func (i *Iterator) Prev() {
+func (i *MVCCIterator) Prev() {
 	i.i.Prev()
 	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
 }
 
 // NextKey is part of the engine.MVCCIterator interface.
-func (i *Iterator) NextKey() {
+func (i *MVCCIterator) NextKey() {
 	i.i.NextKey()
 	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
 }
 
-func (i *Iterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
+func (i *MVCCIterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
 	i.invalid = false
 	i.err = nil
 	if ok, _ := i.i.Valid(); !ok {
@@ -132,37 +132,37 @@ func (i *Iterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
 }
 
 // Key is part of the engine.MVCCIterator interface.
-func (i *Iterator) Key() storage.MVCCKey {
+func (i *MVCCIterator) Key() storage.MVCCKey {
 	return i.i.Key()
 }
 
 // Value is part of the engine.MVCCIterator interface.
-func (i *Iterator) Value() []byte {
+func (i *MVCCIterator) Value() []byte {
 	return i.i.Value()
 }
 
 // ValueProto is part of the engine.MVCCIterator interface.
-func (i *Iterator) ValueProto(msg protoutil.Message) error {
+func (i *MVCCIterator) ValueProto(msg protoutil.Message) error {
 	return i.i.ValueProto(msg)
 }
 
 // UnsafeKey is part of the engine.MVCCIterator interface.
-func (i *Iterator) UnsafeKey() storage.MVCCKey {
+func (i *MVCCIterator) UnsafeKey() storage.MVCCKey {
 	return i.i.UnsafeKey()
 }
 
 // UnsafeRawKey is part of the engine.MVCCIterator interface.
-func (i *Iterator) UnsafeRawKey() []byte {
+func (i *MVCCIterator) UnsafeRawKey() []byte {
 	return i.i.UnsafeRawKey()
 }
 
 // UnsafeValue is part of the engine.MVCCIterator interface.
-func (i *Iterator) UnsafeValue() []byte {
+func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
 }
 
 // ComputeStats is part of the engine.MVCCIterator interface.
-func (i *Iterator) ComputeStats(
+func (i *MVCCIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	if i.spansOnly {
@@ -178,7 +178,7 @@ func (i *Iterator) ComputeStats(
 }
 
 // FindSplitKey is part of the engine.MVCCIterator interface.
-func (i *Iterator) FindSplitKey(
+func (i *MVCCIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (storage.MVCCKey, error) {
 	if i.spansOnly {
@@ -194,24 +194,24 @@ func (i *Iterator) FindSplitKey(
 }
 
 // CheckForKeyCollisions is part of the engine.MVCCIterator interface.
-func (i *Iterator) CheckForKeyCollisions(
+func (i *MVCCIterator) CheckForKeyCollisions(
 	sstData []byte, start, end roachpb.Key,
 ) (enginepb.MVCCStats, error) {
 	return i.i.CheckForKeyCollisions(sstData, start, end)
 }
 
 // SetUpperBound is part of the engine.MVCCIterator interface.
-func (i *Iterator) SetUpperBound(key roachpb.Key) {
+func (i *MVCCIterator) SetUpperBound(key roachpb.Key) {
 	i.i.SetUpperBound(key)
 }
 
 // Stats is part of the engine.MVCCIterator interface.
-func (i *Iterator) Stats() storage.IteratorStats {
+func (i *MVCCIterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
 }
 
 // SupportsPrev is part of the engine.MVCCIterator interface.
-func (i *Iterator) SupportsPrev() bool {
+func (i *MVCCIterator) SupportsPrev() bool {
 	return i.i.SupportsPrev()
 }
 
