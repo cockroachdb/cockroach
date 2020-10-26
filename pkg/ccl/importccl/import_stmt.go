@@ -63,6 +63,7 @@ const (
 	csvComment      = "comment"
 	csvNullIf       = "nullif"
 	csvSkip         = "skip"
+	csvRowLimit     = "row_limit"
 	csvStrictQuotes = "strict_quotes"
 
 	mysqlOutfileRowSep   = "rows_terminated_by"
@@ -105,6 +106,7 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	csvComment:      sql.KVStringOptRequireValue,
 	csvNullIf:       sql.KVStringOptRequireValue,
 	csvSkip:         sql.KVStringOptRequireValue,
+	csvRowLimit:     sql.KVStringOptRequireValue,
 	csvStrictQuotes: sql.KVStringOptRequireNoValue,
 
 	mysqlOutfileRowSep:   sql.KVStringOptRequireValue,
@@ -149,7 +151,7 @@ var avroAllowedOptions = makeStringSet(
 	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize,
 )
 var csvAllowedOptions = makeStringSet(
-	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes,
+	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes, csvRowLimit,
 )
 var mysqlOutAllowedOptions = makeStringSet(
 	mysqlOutfileRowSep, mysqlOutfileFieldSep, mysqlOutfileEnclose,
@@ -447,6 +449,16 @@ func importPlanHook(
 			}
 			if _, ok := opts[importOptionSaveRejected]; ok {
 				format.SaveRejected = true
+			}
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.Csv.RowLimit = int64(rowLimit)
 			}
 		case "DELIMITED":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlOutAllowedOptions); err != nil {
@@ -860,8 +872,7 @@ func importPlanHook(
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
 }
 
-func parseAvroOptions(
-	ctx context.Context, opts map[string]string, p sql.PlanHookState, format *roachpb.IOFileFormat,
+func parseAvroOptions(ctx context.Context, opts map[string]string, p sql.PlanHookState, format *roachpb.IOFileFormat,
 ) error {
 	format.Format = roachpb.IOFileFormat_Avro
 	// Default input format is OCF.
