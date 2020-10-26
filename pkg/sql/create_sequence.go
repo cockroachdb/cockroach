@@ -35,7 +35,7 @@ type createSequenceNode struct {
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
 	un := n.Name.ToUnresolvedObjectName()
-	dbDesc, prefix, err := p.ResolveTargetObject(ctx, un)
+	dbDesc, _, prefix, err := p.ResolveTargetObject(ctx, un)
 	if err != nil {
 		return nil, err
 	}

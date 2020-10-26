@@ -167,15 +167,20 @@ func (p *planner) ResolveUncachedTableDescriptor(
 
 func (p *planner) ResolveTargetObject(
 	ctx context.Context, un *tree.UnresolvedObjectName,
-) (res catalog.DatabaseDescriptor, namePrefix tree.ObjectNamePrefix, err error) {
+) (
+	db catalog.DatabaseDescriptor,
+	schema catalog.ResolvedSchema,
+	namePrefix tree.ObjectNamePrefix,
+	err error,
+) {
 	var prefix *catalog.ResolvedObjectPrefix
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
 	})
 	if err != nil {
-		return nil, namePrefix, err
+		return nil, catalog.ResolvedSchema{}, namePrefix, err
 	}
-	return prefix.Database, namePrefix, err
+	return prefix.Database, prefix.Schema, namePrefix, err
 }
 
 // LookupSchema implements the tree.ObjectNameTargetResolver interface.
