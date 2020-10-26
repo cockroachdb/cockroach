@@ -3,22 +3,20 @@
 
 package descpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import geoindex "github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-import types "github.com/cockroachdb/cockroach/pkg/sql/types"
-import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	bytes "bytes"
+	fmt "fmt"
+	io "io"
+	math "math"
 
-import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-
-import bytes "bytes"
-
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-
-import io "io"
-
-import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
+	geoindex "github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	types "github.com/cockroachdb/cockroach/pkg/sql/types"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -1153,7 +1151,9 @@ type IndexDescriptor struct {
 	Version IndexDescriptorVersion `protobuf:"varint,18,opt,name=version,casttype=IndexDescriptorVersion" json:"version"`
 	// An ordered list of column names of which the index is comprised; these
 	// columns do not include any additional stored columns (which are in
-	// stored_column_names). This list parallels the column_ids list.
+	// stored_column_names). If the index is an inverted index, the last column
+	// in the list is invertable and all others are not invertable. This list
+	// parallels the column_ids list.
 	//
 	// Note: if duplicating the storage of the column names here proves to be
 	// prohibitive, we could clear this field before saving and reconstruct it
@@ -1167,7 +1167,8 @@ type IndexDescriptor struct {
 	StoreColumnNames []string `protobuf:"bytes,5,rep,name=store_column_names,json=storeColumnNames" json:"store_column_names,omitempty"`
 	// An ordered list of column IDs of which the index is comprised. This list
 	// parallels the column_names list and does not include any additional stored
-	// columns.
+	// columns. If the index is an inverted index, the last column in the list
+	// is invertable and all others are not invertable.
 	ColumnIDs []ColumnID `protobuf:"varint,6,rep,name=column_ids,json=columnIds,casttype=ColumnID" json:"column_ids,omitempty"`
 	// An ordered list of IDs for the additional columns associated with the
 	// index:
@@ -1589,7 +1590,12 @@ func (m *DescriptorMutation) GetMaterializedViewRefresh() *MaterializedViewRefre
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*DescriptorMutation) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*DescriptorMutation) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _DescriptorMutation_OneofMarshaler, _DescriptorMutation_OneofUnmarshaler, _DescriptorMutation_OneofSizer, []interface{}{
 		(*DescriptorMutation_Column)(nil),
 		(*DescriptorMutation_Index)(nil),
@@ -1641,7 +1647,9 @@ func _DescriptorMutation_OneofMarshaler(msg proto.Message, b *proto.Buffer) erro
 	return nil
 }
 
-func _DescriptorMutation_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+func _DescriptorMutation_OneofUnmarshaler(
+	msg proto.Message, tag, wire int, b *proto.Buffer,
+) (bool, error) {
 	m := msg.(*DescriptorMutation)
 	switch tag {
 	case 1: // descriptor.column
@@ -2313,7 +2321,9 @@ func (*TableDescriptor_SchemaChangeLease) Descriptor() ([]byte, []int) {
 func (m *TableDescriptor_SchemaChangeLease) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *TableDescriptor_SchemaChangeLease) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TableDescriptor_SchemaChangeLease) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -2359,7 +2369,9 @@ func (*TableDescriptor_CheckConstraint) Descriptor() ([]byte, []int) {
 func (m *TableDescriptor_CheckConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *TableDescriptor_CheckConstraint) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TableDescriptor_CheckConstraint) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -2519,7 +2531,9 @@ func (*TableDescriptor_SequenceOpts_SequenceOwner) Descriptor() ([]byte, []int) 
 func (m *TableDescriptor_SequenceOpts_SequenceOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *TableDescriptor_SequenceOpts_SequenceOwner) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TableDescriptor_SequenceOpts_SequenceOwner) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -2596,7 +2610,9 @@ func (*TableDescriptor_GCDescriptorMutation) Descriptor() ([]byte, []int) {
 func (m *TableDescriptor_GCDescriptorMutation) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *TableDescriptor_GCDescriptorMutation) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TableDescriptor_GCDescriptorMutation) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -3181,7 +3197,12 @@ func (m *Descriptor) GetSchema() *SchemaDescriptor {
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*Descriptor) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*Descriptor) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _Descriptor_OneofMarshaler, _Descriptor_OneofUnmarshaler, _Descriptor_OneofSizer, []interface{}{
 		(*Descriptor_Table)(nil),
 		(*Descriptor_Database)(nil),
