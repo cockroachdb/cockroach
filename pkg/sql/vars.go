@@ -1129,6 +1129,27 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(experimentalAlterColumnTypeGeneralMode.Get(sv))
 		},
 	},
+
+	// CockroachDB extension.
+	// TODO(mgartner): remove this once multi-column inverted indexes are fully
+	// supported.
+	`experimental_enable_multi_column_inverted_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_multi_column_inverted_indexes`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`experimental_enable_multi_column_inverted_indexes`, s)
+			if err != nil {
+				return err
+			}
+			m.SetMutliColumnInvertedIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.EnableMultiColumnInvertedIndexes)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(experimentalMultiColumnInvertedIndexesMode.Get(sv))
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
