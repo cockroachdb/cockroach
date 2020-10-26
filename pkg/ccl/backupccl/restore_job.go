@@ -1110,13 +1110,15 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			tableDesc := *tbl
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-			// Convert any mutations that were in progress on the table descriptor
-			// when the backup was taken, and convert them to schema change jobs.
-			newJobs, err := createSchemaChangeJobsFromMutations(ctx, r.execCfg.JobRegistry, txn, r.job.Payload().Username, &tableDesc)
-			if err != nil {
-				return err
+			if details.DescriptorCoverage != tree.AllDescriptors {
+				// Convert any mutations that were in progress on the table descriptor
+				// when the backup was taken, and convert them to schema change jobs.
+				newJobs, err := createSchemaChangeJobsFromMutations(ctx, r.execCfg.JobRegistry, txn, r.job.Payload().Username, &tableDesc)
+				if err != nil {
+					return err
+				}
+				createdSchemaChangeJobs = append(createdSchemaChangeJobs, newJobs...)
 			}
-			createdSchemaChangeJobs = append(createdSchemaChangeJobs, newJobs...)
 			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
 			if err != nil {
 				return errors.Wrapf(err, "validating table descriptor has not changed, expected: %v", tbl)
