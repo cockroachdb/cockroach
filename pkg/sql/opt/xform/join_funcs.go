@@ -447,19 +447,6 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
-		if joinType == opt.SemiJoinOp {
-			// We cannot use a non-covering index for semi join. Note that
-			// since the semi join doesn't pass through any columns, "non
-			// covering" here means that not all columns in the ON condition are
-			// available.
-			//
-			// For semi joins, we may still be able to generate an inverted join
-			// by converting it to an inner join using the ConvertSemiToInnerJoin
-			// rule. Any semi join that could use an inverted index would already be
-			// transformed into an inner join by ConvertSemiToInnerJoin, so semi
-			// joins can be ignored here.
-			return
-		}
 
 		if pkCols == nil {
 			tab := c.e.mem.Metadata().Table(scanPrivate.Table)
@@ -477,11 +464,16 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 
 		continuationCol := opt.ColumnID(0)
 		invertedJoinType := joinType
-		// Anti joins are converted to a pair consisting of a left join and
-		// anti join.
+		// Anti joins are converted to a pair consisting of a left inverted join
+		// and anti lookup join.
 		if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
 			continuationCol = c.constructContinuationColumnForPairedLeftJoin()
 			invertedJoinType = opt.LeftJoinOp
+		} else if joinType == opt.SemiJoinOp {
+			// Semi joins are converted to a pair consisting of an inner inverted
+			// join and semi lookup join.
+			continuationCol = c.constructContinuationColumnForPairedLeftJoin()
+			invertedJoinType = opt.InnerJoinOp
 		}
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
 		invertedJoin.JoinPrivate = *joinPrivate
@@ -491,7 +483,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		invertedJoin.InvertedExpr = invertedExpr
 		invertedJoin.InvertedCol = scanPrivate.Table.IndexColumnID(index, 0)
 		invertedJoin.Cols = indexCols.Union(inputCols)
-		if invertedJoinType == opt.LeftJoinOp {
+		if continuationCol != 0 {
 			invertedJoin.Cols.Add(continuationCol)
 			invertedJoin.IsFirstJoinInPairedJoiner = true
 			invertedJoin.ContinuationCol = continuationCol
@@ -516,7 +508,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols.Union(inputCols)
 		indexJoin.LookupColsAreTableKey = true
-		if invertedJoinType == opt.LeftJoinOp {
+		if continuationCol != 0 {
 			indexJoin.IsSecondJoinInPairedJoiner = true
 		}
 

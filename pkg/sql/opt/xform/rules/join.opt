@@ -94,7 +94,9 @@
 #
 # Similar to CommuteSemiJoin, this rule allows semi joins to be commuted. This
 # rule is also useful because it allows us to generate lookup joins and
-# inverted lookup joins for cases where the index is not covering.
+# inverted lookup joins for cases where the index is not covering. For inverted
+# lookup joins, the GenerateInvertedJoins* rules will also apply, and should
+# be lower cost since they avoid the DistinctOn operation.
 [ConvertSemiToInnerJoin, Explore]
 (SemiJoin
     $left:*
@@ -145,10 +147,8 @@
 # GenerateInvertedJoins creates InvertedJoin operators for all inverted
 # indexes (of the Scan table) which allow it. See the GenerateInvertedJoins
 # custom function for more details.
-# TODO(rytaft): Add support for SemiJoin. Currently it is supported by first
-# converting it to InnerJoin using the rule ConvertSemiToInnerJoin.
 [GenerateInvertedJoins, Explore]
-(InnerJoin | LeftJoin | AntiJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     (Scan $scanPrivate:*) &
         (IsCanonicalScan $scanPrivate) &
@@ -162,7 +162,7 @@
 # GenerateInvertedJoinsFromSelect is similar to GenerateInvertedJoins, but
 # applies when the input is a Select.
 [GenerateInvertedJoinsFromSelect, Explore]
-(InnerJoin | LeftJoin | AntiJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     (Select
         (Scan $scanPrivate:*) &
