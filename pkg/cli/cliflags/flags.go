@@ -1264,4 +1264,21 @@ The zip command will block for the duration specified. Zero disables this featur
 		Name:        "all",
 		Description: `Cancel all outstanding requests.`,
 	}
+
+	ImportSkipForeignKeys = FlagInfo{
+		Name: "skip-foreign-keys",
+		Description: `
+Speed up data import by ignoring foreign key constraints in the dump file's DDL.
+Also enables importing individual tables that would otherwise fail due to
+dependencies on other tables.
+`,
+	}
+
+	ImportMaxRowSize = FlagInfo{
+		Name: "max-row-size",
+		Description: `
+Override limits on line size when importing Postgres dump files. This setting 
+may need to be tweaked if the Postgres dump file has extremely long lines.
+`,
+	}
 )

@@ -211,6 +211,7 @@ show_stmt ::=
 	| show_indexes_stmt
 	| show_partitions_stmt
 	| show_jobs_stmt
+	| show_locality_stmt
 	| show_schedules_stmt
 	| show_queries_stmt
 	| show_ranges_stmt
@@ -638,6 +639,9 @@ show_jobs_stmt ::=
 	| 'SHOW' 'JOB' a_expr
 	| 'SHOW' 'JOB' 'WHEN' 'COMPLETE' a_expr
 
+show_locality_stmt ::=
+	'SHOW' 'LOCALITY'
+
 show_schedules_stmt ::=
 	'SHOW' 'SCHEDULES' opt_schedule_executor_type
 	| 'SHOW' schedule_state 'SCHEDULES' opt_schedule_executor_type
@@ -759,6 +763,7 @@ unreserved_keyword ::=
 	| 'ACCESS'
 	| 'ADD'
 	| 'ADMIN'
+	| 'AFFINITY'
 	| 'AFTER'
 	| 'AGGREGATE'
 	| 'ALTER'
@@ -897,6 +902,7 @@ unreserved_keyword ::=
 	| 'LOCAL'
 	| 'LOCKED'
 	| 'LOGIN'
+	| 'LOCALITY'
 	| 'LOOKUP'
 	| 'LOW'
 	| 'MATCH'
@@ -985,6 +991,7 @@ unreserved_keyword ::=
 	| 'REF'
 	| 'REFRESH'
 	| 'REGION'
+	| 'REGIONAL'
 	| 'REGIONS'
 	| 'REINDEX'
 	| 'RELEASE'
@@ -1202,6 +1209,7 @@ alter_table_stmt ::=
 	| alter_zone_table_stmt
 	| alter_rename_table_stmt
 	| alter_table_set_schema_stmt
+	| alter_table_regional_affinity_stmt
 
 alter_index_stmt ::=
 	alter_oneindex_stmt
@@ -1586,6 +1594,10 @@ alter_table_set_schema_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'SET' 'SCHEMA' schema_name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' 'SCHEMA' schema_name
 
+alter_table_regional_affinity_stmt ::=
+	'ALTER' 'TABLE' relation_expr 'SET' regional_affinity
+	| 'ALTER' 'TABLE' 'IF' 'NOT' 'EXISTS' relation_expr 'SET' regional_affinity
+
 alter_oneindex_stmt ::=
 	'ALTER' 'INDEX' table_index_name alter_index_cmds
 	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_index_name alter_index_cmds
@@ -1742,7 +1754,7 @@ opt_connection_limit ::=
 	| 
 
 opt_regions_list ::=
-	region_or_regions opt_equal name_list
+	region_or_regions opt_equal region_name_list
 	| 
 
 opt_survive_clause ::=
@@ -2090,6 +2102,20 @@ set_zone_config ::=
 	'CONFIGURE' 'ZONE' 'USING' var_set_list
 	| 'CONFIGURE' 'ZONE' 'DISCARD'
 
+regional_affinity ::=
+	'LOCALITY' 'GLOBAL'
+	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE' 'IN' region_name
+	| 'LOCALITY' 'REGIONAL' 'BY' 'ROW'
+	| 'REGIONAL' 'AFFINITY' 'TO' 'NONE'
+	| 'REGIONAL' 'AFFINITY' 'TO' region_name
+	| 'REGIONAL' 'AFFINITY' 'AT' 'ROW' 'LEVEL'
+	| 'REGIONAL' 'AFFINITY' 'NONE'
+	| 'REGIONAL' 'AFFINITY' region_name
+	| 'REGIONAL' 'AFFINITY' 'ROW' 'LEVEL'
+	| 'NO' 'REGIONAL' 'AFFINITY'
+	| 'TABLE' 'LEVEL' 'REGIONAL' 'AFFINITY' 'TO' region_name
+	| 'ROW' 'LEVEL' 'REGIONAL' 'AFFINITY'
+
 alter_index_cmds ::=
 	( alter_index_cmd ) ( ( ',' alter_index_cmd ) )*
 
@@ -2190,6 +2216,9 @@ opt_equal ::=
 signed_iconst ::=
 	'ICONST'
 	| only_signed_iconst
+
+region_name_list ::=
+	name_list
 
 opt_name ::=
 	name
@@ -2420,6 +2449,9 @@ alter_table_cmd ::=
 
 var_set_list ::=
 	( var_name '=' 'COPY' 'FROM' 'PARENT' | var_name '=' var_value ) ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*
+
+region_name ::=
+	name
 
 alter_index_cmd ::=
 	partition_by
