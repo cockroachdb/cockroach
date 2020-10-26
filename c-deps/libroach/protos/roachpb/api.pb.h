@@ -9956,6 +9956,33 @@ class ExternalStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_in
   ::std::string* release_auth();
   void set_allocated_auth(::std::string* auth);
 
+  // string server_enc_mode = 9;
+  void clear_server_enc_mode();
+  static const int kServerEncModeFieldNumber = 9;
+  const ::std::string& server_enc_mode() const;
+  void set_server_enc_mode(const ::std::string& value);
+  #if LANG_CXX11
+  void set_server_enc_mode(::std::string&& value);
+  #endif
+  void set_server_enc_mode(const char* value);
+  void set_server_enc_mode(const char* value, size_t size);
+  ::std::string* mutable_server_enc_mode();
+  ::std::string* release_server_enc_mode();
+  void set_allocated_server_enc_mode(::std::string* server_enc_mode);
+
+  void clear_server_kms_id();
+  static const int kServerKmsIdFieldNumber = 10;
+  const ::std::string& server_kms_id() const;
+  void set_server_kms_id(const ::std::string& value);
+  #if LANG_CXX11
+  void set_server_kms_id(::std::string&& value);
+  #endif
+  void set_server_kms_id(const char* value);
+  void set_server_kms_id(const char* value, size_t size);
+  ::std::string* mutable_server_kms_id();
+  ::std::string* release_server_kms_id();
+  void set_allocated_server_kms_id(::std::string* server_kms_id);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage.S3)
  private:
 
@@ -9968,6 +9995,8 @@ class ExternalStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_in
   ::google::protobuf::internal::ArenaStringPtr endpoint_;
   ::google::protobuf::internal::ArenaStringPtr region_;
   ::google::protobuf::internal::ArenaStringPtr auth_;
+  ::google::protobuf::internal::ArenaStringPtr server_enc_mode_;
+  ::google::protobuf::internal::ArenaStringPtr server_kms_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -26006,6 +26035,111 @@ inline void ExternalStorage_S3::set_allocated_auth(::std::string* auth) {
   }
   auth_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), auth);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.auth)
+}
+
+// string server_enc_mode = 9;
+inline void ExternalStorage_S3::clear_server_enc_mode() {
+  server_enc_mode_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ExternalStorage_S3::server_enc_mode() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.server_enc_mode)
+  return server_enc_mode_.GetNoArena();
+}
+inline void ExternalStorage_S3::set_server_enc_mode(const ::std::string& value) {
+  
+  server_enc_mode_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.server_enc_mode)
+}
+#if LANG_CXX11
+inline void ExternalStorage_S3::set_server_enc_mode(::std::string&& value) {
+  
+  server_enc_mode_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.server_enc_mode)
+}
+#endif
+inline void ExternalStorage_S3::set_server_enc_mode(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  server_enc_mode_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.server_enc_mode)
+}
+inline void ExternalStorage_S3::set_server_enc_mode(const char* value, size_t size) {
+  
+  server_enc_mode_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.server_enc_mode)
+}
+inline ::std::string* ExternalStorage_S3::mutable_server_enc_mode() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.server_enc_mode)
+  return server_enc_mode_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ExternalStorage_S3::release_server_enc_mode() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.server_enc_mode)
+  
+  return server_enc_mode_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ExternalStorage_S3::set_allocated_server_enc_mode(::std::string* server_enc_mode) {
+  if (server_enc_mode != NULL) {
+    
+  } else {
+    
+  }
+  server_enc_mode_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), server_enc_mode);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.server_enc_mode)
+}
+
+inline void ExternalStorage_S3::clear_server_kms_id() {
+  server_kms_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ExternalStorage_S3::server_kms_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.server_kms_id)
+  return server_kms_id_.GetNoArena();
+}
+inline void ExternalStorage_S3::set_server_kms_id(const ::std::string& value) {
+  
+  server_kms_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.server_kms_id)
+}
+#if LANG_CXX11
+inline void ExternalStorage_S3::set_server_kms_id(::std::string&& value) {
+  
+  server_kms_id_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.server_kms_id)
+}
+#endif
+inline void ExternalStorage_S3::set_server_kms_id(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  server_kms_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.server_kms_id)
+}
+inline void ExternalStorage_S3::set_server_kms_id(const char* value, size_t size) {
+  
+  server_kms_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.server_kms_id)
+}
+inline ::std::string* ExternalStorage_S3::mutable_server_kms_id() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.server_kms_id)
+  return server_kms_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ExternalStorage_S3::release_server_kms_id() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.server_kms_id)
+  
+  return server_kms_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ExternalStorage_S3::set_allocated_server_kms_id(::std::string* server_kms_id) {
+  if (server_kms_id != NULL) {
+    
+  } else {
+    
+  }
+  server_kms_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), server_kms_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.server_kms_id)
 }
 
 // -------------------------------------------------------------------
