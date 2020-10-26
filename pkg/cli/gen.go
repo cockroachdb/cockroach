@@ -213,7 +213,7 @@ Output the list of cluster settings known to this binary.
 				panic(fmt.Sprintf("unknown setting type %q", setting.Typ()))
 			}
 			var defaultVal string
-			if sm, ok := setting.(*settings.StateMachineSetting); ok {
+			if sm, ok := setting.(*settings.VersionSetting); ok {
 				defaultVal = sm.SettingsListDefault()
 			} else {
 				defaultVal = setting.String(&s.SV)
