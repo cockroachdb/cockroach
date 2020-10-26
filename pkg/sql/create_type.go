@@ -59,7 +59,7 @@ func resolveNewTypeName(
 	params runParams, name *tree.UnresolvedObjectName,
 ) (*tree.TypeName, catalog.DatabaseDescriptor, error) {
 	// Resolve the target schema and database.
-	db, prefix, err := params.p.ResolveTargetObject(params.ctx, name)
+	db, _, prefix, err := params.p.ResolveTargetObject(params.ctx, name)
 	if err != nil {
 		return nil, nil, err
 	}
