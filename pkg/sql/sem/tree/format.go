@@ -15,7 +15,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -35,8 +36,8 @@ func (f FmtFlags) HasAnyFlags(subset FmtFlags) bool {
 }
 
 // EncodeFlags returns the subset of the flags that are also lex encode flags.
-func (f FmtFlags) EncodeFlags() lex.EncodeFlags {
-	return lex.EncodeFlags(f) & (lex.EncFirstFreeFlagBit - 1)
+func (f FmtFlags) EncodeFlags() lexbase.EncodeFlags {
+	return lexbase.EncodeFlags(f) & (lexbase.EncFirstFreeFlagBit - 1)
 }
 
 // Basic bit definitions for the FmtFlags bitmask.
@@ -52,15 +53,15 @@ const (
 	// string will be escaped and enclosed in e'...' regardless of
 	// whether FmtBareStrings is specified. See FmtRawStrings below for
 	// an alternative.
-	FmtBareStrings FmtFlags = FmtFlags(lex.EncBareStrings)
+	FmtBareStrings FmtFlags = FmtFlags(lexbase.EncBareStrings)
 
 	// FmtBareIdentifiers instructs the pretty-printer to print
 	// identifiers without wrapping quotes in any case.
-	FmtBareIdentifiers FmtFlags = FmtFlags(lex.EncBareIdentifiers)
+	FmtBareIdentifiers FmtFlags = FmtFlags(lexbase.EncBareIdentifiers)
 
 	// FmtShowPasswords instructs the pretty-printer to not suppress passwords.
 	// If not set, passwords are replaced by *****.
-	FmtShowPasswords FmtFlags = FmtFlags(lex.EncFirstFreeFlagBit) << iota
+	FmtShowPasswords FmtFlags = FmtFlags(lexbase.EncFirstFreeFlagBit) << iota
 
 	// FmtShowTypes instructs the pretty-printer to
 	// annotate expressions with their resolved types.
@@ -143,7 +144,7 @@ const (
 	// FmtPgwireText instructs the pretty-printer to use
 	// a pg-compatible conversion to strings. See comments
 	// in pgwire_encode.go.
-	FmtPgwireText FmtFlags = fmtPgwireFormat | FmtFlags(lex.EncBareStrings)
+	FmtPgwireText FmtFlags = fmtPgwireFormat | FmtFlags(lexbase.EncBareStrings)
 
 	// FmtParsable instructs the pretty-printer to produce a representation that
 	// can be parsed into an equivalent expression. If there is a chance that the
@@ -333,6 +334,11 @@ func (ctx *FmtCtx) FormatName(s string) {
 // FormatNameP formats a string reference as a name.
 func (ctx *FmtCtx) FormatNameP(s *string) {
 	ctx.FormatNode((*Name)(s))
+}
+
+// FormatUsername formats a username safely.
+func (ctx *FmtCtx) FormatUsername(s security.SQLUsername) {
+	ctx.FormatName(s.Normalized())
 }
 
 // FormatNode recurses into a node for pretty-printing.

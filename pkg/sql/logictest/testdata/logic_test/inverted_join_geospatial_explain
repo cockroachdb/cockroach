@@ -146,39 +146,34 @@ project                                    ·                      ·           
 ·                                          table                  ltable@primary                                                                                                                                                                                                              ·                                                ·
 ·                                          spans                  FULL SCAN                                                                                                                                                                                                                   ·                                                ·
 
-# This query performs a semi-join, which is converted to an inner join by the
+# This query performs a semi-join, which is converted to paired joins by the
 # optimizer.
 query TTTTT
 EXPLAIN (VERBOSE)
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
-·                                                    distribution           local                                    ·                                         ·
-·                                                    vectorized             true                                     ·                                         ·
-project                                              ·                      ·                                        (lk)                                      ·
- │                                                   estimated row count    10 (missing stats)                       ·                                         ·
- └── distinct                                        ·                      ·                                        (lk, geom2)                               ·
-      │                                              estimated row count    1000 (missing stats)                     ·                                         ·
-      │                                              distinct on            lk                                       ·                                         ·
-      │                                              order key              lk                                       ·                                         ·
-      └── project                                    ·                      ·                                        (lk, geom2)                               +lk
-           └── project                               ·                      ·                                        (lk, geom2, geom)                         +lk
-                │                                    estimated row count    9801 (missing stats)                     ·                                         ·
-                └── lookup join (inner)              ·                      ·                                        (lk, geom2, rk1, rk2, geom)               +lk
-                     │                               table                  rtable@primary                           ·                                         ·
-                     │                               equality               (rk1, rk2) = (rk1,rk2)                   ·                                         ·
-                     │                               equality cols are key  ·                                        ·                                         ·
-                     │                               pred                   st_intersects(geom2, geom)               ·                                         ·
-                     └── project                     ·                      ·                                        (lk, geom2, rk1, rk2)                     +lk
-                          │                          estimated row count    10000 (missing stats)                    ·                                         ·
-                          └── inverted join (inner)  ·                      ·                                        (lk, geom2, rk1, rk2, geom_inverted_key)  +lk
-                               │                     table                  rtable@geom_index                        ·                                         ·
-                               │                     inverted expr          st_intersects(geom2, geom_inverted_key)  ·                                         ·
-                               └── scan              ·                      ·                                        (lk, geom2)                               +lk
-·                                                    estimated row count    1000 (missing stats)                     ·                                         ·
-·                                                    table                  ltable@primary                           ·                                         ·
-·                                                    spans                  FULL SCAN                                ·                                         ·
+·                                          distribution           local                                    ·                                               ·
+·                                          vectorized             true                                     ·                                               ·
+project                                    ·                      ·                                        (lk)                                            ·
+ │                                         estimated row count    10 (missing stats)                       ·                                               ·
+ └── project                               ·                      ·                                        (lk, geom2)                                     ·
+      │                                    estimated row count    10 (missing stats)                       ·                                               ·
+      └── lookup join (semi)               ·                      ·                                        (lk, geom2, rk1, rk2, cont)                     ·
+           │                               table                  rtable@primary                           ·                                               ·
+           │                               equality               (rk1, rk2) = (rk1,rk2)                   ·                                               ·
+           │                               equality cols are key  ·                                        ·                                               ·
+           │                               pred                   st_intersects(geom2, geom)               ·                                               ·
+           └── project                     ·                      ·                                        (lk, geom2, rk1, rk2, cont)                     ·
+                │                          estimated row count    10000 (missing stats)                    ·                                               ·
+                └── inverted join (inner)  ·                      ·                                        (lk, geom2, rk1, rk2, geom_inverted_key, cont)  ·
+                     │                     table                  rtable@geom_index                        ·                                               ·
+                     │                     inverted expr          st_intersects(geom2, geom_inverted_key)  ·                                               ·
+                     └── scan              ·                      ·                                        (lk, geom2)                                     ·
+·                                          estimated row count    1000 (missing stats)                     ·                                               ·
+·                                          table                  ltable@primary                           ·                                               ·
+·                                          spans                  FULL SCAN                                ·                                               ·
 
-# Left joins are also converted to an inner join by the optimizer.
+# Left outer joins are also converted to paired joins by the optimizer.
 query TTTTT
 EXPLAIN (VERBOSE)
 SELECT lk, rk1 FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom)

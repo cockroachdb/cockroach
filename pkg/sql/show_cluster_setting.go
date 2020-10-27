@@ -53,7 +53,7 @@ func (p *planner) showStateMachineSetting(
 					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 						ctx, "read-setting",
 						txn,
-						sessiondata.InternalExecutorOverride{User: security.RootUser},
+						sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 						"SELECT value FROM system.settings WHERE name = $1", name,
 					)
 					if err != nil {

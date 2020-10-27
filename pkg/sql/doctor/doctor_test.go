@@ -53,7 +53,7 @@ var validTableDesc = &descpb.Descriptor{
 			},
 			NextIndexID: 2,
 			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-				descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUser),
+				descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUserName()),
 			FormatVersion:  descpb.InterleavedFormatVersion,
 			NextMutationID: 1,
 		},

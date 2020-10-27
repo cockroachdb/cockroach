@@ -98,6 +98,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	prevDBID := tableDesc.ParentID
 
 	var targetDbDesc catalog.DatabaseDescriptor
+	var targetSchemaDesc catalog.ResolvedSchema
 	// If the target new name has no qualifications, then assume that the table
 	// is intended to be renamed into the same database and schema.
 	newTn := n.newTn
@@ -105,6 +106,11 @@ func (n *renameTableNode) startExec(params runParams) error {
 		newTn.ObjectNamePrefix = oldTn.ObjectNamePrefix
 		var err error
 		targetDbDesc, err = p.ResolveUncachedDatabaseByName(ctx, string(oldTn.CatalogName), true /* required */)
+		if err != nil {
+			return err
+		}
+
+		_, targetSchemaDesc, err = p.ResolveUncachedSchemaDescriptor(ctx, targetDbDesc.GetID(), oldTn.Schema(), true)
 		if err != nil {
 			return err
 		}
@@ -125,7 +131,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		newUn := newTn.ToUnresolvedObjectName()
 		var prefix tree.ObjectNamePrefix
 		var err error
-		targetDbDesc, prefix, err = p.ResolveTargetObject(ctx, newUn)
+		targetDbDesc, targetSchemaDesc, prefix, err = p.ResolveTargetObject(ctx, newUn)
 		if err != nil {
 			return err
 		}
@@ -180,8 +186,8 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	exists, id, err := catalogkv.LookupPublicTableID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
+	exists, id, err := catalogkv.LookupObjectID(
+		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), targetSchemaDesc.ID, newTn.Table(),
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
@@ -254,7 +260,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 			Statement    string
 			User         string
 			NewTableName string
-		}{oldTn.FQString(), n.n.String(), params.SessionData().User, newTn.FQString()},
+		}{oldTn.FQString(), n.n.String(), params.p.User().Normalized(), newTn.FQString()},
 	)
 }
 

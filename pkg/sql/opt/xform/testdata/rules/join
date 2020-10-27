@@ -4055,68 +4055,35 @@ project
       └── filters
            └── st_covers(c.geom:10, n.geom:16) OR (name:15 LIKE 'Upper%') [outer=(10,15,16), immutable]
 
-# Semi-joins are supported by converting them to an inner join wrapped in
-# a DistinctOn and a Project.
-opt expect=(GenerateInvertedJoins,ConvertSemiToInnerJoin)
+# Semi-joins are supported by converting them to a paired-join consisting of
+# an inner inverted join followed by a left semi lookup join.
+opt expect=GenerateInvertedJoins
 SELECT *
 FROM nyc_census_blocks AS c
 WHERE EXISTS (
   SELECT * FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom)
 )
 ----
-project
+semi-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
+ ├── key columns: [13] = [13]
+ ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- └── distinct-on
-      ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10!null
-      ├── grouping columns: c.gid:1!null
-      ├── internal-ordering: +1
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-10)
-      ├── inner-join (lookup nyc_neighborhoods [as=n])
-      │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10!null n.geom:16!null
-      │    ├── key columns: [13] = [13]
-      │    ├── lookup columns are key
-      │    ├── immutable
-      │    ├── fd: (1)-->(2-10)
-      │    ├── ordering: +1
-      │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null
-      │    │    ├── inverted-expr
-      │    │    │    └── st_covers(c.geom:10, n.geom:16)
-      │    │    ├── key: (1,13)
-      │    │    ├── fd: (1)-->(2-10)
-      │    │    ├── ordering: +1
-      │    │    ├── scan nyc_census_blocks [as=c]
-      │    │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-10)
-      │    │    │    └── ordering: +1
-      │    │    └── filters (true)
-      │    └── filters
-      │         └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
-      └── aggregations
-           ├── const-agg [as=blkid:2, outer=(2)]
-           │    └── blkid:2
-           ├── const-agg [as=popn_total:3, outer=(3)]
-           │    └── popn_total:3
-           ├── const-agg [as=popn_white:4, outer=(4)]
-           │    └── popn_white:4
-           ├── const-agg [as=popn_black:5, outer=(5)]
-           │    └── popn_black:5
-           ├── const-agg [as=popn_nativ:6, outer=(6)]
-           │    └── popn_nativ:6
-           ├── const-agg [as=popn_asian:7, outer=(7)]
-           │    └── popn_asian:7
-           ├── const-agg [as=popn_other:8, outer=(8)]
-           │    └── popn_other:8
-           ├── const-agg [as=c.boroname:9, outer=(9)]
-           │    └── c.boroname:9
-           └── const-agg [as=c.geom:10, outer=(10)]
-                └── c.geom:10
+ ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null continuation:19
+ │    ├── inverted-expr
+ │    │    └── st_covers(c.geom:10, n.geom:16)
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-10), (13)-->(19)
+ │    ├── scan nyc_census_blocks [as=c]
+ │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-10)
+ │    └── filters (true)
+ └── filters
+      └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 # Anti-joins are supported by converting them to a paired-join consisting of
 # a left outer inverted join followed by a left anti lookup join.
@@ -4509,67 +4476,34 @@ project
            └── n.boroname:14 = 'Manhattan' [outer=(14), constraints=(/14: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(14)]
 
 # Inverted "semi-join".
-opt expect=(GenerateInvertedJoinsFromSelect,ConvertSemiToInnerJoin)
+opt expect=GenerateInvertedJoinsFromSelect
 SELECT *
 FROM nyc_census_blocks AS c
 WHERE EXISTS (
   SELECT * FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom) AND n.boroname = 'Manhattan'
 )
 ----
-project
+semi-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
+ ├── key columns: [13] = [13]
+ ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- └── distinct-on
-      ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10!null
-      ├── grouping columns: c.gid:1!null
-      ├── internal-ordering: +1 opt(14)
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-10)
-      ├── inner-join (lookup nyc_neighborhoods [as=n])
-      │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10!null n.boroname:14!null n.geom:16!null
-      │    ├── key columns: [13] = [13]
-      │    ├── lookup columns are key
-      │    ├── immutable
-      │    ├── fd: ()-->(14), (1)-->(2-10)
-      │    ├── ordering: +1 opt(14) [actual: +1]
-      │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
-      │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null
-      │    │    ├── inverted-expr
-      │    │    │    └── st_covers(c.geom:10, n.geom:16)
-      │    │    ├── key: (1,13)
-      │    │    ├── fd: (1)-->(2-10)
-      │    │    ├── ordering: +1
-      │    │    ├── scan nyc_census_blocks [as=c]
-      │    │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-10)
-      │    │    │    └── ordering: +1
-      │    │    └── filters (true)
-      │    └── filters
-      │         ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
-      │         └── n.boroname:14 = 'Manhattan' [outer=(14), constraints=(/14: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(14)]
-      └── aggregations
-           ├── const-agg [as=blkid:2, outer=(2)]
-           │    └── blkid:2
-           ├── const-agg [as=popn_total:3, outer=(3)]
-           │    └── popn_total:3
-           ├── const-agg [as=popn_white:4, outer=(4)]
-           │    └── popn_white:4
-           ├── const-agg [as=popn_black:5, outer=(5)]
-           │    └── popn_black:5
-           ├── const-agg [as=popn_nativ:6, outer=(6)]
-           │    └── popn_nativ:6
-           ├── const-agg [as=popn_asian:7, outer=(7)]
-           │    └── popn_asian:7
-           ├── const-agg [as=popn_other:8, outer=(8)]
-           │    └── popn_other:8
-           ├── const-agg [as=c.boroname:9, outer=(9)]
-           │    └── c.boroname:9
-           └── const-agg [as=c.geom:10, outer=(10)]
-                └── c.geom:10
+ ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null continuation:20
+ │    ├── inverted-expr
+ │    │    └── st_covers(c.geom:10, n.geom:16)
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-10), (13)-->(20)
+ │    ├── scan nyc_census_blocks [as=c]
+ │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-10)
+ │    └── filters (true)
+ └── filters
+      ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
+      └── n.boroname:14 = 'Manhattan' [outer=(14), constraints=(/14: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(14)]
 
 # Inverted "anti-join".
 opt expect=GenerateInvertedJoinsFromSelect

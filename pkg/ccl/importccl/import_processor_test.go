@@ -125,7 +125,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				group.Go(func() error {
 					defer close(kvCh)
 					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format,
-						externalStorageFactory, security.RootUser)
+						externalStorageFactory, security.RootUserName())
 				})
 
 				lastBatch := 0

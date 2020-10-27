@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -226,7 +227,7 @@ func (rec *SpanSetReplicaEvalContext) GetExternalStorage(
 
 // GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
 func (rec *SpanSetReplicaEvalContext) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user string,
+	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	return rec.i.GetExternalStorageFromURI(ctx, uri, user)
 }

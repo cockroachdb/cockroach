@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -56,7 +57,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 		return jobs.Record{
 			Description: "testing",
 			Statement:   "SELECT 1",
-			Username:    "root",
+			Username:    security.RootUserName(),
 			Details: jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
 					{

@@ -1122,7 +1122,7 @@ func (s *adminServer) RangeLog(
 // getUIData returns the values and timestamps for the given UI keys. Keys
 // that are not found will not be returned.
 func (s *adminServer) getUIData(
-	ctx context.Context, userName string, keys []string,
+	ctx context.Context, userName security.SQLUsername, keys []string,
 ) (*serverpb.GetUIDataResponse, error) {
 	if len(keys) == 0 {
 		return &serverpb.GetUIDataResponse{}, nil
@@ -1143,7 +1143,7 @@ func (s *adminServer) getUIData(
 	}
 	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-getUIData", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query.String(), query.QueryArguments()...,
 	)
 	if err != nil {
@@ -1181,8 +1181,8 @@ func (s *adminServer) getUIData(
 // system.ui.
 // The username is combined to ensure that different users
 // can use different customizations.
-func makeUIKey(username, key string) string {
-	return username + "$" + key
+func makeUIKey(username security.SQLUsername, key string) string {
+	return username.Normalized() + "$" + key
 }
 
 // splitUIKey is the inverse of makeUIKey.
@@ -1215,7 +1215,7 @@ func (s *adminServer) SetUIData(
 		rowsAffected, err := s.server.sqlServer.internalExecutor.ExecEx(
 			ctx, "admin-set-ui-data", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
-				User: security.RootUser,
+				User: security.RootUserName(),
 			},
 			query, makeUIKey(userName, key), val)
 		if err != nil {
@@ -1528,7 +1528,7 @@ func (s *adminServer) Locations(
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-locations", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		q.String(),
 	)
 	if err != nil {
@@ -2303,7 +2303,7 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
 // if it exists.
 func (s *adminServer) queryZone(
-	ctx context.Context, userName string, id descpb.ID,
+	ctx context.Context, userName security.SQLUsername, id descpb.ID,
 ) (zonepb.ZoneConfig, bool, error) {
 	const query = `SELECT crdb_internal.get_zone_config($1)`
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
@@ -2346,7 +2346,7 @@ func (s *adminServer) queryZone(
 // queryDescriptorIDPath(), for a ZoneConfig. It returns the most specific
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
-	ctx context.Context, userName string, path []descpb.ID,
+	ctx context.Context, userName security.SQLUsername, path []descpb.ID,
 ) (descpb.ID, zonepb.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
 		zone, zoneExists, err := s.queryZone(ctx, userName, path[i])
@@ -2359,7 +2359,7 @@ func (s *adminServer) queryZonePath(
 
 // queryDatabaseID queries for the ID of the database with the given name.
 func (s *adminServer) queryDatabaseID(
-	ctx context.Context, userName string, name string,
+	ctx context.Context, userName security.SQLUsername, name string,
 ) (descpb.ID, error) {
 	const query = `SELECT crdb_internal.get_database_id($1)`
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
@@ -2394,7 +2394,7 @@ func (s *adminServer) queryDatabaseID(
 // queryTableID queries for the ID of the table with the given name in the
 // database with the given name. The table name may contain a schema qualifier.
 func (s *adminServer) queryTableID(
-	ctx context.Context, username string, database string, tableName string,
+	ctx context.Context, username security.SQLUsername, database string, tableName string,
 ) (descpb.ID, error) {
 	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "admin-resolve-name", nil,
@@ -2428,31 +2428,33 @@ type adminPrivilegeChecker struct {
 	ie *sql.InternalExecutor
 }
 
-func (c *adminPrivilegeChecker) requireAdminUser(ctx context.Context) (userName string, err error) {
+func (c *adminPrivilegeChecker) requireAdminUser(
+	ctx context.Context,
+) (userName security.SQLUsername, err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
-		return "", err
+		return userName, err
 	}
 	if !isAdmin {
-		return "", errRequiresAdmin
+		return userName, errRequiresAdmin
 	}
 	return userName, nil
 }
 
 func (c *adminPrivilegeChecker) requireViewActivityPermission(
 	ctx context.Context,
-) (userName string, err error) {
+) (userName security.SQLUsername, err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
-		return "", err
+		return userName, err
 	}
 	if !isAdmin {
 		hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
 		if err != nil {
-			return "", err
+			return userName, err
 		}
 		if !hasViewActivity {
-			return "", status.Errorf(
+			return userName, status.Errorf(
 				codes.PermissionDenied, "this operation requires the %s role option",
 				roleoption.VIEWACTIVITY)
 		}
@@ -2462,17 +2464,19 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(
 
 func (c *adminPrivilegeChecker) getUserAndRole(
 	ctx context.Context,
-) (userName string, isAdmin bool, err error) {
+) (userName security.SQLUsername, isAdmin bool, err error) {
 	userName, err = userFromContext(ctx)
 	if err != nil {
-		return "", false, err
+		return userName, false, err
 	}
 	isAdmin, err = c.hasAdminRole(ctx, userName)
 	return userName, isAdmin, err
 }
 
-func (c *adminPrivilegeChecker) hasAdminRole(ctx context.Context, user string) (bool, error) {
-	if user == security.RootUser {
+func (c *adminPrivilegeChecker) hasAdminRole(
+	ctx context.Context, user security.SQLUsername,
+) (bool, error) {
+	if user.IsRootUser() {
 		// Shortcut.
 		return true, nil
 	}
@@ -2497,9 +2501,9 @@ func (c *adminPrivilegeChecker) hasAdminRole(ctx context.Context, user string) (
 }
 
 func (c *adminPrivilegeChecker) hasRoleOption(
-	ctx context.Context, user string, roleOption roleoption.Option,
+	ctx context.Context, user security.SQLUsername, roleOption roleoption.Option,
 ) (bool, error) {
-	if user == security.RootUser {
+	if user.IsRootUser() {
 		// Shortcut.
 		return true, nil
 	}

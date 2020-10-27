@@ -434,7 +434,7 @@ func execQuery(
 ) error {
 	rows, cols, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryWithCols(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser, Database: "system"},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName(), Database: "system"},
 		query,
 	)
 	if err != nil {

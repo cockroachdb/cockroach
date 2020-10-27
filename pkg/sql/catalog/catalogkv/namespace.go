@@ -218,13 +218,6 @@ func LookupObjectID(
 	return false, descpb.InvalidID, nil
 }
 
-// LookupPublicTableID is a wrapper around LookupObjectID for public tables.
-func LookupPublicTableID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, name string,
-) (bool, descpb.ID, error) {
-	return LookupObjectID(ctx, txn, codec, parentID, keys.PublicSchemaID, name)
-}
-
 // LookupDatabaseID is  a wrapper around LookupObjectID for databases.
 func LookupDatabaseID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,

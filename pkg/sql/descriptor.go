@@ -86,7 +86,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	desc := dbdesc.NewInitial(id, string(database.Name), p.SessionData().User)
+	desc := dbdesc.NewInitial(id, string(database.Name), p.SessionData().User())
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}

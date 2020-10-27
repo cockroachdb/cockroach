@@ -20,6 +20,7 @@ import "gogoproto/gogo.proto";
 // particular migration is to be considered enabled or disabled.
 message ClusterVersion {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   reserved 1;
   // The version of functionality in use in the cluster. This value must

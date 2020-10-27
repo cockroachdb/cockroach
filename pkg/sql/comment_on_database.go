@@ -49,7 +49,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 			params.ctx,
 			"set-db-comment",
 			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.DatabaseCommentType,
 			n.dbDesc.GetID(),
@@ -62,7 +62,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 			params.ctx,
 			"delete-db-comment",
 			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 			keys.DatabaseCommentType,
 			n.dbDesc.GetID())
@@ -85,7 +85,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 		}{
 			n.n.Name.String(),
 			n.n.String(),
-			params.SessionData().User,
+			params.p.User().Normalized(),
 			n.n.Comment},
 	)
 }

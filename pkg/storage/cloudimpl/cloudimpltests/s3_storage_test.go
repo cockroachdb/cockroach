@@ -46,7 +46,7 @@ func TestPutS3(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	user := security.RootUser
+	user := security.RootUserName()
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
 		_, err := cloudimpl.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
 			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
@@ -117,7 +117,7 @@ func TestPutS3Endpoint(t *testing.T) {
 	if bucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_ENDPOINT_BUCKET env var must be set")
 	}
-	user := security.RootUser
+	user := security.RootUserName()
 
 	u := url.URL{
 		Scheme:   "s3",
@@ -183,7 +183,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	user := security.RootUser
+	user := security.RootUserName()
 
 	conf, err := cloudimpl.ExternalStorageConfFromURI(u.String(), user)
 	if err != nil {

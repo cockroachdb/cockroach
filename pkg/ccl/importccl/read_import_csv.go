@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -62,7 +63,7 @@ func (c *csvInputReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, c.readFile, makeExternalStorage, user)
 }

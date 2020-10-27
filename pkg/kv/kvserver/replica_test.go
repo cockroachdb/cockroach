@@ -6280,7 +6280,7 @@ func TestMerge(t *testing.T) {
 	if err := resp.Value.GetProto(&actual); err != nil {
 		t.Fatal(err)
 	}
-	if !proto.Equal(&actual, &expected) {
+	if !actual.Equal(&expected) {
 		t.Errorf("Get did not return expected value: %v != %v", actual, expected)
 	}
 }

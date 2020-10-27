@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -120,9 +121,13 @@ func runImport(
 		return err
 	}
 
+	username, err := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameCreation)
+	if err != nil {
+		return err
+	}
+
 	// Resolve the userfile destination to upload the dump file to.
-	userfileDestinationURI := constructUserfileDestinationURI(source, "",
-		connURL.User.Username())
+	userfileDestinationURI := constructUserfileDestinationURI(source, "", username)
 	unescapedUserfileURL, err := url.PathUnescape(userfileDestinationURI)
 	if err != nil {
 		return err

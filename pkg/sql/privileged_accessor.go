@@ -48,7 +48,7 @@ func (p *planner) LookupNamespaceID(
 			ctx,
 			"crdb-internal-get-descriptor-id",
 			p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query,
 			parentID,
 			name,
@@ -83,7 +83,7 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 		ctx,
 		"crdb-internal-get-zone",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query,
 		id,
 	)

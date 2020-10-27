@@ -60,7 +60,7 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	request := &serverpb.CancelQueryRequest{
 		NodeId:   fmt.Sprintf("%d", nodeID),
 		QueryID:  string(queryIDString),
-		Username: params.SessionData().User,
+		Username: params.SessionData().User().Normalized(),
 	}
 
 	response, err := params.extendedEvalCtx.SQLStatusServer.CancelQuery(params.ctx, request)

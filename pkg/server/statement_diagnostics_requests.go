@@ -102,7 +102,7 @@ func (s *statusServer) StatementDiagnosticsRequests(
 	// TODO(davidh): Add pagination to this request.
 	rows, err := s.internalExecutor.QueryEx(ctx, "stmt-diag-get-all", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.RootUser,
+			User: security.RootUserName(),
 		},
 		`SELECT
 			id,
@@ -169,7 +169,7 @@ func (s *statusServer) StatementDiagnostics(
 	var err error
 	row, err := s.internalExecutor.QueryRowEx(ctx, "stmt-diag-get-one", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.RootUser,
+			User: security.RootUserName(),
 		},
 		`SELECT
 			id,

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -66,7 +67,7 @@ func storeFromURI(
 	t *testing.T,
 	uri string,
 	clientFactory blobs.BlobClientFactory,
-	user string,
+	user security.SQLUsername,
 	ie *sql.InternalExecutor,
 	kvDB *kv.DB,
 ) cloud.ExternalStorage {
@@ -87,7 +88,7 @@ func testExportStore(
 	t *testing.T,
 	storeURI string,
 	skipSingleFile bool,
-	user string,
+	user security.SQLUsername,
 	ie *sql.InternalExecutor,
 	kvDB *kv.DB,
 ) {
@@ -98,7 +99,8 @@ func testExportStore(
 func testExportStoreWithExternalIOConfig(
 	t *testing.T,
 	ioConf base.ExternalIODirConfig,
-	storeURI, user string,
+	storeURI string,
+	user security.SQLUsername,
 	skipSingleFile bool,
 	ie *sql.InternalExecutor,
 	kvDB *kv.DB,
@@ -277,7 +279,9 @@ func testExportStoreWithExternalIOConfig(
 
 // RunListFilesTest tests the ListFiles() interface method for the ExternalStorage
 // specified by storeURI.
-func testListFiles(t *testing.T, storeURI, user string, ie *sql.InternalExecutor, kvDB *kv.DB) {
+func testListFiles(
+	t *testing.T, storeURI string, user security.SQLUsername, ie *sql.InternalExecutor, kvDB *kv.DB,
+) {
 	ctx := context.Background()
 	dataLetterFiles := []string{"file/letters/dataA.csv", "file/letters/dataB.csv", "file/letters/dataC.csv"}
 	dataNumberFiles := []string{"file/numbers/data1.csv", "file/numbers/data2.csv", "file/numbers/data3.csv"}
@@ -302,7 +306,10 @@ func testListFiles(t *testing.T, storeURI, user string, ie *sql.InternalExecutor
 		for i := range in {
 			u := *uri
 			if u.Scheme == "userfile" && u.Host == "" {
-				u.Host = cloudimpl.DefaultQualifiedNamePrefix + user
+				composedTableName := tree.Name(cloudimpl.DefaultQualifiedNamePrefix + user.Normalized())
+				u.Host = cloudimpl.DefaultQualifiedNamespace +
+					// Escape special identifiers as needed.
+					composedTableName.String()
 			}
 			u.Path = u.Path + "/" + in[i]
 			out[i] = u.String()
@@ -453,7 +460,7 @@ func TestPutGoogleCloud(t *testing.T) {
 		skip.IgnoreLint(t, "GS_BUCKET env var must be set")
 	}
 
-	user := security.RootUser
+	user := security.RootUserName()
 
 	t.Run("empty", func(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test-empty"),
@@ -487,7 +494,7 @@ func TestPutGoogleCloud(t *testing.T) {
 				cloudimpl.CredentialsParam,
 				url.QueryEscape(encoded),
 			),
-			security.RootUser, nil, nil,
+			security.RootUserName(), nil, nil,
 		)
 	})
 	t.Run("implicit", func(t *testing.T) {
@@ -530,7 +537,7 @@ func TestWorkloadStorage(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	user := security.RootUser
+	user := security.RootUserName()
 
 	{
 		s, err := cloudimpl.ExternalStorageFromURI(ctx, bankURL().String(), base.ExternalIODirConfig{},

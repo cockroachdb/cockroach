@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -91,7 +91,7 @@ func (m *mysqldumpReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
 }
@@ -126,7 +126,7 @@ func (m *mysqldumpReader) readFile(
 		switch i := stmt.(type) {
 		case *mysql.Insert:
 			name := safeString(i.Table.Name)
-			conv, ok := m.tables[lex.NormalizeName(name)]
+			conv, ok := m.tables[lexbase.NormalizeName(name)]
 			if !ok {
 				// not importing this table.
 				continue
@@ -291,7 +291,7 @@ func readMysqlCreateTable(
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
 ) ([]*tabledesc.Mutable, error) {
-	match = lex.NormalizeName(match)
+	match = lexbase.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
@@ -348,7 +348,7 @@ func readMysqlCreateTable(
 type mysqlIdent interface{ CompliantName() string }
 
 func safeString(in mysqlIdent) string {
-	return lex.NormalizeName(in.CompliantName())
+	return lexbase.NormalizeName(in.CompliantName())
 }
 
 func safeName(in mysqlIdent) tree.Name {
@@ -400,7 +400,7 @@ func mysqlTableToCockroach(
 
 	var seqDesc *tabledesc.Mutable
 	// If we have an auto-increment seq, create it and increment the id.
-	owner := security.AdminRole
+	owner := security.AdminRoleName()
 	if seqName != "" {
 		var opts tree.SequenceOptions
 		if startingValue != 0 {
@@ -411,7 +411,7 @@ func mysqlTableToCockroach(
 		if p != nil {
 			params := p.RunParams(ctx)
 			if params.SessionData() != nil {
-				owner = params.SessionData().User
+				owner = params.SessionData().User()
 			}
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
 			seqDesc, err = sql.NewSequenceTableDesc(
@@ -515,7 +515,7 @@ func mysqlTableToCockroach(
 			)
 			toCols := i.ReferencedColumns
 			d := &tree.ForeignKeyConstraintTableDef{
-				Name:     tree.Name(lex.NormalizeName(raw.Name)),
+				Name:     tree.Name(lexbase.NormalizeName(raw.Name)),
 				FromCols: toNameList(fromCols),
 				ToCols:   toNameList(toCols),
 			}

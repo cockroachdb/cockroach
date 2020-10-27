@@ -55,15 +55,15 @@ func runImportCLICommand(
 	<-knobs.uploadComplete
 	data, err := ioutil.ReadFile(dumpFilePath)
 	require.NoError(t, err)
-	userfileURI := constructUserfileDestinationURI(dumpFilePath, "", security.RootUser)
-	checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUser, userfileURI, data)
+	userfileURI := constructUserfileDestinationURI(dumpFilePath, "", security.RootUserName())
+	checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(), userfileURI, data)
 	knobs.pauseAfterUpload <- struct{}{}
 	wg.Wait()
 
 	// Check that the dump file has been cleaned up after the import CLI command
 	// has completed.
 	store, err := c.ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx,
-		userfileURI, security.RootUser)
+		userfileURI, security.RootUserName())
 	require.NoError(t, err)
 	_, err = store.ReadFile(ctx, "")
 	testutils.IsError(err, "file doesn't exist")

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 )
 
@@ -593,7 +592,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	); !testutils.IsError(err, "received forward") {
 		t.Fatal(err)
 	}
-	if !proto.Equal(client.forwardAddr, &newAddr) {
+	if !client.forwardAddr.Equal(&newAddr) {
 		t.Fatalf("unexpected forward address %v, expected %v", client.forwardAddr, &newAddr)
 	}
 }

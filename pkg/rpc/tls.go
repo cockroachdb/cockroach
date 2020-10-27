@@ -235,8 +235,8 @@ func (ctx *SecurityContext) GetHTTPClient() (http.Client, error) {
 
 // getClientCertPaths returns the paths to the client cert and key. This uses
 // the node certs for the NodeUser, and the actual client certs for all others.
-func (ctx *SecurityContext) getClientCertPaths(user string) (string, string) {
-	if user == security.NodeUser {
+func (ctx *SecurityContext) getClientCertPaths(user security.SQLUsername) (string, string) {
+	if user.IsNodeUser() {
 		return ctx.NodeCertPath(), ctx.NodeKeyPath()
 	}
 	return ctx.ClientCertPath(user), ctx.ClientKeyPath(user)

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1184,7 +1185,7 @@ func (w *schemaChangeWorker) createSchema(tx *pgx.Tx) (string, error) {
 	}
 
 	// TODO(jayshrivastava): Support authorization
-	stmt := rowenc.MakeSchemaName(w.rng.Intn(2) == 0, schemaName, "")
+	stmt := rowenc.MakeSchemaName(w.rng.Intn(2) == 0, schemaName, security.RootUserName())
 	return tree.Serialize(stmt), nil
 }
 

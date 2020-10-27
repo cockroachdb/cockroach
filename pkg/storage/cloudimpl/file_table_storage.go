@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -32,9 +33,11 @@ import (
 const (
 	// DefaultUserfileScheme is the default scheme used in a userfile URI.
 	DefaultUserfileScheme = "userfile"
-	// DefaultQualifiedNamePrefix is the default FQN prefix used when referencing
-	// tables in userfile.
-	DefaultQualifiedNamePrefix = "defaultdb.public.userfiles_"
+	// DefaultQualifiedNamespace is the default FQN namespace prefix
+	// used when referencing tables in userfile.
+	DefaultQualifiedNamespace = "defaultdb.public."
+	// DefaultQualifiedNamePrefix is the default FQN table name prefix.
+	DefaultQualifiedNamePrefix = "userfiles_"
 )
 
 type fileTableStorage struct {
@@ -81,9 +84,12 @@ func makeFileTableStorage(
 			trimmedPath, path.Clean(trimmedPath))
 	}
 
+	// cfg.User is already a normalized SQL username.
+	username := security.MakeSQLUsernameFromPreNormalizedString(cfg.User)
+
 	executor := filetable.MakeInternalFileToTableExecutor(ie, db)
-	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx, cfg.QualifiedTableName, executor,
-		cfg.User)
+	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx,
+		cfg.QualifiedTableName, executor, username)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +112,12 @@ func MakeSQLConnFileTableStorage(
 	ctx context.Context, cfg roachpb.ExternalStorage_FileTable, conn cloud.SQLConnI,
 ) (cloud.ExternalStorage, error) {
 	executor := filetable.MakeSQLConnFileToTableExecutor(conn)
-	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx, cfg.QualifiedTableName, executor,
-		cfg.User)
+
+	// cfg.User is already a normalized username,
+	username := security.MakeSQLUsernameFromPreNormalizedString(cfg.User)
+
+	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx,
+		cfg.QualifiedTableName, executor, username)
 	if err != nil {
 		return nil, err
 	}

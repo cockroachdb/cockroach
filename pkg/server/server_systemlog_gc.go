@@ -96,7 +96,7 @@ func (s *Server) gcSystemLog(
 				ctx,
 				table+"-gc",
 				txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				deleteStmt,
 				timestampLowerBound,
 				timestampUpperBound,

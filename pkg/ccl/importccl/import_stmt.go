@@ -1651,7 +1651,7 @@ func (r *importResumer) dropTables(
 	}
 	gcJobRecord := jobs.Record{
 		Description:   fmt.Sprintf("GC for %s", r.job.Payload().Description),
-		Username:      r.job.Payload().Username,
+		Username:      r.job.Payload().UsernameProto.Decode(),
 		DescriptorIDs: tablesToGC,
 		Details:       gcDetails,
 		Progress:      jobspb.SchemaChangeGCProgress{},

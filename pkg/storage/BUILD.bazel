@@ -164,7 +164,6 @@ go_test(
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/pebble",
         "//vendor/github.com/cockroachdb/pebble/vfs",
-        "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/kr/pretty",
         "//vendor/github.com/stretchr/testify/assert",
         "//vendor/github.com/stretchr/testify/require",

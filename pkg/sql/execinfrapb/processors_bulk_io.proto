@@ -130,7 +130,7 @@ message ReadImportDataSpec {
 
   // User who initiated the import. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user = 15 [(gogoproto.nullable) = false];
+  optional string user_proto = 15 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 
   // NEXTID: 16
 }
@@ -151,7 +151,7 @@ message BackupDataSpec {
 
   // User who initiated the backup. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user = 10 [(gogoproto.nullable) = false];
+  optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 }
 
 // RestoreDataEntry will be specified at planning time to the SplitAndScatter
@@ -207,7 +207,7 @@ message CSVWriterSpec {
 
   // User who initiated the export. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user = 6 [(gogoproto.nullable) = false];
+  optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

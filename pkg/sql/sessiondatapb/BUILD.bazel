@@ -8,5 +8,8 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/gogo/protobuf/proto"],
+    deps = [
+        "//pkg/security",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
 )

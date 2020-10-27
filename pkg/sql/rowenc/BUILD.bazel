@@ -20,6 +20,7 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",

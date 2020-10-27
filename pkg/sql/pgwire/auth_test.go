@@ -170,7 +170,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		}
 		httpHBAUrl := httpScheme + s.HTTPAddr() + "/debug/hba_conf"
 
-		if _, err := conn.ExecContext(context.Background(), `CREATE USER $1`, server.TestUser); err != nil {
+		if _, err := conn.ExecContext(context.Background(), `CREATE USER $1`, security.TestUser); err != nil {
 			t.Fatal(err)
 		}
 
@@ -321,7 +321,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
 						t, s.ServingSQLAddr(), t.Name(), url.User(user),
-						user == security.RootUser || user == server.TestUser /* withClientCerts */)
+						user == security.RootUser || user == security.TestUser /* withClientCerts */)
 					defer cleanupFn()
 
 					var host, port string

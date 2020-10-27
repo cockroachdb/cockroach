@@ -299,7 +299,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			DatabaseName    string
 			NewDatabaseName string
 			User            string
-		}{n.db.Name, n.newParent.Name, p.SessionData().User},
+		}{n.db.Name, n.newParent.Name, p.User().Normalized()},
 	)
 }
 

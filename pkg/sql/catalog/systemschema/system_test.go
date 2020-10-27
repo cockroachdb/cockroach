@@ -29,7 +29,7 @@ func TestShouldSplitAtDesc(t *testing.T) {
 		tabledesc.NewImmutable(descpb.TableDescriptor{}):                                              true,
 		tabledesc.NewImmutable(descpb.TableDescriptor{ViewQuery: "SELECT"}):                           false,
 		tabledesc.NewImmutable(descpb.TableDescriptor{ViewQuery: "SELECT", IsMaterializedView: true}): true,
-		dbdesc.NewInitial(42, "db", security.AdminRole):                                               false,
+		dbdesc.NewInitial(42, "db", security.AdminRoleName()):                                         false,
 		typedesc.NewCreatedMutable(descpb.TypeDescriptor{}):                                           false,
 		schemadesc.NewImmutable(descpb.SchemaDescriptor{}):                                            false,
 	} {

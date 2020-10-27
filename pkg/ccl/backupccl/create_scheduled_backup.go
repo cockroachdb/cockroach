@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -408,7 +409,7 @@ func checkForExistingBackupsInCollection(
 
 func makeBackupSchedule(
 	env scheduledjobs.JobSchedulerEnv,
-	owner string,
+	owner security.SQLUsername,
 	label string,
 	recurrence *scheduleRecurrence,
 	details jobspb.ScheduleDetails,

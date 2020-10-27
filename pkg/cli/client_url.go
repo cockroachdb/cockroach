@@ -295,9 +295,9 @@ func (u urlParser) setInternal(v string, warn bool) error {
 					return nil
 				}
 
-				userName := security.RootUser
+				userName := security.RootUserName()
 				if cliCtx.sqlConnUser != "" {
-					userName = cliCtx.sqlConnUser
+					userName, _ = security.MakeSQLUsernameFromUserInput(cliCtx.sqlConnUser, security.UsernameValidation)
 				}
 				if err := tryCertsDir("sslrootcert", security.CACertFilename()); err != nil {
 					return err
@@ -353,9 +353,9 @@ func (cliCtx *cliContext) makeClientConnURL() (url.URL, error) {
 
 	if netHost != "" {
 		// Only add TLS parameters when using a network connection.
-		userName := cliCtx.sqlConnUser
-		if userName == "" {
-			userName = security.RootUser
+		userName, _ := security.MakeSQLUsernameFromUserInput(cliCtx.sqlConnUser, security.UsernameValidation)
+		if userName.Undefined() {
+			userName = security.RootUserName()
 		}
 		sCtx := rpc.MakeSecurityContext(cliCtx.Config, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 		if err := sCtx.LoadSecurityOptions(

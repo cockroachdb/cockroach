@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -481,7 +482,7 @@ func (s *Server) ServeConn(
 func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
-			User: args.User,
+			UserProto: args.User.EncodeProto(),
 		},
 		LocalOnlySessionData: sessiondata.LocalOnlySessionData{
 			RemoteAddr:        args.RemoteAddr,
@@ -513,7 +514,7 @@ func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
 		sd.Location = time.UTC
 	}
 	if len(sd.SearchPath.GetPathArray()) == 0 {
-		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User)
+		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User())
 	}
 }
 
@@ -1297,7 +1298,7 @@ func (ex *connExecutor) activate(
 			remoteStr = ex.sessionData.RemoteAddr.String()
 		}
 		ex.eventLog = trace.NewEventLog(
-			fmt.Sprintf("sql session [%s]", ex.sessionData.User), remoteStr)
+			fmt.Sprintf("sql session [%s]", ex.sessionData.User()), remoteStr)
 	}
 
 	ex.activated = true
@@ -2349,8 +2350,8 @@ func (ex *connExecutor) cancelSession() {
 }
 
 // user is part of the registrySession interface.
-func (ex *connExecutor) user() string {
-	return ex.sessionData.User
+func (ex *connExecutor) user() security.SQLUsername {
+	return ex.sessionData.User()
 }
 
 // serialize is part of the registrySession interface.
@@ -2431,7 +2432,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	}
 
 	return serverpb.Session{
-		Username:        ex.sessionData.User,
+		Username:        ex.sessionData.User().Normalized(),
 		ClientAddress:   remoteStr,
 		ApplicationName: ex.applicationName.Load().(string),
 		Start:           ex.phaseTimes[sessionInit].UTC(),

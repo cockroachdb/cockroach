@@ -258,7 +258,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 			Statement       string
 			User            string
 			NewDatabaseName string
-		}{n.n.Name.String(), n.n.String(), p.SessionData().User, n.newName},
+		}{n.n.Name.String(), n.n.String(), p.User().Normalized(), n.newName},
 	)
 }
 

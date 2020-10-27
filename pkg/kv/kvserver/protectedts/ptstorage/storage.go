@@ -78,7 +78,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	}
 	s := makeSettings(p.settings)
 	rows, err := p.ex.QueryEx(ctx, "protectedts-protect", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.Spans),
 		r.ID.GetBytesMut(), r.Timestamp.AsOfSystemTime(),
@@ -114,7 +114,7 @@ func (p *storage) GetRecord(ctx context.Context, txn *kv.Txn, id uuid.UUID) (*pt
 		return nil, errNoTxn
 	}
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		getRecordQuery, id.GetBytesMut())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read record %v", id)
@@ -134,7 +134,7 @@ func (p *storage) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) e
 		return errNoTxn
 	}
 	rows, err := p.ex.QueryEx(ctx, "protectedts-MarkVerified", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to mark record %v as verified", id)
@@ -150,7 +150,7 @@ func (p *storage) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error 
 		return errNoTxn
 	}
 	rows, err := p.ex.QueryEx(ctx, "protectedts-Release", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		releaseQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to release record %v", id)
@@ -166,7 +166,7 @@ func (p *storage) GetMetadata(ctx context.Context, txn *kv.Txn) (ptpb.Metadata, 
 		return ptpb.Metadata{}, errNoTxn
 	}
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetMetadata", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		getMetadataQuery)
 	if err != nil {
 		return ptpb.Metadata{}, errors.Wrap(err, "failed to read metadata")
@@ -199,7 +199,7 @@ func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error)
 
 func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
 	rows, err := p.ex.QueryEx(ctx, "protectedts-GetRecords", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		getRecordsQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")

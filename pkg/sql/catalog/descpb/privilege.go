@@ -39,13 +39,23 @@ func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
 	return bits&priv.Mask() != 0
 }
 
+// Owner accesses the owner field.
+func (p PrivilegeDescriptor) Owner() security.SQLUsername {
+	return p.OwnerProto.Decode()
+}
+
+// User accesses the owner field.
+func (u UserPrivileges) User() security.SQLUsername {
+	return u.UserProto.Decode()
+}
+
 // findUserIndex looks for a given user and returns its
 // index in the User array if found. Returns -1 otherwise.
-func (p PrivilegeDescriptor) findUserIndex(user string) int {
+func (p PrivilegeDescriptor) findUserIndex(user security.SQLUsername) int {
 	idx := sort.Search(len(p.Users), func(i int) bool {
-		return p.Users[i].User >= user
+		return !p.Users[i].User().LessThan(user)
 	})
-	if idx < len(p.Users) && p.Users[idx].User == user {
+	if idx < len(p.Users) && p.Users[idx].User() == user {
 		return idx
 	}
 	return -1
@@ -53,7 +63,7 @@ func (p PrivilegeDescriptor) findUserIndex(user string) int {
 
 // findUser looks for a specific user in the list.
 // Returns (nil, false) if not found, or (obj, true) if found.
-func (p PrivilegeDescriptor) findUser(user string) (*UserPrivileges, bool) {
+func (p PrivilegeDescriptor) findUser(user security.SQLUsername) (*UserPrivileges, bool) {
 	idx := p.findUserIndex(user)
 	if idx == -1 {
 		return nil, false
@@ -62,26 +72,26 @@ func (p PrivilegeDescriptor) findUser(user string) (*UserPrivileges, bool) {
 }
 
 // findOrCreateUser looks for a specific user in the list, creating it if needed.
-func (p *PrivilegeDescriptor) findOrCreateUser(user string) *UserPrivileges {
+func (p *PrivilegeDescriptor) findOrCreateUser(user security.SQLUsername) *UserPrivileges {
 	idx := sort.Search(len(p.Users), func(i int) bool {
-		return p.Users[i].User >= user
+		return !p.Users[i].User().LessThan(user)
 	})
 	if idx == len(p.Users) {
 		// Not found but should be inserted at the end.
-		p.Users = append(p.Users, UserPrivileges{User: user})
-	} else if p.Users[idx].User == user {
+		p.Users = append(p.Users, UserPrivileges{UserProto: user.EncodeProto()})
+	} else if p.Users[idx].User() == user {
 		// Found.
 	} else {
 		// New element to be inserted at idx.
 		p.Users = append(p.Users, UserPrivileges{})
 		copy(p.Users[idx+1:], p.Users[idx:])
-		p.Users[idx] = UserPrivileges{User: user}
+		p.Users[idx] = UserPrivileges{UserProto: user.EncodeProto()}
 	}
 	return &p.Users[idx]
 }
 
 // removeUser looks for a given user in the list and removes it if present.
-func (p *PrivilegeDescriptor) removeUser(user string) {
+func (p *PrivilegeDescriptor) removeUser(user security.SQLUsername) {
 	idx := p.findUserIndex(user)
 	if idx == -1 {
 		// Not found.
@@ -92,16 +102,18 @@ func (p *PrivilegeDescriptor) removeUser(user string) {
 
 // NewCustomSuperuserPrivilegeDescriptor returns a privilege descriptor for the root user
 // and the admin role with specified privileges.
-func NewCustomSuperuserPrivilegeDescriptor(priv privilege.List, owner string) *PrivilegeDescriptor {
+func NewCustomSuperuserPrivilegeDescriptor(
+	priv privilege.List, owner security.SQLUsername,
+) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
-		Owner: owner,
+		OwnerProto: owner.EncodeProto(),
 		Users: []UserPrivileges{
 			{
-				User:       security.AdminRole,
+				UserProto:  security.AdminRoleName().EncodeProto(),
 				Privileges: priv.ToBitField(),
 			},
 			{
-				User:       security.RootUser,
+				UserProto:  security.RootUserName().EncodeProto(),
 				Privileges: priv.ToBitField(),
 			},
 		},
@@ -111,12 +123,14 @@ func NewCustomSuperuserPrivilegeDescriptor(priv privilege.List, owner string) *P
 
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
-func NewPrivilegeDescriptor(user string, priv privilege.List, owner string) *PrivilegeDescriptor {
+func NewPrivilegeDescriptor(
+	user security.SQLUsername, priv privilege.List, owner security.SQLUsername,
+) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
-		Owner: owner,
+		OwnerProto: owner.EncodeProto(),
 		Users: []UserPrivileges{
 			{
-				User:       user,
+				UserProto:  user.EncodeProto(),
 				Privileges: priv.ToBitField(),
 			},
 		},
@@ -130,14 +144,14 @@ var DefaultSuperuserPrivileges = privilege.List{privilege.ALL}
 
 // NewDefaultPrivilegeDescriptor returns a privilege descriptor
 // with ALL privileges for the root user and admin role.
-func NewDefaultPrivilegeDescriptor(owner string) *PrivilegeDescriptor {
+func NewDefaultPrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescriptor {
 	return NewCustomSuperuserPrivilegeDescriptor(DefaultSuperuserPrivileges, owner)
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
 // TODO(marc): if all privileges other than ALL are set, should we collapse
 // them into ALL?
-func (p *PrivilegeDescriptor) Grant(user string, privList privilege.List) {
+func (p *PrivilegeDescriptor) Grant(user security.SQLUsername, privList privilege.List) {
 	userPriv := p.findOrCreateUser(user)
 	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
 		// User already has 'ALL' privilege: no-op.
@@ -157,7 +171,7 @@ func (p *PrivilegeDescriptor) Grant(user string, privList privilege.List) {
 
 // Revoke removes privileges from this descriptor for a given list of users.
 func (p *PrivilegeDescriptor) Revoke(
-	user string, privList privilege.List, objectType privilege.ObjectType,
+	user security.SQLUsername, privList privilege.List, objectType privilege.ObjectType,
 ) {
 	userPriv, ok := p.findUser(user)
 	if !ok || userPriv.Privileges == 0 {
@@ -213,7 +227,7 @@ func MaybeFixPrivileges(id ID, p *PrivilegeDescriptor) bool {
 
 	var modified bool
 
-	fixSuperUser := func(user string) {
+	fixSuperUser := func(user security.SQLUsername) {
 		privs := p.findOrCreateUser(user)
 		if privs.Privileges != allowedPrivilegesBits {
 			privs.Privileges = allowedPrivilegesBits
@@ -222,8 +236,8 @@ func MaybeFixPrivileges(id ID, p *PrivilegeDescriptor) bool {
 	}
 
 	// Check "root" user and "admin" role.
-	fixSuperUser(security.RootUser)
-	fixSuperUser(security.AdminRole)
+	fixSuperUser(security.RootUserName())
+	fixSuperUser(security.AdminRoleName())
 
 	if isPrivilegeSet(allowedPrivilegesBits, privilege.ALL) {
 		// ALL privileges allowed, we can skip regular users.
@@ -233,7 +247,7 @@ func MaybeFixPrivileges(id ID, p *PrivilegeDescriptor) bool {
 	for i := range p.Users {
 		// Users is a slice of values, we need pointers to make them mutable.
 		u := &p.Users[i]
-		if u.User == security.RootUser || u.User == security.AdminRole {
+		if u.User().IsRootUser() || u.User().IsAdminRole() {
 			// we've already checked super users.
 			continue
 		}
@@ -265,17 +279,17 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 	}
 
 	// Check "root" user.
-	if err := p.validateRequiredSuperuser(id, allowedPrivileges, security.RootUser, objectType); err != nil {
+	if err := p.validateRequiredSuperuser(id, allowedPrivileges, security.RootUserName(), objectType); err != nil {
 		return err
 	}
 
 	// We expect an "admin" role. Check that it has desired superuser permissions.
-	if err := p.validateRequiredSuperuser(id, allowedPrivileges, security.AdminRole, objectType); err != nil {
+	if err := p.validateRequiredSuperuser(id, allowedPrivileges, security.AdminRoleName(), objectType); err != nil {
 		return err
 	}
 
 	if p.Version >= OwnerVersion {
-		if p.Owner == "" {
+		if p.Owner().Undefined() {
 			return errors.AssertionFailedf("found no owner for system %s with ID=%d",
 				objectType, id)
 		}
@@ -286,14 +300,14 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 	// For all non-super users, privileges must not exceed the allowed privileges.
 	// Also the privileges must be valid on the object type.
 	for _, u := range p.Users {
-		if u.User == security.RootUser || u.User == security.AdminRole {
+		if u.User().IsRootUser() || u.User().IsAdminRole() {
 			// We've already checked super users.
 			continue
 		}
 
 		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
 			return fmt.Errorf("user %s must not have %s privileges on system %s with ID=%d",
-				u.User, privilege.ListFromBitField(remaining, privilege.Any), objectType, id)
+				u.User(), privilege.ListFromBitField(remaining, privilege.Any), objectType, id)
 		}
 		// Get all the privilege bits set on the descriptor even if they're not valid.
 		privs := privilege.ListFromBitField(u.Privileges, privilege.Any)
@@ -308,7 +322,10 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 }
 
 func (p PrivilegeDescriptor) validateRequiredSuperuser(
-	id ID, allowedPrivileges privilege.List, user string, objectType privilege.ObjectType,
+	id ID,
+	allowedPrivileges privilege.List,
+	user security.SQLUsername,
+	objectType privilege.ObjectType,
 ) error {
 	superPriv, ok := p.findUser(user)
 	if !ok {
@@ -328,7 +345,7 @@ func (p PrivilegeDescriptor) validateRequiredSuperuser(
 // UserPrivilegeString is a pair of strings describing the
 // privileges for a given user.
 type UserPrivilegeString struct {
-	User       string
+	User       security.SQLUsername
 	Privileges []string
 }
 
@@ -343,7 +360,7 @@ func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivile
 	ret := make([]UserPrivilegeString, 0, len(p.Users))
 	for _, userPriv := range p.Users {
 		ret = append(ret, UserPrivilegeString{
-			User:       userPriv.User,
+			User:       userPriv.User(),
 			Privileges: privilege.ListFromBitField(userPriv.Privileges, objectType).SortedNames(),
 		})
 	}
@@ -351,11 +368,11 @@ func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivile
 }
 
 // CheckPrivilege returns true if 'user' has 'privilege' on this descriptor.
-func (p PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bool {
+func (p PrivilegeDescriptor) CheckPrivilege(user security.SQLUsername, priv privilege.Kind) bool {
 	userPriv, ok := p.findUser(user)
 	if !ok {
 		// User "node" has all privileges.
-		return user == security.NodeUser
+		return user.IsNodeUser()
 	}
 
 	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
@@ -365,8 +382,8 @@ func (p PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bo
 }
 
 // AnyPrivilege returns true if 'user' has any privilege on this descriptor.
-func (p PrivilegeDescriptor) AnyPrivilege(user string) bool {
-	if p.Owner == user {
+func (p PrivilegeDescriptor) AnyPrivilege(user security.SQLUsername) bool {
+	if p.Owner() == user {
 		return true
 	}
 	userPriv, ok := p.findUser(user)
@@ -421,6 +438,6 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 }
 
 // SetOwner sets the owner of the privilege descriptor to the provided string.
-func (p *PrivilegeDescriptor) SetOwner(owner string) {
-	p.Owner = owner
+func (p *PrivilegeDescriptor) SetOwner(owner security.SQLUsername) {
+	p.OwnerProto = owner.EncodeProto()
 }

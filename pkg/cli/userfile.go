@@ -20,8 +20,10 @@ import (
 	"path"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/errors"
@@ -166,15 +168,17 @@ func openUserFile(source string) (io.ReadCloser, error) {
 }
 
 // Construct the userfile ExternalStorage URI from CLI args.
-func constructUserfileDestinationURI(source, destination, user string) string {
+func constructUserfileDestinationURI(source, destination string, user security.SQLUsername) string {
 	// User has not specified a destination URI/path. We use the default URI
 	// scheme and host, and the basename from the source arg as the path.
 	if destination == "" {
 		sourceFilename := path.Base(source)
 		userFileURL := url.URL{
 			Scheme: defaultUserfileScheme,
-			Host:   defaultQualifiedNamePrefix + user,
-			Path:   sourceFilename,
+			// TODO(knz): This looks suspicious, see
+			// https://github.com/cockroachdb/cockroach/issues/55389
+			Host: defaultQualifiedNamePrefix + user.Normalized(),
+			Path: sourceFilename,
 		}
 		return userFileURL.String()
 	}
@@ -190,7 +194,9 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 	if userfileURI, err = url.ParseRequestURI(destination); err == nil {
 		if userfileURI.Scheme == defaultUserfileScheme {
 			if userfileURI.Host == "" {
-				userfileURI.Host = defaultQualifiedNamePrefix + user
+				// TODO(knz): This looks suspicious, see
+				// https://github.com/cockroachdb/cockroach/issues/55389
+				userfileURI.Host = defaultQualifiedNamePrefix + user.Normalized()
 			}
 			return userfileURI.String()
 		}
@@ -200,8 +206,10 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 	// userfile URI schema and host, and the destination as the path.
 	userFileURL := url.URL{
 		Scheme: defaultUserfileScheme,
-		Host:   defaultQualifiedNamePrefix + user,
-		Path:   destination,
+		// TODO(knz): This looks suspicious, see
+		// https://github.com/cockroachdb/cockroach/issues/55389
+		Host: defaultQualifiedNamePrefix + user.Normalized(),
+		Path: destination,
 	}
 	return userFileURL.String()
 }
@@ -254,8 +262,9 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 		return nil, err
 	}
 
-	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI,
-		connURL.User.Username())
+	reqUsername, _ := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameValidation)
+
+	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
 		return nil, err
 	}
@@ -285,8 +294,9 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 		return nil, err
 	}
 
-	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI,
-		connURL.User.Username())
+	reqUsername, _ := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameValidation)
+
+	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +341,10 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 			return deletedFiles, errors.WithDetail(err, fmt.Sprintf("deletion failed at %s", file))
 		}
 
-		resolvedHost := defaultQualifiedNamePrefix + connURL.User.Username()
+		composedTableName := tree.Name(cloudimpl.DefaultQualifiedNamePrefix + connURL.User.Username())
+		resolvedHost := cloudimpl.DefaultQualifiedNamespace +
+			// Escape special identifiers as needed.
+			composedTableName.String()
 		if userfileParsedURL.Host != "" {
 			resolvedHost = userfileParsedURL.Host
 		}
@@ -404,10 +417,20 @@ func uploadUserFile(
 		return "", err
 	}
 
+	// Validate the username for creation. We need to do this because
+	// there is no guarantee that the username in the connection string
+	// is the same one on the remote machine, and it may contain special
+	// characters.
+	// See also: https://github.com/cockroachdb/cockroach/issues/55389
+	username, err := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameCreation)
+	if err != nil {
+		return "", err
+	}
+
 	// Construct the userfile URI as the destination for the CopyIn stmt.
 	// Currently we hardcode the db.schema prefix, in the future we might allow
 	// users to specify this.
-	userfileURI := constructUserfileDestinationURI(source, destination, connURL.User.Username())
+	userfileURI := constructUserfileDestinationURI(source, destination, username)
 
 	// Accounts for filenames with arbitrary unicode characters. url.URL escapes
 	// these characters by default when setting the Path above.

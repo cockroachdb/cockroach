@@ -60,7 +60,7 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 	request := &serverpb.CancelSessionRequest{
 		NodeId:    fmt.Sprintf("%d", nodeID),
 		SessionID: sessionID.GetBytes(),
-		Username:  params.SessionData().User,
+		Username:  params.SessionData().User().Normalized(),
 	}
 
 	response, err := params.extendedEvalCtx.SQLStatusServer.CancelSession(params.ctx, request)

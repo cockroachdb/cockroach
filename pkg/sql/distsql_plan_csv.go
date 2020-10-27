@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -110,7 +111,7 @@ func makeImportReaderSpecs(
 	format roachpb.IOFileFormat,
 	nodes []roachpb.NodeID,
 	walltime int64,
-	user string,
+	user security.SQLUsername,
 ) []*execinfrapb.ReadImportDataSpec {
 
 	// For each input file, assign it to a node.
@@ -131,7 +132,7 @@ func makeImportReaderSpecs(
 				WalltimeNanos: walltime,
 				Uri:           make(map[int32]string),
 				ResumePos:     make(map[int32]int64),
-				User:          user,
+				UserProto:     user.EncodeProto(),
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}

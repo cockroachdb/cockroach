@@ -609,7 +609,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 			ctx,
 			"lookup-schedule-info",
 			txn,
-			sessiondata.InternalExecutorOverride{User: security.NodeUser},
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 			fmt.Sprintf(
 				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
 				env.SystemJobsTableName()),
@@ -678,7 +678,7 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 }
 
 func (b *backupResumer) deleteCheckpoint(
-	ctx context.Context, cfg *sql.ExecutorConfig, user string,
+	ctx context.Context, cfg *sql.ExecutorConfig, user security.SQLUsername,
 ) {
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {

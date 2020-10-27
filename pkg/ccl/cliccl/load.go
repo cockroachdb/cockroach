@@ -62,7 +62,7 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	}
 
 	externalStorageFromURI := func(ctx context.Context, uri string,
-		user string) (cloud.ExternalStorage, error) {
+		user security.SQLUsername) (cloud.ExternalStorage, error) {
 		return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
 			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 	}
@@ -70,7 +70,7 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	// upgraded from the old FK representation, or even older formats). If more
 	// fields are added to the output, the table descriptors may need to be
 	// upgraded.
-	desc, err := backupccl.ReadBackupManifestFromURI(ctx, basepath, security.RootUser,
+	desc, err := backupccl.ReadBackupManifestFromURI(ctx, basepath, security.RootUserName(),
 		externalStorageFromURI, nil)
 	if err != nil {
 		return err
