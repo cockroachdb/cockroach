@@ -67,6 +67,9 @@ func runTC(queueBuild func(string, map[string]string)) {
 		// By default, fail the stress run on the first test failure.
 		maxFails := 1
 
+		// By default, a single test times out after 40 minutes.
+		testTimeout := 40 * time.Minute
+
 		// The stress program by default runs as many instances in parallel as there
 		// are CPUs. Each instance itself can run tests in parallel. The amount of
 		// parallelism needs to be reduced, or we can run into OOM issues,
@@ -87,11 +90,16 @@ func runTC(queueBuild func(string, map[string]string)) {
 			// Stress logic tests with reduced parallelism (to avoid overloading the
 			// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
 			parallelism /= 2
+			// Increase logic test timeout.
+			testTimeout = 2 * time.Hour
+			maxTime = 3 * time.Hour
 		}
 
 		opts := map[string]string{
 			"env.PKG": importPath,
 		}
+
+		opts["env.TESTTIMEOUT"] = testTimeout.String()
 
 		// Run non-race build.
 		opts["env.GOFLAGS"] = fmt.Sprintf("-parallel=%d", parallelism)
