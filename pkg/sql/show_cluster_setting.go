@@ -33,8 +33,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (p *planner) showStateMachineSetting(
-	ctx context.Context, st *cluster.Settings, s *settings.StateMachineSetting, name string,
+func (p *planner) showVersionSetting(
+	ctx context.Context, st *cluster.Settings, s *settings.VersionSetting, name string,
 ) (string, error) {
 	var res string
 	// For statemachine settings (at the time of writing, this is only the cluster version setting)
@@ -83,8 +83,8 @@ func (p *planner) showStateMachineSetting(
 					if err != nil {
 						return err
 					}
-					res = val.(fmt.Stringer).String()
 
+					res = val.String()
 					return nil
 				})
 			})
@@ -113,7 +113,7 @@ func (p *planner) ShowClusterSetting(
 	switch val.(type) {
 	case *settings.IntSetting:
 		dType = types.Int
-	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting, *settings.EnumSetting:
+	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.VersionSetting, *settings.EnumSetting:
 		dType = types.String
 	case *settings.BoolSetting:
 		dType = types.Bool
@@ -138,13 +138,6 @@ func (p *planner) ShowClusterSetting(
 				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
 			case *settings.StringSetting:
 				d = tree.NewDString(s.String(&st.SV))
-			case *settings.StateMachineSetting:
-				var err error
-				valStr, err := p.showStateMachineSetting(ctx, st, s, name)
-				if err != nil {
-					return nil, err
-				}
-				d = tree.NewDString(valStr)
 			case *settings.BoolSetting:
 				d = tree.MakeDBool(tree.DBool(s.Get(&st.SV)))
 			case *settings.FloatSetting:
@@ -157,6 +150,12 @@ func (p *planner) ShowClusterSetting(
 				d = tree.NewDString(s.String(&st.SV))
 			case *settings.ByteSizeSetting:
 				d = tree.NewDString(s.String(&st.SV))
+			case *settings.VersionSetting:
+				valStr, err := p.showVersionSetting(ctx, st, s, name)
+				if err != nil {
+					return nil, err
+				}
+				d = tree.NewDString(valStr)
 			default:
 				return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 			}

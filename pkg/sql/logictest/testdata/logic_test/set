@@ -169,9 +169,6 @@ statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
 
 statement ok
-SET vectorize = '201auto'
-
-statement ok
 SET vectorize = on
 
 statement ok

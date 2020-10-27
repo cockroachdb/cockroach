@@ -190,8 +190,16 @@ func (sv *Values) setOnChange(slotIdx int, fn func()) {
 type Setting interface {
 	// Typ returns the short (1 char) string denoting the type of setting.
 	Typ() string
+	// String returns the string representation of the setting's current value.
+	// It's used when materializing results for `SHOW CLUSTER SETTINGS` or `SHOW
+	// CLUSTER SETTING <setting-name>`.
 	String(sv *Values) string
+	// Description contains a helpful text explaining what the specific cluster
+	// setting is for.
 	Description() string
+	// Visibility controls whether or not the setting is made publicly visible.
+	// Reserved settings are still accessible to users, but they don't get
+	// listed out when retrieving all settings.
 	Visibility() Visibility
 }
 
@@ -199,10 +207,18 @@ type Setting interface {
 type WritableSetting interface {
 	Setting
 
-	// Encoded returns the encoded value of the current value of the setting.
+	// Encoded returns the encoded representation of the current value of the
+	// setting.
 	Encoded(sv *Values) string
+	// EncodedDefault returns the encoded representation of the default value of
+	// the setting.
 	EncodedDefault() string
+	// SetOnChange installs a callback to be called when a setting's value
+	// changes. `fn` should avoid doing long-running or blocking work as it is
+	// called on the goroutine which handles all settings updates.
 	SetOnChange(sv *Values, fn func())
+	// ErrorHint returns a hint message to be displayed to the user when there's
+	// an error.
 	ErrorHint() (bool, string)
 }
 

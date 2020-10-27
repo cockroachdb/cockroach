@@ -144,7 +144,7 @@ var ReadableTypes = map[string]string{
 	"z": "byte size",
 	"d": "duration",
 	"e": "enumeration",
-	"m": "custom validation",
+	"v": "version",
 }
 
 // RedactedValue returns a string representation of the value for settings

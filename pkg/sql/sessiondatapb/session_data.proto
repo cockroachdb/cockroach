@@ -92,13 +92,7 @@ enum VectorizeExecMode {
 
   // VectorizeOff means that columnar execution is disabled.
   VectorizeOff = 0;
-  // Vectorize201Auto means that that any supported queries that use only
-  // streaming operators (i.e. those that do not require any buffering) will
-  // be run using the columnar execution. If any part of a query is not
-  // supported by the vectorized execution engine, the whole query will fall
-  // back to row execution.
-  // This is the default setting in 20.1.
-  Vectorize201Auto = 1;
+  reserved 1;
   // VectorizeOn means that any supported queries will be run using the
   // columnar execution.
   VectorizeOn = 2;

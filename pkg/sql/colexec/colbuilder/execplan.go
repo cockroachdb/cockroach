@@ -149,11 +149,8 @@ func needHashAggregator(aggSpec *execinfrapb.AggregatorSpec) (bool, error) {
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
-func isSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
+func isSupported(spec *execinfrapb.ProcessorSpec) error {
 	core := spec.Core
-	isFullVectorization := mode == sessiondatapb.VectorizeOn ||
-		mode == sessiondatapb.VectorizeExperimentalAlways
-
 	switch {
 	case core.Noop != nil:
 		return nil
@@ -189,11 +186,6 @@ func isSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.Process
 		}
 		if core.Distinct.ErrorOnDup != "" {
 			return errors.Newf("distinct with error on duplicates not supported")
-		}
-		if !isFullVectorization {
-			if len(core.Distinct.OrderedColumns) < len(core.Distinct.DistinctColumns) {
-				return errors.Newf("unordered distinct can only run in vectorize 'on' mode")
-			}
 		}
 		return nil
 
@@ -245,12 +237,6 @@ func isSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.Process
 
 			if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
 				return errors.Newf("window function %s is not supported", wf.String())
-			}
-			if !isFullVectorization {
-				switch *wf.Func.WindowFunc {
-				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
-					return errors.Newf("window function %s can only run in vectorize 'on' mode", wf.String())
-				}
 			}
 		}
 		return nil
@@ -431,8 +417,6 @@ func (r opResult) createAndWrapRowSource(
 	}
 	if spec.Core.JoinReader == nil {
 		switch flowCtx.EvalCtx.SessionData.VectorizeMode {
-		case sessiondatapb.Vectorize201Auto:
-			return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=201auto mode")
 		case sessiondatapb.VectorizeExperimentalAlways:
 			return causeToWrap
 		}
@@ -477,11 +461,7 @@ func (r opResult) createAndWrapRowSource(
 	if err != nil {
 		return err
 	}
-	// We say that the wrapped processor is "streaming" because it is not a
-	// buffering operator (even if it is a buffering processor). This is not a
-	// problem for memory accounting because each processor does that on its
-	// own, so the used memory will be accounted for.
-	r.Op, r.IsStreaming = c, true
+	r.Op = c
 	r.MetadataSources = append(r.MetadataSources, c)
 	r.ToClose = append(r.ToClose, c)
 	return nil
@@ -551,18 +531,11 @@ func NewColOperator(
 	core := &spec.Core
 	post := &spec.Post
 
-	// By default, we safely assume that an operator is not streaming. Note that
-	// projections, renders, filters, limits, offsets as well as all internal
-	// operators (like stats collectors and cancel checkers) are streaming, so in
-	// order to determine whether the resulting chain of operators is streaming,
-	// it is sufficient to look only at the "core" operator.
-	result.IsStreaming = false
-
 	// resultPreSpecPlanningStateShallowCopy is a shallow copy of the result
 	// before any specs are planned. Used if there is a need to backtrack.
 	resultPreSpecPlanningStateShallowCopy := r
 
-	if err = isSupported(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
+	if err = isSupported(spec); err != nil {
 		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
 		// around a planNode) because it creates complications, and a flow with
 		// such processor probably will not benefit from the vectorization.
@@ -620,7 +593,7 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
 			}
-			result.Op, result.IsStreaming = colexec.NewNoop(inputs[0]), true
+			result.Op = colexec.NewNoop(inputs[0])
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 
@@ -631,7 +604,7 @@ func NewColOperator(
 			if core.Values.NumRows != 0 {
 				return r, errors.AssertionFailedf("values core only with zero rows supported, %d given", core.Values.NumRows)
 			}
-			result.Op, result.IsStreaming = colexec.NewZeroOpNoInput(), true
+			result.Op = colexec.NewZeroOpNoInput()
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
 				result.ColumnTypes[i] = col.Type
@@ -645,7 +618,7 @@ func NewColOperator(
 			if err != nil {
 				return r, err
 			}
-			result.Op, result.IsStreaming = scanOp, true
+			result.Op = scanOp
 			result.IOReader = scanOp
 			result.MetadataSources = append(result.MetadataSources, scanOp)
 			// colBatchScan is wrapped with a cancel checker below, so we need to
@@ -675,13 +648,13 @@ func NewColOperator(
 				// TODO(solon): The distsql plan for this case includes a TableReader, so
 				// we end up creating an orphaned colBatchScan. We should avoid that.
 				// Ideally the optimizer would not plan a scan in this unusual case.
-				result.Op, result.IsStreaming, err = colexec.NewSingleTupleNoInputOp(streamingAllocator), true, nil
+				result.Op, err = colexec.NewSingleTupleNoInputOp(streamingAllocator), nil
 				// We make ColumnTypes non-nil so that sanity check doesn't panic.
 				result.ColumnTypes = []*types.T{}
 				break
 			}
 			if aggSpec.IsRowCount() {
-				result.Op, result.IsStreaming, err = colexec.NewCountOp(streamingAllocator, inputs[0]), true, nil
+				result.Op, err = colexec.NewCountOp(streamingAllocator, inputs[0]), nil
 				result.ColumnTypes = []*types.T{types.Int}
 				break
 			}
@@ -727,7 +700,6 @@ func NewColOperator(
 					streamingAllocator, streamingMemAccount, inputs[0], inputTypes, aggSpec,
 					evalCtx, constructors, constArguments, result.ColumnTypes, aggSpec.IsScalar(),
 				)
-				result.IsStreaming = true
 			}
 			result.ToClose = append(result.ToClose, result.Op.(colexecbase.Closer))
 
@@ -739,7 +711,6 @@ func NewColOperator(
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
 				result.Op, err = colexec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
-				result.IsStreaming = true
 			} else {
 				distinctMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
@@ -768,7 +739,6 @@ func NewColOperator(
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
 			result.Op = colexec.NewOrdinalityOp(streamingAllocator, inputs[0], outputIdx)
-			result.IsStreaming = true
 			result.ColumnTypes = appendOneType(spec.Input[0].ColumnTypes, types.Int)
 
 		case core.HashJoiner != nil:
@@ -887,9 +857,6 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 2); err != nil {
 				return r, err
 			}
-			// Merge joiner is a streaming operator when equality columns form a key
-			// for both of the inputs.
-			result.IsStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
 
 			leftTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(leftTypes, spec.Input[0].ColumnTypes)

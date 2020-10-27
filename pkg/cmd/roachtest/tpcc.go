@@ -71,9 +71,9 @@ type tpccOptions struct {
 // specify pgurl to ensure that it is run on a node with a running cockroach
 // instance to ensure that the workload version matches the gateway version in a
 // mixed version cluster.
-func tpccImportCmd(t *test, warehouses int, extraArgs string) string {
+func tpccImportCmd(warehouses int, extraArgs ...string) string {
 	return fmt.Sprintf("./cockroach workload fixtures import tpcc --warehouses=%d %s",
-		warehouses, extraArgs)
+		warehouses, strings.Join(extraArgs, " "))
 }
 
 func setupTPCC(
@@ -125,7 +125,7 @@ func setupTPCC(
 		switch opts.SetupType {
 		case usingImport:
 			t.Status("loading fixture")
-			c.Run(ctx, crdbNodes[:1], tpccImportCmd(t, opts.Warehouses, opts.ExtraSetupArgs))
+			c.Run(ctx, crdbNodes[:1], tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs))
 		case usingInit:
 			t.Status("initializing tables")
 			extraArgs := opts.ExtraSetupArgs
@@ -639,7 +639,7 @@ func loadTPCCBench(
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
 	waitForFullReplication(t, db)
-	cmd := tpccImportCmd(t, b.LoadWarehouses, loadArgs)
+	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs)
 	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -91,10 +92,10 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	if _, ok := setting.(*settings.StateMachineSetting); ok && p.execCfg.TenantTestingKnobs.CanSetClusterSettings() {
-		// A tenant that is allowed to set in-memory cluster settings is attempting
-		// to set a state machine setting, which is disallowed due to complexity.
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can set state machine settings")
+	if _, ok := setting.(*settings.VersionSetting); ok && p.execCfg.TenantTestingKnobs.CanSetClusterSettings() {
+		// A tenant that is allowed to set in-memory cluster settings is
+		// attempting to set the cluster version setting, which is disallowed.
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can set version settings")
 	}
 
 	var value tree.TypedExpr
@@ -108,7 +109,7 @@ func (p *planner) SetClusterSetting(
 			var dummyHelper tree.IndexedVarHelper
 
 			switch setting.(type) {
-			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
+			case *settings.StringSetting, *settings.VersionSetting, *settings.ByteSizeSetting:
 				requiredType = types.String
 			case *settings.BoolSetting:
 				requiredType = types.Bool
@@ -150,8 +151,8 @@ func (p *planner) SetClusterSetting(
 			}
 
 			value = typed
-		} else if _, isStateMachineSetting := setting.(*settings.StateMachineSetting); isStateMachineSetting {
-			return nil, errors.New("cannot RESET this cluster setting")
+		} else if _, isVersionSetting := setting.(*settings.VersionSetting); isVersionSetting {
+			return nil, errors.New("cannot RESET cluster version setting")
 		}
 	}
 
@@ -176,8 +177,8 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if _, ok := n.setting.(*settings.StateMachineSetting); ok {
-				return errors.Errorf("tenants cannot change state machine settings, this should've been checked at plan time")
+			if _, ok := n.setting.(*settings.VersionSetting); ok {
+				return errors.Errorf("tenants cannot change cluster version setting, this should've been checked at plan time")
 			}
 			encodedValue, err = toSettingString(params.ctx, n.st, n.name, n.setting, value, nil /* prev */)
 			if err != nil {
@@ -208,7 +209,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 			reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
 			var prev tree.Datum
-			if _, ok := n.setting.(*settings.StateMachineSetting); ok {
+			if _, ok := n.setting.(*settings.VersionSetting); ok {
 				datums, err := execCfg.InternalExecutor.QueryRowEx(
 					ctx, "retrieve-prev-setting", txn,
 					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -295,9 +296,9 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		return err
 	}
 
-	if _, ok := n.setting.(*settings.StateMachineSetting); ok && n.value == nil {
-		// The "version" setting doesn't have a well defined "default" since it is
-		// set in a startup migration.
+	if _, ok := n.setting.(*settings.VersionSetting); ok && n.value == nil {
+		// The "version" setting doesn't have a well defined "default" since it
+		// is set in a startup migration.
 		return nil
 	}
 	errNotReady := errors.New("setting updated but timed out waiting to read new value")
@@ -341,14 +342,20 @@ func toSettingString(
 			return string(*s), nil
 		}
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
-	case *settings.StateMachineSetting:
+	case *settings.VersionSetting:
 		if s, ok := d.(*tree.DString); ok {
 			dStr, ok := prev.(*tree.DString)
 			if !ok {
 				return "", errors.New("the existing value is not a string")
 			}
+
 			prevRawVal := []byte(string(*dStr))
-			newBytes, err := setting.Validate(ctx, &st.SV, prevRawVal, string(*s))
+			newRawVal, err := clusterversion.EncodingFromVersionStr(string(*s))
+			if err != nil {
+				return "", err
+			}
+
+			newBytes, err := setting.Validate(ctx, &st.SV, prevRawVal, newRawVal)
 			if err != nil {
 				return "", err
 			}

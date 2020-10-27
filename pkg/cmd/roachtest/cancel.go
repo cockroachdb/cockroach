@@ -43,8 +43,7 @@ func registerCancel(r *testRegistry) {
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("importing TPCC fixture")
-			c.Run(ctx, c.Node(1), fmt.Sprintf(
-				"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", warehouses))
+			c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
 
 			conn := c.Conn(ctx, 1)
 			defer conn.Close()

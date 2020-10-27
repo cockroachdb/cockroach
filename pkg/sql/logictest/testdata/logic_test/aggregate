@@ -858,10 +858,10 @@ VALUES (1, 1.1, 1.1),
        (18, 11.2, 11.2);
 
 query FRF
-select sqrdiff(i), round(sqrdiff(f), 13), sqrdiff(d)
+select sqrdiff(i), round(sqrdiff(f), 12), sqrdiff(d)
 from ifd
 ----
-206.8333333333333333333334 86.2483333333333 86.24833333333333333333333
+206.8333333333333333333334 86.248333333333 86.24833333333333333333333
 
 query FRF
 SELECT sqrdiff(i), round(sqrdiff(f), 2), sqrdiff(d)
