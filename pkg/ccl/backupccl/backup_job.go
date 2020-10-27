@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -154,12 +155,20 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 		return 0, err
 	}
 	var nodes int
-	_ = g.IterateInfos(
+	err = g.IterateInfos(
 		gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
 			nodes++
 			return nil
 		},
 	)
+	if err != nil {
+		return 0, err
+	}
+	// If we somehow got 0 and return it, a caller may panic if they divide by
+	// such a nonsensical nodecount.
+	if nodes == 0 {
+		return 1, errors.New("failed to count nodes")
+	}
 	return nodes, nil
 }
 
@@ -490,7 +499,11 @@ func (b *backupResumer) Resume(
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
-		return err
+		if !build.IsRelease() {
+			return err
+		}
+		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
+		numClusterNodes = 1
 	}
 
 	statsCache := p.ExecCfg().TableStatsCache
