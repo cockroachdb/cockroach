@@ -48,7 +48,7 @@ func isEmptyKeyTimeRange(
 	// may not be in the time range but the fact the TBI found any key indicates
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
-	iter := readWriter.NewIterator(storage.IterOptions{
+	iter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound: from, UpperBound: to,
 		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
 	})

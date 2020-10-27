@@ -225,7 +225,7 @@ func checkForKeyCollisions(
 	emptyMVCCStats := enginepb.MVCCStats{}
 
 	// Create iterator over the existing data.
-	existingDataIter := dbEngine.NewIterator(storage.IterOptions{UpperBound: mvccEndKey.Key})
+	existingDataIter := dbEngine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
 	existingDataIter.SeekGE(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {

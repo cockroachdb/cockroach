@@ -688,12 +688,14 @@ func (p *Pebble) MVCCGetProto(
 }
 
 // MVCCIterate implements the Engine interface.
-func (p *Pebble) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
-	return iterateOnReader(p, start, end, f)
+func (p *Pebble) MVCCIterate(
+	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+) error {
+	return iterateOnReader(p, start, end, iterKind, f)
 }
 
-// NewIterator implements the Engine interface.
-func (p *Pebble) NewIterator(opts IterOptions) MVCCIterator {
+// NewMVCCIterator implements the Engine interface.
+func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	iter := newPebbleIterator(p.db, opts)
 	if iter == nil {
 		panic("couldn't create a new iterator")
@@ -1142,14 +1144,16 @@ func (p *pebbleReadOnly) MVCCGetProto(
 	return p.parent.MVCCGetProto(key, msg)
 }
 
-func (p *pebbleReadOnly) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
+func (p *pebbleReadOnly) MVCCIterate(
+	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+) error {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
-	return iterateOnReader(p, start, end, f)
+	return iterateOnReader(p, start, end, iterKind, f)
 }
 
-func (p *pebbleReadOnly) NewIterator(opts IterOptions) MVCCIterator {
+func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -1292,12 +1296,14 @@ func (p *pebbleSnapshot) MVCCGetProto(
 }
 
 // MVCCIterate implements the Reader interface.
-func (p *pebbleSnapshot) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
-	return iterateOnReader(p, start, end, f)
+func (p *pebbleSnapshot) MVCCIterate(
+	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+) error {
+	return iterateOnReader(p, start, end, iterKind, f)
 }
 
-// NewIterator implements the Reader interface.
-func (p pebbleSnapshot) NewIterator(opts IterOptions) MVCCIterator {
+// NewMVCCIterator implements the Reader interface.
+func (p pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	return newPebbleIterator(p.snapshot, opts)
 }
 
