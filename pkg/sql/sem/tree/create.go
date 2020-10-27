@@ -1322,10 +1322,10 @@ func (node *CreateTable) HoistConstraints() {
 // CreateSchema represents a CREATE SCHEMA statement.
 type CreateSchema struct {
 	IfNotExists bool
-	Schema      Name
 	// TODO(solon): Adjust this, see
 	// https://github.com/cockroachdb/cockroach/issues/54696
 	AuthRole security.SQLUsername
+	Schema   ObjectNamePrefix
 }
 
 // Format implements the NodeFormatter interface.
@@ -1336,7 +1336,7 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 		ctx.WriteString(" IF NOT EXISTS")
 	}
 
-	if node.Schema != "" {
+	if node.Schema.ExplicitSchema {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.Schema)
 	}

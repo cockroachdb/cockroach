@@ -198,7 +198,7 @@ func (node *DropType) Format(ctx *FmtCtx) {
 
 // DropSchema represents a DROP SCHEMA command.
 type DropSchema struct {
-	Names        NameList
+	Names        ObjectNamePrefixList
 	IfExists     bool
 	DropBehavior DropBehavior
 }
