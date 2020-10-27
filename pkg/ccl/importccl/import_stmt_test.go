@@ -3747,8 +3747,8 @@ func TestImportComputed(t *testing.T) {
 	}
 	avroData := createAvroData(t, "t", avroField, avroRows)
 	pgdumpData := `
-CREATE TABLE users (a INT, b INT, c INT AS (a + b) STORED);
-INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
+CREATE TABLE users (a INT, b INT, c INT AS (a + b) STORED);		
+INSERT INTO users (a, b) VALUES (1, 2), (3, 4);		
 `
 	defer srv.Close()
 	tests := []struct {
@@ -3812,18 +3812,16 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 			name:          "import-table-csv",
 			data:          "35,23\n67,10",
 			create:        "a INT, c INT AS (a + b) STORED, b INT",
-			targetCols:    "a, b",
 			format:        "CSV",
-			expectedError: "requires targeted column specification",
+			expectedError: "to use computed columns, use IMPORT INTO",
 		},
 		{
 			into:            false,
 			name:            "import-table-avro",
 			data:            avroData,
-			create:          "a INT, b INT, c INT AS (a + b) STORED",
-			targetCols:      "a, b",
+			create:          "a INT, c INT AS (a + b) STORED, b INT",
 			format:          "AVRO",
-			expectedResults: [][]string{{"1", "2", "3"}, {"3", "4", "7"}},
+			expectedResults: [][]string{{"1", "3", "2"}, {"3", "7", "4"}},
 		},
 		{
 			into:            false,
