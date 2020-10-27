@@ -32,7 +32,7 @@ storiesOf("Session Details Page", module)
       {...sessionDetailsActiveTxnPropsFixture}
     />
   ))
-  .add("Active Session", () => (
+  .add("Session", () => (
     <SessionDetails
       {...sessionDetailsActiveStmtPropsFixture}
     />
