@@ -781,6 +781,14 @@ func (opts *MVCCGetOptions) validate() error {
 	return nil
 }
 
+func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCIterator {
+	iterKind := MVCCKeyAndIntentsIterKind
+	if inlineMeta {
+		iterKind = MVCCKeyIterKind
+	}
+	return reader.NewMVCCIterator(iterKind, opts)
+}
+
 // MVCCGet returns the most recent value for the specified key whose timestamp
 // is less than or equal to the supplied timestamp. If no such value exists, nil
 // is returned instead.
@@ -808,7 +816,7 @@ func (opts *MVCCGetOptions) validate() error {
 func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
-	iter := reader.NewIterator(IterOptions{Prefix: true})
+	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
 	return mvccGet(ctx, iter, key, timestamp, opts)
 }
@@ -1234,7 +1242,7 @@ func MVCCPut(
 	var iter MVCCIterator
 	blind := ms == nil && timestamp == (hlc.Timestamp{})
 	if !blind {
-		iter = rw.NewIterator(IterOptions{Prefix: true})
+		iter = rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
 		defer iter.Close()
 	}
 	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
@@ -1276,7 +1284,7 @@ func MVCCDelete(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 ) error {
-	iter := rw.NewIterator(IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
 
 	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, nil /* valueFn */)
@@ -1917,7 +1925,7 @@ func MVCCIncrement(
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
-	iter := rw.NewIterator(IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
 
 	var int64Val int64
@@ -1989,7 +1997,7 @@ func MVCCConditionalPut(
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	iter := rw.NewIterator(IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
 
 	return mvccConditionalPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, expVal, allowIfDoesNotExist, txn)
@@ -2067,7 +2075,7 @@ func MVCCInitPut(
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	iter := rw.NewIterator(IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
 	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, failOnTombstones, txn)
 }
@@ -2269,7 +2277,10 @@ func MVCCClearTimeRange(
 	// for deletion, allowing us to quickly skip over swaths of uninteresting
 	// keys, but then use a normal iteration to actually do the delete including
 	// updating the live key stats correctly.
-	it := rw.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
+	//
+	// Intents must be seen so that an error can be returned. We never delete an
+	// intent here.
+	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: key, UpperBound: endKey})
 	defer it.Close()
 
 	var clearedMetaKey MVCCKey
@@ -2395,7 +2406,7 @@ func MVCCDeleteRange(
 	}
 
 	buf := newPutBuffer()
-	iter := rw.NewIterator(IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
 
 	for i := range res.KVs {
 		err = mvccPutInternal(
@@ -2631,7 +2642,7 @@ func MVCCScan(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	iter := reader.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
 }
@@ -2644,7 +2655,7 @@ func MVCCScanToBytes(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	iter := reader.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 	return mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
 }
@@ -2686,7 +2697,8 @@ func MVCCIterate(
 	opts MVCCScanOptions,
 	f func(roachpb.KeyValue) error,
 ) ([]roachpb.Intent, error) {
-	iter := reader.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(
+		reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 
 	var intents []roachpb.Intent
@@ -2758,7 +2770,7 @@ func MVCCIterate(
 func MVCCResolveWriteIntent(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
 ) (bool, error) {
-	iterAndBuf := GetBufUsingIter(rw.NewIterator(IterOptions{Prefix: true}))
+	iterAndBuf := GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true}))
 	ok, err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent)
 	// Using defer would be more convenient, but it is measurably slower.
 	iterAndBuf.Cleanup()
@@ -3129,9 +3141,10 @@ type IterAndBuf struct {
 	iter MVCCIterator
 }
 
-// GetIterAndBuf returns an IterAndBuf for passing into various MVCC* methods.
+// GetIterAndBuf returns an IterAndBuf for passing into various MVCC* methods
+// that need to see intents.
 func GetIterAndBuf(reader Reader, opts IterOptions) IterAndBuf {
-	return GetBufUsingIter(reader.NewIterator(opts))
+	return GetBufUsingIter(reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts))
 }
 
 // GetBufUsingIter returns an IterAndBuf using the supplied iterator.
@@ -3270,7 +3283,7 @@ func MVCCGarbageCollect(
 
 	// Bound the iterator appropriately for the set of keys we'll be garbage
 	// collecting.
-	iter := rw.NewIterator(IterOptions{
+	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),
 	})
@@ -3457,7 +3470,7 @@ func MVCCFindSplitKey(
 		key = roachpb.RKey(keys.LocalMax)
 	}
 
-	it := reader.NewIterator(IterOptions{UpperBound: endKey.AsRawKey()})
+	it := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: endKey.AsRawKey()})
 	defer it.Close()
 
 	// We want to avoid splitting at the first key in the range because that

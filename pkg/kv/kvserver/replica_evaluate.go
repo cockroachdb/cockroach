@@ -89,7 +89,10 @@ func optimizePuts(
 	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
 		return origReqs
 	}
-	iter := reader.NewIterator(storage.IterOptions{
+	// iter is being used to find the parts of the key range that is empty. We
+	// don't need to see intents for this purpose since intents also have
+	// provisional values that we will see.
+	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
 		UpperBound: maxKey.Next(),

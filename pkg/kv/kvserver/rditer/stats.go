@@ -22,7 +22,7 @@ import (
 func ComputeStatsForRange(
 	d *roachpb.RangeDescriptor, reader storage.Reader, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	iter := reader.NewIterator(storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	ms := enginepb.MVCCStats{}
