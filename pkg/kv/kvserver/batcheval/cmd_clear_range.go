@@ -87,7 +87,7 @@ func ClearRange(
 	// instead of using a range tombstone (inefficient for small ranges).
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
-		if err := readWriter.Iterate(from, to,
+		if err := readWriter.MVCCIterate(from, to,
 			func(kv storage.MVCCKeyValue) error {
 				return readWriter.Clear(kv.Key)
 			},

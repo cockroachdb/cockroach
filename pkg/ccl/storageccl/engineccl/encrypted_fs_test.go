@@ -244,7 +244,7 @@ func TestPebbleEncryption(t *testing.T) {
 	require.NoError(t, batch.Put(storage.MVCCKey{Key: roachpb.Key("a")}, []byte("a")))
 	require.NoError(t, batch.Commit(true))
 	require.NoError(t, db.Flush())
-	val, err := db.Get(storage.MVCCKey{Key: roachpb.Key("a")})
+	val, err := db.MVCCGet(storage.MVCCKey{Key: roachpb.Key("a")})
 	require.NoError(t, err)
 	require.Equal(t, "a", string(val))
 	db.Close()
@@ -266,7 +266,7 @@ func TestPebbleEncryption(t *testing.T) {
 			Opts: opts2,
 		})
 	require.NoError(t, err)
-	val, err = db.Get(storage.MVCCKey{Key: roachpb.Key("a")})
+	val, err = db.MVCCGet(storage.MVCCKey{Key: roachpb.Key("a")})
 	require.NoError(t, err)
 	require.Equal(t, "a", string(val))
 

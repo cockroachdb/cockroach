@@ -97,7 +97,7 @@ func TestMVCCHistories(t *testing.T) {
 
 				reportDataEntries := func(buf *bytes.Buffer) error {
 					hasData := false
-					err := engine.Iterate(
+					err := engine.MVCCIterate(
 						span.Key,
 						span.EndKey,
 						func(r MVCCKeyValue) error {
@@ -521,7 +521,7 @@ func cmdCheckIntent(e *evalCtx) error {
 	}
 	metaKey := mvccKey(key)
 	var meta enginepb.MVCCMetadata
-	ok, _, _, err := e.engine.GetProto(metaKey, &meta)
+	ok, _, _, err := e.engine.MVCCGetProto(metaKey, &meta)
 	if err != nil {
 		return err
 	}

@@ -91,7 +91,7 @@ func TestEngineBatchCommit(t *testing.T) {
 						case <-writesDone:
 							return nil
 						default:
-							val, err := e.Get(key)
+							val, err := e.MVCCGet(key)
 							if err != nil {
 								return err
 							}
@@ -263,7 +263,7 @@ func TestEngineBatch(t *testing.T) {
 			}
 
 			get := func(rw ReadWriter, key MVCCKey) []byte {
-				b, err := rw.Get(key)
+				b, err := rw.MVCCGet(key)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -367,12 +367,12 @@ func TestEnginePutGetDelete(t *testing.T) {
 				engine.Put(mvccKey(""), []byte("")),
 				engine.Put(NilKey, []byte("")),
 				func() error {
-					_, err := engine.Get(mvccKey(""))
+					_, err := engine.MVCCGet(mvccKey(""))
 					return err
 				}(),
 				engine.Clear(NilKey),
 				func() error {
-					_, err := engine.Get(NilKey)
+					_, err := engine.MVCCGet(NilKey)
 					return err
 				}(),
 				engine.Clear(NilKey),
@@ -395,7 +395,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 				{mvccKey("server"), []byte("42")},
 			}
 			for _, c := range testCases {
-				val, err := engine.Get(c.key)
+				val, err := engine.MVCCGet(c.key)
 				if err != nil {
 					t.Errorf("get: expected no error, but got %s", err)
 				}
@@ -405,7 +405,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 				if err := engine.Put(c.key, c.value); err != nil {
 					t.Errorf("put: expected no error, but got %s", err)
 				}
-				val, err = engine.Get(c.key)
+				val, err = engine.MVCCGet(c.key)
 				if err != nil {
 					t.Errorf("get: expected no error, but got %s", err)
 				}
@@ -415,7 +415,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 				if err := engine.Clear(c.key); err != nil {
 					t.Errorf("delete: expected no error, but got %s", err)
 				}
-				val, err = engine.Get(c.key)
+				val, err = engine.MVCCGet(c.key)
 				if err != nil {
 					t.Errorf("get: expected no error, but got %s", err)
 				}
@@ -542,7 +542,7 @@ func TestEngineMerge(t *testing.T) {
 						t.Fatalf("%d: %+v", i, err)
 					}
 				}
-				result, _ := engine.Get(tc.testKey)
+				result, _ := engine.MVCCGet(tc.testKey)
 				engineBytes[engineIndex][tcIndex] = result
 				var resultV, expectedV enginepb.MVCCMetadata
 				if err := protoutil.Unmarshal(result, &resultV); err != nil {
@@ -1005,7 +1005,7 @@ func TestSnapshot(t *testing.T) {
 			if err := engine.Put(key, val1); err != nil {
 				t.Fatal(err)
 			}
-			val, _ := engine.Get(key)
+			val, _ := engine.MVCCGet(key)
 			if !bytes.Equal(val, val1) {
 				t.Fatalf("the value %s in get result does not match the value %s in request",
 					val, val1)
@@ -1018,8 +1018,8 @@ func TestSnapshot(t *testing.T) {
 			if err := engine.Put(key, val2); err != nil {
 				t.Fatal(err)
 			}
-			val, _ = engine.Get(key)
-			valSnapshot, error := snap.Get(key)
+			val, _ = engine.MVCCGet(key)
+			valSnapshot, error := snap.MVCCGet(key)
 			if error != nil {
 				t.Fatalf("error : %s", error)
 			}
@@ -1066,7 +1066,7 @@ func TestSnapshotMethods(t *testing.T) {
 				if err := engine.Put(keys[i], vals[i]); err != nil {
 					t.Fatal(err)
 				}
-				if val, err := engine.Get(keys[i]); err != nil {
+				if val, err := engine.MVCCGet(keys[i]); err != nil {
 					t.Fatal(err)
 				} else if !bytes.Equal(vals[i], val) {
 					t.Fatalf("expected %s, but found %s", vals[i], val)
@@ -1077,7 +1077,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify Get.
 			for i := range keys {
-				valSnapshot, err := snap.Get(keys[i])
+				valSnapshot, err := snap.MVCCGet(keys[i])
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1098,9 +1098,9 @@ func TestSnapshotMethods(t *testing.T) {
 					keyvals, keyvalsSnapshot)
 			}
 
-			// Verify Iterate.
+			// Verify MVCCIterate.
 			index := 0
-			if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) error {
+			if err := snap.MVCCIterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) error {
 				if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 					t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 						index, keys[index], vals[index], kv.Key, kv.Value)

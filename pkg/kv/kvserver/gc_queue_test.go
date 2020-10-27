@@ -967,12 +967,12 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 	assert.True(t, processed, "queue not processed")
 
-	// Iterate through all values to ensure intents have been fully resolved.
+	// MVCCIterate through all values to ensure intents have been fully resolved.
 	// This must be done in a SucceedsSoon loop because intent resolution
 	// is initiated asynchronously from the GC queue.
 	testutils.SucceedsSoon(t, func() error {
 		meta := &enginepb.MVCCMetadata{}
-		return tc.store.Engine().Iterate(roachpb.KeyMin, roachpb.KeyMax,
+		return tc.store.Engine().MVCCIterate(roachpb.KeyMin, roachpb.KeyMax,
 			func(kv storage.MVCCKeyValue) error {
 				if !kv.Key.IsValue() {
 					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {

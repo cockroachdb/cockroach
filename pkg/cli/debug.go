@@ -215,7 +215,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, func(kv storage.MVCCKeyValue) error {
+	return db.MVCCIterate(debugCtx.startKey.Key, debugCtx.endKey.Key, func(kv storage.MVCCKeyValue) error {
 		done, err := printer(kv)
 		if err != nil {
 			return err
@@ -380,7 +380,7 @@ func loadRangeDescriptor(
 	start := keys.LocalRangePrefix
 	end := keys.LocalRangeMax
 
-	if err := db.Iterate(start, end, handleKV); err != nil {
+	if err := db.MVCCIterate(start, end, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -401,7 +401,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	start := keys.LocalRangePrefix
 	end := keys.LocalRangeMax
 
-	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) error {
+	return db.MVCCIterate(start, end, func(kv storage.MVCCKeyValue) error {
 		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 			return nil
 		}
@@ -531,7 +531,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(start))),
 		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(end))))
 
-	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) error {
+	return db.MVCCIterate(start, end, func(kv storage.MVCCKeyValue) error {
 		kvserver.PrintKeyValue(kv)
 		return nil
 	})
