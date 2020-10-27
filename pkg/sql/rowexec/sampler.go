@@ -36,11 +36,20 @@ import (
 )
 
 // sketchInfo contains the specification and run-time state for each sketch.
+// A sketchInfo is scoped to a set of table columns: each value in it is a
+// summary of information about data in those columns.
 type sketchInfo struct {
 	spec     execinfrapb.SketchSpec
 	sketch   *hyperloglog.Sketch
 	numNulls int64
 	numRows  int64
+	// fixedDataSize is set to non-zero if the size of the data in the columns
+	// in the sketch is fixed, so we don't have to calculate the size of each
+	// datum in the columns at sample-time.
+	// fixedDataSize int64
+	// totalDataSize is the sum of the size of all of the data in the columns that
+	// we've seen so far.
+	totalDataSize int64
 }
 
 // A sampler processor returns a random sample of rows, as well as "global"
@@ -69,6 +78,7 @@ type samplerProcessor struct {
 	sketchCol    int
 	invColIdxCol int
 	invIdxKeyCol int
+	dataSizeCol  int
 }
 
 var _ execinfra.Processor = &samplerProcessor{}
@@ -136,6 +146,17 @@ func newSamplerProcessor(
 			numNulls: 0,
 			numRows:  0,
 		}
+		/*
+			// TODO(jordan): remove before commiting this!
+			for j := range spec.Sketches[i].Columns {
+				size, varLen := tree.DatumTypeSize(inTypes[j])
+				if varLen {
+					s.sketches[i].fixedDataSize = 0
+					break
+				}
+				s.sketches[i].fixedDataSize += int64(size)
+			}
+		*/
 		if spec.Sketches[i].GenerateHistogram {
 			sampleCols.Add(int(spec.Sketches[i].Columns[0]))
 		}
@@ -162,7 +183,7 @@ func newSamplerProcessor(
 
 	s.sr.Init(int(spec.SampleSize), inTypes, &s.memAcc, sampleCols)
 
-	outTypes := make([]*types.T, 0, len(inTypes)+7)
+	outTypes := make([]*types.T, 0, len(inTypes)+8)
 
 	// First columns are the same as the input.
 	outTypes = append(outTypes, inTypes...)
@@ -195,6 +216,10 @@ func newSamplerProcessor(
 	// A BYTES column with the inverted index key datum.
 	s.invIdxKeyCol = len(outTypes)
 	outTypes = append(outTypes, types.Bytes)
+
+	// An INT column with the total size of the data in the sketch columns.
+	s.dataSizeCol = len(outTypes)
+	outTypes = append(outTypes, types.Int)
 
 	s.outTypes = outTypes
 
@@ -435,6 +460,7 @@ func (s *samplerProcessor) emitSketchRow(
 		return false, err
 	}
 	outRow[s.sketchCol] = rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
+	outRow[s.dataSizeCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.totalDataSize))}
 	if !emitHelper(ctx, &s.Out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 		return true, nil
 	}
@@ -492,14 +518,14 @@ func (s *sketchInfo) addRow(
 	s.numRows++
 
 	var col uint32
-	var useFastPath bool
+	var useIntFastPath bool
 	if len(s.spec.Columns) == 1 {
 		col = s.spec.Columns[0]
 		isNull := row[col].IsNull()
-		useFastPath = typs[col].Family() == types.IntFamily && !isNull
+		useIntFastPath = typs[col].Family() == types.IntFamily && !isNull
 	}
 
-	if useFastPath {
+	if useIntFastPath {
 		var intbuf [8]byte
 		// Fast path for integers.
 		// TODO(radu): make this more general.
@@ -520,6 +546,7 @@ func (s *sketchInfo) addRow(
 		// order_line) with simplistic functions yielded bad results.
 		binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
 		s.sketch.Insert(intbuf[:])
+		s.totalDataSize += 8
 		return nil
 	}
 	isNull := true
@@ -527,11 +554,13 @@ func (s *sketchInfo) addRow(
 	for _, col := range s.spec.Columns {
 		// We choose to not perform the memory accounting for possibly decoded
 		// tree.Datum because we will lose the references to row very soon.
-		*buf, err = row[col].Fingerprint(ctx, typs[col], da, *buf, nil /* acc */)
+		datum := row[col]
+		*buf, err = datum.Fingerprint(ctx, typs[col], da, *buf, nil /* acc */)
 		if err != nil {
 			return err
 		}
-		isNull = isNull && row[col].IsNull()
+		isNull = isNull && datum.IsNull()
+		s.totalDataSize += int64(datum.Size())
 	}
 	if isNull {
 		s.numNulls++

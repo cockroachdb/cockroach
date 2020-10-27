@@ -209,6 +209,7 @@ func (eg *exprGen) statsFromStr(str string) props.Statistics {
 		}
 		s.DistinctCount = float64(stats[i].DistinctCount)
 		s.NullCount = float64(stats[i].NullCount)
+		s.DataSize = float64(stats[i].DataSize)
 	}
 	return result
 }

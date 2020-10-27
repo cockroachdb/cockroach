@@ -536,10 +536,16 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		// with most recent first.
 		stats.Available = true
 		stats.RowCount = float64(tab.Statistic(0).RowCount())
+		// TODO(jordan): does it even make sense to have data size here? it would have
+		// to be the sum of the single-column statistics for each of the columns in
+		// the index or something?
+		stats.DataSize = float64(tab.Statistic(0).DataSize())
 
-		// Make sure the row count is at least 1. The stats may be stale, and we
-		// can end up with weird and inefficient plans if we estimate 0 rows.
+		// Make sure the row count and data size is at least 1. The stats may be
+		// stale, and we can end up with weird and inefficient plans if we estimate
+		// 0 rows.
 		stats.RowCount = max(stats.RowCount, 1)
+		stats.DataSize = max(stats.DataSize, 1)
 
 		// Add all the column statistics, using the most recent statistic for each
 		// column set. Stats are ordered with most recent first.
@@ -557,6 +563,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			if colStat, ok := stats.ColStats.Add(cols); ok {
 				colStat.DistinctCount = float64(stat.DistinctCount())
 				colStat.NullCount = float64(stat.NullCount())
+				colStat.DataSize = float64(stat.DataSize())
 				if cols.Len() == 1 && stat.Histogram() != nil &&
 					sb.evalCtx.SessionData.OptimizerUseHistograms {
 					col, _ := cols.Next(0)
@@ -2590,6 +2597,8 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 	// larger than the product of all the distinct counts of its individual
 	// columns, and no smaller than the distinct count of any single column.
 	if colStat.Cols.Len() > 1 && rowCount > 1 {
+		// TODO(jordan): what do we have to do here to ensure that the data sizes
+		// are sane?
 		product := 1.0
 		maxDistinct := 0.0
 		colStat.Cols.ForEach(func(col opt.ColumnID) {

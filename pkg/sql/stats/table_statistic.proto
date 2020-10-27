@@ -47,4 +47,6 @@ message TableStatisticProto {
   uint64 null_count = 8;
   // Histogram (if available)
   HistogramData histogram_data = 9;
+  // The size, in bytes, of all of the data in the columns in ColumnIDs.
+  uint64 data_size = 10;
 }

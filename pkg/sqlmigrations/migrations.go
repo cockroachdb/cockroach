@@ -373,6 +373,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              markDeprecatedSchemaChangeJobsFailed,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionLeasedDatabaseDescriptors),
 	},
+	{
+		// Introduced in v21.1.
+		name:                "add system.table_statistics.data_size column",
+		workFn:              alterSystemTableStatisticsAddDataSize,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionSystemTableStatisticsDataSize),
+	},
 }
 
 func staticIDs(
@@ -1457,5 +1463,13 @@ ALTER COLUMN owner SET NOT NULL,
 DROP COLUMN IF EXISTS schedule_changes
 `
 	_, err := r.sqlExecutor.ExecEx(ctx, "alter-scheduled-jobs", nil, asNode, alterSchedules)
+	return err
+}
+
+func alterSystemTableStatisticsAddDataSize(ctx context.Context, r runner) error {
+	addCol := `ALTER TABLE system.table_statistics ADD COLUMN "dataSize" int`
+	asNode := sessiondata.InternalExecutorOverride{User: security.NodeUser}
+
+	_, err := r.sqlExecutor.ExecEx(ctx, "alter-table-statistics-add-data-size", nil, asNode, addCol)
 	return err
 }

@@ -974,6 +974,11 @@ func (ts *TableStat) NullCount() uint64 {
 	return ts.js.NullCount
 }
 
+// NullCount is part of the cat.TableStatistic interface.
+func (ts *TableStat) DataSize() uint64 {
+	return ts.js.DataSize
+}
+
 // Histogram is part of the cat.TableStatistic interface.
 func (ts *TableStat) Histogram() []cat.HistogramBucket {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())

@@ -76,6 +76,7 @@ const (
 	VersionHBAForNonTLS
 	Version20_2
 	VersionStart21_1
+	VersionSystemTableStatisticsDataSize
 
 	// Add new versions here (step one of two).
 )
@@ -431,6 +432,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionStart21_1 demarcates work towards CockroachDB v21.1.
 		Key:     VersionStart21_1,
 		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 1},
+	},
+	{
+		// VersionSystemTableStatisticsDataSize includes the dataSize column in
+		// system.table_statistics.
+		Key:     VersionSystemTableStatisticsDataSize,
+		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 2},
 	},
 
 	// Add new versions here (step two of two).
