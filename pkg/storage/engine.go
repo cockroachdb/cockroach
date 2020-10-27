@@ -96,6 +96,8 @@ type MVCCIterator interface {
 	// Key returns the current key.
 	Key() MVCCKey
 	// UnsafeRawKey returns the current raw key (i.e. the encoded MVCC key).
+	// TODO(sumeer): this is a dangerous method since it may expose the
+	// raw key of a separated intent. Audit all callers and fix.
 	UnsafeRawKey() []byte
 	// Value returns the current value as a byte slice.
 	Value() []byte
@@ -209,18 +211,18 @@ type IterOptions struct {
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
 // by the caller.
-//lint:ignore U1001 unused
 type MVCCIterKind int
 
 const (
 	// MVCCKeyAndIntentsIterKind specifies that intents must be seen, and appear
 	// interleaved with keys, even if they are in a separated lock table.
-	//lint:ignore U1001 unused
 	MVCCKeyAndIntentsIterKind MVCCIterKind = iota
 	// MVCCKeyIterKind specifies that the caller does not need to see intents.
 	// Any interleaved intents may be seen, but no correctness properties are
-	// derivable from such partial knowledge of intents.
-	//lint:ignore U1001 unused
+	// derivable from such partial knowledge of intents. NB: this is a performance
+	// optimization when iterating over (a) MVCC keys where the caller does
+	// not need to see intents, (b) a key space that is known to not have multiple
+	// versions (and therefore will never have intents), like the raft log.
 	MVCCKeyIterKind
 )
 
@@ -261,14 +263,16 @@ type Reader interface {
 		exportAllRevisions bool, targetSize uint64, maxSize uint64,
 		io IterOptions,
 	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
-	// Get returns the value for the given key, nil otherwise.
+	// Get returns the value for the given key, nil otherwise. Semantically, it
+	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
 	// Deprecated: use storage.MVCCGet instead.
 	MVCCGet(key MVCCKey) ([]byte, error)
 	// MVCCGetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
-	// key and the value.
+	// key and the value. Semantically, it behaves as if an iterator with
+	// MVCCKeyAndIntentsIterKind was used.
 	//
 	// Deprecated: use MVCCIterator.ValueProto instead.
 	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
@@ -280,7 +284,7 @@ type Reader interface {
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
 	// TODO(sumeer): add MVCCIterKind parameter.
-	MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error
+	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error) error
 	// NewIterator returns a new instance of an MVCCIterator over this
 	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
@@ -631,7 +635,7 @@ func PutProto(
 // Specify max=0 for unbounded scans.
 func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.MVCCIterate(start, end, func(kv MVCCKeyValue) error {
+	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
 		if max != 0 && int64(len(kvs)) >= max {
 			return iterutil.StopIteration()
 		}
