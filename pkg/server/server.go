@@ -142,10 +142,13 @@ type Server struct {
 	status         *statusServer
 	authentication *authenticationServer
 	oidc           OIDC
-	tsDB           *ts.DB
-	tsServer       *ts.Server
-	raftTransport  *kvserver.RaftTransport
-	stopper        *stop.Stopper
+	// The logger to use for authn/session events.
+	authLogger *log.SecondaryLogger
+
+	tsDB          *ts.DB
+	tsServer      *ts.Server
+	raftTransport *kvserver.RaftTransport
+	stopper       *stop.Stopper
 
 	debug *debug.Server
 
@@ -328,6 +331,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cm.RegisterSignalHandler(stopper)
 		registry.AddMetricStruct(cm.Metrics())
 	}
+
+	authLogger := StartAuthConnLogger(ctx, stopper)
 
 	// Check the compatibility between the configured addresses and that
 	// provided in certificates. This also logs the certificate
@@ -628,6 +633,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
 		sqlStatusServer:          sStatus,
+		authLogger:               authLogger,
 	})
 	if err != nil {
 		return nil, err
@@ -668,6 +674,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsReconciler:  protectedtsReconciler,
 		sqlServer:              sqlServer,
 		externalStorageBuilder: externalStorageBuilder,
+		authLogger:             authLogger,
 	}
 	return lateBoundServer, err
 }
@@ -679,6 +686,7 @@ func (s *Server) ClusterSettings() *cluster.Settings {
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
 func (s *Server) AnnotateCtx(ctx context.Context) context.Context {
+	ctx = decorateContextFromWebMetadata(ctx)
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
@@ -1694,7 +1702,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.mux.Handle("/", authenticatedUIHandler)
 
 	// Register gRPC-gateway endpoints used by the admin UI.
-	var authHandler http.Handler = gwMux
+	var authHandler http.Handler = newAuthConnLoggingHandler(s.authLogger, s.cfg.Settings, gwMux)
 	if s.cfg.RequireWebSession() {
 		authHandler = newAuthenticationMux(s.authentication, authHandler)
 	}
@@ -1719,21 +1727,23 @@ func (s *Server) PreStart(ctx context.Context) error {
 		// authenticationMux guarantees that we have a non-empty user
 		// session, but our machinery for verifying the roles of a user
 		// lives on adminServer and is tied to GRPC metadata.
-		debugHandler = newAuthenticationMux(s.authentication, http.HandlerFunc(
-			func(w http.ResponseWriter, req *http.Request) {
-				md := forwardAuthenticationMetadata(req.Context(), req)
-				authCtx := metadata.NewIncomingContext(req.Context(), md)
-				_, err := s.admin.requireAdminUser(authCtx)
-				if errors.Is(err, errRequiresAdmin) {
-					http.Error(w, "admin privilege required", http.StatusUnauthorized)
-					return
-				} else if err != nil {
-					log.Infof(authCtx, "web session error: %s", err)
-					http.Error(w, "error checking authentication", http.StatusInternalServerError)
-					return
-				}
-				s.debug.ServeHTTP(w, req)
-			}))
+		debugHandler = newAuthenticationMux(s.authentication,
+			newAuthConnLoggingHandler(s.authLogger, s.cfg.Settings,
+				http.HandlerFunc(
+					func(w http.ResponseWriter, req *http.Request) {
+						md := forwardAuthenticationMetadata(req.Context(), req)
+						authCtx := metadata.NewIncomingContext(req.Context(), md)
+						_, err := s.admin.requireAdminUser(authCtx)
+						if errors.Is(err, errRequiresAdmin) {
+							http.Error(w, "admin privilege required", http.StatusUnauthorized)
+							return
+						} else if err != nil {
+							log.Infof(authCtx, "web session error: %s", err)
+							http.Error(w, "error checking authentication", http.StatusInternalServerError)
+							return
+						}
+						s.debug.ServeHTTP(w, req)
+					})))
 	}
 	s.mux.Handle(debug.Endpoint, debugHandler)
 
@@ -2244,8 +2254,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}()
 		w = gzw
 	}
+	ctx := r.Context()
+	ctx = logtags.AddTag(ctx, "client", r.RemoteAddr)
+	r = r.WithContext(ctx)
+	if log.V(1) || httpRequestLog.Get(&s.cfg.Settings.SV) {
+		log.Infof(ctx, "HTTP %s: %s", log.Safe(r.Method), r.URL)
+	}
 	s.mux.ServeHTTP(w, r)
 }
+
+var httpRequestLog = settings.RegisterPublicBoolSetting(
+	"server.log_web_requests.enabled",
+	"if set, log all HTTP requests on every node",
+	false)
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
 // It is empty for an in-memory temp storage.

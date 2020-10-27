@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -424,7 +425,11 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 }
 
 func makeSQLServerArgs(
-	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
+	stopper *stop.Stopper,
+	kvClusterName string,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+	authLogger *log.SecondaryLogger,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 	baseCfg.AmbientCtx.AddLogTag("sql", nil)
@@ -577,6 +582,7 @@ func makeSQLServerArgs(
 		sqlStatusServer: newTenantStatusServer(
 			baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: circularInternalExecutor}, sessionRegistry, baseCfg.Settings,
 		),
+		authLogger: authLogger,
 	}, nil
 }
 
@@ -610,6 +616,7 @@ func (ts *TestServer) StartTenant(
 		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
+		ts.authLogger,
 	)
 }
 
@@ -620,8 +627,9 @@ func StartTenant(
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
+	authLogger *log.SecondaryLogger,
 ) (pgAddr string, httpAddr string, _ error) {
-	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
+	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg, authLogger)
 	if err != nil {
 		return "", "", err
 	}

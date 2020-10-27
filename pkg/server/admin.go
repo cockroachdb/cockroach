@@ -208,6 +208,8 @@ func (s *adminServer) AllMetricMetadata(
 func (s *adminServer) ChartCatalog(
 	ctx context.Context, req *serverpb.ChartCatalogRequest,
 ) (*serverpb.ChartCatalogResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	metricsMetadata := s.server.recorder.GetMetricsMetadata()
 
 	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
@@ -1261,6 +1263,8 @@ func (s *adminServer) GetUIData(
 func (s *adminServer) Settings(
 	ctx context.Context, req *serverpb.SettingsRequest,
 ) (*serverpb.SettingsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	keys := req.Keys
 	if len(keys) == 0 {
 		keys = settings.Keys()
@@ -1305,8 +1309,10 @@ func (s *adminServer) Settings(
 
 // Cluster returns cluster metadata.
 func (s *adminServer) Cluster(
-	_ context.Context, req *serverpb.ClusterRequest,
+	ctx context.Context, req *serverpb.ClusterRequest,
 ) (*serverpb.ClusterResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	clusterID := s.server.ClusterID()
 	if clusterID == (uuid.UUID{}) {
 		return nil, status.Errorf(codes.Unavailable, "cluster ID not yet available")
@@ -1659,6 +1665,8 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 func (s *adminServer) DecommissionStatus(
 	ctx context.Context, req *serverpb.DecommissionStatusRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	// Get the number of replicas on each node. We *may* not need all of them,
 	// but that would be more complicated than seems worth it right now.
 	ns, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{})
@@ -1733,6 +1741,8 @@ func (s *adminServer) DecommissionStatus(
 func (s *adminServer) Decommission(
 	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	nodeIDs := req.NodeIDs
 
 	if len(nodeIDs) == 0 {
@@ -1751,6 +1761,8 @@ func (s *adminServer) Decommission(
 func (s *adminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,
 ) (*serverpb.DataDistributionResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	if _, err := s.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
@@ -1923,7 +1935,6 @@ func (s *adminServer) DataDistribution(
 func (s *adminServer) EnqueueRange(
 	ctx context.Context, req *serverpb.EnqueueRangeRequest,
 ) (*serverpb.EnqueueRangeResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.server.AnnotateCtx(ctx)
 
 	if _, err := s.requireAdminUser(ctx); err != nil {

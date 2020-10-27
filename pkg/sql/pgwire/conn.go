@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq/oid"
 )
 
@@ -214,11 +213,7 @@ func (c *conn) serveImpl(
 ) {
 	defer func() { _ = c.conn.Close() }()
 
-	if c.sessionArgs.User == security.RootUser || c.sessionArgs.User == security.NodeUser {
-		ctx = logtags.AddTag(ctx, "user", log.Safe(c.sessionArgs.User))
-	} else {
-		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
-	}
+	ctx = security.DecorateContext(ctx, c.sessionArgs.User)
 
 	inTestWithoutSQL := sqlServer == nil
 	var authLogger *log.SecondaryLogger

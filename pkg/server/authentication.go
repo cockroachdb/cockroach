@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -132,6 +134,8 @@ func (s *authenticationServer) RegisterGateway(
 func (s *authenticationServer) UserLogin(
 	ctx context.Context, req *serverpb.UserLoginRequest,
 ) (*serverpb.UserLoginResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	username := req.Username
 	if username == "" {
 		return nil, status.Errorf(
@@ -184,6 +188,8 @@ var errWebAuthenticationFailure = status.Errorf(
 func (s *authenticationServer) ValidateOIDCState(
 	ctx context.Context, req *serverpb.ValidateOIDCStateRequest,
 ) (*serverpb.ValidateOIDCStateResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	err := s.server.oidc.ValidateOIDCState(req.State)
 	if err != nil {
 		return nil, err
@@ -199,6 +205,8 @@ func (s *authenticationServer) ValidateOIDCState(
 func (s *authenticationServer) UserLoginFromSSO(
 	ctx context.Context, username string,
 ) (*http.Cookie, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
 	// case-insensitive. Therefore we need to normalize the username
 	// here, so that the normalized username is retained in the session
@@ -247,6 +255,8 @@ func (s *authenticationServer) createSessionFor(
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, apiInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
@@ -279,6 +289,11 @@ func (s *authenticationServer) UserLogout(
 			"session with id %d nonexistent", sessionID)
 		log.Infof(ctx, "%v", err)
 		return nil, err
+	}
+
+	// Emit an audit log message if requested by configuration.
+	if logWebSessionAuth.Get(&s.server.st.SV) {
+		s.server.authLogger.Logf(ctx, "session %d logged out", sessionID)
 	}
 
 	// Send back a header which will cause the browser to destroy the cookie.
@@ -449,6 +464,13 @@ RETURNING id
 	// Extract integer value from single datum.
 	id = int64(*row[0].(*tree.DInt))
 
+	// Emit an audit log message if requested by configuration.
+	if logWebSessionAuth.Get(&s.server.st.SV) {
+		ctx = security.DecorateContext(ctx, username)
+		log.Infof(ctx, "WOO\n%s", debug.Stack())
+		s.server.authLogger.Logf(ctx, "web session %d logged in, expires at %s", id, expiration)
+	}
+
 	return id, secret, nil
 }
 
@@ -491,6 +513,7 @@ type webSessionIDKey struct{}
 
 const webSessionUserKeyStr = "websessionuser"
 const webSessionIDKeyStr = "websessionid"
+const webSessionRemoteAddrStr = "websessionclient"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	username, cookie, err := am.getSession(w, req)
@@ -498,6 +521,12 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		ctx := req.Context()
 		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
 		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+		// Attach the username to every logging event.
+		ctx = security.DecorateContext(ctx, username)
+		// We also log the session ID, so that concurrent requests from
+		// different sessions can be tracked back to their respective
+		// session ID / cookie in the system table.
+		ctx = logtags.AddTag(ctx, "sid", cookie.ID)
 		req = req.WithContext(ctx)
 	} else if !am.allowAnonymous {
 		if log.V(1) {
@@ -598,8 +627,9 @@ func authenticationHeaderMatcher(key string) (string, bool) {
 	return fmt.Sprintf("%s%s", gwruntime.MetadataHeaderPrefix, key), true
 }
 
-func forwardAuthenticationMetadata(ctx context.Context, _ *http.Request) metadata.MD {
+func forwardAuthenticationMetadata(ctx context.Context, r *http.Request) metadata.MD {
 	md := metadata.MD{}
+	md.Set(webSessionRemoteAddrStr, r.RemoteAddr)
 	if user := ctx.Value(webSessionUserKey{}); user != nil {
 		md.Set(webSessionUserKeyStr, user.(string))
 	}
@@ -607,4 +637,26 @@ func forwardAuthenticationMetadata(ctx context.Context, _ *http.Request) metadat
 		md.Set(webSessionIDKeyStr, fmt.Sprintf("%v", sessionID))
 	}
 	return md
+}
+
+func decorateContextFromWebMetadata(ctx context.Context) context.Context {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ctx
+	}
+	// We are annotating a context while serving a RPC request.
+	if remoteAddrs, ok := md[webSessionRemoteAddrStr]; ok && len(remoteAddrs) == 1 {
+		ctx = logtags.AddTag(ctx, "client", remoteAddrs[0])
+	}
+	if sessionIDs, ok := md[webSessionIDKeyStr]; ok && len(sessionIDs) == 1 {
+		ctx = logtags.AddTag(ctx, "sid", sessionIDs[0])
+	}
+	if usernames, ok := md[webSessionUserKeyStr]; ok && len(usernames) == 1 {
+		ctx = security.DecorateContext(ctx, usernames[0])
+	}
+
+	// If the incoming RPC request issues an outgoing RPC request
+	// as part of its service (e.g. cluster-wide RPC broadcast),
+	// we want the sub-requests to also carry the metadata.
+	return metadata.NewOutgoingContext(ctx, md)
 }
