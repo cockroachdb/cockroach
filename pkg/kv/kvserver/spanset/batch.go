@@ -275,7 +275,7 @@ func (s spanSetReader) MVCCGetProto(
 }
 
 func (s spanSetReader) MVCCIterate(
-	start, end roachpb.Key, f func(storage.MVCCKeyValue) error,
+	start, end roachpb.Key, iterKind storage.MVCCIterKind, f func(storage.MVCCKeyValue) error,
 ) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
@@ -286,7 +286,7 @@ func (s spanSetReader) MVCCIterate(
 			return err
 		}
 	}
-	return s.r.MVCCIterate(start, end, f)
+	return s.r.MVCCIterate(start, end, iterKind, f)
 }
 
 func (s spanSetReader) NewIterator(opts storage.IterOptions) storage.MVCCIterator {

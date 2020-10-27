@@ -97,24 +97,21 @@ func TestMVCCHistories(t *testing.T) {
 
 				reportDataEntries := func(buf *bytes.Buffer) error {
 					hasData := false
-					err := engine.MVCCIterate(
-						span.Key,
-						span.EndKey,
-						func(r MVCCKeyValue) error {
-							hasData = true
-							if r.Key.Timestamp.IsEmpty() {
-								// Meta is at timestamp zero.
-								meta := enginepb.MVCCMetadata{}
-								if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-									fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
-								} else {
-									fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
-								}
+					err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
+						hasData = true
+						if r.Key.Timestamp.IsEmpty() {
+							// Meta is at timestamp zero.
+							meta := enginepb.MVCCMetadata{}
+							if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
+								fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
 							} else {
-								fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
+								fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
 							}
-							return nil
-						})
+						} else {
+							fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
+						}
+						return nil
+					})
 					if !hasData {
 						buf.WriteString("<no data>\n")
 					}
