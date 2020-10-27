@@ -722,11 +722,12 @@ func newOptTable(
 			}
 		}
 		if idxDesc.Type == descpb.IndexDescriptor_INVERTED {
-			// The first column of an inverted index is special: in the descriptors,
-			// it looks as if the table column is part of the index; in fact the key
-			// contains values *derived* from that column. In the catalog, we refer to
-			// this key as a separate, virtual column.
-			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idxDesc.ColumnIDs[0])
+			// The last column of an inverted index is special: in the
+			// descriptors, it looks as if the table column is part of the
+			// index; in fact the key contains values *derived* from that
+			// column. In the catalog, we refer to this key as a separate,
+			// virtual column.
+			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idxDesc.ColumnIDs[len(idxDesc.ColumnIDs)-1])
 
 			// Add a virtual column that refers to the inverted index key.
 			virtualCol, virtualColOrd := newColumn()
@@ -1199,7 +1200,7 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
 		ord := 0
-		if i == 0 && oi.invertedVirtualColOrd != -1 {
+		if oi.IsInverted() && i == length-1 {
 			ord = oi.invertedVirtualColOrd
 		} else {
 			ord, _ = oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
