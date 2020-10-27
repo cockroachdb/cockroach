@@ -1515,3 +1515,55 @@ with &1 (t)
            │         └──  y.a:1 => a:8
            └── filters
                 └── x.a:4 = a:8
+
+# Verify that we don't incorrectly project a+1 again (#55196).
+build
+WITH cte AS (SELECT a+1 FROM x ORDER BY a+b LIMIT 10) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: "?column?":7
+ ├── project
+ │    ├── columns: "?column?":5
+ │    └── limit
+ │         ├── columns: "?column?":5 column6:6
+ │         ├── internal-ordering: +6
+ │         ├── sort
+ │         │    ├── columns: "?column?":5 column6:6
+ │         │    ├── ordering: +6
+ │         │    ├── limit hint: 10.00
+ │         │    └── project
+ │         │         ├── columns: "?column?":5 column6:6
+ │         │         ├── scan x
+ │         │         │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         │         └── projections
+ │         │              ├── a:1 + 1 [as="?column?":5]
+ │         │              └── a:1 + b:2 [as=column6:6]
+ │         └── 10
+ └── with-scan &1 (cte)
+      ├── columns: "?column?":7
+      └── mapping:
+           └──  "?column?":5 => "?column?":7
+
+build
+WITH cte AS (SELECT DISTINCT ON (b) a+1 FROM x) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: "?column?":6
+ ├── project
+ │    ├── columns: "?column?":5
+ │    └── distinct-on
+ │         ├── columns: b:2 "?column?":5
+ │         ├── grouping columns: b:2
+ │         ├── project
+ │         │    ├── columns: "?column?":5 b:2
+ │         │    ├── scan x
+ │         │    │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         │    └── projections
+ │         │         └── a:1 + 1 [as="?column?":5]
+ │         └── aggregations
+ │              └── first-agg [as="?column?":5]
+ │                   └── "?column?":5
+ └── with-scan &1 (cte)
+      ├── columns: "?column?":6
+      └── mapping:
+           └──  "?column?":5 => "?column?":6
