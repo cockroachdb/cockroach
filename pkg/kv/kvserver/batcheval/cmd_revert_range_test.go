@@ -42,7 +42,7 @@ func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []by
 
 func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
 	t.Helper()
-	iter := reader.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+	iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
 	s, err := storage.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 1100)
 	if err != nil {

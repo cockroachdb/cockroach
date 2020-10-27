@@ -96,7 +96,7 @@ func clearExistingData(
 		}
 	}
 
-	iter := batch.NewIterator(storage.IterOptions{UpperBound: end})
+	iter := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	iter.SeekGE(storage.MakeMVCCMetadataKey(start))

@@ -104,7 +104,7 @@ func TestMultiIterator(t *testing.T) {
 						t.Fatalf("%+v", err)
 					}
 				}
-				iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 				defer iter.Close()
 				iters = append(iters, iter)
 			}

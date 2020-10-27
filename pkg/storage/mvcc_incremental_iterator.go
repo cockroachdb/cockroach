@@ -115,12 +115,14 @@ func NewMVCCIncrementalIterator(
 	if !opts.IterOptions.MinTimestampHint.IsEmpty() && !opts.IterOptions.MaxTimestampHint.IsEmpty() {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
-		iter = reader.NewIterator(IterOptions{
+		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			UpperBound: opts.IterOptions.UpperBound,
 		})
-		timeBoundIter = reader.NewIterator(opts.IterOptions)
+		// The timeBoundIter is only required to see versioned keys, since the
+		// intents will be found by iter.
+		timeBoundIter = reader.NewMVCCIterator(MVCCKeyIterKind, opts.IterOptions)
 	} else {
-		iter = reader.NewIterator(opts.IterOptions)
+		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts.IterOptions)
 	}
 
 	return &MVCCIncrementalIterator{

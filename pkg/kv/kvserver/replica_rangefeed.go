@@ -201,7 +201,7 @@ func (r *Replica) RangeFeed(
 	if usingCatchupIter {
 		catchUpIterFunc = func() storage.SimpleMVCCIterator {
 
-			innerIter := r.Engine().NewIterator(storage.IterOptions{
+			innerIter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				UpperBound: args.Span.EndKey,
 				// RangeFeed originally intended to use the time-bound iterator
 				// performance optimization. However, they've had correctness issues in
@@ -347,7 +347,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	// Start it with an iterator to initialize the resolved timestamp.
 	rtsIter := func() storage.SimpleMVCCIterator {
-		return r.Engine().NewIterator(storage.IterOptions{
+		return r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: desc.EndKey.AsRawKey(),
 			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
 			// we should periodically persist the resolved timestamp so that we

@@ -283,13 +283,11 @@ type Reader interface {
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	// TODO(sumeer): add MVCCIterKind parameter.
 	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error) error
-	// NewIterator returns a new instance of an MVCCIterator over this
+	// NewMVCCIterator returns a new instance of an MVCCIterator over this
 	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
-	// TODO(sumeer): add MVCCIterKind parameter and rename to NewMVCCIterator.
-	NewIterator(opts IterOptions) MVCCIterator
+	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
 }
 
 // Writer is the write interface to an engine's data.
@@ -664,7 +662,7 @@ func WriteSyncNoop(ctx context.Context, eng Engine) error {
 // (exclusive). Depending on the number of keys, it will either use ClearRange
 // or ClearIterRange.
 func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Key) error {
-	iter := reader.NewIterator(IterOptions{UpperBound: end})
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same
@@ -774,7 +772,9 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.
 }
 
 // Helper function to implement Reader.MVCCIterate().
-func iterateOnReader(reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) error) error {
+func iterateOnReader(
+	reader Reader, start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+) error {
 	if reader.Closed() {
 		return errors.New("cannot call MVCCIterate on a closed batch")
 	}
@@ -782,7 +782,7 @@ func iterateOnReader(reader Reader, start, end roachpb.Key, f func(MVCCKeyValue)
 		return nil
 	}
 
-	it := reader.NewIterator(IterOptions{UpperBound: end})
+	it := reader.NewMVCCIterator(iterKind, IterOptions{UpperBound: end})
 	defer it.Close()
 
 	it.SeekGE(MakeMVCCMetadataKey(start))

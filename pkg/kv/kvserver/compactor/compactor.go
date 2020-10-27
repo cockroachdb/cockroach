@@ -286,7 +286,10 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 func (c *Compactor) fetchSuggestions(
 	ctx context.Context,
 ) (suggestions []kvserverpb.SuggestedCompaction, totalBytes int64, err error) {
-	dataIter := c.eng.NewIterator(storage.IterOptions{
+	// dataIter is only used to confirm that a suggested compaction range has no
+	// keys that can be read from the store, so it is sufficient to ignore
+	// intents (if there is an intent, there must also be a provisional value).
+	dataIter := c.eng.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		UpperBound: roachpb.KeyMax, // refined before every seek
 	})
 	defer dataIter.Close()
