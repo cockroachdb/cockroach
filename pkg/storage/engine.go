@@ -170,14 +170,15 @@ type EngineIterator interface {
 	SetUpperBound(roachpb.Key)
 }
 
-// IterOptions contains options used to create an MVCCIterator.
+// IterOptions contains options used to create an {MVCC,Engine}Iterator.
 //
-// For performance, every MVCCIterator must specify either Prefix or UpperBound.
+// For performance, every {MVCC,Engine}Iterator must specify either Prefix or
+// UpperBound.
 type IterOptions struct {
-	// If Prefix is true, Seek will use the user-key prefix of
-	// the supplied MVCC key to restrict which sstables are searched,
-	// but iteration (using Next) over keys without the same user-key
-	// prefix will not work correctly (keys may be skipped).
+	// If Prefix is true, Seek will use the user-key prefix of the supplied
+	// {MVCC,Engine}Key (the Key field) to restrict which sstables are searched,
+	// but iteration (using Next) over keys without the same user-key prefix
+	// will not work correctly (keys may be skipped).
 	Prefix bool
 	// LowerBound gives this iterator an inclusive lower bound. Attempts to
 	// SeekReverse or Prev to a key that is strictly less than the bound will
@@ -188,7 +189,7 @@ type IterOptions struct {
 	// the iterator. UpperBound must be provided unless Prefix is true, in which
 	// case the end of the prefix will be used as the upper bound.
 	UpperBound roachpb.Key
-	// If WithStats is true, the iterator accumulates RocksDB performance
+	// If WithStats is true, the iterator accumulates performance
 	// counters over its lifetime which can be queried via `Stats()`.
 	WithStats bool
 	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
@@ -201,8 +202,27 @@ type IterOptions struct {
 	// iterators with time bounds hints will frequently return keys outside of the
 	// [start, end] time range. If you must guarantee that you never see a key
 	// outside of the time bounds, perform your own filtering.
+	//
+	// These fields are only relevant for MVCCIterators.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
+
+// MVCCIterKind is used to inform Reader about the kind of iteration desired
+// by the caller.
+//lint:ignore U1001 unused
+type MVCCIterKind int
+
+const (
+	// MVCCKeyAndIntentsIterKind specifies that intents must be seen, and appear
+	// interleaved with keys, even if they are in a separated lock table.
+	//lint:ignore U1001 unused
+	MVCCKeyAndIntentsIterKind MVCCIterKind = iota
+	// MVCCKeyIterKind specifies that the caller does not need to see intents.
+	// Any interleaved intents may be seen, but no correctness properties are
+	// derivable from such partial knowledge of intents.
+	//lint:ignore U1001 unused
+	MVCCKeyIterKind
+)
 
 // Reader is the read interface to an engine's data.
 type Reader interface {
@@ -216,7 +236,7 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// ExportToSst exports changes to the keyrange [startKey, endKey) over the
+	// ExportMVCCToSst exports changes to the keyrange [startKey, endKey) over the
 	// interval (startTS, endTS]. Passing exportAllRevisions exports
 	// every revision of a key for the interval, otherwise only the latest value
 	// within the interval is exported. Deletions are included if all revisions are
@@ -233,33 +253,38 @@ type Reader interface {
 	// returned sst. If it is the case that the versions of the last key will lead
 	// to an SST that exceeds maxSize, an error will be returned. This parameter
 	// exists to prevent creating SSTs which are too large to be used.
-	ExportToSst(
+	//
+	// This function looks at MVCC versions and intents, and returns an error if an
+	// intent is found.
+	ExportMVCCToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
 		exportAllRevisions bool, targetSize uint64, maxSize uint64,
 		io IterOptions,
 	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
 	// Get returns the value for the given key, nil otherwise.
 	//
-	// Deprecated: use MVCCGet instead.
-	Get(key MVCCKey) ([]byte, error)
-	// GetProto fetches the value at the specified key and unmarshals it
+	// Deprecated: use storage.MVCCGet instead.
+	MVCCGet(key MVCCKey) ([]byte, error)
+	// MVCCGetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value.
 	//
 	// Deprecated: use MVCCIterator.ValueProto instead.
-	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
-	// Iterate scans from the start key to the end key (exclusive), invoking the
+	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
+	// MVCCIterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan
 	// itself encounters an error, the iteration will stop and return the error.
 	// If the first result of f is true, the iteration stops and returns a nil
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error
+	// TODO(sumeer): add MVCCIterKind parameter.
+	MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error
 	// NewIterator returns a new instance of an MVCCIterator over this
 	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
+	// TODO(sumeer): add MVCCIterKind parameter and rename to NewMVCCIterator.
 	NewIterator(opts IterOptions) MVCCIterator
 }
 
@@ -606,7 +631,7 @@ func PutProto(
 // Specify max=0 for unbounded scans.
 func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.Iterate(start, end, func(kv MVCCKeyValue) error {
+	err := reader.MVCCIterate(start, end, func(kv MVCCKeyValue) error {
 		if max != 0 && int64(len(kvs)) >= max {
 			return iterutil.StopIteration()
 		}
@@ -744,10 +769,10 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.
 	return 0
 }
 
-// Helper function to implement Reader.Iterate().
+// Helper function to implement Reader.MVCCIterate().
 func iterateOnReader(reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) error) error {
 	if reader.Closed() {
-		return errors.New("cannot call Iterate on a closed batch")
+		return errors.New("cannot call MVCCIterate on a closed batch")
 	}
 	if start.Compare(end) >= 0 {
 		return nil
