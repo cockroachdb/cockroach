@@ -1090,6 +1090,11 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 
 	newSchemaChangeJobs := make([]*jobs.StartableJob, 0)
 	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// createdSchemaChangeJobs is scoped inside this callback so that the
+		// callback remains idempotent. It needs to be idempotent since the
+		// transaction that we're in could be retried. In particular, we want to
+		// avoid reading any writes to external state (e.g. newSchemaChangeJobs).
+		createdSchemaChangeJobs := make([]*jobs.StartableJob, 0)
 		// Write the new TableDescriptors and flip state over to public so they can be
 		// accessed.
 		b := txn.NewBatch()
@@ -1104,7 +1109,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			newSchemaChangeJobs = append(newSchemaChangeJobs, newJobs...)
+			createdSchemaChangeJobs = append(createdSchemaChangeJobs, newJobs...)
 			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
 			if err != nil {
 				return errors.Wrapf(err, "validating table descriptor has not changed, expected: %v", tbl)
@@ -1115,6 +1120,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 				existingDescVal,
 			)
 			newTables = append(newTables, &tableDesc)
+			newSchemaChangeJobs = createdSchemaChangeJobs
 		}
 
 		if err := txn.Run(ctx, b); err != nil {
