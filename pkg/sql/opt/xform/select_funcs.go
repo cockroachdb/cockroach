@@ -1704,9 +1704,10 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 	for i := 0; i < tabMeta.Table.IndexCount(); i++ {
 		index := tabMeta.Table.Index(i)
 		for j, n := 0, index.KeyColumnCount(); j < n; j++ {
-			ord := index.Column(j).Ordinal()
-			if j == 0 && index.IsInverted() {
-				ord = index.Column(j).InvertedSourceColumnOrdinal()
+			col := index.Column(j)
+			ord := col.Ordinal()
+			if col.Kind() == cat.VirtualInverted {
+				ord = col.InvertedSourceColumnOrdinal()
 			}
 			if cols.Contains(tabMeta.MetaID.ColumnID(ord)) {
 				return true
