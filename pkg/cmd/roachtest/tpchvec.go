@@ -75,20 +75,7 @@ var queriesToSkipByVersion = map[crdbVersion]map[int]string{
 	},
 }
 
-// getSlownessThreshold returns the threshold at which we fail the test if vec
-// ON is slower that vec OFF, meaning that if
-//   vec_on_time >= slownessThreshold * vec_off_time
-// the test is failed. This will help catch any regressions.
-func getSlownessThreshold(version crdbVersion) float64 {
-	switch version {
-	// Note that for 19.2 version the threshold is higher in order to reduce
-	// the noise.
-	case tpchVecVersion19_2:
-		return 1.5
-	default:
-		return 1.2
-	}
-}
+const tpchVecPerfSlownessThreshold = 1.5
 
 var tpchTables = []string{
 	"nation", "region", "part", "supplier",
@@ -324,7 +311,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
 					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
 		}
-		if vecOnTime >= getSlownessThreshold(version)*vecOffTime {
+		if vecOnTime >= tpchVecPerfSlownessThreshold*vecOffTime {
 			// For some reason, the vectorized engine executed the query a lot
 			// slower than the row-by-row engine which is unexpected. In order
 			// to understand where the slowness comes from, we will run EXPLAIN
