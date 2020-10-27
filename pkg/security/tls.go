@@ -63,7 +63,14 @@ func newServerTLSConfig(
 	cfg.ClientAuth = tls.VerifyClientCertIfGiven
 
 	if len(caClientPEMs) != 0 {
-		certPool := x509.NewCertPool()
+		// cfg.ClientCAs is hopefully already populated with a cert pool
+		// containing the main caPEM, if caPEM is not nil. If already there,
+		// we reuse it.
+		certPool := cfg.ClientCAs
+		if certPool == nil {
+			// Otherwise we create a new one.
+			certPool = x509.NewCertPool()
+		}
 		for _, pem := range caClientPEMs {
 			if !certPool.AppendCertsFromPEM(pem) {
 				return nil, errors.Errorf("failed to parse client CA PEM data to pool")

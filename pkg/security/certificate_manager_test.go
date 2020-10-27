@@ -49,7 +49,7 @@ func TestManagerWithEmbedded(t *testing.T) {
 	}
 
 	// Verify that we can build tls.Config objects.
-	if _, err := cm.GetServerTLSConfig(); err != nil {
+	if _, err := cm.GetNodeToNodeServerTLSConfig(); err != nil {
 		t.Error(err)
 	}
 	if _, err := cm.GetClientTLSConfig(security.NodeUser); err != nil {

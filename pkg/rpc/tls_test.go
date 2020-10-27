@@ -43,10 +43,8 @@ func TestClientSSLSettings(t *testing.T) {
 	}{
 		{true, false, security.NodeUser, "http", "", true, false},
 		{true, true, "not-a-user", "http", "", true, false},
-		{false, true, "not-a-user", "https", clientCertNotFound, true, false},
 		{false, false, security.NodeUser, "https", certDirNotFound, false, true},
 		{false, true, security.NodeUser, "https", "", false, false},
-		{false, true, "bad-user", "https", clientCertNotFound, false, false},
 	}
 
 	for _, tc := range testCases {
@@ -72,7 +70,7 @@ func TestClientSSLSettings(t *testing.T) {
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
 				t.Fatalf("expected HTTPRequestScheme=%s, got: %s", tc.requestScheme, cfg.HTTPRequestScheme())
 			}
-			tlsConfig, err := rpcContext.GetClientTLSConfig()
+			tlsConfig, err := rpcContext.GetNodeToNodeClientTLSConfig()
 			if !testutils.IsError(err, tc.configErr) {
 				t.Fatalf("expected err=%s, got err=%v", tc.configErr, err)
 			}
@@ -128,7 +126,7 @@ func TestServerSSLSettings(t *testing.T) {
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
 				t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
 			}
-			tlsConfig, err := rpcContext.GetServerTLSConfig()
+			tlsConfig, err := rpcContext.GetNodeToNodeServerTLSConfig()
 			if (err == nil) != tc.configSuccess {
 				t.Fatalf("#%d: expected GetServerTLSConfig success=%t, got err=%v", tcNum, tc.configSuccess, err)
 			}
