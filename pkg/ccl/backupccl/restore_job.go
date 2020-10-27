@@ -122,7 +122,7 @@ func makeImportSpans(
 	backups []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	lowWaterMark roachpb.Key,
-	user string,
+	user security.SQLUsername,
 	onMissing func(span covering.Range, start, end hlc.Timestamp) error,
 ) ([]execinfrapb.RestoreSpanEntry, hlc.Timestamp, error) {
 	// Put the covering for the already-completed spans into the
@@ -282,7 +282,7 @@ rangeLoop:
 func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
-	user string,
+	user security.SQLUsername,
 	descsCol *descs.Collection,
 	databases []catalog.DatabaseDescriptor,
 	schemas []catalog.SchemaDescriptor,
@@ -872,7 +872,7 @@ func createImportingDescriptors(
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		tempSystemDBID := getTempSystemDBID(details)
 		databases = append(databases, dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
-			security.AdminRole))
+			security.AdminRoleName()))
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
@@ -1376,7 +1376,7 @@ func (r *restoreResumer) publishDescriptors(
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
 			newJobs, err := createSchemaChangeJobsFromMutations(ctx,
-				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, mutTable)
+				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), mutTable)
 			if err != nil {
 				return newDescriptorChangeJobs, err
 			}
@@ -1396,7 +1396,7 @@ func (r *restoreResumer) publishDescriptors(
 		allMutDescs = append(allMutDescs, typ)
 		newTypes = append(newTypes, typ.TypeDesc())
 		if typ.HasPendingSchemaChanges() && details.DescriptorCoverage != tree.AllDescriptors {
-			typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, typ)
+			typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), typ)
 			if err != nil {
 				return newDescriptorChangeJobs, err
 			}
@@ -1590,7 +1590,7 @@ func (r *restoreResumer) dropDescriptors(
 	}
 	gcJobRecord := jobs.Record{
 		Description:   fmt.Sprintf("GC for %s", r.job.Payload().Description),
-		Username:      r.job.Payload().Username,
+		Username:      r.job.Payload().UsernameProto.Decode(),
 		DescriptorIDs: tablesToGC,
 		Details:       gcDetails,
 		Progress:      jobspb.SchemaChangeGCProgress{},
@@ -1774,7 +1774,7 @@ func getRestoringPrivileges(
 	ctx context.Context,
 	txn *kv.Txn,
 	desc catalog.Descriptor,
-	user string,
+	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
 ) (*descpb.PrivilegeDescriptor, error) {

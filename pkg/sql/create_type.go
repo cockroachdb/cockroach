@@ -59,7 +59,7 @@ func resolveNewTypeName(
 	params runParams, name *tree.UnresolvedObjectName,
 ) (*tree.TypeName, catalog.DatabaseDescriptor, error) {
 	// Resolve the target schema and database.
-	db, prefix, err := params.p.ResolveTargetObject(params.ctx, name)
+	db, _, prefix, err := params.p.ResolveTargetObject(params.ctx, name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -339,7 +339,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 			TypeName  string
 			Statement string
 			User      string
-		}{typeName.FQString(), tree.AsStringWithFQNames(n, params.Ann()), p.User()},
+		}{typeName.FQString(), tree.AsStringWithFQNames(n, params.Ann()), p.User().Normalized()},
 	)
 }
 
@@ -359,7 +359,7 @@ func inheritUsagePrivilegeFromSchema(
 	switch resolvedSchema.Kind {
 	case catalog.SchemaPublic:
 		// If the type is in the public schema, the public role has USAGE on it.
-		privs.Grant(security.PublicRole, privilege.List{privilege.USAGE})
+		privs.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE})
 	case catalog.SchemaTemporary, catalog.SchemaVirtual:
 		// No types should be created in a temporary schema or a virtual schema.
 		panic(errors.AssertionFailedf(
@@ -373,7 +373,7 @@ func inheritUsagePrivilegeFromSchema(
 		// privilege descriptor.
 		for _, u := range schemaPrivs.Users {
 			if u.Privileges&privilege.USAGE.Mask() == 1 {
-				privs.Grant(u.User, privilege.List{privilege.USAGE})
+				privs.Grant(u.User(), privilege.List{privilege.USAGE})
 			}
 		}
 	default:

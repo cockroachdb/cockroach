@@ -106,7 +106,7 @@ func TestAntagonisticRead(t *testing.T) {
 	}()
 
 	gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/region.tbl?AUTH=implicit"
-	conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, security.RootUser)
+	conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, security.RootUserName())
 	require.NoError(t, err)
 
 	s, err := cloudimpl.MakeExternalStorage(
@@ -129,7 +129,7 @@ func TestFileDoesNotExist(t *testing.T) {
 		// This test requires valid GS credential file.
 		skip.IgnoreLint(t, "GOOGLE_APPLICATION_CREDENTIALS env var must be set")
 	}
-	user := security.RootUser
+	user := security.RootUserName()
 
 	{
 		// Invalid gsFile.

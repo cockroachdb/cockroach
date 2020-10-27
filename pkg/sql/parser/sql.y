@@ -31,6 +31,7 @@ import (
 
     "github.com/cockroachdb/cockroach/pkg/geo/geopb"
     "github.com/cockroachdb/cockroach/pkg/roachpb"
+    "github.com/cockroachdb/cockroach/pkg/security"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -140,6 +141,12 @@ func (u *sqlSymUnion) strPtr() *string {
 }
 func (u *sqlSymUnion) strs() []string {
     return u.val.([]string)
+}
+func (u *sqlSymUnion) user() security.SQLUsername {
+    return u.val.(security.SQLUsername)
+}
+func (u *sqlSymUnion) users() []security.SQLUsername {
+    return u.val.([]security.SQLUsername)
 }
 func (u *sqlSymUnion) newTableIndexName() *tree.TableIndexName {
     tn := u.val.(tree.TableIndexName)
@@ -1123,8 +1130,11 @@ func (u *sqlSymUnion) survive() tree.Survive {
 %type <str> unrestricted_name type_function_name type_function_name_no_crdb_extra
 %type <str> non_reserved_word
 %type <str> non_reserved_word_or_sconst
-%type <str> role_spec
-%type <[]string> role_spec_list
+%type <security.SQLUsername> username_or_sconst
+// TODO(solon): The type for role_spec needs to be updated to fix
+// https://github.com/cockroachdb/cockroach/issues/54696
+%type <security.SQLUsername> role_spec
+%type <[]security.SQLUsername> role_spec_list
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
@@ -1455,10 +1465,10 @@ alter_database_stmt:
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
 
 alter_database_owner:
-	ALTER DATABASE database_name OWNER TO role_spec
-	{
-		$$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: tree.Name($6)}
-	}
+  ALTER DATABASE database_name OWNER TO role_spec
+  {
+    $$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6.user()}
+  }
 
 alter_database_add_region_stmt:
   ALTER DATABASE database_name ADD region_or_regions name_list
@@ -1978,7 +1988,7 @@ alter_table_cmd:
 | OWNER TO role_spec
   {
     $$.val = &tree.AlterTableOwner{
-      Owner: tree.Name($3),
+      Owner: $3.user(),
     }
   }
 
@@ -2124,7 +2134,7 @@ alter_type_stmt:
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeOwner{
-        Owner: tree.Name($6),
+        Owner: $6.user(),
       },
     }
   }
@@ -2159,18 +2169,44 @@ opt_add_val_placement:
   }
 
 role_spec_list:
-	role_spec {
-		$$.val = []string{$1}
-	}
+  role_spec
+  {
+    $$.val = []security.SQLUsername{$1.user()}
+  }
 | role_spec_list ',' role_spec
-	{
-		$$.val = append($1.strs(), $3)
-	}
+  {
+    $$.val = append($1.users(), $3.user())
+  }
 
 role_spec:
-  non_reserved_word_or_sconst
+  username_or_sconst { $$.val = $1.user() }
 | CURRENT_USER
+  {
+   // This is incorrect, see https://github.com/cockroachdb/cockroach/issues/54696
+   $$.val = security.MakeSQLUsernameFromPreNormalizedString($1)
+  }
 | SESSION_USER
+  {
+   // This is incorrect, see https://github.com/cockroachdb/cockroach/issues/54696
+     $$.val = security.MakeSQLUsernameFromPreNormalizedString($1)
+  }
+
+username_or_sconst:
+  non_reserved_word
+  {
+    // Username was entered as a SQL keyword, or as a SQL identifier
+    // already subject to case normalization and NFC reduction.
+    // (or is it? In fact, there is a bug here: https://github.com/cockroachdb/cockroach/issues/55396
+    // which needs to be fixed to make this fully correct.)
+    $$.val = security.MakeSQLUsernameFromPreNormalizedString($1)
+  }
+| SCONST
+  {
+    // We use UsernameValidation because username_or_sconst and role_spec
+    // are only used for usernames of existing accounts, not when
+    // creating new users or roles.	
+    $$.val, _ = security.MakeSQLUsernameFromUserInput($1, security.UsernameValidation)
+  }
 
 alter_attribute_action_list:
   alter_attribute_action
@@ -4136,7 +4172,7 @@ set_rest_more:
     /* SKIP DOC */
     $$.val = &tree.SetSessionAuthorizationDefault{}
   }
-| SESSION AUTHORIZATION non_reserved_word_or_sconst
+| SESSION AUTHORIZATION username_or_sconst
   {
     return unimplementedWithIssue(sqllex, 40283)
   }
@@ -5455,7 +5491,7 @@ create_schema_stmt:
   {
     $$.val = &tree.CreateSchema{
       Schema: tree.Name($3),
-      AuthRole: $5,
+      AuthRole: $5.user(),
     }
   }
 | CREATE SCHEMA IF NOT EXISTS opt_schema_name AUTHORIZATION role_spec
@@ -5463,7 +5499,7 @@ create_schema_stmt:
     $$.val = &tree.CreateSchema{
       Schema: tree.Name($6),
       IfNotExists: true,
-      AuthRole: $8,
+      AuthRole: $8.user(),
     }
   }
 | CREATE SCHEMA error // SHOW HELP: CREATE SCHEMA
@@ -5490,7 +5526,7 @@ alter_schema_stmt:
     $$.val = &tree.AlterSchema{
       Schema: tree.Name($3),
       Cmd: &tree.AlterSchemaOwner{
-        Owner: tree.Name($6),
+        Owner: $6.user(),
       },
     }
   }
@@ -7836,13 +7872,13 @@ multiple_set_clause:
 // TO {<name> | CURRENT_USER | SESSION_USER}
 // %SeeAlso: DROP OWNED BY
 reassign_owned_by_stmt:
-	REASSIGN OWNED BY role_spec_list TO role_spec
-{
-	$$.val = &tree.ReassignOwnedBy{
-      OldRoles: $4.strs(),
-      NewRole: $6,
-	}
-}
+  REASSIGN OWNED BY role_spec_list TO role_spec
+  {
+    $$.val = &tree.ReassignOwnedBy{
+      OldRoles: $4.users(),
+      NewRole: $6.user(),
+    }
+  }
 | REASSIGN OWNED BY error // SHOW HELP: REASSIGN OWNED BY
 
 // %Help: DROP OWNED BY - remove database objects owned by role(s).
@@ -7851,13 +7887,13 @@ reassign_owned_by_stmt:
 // [RESTRICT | CASCADE]
 // %SeeAlso: REASSIGN OWNED BY
 drop_owned_by_stmt:
-	DROP OWNED BY role_spec_list opt_drop_behavior
-{
-	$$.val = &tree.DropOwnedBy{
-      Roles: $4.strs(),
+  DROP OWNED BY role_spec_list opt_drop_behavior
+  {
+    $$.val = &tree.DropOwnedBy{
+      Roles: $4.users(),
       DropBehavior: $5.dropBehavior(),
-	}
-}
+    }
+  }
 | DROP OWNED BY error // SHOW HELP: DROP OWNED BY
 
 // A complete SELECT statement looks like this.

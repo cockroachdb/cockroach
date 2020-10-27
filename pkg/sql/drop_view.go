@@ -111,7 +111,7 @@ func (n *dropViewNode) startExec(params runParams) error {
 				Statement           string
 				User                string
 				CascadeDroppedViews []string
-			}{toDel.tn.FQString(), n.n.String(), params.SessionData().User, cascadeDroppedViews},
+			}{toDel.tn.FQString(), n.n.String(), params.p.User().Normalized(), cascadeDroppedViews},
 		); err != nil {
 			return err
 		}

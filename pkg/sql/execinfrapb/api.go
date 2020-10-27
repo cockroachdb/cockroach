@@ -11,6 +11,7 @@
 package execinfrapb
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -40,4 +41,29 @@ func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 		StmtTimestampNanos: evalCtx.StmtTimestamp.UnixNano(),
 		TxnTimestampNanos:  evalCtx.TxnTimestamp.UnixNano(),
 	}
+}
+
+// User accesses the user field.
+func (m *BackupDataSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *CSVWriterSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *ReadImportDataSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *ChangeAggregatorSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
+}
+
+// User accesses the user field.
+func (m *ChangeFrontierSpec) User() security.SQLUsername {
+	return m.UserProto.Decode()
 }

@@ -51,7 +51,7 @@ func authGSS(
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
-	return func(requestedUser string, clientConnection bool) (func(), error) {
+	return func(requestedUser security.SQLUsername, clientConnection bool) (func(), error) {
 		var (
 			majStat, minStat, lminS, gflags C.OM_uint32
 			gbuf                            C.gss_buffer_desc
@@ -153,7 +153,8 @@ func authGSS(
 			return connClose, errors.New("GSSAPI did not return realm but realm matching was requested")
 		}
 
-		if !strings.EqualFold(gssUser, requestedUser) {
+		gssUsername, _ := security.MakeSQLUsernameFromUserInput(gssUser, security.UsernameValidation)
+		if gssUsername != requestedUser {
 			return connClose, errors.Errorf("requested user is %s, but GSSAPI auth is for %s", requestedUser, gssUser)
 		}
 

@@ -80,7 +80,10 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 			SequenceName string
 			Statement    string
 			User         string
-		}{params.p.ResolvedName(n.n.Name).FQString(), n.n.String(), params.SessionData().User},
+		}{
+			params.p.ResolvedName(n.n.Name).FQString(),
+			n.n.String(),
+			params.SessionData().User().Normalized()},
 	)
 }
 

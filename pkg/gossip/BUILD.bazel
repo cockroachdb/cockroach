@@ -89,7 +89,6 @@ go_test(
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/google.golang.org/grpc",
     ],
 )

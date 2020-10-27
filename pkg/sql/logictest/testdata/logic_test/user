@@ -50,10 +50,10 @@ CREATE USER uSEr2 WITH PASSWORD 'cockroach'
 statement ok
 CREATE USER user3 WITH PASSWORD '蟑螂'
 
-statement error pq: username "foo☂" invalid
+statement error pq: "foo☂": username is invalid
 CREATE USER foo☂
 
-statement error pq: username "-foo" invalid
+statement error pq: "-foo": username is invalid
 CREATE USER "-foo"
 
 statement error at or near "-": syntax error

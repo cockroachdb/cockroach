@@ -217,7 +217,7 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (re
 		// Check if there's already a pending request for this fingerprint.
 		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
 			sessiondata.InternalExecutorOverride{
-				User: security.RootUser,
+				User: security.RootUserName(),
 			},
 			"SELECT count(1) FROM system.statement_diagnostics_requests "+
 				"WHERE completed = false AND statement_fingerprint = $1",
@@ -232,7 +232,7 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (re
 
 		row, err = r.ie.QueryRowEx(ctx, "stmt-diag-insert-request", txn,
 			sessiondata.InternalExecutorOverride{
-				User: security.RootUser,
+				User: security.RootUserName(),
 			},
 			"INSERT INTO system.statement_diagnostics_requests (statement_fingerprint, requested_at) "+
 				"VALUES ($1, $2) RETURNING id",
@@ -385,7 +385,7 @@ func (r *Registry) insertStatementDiagnostics(
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if requestID != 0 {
 			row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-completed", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
 				requestID)
 			if err != nil {
@@ -418,7 +418,7 @@ func (r *Registry) insertStatementDiagnostics(
 			// Insert the chunk into system.statement_bundle_chunks.
 			row, err := r.ie.QueryRowEx(
 				ctx, "stmt-bundle-chunks-insert", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
 				"statement diagnostics bundle",
 				tree.NewDBytes(tree.DBytes(chunk)),
@@ -437,7 +437,7 @@ func (r *Registry) insertStatementDiagnostics(
 		// Insert the trace into system.statement_diagnostics.
 		row, err := r.ie.QueryRowEx(
 			ctx, "stmt-diag-insert", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"INSERT INTO system.statement_diagnostics "+
 				"(statement_fingerprint, statement, collected_at, trace, bundle_chunks, error) "+
 				"VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
@@ -451,7 +451,7 @@ func (r *Registry) insertStatementDiagnostics(
 		if requestID != 0 {
 			// Mark the request from system.statement_diagnostics_request as completed.
 			_, err := r.ie.ExecEx(ctx, "stmt-diag-mark-completed", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"UPDATE system.statement_diagnostics_requests "+
 					"SET completed = true, statement_diagnostics_id = $1 WHERE id = $2",
 				diagID, requestID)
@@ -463,7 +463,7 @@ func (r *Registry) insertStatementDiagnostics(
 			// This is necessary because the UI uses this table to discover completed
 			// diagnostics.
 			_, err := r.ie.ExecEx(ctx, "stmt-diag-add-completed", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"INSERT INTO system.statement_diagnostics_requests"+
 					" (completed, statement_fingerprint, statement_diagnostics_id, requested_at)"+
 					" VALUES (true, $1, $2, $3)",
@@ -493,7 +493,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		var err error
 		rows, err = r.ie.QueryEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
-				User: security.RootUser,
+				User: security.RootUserName(),
 			},
 			"SELECT id, statement_fingerprint FROM system.statement_diagnostics_requests "+
 				"WHERE completed = false")

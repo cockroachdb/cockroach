@@ -69,7 +69,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
 				if _, err := s.sqlServer.internalExecutor.ExecEx(
 					ctx, "set-version", nil, /* txn */
-					sessiondata.InternalExecutorOverride{User: security.RootUser},
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
 				); err != nil {
 					log.Infof(ctx, "error when finalizing cluster version upgrade: %s", err)
@@ -142,7 +142,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	// SET CLUSTER SETTING.
 	datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "read-downgrade", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
 	)
 	if err != nil {
@@ -167,7 +167,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 func (s *Server) clusterVersion(ctx context.Context) (string, error) {
 	datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "show-version", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SHOW CLUSTER SETTING version;",
 	)
 	if err != nil {

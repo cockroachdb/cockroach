@@ -569,3 +569,32 @@ SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
 ----
 CREATE
 USAGE
+
+# Verify that a table can be renamed with a schema prefixes
+subtest alter_table_rename
+
+user root
+
+statement ok
+CREATE SCHEMA sch;
+CREATE TABLE sch.table_to_rename();
+CREATE TABLE sch.table_exists();
+CREATE TABLE public_table_to_rename();
+CREATE TABLE public_table_exists();
+
+statement ok
+ALTER TABLE sch.table_to_rename RENAME TO renamed_table;
+
+statement ok
+ALTER TABLE sch.renamed_table RENAME TO sch.renamed_table_2;
+
+statement error pq: relation "table_exists" already exists
+ALTER TABLE sch.renamed_table_2 RENAME TO sch.table_exists;
+
+statement ok
+ALTER TABLE public_table_to_rename RENAME TO public.renamed_public_table;
+
+statement error pq: relation "public_table_exists" already exists
+ALTER TABLE renamed_public_table RENAME TO public_table_exists;
+
+

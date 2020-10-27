@@ -472,7 +472,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 			MutationID uint32
 		}{
 			n.n.Table.FQString(), indexName, n.n.String(),
-			params.SessionData().User, uint32(mutationID),
+			params.p.User().Normalized(), uint32(mutationID),
 		},
 	)
 }

@@ -1367,6 +1367,8 @@ message ExternalStorage {
 
     // User interacting with the external storage. This is used to check access
     // privileges of the requested user scoped tables.
+    // This field is really of type security.SQLUsername. We can't use
+    // the type directly however because it would create a circular dependency.
     string user = 1;
 
     // QualifiedTableName specifies the database.schema.tablename which the

@@ -47,6 +47,7 @@ go_test(
         "txn_external_test.go",
         "txn_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":kv"],
     deps = [
         "//pkg/base",

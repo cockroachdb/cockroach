@@ -36,7 +36,6 @@ go_test(
     srcs = [
         "bench_test.go",
         "csv_test.go",
-        "dep_test.go",
         "main_test.go",
         "pgx_helpers_test.go",
         "stats_test.go",
@@ -50,7 +49,6 @@ go_test(
         "//pkg/server",
         "//pkg/sql/types",
         "//pkg/testutils",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",

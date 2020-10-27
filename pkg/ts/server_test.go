@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 )
 
@@ -204,7 +203,7 @@ func TestServerQuery(t *testing.T) {
 	for _, r := range response.Results {
 		sort.Strings(r.Sources)
 	}
-	if !proto.Equal(response, expectedResult) {
+	if !response.Equal(expectedResult) {
 		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
 			response, expectedResult)
 	}
@@ -248,7 +247,7 @@ func TestServerQuery(t *testing.T) {
 	for _, r := range response.Results {
 		sort.Strings(r.Sources)
 	}
-	if !proto.Equal(response, expectedResult) {
+	if !response.Equal(expectedResult) {
 		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
 			response, expectedResult)
 	}

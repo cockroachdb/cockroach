@@ -53,6 +53,7 @@ import "gogoproto/gogo.proto";
 // and on-disk savings for our highest resolution data.
 message InternalTimeSeriesData {
   option (gogoproto.populate) = true;
+  option (gogoproto.equal) = true;
 
   // Holds a wall time, expressed as a unix epoch time in nanoseconds. This
   // represents the earliest possible timestamp for a sample within the
@@ -116,6 +117,7 @@ message InternalTimeSeriesData {
 // If the count of measurements is 1, then max and min fields may be omitted
 // and assumed equal to the sum field.
 message InternalTimeSeriesSample {
+  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // Temporal offset from the "start_timestamp" of the InternalTimeSeriesData

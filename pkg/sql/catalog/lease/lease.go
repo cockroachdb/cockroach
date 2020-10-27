@@ -383,7 +383,7 @@ func CountLeases(
 		strings.Join(whereClauses, " OR ")
 	values, err := executor.QueryRowEx(
 		ctx, "count-leases", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		stmt, at.GoTime(),
 	)
 	if err != nil {

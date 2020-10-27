@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -65,7 +66,8 @@ func (t *tenantStatusServer) ListLocalSessions(
 func (t *tenantStatusServer) CancelQuery(
 	ctx context.Context, request *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
-	if err := t.checkCancelPrivilege(ctx, request.Username, findSessionByQueryID(request.QueryID)); err != nil {
+	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
+	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
 		return nil, err
 	}
 	var (
@@ -82,7 +84,8 @@ func (t *tenantStatusServer) CancelQuery(
 func (t *tenantStatusServer) CancelSession(
 	ctx context.Context, request *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
-	if err := t.checkCancelPrivilege(ctx, request.Username, findSessionBySessionID(request.SessionID)); err != nil {
+	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
+	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
 		return nil, err
 	}
 	return t.sessionRegistry.CancelSession(request.SessionID)

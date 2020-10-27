@@ -56,7 +56,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			params.ctx,
 			"set-column-comment",
 			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 			keys.ColumnCommentType,
 			n.tableDesc.ID,
@@ -70,7 +70,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			params.ctx,
 			"delete-column-comment",
 			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 			keys.ColumnCommentType,
 			n.tableDesc.ID,
@@ -96,7 +96,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			n.tableDesc.Name,
 			string(n.n.ColumnItem.ColumnName),
 			n.n.String(),
-			params.SessionData().User,
+			params.p.User().Normalized(),
 			n.n.Comment},
 	)
 }

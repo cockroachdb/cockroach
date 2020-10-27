@@ -29,6 +29,7 @@ go_test(
     srcs = ["hydratedcache_test.go"],
     embed = [":hydratedtables"],
     deps = [
+        "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",
