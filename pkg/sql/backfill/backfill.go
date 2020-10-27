@@ -71,9 +71,6 @@ type ColumnBackfiller struct {
 
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
-	// boundAccount is associated with mon and is used to track allocations during
-	// a column backfill.
-	boundAccount mon.BoundAccount
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
@@ -137,7 +134,6 @@ func (cb *ColumnBackfiller) init(
 		return errors.AssertionFailedf("no memory monitor linked to ColumnBackfiller during init")
 	}
 	cb.mon = mon
-	cb.boundAccount = mon.MakeBoundAccount()
 
 	return cb.fetcher.Init(
 		evalCtx.Context,
@@ -147,7 +143,7 @@ func (cb *ColumnBackfiller) init(
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&cb.alloc,
-		mon,
+		cb.mon,
 		tableArgs,
 	)
 }
@@ -239,7 +235,6 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 func (cb *ColumnBackfiller) Close(ctx context.Context) {
 	cb.fetcher.Close(ctx)
 	if cb.mon != nil {
-		cb.boundAccount.Close(ctx)
 		cb.mon.Stop(ctx)
 	}
 }
