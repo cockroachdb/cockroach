@@ -124,7 +124,7 @@ sort
       │    │    │    │    │    │    │    ├── stats: [rows=30000, distinct(46)=27672.3293, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=0.996222107, null(66)=0]
       │    │    │    │    │    │    │    ├── key: (46)
       │    │    │    │    │    │    │    ├── fd: ()-->(66), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49)
-      │    │    │    │    │    │    │    ├── inner-join (lookup nation@n_rk)
+      │    │    │    │    │    │    │    ├── inner-join (lookup nation@n_rk [as=n1])
       │    │    │    │    │    │    │    │    ├── save-table-name: q8_lookup_join_11
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:55(int!null) n1.n_regionkey:57(int!null) r_regionkey:65(int!null) r_name:66(char!null)
       │    │    │    │    │    │    │    │    ├── key columns: [65] = [57]
@@ -202,7 +202,7 @@ sort
       │    │    │    │    │    │         └── o_custkey:37 = c_custkey:46 [type=bool, outer=(37,46), constraints=(/37: (/NULL - ]; /46: (/NULL - ]), fd=(37)==(46), (46)==(37)]
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── s_suppkey:11 = l_suppkey:21 [type=bool, outer=(11,21), constraints=(/11: (/NULL - ]; /21: (/NULL - ]), fd=(11)==(21), (21)==(11)]
-      │    │    │    │    ├── scan n2
+      │    │    │    │    ├── scan nation [as=n2]
       │    │    │    │    │    ├── save-table-name: q8_scan_19
       │    │    │    │    │    ├── columns: n2.n_nationkey:60(int!null) n2.n_name:61(char!null)
       │    │    │    │    │    ├── stats: [rows=25, distinct(60)=25, null(60)=0, distinct(61)=25, null(61)=0]

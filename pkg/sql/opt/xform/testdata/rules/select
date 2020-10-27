@@ -3268,7 +3268,7 @@ project
       ├── lookup columns are key
       ├── key: (1)
       ├── fd: ()-->(2-5)
-      ├── inner-join (zigzag zz_partial@i zz_partial@j)
+      ├── inner-join (zigzag zz_partial@i,partial zz_partial@j,partial)
       │    ├── columns: k:1!null i:2!null j:3!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [2] = [10]
@@ -3328,7 +3328,7 @@ project
       ├── lookup columns are key
       ├── key: (1)
       ├── fd: ()-->(2-4)
-      ├── inner-join (zigzag zz_partial@i zz_partial@j)
+      ├── inner-join (zigzag zz_partial@i,partial zz_partial@j)
       │    ├── columns: k:1!null i:2!null j:3!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [2] = [10]

@@ -541,10 +541,10 @@ project
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:17(varchar) tab1.f:18("char") tab1.j:22(float!null)
  │    │    │    ├── stats: [rows=333333.333, distinct(5,6,8,17,18)=333333.333, null(5,6,8,17,18)=3.33333333e-05]
- │    │    │    ├── scan tab0
+ │    │    │    ├── scan t37953 [as=tab0]
  │    │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
  │    │    │    │    └── stats: [rows=1000, distinct(5,6,8)=1000, null(5,6,8)=0.001]
- │    │    │    ├── scan tab1
+ │    │    │    ├── scan t37953 [as=tab1]
  │    │    │    │    ├── columns: tab1.e:17(varchar) tab1.f:18("char") tab1.j:22(float!null)
  │    │    │    │    └── stats: [rows=1000, distinct(17,18)=1000, null(17,18)=0.1]
  │    │    │    └── filters

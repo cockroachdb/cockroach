@@ -861,7 +861,7 @@ project
                 ├── columns: r:4!null
                 ├── select
                 │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
-                │    ├── scan x
+                │    ├── scan kv [as=x]
                 │    │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
                 │    └── filters
                 │         └── k:1 = 1
@@ -969,7 +969,7 @@ select
  ├── columns: foo1:1!null moo2:2 moo3:3
  ├── project
  │    ├── columns: moo1:1!null moo2:2 moo3:3
- │    └── scan moo
+ │    └── scan xyz [as=moo]
  │         └── columns: moo1:1!null moo2:2 moo3:3 crdb_internal_mvcc_timestamp:4
  └── filters
       └── moo1:1 < 7
@@ -981,7 +981,7 @@ select
  ├── columns: foo1:1!null moo2:2 moo3:3
  ├── project
  │    ├── columns: moo1:1!null moo2:2 moo3:3
- │    └── scan moo
+ │    └── scan xyz [as=moo]
  │         └── columns: moo1:1!null moo2:2 moo3:3 crdb_internal_mvcc_timestamp:4
  └── filters
       └── moo1:1 < 7
@@ -996,7 +996,7 @@ sort
       ├── columns: moo1:1!null moo2:2 moo3:3
       ├── project
       │    ├── columns: moo1:1!null moo2:2 moo3:3
-      │    └── scan moo
+      │    └── scan xyz [as=moo]
       │         └── columns: moo1:1!null moo2:2 moo3:3 crdb_internal_mvcc_timestamp:4
       └── filters
            └── moo1:1 < 7
@@ -1275,7 +1275,7 @@ SELECT (SELECT akv.k) FROM kv akv
 ----
 project
  ├── columns: k:5
- ├── scan akv
+ ├── scan kv [as=akv]
  │    └── columns: akv.k:1!null v:2 crdb_internal_mvcc_timestamp:3
  └── projections
       └── subquery [as=k:5]
@@ -1334,7 +1334,7 @@ project
  ├── columns: k:8
  ├── inner-join (cross)
  │    ├── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.crdb_internal_mvcc_timestamp:3 t.public.kv.k:4!null t.public.kv.v:5 t.public.kv.crdb_internal_mvcc_timestamp:6
- │    ├── scan db1.public.kv
+ │    ├── scan db1.public.kv [as=kv1]
  │    │    └── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.crdb_internal_mvcc_timestamp:3
  │    ├── scan t.public.kv
  │    │    └── columns: t.public.kv.k:4!null t.public.kv.v:5 t.public.kv.crdb_internal_mvcc_timestamp:6

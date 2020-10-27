@@ -133,23 +133,23 @@ sort
       │    │    ├── columns: c.oid:31!null c.collname:32!null t.oid:39!null typcollation:66!null
       │    │    ├── key: (31,39)
       │    │    ├── fd: (31)-->(32), (39)-->(66)
-      │    │    ├── scan c@pg_collation_name_enc_nsp_index
+      │    │    ├── scan pg_collation@pg_collation_name_enc_nsp_index [as=c]
       │    │    │    ├── columns: c.oid:31!null c.collname:32!null
       │    │    │    ├── key: (31)
       │    │    │    └── fd: (31)-->(32)
-      │    │    ├── scan t
+      │    │    ├── scan pg_type [as=t]
       │    │    │    ├── columns: t.oid:39!null typcollation:66!null
       │    │    │    ├── key: (39)
       │    │    │    └── fd: (39)-->(66)
       │    │    └── filters
       │    │         └── c.oid:31 != typcollation:66 [outer=(31,66), constraints=(/31: (/NULL - ]; /66: (/NULL - ])]
-      │    ├── left-join (lookup pg_attrdef)
+      │    ├── left-join (lookup pg_attrdef [as=d])
       │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:26 adnum:27 adbin:28
       │    │    ├── key columns: [25] = [25]
       │    │    ├── lookup columns are key
       │    │    ├── key: (6)
       │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,26-28), (2)-->(3,6,9,13,20), (27)-->(28)
-      │    │    ├── left-join (lookup pg_attrdef@pg_attrdef_adrelid_adnum_index)
+      │    │    ├── left-join (lookup pg_attrdef@pg_attrdef_adrelid_adnum_index [as=d])
       │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null d.oid:25 adrelid:26 adnum:27
       │    │    │    ├── key columns: [1 6] = [26 27]
       │    │    │    ├── lookup columns are key
@@ -159,7 +159,7 @@ sort
       │    │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null
       │    │    │    │    ├── key: (6)
       │    │    │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20), (2)-->(3,6,9,13,20)
-      │    │    │    │    ├── scan a
+      │    │    │    │    ├── scan pg_attribute [as=a]
       │    │    │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null
       │    │    │    │    │    ├── constraint: /1/6: [/numbers/1 - /numbers]
       │    │    │    │    │    ├── key: (6)
