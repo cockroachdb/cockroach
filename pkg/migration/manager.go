@@ -24,11 +24,13 @@ package migration
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -65,8 +67,10 @@ type Migration func(context.Context, *Helper) error
 // Manager is the instance responsible for executing migrations across the
 // cluster.
 type Manager struct {
-	dialer *nodedialer.Dialer
-	nl     nodeLiveness
+	dialer   *nodedialer.Dialer
+	executor *sql.InternalExecutor
+	nl       nodeLiveness
+	db       *kv.DB
 }
 
 // Helper captures all the primitives required to fully specify a migration.
@@ -84,11 +88,15 @@ type nodeLiveness interface {
 // NewManager constructs a new Manager.
 //
 // TODO(irfansharif): We'll need to eventually plumb in a few things here. We'll
-// need a handle on a lease manager, an internal executor, and a kv.DB.
-func NewManager(dialer *nodedialer.Dialer, nl nodeLiveness) *Manager {
+// need a handle on a lease manager.
+func NewManager(
+	dialer *nodedialer.Dialer, nl nodeLiveness, executor *sql.InternalExecutor, db *kv.DB,
+) *Manager {
 	return &Manager{
-		dialer: dialer,
-		nl:     nl,
+		dialer:   dialer,
+		executor: executor,
+		nl:       nl,
+		db:       db,
 	}
 }
 

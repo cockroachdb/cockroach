@@ -641,7 +641,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		// We only need to attach a version upgrade hook if we're the system
 		// tenant. Regular tenants are disallowed from changing cluster
 		// versions.
-		migrationMgr := migration.NewManager(cfg.nodeDialer, nodeLiveness)
+		migrationMgr := migration.NewManager(
+			cfg.nodeDialer,
+			nodeLiveness,
+			cfg.circularInternalExecutor,
+			cfg.db,
+		)
 		execCfg.VersionUpgradeHook = func(ctx context.Context, targetV roachpb.Version) error {
 			return migrationMgr.MigrateTo(ctx, targetV)
 		}
