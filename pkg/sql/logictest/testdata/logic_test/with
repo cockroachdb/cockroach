@@ -604,3 +604,15 @@ EXECUTE ctestmt (10)
 31
 41
 51
+
+# Test CTE with order-by projection (#55196).
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1,1),(1,2),(2,1),(2,2);
+
+query I rowsort
+WITH cte AS (SELECT x*10+y FROM xy ORDER BY x+y LIMIT 3) SELECT * FROM cte
+----
+11
+12
+21
