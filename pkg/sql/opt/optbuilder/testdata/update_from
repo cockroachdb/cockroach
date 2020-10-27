@@ -25,7 +25,7 @@ update abc
       │    ├── scan abc
       │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7
       │    │    └── ordering: +5
-      │    ├── scan other
+      │    ├── scan abc [as=other]
       │    │    ├── columns: other.a:9!null other.b:10 other.c:11 other.crdb_internal_mvcc_timestamp:12
       │    │    └── ordering: +9
       │    └── filters (true)
@@ -50,7 +50,7 @@ update abc
       │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 other.a:9!null other.b:10 other.c:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13
       │    ├── scan abc
       │    │    └── columns: abc.a:5!null abc.b:6 abc.c:7
-      │    ├── scan other
+      │    ├── scan new_abc [as=other]
       │    │    └── columns: other.a:9 other.b:10 other.c:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13
       │    └── filters
       │         └── abc.a:5 = other.a:9
@@ -97,7 +97,7 @@ update abc
       │    ├── scan abc
       │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7
       │    │    └── ordering: +5
-      │    ├── scan old
+      │    ├── scan abc [as=old]
       │    │    ├── columns: old.a:9!null old.b:10 old.c:11
       │    │    └── ordering: +9
       │    └── filters (true)
@@ -124,7 +124,7 @@ update abc
       │    ├── scan abc
       │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7
       │    │    └── ordering: +5
-      │    ├── scan old
+      │    ├── scan abc [as=old]
       │    │    ├── columns: old.a:9!null old.b:10 old.c:11
       │    │    └── ordering: +9
       │    └── filters (true)
@@ -149,7 +149,7 @@ update abc
       │    ├── scan abc
       │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7
       │    │    └── constraint: /5: [/2 - /2]
-      │    ├── scan old
+      │    ├── scan abc [as=old]
       │    │    ├── columns: old.a:9!null old.b:10 old.c:11 old.crdb_internal_mvcc_timestamp:12
       │    │    └── constraint: /9: [/2 - /2]
       │    └── filters (true)

@@ -921,7 +921,7 @@ with &2 (included_parts)
  │              │    │         ├──  sub_part:6 => sub_part:9
  │              │    │         ├──  part:7 => part:10
  │              │    │         └──  quantity:8 => quantity:11
- │              │    ├── scan p
+ │              │    ├── scan parts [as=p]
  │              │    │    └── columns: p.part:12 p.sub_part:13 p.quantity:14 p.rowid:15!null p.crdb_internal_mvcc_timestamp:16
  │              │    └── filters (true)
  │              └── filters
@@ -972,7 +972,7 @@ with &2 (search_graph)
  │    │    └── columns: g.id:1 g.link:2 g.data:3 "?column?":5 array:6 bool:7
  │    ├── project
  │    │    ├── columns: "?column?":5!null array:6!null bool:7!null g.id:1!null g.link:2 g.data:3
- │    │    ├── scan g
+ │    │    ├── scan graph [as=g]
  │    │    │    └── columns: g.id:1!null g.link:2 g.data:3 crdb_internal_mvcc_timestamp:4
  │    │    └── projections
  │    │         ├── 1 [as="?column?":5]
@@ -984,7 +984,7 @@ with &2 (search_graph)
  │         │    ├── columns: g.id:14!null g.link:15 g.data:16 crdb_internal_mvcc_timestamp:17 id:18 link:19!null data:20 depth:21 path:22 cycle:23!null
  │         │    ├── inner-join (cross)
  │         │    │    ├── columns: g.id:14!null g.link:15 g.data:16 crdb_internal_mvcc_timestamp:17 id:18 link:19 data:20 depth:21 path:22 cycle:23
- │         │    │    ├── scan g
+ │         │    │    ├── scan graph [as=g]
  │         │    │    │    └── columns: g.id:14!null g.link:15 g.data:16 crdb_internal_mvcc_timestamp:17
  │         │    │    ├── with-scan &1 (search_graph)
  │         │    │    │    ├── columns: id:18 link:19 data:20 depth:21 path:22 cycle:23

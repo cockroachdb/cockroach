@@ -1991,7 +1991,7 @@ update partial_indexes
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 UPDATE family SET b=c WHERE a > 100
 ----
-update "family"
+update family
  ├── columns: <none>
  ├── fetch columns: a:7 b:8
  ├── update-mapping:
@@ -2002,7 +2002,7 @@ update "family"
       ├── columns: a:7!null b:8 c:9
       ├── key: (7)
       ├── fd: (7)-->(8,9)
-      ├── scan "family"
+      ├── scan family
       │    ├── columns: a:7!null b:8 c:9
       │    ├── key: (7)
       │    └── fd: (7)-->(8,9)
@@ -2013,7 +2013,7 @@ update "family"
 norm expect-not=(PruneMutationFetchCols)
 UPDATE family SET a=a+1 WHERE a > 100
 ----
-update "family"
+update family
  ├── columns: <none>
  ├── fetch columns: a:7 b:8 c:9 d:10 e:11
  ├── update-mapping:
@@ -2029,7 +2029,7 @@ update "family"
       │    ├── columns: a:7!null b:8 c:9 d:10 e:11
       │    ├── key: (7)
       │    ├── fd: (7)-->(8-11)
-      │    ├── scan "family"
+      │    ├── scan family
       │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8-11)
@@ -2045,7 +2045,7 @@ UPDATE family SET c=c+1 RETURNING b
 project
  ├── columns: b:2
  ├── volatile, mutations
- └── update "family"
+ └── update family
       ├── columns: a:1!null b:2
       ├── fetch columns: a:7 b:8 c:9 d:10
       ├── update-mapping:
@@ -2058,7 +2058,7 @@ project
            ├── immutable
            ├── key: (7)
            ├── fd: (7)-->(8-10), (9)-->(13)
-           ├── scan "family"
+           ├── scan family
            │    ├── columns: a:7!null b:8 c:9 d:10
            │    ├── key: (7)
            │    └── fd: (7)-->(8-10)
@@ -2182,7 +2182,7 @@ upsert a
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 UPSERT INTO family (a, b) VALUES (1, 2)
 ----
-upsert "family"
+upsert family
  ├── columns: <none>
  ├── arbiter indexes: primary
  ├── canary column: a:10
@@ -2214,7 +2214,7 @@ upsert "family"
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(10,11)
-      │    ├── scan "family"
+      │    ├── scan family
       │    │    ├── columns: a:10!null b:11
       │    │    ├── key: (10)
       │    │    └── fd: (10)-->(11)
@@ -2231,7 +2231,7 @@ project
  ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(5)
- └── upsert "family"
+ └── upsert family
       ├── columns: a:1!null e:5
       ├── arbiter indexes: primary
       ├── canary column: a:12
@@ -2273,7 +2273,7 @@ project
            │    │    ├── cardinality: [0 - 1]
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(12,14-16)
-           │    │    ├── scan "family"
+           │    │    ├── scan family
            │    │    │    ├── columns: a:12!null c:14 d:15 e:16
            │    │    │    ├── key: (12)
            │    │    │    └── fd: (12)-->(14-16)
@@ -2290,7 +2290,7 @@ project
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 INSERT INTO family VALUES (1, 2, 3, 4) ON CONFLICT (a) DO UPDATE SET d=10
 ----
-upsert "family"
+upsert family
  ├── columns: <none>
  ├── arbiter indexes: primary
  ├── canary column: a:12
@@ -2327,7 +2327,7 @@ upsert "family"
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(12,14,15)
-      │    │    ├── scan "family"
+      │    │    ├── scan family
       │    │    │    ├── columns: a:12!null c:14 d:15
       │    │    │    ├── key: (12)
       │    │    │    └── fd: (12)-->(14,15)
@@ -2887,7 +2887,7 @@ update abcde
       │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11
       │    ├── key: (7)
       │    └── fd: (7)-->(8-11), (8,9)~~>(7,10,11)
-      ├── scan "family"
+      ├── scan family
       │    ├── columns: "family".a:13!null "family".b:14 "family".c:15
       │    ├── key: (13)
       │    └── fd: (13)-->(14,15)
@@ -2910,7 +2910,7 @@ semi-join (hash)
  │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3), (2,3)~~>(1)
- ├── scan "family"
+ ├── scan family
  │    ├── columns: "family".a:7!null
  │    └── key: (7)
  └── filters
@@ -2929,7 +2929,7 @@ semi-join (hash)
  │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3), (2,3)~~>(1)
- ├── scan "family"
+ ├── scan family
  │    ├── columns: "family".a:7!null "family".b:8 "family".c:9
  │    ├── key: (7)
  │    └── fd: (7)-->(8,9)
@@ -2948,7 +2948,7 @@ anti-join (hash)
  │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3), (2,3)~~>(1)
- ├── scan "family"
+ ├── scan family
  │    ├── columns: "family".a:7!null
  │    └── key: (7)
  └── filters
@@ -2982,7 +2982,7 @@ semi-join-apply
  │    ├── columns: "family".a:7!null
  │    ├── outer: (1)
  │    ├── key: (7)
- │    ├── scan "family"
+ │    ├── scan family
  │    │    ├── columns: "family".a:7!null
  │    │    └── key: (7)
  │    ├── scan a
@@ -3021,7 +3021,7 @@ anti-join-apply
  │    ├── columns: "family".a:7!null
  │    ├── outer: (1)
  │    ├── key: (7)
- │    ├── scan "family"
+ │    ├── scan family
  │    │    ├── columns: "family".a:7!null
  │    │    └── key: (7)
  │    ├── scan a
