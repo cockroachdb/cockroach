@@ -408,6 +408,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
+	if knobs := cfg.TestingKnobs.NodeLiveness; knobs != nil {
+		nlKnobs := knobs.(kvserver.NodeLivenessTestingKnobs)
+		if duration := nlKnobs.LivenessDuration; duration != 0 {
+			nlActive = duration
+		}
+		if duration := nlKnobs.RenewalDuration; duration != 0 {
+			nlRenewal = duration
+		}
+	}
 
 	nodeLiveness := kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,

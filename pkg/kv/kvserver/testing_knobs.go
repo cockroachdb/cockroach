@@ -13,6 +13,7 @@ package kvserver
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -250,3 +251,19 @@ type StoreTestingKnobs struct {
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*StoreTestingKnobs) ModuleTestingKnobs() {}
+
+// NodeLivenessTestingKnobs allows tests to override some node liveness
+// controls. When set, fields ultimately affect the NodeLivenessOptions used by
+// the cluster.
+type NodeLivenessTestingKnobs struct {
+	// LivenessDuration overrides a liveness record's life time.
+	LivenessDuration time.Duration
+	// RenewalDuration specifies how long before the expiration a record is
+	// heartbeated. If LivenessDuration is set, this should probably be set too.
+	RenewalDuration time.Duration
+}
+
+var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (NodeLivenessTestingKnobs) ModuleTestingKnobs() {}
