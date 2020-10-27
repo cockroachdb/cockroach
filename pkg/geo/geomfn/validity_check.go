@@ -72,3 +72,11 @@ func MakeValid(g geo.Geometry) (geo.Geometry, error) {
 	}
 	return geo.ParseGeometryFromEWKB(validEWKB)
 }
+
+func EqualsExact(lhs, rhs geo.Geometry, tolerance float64) bool {
+	equalsExact, err := geos.EqualsExact(lhs.EWKB(), rhs.EWKB(), tolerance)
+	if err != nil {
+		return false
+	}
+	return equalsExact
+}
