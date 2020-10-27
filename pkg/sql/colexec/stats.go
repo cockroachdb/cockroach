@@ -162,7 +162,6 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		vsc.MaxAllocatedMem = 0
 		vsc.MaxAllocatedDisk = 0
 		vsc.NumBatches = 0
-		vsc.BytesRead = 0
 	}
 	tracing.SetSpanStats(span, &vsc.VectorizedStats)
 	span.Finish()
