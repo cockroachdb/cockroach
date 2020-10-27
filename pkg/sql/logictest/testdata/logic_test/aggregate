@@ -853,17 +853,17 @@ VALUES (1, 1.1, 1.1),
        (18, 11.2, 11.2);
 
 query RRR
-select sqrdiff(i), round(sqrdiff(f), 13), sqrdiff(d)
+select round(sqrdiff(i), 21), round(sqrdiff(f), 12), round(sqrdiff(d), 21)
 from ifd
 ----
-206.8333333333333333333334 86.2483333333333 86.24833333333333333333333
+206.833333333333333333333 86.248333333333 86.248333333333333333333
 
 query RRR
-SELECT sqrdiff(i), round(sqrdiff(f), 2), sqrdiff(d)
+SELECT round(sqrdiff(i), 23), round(sqrdiff(f), 2), round(sqrdiff(d), 2)
 FROM ifd
 where i < 10
 ----
-8.666666666666666666666666 1.82 1.82
+8.66666666666666666666667 1.82 1.82
 
 statement ok
 DROP TABLE ifd
