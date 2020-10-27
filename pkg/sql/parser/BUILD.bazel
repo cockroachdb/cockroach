@@ -8,7 +8,7 @@ go_library(
     # during BUILD file re-generation.
     srcs = [
         "help.go",
-        "help_messages.go",
+        "help_messages.go",  # keep
         "lexer.go",
         "parse.go",
         "scan.go",
@@ -41,7 +41,7 @@ go_test(
     name = "parser_test",
     srcs = [
         "help_test.go",
-        "helpmap_test.go",
+        "helpmap_test.go",  # keep
         "lexer_test.go",
         "parse_internal_test.go",
         "parse_test.go",
