@@ -289,11 +289,13 @@ func (s spanSetReader) MVCCIterate(
 	return s.r.MVCCIterate(start, end, iterKind, f)
 }
 
-func (s spanSetReader) NewIterator(opts storage.IterOptions) storage.MVCCIterator {
+func (s spanSetReader) NewMVCCIterator(
+	iterKind storage.MVCCIterKind, opts storage.IterOptions,
+) storage.MVCCIterator {
 	if s.spansOnly {
-		return NewIterator(s.r.NewIterator(opts), s.spans)
+		return NewIterator(s.r.NewMVCCIterator(iterKind, opts), s.spans)
 	}
-	return NewIteratorAt(s.r.NewIterator(opts), s.spans, s.ts)
+	return NewIteratorAt(s.r.NewMVCCIterator(iterKind, opts), s.spans, s.ts)
 }
 
 // GetDBEngine recursively searches for the underlying rocksDB engine.

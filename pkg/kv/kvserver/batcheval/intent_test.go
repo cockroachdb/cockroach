@@ -32,11 +32,13 @@ type instrumentedEngine struct {
 	// ... can be extended ...
 }
 
-func (ie *instrumentedEngine) NewIterator(opts storage.IterOptions) storage.MVCCIterator {
+func (ie *instrumentedEngine) NewMVCCIterator(
+	iterKind storage.MVCCIterKind, opts storage.IterOptions,
+) storage.MVCCIterator {
 	if ie.onNewIterator != nil {
 		ie.onNewIterator(opts)
 	}
-	return ie.Engine.NewIterator(opts)
+	return ie.Engine.NewMVCCIterator(iterKind, opts)
 }
 
 // TestCollectIntentsUsesSameIterator tests that all uses of CollectIntents

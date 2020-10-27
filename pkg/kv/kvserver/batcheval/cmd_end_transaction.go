@@ -442,7 +442,7 @@ func resolveLocalLocks(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	iter := readWriter.NewIterator(storage.IterOptions{
+	iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		UpperBound: desc.EndKey.AsRawKey(),
 	})
 	iterAndBuf := storage.GetBufUsingIter(iter)
@@ -1063,7 +1063,8 @@ func mergeTrigger(
 	ms.Add(merge.RightMVCCStats)
 	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		iter := batch.NewIterator(storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
+		// NB: Range-ID local keys have no versions and no intents.
+		iter := batch.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
 		defer iter.Close()
 		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
