@@ -250,6 +250,111 @@ DROP SCHEMA scdrop1, scdrop2, scdrop3 CASCADE
 query T
 SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'scdrop%'
 
+subtest create_schemas_with_database_prefixes
+
+# Ensure that schemas can be created using with database prefixes
+statement ok
+CREATE DATABASE create_schemas;
+
+statement ok
+CREATE SCHEMA create_schemas.schema1;
+
+statement ok
+CREATE SCHEMA create_schemas.schema2 AUTHORIZATION root;
+
+query T
+SELECT catalog_name FROM create_schemas.information_schema.schemata WHERE schema_name = 'schema1';
+----
+create_schemas
+
+query T
+SELECT catalog_name FROM create_schemas.information_schema.schemata WHERE schema_name = 'schema2';
+----
+create_schemas
+
+statement error pq: schema "schema1" already exists
+CREATE SCHEMA create_schemas.schema1;
+
+statement error pq: schema "schema2" already exists
+CREATE SCHEMA create_schemas.schema2 AUTHORIZATION root;
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS create_schemas.schema1;
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS create_schemas.schema2 AUTHORIZATION root;
+
+statement error pq: cannot create schemas in the system database
+CREATE SCHEMA system.schema3;
+
+subtest drop_schemas_with_database_prefixes
+
+# Test that empty schemas from different databases can be dropped
+statement ok
+CREATE DATABASE scdrop4_db;
+CREATE DATABASE scdrop6_db;
+CREATE SCHEMA scdrop4_db.scdrop4;
+CREATE SCHEMA scdrop5;
+CREATE SCHEMA scdrop6_db.scdrop6;
+
+statement ok
+DROP SCHEMA scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6;
+
+# Test that non-empty schemas from different databases can be dropped with cascade
+statement ok
+CREATE SCHEMA scdrop4_db.scdrop4;
+CREATE SCHEMA scdrop5;
+CREATE SCHEMA scdrop6_db.scdrop6;
+CREATE TABLE scdrop4_db.scdrop4.scdrop4_t1 (x INT);
+CREATE TABLE scdrop5.scdrop5_t1 (x INT);
+CREATE TABLE scdrop6_db.scdrop6.scdrop6_t1 (x INT);
+CREATE VIEW scdrop4_db.scdrop4.scdrop4_v1 AS SELECT x FROM scdrop4_db.scdrop4.scdrop4_t1;
+CREATE VIEW scdrop5.scdrop5_v1 AS SELECT x FROM scdrop5.scdrop5_t1;
+CREATE VIEW scdrop6_db.scdrop6.scdrop6_v1 AS SELECT x FROM scdrop6_db.scdrop6.scdrop6_t1;
+
+statement error pq: schema "scdrop4" is not empty and CASCADE was not specified
+DROP SCHEMA scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6 RESTRICT;
+
+statement ok
+DROP SCHEMA IF EXISTS scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6 CASCADE;
+
+statement ok
+DROP SCHEMA IF EXISTS scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6 CASCADE;
+
+statement error pq: unknown schema "scdrop4"
+DROP SCHEMA scdrop4_db.scdrop4, scdrop5, scdrop6_db.scdrop6 CASCADE;
+
+query T
+SELECT schema_name FROM scdrop4_db.information_schema.schemata WHERE schema_name = 'scdrop4_db';
+
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'scdrop%'
+
+subtest alter_schema_with_database_prefix
+
+# We should be able to alter schemas in different databases
+statement ok
+CREATE DATABASE with_alter_schema;
+CREATE ROLE jay;
+CREATE SCHEMA with_alter_schema.schema_to_alter AUTHORIZATION jay;
+
+statement ok
+ALTER SCHEMA with_alter_schema.schema_to_alter RENAME TO altered_schema;
+
+statement ok
+ALTER SCHEMA with_alter_schema.altered_schema OWNER TO root;
+
+statement ok
+USE with_alter_schema
+
+query T
+SELECT owner from [SHOW SCHEMAS] WHERE schema_name = 'altered_schema';
+----
+root
+
+statement error pq: unknown schema "schema_to_alter"
+ALTER SCHEMA with_alter_schema.schema_to_alter RENAME TO altered_schema;
+
 subtest drop_database
 
 # Ensure that user defined schemas are dropped when dropping the parent database.
@@ -372,6 +477,79 @@ COMMENT ON COLUMN privs.usage_tbl.x IS 'foo'
 
 statement error pq: user testuser does not have USAGE privilege on schema privs
 ALTER TYPE privs.usage_typ ADD VALUE 'denied'
+
+# Test privileges for schemas qualified with database names
+user root
+
+# Create some other databases with schemas
+statement ok
+CREATE DATABASE otherdb;
+CREATE SCHEMA otherdb.privs;
+CREATE DATABASE otherdb2;
+CREATE SCHEMA otherdb2.privs;
+
+# testuser should have create privilege on test.priv, otherdb.priv, and otherdb2.priv after grant
+statement ok
+GRANT CREATE ON SCHEMA privs, otherdb.privs, otherdb2.privs TO testuser;
+
+user testuser
+
+statement ok
+CREATE TABLE test.privs.fail_tbl();
+
+statement ok
+CREATE TABLE otherdb.privs.fail_tbl();
+
+statement ok
+CREATE TABLE otherdb2.privs.fail_tbl();
+
+# Show should support database qualified schema names
+user root
+
+statement ok
+SET SESSION sql_safe_updates=false;
+
+statement ok
+USE ""
+
+query TTTT
+SELECT database_name, schema_name, grantee, privilege_type FROM
+[SHOW GRANTS ON SCHEMA test.privs, otherdb.privs, otherdb2.privs]
+WHERE grantee = 'testuser'
+ORDER BY database_name, schema_name, grantee
+----
+otherdb   privs  testuser  CREATE
+otherdb2  privs  testuser  CREATE
+test      privs  testuser  CREATE
+
+statement ok
+use test
+
+query TTTT
+SELECT database_name, schema_name, grantee, privilege_type FROM
+[SHOW GRANTS ON SCHEMA privs, otherdb.privs, otherdb2.privs]
+WHERE grantee = 'testuser'
+ORDER BY database_name, schema_name, grantee
+----
+otherdb   privs  testuser  CREATE
+otherdb2  privs  testuser  CREATE
+test      privs  testuser  CREATE
+
+# testuser should not have create privilege on test.priv, otherdb.priv, nor otherdb2.priv after revoke
+
+statement ok
+REVOKE CREATE ON SCHEMA privs, otherdb.privs, otherdb2.privs FROM testuser;
+
+user testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE test.privs.fail_tbl();
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE otherdb.privs.fail_tbl();
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE otherdb2.privs.fail_tbl();
 
 subtest authorization
 

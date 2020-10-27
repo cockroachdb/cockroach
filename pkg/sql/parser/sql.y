@@ -569,6 +569,12 @@ func (u *sqlSymUnion) regionAffinity() tree.RegionalAffinity {
 func (u *sqlSymUnion) survive() tree.Survive {
   return u.val.(tree.Survive)
 }
+func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
+	return u.val.(tree.ObjectNamePrefix)
+}
+func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
+    return u.val.(tree.ObjectNamePrefixList)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -972,7 +978,9 @@ func (u *sqlSymUnion) survive() tree.Survive {
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
-%type <str> schema_name opt_schema_name
+%type <str> schema_name
+%type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name
+%type <tree.ObjectNamePrefixList> schema_name_list
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target analyze_target
@@ -3489,18 +3497,18 @@ type_name_list:
 // %Category: DDL
 // %Text: DROP SCHEMA [IF EXISTS] <schema_name> [, ...] [CASCADE | RESTRICT]
 drop_schema_stmt:
-  DROP SCHEMA name_list opt_drop_behavior
+  DROP SCHEMA schema_name_list opt_drop_behavior
   {
     $$.val = &tree.DropSchema{
-      Names: $3.nameList(),
+      Names: $3.objectNamePrefixList(),
       IfExists: false,
       DropBehavior: $4.dropBehavior(),
     }
   }
-| DROP SCHEMA IF EXISTS name_list opt_drop_behavior
+| DROP SCHEMA IF EXISTS schema_name_list opt_drop_behavior
   {
     $$.val = &tree.DropSchema{
-      Names: $5.nameList(),
+      Names: $5.objectNamePrefixList(),
       IfExists: true,
       DropBehavior: $6.dropBehavior(),
     }
@@ -3789,7 +3797,7 @@ deallocate_stmt:
 //   DATABASE <databasename> [, ...]
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //   TYPE <typename> [, <typename>]...
-//   SCHEMA <schemaname> [, <schemaname]...
+//   SCHEMA [<databasename> .]<schemaname> [, [<databasename> .]<schemaname>]...
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
@@ -3809,12 +3817,12 @@ grant_stmt:
   {
     $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
   }
-| GRANT privileges ON SCHEMA name_list TO name_list
+| GRANT privileges ON SCHEMA schema_name_list TO name_list
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
       Targets: tree.TargetList{
-        Schemas: $5.nameList(),
+        Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.nameList(),
     }
@@ -3836,7 +3844,7 @@ grant_stmt:
 //   DATABASE <databasename> [, <databasename>]...
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //   TYPE <typename> [, <typename>]...
-//   SCHEMA <schemaname> [, <schemaname]...
+//   SCHEMA [<databasename> .]<schemaname> [, [<databasename> .]<schemaname]...
 //
 // %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
@@ -3856,12 +3864,12 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
   }
-| REVOKE privileges ON SCHEMA name_list FROM name_list
+| REVOKE privileges ON SCHEMA schema_name_list FROM name_list
   {
     $$.val = &tree.Revoke{
       Privileges: $2.privilegeList(),
       Targets: tree.TargetList{
-        Schemas: $5.nameList(),
+        Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.nameList(),
     }
@@ -5357,9 +5365,9 @@ targets_roles:
   {
      $$.val = tree.TargetList{ForRoles: true, Roles: $2.nameList()}
   }
-| SCHEMA name_list
+| SCHEMA schema_name_list
   {
-     $$.val = tree.TargetList{Schemas: $2.nameList()}
+     $$.val = tree.TargetList{Schemas: $2.objectNamePrefixList()}
   }
 | TYPE type_name_list
   {
@@ -5472,32 +5480,32 @@ pause_schedules_stmt:
 // %Help: CREATE SCHEMA - create a new schema
 // %Category: DDL
 // %Text:
-// CREATE SCHEMA [IF NOT EXISTS] { <schemaname> | [<schemaname>] AUTHORIZATION <rolename> }
+// CREATE SCHEMA [IF NOT EXISTS] { [<databasename>.]<schemaname> | [[<databasename>.]<schemaname>] AUTHORIZATION <rolename> }
 create_schema_stmt:
-  CREATE SCHEMA schema_name
+  CREATE SCHEMA qualifiable_schema_name
   {
     $$.val = &tree.CreateSchema{
-      Schema: tree.Name($3),
+      Schema: $3.objectNamePrefix(),
     }
   }
-| CREATE SCHEMA IF NOT EXISTS schema_name
+| CREATE SCHEMA IF NOT EXISTS qualifiable_schema_name
   {
     $$.val = &tree.CreateSchema{
-      Schema: tree.Name($6),
+      Schema: $6.objectNamePrefix(),
       IfNotExists: true,
     }
   }
 | CREATE SCHEMA opt_schema_name AUTHORIZATION role_spec
   {
     $$.val = &tree.CreateSchema{
-      Schema: tree.Name($3),
+      Schema: $3.objectNamePrefix(),
       AuthRole: $5.user(),
     }
   }
 | CREATE SCHEMA IF NOT EXISTS opt_schema_name AUTHORIZATION role_spec
   {
     $$.val = &tree.CreateSchema{
-      Schema: tree.Name($6),
+      Schema: $6.objectNamePrefix(),
       IfNotExists: true,
       AuthRole: $8.user(),
     }
@@ -5512,19 +5520,19 @@ create_schema_stmt:
 //   ALTER SCHEMA ... RENAME TO <newschemaname>
 //   ALTER SCHEMA ... OWNER TO {<newowner> | CURRENT_USER | SESSION_USER }
 alter_schema_stmt:
-  ALTER SCHEMA schema_name RENAME TO schema_name
+  ALTER SCHEMA qualifiable_schema_name RENAME TO schema_name
   {
     $$.val = &tree.AlterSchema{
-      Schema: tree.Name($3),
+      Schema: $3.objectNamePrefix(),
       Cmd: &tree.AlterSchemaRename{
         NewName: tree.Name($6),
       },
     }
   }
-| ALTER SCHEMA schema_name OWNER TO role_spec
+| ALTER SCHEMA qualifiable_schema_name OWNER TO role_spec
   {
     $$.val = &tree.AlterSchema{
-      Schema: tree.Name($3),
+      Schema: $3.objectNamePrefix(),
       Cmd: &tree.AlterSchemaOwner{
         Owner: $6.user(),
       },
@@ -11595,7 +11603,33 @@ region_name_list:      name_list
 
 schema_name:           name
 
-opt_schema_name:       opt_name
+qualifiable_schema_name:
+	name
+	{
+		$$.val = tree.ObjectNamePrefix{SchemaName: tree.Name($1), ExplicitSchema: true}
+	}
+| name '.' name
+	{
+		$$.val = tree.ObjectNamePrefix{CatalogName: tree.Name($1), SchemaName: tree.Name($3), ExplicitCatalog: true, ExplicitSchema: true}
+	}
+
+schema_name_list:
+  qualifiable_schema_name
+  {
+    $$.val = tree.ObjectNamePrefixList{$1.objectNamePrefix()}
+  }
+| schema_name_list ',' qualifiable_schema_name
+  {
+    $$.val = append($1.objectNamePrefixList(), $3.objectNamePrefix())
+  }
+
+
+opt_schema_name:
+	qualifiable_schema_name
+| /* EMPTY */
+	{
+		$$.val = tree.ObjectNamePrefix{ExplicitSchema: false}
+	}
 
 table_name:            db_object_name
 

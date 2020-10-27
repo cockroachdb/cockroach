@@ -90,8 +90,12 @@ func TestParse(t *testing.T) {
 
 		{`CREATE SCHEMA IF NOT EXISTS foo`},
 		{`CREATE SCHEMA foo`},
+		{`CREATE SCHEMA IF NOT EXISTS foo.bar`},
+		{`CREATE SCHEMA foo.bar`},
 		{`CREATE SCHEMA IF NOT EXISTS foo AUTHORIZATION foobar`},
+		{`CREATE SCHEMA IF NOT EXISTS foo.bar AUTHORIZATION foobar`},
 		{`CREATE SCHEMA foo AUTHORIZATION foobar`},
+		{`CREATE SCHEMA foo.bar AUTHORIZATION foobar`},
 		{`CREATE SCHEMA IF NOT EXISTS AUTHORIZATION foobar`},
 		{`CREATE SCHEMA AUTHORIZATION foobar`},
 
@@ -412,6 +416,17 @@ func TestParse(t *testing.T) {
 		{`DROP SCHEMA IF EXISTS a, b RESTRICT`},
 		{`DROP SCHEMA a RESTRICT`},
 
+		{`DROP SCHEMA a.a`},
+		{`DROP SCHEMA a.a, b.b, c.c`},
+		{`DROP SCHEMA a, b.b, c`},
+		{`DROP SCHEMA IF EXISTS a.a, b.b, c.c`},
+		{`DROP SCHEMA IF EXISTS a, b, c.c`},
+		{`DROP SCHEMA IF EXISTS a.a, b.b CASCADE`},
+		{`DROP SCHEMA IF EXISTS a.a, b CASCADE`},
+		{`DROP SCHEMA IF EXISTS a.a, b.c RESTRICT`},
+		{`DROP SCHEMA IF EXISTS a, b.b RESTRICT`},
+		{`DROP SCHEMA a.a RESTRICT`},
+
 		{`DROP TYPE a`},
 		{`DROP TYPE a, b, c`},
 		{`DROP TYPE db.sc.a, sc.a`},
@@ -653,7 +668,9 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN SHOW GRANTS`},
 		{`SHOW GRANTS ON TABLE foo`},
 		{`SHOW GRANTS ON SCHEMA foo`},
+		{`SHOW GRANTS ON SCHEMA foo.bar`},
 		{`SHOW GRANTS ON SCHEMA foo, bar`},
+		{`SHOW GRANTS ON SCHEMA foo.bar, bar.baz`},
 		{`SHOW GRANTS ON TYPE typ1`},
 		{`SHOW GRANTS ON TYPE typ1, schema2.typ2, db.schema.typ`},
 		{`SHOW GRANTS ON TABLE foo, db.foo`},
@@ -744,8 +761,11 @@ func TestParse(t *testing.T) {
 
 		// GRANT ON SCHEMA.
 		{`GRANT USAGE ON SCHEMA foo TO root`},
+		{`GRANT USAGE ON SCHEMA foo.bar TO root`},
 		{`GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root`},
+		{`GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root`},
 		{`GRANT ALL ON SCHEMA foo, bar, baz TO root`},
+		{`GRANT ALL ON SCHEMA a.b, c.d, e.f TO root`},
 
 		// Tables are the default, but can also be specified with
 		// REVOKE x ON TABLE y. However, the stringer does not output TABLE.
@@ -765,8 +785,11 @@ func TestParse(t *testing.T) {
 
 		// REVOKE ON SCHEMA.
 		{`REVOKE USAGE ON SCHEMA foo FROM root`},
+		{`REVOKE USAGE ON SCHEMA foo.bar FROM root`},
 		{`REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root`},
+		{`REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root`},
 		{`REVOKE ALL ON SCHEMA foo, bar, baz FROM root`},
+		{`REVOKE ALL ON SCHEMA a.b, c.d, e.f FROM root`},
 
 		{`INSERT INTO a VALUES (1)`},
 		{`EXPLAIN INSERT INTO a VALUES (1)`},
@@ -1351,6 +1374,8 @@ func TestParse(t *testing.T) {
 
 		{`ALTER SCHEMA s RENAME TO s2`},
 		{`ALTER SCHEMA s OWNER TO foo`},
+		{`ALTER SCHEMA db.s RENAME TO s2`},
+		{`ALTER SCHEMA db.s OWNER TO foo`},
 
 		{`ALTER TABLE a RENAME TO b`},
 		{`EXPLAIN ALTER TABLE a RENAME TO b`},
@@ -2723,9 +2748,13 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 		{`GRANT ALL PRIVILEGES ON DATABASE foo TO root`, `GRANT ALL ON DATABASE foo TO root`},
 		{`GRANT ALL PRIVILEGES ON TABLE foo TO root`, `GRANT ALL ON TABLE foo TO root`},
 		{`GRANT ALL PRIVILEGES ON SCHEMA foo TO root`, `GRANT ALL ON SCHEMA foo TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA foo.bar TO root`, `GRANT ALL ON SCHEMA foo.bar TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA a.b, c.d TO root`, `GRANT ALL ON SCHEMA a.b, c.d TO root`},
 		{`REVOKE ALL PRIVILEGES ON DATABASE foo FROM root`, `REVOKE ALL ON DATABASE foo FROM root`},
 		{`REVOKE ALL PRIVILEGES ON TABLE foo FROM root`, `REVOKE ALL ON TABLE foo FROM root`},
 		{`REVOKE ALL PRIVILEGES ON SCHEMA foo FROM root`, `REVOKE ALL ON SCHEMA foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA foo.bar FROM root`, `REVOKE ALL ON SCHEMA foo.bar FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA a.b, c.d FROM root`, `REVOKE ALL ON SCHEMA a.b, c.d FROM root`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {

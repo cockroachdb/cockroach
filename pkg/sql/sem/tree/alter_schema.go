@@ -14,7 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/security"
 
 // AlterSchema represents an ALTER SCHEMA statement.
 type AlterSchema struct {
-	Schema Name
+	Schema ObjectNamePrefix
 	Cmd    AlterSchemaCmd
 }
 

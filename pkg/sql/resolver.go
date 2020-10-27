@@ -343,14 +343,28 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			return nil, errNoSchema
 		}
 		descs := make([]catalog.Descriptor, 0, len(targets.Schemas))
-		// Resolve the current database.
-		curDB, err := p.ResolveMutableDatabaseDescriptor(ctx, p.CurrentDatabase(), true /* required */)
-		if err != nil {
-			return nil, err
+
+		// Resolve the databases being changed
+		type schemaWithDBDesc struct {
+			schema string
+			dbDesc *dbdesc.Mutable
 		}
+		var targetSchemas []schemaWithDBDesc
 		for _, sc := range targets.Schemas {
+			dbName := p.CurrentDatabase()
+			if sc.ExplicitCatalog {
+				dbName = sc.Catalog()
+			}
+			db, err := p.ResolveMutableDatabaseDescriptor(ctx, dbName, true /* required */)
+			if err != nil {
+				return nil, err
+			}
+			targetSchemas = append(targetSchemas, schemaWithDBDesc{schema: sc.Schema(), dbDesc: db})
+		}
+
+		for _, sc := range targetSchemas {
 			_, resSchema, err := p.ResolveMutableSchemaDescriptor(
-				ctx, curDB.ID, string(sc), true /* required */)
+				ctx, sc.dbDesc.ID, sc.schema, true /* required */)
 			if err != nil {
 				return nil, err
 			}
