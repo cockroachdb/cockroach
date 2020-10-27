@@ -44,6 +44,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 )
@@ -211,4 +212,20 @@ func (cv ClusterVersion) String() string { return redact.StringWithoutMarkers(cv
 // SafeFormat implements the redact.SafeFormatter interface.
 func (cv ClusterVersion) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Print(cv.Version)
+}
+
+// ClusterVersionImpl implements the settings.ClusterVersionImpl interface.
+func (cv ClusterVersion) ClusterVersionImpl() {}
+
+var _ settings.ClusterVersionImpl = ClusterVersion{}
+
+// EncodingFromVersionStr is a shorthand to generate an encoded cluster version
+// from a version string.
+func EncodingFromVersionStr(v string) ([]byte, error) {
+	newV, err := roachpb.ParseVersion(v)
+	if err != nil {
+		return nil, err
+	}
+	newCV := ClusterVersion{Version: newV}
+	return protoutil.Marshal(&newCV)
 }

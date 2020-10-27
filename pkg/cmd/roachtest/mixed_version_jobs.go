@@ -104,15 +104,10 @@ func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgrade
 	}
 }
 
-func backgroundTPCCWorkload(t *test, warehouses int, tpccDB string) backgroundStepper {
+func backgroundTPCCWorkload(t *test, warehouses int) backgroundStepper {
 	return makeBackgroundStepper(func(ctx context.Context, u *versionUpgradeTest) error {
-		cmd := []string{
-			"./workload fixtures load tpcc",
-			fmt.Sprintf("--warehouses=%d", warehouses),
-			fmt.Sprintf("--db=%s", tpccDB),
-		}
 		// The workload has to run on one of the nodes of the cluster.
-		err := u.c.RunE(ctx, u.c.Node(1), cmd...)
+		err := u.c.RunE(ctx, u.c.Node(1), tpccImportCmd(warehouses))
 		if ctx.Err() != nil {
 			// If the context is canceled, that's probably why the workload returned
 			// so swallow error. (This is how the harness tells us to shut down the
@@ -220,7 +215,7 @@ func runJobsMixedVersions(
 	// `cockroach` will be used.
 	const mainVersion = ""
 	roachNodes := c.All()
-	backgroundTPCC := backgroundTPCCWorkload(t, warehouses, "tpcc")
+	backgroundTPCC := backgroundTPCCWorkload(t, warehouses)
 	resumeAllJobsAndWaitStep := makeResumeAllJobsAndWaitStep(10 * time.Second)
 	c.Put(ctx, workload, "./workload", c.Node(1))
 
