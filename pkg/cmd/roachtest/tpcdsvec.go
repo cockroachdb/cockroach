@@ -98,9 +98,6 @@ func registerTPCDSVec(r *testRegistry) {
 		c.Start(ctx, t)
 
 		clusterConn := c.Conn(ctx, 1)
-		// We will disable range merges in order to remove a possible source of
-		// random query latency spikes during perf runs.
-		disableRangeMerges(t, clusterConn)
 		disableAutoStats(t, clusterConn)
 		disableVectorizeRowCountThresholdHeuristic(t, clusterConn)
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
