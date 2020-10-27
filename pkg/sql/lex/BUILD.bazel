@@ -5,8 +5,8 @@ go_library(
     srcs = [
         "encode.go",
         "experimental_keywords.go",
-        "keywords.go",
-        "tokens.go",
+        "keywords.go",  # keep
+        "tokens.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/lex",
     visibility = ["//visibility:public"],
