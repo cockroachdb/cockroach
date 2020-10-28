@@ -138,12 +138,13 @@ SELECT * FROM users@pk
 1 tom   cat
 2 jerry rat
 
-query TTT
+query T
 EXPLAIN ALTER INDEX users@bar RENAME TO woo
 ----
-·             distribution  local
-·             vectorized    false
-rename index  ·             ·
+distribution: local
+vectorized: false
+·
+• rename index
 
 # Verify that EXPLAIN did not actually rename the index (#30543)
 query T rowsort

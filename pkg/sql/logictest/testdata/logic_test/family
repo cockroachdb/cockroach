@@ -294,11 +294,11 @@ SELECT a FROM t1 WHERE a = 10
 ----
 10
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT a FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t1@primary
-spans  [/10 - /10]
+  table: t1@primary
+  spans: [/10 - /10]
 
 # A point lookup on a non-nullable column allows us to scan only that column
 # family.
@@ -307,11 +307,11 @@ SELECT b FROM t1 WHERE a = 10
 ----
 20
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT b FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT b FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t1@primary
-spans  [/10 - /10]
+  table: t1@primary
+  spans: [/10 - /10]
 
 # Even if we also select the primary key column, we can still scan the single
 # column family because that column can be decoded from the key.
@@ -320,11 +320,11 @@ SELECT a, b FROM t1 WHERE a = 10
 ----
 10  20
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT a, b FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT a, b FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t1@primary
-spans  [/10 - /10]
+  table: t1@primary
+  spans: [/10 - /10]
 
 # A point lookup on a nullable column requires also scanning column family 0 as
 # a sentinel.
@@ -333,11 +333,11 @@ SELECT c FROM t1 WHERE a = 10
 ----
 30
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT c FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT c FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t1@primary
-spans  [/10 - /10]
+  table: t1@primary
+  spans: [/10 - /10]
 
 # A point lookup on two columns in non-adjacent column families results in two
 # spans.
@@ -346,11 +346,11 @@ SELECT b, d FROM t1 WHERE a = 10
 ----
 20  40
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT b, d FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT b, d FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t1@primary
-spans  [/10 - /10]
+  table: t1@primary
+  spans: [/10 - /10]
 
 # Unique secondary indexes store non-indexed primary key columns in column
 # family 0.
@@ -362,11 +362,11 @@ SELECT a FROM t1 WHERE b = 20
 ----
 10
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT a FROM t1 WHERE b = 20] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM t1 WHERE b = 20] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t1@b_idx
-spans  [/20 - /20]
+  table: t1@b_idx
+  spans: [/20 - /20]
 
 # If the primary key column is composite, we do need to scan its column family
 # to retrieve its value.
@@ -383,11 +383,11 @@ SELECT a FROM t2 WHERE a = 10
 ----
 10.00
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT a FROM t2 WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM t2 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t2@primary
-spans  [/10 - /10]
+  table: t2@primary
+  spans: [/10 - /10]
 
 # A point lookup on `a` and `b` should scan both of their families.
 query TI
@@ -395,11 +395,11 @@ SELECT a, b FROM t2 WHERE a = 10
 ----
 10.00  20
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT a, b FROM t2 WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT a, b FROM t2 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t2@primary
-spans  [/10 - /10]
+  table: t2@primary
+  spans: [/10 - /10]
 
 # Secondary indexes always store their composite values in column family 0.
 statement ok
@@ -411,11 +411,11 @@ SELECT a, b FROM t2@a_idx WHERE a = 10
 ----
 10.00  20
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT a FROM t2@a_idx WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM t2@a_idx WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t2@a_idx
-spans  [/10 - /10]
+  table: t2@a_idx
+  spans: [/10 - /10]
 
 # A point lookup on `a` and `b` should use column family 0 and b's family.
 query TI
@@ -423,11 +423,11 @@ SELECT a, b FROM t2@a_idx WHERE a = 10
 ----
 10.00  20
 
-query TT
-SELECT field, description FROM [EXPLAIN SELECT a, b FROM t2@a_idx WHERE a = 10] WHERE field IN ('table', 'spans')
+query T
+SELECT info FROM [EXPLAIN SELECT a, b FROM t2@a_idx WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
 ----
-table  t2@a_idx
-spans  [/10 - /10]
+  table: t2@a_idx
+  spans: [/10 - /10]
 
 # ------------------------------------------------------------------------------
 # UPSERT/INSERT..ON CONFLICT cases.

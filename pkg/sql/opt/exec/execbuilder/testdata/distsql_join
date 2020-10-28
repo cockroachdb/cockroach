@@ -29,25 +29,35 @@ NULL       /1       {1}       1
 /9         NULL     {5}       5
 
 # ensure merge joins are planned when there's orderings.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
-·                        distribution         full                  ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b)        ·
- │                       estimated row count  100 (missing stats)   ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, b)  ·
-      │                  estimated row count  100 (missing stats)   ·             ·
-      │                  equality             (a, b) = (a, b)       ·             ·
-      │                  merge ordering       +"(a=a)",+"(b=b)"     ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a,+b
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                data@primary          ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      └── scan           ·                    ·                     (a, b)        +a,+b
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                data@primary          ·             ·
-·                        spans                FULL SCAN             ·             ·
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│ estimated row count: 100 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 100 (missing stats)
+    │ equality: (a, b) = (a, b)
+    │ merge ordering: +"(a=a)",+"(b=b)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a,+b
+    │     estimated row count: 1000 (missing stats)
+    │     table: data@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          columns: (a, b)
+          ordering: +a,+b
+          estimated row count: 1000 (missing stats)
+          table: data@primary
+          spans: FULL SCAN
 
 # TODO(radu): enable these tests when joins pass through orderings on equality
 # columns.
@@ -110,25 +120,34 @@ project                  ·                    ·                     (a, b)    
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJzElk9v2kwQxu_vp4jm9FbZCu_a_LNUiWsqNanS3ioODt6CJcKitZEaRXz3ChyEbMM-ni6yjwR-3tmZ3-TxO21Mqh-TV51T_IskCVIkKCRBEQka0lzQ1pqFznNjDz8pgYf0D8WBoGyz3RWHP88FLYzVFL9TkRVrTTH9TF7W-lknqbaDgASlukiy9fGYrc1eE_s2S5MiIUFPuyK-m0kxUzTfCzK74uOp54e9vN2tknxVfcwJmQvKi2SpKZZ78W8FDlsUGIpZVCvwfLLinPzD2ELbgQzq97kXM3Xv24TwainnRxmbaqvTq-e3_uWF233Tdqm_mmxzuGKtsWv9u_j_g_70xWbL1fljxQThbnfkf8cLlT-az2Y7UNWxXCthWClBtndN9rIMjAJHt10GcPJpGWQHyyD7XYZRF8ug2g9a9WIio8DxbU0EJ59MVB2YqPo1cdyFiWH7QYe9mMgocHJbE8HJJxPDDkwM-zVx0oWJUftBR72YyChwelsTwcknE6MOTIz6NXHa9avqhYKedb41m1y3egMNDlfS6VKXDcvNzi70d2sWx2PKj09H7vjmk-q8KL8Nyw8Pm_KrQ4Ht4YkPLJUXPfKhVeCmZZ0OKnQFDuqwYjRc8eCJD1xrOJce-dC1hjfo0NnwyD2tyD0t6R7X0Gc_3DDYDzeM9gPQYD_cNNqPkbPjY3fDxz774YbBfrhhtB-ABvvhptF-THz2Y-pjuBsGhrthZDiggeFuGiZAI0AqHZfgn4psJAhHckADywGNNEc48BzgSHTZyBGO6bKRIxzVAQ1cBzSSHeHAdoBD3d0ZKodAd06INmfOSVEuDXVn5SgXh7q7kxTpzolSLo10Z4UpG0e6s-K0ibvzVE6B7pxEbc6cE6lcGurOClUujnRX7lSt6z7f__c3AAD__68_ThQ=
 
 # ORDER BY on a different ordering should require a terminal SORT NODE.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
-·                       distribution         full                  ·             ·
-·                       vectorized           true                  ·             ·
-sort                    ·                    ·                     (a, b, c, d)  +b,+a
- │                      estimated row count  100 (missing stats)   ·             ·
- │                      order                +b,+a                 ·             ·
- └── hash join (inner)  ·                    ·                     (a, b, c, d)  ·
-      │                 estimated row count  100 (missing stats)   ·             ·
-      │                 equality             (a, b) = (c, d)       ·             ·
-      ├── scan          ·                    ·                     (a, b)        ·
-      │                 estimated row count  1000 (missing stats)  ·             ·
-      │                 table                data@primary          ·             ·
-      │                 spans                FULL SCAN             ·             ·
-      └── scan          ·                    ·                     (c, d)        ·
-·                       estimated row count  1000 (missing stats)  ·             ·
-·                       table                data@primary          ·             ·
-·                       spans                FULL SCAN             ·             ·
+distribution: full
+vectorized: true
+·
+• sort
+│ columns: (a, b, c, d)
+│ ordering: +b,+a
+│ estimated row count: 100 (missing stats)
+│ order: +b,+a
+│
+└── • hash join (inner)
+    │ columns: (a, b, c, d)
+    │ estimated row count: 100 (missing stats)
+    │ equality: (a, b) = (c, d)
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     estimated row count: 1000 (missing stats)
+    │     table: data@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          columns: (c, d)
+          estimated row count: 1000 (missing stats)
+          table: data@primary
+          spans: FULL SCAN
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)]

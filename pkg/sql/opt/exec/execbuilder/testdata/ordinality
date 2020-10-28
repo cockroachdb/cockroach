@@ -3,80 +3,112 @@
 statement ok
 CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT max(ordinality) FROM foo WITH ORDINALITY
 ----
-·                distribution         local                 ·               ·
-·                vectorized           true                  ·               ·
-group (scalar)   ·                    ·                     (max)           ·
- │               estimated row count  1 (missing stats)     ·               ·
- │               aggregate 0          max(ordinality)       ·               ·
- └── ordinality  ·                    ·                     ("ordinality")  ·
-      │          estimated row count  1000 (missing stats)  ·               ·
-      └── scan   ·                    ·                     ()              ·
-·                estimated row count  1000 (missing stats)  ·               ·
-·                table                foo@primary           ·               ·
-·                spans                FULL SCAN             ·               ·
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (max)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: max(ordinality)
+│
+└── • ordinality
+    │ columns: ("ordinality")
+    │ estimated row count: 1000 (missing stats)
+    │
+    └── • scan
+          columns: ()
+          estimated row count: 1000 (missing stats)
+          table: foo@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
 ----
-·                distribution         local                 ·                  ·
-·                vectorized           true                  ·                  ·
-filter           ·                    ·                     (x, "ordinality")  +"ordinality"
- │               estimated row count  333 (missing stats)   ·                  ·
- │               filter               "ordinality" > 1      ·                  ·
- └── ordinality  ·                    ·                     (x, "ordinality")  ·
-      │          estimated row count  1000 (missing stats)  ·                  ·
-      └── scan   ·                    ·                     (x)                ·
-·                estimated row count  1000 (missing stats)  ·                  ·
-·                table                foo@primary           ·                  ·
-·                spans                FULL SCAN             ·                  ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (x, "ordinality")
+│ ordering: +"ordinality"
+│ estimated row count: 333 (missing stats)
+│ filter: "ordinality" > 1
+│
+└── • ordinality
+    │ columns: (x, "ordinality")
+    │ estimated row count: 1000 (missing stats)
+    │
+    └── • scan
+          columns: (x)
+          estimated row count: 1000 (missing stats)
+          table: foo@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
 ----
-·                     distribution         local                 ·                  ·
-·                     vectorized           true                  ·                  ·
-sort                  ·                    ·                     (x, "ordinality")  -"ordinality"
- │                    estimated row count  333 (missing stats)   ·                  ·
- │                    order                -"ordinality"         ·                  ·
- └── filter           ·                    ·                     (x, "ordinality")  ·
-      │               estimated row count  333 (missing stats)   ·                  ·
-      │               filter               "ordinality" > 1      ·                  ·
-      └── ordinality  ·                    ·                     (x, "ordinality")  ·
-           │          estimated row count  1000 (missing stats)  ·                  ·
-           └── scan   ·                    ·                     (x)                ·
-·                     estimated row count  1000 (missing stats)  ·                  ·
-·                     table                foo@primary           ·                  ·
-·                     spans                FULL SCAN             ·                  ·
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (x, "ordinality")
+│ ordering: -"ordinality"
+│ estimated row count: 333 (missing stats)
+│ order: -"ordinality"
+│
+└── • filter
+    │ columns: (x, "ordinality")
+    │ estimated row count: 333 (missing stats)
+    │ filter: "ordinality" > 1
+    │
+    └── • ordinality
+        │ columns: (x, "ordinality")
+        │ estimated row count: 1000 (missing stats)
+        │
+        └── • scan
+              columns: (x)
+              estimated row count: 1000 (missing stats)
+              table: foo@primary
+              spans: FULL SCAN
 
 # Show that the primary key is used under ordinalityNode.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 ----
-·           distribution         local                ·                  ·
-·           vectorized           true                 ·                  ·
-ordinality  ·                    ·                    (x, "ordinality")  ·
- │          estimated row count  333 (missing stats)  ·                  ·
- └── scan   ·                    ·                    (x)                ·
-·           estimated row count  333 (missing stats)  ·                  ·
-·           table                foo@primary          ·                  ·
-·           spans                /"a\x00"-            ·                  ·
+distribution: local
+vectorized: true
+·
+• ordinality
+│ columns: (x, "ordinality")
+│ estimated row count: 333 (missing stats)
+│
+└── • scan
+      columns: (x)
+      estimated row count: 333 (missing stats)
+      table: foo@primary
+      spans: /"a\x00"-
 
 # Show that the primary key cannot be used with a PK predicate
 # outside of ordinalityNode.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 ----
-·                distribution         local                 ·                  ·
-·                vectorized           true                  ·                  ·
-filter           ·                    ·                     (x, "ordinality")  ·
- │               estimated row count  333 (missing stats)   ·                  ·
- │               filter               x > 'a'               ·                  ·
- └── ordinality  ·                    ·                     (x, "ordinality")  ·
-      │          estimated row count  1000 (missing stats)  ·                  ·
-      └── scan   ·                    ·                     (x)                ·
-·                estimated row count  1000 (missing stats)  ·                  ·
-·                table                foo@primary           ·                  ·
-·                spans                FULL SCAN             ·                  ·
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (x, "ordinality")
+│ estimated row count: 333 (missing stats)
+│ filter: x > 'a'
+│
+└── • ordinality
+    │ columns: (x, "ordinality")
+    │ estimated row count: 1000 (missing stats)
+    │
+    └── • scan
+          columns: (x)
+          estimated row count: 1000 (missing stats)
+          table: foo@primary
+          spans: FULL SCAN

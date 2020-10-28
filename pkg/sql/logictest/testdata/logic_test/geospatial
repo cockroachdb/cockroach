@@ -5435,7 +5435,7 @@ SELECT ST_MemSize(g) FROM ( VALUES
 121
 119
 
-subtest  st_pointinsidecircle
+subtest st_pointinsidecircle
 
 query B
 SELECT ST_PointInsideCircle(point, x, y, radius) FROM ( VALUES

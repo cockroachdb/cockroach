@@ -189,12 +189,13 @@ system     node
 t          root
 v          root
 
-query TTT
+query T
 EXPLAIN ALTER DATABASE v RENAME TO x
 ----
-·                distribution  local
-·                vectorized    false
-rename database  ·             ·
+distribution: local
+vectorized: false
+·
+• rename database
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
 query TT colnames

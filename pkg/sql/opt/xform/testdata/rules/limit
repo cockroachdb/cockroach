@@ -346,7 +346,7 @@ opt
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30 ORDER BY b DESC LIMIT 5
 ----
 explain
- ├── columns: tree:6 field:7 description:8
+ ├── columns: info:6
  └── limit
       ├── columns: a:1!null b:2 c:3 d:4
       ├── internal-ordering: -2
@@ -386,7 +386,7 @@ Initial expression
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
   explain
-   ├── columns: tree:6 field:7 description:8
+   ├── columns: info:6
    └── sort
         ├── columns: a:1!null b:2 c:3 d:4
         ├── cardinality: [0 - 5]
@@ -429,7 +429,7 @@ SimplifySelectFilters
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:6 field:7 description:8
+    ├── columns: info:6
     └── sort
          ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
@@ -474,7 +474,7 @@ ConsolidateSelectFilters
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:6 field:7 description:8
+    ├── columns: info:6
     └── sort
          ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
@@ -519,7 +519,7 @@ PruneSelectCols
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:6 field:7 description:8
+    ├── columns: info:6
     └── sort
          ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
@@ -566,7 +566,7 @@ EliminateProject
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:6 field:7 description:8
+    ├── columns: info:6
     └── sort
          ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
@@ -617,7 +617,7 @@ GenerateIndexScans
   Cost: 4083.92
 ================================================================================
    explain
-    ├── columns: tree:6 field:7 description:8
+    ├── columns: info:6
   - └── sort
   + └── limit
          ├── columns: a:1!null b:2 c:3 d:4
@@ -689,7 +689,7 @@ Final best expression
   Cost: 4083.92
 ================================================================================
   explain
-   ├── columns: tree:6 field:7 description:8
+   ├── columns: info:6
    └── limit
         ├── columns: a:1!null b:2 c:3 d:4
         ├── internal-ordering: -2

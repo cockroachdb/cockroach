@@ -34,11 +34,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	switch explain.Mode {
 	case tree.ExplainPlan:
 		telemetry.Inc(sqltelemetry.ExplainPlanUseCounter)
-		if explain.Flags[tree.ExplainFlagVerbose] || explain.Flags[tree.ExplainFlagTypes] {
-			cols = colinfo.ExplainPlanVerboseColumns
-		} else {
-			cols = colinfo.ExplainPlanColumns
-		}
+		cols = colinfo.ExplainPlanColumns
 
 	case tree.ExplainDistSQL:
 		analyze := explain.Flags[tree.ExplainFlagAnalyze]

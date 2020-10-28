@@ -211,10 +211,11 @@ func (ob *OutputBuilder) BuildExplainRows() []tree.Datums {
 	return rows
 }
 
-// BuildString creates a string representation of the plan information.
-// The output string always ends in a newline.
-func (ob *OutputBuilder) BuildString() string {
-	var buf bytes.Buffer
+// BuildStringRows creates a string representation of the plan information and
+// returns it as a list of strings (one for each row). The strings do not end in
+// newline.
+func (ob *OutputBuilder) BuildStringRows() []string {
+	var result []string
 	tp := treeprinter.NewWithStyle(treeprinter.BulletStyle)
 	stack := []treeprinter.Node{tp}
 	entries := ob.entries
@@ -235,11 +236,10 @@ func (ob *OutputBuilder) BuildString() string {
 	// There may be some top-level non-node entries (like "distributed"). Print
 	// them separately, as they can't be part of the tree.
 	for e := popField(); e != nil; e = popField() {
-		buf.WriteString(e.fieldStr())
-		buf.WriteString("\n")
+		result = append(result, e.fieldStr())
 	}
-	if buf.Len() > 0 {
-		buf.WriteString("\n")
+	if len(result) > 0 {
+		result = append(result, "")
 	}
 
 	for len(entries) > 0 {
@@ -257,7 +257,19 @@ func (ob *OutputBuilder) BuildString() string {
 			child.AddLine(entry.fieldStr())
 		}
 	}
-	buf.WriteString(tp.String())
+	result = append(result, tp.FormattedRows()...)
+	return result
+}
+
+// BuildString creates a string representation of the plan information.
+// The output string always ends in a newline.
+func (ob *OutputBuilder) BuildString() string {
+	rows := ob.BuildStringRows()
+	var buf bytes.Buffer
+	for _, row := range rows {
+		buf.WriteString(row)
+		buf.WriteString("\n")
+	}
 	return buf.String()
 }
 

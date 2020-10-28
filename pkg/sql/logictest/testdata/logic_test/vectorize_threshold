@@ -15,32 +15,36 @@ SET vectorize_row_count_threshold = 1000
 
 # There are no stats available, so this should run through the row execution
 # engine.
-query TTT
+query T
 EXPLAIN SELECT count(*) from small
 ----
-·               distribution   full
-·               vectorized     false
-group (scalar)  ·              ·
- └── scan       ·              ·
-·               missing stats  ·
-·               table          small@primary
-·               spans          FULL SCAN
+distribution: full
+vectorized: false
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: small@primary
+      spans: FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 0
 
 # This should run through the vectorized execution engine because we disabled
 # the threshold.
-query TTT
+query T
 EXPLAIN SELECT count(*) from small
 ----
-·               distribution   full
-·               vectorized     true
-group (scalar)  ·              ·
- └── scan       ·              ·
-·               missing stats  ·
-·               table          small@primary
-·               spans          FULL SCAN
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: small@primary
+      spans: FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000
@@ -56,32 +60,36 @@ ALTER TABLE small INJECT STATISTICS '[
 ]'
 
 # This should run through the row execution engine.
-query TTT
+query T
 EXPLAIN SELECT count(*) from small
 ----
-·               distribution         full
-·               vectorized           false
-group (scalar)  ·                    ·
- └── scan       ·                    ·
-·               estimated row count  100
-·               table                small@primary
-·               spans                FULL SCAN
+distribution: full
+vectorized: false
+·
+• group (scalar)
+│
+└── • scan
+      estimated row count: 100
+      table: small@primary
+      spans: FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1
 
 # This should run through the vectorized execution engine because we lowered
 # the threshold.
-query TTT
+query T
 EXPLAIN SELECT count(*) from small
 ----
-·               distribution         full
-·               vectorized           true
-group (scalar)  ·                    ·
- └── scan       ·                    ·
-·               estimated row count  100
-·               table                small@primary
-·               spans                FULL SCAN
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      estimated row count: 100
+      table: small@primary
+      spans: FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000
@@ -100,52 +108,59 @@ ALTER TABLE large INJECT STATISTICS '[
 ]'
 
 # This should run through the vectorized execution engine.
-query TTT
+query T
 EXPLAIN SELECT count(*) from large
 ----
-·               distribution         full
-·               vectorized           true
-group (scalar)  ·                    ·
- └── scan       ·                    ·
-·               estimated row count  100000
-·               table                large@primary
-·               spans                FULL SCAN
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      estimated row count: 100000
+      table: large@primary
+      spans: FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000000
 
 # This should run through the row execution engine because we increased the
 # threshold.
-query TTT
+query T
 EXPLAIN SELECT count(*) from large
 ----
-·               distribution         full
-·               vectorized           false
-group (scalar)  ·                    ·
- └── scan       ·                    ·
-·               estimated row count  100000
-·               table                large@primary
-·               spans                FULL SCAN
+distribution: full
+vectorized: false
+·
+• group (scalar)
+│
+└── • scan
+      estimated row count: 100000
+      table: large@primary
+      spans: FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000
 
 # Check that we estimate the row count correctly when multiple tables are
 # scanned.
-query TTT
+query T
 EXPLAIN SELECT * FROM small INNER MERGE JOIN large ON small.a = large.a
 ----
-·           distribution         full
-·           vectorized           true
-merge join  ·                    ·
- │          equality             (a) = (a)
- │          left cols are key    ·
- │          right cols are key   ·
- ├── scan   ·                    ·
- │          estimated row count  100
- │          table                small@primary
- │          spans                FULL SCAN
- └── scan   ·                    ·
-·           estimated row count  100000
-·           table                large@primary
-·           spans                FULL SCAN
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (a) = (a)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     estimated row count: 100
+│     table: small@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      estimated row count: 100000
+      table: large@primary
+      spans: FULL SCAN

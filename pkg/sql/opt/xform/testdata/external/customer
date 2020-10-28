@@ -426,7 +426,7 @@ opt
 EXPLAIN SELECT id FROM test ORDER BY id asc LIMIT 10 offset 10000;
 ----
 explain
- ├── columns: tree:5 field:6 description:7
+ ├── columns: info:5
  └── offset
       ├── columns: id:1!null
       ├── internal-ordering: +1

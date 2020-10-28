@@ -26,7 +26,7 @@ SELECT * FROM ab
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO ab VALUES (1, 1)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -47,7 +47,7 @@ dist sender send  r35: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO ab VALUES (2, 2), (3, 3)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -71,7 +71,7 @@ BEGIN
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO ab VALUES (4, 4), (5, 5)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -95,7 +95,7 @@ ROLLBACK
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -116,7 +116,7 @@ dist sender send  r35: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -140,7 +140,7 @@ dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -177,7 +177,7 @@ SELECT count(*) FROM ab WHERE b=0
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (1, 1)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -198,7 +198,7 @@ dist sender send  r35: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (2, 2), (3, 3)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -222,7 +222,7 @@ BEGIN
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (4, 4), (5, 5)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -246,7 +246,7 @@ ROLLBACK
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -267,7 +267,7 @@ dist sender send  r35: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -291,7 +291,7 @@ dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -328,7 +328,7 @@ SELECT count(*) FROM ab WHERE b=0
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -353,7 +353,7 @@ BEGIN
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -378,7 +378,7 @@ ROLLBACK
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a, b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -400,7 +400,7 @@ dist sender send  r35: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a + b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -425,7 +425,7 @@ dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a / b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -463,7 +463,7 @@ SELECT count(*) FROM ab WHERE b=0
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) DELETE FROM ab WHERE a = 1
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -484,7 +484,7 @@ dist sender send  r35: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (2, 3)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -508,7 +508,7 @@ BEGIN
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (4, 5)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -532,7 +532,7 @@ ROLLBACK
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (6, 7) RETURNING a, b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 true
 
@@ -554,7 +554,7 @@ dist sender send  r35: sending batch 2 Del, 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (8, 9) RETURNING a + b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -579,7 +579,7 @@ dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (10, 11) RETURNING a / b
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -628,7 +628,7 @@ SELECT * FROM fk_parent JOIN fk_child ON p = b
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO fk_child VALUES (1, 1), (2, 2)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -651,7 +651,7 @@ dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) UPDATE fk_child SET b=b+1 WHERE a < 2
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -675,7 +675,7 @@ dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) DELETE FROM fk_parent WHERE p = 3
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -731,7 +731,7 @@ SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO ab (
     SELECT a*10, b*10 FROM [ INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b ]
   )
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 
@@ -757,7 +757,7 @@ query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) WITH cte AS (INSERT INTO ab VALUES (3, 3), (4, 4) RETURNING a, b)
     INSERT INTO ab (SELECT a*10, b*10 FROM cte)
-] WHERE field = 'auto commit'
+] WHERE info LIKE '%auto commit%'
 ----
 false
 

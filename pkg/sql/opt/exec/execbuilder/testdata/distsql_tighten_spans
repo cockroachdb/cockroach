@@ -133,69 +133,69 @@ NULL       /0         {1}       1
 
 # Secondary index should not be tightened.
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE b <= 3] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE b <= 3] WHERE info LIKE '%spans%'
 ----
--/4
+  spans: -/4
 
 # Partial predicate on primary key should not be tightened.
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3] WHERE info LIKE '%spans%'
 ----
--/4
+  spans: -/4
 
 # Tighten end key if span contains full primary key.
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3 AND b <= 3] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3 AND b <= 3] WHERE info LIKE '%spans%'
 ----
--/3/3/#
+      spans: -/3/3/#
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3 AND b < 4] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3 AND b < 4] WHERE info LIKE '%spans%'
 ----
--/3/3/#
+      spans: -/3/3/#
 
 # Mixed bounds.
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a >= 2 AND b <= 3] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a >= 2 AND b <= 3] WHERE info LIKE '%spans%'
 ----
-/2-
+      spans: /2-
 
 # Edge cases.
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 0 AND b <= 0] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 0 AND b <= 0] WHERE info LIKE '%spans%'
 ----
--/0/0/#
+      spans: -/0/0/#
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= -1 AND b <= -1] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= -1 AND b <= -1] WHERE info LIKE '%spans%'
 ----
--/-1/-1/#
+      spans: -/-1/-1/#
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808] WHERE info LIKE '%spans%'
 ----
-/1-/1/-9223372036854775808/#
+  spans: /1-/1/-9223372036854775808/#
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807] WHERE info LIKE '%spans%'
 ----
-/1-/1/9223372036854775807/#
+  spans: /1-/1/9223372036854775807/#
 
 # Table c1 (interleaved table)
 
 # Partial primary key does not tighten.
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3] WHERE info LIKE '%spans%'
 ----
--/4
+  spans: -/4
 
 # Tighten span on fully primary key.
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3 AND b <= 3] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3 AND b <= 3] WHERE info LIKE '%spans%'
 ----
--/3/3/#/54/1/#
+      spans: -/3/3/#/54/1/#
 
 # Table p2 with interleaved index.
 
@@ -203,16 +203,16 @@ SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3 AND b <
 
 # Lower bound (i >= 2)
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i >= 2] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i >= 2] WHERE info LIKE '%spans%'
 ----
-/2-
+  spans: /2-
 
 # Upper bound (i <= 5)
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i <= 5] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i <= 5] WHERE info LIKE '%spans%'
 ----
--/5/#
+  spans: -/5/#
 
 # From the interleaved index: no tightening at all.
 
@@ -220,53 +220,53 @@ SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i <= 5] WHERE 
 
 # Note 53/2 refers to the 2nd index (after primary index) of table p2.
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2] WHERE info LIKE '%spans%'
 ----
-/1/#/55/2/2-
+      spans: /1/#/55/2/2-
 
 # Upper bound (i <= 6 AND d <= 5)
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5] WHERE info LIKE '%spans%'
 ----
--/6/#/55/2/6
+      spans: -/6/#/55/2/6
 
 # IS NULL
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL] WHERE info LIKE '%spans%'
 ----
-/1/#/55/2/NULL-
+      spans: /1/#/55/2/NULL-
 
 # IS NOT NULL
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL] WHERE info LIKE '%spans%'
 ----
-/1/#/55/2/!NULL-
+      spans: /1/#/55/2/!NULL-
 
 # String table
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM bytes_t WHERE a = 'a'] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM bytes_t WHERE a = 'a'] WHERE info LIKE '%spans%'
 ----
-/"a"-/"a"/#
+  spans: /"a"-/"a"/#
 
 # No tightening.
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM bytes_t WHERE a < 'aa'] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM bytes_t WHERE a < 'aa'] WHERE info LIKE '%spans%'
 ----
--/"aa"
+  spans: -/"aa"
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM decimal_t WHERE a = 1.00] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM decimal_t WHERE a = 1.00] WHERE info LIKE '%spans%'
 ----
-/1-/1/#
+  spans: /1-/1/#
 
 # No tightening.
 
 query T
-SELECT description FROM [EXPLAIN (VERBOSE) SELECT * FROM decimal_t WHERE a < 2] WHERE field = 'spans'
+SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM decimal_t WHERE a < 2] WHERE info LIKE '%spans%'
 ----
--/2
+  spans: -/2

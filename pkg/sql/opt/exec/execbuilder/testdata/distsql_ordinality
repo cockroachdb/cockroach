@@ -30,17 +30,21 @@ NULL       /2       {1}       1
 /6         /7       {4}       4
 /7         NULL     {5}       5
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
 ----
-·           distribution         local                 ·                        ·
-·           vectorized           true                  ·                        ·
-ordinality  ·                    ·                     (x, y, z, "ordinality")  ·
- │          estimated row count  1000 (missing stats)  ·                        ·
- └── scan   ·                    ·                     (x, y, z)                ·
-·           estimated row count  1000 (missing stats)  ·                        ·
-·           table                xyz@primary           ·                        ·
-·           spans                FULL SCAN             ·                        ·
+distribution: local
+vectorized: true
+·
+• ordinality
+│ columns: (x, y, z, "ordinality")
+│ estimated row count: 1000 (missing stats)
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 1000 (missing stats)
+      table: xyz@primary
+      spans: FULL SCAN
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY]

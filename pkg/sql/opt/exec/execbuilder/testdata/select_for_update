@@ -13,271 +13,319 @@ CREATE VIEW v AS SELECT a FROM t AS t2
 # Basic tests.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for no key update     ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for no key update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for share             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for share
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for key share         ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for key share
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for share             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for share
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for no key update     ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for no key update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t
 ----
-·          distribution         local                 ·             ·
-·          vectorized           true                  ·             ·
-render     ·                    ·                     ("?column?")  ·
- │         estimated row count  1000 (missing stats)  ·             ·
- │         render 0             1                     ·             ·
- └── scan  ·                    ·                     ()            ·
-·          estimated row count  1000 (missing stats)  ·             ·
-·          table                t@primary             ·             ·
-·          spans                FULL SCAN             ·             ·
-·          locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ estimated row count: 1000 (missing stats)
+│ render 0: 1
+│
+└── • scan
+      columns: ()
+      estimated row count: 1000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
+      locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for update         ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for no key update  ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for no key update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for share          ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for share
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for key share      ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for key share
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for share          ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for share
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for no key update  ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for no key update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for update         ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for update         ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t
 ----
-·          distribution         local              ·             ·
-·          vectorized           true               ·             ·
-render     ·                    ·                  ("?column?")  ·
- │         estimated row count  1 (missing stats)  ·             ·
- │         render 0             1                  ·             ·
- └── scan  ·                    ·                  (a)           ·
-·          estimated row count  1 (missing stats)  ·             ·
-·          table                t@primary          ·             ·
-·          spans                /1-/1/#            ·             ·
-·          locking strength     for update         ·             ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ estimated row count: 1 (missing stats)
+│ render 0: 1
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1 (missing stats)
+      table: t@primary
+      spans: /1-/1/#
+      locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with table aliases.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE OF t
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE OF t2
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with numeric table references.
 # Cockroach numeric references start after 53 for user tables.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM [53 AS t] FOR UPDATE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM [53 AS t] FOR UPDATE OF t
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM [53 AS t] FOR UPDATE OF t2
@@ -286,27 +334,31 @@ EXPLAIN (VERBOSE) SELECT * FROM [53 AS t] FOR UPDATE OF t2
 # Tests with views.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF v
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
 query error pgcode 42P01 relation "v2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF v2
@@ -321,30 +373,34 @@ EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF t2
 # Tests with aliased views.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
 query error pgcode 42P01 relation "v" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE OF v
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE OF v2
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with subqueries.
@@ -354,311 +410,413 @@ scan  ·                    ·                     (a)  ·
 # the filter.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) FOR UPDATE
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE)
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for no key update     ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for no key update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for no key update     ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for no key update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
-·     distribution         local                 ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (a)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                t@primary             ·    ·
-·     spans                FULL SCAN             ·    ·
-·     locking strength     for update            ·    ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE
 ----
-·                    distribution         local                 ·    ·
-·                    vectorized           false                 ·    ·
-root                 ·                    ·                     (a)  ·
- ├── values          ·                    ·                     (a)  ·
- │                   size                 1 column, 1 row       ·    ·
- │                   row 0, expr 0        @S1                   ·    ·
- └── subquery        ·                    ·                     ·    ·
-      │              id                   @S1                   ·    ·
-      │              original sql         (SELECT a FROM t)     ·    ·
-      │              exec mode            one row               ·    ·
-      └── max1row    ·                    ·                     (a)  ·
-           │         estimated row count  1                     ·    ·
-           └── scan  ·                    ·                     (a)  ·
-·                    estimated row count  1000 (missing stats)  ·    ·
-·                    table                t@primary             ·    ·
-·                    spans                FULL SCAN             ·    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (a)
+│
+├── • values
+│     columns: (a)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE)
 ----
-·                    distribution         local                         ·    ·
-·                    vectorized           false                         ·    ·
-root                 ·                    ·                             (a)  ·
- ├── values          ·                    ·                             (a)  ·
- │                   size                 1 column, 1 row               ·    ·
- │                   row 0, expr 0        @S1                           ·    ·
- └── subquery        ·                    ·                             ·    ·
-      │              id                   @S1                           ·    ·
-      │              original sql         (SELECT a FROM t FOR UPDATE)  ·    ·
-      │              exec mode            one row                       ·    ·
-      └── max1row    ·                    ·                             (a)  ·
-           │         estimated row count  1                             ·    ·
-           └── scan  ·                    ·                             (a)  ·
-·                    estimated row count  1000 (missing stats)          ·    ·
-·                    table                t@primary                     ·    ·
-·                    spans                FULL SCAN                     ·    ·
-·                    locking strength     for update                    ·    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (a)
+│
+├── • values
+│     columns: (a)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t FOR UPDATE)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE OF t
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
-·                    distribution         local                              ·    ·
-·                    vectorized           false                              ·    ·
-root                 ·                    ·                                  (a)  ·
- ├── values          ·                    ·                                  (a)  ·
- │                   size                 1 column, 1 row                    ·    ·
- │                   row 0, expr 0        @S1                                ·    ·
- └── subquery        ·                    ·                                  ·    ·
-      │              id                   @S1                                ·    ·
-      │              original sql         (SELECT a FROM t FOR UPDATE OF t)  ·    ·
-      │              exec mode            one row                            ·    ·
-      └── max1row    ·                    ·                                  (a)  ·
-           │         estimated row count  1                                  ·    ·
-           └── scan  ·                    ·                                  (a)  ·
-·                    estimated row count  1000 (missing stats)               ·    ·
-·                    table                t@primary                          ·    ·
-·                    spans                FULL SCAN                          ·    ·
-·                    locking strength     for update                         ·    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (a)
+│
+├── • values
+│     columns: (a)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t FOR UPDATE OF t)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE
 ----
-·                    distribution         local                 ·    ·
-·                    vectorized           false                 ·    ·
-root                 ·                    ·                     (r)  ·
- ├── values          ·                    ·                     (r)  ·
- │                   size                 1 column, 1 row       ·    ·
- │                   row 0, expr 0        @S1                   ·    ·
- └── subquery        ·                    ·                     ·    ·
-      │              id                   @S1                   ·    ·
-      │              original sql         (SELECT a FROM t)     ·    ·
-      │              exec mode            one row               ·    ·
-      └── max1row    ·                    ·                     (a)  ·
-           │         estimated row count  1                     ·    ·
-           └── scan  ·                    ·                     (a)  ·
-·                    estimated row count  1000 (missing stats)  ·    ·
-·                    table                t@primary             ·    ·
-·                    spans                FULL SCAN             ·    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (r)
+│
+├── • values
+│     columns: (r)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
-·                    distribution         local                         ·    ·
-·                    vectorized           false                         ·    ·
-root                 ·                    ·                             (r)  ·
- ├── values          ·                    ·                             (r)  ·
- │                   size                 1 column, 1 row               ·    ·
- │                   row 0, expr 0        @S1                           ·    ·
- └── subquery        ·                    ·                             ·    ·
-      │              id                   @S1                           ·    ·
-      │              original sql         (SELECT a FROM t FOR UPDATE)  ·    ·
-      │              exec mode            one row                       ·    ·
-      └── max1row    ·                    ·                             (a)  ·
-           │         estimated row count  1                             ·    ·
-           └── scan  ·                    ·                             (a)  ·
-·                    estimated row count  1000 (missing stats)          ·    ·
-·                    table                t@primary                     ·    ·
-·                    spans                FULL SCAN                     ·    ·
-·                    locking strength     for update                    ·    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (r)
+│
+├── • values
+│     columns: (r)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t FOR UPDATE)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
-·                    distribution         local                              ·    ·
-·                    vectorized           false                              ·    ·
-root                 ·                    ·                                  (r)  ·
- ├── values          ·                    ·                                  (r)  ·
- │                   size                 1 column, 1 row                    ·    ·
- │                   row 0, expr 0        @S1                                ·    ·
- └── subquery        ·                    ·                                  ·    ·
-      │              id                   @S1                                ·    ·
-      │              original sql         (SELECT a FROM t FOR UPDATE OF t)  ·    ·
-      │              exec mode            one row                            ·    ·
-      └── max1row    ·                    ·                                  (a)  ·
-           │         estimated row count  1                                  ·    ·
-           └── scan  ·                    ·                                  (a)  ·
-·                    estimated row count  1000 (missing stats)               ·    ·
-·                    table                t@primary                          ·    ·
-·                    spans                FULL SCAN                          ·    ·
-·                    locking strength     for update                         ·    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (r)
+│
+├── • values
+│     columns: (r)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t FOR UPDATE OF t)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ----
-·                         distribution           local                 ·          ·
-·                         vectorized             true                  ·          ·
-project                   ·                      ·                     (a, b)     ·
- │                        estimated row count    100 (missing stats)   ·          ·
- └── lookup join (inner)  ·                      ·                     (b, a, b)  ·
-      │                   estimated row count    99 (missing stats)    ·          ·
-      │                   table                  t@primary             ·          ·
-      │                   equality               (b) = (a)             ·          ·
-      │                   equality cols are key  ·                     ·          ·
-      └── distinct        ·                      ·                     (b)        ·
-           │              estimated row count    100 (missing stats)   ·          ·
-           │              distinct on            b                     ·          ·
-           └── scan       ·                      ·                     (b)        ·
-·                         estimated row count    1000 (missing stats)  ·          ·
-·                         table                  t@primary             ·          ·
-·                         spans                  FULL SCAN             ·          ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│ estimated row count: 100 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (b, a, b)
+    │ estimated row count: 99 (missing stats)
+    │ table: t@primary
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │
+    └── • distinct
+        │ columns: (b)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: b
+        │
+        └── • scan
+              columns: (b)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
 ----
-·                         distribution           local                 ·          ·
-·                         vectorized             true                  ·          ·
-project                   ·                      ·                     (a, b)     ·
- │                        estimated row count    100 (missing stats)   ·          ·
- └── lookup join (inner)  ·                      ·                     (b, a, b)  ·
-      │                   estimated row count    99 (missing stats)    ·          ·
-      │                   table                  t@primary             ·          ·
-      │                   equality               (b) = (a)             ·          ·
-      │                   equality cols are key  ·                     ·          ·
-      └── distinct        ·                      ·                     (b)        ·
-           │              estimated row count    100 (missing stats)   ·          ·
-           │              distinct on            b                     ·          ·
-           └── scan       ·                      ·                     (b)        ·
-·                         estimated row count    1000 (missing stats)  ·          ·
-·                         table                  t@primary             ·          ·
-·                         spans                  FULL SCAN             ·          ·
-·                         locking strength       for update            ·          ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│ estimated row count: 100 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (b, a, b)
+    │ estimated row count: 99 (missing stats)
+    │ table: t@primary
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │
+    └── • distinct
+        │ columns: (b)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: b
+        │
+        └── • scan
+              columns: (b)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
 ----
-·                         distribution           local                 ·          ·
-·                         vectorized             true                  ·          ·
-project                   ·                      ·                     (a, b)     ·
- │                        estimated row count    100 (missing stats)   ·          ·
- └── lookup join (inner)  ·                      ·                     (b, a, b)  ·
-      │                   estimated row count    99 (missing stats)    ·          ·
-      │                   table                  t@primary             ·          ·
-      │                   equality               (b) = (a)             ·          ·
-      │                   equality cols are key  ·                     ·          ·
-      └── distinct        ·                      ·                     (b)        ·
-           │              estimated row count    100 (missing stats)   ·          ·
-           │              distinct on            b                     ·          ·
-           └── scan       ·                      ·                     (b)        ·
-·                         estimated row count    1000 (missing stats)  ·          ·
-·                         table                  t@primary             ·          ·
-·                         spans                  FULL SCAN             ·          ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│ estimated row count: 100 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (b, a, b)
+    │ estimated row count: 99 (missing stats)
+    │ table: t@primary
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │
+    └── • distinct
+        │ columns: (b)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: b
+        │
+        └── • scan
+              columns: (b)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
 ----
-·                         distribution           local                 ·          ·
-·                         vectorized             true                  ·          ·
-project                   ·                      ·                     (a, b)     ·
- │                        estimated row count    100 (missing stats)   ·          ·
- └── lookup join (inner)  ·                      ·                     (b, a, b)  ·
-      │                   estimated row count    99 (missing stats)    ·          ·
-      │                   table                  t@primary             ·          ·
-      │                   equality               (b) = (a)             ·          ·
-      │                   equality cols are key  ·                     ·          ·
-      └── distinct        ·                      ·                     (b)        ·
-           │              estimated row count    100 (missing stats)   ·          ·
-           │              distinct on            b                     ·          ·
-           └── scan       ·                      ·                     (b)        ·
-·                         estimated row count    1000 (missing stats)  ·          ·
-·                         table                  t@primary             ·          ·
-·                         spans                  FULL SCAN             ·          ·
-·                         locking strength       for update            ·          ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│ estimated row count: 100 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (b, a, b)
+    │ estimated row count: 99 (missing stats)
+    │ table: t@primary
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │
+    └── • distinct
+        │ columns: (b)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: b
+        │
+        └── • scan
+              columns: (b)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.
@@ -671,347 +829,482 @@ project                   ·                      ·                     (a, b) 
 # contain locking clauses are not inlined.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t] FOR UPDATE
 ----
-·          distribution         local                 ·    ·
-·          vectorized           true                  ·    ·
-render     ·                    ·                     (a)  ·
- │         estimated row count  1000 (missing stats)  ·    ·
- │         render 0             a                     ·    ·
- └── scan  ·                    ·                     (a)  ·
-·          estimated row count  1000 (missing stats)  ·    ·
-·          table                t@primary             ·    ·
-·          spans                FULL SCAN             ·    ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a)
+│ estimated row count: 1000 (missing stats)
+│ render 0: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
 ----
-·          distribution         local                 ·    ·
-·          vectorized           true                  ·    ·
-render     ·                    ·                     (a)  ·
- │         estimated row count  1000 (missing stats)  ·    ·
- │         render 0             a                     ·    ·
- └── scan  ·                    ·                     (a)  ·
-·          estimated row count  1000 (missing stats)  ·    ·
-·          table                t@primary             ·    ·
-·          spans                FULL SCAN             ·    ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a)
+│ estimated row count: 1000 (missing stats)
+│ render 0: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
-·                    distribution         local                       ·    ·
-·                    vectorized           false                       ·    ·
-root                 ·                    ·                           (a)  ·
- ├── scan buffer     ·                    ·                           (a)  ·
- │                   estimated row count  1000 (missing stats)        ·    ·
- │                   label                buffer 1                    ·    ·
- └── subquery        ·                    ·                           ·    ·
-      │              id                   @S1                         ·    ·
-      │              original sql         SELECT a FROM t FOR UPDATE  ·    ·
-      │              exec mode            all rows                    ·    ·
-      └── buffer     ·                    ·                           (a)  ·
-           │         label                buffer 1                    ·    ·
-           └── scan  ·                    ·                           (a)  ·
-·                    estimated row count  1000 (missing stats)        ·    ·
-·                    table                t@primary                   ·    ·
-·                    spans                FULL SCAN                   ·    ·
-·                    locking strength     for update                  ·    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (a)
+│
+├── • scan buffer
+│     columns: (a)
+│     estimated row count: 1000 (missing stats)
+│     label: buffer 1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT a FROM t FOR UPDATE
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
-·                    distribution         local                       ·    ·
-·                    vectorized           false                       ·    ·
-root                 ·                    ·                           (a)  ·
- ├── scan buffer     ·                    ·                           (a)  ·
- │                   estimated row count  1000 (missing stats)        ·    ·
- │                   label                buffer 1 (cte)              ·    ·
- └── subquery        ·                    ·                           ·    ·
-      │              id                   @S1                         ·    ·
-      │              original sql         SELECT a FROM t FOR UPDATE  ·    ·
-      │              exec mode            all rows                    ·    ·
-      └── buffer     ·                    ·                           (a)  ·
-           │         label                buffer 1 (cte)              ·    ·
-           └── scan  ·                    ·                           (a)  ·
-·                    estimated row count  1000 (missing stats)        ·    ·
-·                    table                t@primary                   ·    ·
-·                    spans                FULL SCAN                   ·    ·
-·                    locking strength     for update                  ·    ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (a)
+│
+├── • scan buffer
+│     columns: (a)
+│     estimated row count: 1000 (missing stats)
+│     label: buffer 1 (cte)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT a FROM t FOR UPDATE
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1 (cte)
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
 # Verify that the unused CTE doesn't get eliminated.
 # TODO(radu): we should at least not buffer the rows in this case.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) WITH sfu AS (SELECT a FROM t FOR UPDATE)
 SELECT c FROM u
 ----
-·                    distribution         local                       ·    ·
-·                    vectorized           true                        ·    ·
-root                 ·                    ·                           (c)  ·
- ├── scan            ·                    ·                           (c)  ·
- │                   estimated row count  1000 (missing stats)        ·    ·
- │                   table                u@primary                   ·    ·
- │                   spans                FULL SCAN                   ·    ·
- └── subquery        ·                    ·                           ·    ·
-      │              id                   @S1                         ·    ·
-      │              original sql         SELECT a FROM t FOR UPDATE  ·    ·
-      │              exec mode            all rows                    ·    ·
-      └── buffer     ·                    ·                           (a)  ·
-           │         label                buffer 1 (sfu)              ·    ·
-           └── scan  ·                    ·                           (a)  ·
-·                    estimated row count  1000 (missing stats)        ·    ·
-·                    table                t@primary                   ·    ·
-·                    spans                FULL SCAN                   ·    ·
-·                    locking strength     for update                  ·    ·
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (c)
+│
+├── • scan
+│     columns: (c)
+│     estimated row count: 1000 (missing stats)
+│     table: u@primary
+│     spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT a FROM t FOR UPDATE
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1 (sfu)
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+              locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with joins.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for share             ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for share
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for share             ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for share
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for no key update     ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for key share         ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for no key update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for key share
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for no key update     ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for no key update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with joins of aliased tables and aliased joins.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
@@ -1022,103 +1315,143 @@ EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t, u
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
 # Postgres doesn't support applying locking clauses to joins. The following
 # queries all return the error: "FOR UPDATE cannot be applied to a join".
 # We could do the same, but it's not hard to support these, so we do.
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
@@ -1129,353 +1462,433 @@ EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u
 query error pgcode 42P01 relation "u2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u2
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
-·                        distribution         local                 ·             ·
-·                        vectorized           true                  ·             ·
-project                  ·                    ·                     (a, b, c)     ·
- │                       estimated row count  1000 (missing stats)  ·             ·
- └── merge join (inner)  ·                    ·                     (a, b, a, c)  ·
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  equality             (a) = (a)             ·             ·
-      │                  left cols are key    ·                     ·             ·
-      │                  right cols are key   ·                     ·             ·
-      │                  merge ordering       +"(a=a)"              ·             ·
-      ├── scan           ·                    ·                     (a, b)        +a
-      │                  estimated row count  1000 (missing stats)  ·             ·
-      │                  table                t@primary             ·             ·
-      │                  spans                FULL SCAN             ·             ·
-      │                  locking strength     for update            ·             ·
-      └── scan           ·                    ·                     (a, c)        +a
-·                        estimated row count  1000 (missing stats)  ·             ·
-·                        table                u@primary             ·             ·
-·                        spans                FULL SCAN             ·             ·
-·                        locking strength     for update            ·             ·
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1000 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1000 (missing stats)
+    │     table: t@primary
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, c)
+          ordering: +a
+          estimated row count: 1000 (missing stats)
+          table: u@primary
+          spans: FULL SCAN
+          locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with lateral joins.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE
 ----
-·                   distribution         local                    ·             ·
-·                   vectorized           true                     ·             ·
-cross join (inner)  ·                    ·                        (a, b, a, c)  ·
- │                  estimated row count  1000000 (missing stats)  ·             ·
- ├── scan           ·                    ·                        (a, b)        ·
- │                  estimated row count  1000 (missing stats)     ·             ·
- │                  table                t@primary                ·             ·
- │                  spans                FULL SCAN                ·             ·
- │                  locking strength     for update               ·             ·
- └── scan           ·                    ·                        (a, c)        ·
-·                   estimated row count  1000 (missing stats)     ·             ·
-·                   table                u@primary                ·             ·
-·                   spans                FULL SCAN                ·             ·
-·                   locking strength     for update               ·             ·
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, c)
+│ estimated row count: 1000000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1000 (missing stats)
+│     table: t@primary
+│     spans: FULL SCAN
+│     locking strength: for update
+│
+└── • scan
+      columns: (a, c)
+      estimated row count: 1000 (missing stats)
+      table: u@primary
+      spans: FULL SCAN
+      locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE OF t
 ----
-·                   distribution         local                    ·             ·
-·                   vectorized           true                     ·             ·
-cross join (inner)  ·                    ·                        (a, b, a, c)  ·
- │                  estimated row count  1000000 (missing stats)  ·             ·
- ├── scan           ·                    ·                        (a, b)        ·
- │                  estimated row count  1000 (missing stats)     ·             ·
- │                  table                t@primary                ·             ·
- │                  spans                FULL SCAN                ·             ·
- │                  locking strength     for update               ·             ·
- └── scan           ·                    ·                        (a, c)        ·
-·                   estimated row count  1000 (missing stats)     ·             ·
-·                   table                u@primary                ·             ·
-·                   spans                FULL SCAN                ·             ·
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, c)
+│ estimated row count: 1000000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1000 (missing stats)
+│     table: t@primary
+│     spans: FULL SCAN
+│     locking strength: for update
+│
+└── • scan
+      columns: (a, c)
+      estimated row count: 1000 (missing stats)
+      table: u@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
-·                   distribution         local                    ·             ·
-·                   vectorized           true                     ·             ·
-cross join (inner)  ·                    ·                        (a, b, a, c)  ·
- │                  estimated row count  1000000 (missing stats)  ·             ·
- ├── scan           ·                    ·                        (a, b)        ·
- │                  estimated row count  1000 (missing stats)     ·             ·
- │                  table                t@primary                ·             ·
- │                  spans                FULL SCAN                ·             ·
- │                  locking strength     for share                ·             ·
- └── scan           ·                    ·                        (a, c)        ·
-·                   estimated row count  1000 (missing stats)     ·             ·
-·                   table                u@primary                ·             ·
-·                   spans                FULL SCAN                ·             ·
-·                   locking strength     for update               ·             ·
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, c)
+│ estimated row count: 1000000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1000 (missing stats)
+│     table: t@primary
+│     spans: FULL SCAN
+│     locking strength: for share
+│
+└── • scan
+      columns: (a, c)
+      estimated row count: 1000 (missing stats)
+      table: u@primary
+      spans: FULL SCAN
+      locking strength: for update
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
-·                   distribution         local                    ·             ·
-·                   vectorized           true                     ·             ·
-cross join (inner)  ·                    ·                        (a, b, a, c)  ·
- │                  estimated row count  1000000 (missing stats)  ·             ·
- ├── scan           ·                    ·                        (a, b)        ·
- │                  estimated row count  1000 (missing stats)     ·             ·
- │                  table                t@primary                ·             ·
- │                  spans                FULL SCAN                ·             ·
- │                  locking strength     for update               ·             ·
- └── scan           ·                    ·                        (a, c)        ·
-·                   estimated row count  1000 (missing stats)     ·             ·
-·                   table                u@primary                ·             ·
-·                   spans                FULL SCAN                ·             ·
-·                   locking strength     for update               ·             ·
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, c)
+│ estimated row count: 1000000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1000 (missing stats)
+│     table: t@primary
+│     spans: FULL SCAN
+│     locking strength: for update
+│
+└── • scan
+      columns: (a, c)
+      estimated row count: 1000 (missing stats)
+      table: u@primary
+      spans: FULL SCAN
+      locking strength: for update
 
 query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
-·                   distribution         local                    ·             ·
-·                   vectorized           true                     ·             ·
-cross join (inner)  ·                    ·                        (a, b, a, c)  ·
- │                  estimated row count  1000000 (missing stats)  ·             ·
- ├── scan           ·                    ·                        (a, b)        ·
- │                  estimated row count  1000 (missing stats)     ·             ·
- │                  table                t@primary                ·             ·
- │                  spans                FULL SCAN                ·             ·
- └── scan           ·                    ·                        (a, c)        ·
-·                   estimated row count  1000 (missing stats)     ·             ·
-·                   table                u@primary                ·             ·
-·                   spans                FULL SCAN                ·             ·
-·                   locking strength     for update               ·             ·
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, c)
+│ estimated row count: 1000000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1000 (missing stats)
+│     table: t@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (a, c)
+      estimated row count: 1000 (missing stats)
+      table: u@primary
+      spans: FULL SCAN
+      locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with the NOWAIT lock wait policy.
 # ------------------------------------------------------------------------------
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE NOWAIT
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
-·     locking wait policy  nowait                ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE NOWAIT
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for no key update     ·       ·
-·     locking wait policy  nowait                ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for no key update
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE NOWAIT
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for share             ·       ·
-·     locking wait policy  nowait                ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for share
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE NOWAIT
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for key share         ·       ·
-·     locking wait policy  nowait                ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for key share
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for share             ·       ·
-·     locking wait policy  nowait                ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for share
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for no key update     ·       ·
-·     locking wait policy  nowait                ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for no key update
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
-·     locking wait policy  nowait                ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t NOWAIT
 ----
-·     distribution         local                 ·       ·
-·     vectorized           true                  ·       ·
-scan  ·                    ·                     (a, b)  ·
-·     estimated row count  1000 (missing stats)  ·       ·
-·     table                t@primary             ·       ·
-·     spans                FULL SCAN             ·       ·
-·     locking strength     for update            ·       ·
-·     locking wait policy  nowait                ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1000 (missing stats)
+  table: t@primary
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: nowait
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2 NOWAIT
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t NOWAIT
 ----
-·          distribution         local                 ·             ·
-·          vectorized           true                  ·             ·
-render     ·                    ·                     ("?column?")  ·
- │         estimated row count  1000 (missing stats)  ·             ·
- │         render 0             1                     ·             ·
- └── scan  ·                    ·                     ()            ·
-·          estimated row count  1000 (missing stats)  ·             ·
-·          table                t@primary             ·             ·
-·          spans                FULL SCAN             ·             ·
-·          locking strength     for update            ·             ·
-·          locking wait policy  nowait                ·             ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ estimated row count: 1000 (missing stats)
+│ render 0: 1
+│
+└── • scan
+      columns: ()
+      estimated row count: 1000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN
+      locking strength: for update
+      locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE NOWAIT
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for update         ·       ·
-·     locking wait policy  nowait             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for update
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE NOWAIT
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for no key update  ·       ·
-·     locking wait policy  nowait             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for no key update
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE NOWAIT
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for share          ·       ·
-·     locking wait policy  nowait             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for share
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE NOWAIT
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for key share      ·       ·
-·     locking wait policy  nowait             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for key share
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE NOWAIT
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for share          ·       ·
-·     locking wait policy  nowait             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for share
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE NOWAIT
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for no key update  ·       ·
-·     locking wait policy  nowait             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for no key update
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE NOWAIT
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for update         ·       ·
-·     locking wait policy  nowait             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for update
+  locking wait policy: nowait
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 ----
-·     distribution         local              ·       ·
-·     vectorized           true               ·       ·
-scan  ·                    ·                  (a, b)  ·
-·     estimated row count  1 (missing stats)  ·       ·
-·     table                t@primary          ·       ·
-·     spans                /1-/1/#            ·       ·
-·     locking strength     for update         ·       ·
-·     locking wait policy  nowait             ·       ·
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@primary
+  spans: /1-/1/#
+  locking strength: for update
+  locking wait policy: nowait
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2 NOWAIT
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 ----
-·          distribution         local              ·             ·
-·          vectorized           true               ·             ·
-render     ·                    ·                  ("?column?")  ·
- │         estimated row count  1 (missing stats)  ·             ·
- │         render 0             1                  ·             ·
- └── scan  ·                    ·                  (a)           ·
-·          estimated row count  1 (missing stats)  ·             ·
-·          table                t@primary          ·             ·
-·          spans                /1-/1/#            ·             ·
-·          locking strength     for update         ·             ·
-·          locking wait policy  nowait             ·             ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ estimated row count: 1 (missing stats)
+│ render 0: 1
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1 (missing stats)
+      table: t@primary
+      spans: /1-/1/#
+      locking strength: for update
+      locking wait policy: nowait

@@ -64,18 +64,22 @@ NULL             /NULL/NULL/NULL  {5}       5
 /"2"/"3"/"4"     /"3"/"4"/"5"     {4}       4
 /"3"/"4"/"5"     NULL             {5}       5
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
-·          distribution         full                  ·          ·
-·          vectorized           true                  ·          ·
-distinct   ·                    ·                     (x, y, z)  ·
- │         estimated row count  1000 (missing stats)  ·          ·
- │         distinct on          x, y, z               ·          ·
- └── scan  ·                    ·                     (x, y, z)  ·
-·          estimated row count  1000 (missing stats)  ·          ·
-·          table                xyz@primary           ·          ·
-·          spans                FULL SCAN             ·          ·
+distribution: full
+vectorized: true
+·
+• distinct
+│ columns: (x, y, z)
+│ estimated row count: 1000 (missing stats)
+│ distinct on: x, y, z
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 1000 (missing stats)
+      table: xyz@primary
+      spans: FULL SCAN
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
@@ -83,22 +87,30 @@ SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
 https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lU1v4jAQhu_7K6w5tZKj4HxQyIlVy0pILHSBw0oVh5RYbSSaZO1E4kP891WSCgotHhdH3Ajx43ntZzTZgvy3hACm_WH_fkYKsSS_JuPf5Kn_93H4czAiNw-D6Wz6Z3hL3peUz4PR_YyMR-RmRcmaks0tef9Rw6v1Zg4UkjTio_CNSwiegAEFByi4QMEDCj7MKWQiXXApU1Eu2VbAIFpB0KIQJ1mRl3_PKSxSwSHYQh7nSw4BzMLnJZ_wMOLCbgGFiOdhvKzKrNabXibit1CsgcI0CxMZEMsuK4-LPCA9h_Zc2vNgvqOQFvmhiMzDFw4B21H9IA-xzONkkdv-cYoeo1WhkyoH8HlNXkP5epY65HHO5jnsViSpiLjg0dF-1S5nE7OWVuRDELfZIKPUSjOb-Scrv67tHdVm-t3BNLrDdizbu7A_kCj7225fqT9Yc_3BjPrD0Xfk6DjyrOoOL3GERNmf-O5KjpzmHDlGjlx9R66Oo7ZV3eEljpAo-xN3ruTIbc6Ra-TI03fk6Ti6sy40hATZn7d7JUNec4a8xr6EX5SZcJmlieRa37lWGZRHL7w-lUwLseCPIl1UZerHccVVf0Rc5vVbVj8MkvpVGfAjzE5h9hF2jmD2PbhtAndNYGaUm_lq2lHet6uGXbWsttqWp6R9NeybqFbDiGo1jKhWw5hqhEZUt01U3ynhjlpWx0SWGkZkqWFElhrGZCE0IqtrIoshUxQbo2Zz1GyQmk1Sw1FqNkuZ0TBlyDT1EGmfxum3pKlpTJqaxqSpaVQagmPSPg1VpbT57sf_AAAA__-kuPbl
 
 # Ensure that ordering propagates past local DISTINCT processors.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
-·               distribution         full                  ·          ·
-·               vectorized           true                  ·          ·
-distinct        ·                    ·                     (x, y, z)  +x
- │              estimated row count  1000 (missing stats)  ·          ·
- │              distinct on          x, y, z               ·          ·
- │              order key            x                     ·          ·
- └── sort       ·                    ·                     (x, y, z)  +x
-      │         estimated row count  1000 (missing stats)  ·          ·
-      │         order                +x                    ·          ·
-      └── scan  ·                    ·                     (x, y, z)  ·
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                xyz@primary           ·          ·
-·               spans                FULL SCAN             ·          ·
+distribution: full
+vectorized: true
+·
+• distinct
+│ columns: (x, y, z)
+│ ordering: +x
+│ estimated row count: 1000 (missing stats)
+│ distinct on: x, y, z
+│ order key: x
+│
+└── • sort
+    │ columns: (x, y, z)
+    │ ordering: +x
+    │ estimated row count: 1000 (missing stats)
+    │ order: +x
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
@@ -107,22 +119,30 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzElk9v4jwQh-_vp7Dm1Oo1Cn
 
 # Ensure that even with more ordering columns, ordering propagates past local
 # DISTINCT processors.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
-·               distribution         full                  ·       ·
-·               vectorized           true                  ·       ·
-distinct        ·                    ·                     (x, y)  +y
- │              estimated row count  100 (missing stats)   ·       ·
- │              distinct on          y                     ·       ·
- │              order key            y                     ·       ·
- └── sort       ·                    ·                     (x, y)  +y,+x
-      │         estimated row count  1000 (missing stats)  ·       ·
-      │         order                +y,+x                 ·       ·
-      └── scan  ·                    ·                     (x, y)  ·
-·               estimated row count  1000 (missing stats)  ·       ·
-·               table                xyz@primary           ·       ·
-·               spans                FULL SCAN             ·       ·
+distribution: full
+vectorized: true
+·
+• distinct
+│ columns: (x, y)
+│ ordering: +y
+│ estimated row count: 100 (missing stats)
+│ distinct on: y
+│ order key: y
+│
+└── • sort
+    │ columns: (x, y)
+    │ ordering: +y,+x
+    │ estimated row count: 1000 (missing stats)
+    │ order: +y,+x
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
@@ -130,35 +150,46 @@ SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY
 https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lk1v2kAQhu_9Fas5Jcois2vzEZ9oEyohpZACh1YRBwevEiSC3V0j4UT898o2kgMOMzZGHP3xeGbnfTTyB5h_S3Bh0n_o303ZWi_Zz_HoF3vq_3l8-D4Ysqv7wWQ6-f1wzXavJNeD4d2UjYbsKr5mG87ijNnE72w0vu-P2Y-_LOZsMwMOq8BXQ-9NGXCfQAAHCRxs4OAAhxbMOIQ6mCtjAp288pECA38DbpPDYhWuo-T2jMM80ArcD4gW0VKBC1PveanGyvOVtprAwVeRt1imZTbxey_UizdPx8BhEnor47KGlVQerSOX9STv2TDbcgjWUV7BRN6LAldsefkuJoGOlLZa-w305A3viZujJWSVEvcLEy1W88gSzcMqyYG0r7Tyk0MdlMu_8ByzV8-8FujZNm_JPtpS_p0gq3XsrGjvhQmhved9OTX6-rqnYdAIQkvuD_NY-dZeeVFeSVFCSUs2LOcUKYk-dlK260hJlMiDFReTUpxdysKETpJSlrdClrHCaaTRVbaC6GNnRaeOFUSJfLLyYlbIs1tRmNBJVtjlrbDLWNFupNFVtoLoY2dFt44VRIl8svbFrLDPbkVhQidZ4ZS3wiljRadxihNEFzsnbus4QZTI5-pczAnn7E4UJlT7p-aLcmNlwmBlVKn_lWbSsPJfVHZIE6z1XD3qYJ6WyS5HKZfe8JWJsqciuxisskdJg59hgcISh-UhLD7D9h4sqsHdOrCQteh2HVo2cdpGB-7gsIOnRWTdQuk2DrdRuIPDnTqi4DAhCg5TohA0IQpOU6J064hyi--EJrEUiJVC7ZTCUqkSN0ETeRM0FTiFE4kTOBW5KKyWKpkLfLUIh0gNXy6iReCF7VIpdJymQsdpMnQCp0LHcTJ0fLNSoReWzH5qXSI1fMuIWwIv7JlKoeM0FTpOk6ETOBU6jlOhS3zDHoY-2377HwAA__8VCBZB
 
 # Distinct processors elided becaue of strong key.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-·     distribution         full                  ·          ·
-·     vectorized           true                  ·          ·
-scan  ·                    ·                     (a, b, c)  ·
-·     estimated row count  1000 (missing stats)  ·          ·
-·     table                abc@primary           ·          ·
-·     spans                FULL SCAN             ·          ·
+distribution: full
+vectorized: true
+·
+• scan
+  columns: (a, b, c)
+  estimated row count: 1000 (missing stats)
+  table: abc@primary
+  spans: FULL SCAN
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJykk0-L2zAQxe_9FOKddkHG8Z_04FPLNgWD62yTFAobHxRr2Aa8livJ0BLy3YvlpfnTtCjNZfCT5vn9GEY7mO8NMixnxexhxXrdsI-L-Sf2NPv6WLzPS3b3IV-ulp-Le_baMui8fFixecnuBGcbzup79voxmsWmrsDRKkmleCGD7AkROGJwJOBIwTFFxdFpVZMxSg8tO2fI5Q9kE45t2_V2OK44aqUJ2Q52axtChpXYNLQgIUmHw38lWbFtXIzY1O86vX0R-ic4lp1oTcbC8ktRHEoQrhGt8bvGa6Dac6jeHjKNFc-ELNrzv3AdcPpWaUma5AlKtb9AXqpAdeH0rPFydHwSHfmPJPYZyR8jCI7FVVOJ_dGSa9DiY7RRJK6m3miJP1rqh3bGERyLcI2pN1rqjzbxQAvOlpyJVrKIKfuN9H9s9wWiBZlOtYa8lncybD_JZxqfilG9rulRq9rFjHLufO5AkrHjbTSKvHVXDvDYHP3T_PbEPDk3x7ckJ7eY01vM06vM1f7NrwAAAP__dnDXkQ==
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-·               distribution         full                  ·          ·
-·               vectorized           true                  ·          ·
-project         ·                    ·                     (a, b)     +a,+b
- │              estimated row count  1000 (missing stats)  ·          ·
- └── distinct   ·                    ·                     (a, b, c)  +a,+b
-      │         distinct on          a, b                  ·          ·
-      │         order key            a, b                  ·          ·
-      └── scan  ·                    ·                     (a, b, c)  +a,+b,+c
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                abc@primary           ·          ·
-·               spans                FULL SCAN             ·          ·
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│ ordering: +a,+b
+│ estimated row count: 1000 (missing stats)
+│
+└── • distinct
+    │ columns: (a, b, c)
+    │ ordering: +a,+b
+    │ distinct on: a, b
+    │ order key: a, b
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a,+b,+c
+          estimated row count: 1000 (missing stats)
+          table: abc@primary
+          spans: FULL SCAN
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
