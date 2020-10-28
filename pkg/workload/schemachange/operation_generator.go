@@ -78,6 +78,8 @@ var opsWithExecErrorScreening = map[opType]bool{
 	createTableAs: true,
 	createView:    true,
 
+	dropColumn: true,
+
 	renameTable: true,
 }
 
@@ -572,10 +574,38 @@ func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "IrrelevantColumnName"`, tableName), nil
+	}
+
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	colIsPrimaryKey, err := colIsPrimaryKey(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	columnIsDependedOn, err := columnIsDependedOn(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{code: pgcode.UndefinedColumn, condition: !columnExists},
+		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
+		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
+	}.add(og.expectedExecErrors)
+
 	return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName), nil
 }
 
@@ -946,6 +976,7 @@ func (og *operationGenerator) randColumn(
 	q := fmt.Sprintf(`
   SELECT column_name
     FROM [SHOW COLUMNS FROM %s]
+   WHERE column_name != 'rowid'
 ORDER BY random()
    LIMIT 1;
 `, tableName.String())
