@@ -203,6 +203,7 @@ public       jobs                             table  NULL   NULL
 public       web_sessions                     table  NULL   NULL
 public       table_statistics                 table  NULL   NULL
 public       locations                        table  NULL   NULL
+public       migrations                       table  NULL   NULL
 public       role_members                     table  NULL   NULL
 public       comments                         table  NULL   NULL
 public       replication_constraint_stats     table  NULL   NULL
@@ -237,6 +238,7 @@ public       jobs                             table  NULL   NULL                
 public       web_sessions                     table  NULL   NULL                 ·
 public       table_statistics                 table  NULL   NULL                 ·
 public       locations                        table  NULL   NULL                 ·
+public       migrations                       table  NULL   NULL                 ·
 public       role_members                     table  NULL   NULL                 ·
 public       comments                         table  NULL   NULL                 ·
 public       replication_constraint_stats     table  NULL   NULL                 ·

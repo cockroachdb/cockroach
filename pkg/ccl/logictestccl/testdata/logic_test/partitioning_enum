@@ -31,4 +31,3 @@ ALTER TABLE partitioned_table PARTITION BY LIST (place)
             PARTITION us VALUES IN ('us'),
             PARTITION eu VALUES IN ('eu')
         );
-

@@ -373,6 +373,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              markDeprecatedSchemaChangeJobsFailed,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionLeasedDatabaseDescriptors),
 	},
+	{
+		// Introduced in v21.1.
+		name:                "create new system.migrations table",
+		workFn:              createMigrationTable,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionMigrationTable),
+		newDescriptorIDs:    staticIDs(keys.MigrationsID),
+	},
 }
 
 func staticIDs(
@@ -1440,6 +1447,14 @@ ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
 
 func createTenantsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, systemschema.TenantsTable)
+}
+
+func createMigrationTable(ctx context.Context, r runner) error {
+	err := createSystemTable(ctx, r, systemschema.MigrationsTable)
+	if err != nil {
+		return errors.Wrap(err, "failed to create system.migrations")
+	}
+	return nil
 }
 
 func alterSystemScheduledJobsFixTableSchema(ctx context.Context, r runner) error {
