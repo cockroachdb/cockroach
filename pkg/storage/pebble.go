@@ -1088,13 +1088,6 @@ func (p *Pebble) CreateCheckpoint(dir string) error {
 	return p.db.Checkpoint(dir)
 }
 
-// GetSSTables implements the Engine interface.
-func (p *Pebble) GetSSTables() SSTableInfos {
-	// TODO(jackson): Remove GetSSTables from the Engine interface altogether
-	// once RocksDB and the compactor queue is removed.
-	panic("unimplemented")
-}
-
 type pebbleReadOnly struct {
 	parent     *Pebble
 	prefixIter pebbleIterator

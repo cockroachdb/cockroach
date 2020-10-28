@@ -36,11 +36,6 @@ func TestStoreKeyEncodeDecode(t *testing.T) {
 		{key: StoreClusterVersionKey(), expSuffix: localStoreClusterVersionSuffix, expDetail: nil},
 		{key: StoreLastUpKey(), expSuffix: localStoreLastUpSuffix, expDetail: nil},
 		{key: StoreHLCUpperBoundKey(), expSuffix: localStoreHLCUpperBoundSuffix, expDetail: nil},
-		{
-			key:       StoreSuggestedCompactionKey(roachpb.Key("a"), roachpb.Key("z")),
-			expSuffix: localStoreSuggestedCompactionSuffix,
-			expDetail: encoding.EncodeBytesAscending(encoding.EncodeBytesAscending(nil, roachpb.Key("a")), roachpb.Key("z")),
-		},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -52,22 +47,6 @@ func TestStoreKeyEncodeDecode(t *testing.T) {
 				t.Errorf("expected %s; got %s", test.expDetail, detail)
 			}
 		})
-	}
-}
-
-func TestStoreSuggestedCompactionKeyDecode(t *testing.T) {
-	origStart := roachpb.Key("a")
-	origEnd := roachpb.Key("z")
-	key := StoreSuggestedCompactionKey(origStart, origEnd)
-	start, end, err := DecodeStoreSuggestedCompactionKey(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !start.Equal(origStart) {
-		t.Errorf("expected %s == %s", start, origStart)
-	}
-	if !end.Equal(origEnd) {
-		t.Errorf("expected %s == %s", end, origEnd)
 	}
 }
 

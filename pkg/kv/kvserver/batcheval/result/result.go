@@ -280,15 +280,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.AddSSTable = nil
 
-	if q.Replicated.SuggestedCompactions != nil {
-		if p.Replicated.SuggestedCompactions == nil {
-			p.Replicated.SuggestedCompactions = q.Replicated.SuggestedCompactions
-		} else {
-			p.Replicated.SuggestedCompactions = append(p.Replicated.SuggestedCompactions, q.Replicated.SuggestedCompactions...)
-		}
-	}
-	q.Replicated.SuggestedCompactions = nil
-
 	if p.Replicated.PrevLeaseProposal == nil {
 		p.Replicated.PrevLeaseProposal = q.Replicated.PrevLeaseProposal
 	} else if q.Replicated.PrevLeaseProposal != nil {

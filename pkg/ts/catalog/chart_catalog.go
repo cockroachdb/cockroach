@@ -2122,35 +2122,6 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{StorageLayer, "Storage", "Compactor"}},
-		Charts: []chartDescription{
-			{
-				Title: "Overview",
-				Metrics: []string{
-					"compactor.suggestionbytes.compacted",
-					"compactor.suggestionbytes.skipped",
-				},
-			},
-			{
-				Title: "Queued",
-				Metrics: []string{
-					"compactor.suggestionbytes.queued",
-				},
-			},
-			{
-				Title: "Success",
-				Metrics: []string{
-					"compactor.compactions.failure",
-					"compactor.compactions.success",
-				},
-			},
-			{
-				Title:   "Time",
-				Metrics: []string{"compactor.compactingnanos"},
-			},
-		},
-	},
-	{
 		Organization: [][]string{{StorageLayer, "Storage", "KV"}},
 		Charts: []chartDescription{
 			{

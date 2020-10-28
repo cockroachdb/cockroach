@@ -223,13 +223,12 @@ var _ = [...]interface{}{
 	//   5. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the
 	//   store 'ident' record. They all share `localStorePrefix`.
-	StoreSuggestedCompactionKey, // "comp"
-	StoreClusterVersionKey,      // "cver"
-	StoreGossipKey,              // "goss"
-	StoreHLCUpperBoundKey,       // "hlcu"
-	StoreIdentKey,               // "iden"
-	StoreNodeTombstoneKey,       // "ntmb"
-	StoreLastUpKey,              // "uptm"
+	StoreClusterVersionKey, // "cver"
+	StoreGossipKey,         // "goss"
+	StoreHLCUpperBoundKey,  // "hlcu"
+	StoreIdentKey,          // "iden"
+	StoreNodeTombstoneKey,  // "ntmb"
+	StoreLastUpKey,         // "uptm"
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.

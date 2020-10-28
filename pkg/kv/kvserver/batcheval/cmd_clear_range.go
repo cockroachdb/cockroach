@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -95,18 +94,6 @@ func ClearRange(
 		return pd, nil
 	}
 
-	// Otherwise, suggest a compaction for the cleared range and clear
-	// the key span using engine.ClearRange.
-	pd.Replicated.SuggestedCompactions = []kvserverpb.SuggestedCompaction{
-		{
-			StartKey: from,
-			EndKey:   to,
-			Compaction: kvserverpb.Compaction{
-				Bytes:            statsDelta.Total(),
-				SuggestedAtNanos: cArgs.Header.Timestamp.WallTime,
-			},
-		},
-	}
 	if err := readWriter.ClearRange(storage.MakeMVCCMetadataKey(from),
 		storage.MakeMVCCMetadataKey(to)); err != nil {
 		return result.Result{}, err
