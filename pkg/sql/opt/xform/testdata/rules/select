@@ -102,6 +102,20 @@ CREATE TABLE no_explicit_primary_key
 )
 ----
 
+exec-ddl
+CREATE TABLE computed (
+    k INT PRIMARY KEY,
+    s STRING,
+    l STRING AS (lower(s)) STORED,
+    j JSON,
+    field JSON AS (j->'foo') STORED,
+    fieldstr STRING AS ((j->'foo')::string) STORED,
+    INDEX l_idx (l),
+    INDEX fieldstr_idx (fieldstr),
+    INVERTED INDEX field_inv_idx (field)
+)
+----
+
 # --------------------------------------------------
 # GeneratePartialIndexScans
 # --------------------------------------------------
@@ -1618,6 +1632,32 @@ project
       └── filters
            └── a:2 > 1 [outer=(2), constraints=(/2: [/2 - ]; tight)]
 
+# Check that we can generate constraints by recognizing computed column
+# expressions.
+opt
+SELECT k FROM computed WHERE lower(s) = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan computed@l_idx
+      ├── columns: k:1!null
+      ├── constraint: /3/1: [/'foo' - /'foo']
+      └── key: (1)
+
+opt
+SELECT k FROM computed WHERE (j->'foo')::string LIKE 'bar%'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan computed@fieldstr_idx
+      ├── columns: k:1!null
+      ├── constraint: /6/1: [/'bar' - /'bas')
+      └── key: (1)
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
@@ -2903,6 +2943,20 @@ memo (optimized, ~6KB, required=[presentation: k:1,s:2,j:3])
 exec-ddl
 DROP INDEX idx
 ----
+
+# Check that we can generate constraints by recognizing computed column
+# expressions.
+opt
+SELECT k FROM computed WHERE (j->'foo') @> '{"a": "b"}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan computed@field_inv_idx
+      ├── columns: k:1!null
+      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
 
 # --------------------------------------------------
 # GenerateZigzagJoins

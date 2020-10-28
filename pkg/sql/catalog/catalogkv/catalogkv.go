@@ -534,7 +534,7 @@ func MustGetDatabaseDescByID(
 ) (*dbdesc.Immutable, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		DatabaseDescriptorKind, true /* required */)
-	if err != nil || desc == nil {
+	if err != nil {
 		return nil, err
 	}
 	return desc.(*dbdesc.Immutable), nil
@@ -545,8 +545,9 @@ func MustGetDatabaseDescByID(
 func MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (*schemadesc.Immutable, error) {
-	desc, err := GetAnyDescriptorByID(ctx, txn, codec, id, Immutable)
-	if err != nil || desc == nil {
+	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
+		SchemaDescriptorKind, true /* required */)
+	if err != nil {
 		return nil, err
 	}
 	sc, ok := desc.(*schemadesc.Immutable)

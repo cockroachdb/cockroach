@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -34,22 +35,42 @@ import (
 // NewLogicalAccessor constructs a new accessor given an underlying physical
 // accessor and VirtualSchemas.
 func NewLogicalAccessor(
-	physicalAccessor catalog.Accessor, vs catalog.VirtualSchemas,
+	descsCol *descs.Collection, vs catalog.VirtualSchemas,
 ) *LogicalSchemaAccessor {
 	return &LogicalSchemaAccessor{
-		Accessor: physicalAccessor,
-		vs:       vs,
+		tc: descsCol,
+		vs: vs,
 	}
 }
 
 // LogicalSchemaAccessor extends an existing DatabaseLister with the
 // ability to list tables in a virtual schema.
 type LogicalSchemaAccessor struct {
-	catalog.Accessor
+	tc *descs.Collection
 	vs catalog.VirtualSchemas
 }
 
-var _ catalog.Accessor = &LogicalSchemaAccessor{}
+// GetDatabaseDesc implements the Accessor interface.
+func (l *LogicalSchemaAccessor) GetDatabaseDesc(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	name string,
+	flags tree.DatabaseLookupFlags,
+) (desc catalog.DatabaseDescriptor, err error) {
+	if flags.RequireMutable {
+		db, err := l.tc.GetMutableDatabaseDescriptor(ctx, txn, name, flags)
+		if db == nil {
+			return nil, err
+		}
+		return db, err
+	}
+	db, err := l.tc.GetDatabaseVersion(ctx, txn, name, flags)
+	if db == nil {
+		return nil, err
+	}
+	return db, err
+}
 
 // GetSchema implements the Accessor interface.
 func (l *LogicalSchemaAccessor) GetSchema(
@@ -65,7 +86,7 @@ func (l *LogicalSchemaAccessor) GetSchema(
 	}
 
 	// Fallthrough.
-	return l.Accessor.GetSchema(ctx, txn, codec, dbID, scName, flags)
+	return l.tc.ResolveSchema(ctx, txn, dbID, scName, flags)
 }
 
 // GetObjectNames implements the DatabaseLister interface.
@@ -91,7 +112,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	}
 
 	// Fallthrough.
-	return l.Accessor.GetObjectNames(ctx, txn, codec, dbDesc, scName, flags)
+	return descs.GetObjectNames(ctx, txn, codec, dbDesc, scName, flags)
 }
 
 // GetObjectDesc implements the ObjectAccessor interface.
@@ -133,7 +154,46 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	}
 
 	// Fallthrough.
-	return l.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
+	return l.getPhysicalObjectDesc(ctx, txn, db, schema, object, flags)
+}
+
+func (l *LogicalSchemaAccessor) getPhysicalObjectDesc(
+	ctx context.Context, txn *kv.Txn, db, schema, object string, flags tree.ObjectLookupFlags,
+) (catalog.Descriptor, error) {
+	switch flags.DesiredObjectKind {
+	case tree.TypeObject:
+		typeName := tree.MakeNewQualifiedTypeName(db, schema, object)
+		if flags.RequireMutable {
+			typ, err := l.tc.GetMutableTypeDescriptor(ctx, txn, &typeName, flags)
+			if typ == nil {
+				return nil, err
+			}
+			return typ, err
+		}
+		typ, err := l.tc.GetTypeVersion(ctx, txn, &typeName, flags)
+		if typ == nil {
+			return nil, err
+		}
+		return typ, err
+	case tree.TableObject:
+		tableName := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
+		if flags.RequireMutable {
+			table, err := l.tc.GetMutableTableDescriptor(ctx, txn, &tableName, flags)
+			if table == nil {
+				// return nil interface.
+				return nil, err
+			}
+			return table, err
+		}
+		table, err := l.tc.GetTableVersion(ctx, txn, &tableName, flags)
+		if table == nil {
+			// return nil interface.
+			return nil, err
+		}
+		return table, err
+	default:
+		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
+	}
 }
 
 func newMutableAccessToVirtualSchemaError(entry catalog.VirtualSchema, object string) error {
