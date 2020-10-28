@@ -46,18 +46,14 @@ type spanMeta struct {
 type SpanContext struct {
 	spanMeta
 
-	// Underlying shadow tracer info and context (optional).
-	shadowTr  *shadowTracer
-	shadowCtx opentracing.SpanContext
+	// Underlying shadow tracer info and span context (optional).
+	shadowTracerType string
+	shadowCtx        opentracing.SpanContext
 
 	// If set, all spans derived from this context are being recorded.
+	// TODO set from remote - if snowball. Or we keep using baggage,
+	// then this can go away.
 	recordingType RecordingType
-	// span is set if this context corresponds to a local span. If so, pointing
-	// back to the span is used for registering child spans with their parent.
-	// Children of remote spans act as roots when it comes to recordings - someone
-	// is responsible for calling GetRecording() on them and marshaling the
-	// recording back to the parent (generally an RPC handler does this).
-	span *Span
 
 	// The Span's associated baggage.
 	Baggage map[string]string
@@ -77,17 +73,6 @@ type SpanStats interface {
 	// to value to be added to Span tags. The keys will be prefixed with
 	// StatTagPrefix.
 	Stats() map[string]string
-}
-
-var _ opentracing.SpanContext = &SpanContext{}
-
-// ForeachBaggageItem is part of the opentracing.SpanContext interface.
-func (sc *SpanContext) ForeachBaggageItem(handler func(k, v string) bool) {
-	for k, v := range sc.Baggage {
-		if !handler(k, v) {
-			break
-		}
-	}
 }
 
 type crdbSpan struct {
@@ -246,7 +231,7 @@ func (s *crdbSpan) enableRecording(
 // will be part of the same recording.
 //
 // Recording is not supported by noop spans; to ensure a real Span is always
-// created, use the Recordable option to StartSpan.
+// created, use the WithRealSpan option to StartSpan.
 //
 // If recording was already started on this Span (either directly or because a
 // parent Span is recording), the old recording is lost.
@@ -258,7 +243,7 @@ func (s *Span) StartRecording(recType RecordingType) {
 		panic("StartRecording called with NoRecording")
 	}
 	if s.isNoop() {
-		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
+		panic("StartRecording called on NoopSpan; use the WithRealSpan option for StartSpan")
 	}
 
 	// If we're already recording (perhaps because the parent was recording when
@@ -330,6 +315,12 @@ func (s *crdbSpan) getRecording() Recording {
 	return result
 }
 
+func (s *crdbSpan) getRecordingType() RecordingType {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.recording.recordingType
+}
+
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
@@ -364,13 +355,13 @@ func (s *Span) IsBlackHole() bool {
 	return s.isBlackHole()
 }
 
-// IsNoop returns true if the Span context is from a "no-op" Span. If
+// isNilOrNoop returns true if the Span context is eithernil or corresponds from a "no-op" Span. If
 // this is true, any Span derived from this context will be a "black hole Span".
 //
 // You should never need to care about this method. It is exported for technical
 // reasons.
-func (sc *SpanContext) IsNoop() bool {
-	return sc.recordingType == NoRecording && sc.shadowTr == nil
+func (sc *SpanContext) isNilOrNoop() bool {
+	return sc.recordingType == NoRecording && sc.shadowTracerType == ""
 }
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
@@ -409,19 +400,12 @@ func (s *Span) Finish() {
 
 // Context is part of the opentracing.Span interface.
 //
-// TODO(andrei, radu): Should this return noopSpanContext for a Recordable Span
+// TODO(andrei, radu): Should this return noopSpanContext for a WithRealSpan Span
 // that's not currently recording? That might save work and allocations when
 // creating child spans.
 func (s *Span) Context() *SpanContext {
 	s.crdb.mu.Lock()
 	defer s.crdb.mu.Unlock()
-	sc := s.SpanContext()
-	return &sc
-}
-
-// SpanContext returns a SpanContext. Note that this returns a value,
-// not a pointer, which the caller can use to avoid heap allocations.
-func (s *Span) SpanContext() SpanContext {
 	n := len(s.crdb.mu.Baggage)
 	// In the common case, we have no baggage, so avoid making an empty map.
 	var baggageCopy map[string]string
@@ -433,18 +417,17 @@ func (s *Span) SpanContext() SpanContext {
 	}
 	sc := SpanContext{
 		spanMeta: s.crdb.spanMeta,
-		span:     s,
 		Baggage:  baggageCopy,
 	}
 	if s.ot.shadowSpan != nil {
-		sc.shadowTr = s.ot.shadowTr
+		sc.shadowTracerType, _ = s.ot.shadowTr.Typ()
 		sc.shadowCtx = s.ot.shadowSpan.Context()
 	}
 
 	if s.crdb.isRecording() {
 		sc.recordingType = s.crdb.mu.recording.recordingType
 	}
-	return sc
+	return &sc
 }
 
 // SetOperationName is part of the opentracing.Span interface.

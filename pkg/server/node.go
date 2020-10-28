@@ -980,7 +980,7 @@ func (n *Node) setupSpanForIncomingRPC(
 			// should have opened a span for us. If not, open a span now (if tracing is
 			// disabled, this will be a noop span).
 			newSpan = n.storeCfg.AmbientCtx.Tracer.StartRootSpan(
-				opName, n.storeCfg.AmbientCtx.LogTags(), tracing.NonRecordableSpan,
+				opName, n.storeCfg.AmbientCtx.LogTags(), false, /* forceRealSpan */
 			)
 			ctx = tracing.ContextWithSpan(ctx, newSpan)
 		} else {

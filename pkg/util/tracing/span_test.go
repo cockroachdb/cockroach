@@ -27,7 +27,7 @@ func TestRecordingString(t *testing.T) {
 	tr := NewTracer()
 	tr2 := NewTracer()
 
-	root := tr.StartSpan("root", Recordable)
+	root := tr.StartSpan("root", WithRealSpan)
 	root.StartRecording(SnowballRecording)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 1"))
 	// Hackily fix the timing on the first log message, so that we can check it later.
@@ -40,7 +40,7 @@ func TestRecordingString(t *testing.T) {
 	err := tr.Inject(root.Context(), opentracing.HTTPHeaders, carrier)
 	require.NoError(t, err)
 	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
-	remoteChild := tr2.StartSpan("remote child", opentracing.FollowsFrom(wireContext))
+	remoteChild := tr2.StartSpan("remote child", WithRemoteParent(wireContext))
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 2"))
 	remoteChild.LogFields(otlog.String(tracingpb.LogMessageField, "remote child 1"))
 	require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestRecordingString(t *testing.T) {
 
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 3"))
 
-	ch2 := tr.StartChildSpan("local child", root.SpanContext(), nil /* logTags */, false /* recordable */, false /* separateRecording */)
+	ch2 := tr.StartChildSpan("local child", root, nil /* logTags */, false /* recordable */, false /* separateRecording */)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 4"))
 	ch2.LogFields(otlog.String(tracingpb.LogMessageField, "local child 1"))
 	ch2.Finish()
@@ -145,12 +145,16 @@ func recToStrippedString(r Recording) string {
 func TestRecordingInRecording(t *testing.T) {
 	tr := NewTracer()
 
-	root := tr.StartSpan("root", Recordable)
+	root := tr.StartSpan("root", WithRealSpan)
 	root.StartRecording(SnowballRecording)
-	child := tr.StartSpan("child", opentracing.ChildOf(root.Context()), Recordable)
+	child := tr.StartSpan("child", WithParent(root), WithRealSpan)
 	child.StartRecording(SnowballRecording)
-	grandChild := tr.StartSpan("grandchild", opentracing.ChildOf(child.Context()))
+	// The remote grandchild is also recording, however since it's remote the spans
+	// have to be imported into the parent manually (this would usually happen via
+	// code at the RPC boundaries).
+	grandChild := tr.StartSpan("grandchild", WithRemoteParent(child.Context()))
 	grandChild.Finish()
+	child.ImportRemoteSpans(grandChild.GetRecording())
 	child.Finish()
 	root.Finish()
 

@@ -12556,7 +12556,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 
 	// Hold the RaftLock to encourage the reproposals to occur in the same batch.
 	tc.repl.RaftLock()
-	sp := tracer.StartRootSpan("replica send", logtags.FromContext(ctx), tracing.RecordableSpan)
+	sp := tracer.StartRootSpan("replica send", logtags.FromContext(ctx), true /* forceRealSpan */)
 	tracedCtx := tracing.ContextWithSpan(ctx, sp)
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.

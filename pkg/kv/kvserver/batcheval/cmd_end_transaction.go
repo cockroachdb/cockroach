@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -813,7 +812,7 @@ func splitTrigger(
 ) (enginepb.MVCCStats, result.Result, error) {
 	// TODO(andrei): should this span be a child of the ctx's (if any)?
 	sp := rec.ClusterSettings().Tracer.StartRootSpan(
-		"split", logtags.FromContext(ctx), tracing.NonRecordableSpan,
+		"split", logtags.FromContext(ctx), false, /* forceRealSpan */
 	)
 	defer sp.Finish()
 	desc := rec.Desc()
