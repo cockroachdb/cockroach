@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
@@ -425,3 +426,7 @@ func (cs *tracingClientStream) CloseSend() error {
 	}
 	return err
 }
+
+// Recording represents a group of RecordedSpans, as returned by GetRecording.
+// Spans are sorted by StartTime.
+type Recording []tracingpb.RecordedSpan

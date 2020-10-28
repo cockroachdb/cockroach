@@ -12,10 +12,7 @@ package tracing
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
-	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -23,10 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/trace"
@@ -687,87 +681,6 @@ func StartSnowballTrace(
 	}
 	StartRecording(span, SnowballRecording)
 	return ContextWithSpan(ctx, span), span
-}
-
-// TestingCheckRecordedSpans checks whether a recording looks like an expected
-// one represented by a string with one line per expected Span and one line per
-// expected event (i.e. log message).
-//
-// Use with something like:
-// 	 if err := TestingCheckRecordedSpans(tracing.GetRecording(Span), `
-//     Span root:
-//       event: a
-//       event: c
-//     Span child:
-//       event: [ambient] b
-//   `); err != nil {
-//   	t.Fatal(err)
-//   }
-//
-// The event lines can (and generally should) omit the file:line part that they
-// might contain (depending on the level at which they were logged).
-//
-// Note: this test function is in this file because it needs to be used by
-// both tests in the tracing package and tests outside of it, and the function
-// itself depends on tracing.
-func TestingCheckRecordedSpans(recSpans []tracingpb.RecordedSpan, expected string) error {
-	expected = strings.TrimSpace(expected)
-	var rows []string
-	row := func(format string, args ...interface{}) {
-		rows = append(rows, fmt.Sprintf(format, args...))
-	}
-
-	for _, rs := range recSpans {
-		row("Span %s:", rs.Operation)
-		if len(rs.Tags) > 0 {
-			var tags []string
-			for k, v := range rs.Tags {
-				tags = append(tags, fmt.Sprintf("%s=%v", k, v))
-			}
-			sort.Strings(tags)
-			row("  tags: %s", strings.Join(tags, " "))
-		}
-		for _, l := range rs.Logs {
-			msg := ""
-			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("  %s: %v", f.Key, f.Value)
-			}
-			row("%s", msg)
-		}
-	}
-	var expRows []string
-	if expected != "" {
-		expRows = strings.Split(expected, "\n")
-	}
-	match := false
-	if len(expRows) == len(rows) {
-		match = true
-		for i := range expRows {
-			e := strings.Trim(expRows[i], " \t")
-			r := strings.Trim(rows[i], " \t")
-			if e != r && !matchesWithoutFileLine(r, e) {
-				match = false
-				break
-			}
-		}
-	}
-	if !match {
-		file, line, _ := caller.Lookup(1)
-		return errors.Errorf(
-			"%s:%d expected:\n%s\ngot:\n%s",
-			file, line, expected, strings.Join(rows, "\n"))
-	}
-	return nil
-}
-
-// matchesWithoutFileLine tries to match an event by stripping a file:line from
-// it. For example:
-// "event: util/log/trace_test.go:111 log" will match "event: log".
-//
-// Returns true if it matches.
-func matchesWithoutFileLine(msg string, expected string) bool {
-	groups := regexp.MustCompile(`^(event: ).*:[0-9]* (.*)$`).FindStringSubmatch(msg)
-	return len(groups) == 3 && fmt.Sprintf("event: %s", groups[2]) == expected
 }
 
 // ContextWithRecordingSpan returns a context with an embedded trace Span which
