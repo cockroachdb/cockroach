@@ -149,14 +149,14 @@ var allowedCommonOptions = makeStringSet(
 // Format specific allowed options.
 var avroAllowedOptions = makeStringSet(
 	avroStrict, avroBinRecords, avroJSONRecords,
-	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize,
+	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize, csvRowLimit,
 )
 var csvAllowedOptions = makeStringSet(
 	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes, csvRowLimit,
 )
 var mysqlOutAllowedOptions = makeStringSet(
 	mysqlOutfileRowSep, mysqlOutfileFieldSep, mysqlOutfileEnclose,
-	mysqlOutfileEscape, csvNullIf, csvSkip,
+	mysqlOutfileEscape, csvNullIf, csvSkip, csvRowLimit,
 )
 var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
@@ -519,6 +519,16 @@ func importPlanHook(
 			}
 			if _, ok := opts[importOptionSaveRejected]; ok {
 				format.SaveRejected = true
+			}
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.MysqlOut.RowLimit = int64(rowLimit)
 			}
 		case "MYSQLDUMP":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlDumpAllowedOptions); err != nil {
@@ -886,6 +896,17 @@ func parseAvroOptions(
 
 	if haveBinRecs && haveJSONRecs {
 		return errors.Errorf("only one of the %s or %s options can be set", avroBinRecords, avroJSONRecords)
+	}
+
+	if override, ok := opts[csvRowLimit]; ok {
+		rowLimit, err := strconv.Atoi(override)
+		if err != nil {
+			return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+		}
+		if rowLimit <= 0 {
+			return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+		}
+		format.Avro.RowLimit = int64(rowLimit)
 	}
 
 	if haveBinRecs || haveJSONRecs {

@@ -88,6 +88,8 @@ message MySQLOutfileOptions {
   // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
   optional string null_encoding = 8 [(gogoproto.nullable) = true];
   reserved 9;
+  // limit the number of rows to import.
+  optional int64 row_limit = 10 [(gogoproto.nullable) = false];
 }
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
@@ -128,4 +130,5 @@ message AvroOptions {
   optional string schemaJSON = 3 [(gogoproto.nullable) = false];
   optional int32 max_record_size = 4 [(gogoproto.nullable) = false];
   optional int32 record_separator = 5 [(gogoproto.nullable) = false];
+  optional int64 row_limit = 6 [(gogoproto.nullable) = false];
 }
