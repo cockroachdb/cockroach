@@ -72,10 +72,13 @@ type opType int
 // opsWithErrorScreening stores ops which currently check for exec
 // errors and update expectedExecErrors in the op generator state
 var opsWithExecErrorScreening = map[opType]bool{
-	addColumn:     true,
+	addColumn: true,
+
 	createTable:   true,
 	createTableAs: true,
 	createView:    true,
+
+	renameTable: true,
 }
 
 func opScreensForExecErrors(op opType) bool {
@@ -732,6 +735,35 @@ func (og *operationGenerator) renameTable(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	srcTableExists, err := tableExists(tx, srcTableName)
+	if err != nil {
+		return "", err
+	}
+
+	destSchemaExists, err := schemaExists(tx, destTableName.Schema())
+	if err != nil {
+		return "", err
+	}
+
+	destTableExists, err := tableExists(tx, destTableName)
+	if err != nil {
+		return "", err
+	}
+
+	srcTableHasDependencies, err := tableHasDependencies(tx, srcTableName)
+	if err != nil {
+		return "", err
+	}
+
+	srcEqualsDest := destTableName.String() == srcTableName.String()
+	codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !srcTableExists},
+		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destTableExists},
+		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
+		{code: pgcode.InvalidName, condition: srcTableName.Schema() != destTableName.Schema()},
+	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName), nil
 }
