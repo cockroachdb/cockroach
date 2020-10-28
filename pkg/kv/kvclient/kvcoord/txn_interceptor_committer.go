@@ -22,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
+// DocParallelCommit is a doc anchor; see the kvdoc package.
+type ParallelCommits struct{}
+
 var parallelCommitsEnabled = settings.RegisterBoolSetting(
 	"kv.transaction.parallel_commits_enabled",
 	"if enabled, transactional commits will be parallelized with transactional writes",

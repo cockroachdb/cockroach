@@ -36,6 +36,9 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
+// ParallelCommits foo bar baz.
+type ParallelCommits struct{}
+
 func init() {
 	RegisterReadWriteCommand(roachpb.EndTxn, declareKeysEndTxn, EndTxn)
 }
