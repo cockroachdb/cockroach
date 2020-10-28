@@ -41,6 +41,18 @@ var consistencyCheckRate = settings.RegisterPublicValidatedByteSizeSetting(
 	validatePositive,
 )
 
+// consistencyCheckRateBurstFactor we use this to set the burst parameter on the
+// quotapool.RateLimiter. It seems overkill to provide a user setting for this,
+// so we use a factor to scale the burst setting based on the rate defined above.
+const consistencyCheckRateBurstFactor = 8
+
+// consistencyCheckRateMinWait is the minimum time to wait once the rate limit
+// is reached. We check the limit on every key/value pair, which can lead to
+// a lot of nano-second waits because each pair could be very small. Instead we
+// force a larger pause every time the timer is breached to reduce the
+// churn on timers.
+const consistencyCheckRateMinWait = 100 * time.Millisecond
+
 var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
 
 type consistencyQueue struct {

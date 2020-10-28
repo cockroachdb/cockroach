@@ -416,6 +416,7 @@ type Store struct {
 	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
 	scanner            *replicaScanner             // Replica scanner
 	consistencyQueue   *consistencyQueue           // Replica consistency check queue
+	consistencyLimiter *quotapool.RateLimiter      // Rate limits consistency checks
 	metrics            *StoreMetrics
 	intentResolver     *intentresolver.IntentResolver
 	recoveryMgr        txnrecovery.Manager
@@ -1575,6 +1576,17 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
+
+	s.consistencyLimiter = quotapool.NewRateLimiter(
+		"ConsistencyQueue",
+		quotapool.Limit(consistencyCheckRate.Get(&s.ClusterSettings().SV)),
+		consistencyCheckRate.Get(&s.ClusterSettings().SV)*consistencyCheckRateBurstFactor,
+		quotapool.WithMinimumWait(consistencyCheckRateMinWait))
+
+	consistencyCheckRate.SetOnChange(&s.ClusterSettings().SV, func() {
+		rate := consistencyCheckRate.Get(&s.ClusterSettings().SV)
+		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
+	})
 
 	// Storing suggested compactions in the store itself was deprecated with
 	// the removal of the Compactor in 21.1. See discussion in
