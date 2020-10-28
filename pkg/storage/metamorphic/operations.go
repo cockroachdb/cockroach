@@ -464,7 +464,7 @@ type iterOpenOp struct {
 
 func (i iterOpenOp) run(ctx context.Context) string {
 	rw := i.m.getReadWriter(i.rw)
-	iter := rw.NewIterator(storage.IterOptions{
+	iter := rw.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		Prefix:     false,
 		LowerBound: i.key,
 		UpperBound: i.endKey.Next(),

@@ -121,7 +121,7 @@ func mvccGetGo(
 		return nil, nil, emptyKeyError()
 	}
 
-	iter := reader.NewIterator(IterOptions{Prefix: true})
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	buf := newGetBuffer()
@@ -1318,7 +1318,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 
 					{
 						// Seek the iter to a valid position.
-						iter := batch.NewIterator(iterOptions)
+						iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
 						iter.SeekGE(MakeMVCCMetadataKey(key))
 						iter.Close()
 					}
@@ -1332,7 +1332,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 					case "findSplitKey":
 						_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 					case "computeStats":
-						iter := batch.NewIterator(iterOptions)
+						iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
 						_, err = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
 						iter.Close()
 					}
@@ -1341,7 +1341,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 					}
 
 					// Verify that the iter is invalid.
-					iter := batch.NewIterator(iterOptions)
+					iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
 					defer iter.Close()
 					if ok, _ := iter.Valid(); ok {
 						t.Fatalf("iterator should not be valid")
@@ -1393,7 +1393,7 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 				ReadTimestamp: hlc.Timestamp{WallTime: 10},
 				MaxTimestamp:  hlc.Timestamp{WallTime: 10},
 			}
-			iter := batch.NewIterator(IterOptions{
+			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 				LowerBound: testKey1,
 				UpperBound: testKey5,
 			})
@@ -2578,7 +2578,7 @@ func computeStats(
 	t *testing.T, reader Reader, from, to roachpb.Key, nowNanos int64,
 ) enginepb.MVCCStats {
 	t.Helper()
-	iter := reader.NewIterator(IterOptions{UpperBound: to})
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: to})
 	defer iter.Close()
 	s, err := ComputeStatsGo(iter, from, to, nowNanos)
 	if err != nil {
@@ -4908,7 +4908,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 
 			// Verify aggregated stats match computed stats after GC.
-			iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
@@ -5017,9 +5017,11 @@ type readWriterReturningSeekLTTrackingIterator struct {
 	ReadWriter
 }
 
-// NewIterator injects a seekLTTrackingIterator over the engine's real iterator.
-func (rw *readWriterReturningSeekLTTrackingIterator) NewIterator(opts IterOptions) MVCCIterator {
-	rw.it.MVCCIterator = rw.ReadWriter.NewIterator(opts)
+// NewMVCCIterator injects a seekLTTrackingIterator over the engine's real iterator.
+func (rw *readWriterReturningSeekLTTrackingIterator) NewMVCCIterator(
+	iterKind MVCCIterKind, opts IterOptions,
+) MVCCIterator {
+	rw.it.MVCCIterator = rw.ReadWriter.NewMVCCIterator(iterKind, opts)
 	return &rw.it
 }
 
@@ -5057,7 +5059,7 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 	engineBatchIteratorSupportsPrev := func(engine Engine) bool {
 		batch := engine.NewBatch()
 		defer batch.Close()
-		it := batch.NewIterator(IterOptions{
+		it := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			UpperBound: keys.UserTableDataMin,
 			LowerBound: keys.MaxKey,
 		})

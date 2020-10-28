@@ -683,7 +683,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	{
 		// Iterate over the entries in the first DB, ingesting them into SSTables
 		// in the second DB.
-		it := db1.NewIterator(IterOptions{
+		it := db1.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			UpperBound: keys.MaxKey,
 		})
 		defer it.Close()
@@ -766,7 +766,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
 			var expectedKVs []MVCCKeyValue
-			iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
 			iter.SeekGE(MVCCKey{})
 			for {

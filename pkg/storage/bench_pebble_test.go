@@ -317,7 +317,7 @@ func BenchmarkClearRange_Pebble(b *testing.B) {
 func BenchmarkClearIterRange_Pebble(b *testing.B) {
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 		return batch.ClearIterRange(iter, start.Key, end.Key)
 	})

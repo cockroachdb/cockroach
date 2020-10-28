@@ -125,7 +125,8 @@
 // be the target of KV operations, unaddressable keys can only be written as a
 // side-effect of other KV operations. This can often makes the choice between
 // the two clear (range descriptor keys needing to be addressable, and therefore
-// being a range local key is one example of this).
+// being a range local key is one example of this). Not being addressable also
+// implies not having multiple versions, and therefore never having intents.
 //
 // The "behavioral" difference between range local keys and range-id local keys
 // is that range local keys split and merge along range boundaries while

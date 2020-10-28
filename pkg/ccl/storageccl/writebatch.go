@@ -84,7 +84,7 @@ func clearExistingData(
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.MVCCIterate(start, end, func(_ storage.MVCCKeyValue) error {
+		if err := batch.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(_ storage.MVCCKeyValue) error {
 			isEmpty = false
 			return iterutil.StopIteration() // stop right away
 		}); err != nil {
@@ -96,7 +96,7 @@ func clearExistingData(
 		}
 	}
 
-	iter := batch.NewIterator(storage.IterOptions{UpperBound: end})
+	iter := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	iter.SeekGE(storage.MakeMVCCMetadataKey(start))
