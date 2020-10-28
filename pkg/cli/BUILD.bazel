@@ -118,6 +118,7 @@ go_library(
         "//pkg/sql/doctor",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/lex",
+        "//pkg/sql/lexbase:lex",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

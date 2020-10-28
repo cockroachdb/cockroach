@@ -67,9 +67,9 @@ func isReservedKeyword(s string) bool {
 	return ok
 }
 
-// isBareIdentifier returns true if the input string is a permissible bare SQL
+// IsBareIdentifier returns true if the input string is a permissible bare SQL
 // identifier.
-func isBareIdentifier(s string) bool {
+func IsBareIdentifier(s string) bool {
 	if len(s) == 0 || !IsIdentStart(int(s[0])) || (s[0] >= 'A' && s[0] <= 'Z') {
 		return false
 	}
