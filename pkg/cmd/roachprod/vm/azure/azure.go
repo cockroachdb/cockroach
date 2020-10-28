@@ -458,55 +458,16 @@ func (p *Provider) createVM(
 	name, sshKey string,
 	opts vm.CreateOpts,
 ) (vm compute.VirtualMachine, err error) {
-	// We can inject a cloud-init script into the VM creation to perform
-	// the necessary pre-flight configuration. By default, a
-	// locally-attached SSD is available at /mnt, so we just need to
-	// create the necessary directory and preflight.
-	//
-	// https://cloudinit.readthedocs.io/en/latest/
-	cloudConfig := `#cloud-config
-final_message: "roachprod init completed"
-`
-
-	var cmds []string
-	if opts.SSDOpts.UseLocalSSD {
-		cmds = []string{
-			"mkdir -p /mnt/data1",
-			"touch /mnt/data1/.roachprod-initialized",
-			fmt.Sprintf("chown -R %s /data1", remoteUser),
-		}
-		if opts.SSDOpts.NoExt4Barrier {
-			cmds = append(cmds, "mount -o remount,nobarrier /mnt/data1")
-		}
-	} else {
+	startupArgs := azureStartupArgs{RemoteUser: remoteUser}
+	if !opts.SSDOpts.UseLocalSSD {
 		// We define lun42 explicitly in the data disk request below.
-		cloudConfig += `
-disk_setup:
-  /dev/disk/azure/scsi1/lun42:
-    table_type: gpt
-    layout: True
-    overwrite: True
-
-fs_setup:
-  - device: /dev/disk/azure/scsi1/lun42
-    partition: 1
-    filesystem: ext4
-
-mounts:
-  - ["/dev/disk/azure/scsi1/lun42-part1", "/data1", "auto", "defaults"]
-`
-		cmds = []string{
-			"ln -s /data1 /mnt/data1",
-			"touch /data1/.roachprod-initialized",
-			fmt.Sprintf("chown -R %s /data1", remoteUser),
-		}
+		lun := 42
+		startupArgs.AttachedDiskLun = &lun
 	}
-
-	cloudConfig += "runcmd:\n"
-	for _, cmd := range cmds {
-		cloudConfig += fmt.Sprintf(" - %q\n", cmd)
+	startupScript, err := evalStartupTemplate(startupArgs)
+	if err != nil {
+		return vm, err
 	}
-
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
 		return
@@ -561,7 +522,7 @@ mounts:
 				AdminUsername: to.StringPtr(remoteUser),
 				// Per the docs, the cloud-init script should be uploaded already
 				// base64-encoded.
-				CustomData: to.StringPtr(base64.StdEncoding.EncodeToString([]byte(cloudConfig))),
+				CustomData: to.StringPtr(startupScript),
 				LinuxConfiguration: &compute.LinuxConfiguration{
 					SSH: &compute.SSHConfiguration{
 						PublicKeys: &[]compute.SSHPublicKey{

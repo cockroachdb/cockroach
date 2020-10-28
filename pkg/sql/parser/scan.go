@@ -944,7 +944,7 @@ outer:
 
 		default:
 			// If we haven't found a start tag yet, check whether the current characters is a valid for a tag.
-			if !foundStartTag && !lexbase.IsIdentStart(ch) {
+			if !foundStartTag && !lexbase.IsIdentStart(ch) && !lexbase.IsDigit(ch) {
 				return false
 			}
 			s.pos++
