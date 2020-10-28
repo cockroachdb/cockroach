@@ -66,7 +66,7 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
 		checkBundle(
 			t, fmt.Sprint(rows),
-			base, plans, "stats-defaultdb.public.abc.sql", "distsql-1.html distsql-2.html",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql-2-main-query.html distsql-1-subquery.html",
 		)
 	})
 

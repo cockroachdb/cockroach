@@ -267,6 +267,16 @@ type planNodeSpooled interface {
 
 var _ planNodeSpooled = &spoolNode{}
 
+type annotatedFlowDiagram struct {
+	typ     planComponentType
+	diagram execinfrapb.FlowDiagram
+}
+
+type annotatedFlows struct {
+	typ   planComponentType
+	flows map[roachpb.NodeID]*execinfrapb.FlowSpec
+}
+
 // planTop is the struct that collects the properties
 // of an entire plan.
 // Note: some additional per-statement state is also stored in
@@ -302,7 +312,9 @@ type planTop struct {
 	avoidBuffering bool
 
 	// If we are collecting query diagnostics, flow diagrams are saved here.
-	distSQLDiagrams []execinfrapb.FlowDiagram
+	distSQLDiagrams []annotatedFlowDiagram
+	// If we are collecting query diagnostics, physical plans are saved here.
+	flows []annotatedFlows
 
 	// If savePlanForStats is true, an ExplainTreePlanNode tree will be saved in
 	// planForStats when the plan is closed.
@@ -377,6 +389,28 @@ func (p *planMaybePhysical) Close(ctx context.Context) {
 	if p.physPlan != nil {
 		p.physPlan.Close(ctx)
 		p.physPlan = nil
+	}
+}
+
+type planComponentType int
+
+const (
+	planComponentTypeUnknown = iota
+	planComponentTypeMainQuery
+	planComponentTypeSubquery
+	planComponentTypePostquery
+)
+
+func (t planComponentType) String() string {
+	switch t {
+	case planComponentTypeMainQuery:
+		return "main-query"
+	case planComponentTypeSubquery:
+		return "subquery"
+	case planComponentTypePostquery:
+		return "postquery"
+	default:
+		return "unknownquerytype"
 	}
 }
 
