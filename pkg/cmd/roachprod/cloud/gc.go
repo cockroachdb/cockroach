@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/nlopes/slack"
 )
 
@@ -254,7 +255,7 @@ func shouldSend(channel string, status *status) (bool, error) {
 	}
 	hashPath := os.ExpandEnv(filepath.Join(hashDir, "notification-"+channel))
 	fileBytes, err := ioutil.ReadFile(hashPath)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !oserror.IsNotExist(err) {
 		return true, err
 	}
 	oldHash := string(fileBytes)

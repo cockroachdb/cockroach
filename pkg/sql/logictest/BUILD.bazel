@@ -35,6 +35,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/lib/pq",
         "//vendor/github.com/stretchr/testify/require",
     ],

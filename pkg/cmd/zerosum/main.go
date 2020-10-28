@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 var workers = flag.Int("w", 2*runtime.NumCPU(), "number of workers")
@@ -414,7 +415,7 @@ func main() {
 
 	cockroachBin := func() string {
 		bin := "./cockroach"
-		if _, err := os.Stat(bin); os.IsNotExist(err) {
+		if _, err := os.Stat(bin); oserror.IsNotExist(err) {
 			bin = "cockroach"
 		} else if err != nil {
 			panic(err)

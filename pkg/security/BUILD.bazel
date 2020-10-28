@@ -32,6 +32,7 @@ go_library(
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/cockroachdb/redact",
         "//vendor/golang.org/x/crypto/bcrypt",
         "//vendor/golang.org/x/crypto/ocsp",

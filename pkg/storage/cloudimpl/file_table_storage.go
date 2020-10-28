@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os"
 	"path"
 	"strings"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 const (
@@ -193,7 +193,7 @@ func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.Re
 		return nil, err
 	}
 	reader, err := f.fs.ReadFile(ctx, filepath)
-	if os.IsNotExist(err) {
+	if oserror.IsNotExist(err) {
 		return nil, errors.Wrapf(ErrFileDoesNotExist,
 			"file %s does not exist in the UserFileTableSystem", filepath)
 	}

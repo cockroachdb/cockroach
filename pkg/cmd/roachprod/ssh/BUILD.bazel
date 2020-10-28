@@ -12,6 +12,7 @@ go_library(
         "//pkg/cmd/roachprod/config",
         "//pkg/util/syncutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/golang.org/x/crypto/ssh",
         "//vendor/golang.org/x/crypto/ssh/agent",
         "//vendor/golang.org/x/crypto/ssh/knownhosts",

@@ -16,7 +16,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/kr/pretty"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -312,7 +312,7 @@ func testSideloadingSideloadedStorage(
 			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
 		}
 		if err != nil {
-			if !os.IsNotExist(err) {
+			if !oserror.IsNotExist(err) {
 				t.Fatalf("expected %q to be removed: %+v", ss.(*diskSideloadStorage).dir, err)
 			}
 		}
@@ -336,7 +336,7 @@ func testSideloadingSideloadedStorage(
 			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
 		}
 		if err != nil {
-			if !os.IsNotExist(err) {
+			if !oserror.IsNotExist(err) {
 				t.Fatalf("expected %q to be removed: %+v", ss.(*diskSideloadStorage).dir, err)
 			}
 		}

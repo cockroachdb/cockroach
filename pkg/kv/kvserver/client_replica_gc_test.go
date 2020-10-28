@@ -12,7 +12,6 @@ package kvserver_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -126,7 +126,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 					dir := repl1.SideloadedRaftMuLocked().Dir()
 					repl1.RaftUnlock()
 					_, err := eng.Stat(dir)
-					if os.IsNotExist(err) {
+					if oserror.IsNotExist(err) {
 						return nil
 					}
 					return errors.Errorf("replica still has sideloaded files despite GC: %v", err)

@@ -186,6 +186,7 @@ go_test(
         "//vendor/github.com/cockroachdb/cockroach-go/crdb",
         "//vendor/github.com/cockroachdb/datadriven",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/gogo/protobuf/types",
         "//vendor/github.com/gorhill/cronexpr",

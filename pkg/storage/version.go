@@ -16,6 +16,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/cockroachdb/errors/oserror"
 )
 
 type storageVersion int
@@ -52,7 +54,7 @@ func getVersion(dir string) (storageVersion, error) {
 	filename := getVersionFilename(dir)
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			return versionNoFile, nil
 		}
 		return 0, err

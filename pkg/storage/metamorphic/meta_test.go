@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 var (
@@ -224,7 +225,7 @@ func TestPebbleCheck(t *testing.T) {
 	ctx := context.Background()
 
 	if *check != "" {
-		if _, err := os.Stat(*check); os.IsNotExist(err) {
+		if _, err := os.Stat(*check); oserror.IsNotExist(err) {
 			t.Fatal(err)
 		}
 

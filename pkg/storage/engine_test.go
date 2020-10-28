@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
@@ -1362,9 +1362,9 @@ func TestEngineFS(t *testing.T) {
 						t.Fatalf("%q: got nil error, want non-nil %s", tc, errorStr)
 					}
 					var actualErrStr string
-					if os.IsExist(err) {
+					if oserror.IsExist(err) {
 						actualErrStr = "exists"
-					} else if os.IsNotExist(err) {
+					} else if oserror.IsNotExist(err) {
 						actualErrStr = "does-not-exist"
 					} else {
 						actualErrStr = "error"
@@ -1423,7 +1423,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 			defer db.Close()
 
 			// Verify Remove returns os.ErrNotExist if file does not exist.
-			if err := db.Remove("/non/existent/file"); !os.IsNotExist(err) {
+			if err := db.Remove("/non/existent/file"); !oserror.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
@@ -1460,12 +1460,12 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 			}
 
 			// Verify ReadFile returns os.ErrNotExist if reading an already deleted file.
-			if _, err := db.ReadFile(fname); !os.IsNotExist(err) {
+			if _, err := db.ReadFile(fname); !oserror.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
 			// Verify Remove returns os.ErrNotExist if deleting an already deleted file.
-			if err := db.Remove(fname); !os.IsNotExist(err) {
+			if err := db.Remove(fname); !oserror.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 		})
@@ -1551,7 +1551,7 @@ func TestFS(t *testing.T) {
 			// Create a/ and assert that it's empty.
 			require.NoError(t, fs.MkdirAll(path("a")))
 			expectLS(path("a"), []string{})
-			if _, err := fs.Stat(path("a/b/c")); !os.IsNotExist(err) {
+			if _, err := fs.Stat(path("a/b/c")); !oserror.IsNotExist(err) {
 				t.Fatal(`fs.Stat("a/b/c") should not exist`)
 			}
 

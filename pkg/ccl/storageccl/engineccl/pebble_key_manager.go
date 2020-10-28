@@ -14,7 +14,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
 )
@@ -178,7 +178,7 @@ func (m *DataKeyManager) Load(ctx context.Context) error {
 	_, err := m.fs.Stat(m.registryFilename)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if os.IsNotExist(err) {
+	if oserror.IsNotExist(err) {
 		// First run.
 		m.mu.keyRegistry = makeRegistryProto()
 		return nil

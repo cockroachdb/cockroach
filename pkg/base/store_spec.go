@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
@@ -441,7 +441,7 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 		}
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			if !os.IsNotExist(err) {
+			if !oserror.IsNotExist(err) {
 				addError(errors.Wrapf(err, "%s", path))
 			}
 			continue
