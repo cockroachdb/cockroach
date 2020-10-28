@@ -301,12 +301,39 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after ApplyBatchRepr
 	// returns.
 	ApplyBatchRepr(repr []byte, sync bool) error
+
+	// ClearMVCC removes the item from the db with the given MVCCKey. It
+	// requires that the timestamp is non-empty (see
+	// {ClearUnversioned,ClearIntent} if the timestamp is empty). Note that
+	// clear actually removes entries from the storage engine, rather than
+	// inserting tombstones.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearMVCC(key MVCCKey) error
+	// ClearUnversioned removes an unversioned item from the db. It is for use
+	// with inline metadata (not intents) and other unversioned keys (like
+	// Range-ID local keys).
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearUnversioned(key roachpb.Key) error
+	// ClearIntent removes an intent from the db. Unlike
+	// {ClearMVCC,ClearUnversioned} this is a higher-level method that may make
+	// changes in parts of the key space that are not only a function of the
+	// input, and may choose to use a single-clear under the covers.
+	// TODO(sumeer): add additional parameters. This initial placeholder is so
+	// that we can identify all call-sites.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearIntent(key roachpb.Key) error
+	// TODO: remove
 	// Clear removes the item from the db with the given key. Note that clear
 	// actually removes entries from the storage engine, rather than inserting
 	// tombstones.
 	//
-	// It is safe to modify the contents of the arguments after Clear returns.
+	// It is safe to modify the contents of the arguments after it returns.
 	Clear(key MVCCKey) error
+
+	// TODO: remove
 	// SingleClear removes the most recent write to the item from the db with
 	// the given key. Whether older version of the item will come back to life
 	// if not also removed with SingleClear is undefined. See the following:
@@ -318,6 +345,41 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after SingleClear
 	// returns.
 	SingleClear(key MVCCKey) error
+
+	// ClearRawRange removes a set of entries, from start (inclusive) to end
+	// (exclusive). It can be applied to a range consisting of MVCCKeys or the
+	// more general EngineKeys -- it simply uses the roachpb.Key parameters as
+	// the Key field of an EngineKey. Similar to the other Clear* methods,
+	// this method actually removes entries from the storage engine.
+	//
+	// Note that when used on batches, subsequent reads may not reflect the result
+	// of the ClearRawRange.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearRawRange(start, end roachpb.Key) error
+	// ClearMVCCRangeAndIntents removes MVCC keys and intents from start (inclusive)
+	// to end (exclusive). This is a higher-level method that handles both
+	// interleaved and separated intents. Similar to the other Clear* methods,
+	// this method actually removes entries from the storage engine.
+	//
+	// Note that when used on batches, subsequent reads may not reflect the result
+	// of the ClearMVCCRangeAndIntents.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearMVCCRangeAndIntents(start, end roachpb.Key) error
+	// ClearMVCCRange removes MVCC keys from start (inclusive) to end
+	// (exclusive). It should not be expected to clear intents, though may clear
+	// interleaved intents that it encounters. It is meant for efficiently
+	// clearing a subset of versions of a key, since the parameters are MVCCKeys
+	// and not roachpb.Keys. Similar to the other Clear* methods, this method
+	// actually removes entries from the storage engine.
+	//
+	// Note that when used on batches, subsequent reads may not reflect the result
+	// of the ClearMVCCRange.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearMVCCRange(start, end MVCCKey) error
+	// TODO: remove
 	// ClearRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear, this method actually removes entries from
 	// the storage engine.
@@ -332,19 +394,23 @@ type Writer interface {
 	// MVCCClearTimeRange. That function actually does what to clear records
 	// between specific versions.
 	ClearRange(start, end MVCCKey) error
+
 	// ClearIterRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear and ClearRange, this method actually removes
 	// entries from the storage engine. Unlike ClearRange, the entries to remove
 	// are determined by iterating over iter and per-key tombstones are
-	// generated.
+	// generated. If the MVCCIterator was constructed using MVCCKeyAndIntentsIterKind,
+	// any separated intents/locks will also be cleared.
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
 	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
+
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
-	// value which is computed from the original merged values.
+	// value which is computed from the original merged values. We only
+	// support Merge for keys with no version.
 	//
 	// Merge currently provides specialized behavior for three data types:
 	// integers, byte slices, and time series observations. Merged integers are
@@ -353,15 +419,34 @@ type Writer interface {
 	// (stored as byte slices with a special tag on the roachpb.Value) are
 	// combined with specialized logic beyond that of simple byte slices.
 	//
-	// The logic for merges is written in db.cc in order to be compatible with
-	// RocksDB.
 	//
 	// It is safe to modify the contents of the arguments after Merge returns.
 	Merge(key MVCCKey, value []byte) error
-	// Put sets the given key to the value provided.
+
+	// PutMVCC sets the given key to the value provided. It requires that the
+	// timestamp is non-empty (see {PutUnversioned,PutIntent} if the timestamp
+	// is empty).
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
+	PutMVCC(key MVCCKey, value []byte) error
+	// PutUnversioned sets the given key to the value provided. It is for use
+	// with inline metadata (not intents) and other unversioned keys (like
+	// Range-ID local keys).
+	//
+	// It is safe to modify the contents of the arguments after Put returns.
+	PutUnversioned(key roachpb.Key, value []byte) error
+	// PutIntent puts an intent at the given key to the value provided.
+	// This is a higher-level method that may make changes in parts of the key
+	// space that are not only a function of the input key, and may explicitly
+	// clear the preceding intent.
+	// TODO(sumeer): add additional parameters. This initial placeholder is so
+	// that we can identify all call-sites.
+	//
+	// It is safe to modify the contents of the arguments after Put returns.
+	PutIntent(key roachpb.Key, value []byte) error
+	// TODO: remove
 	Put(key MVCCKey, value []byte) error
+
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
 	//
@@ -488,6 +573,20 @@ type Engine interface {
 // Batch is the interface for batch specific operations.
 type Batch interface {
 	ReadWriter
+	// SingleClearEngine removes the most recent write to the item from the db
+	// with the given key. Whether older writes of the item will come back
+	// to life if not also removed with SingleClear is undefined. See the
+	// following:
+	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
+	// for details on the SingleDelete operation that this method invokes. Note
+	// that clear actually removes entries from the storage engine, rather than
+	// inserting tombstones. This is a low-level interface that must not be
+	// called from outside the storage package. It is part of the interface because
+	// there are structs that wrap Batch and implement the Batch interface, that are
+	// not part of the storage package.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	SingleClearEngine(key EngineKey) error
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.
