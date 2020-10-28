@@ -88,12 +88,6 @@ type Tracer struct {
 	// x/net/trace or lightstep and we are not recording.
 	noopSpan *Span
 
-	// If forceRealSpans is set, this Tracer will always create real spans (never
-	// noopSpans), regardless of the recording or lightstep configuration. Used
-	// by tests for situations when they need to indirectly create spans and don't
-	// have the option of passing the Recordable option to their constructor.
-	forceRealSpans bool
-
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
@@ -143,14 +137,6 @@ func (t *Tracer) useNetTrace() bool {
 func (t *Tracer) Close() {
 	// Clean up any shadow tracer.
 	t.setShadowTracer(nil, nil)
-}
-
-// SetForceRealSpans sets forceRealSpans option to v and returns the previous
-// value.
-func (t *Tracer) SetForceRealSpans(v bool) bool {
-	prevVal := t.forceRealSpans
-	t.forceRealSpans = v
-	return prevVal
 }
 
 func (t *Tracer) setShadowTracer(manager shadowTracerManager, tr opentracing.Tracer) {
@@ -270,7 +256,7 @@ const (
 // context.
 func (t *Tracer) AlwaysTrace() bool {
 	shadowTracer := t.getShadowTracer()
-	return t.useNetTrace() || shadowTracer != nil || t.forceRealSpans
+	return t.useNetTrace() || shadowTracer != nil
 }
 
 // StartRootSpan creates a root Span. This is functionally equivalent to:
