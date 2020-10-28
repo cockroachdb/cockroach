@@ -202,7 +202,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 
 	var span *tracing.Span
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
-	if span != nil && tracing.IsRecording(span) {
+	if span != nil && span.IsRecording() {
 		m.statsCollectionEnabled = true
 		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
 		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
@@ -285,7 +285,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 					if m.flowCtx.Cfg.TestingKnobs.DeterministicStats {
 						m.stats.BytesSent = 0
 					}
-					tracing.SetSpanStats(span, &m.stats)
+					span.SetSpanStats(&m.stats)
 					tracing.FinishSpan(span)
 					spanFinished = true
 					if trace := execinfra.GetTraceData(ctx); trace != nil {

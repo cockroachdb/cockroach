@@ -54,7 +54,7 @@ func (s *sorterBase) init(
 	opts execinfra.ProcStateOpts,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
-	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		input = newInputStatCollector(input)
 		s.FinishTrace = s.outputStatsToTrace
 	}
@@ -163,8 +163,7 @@ func (s *sorterBase) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(s.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
+		sp.SetSpanStats(
 			&SorterStats{
 				InputStats:       is,
 				MaxAllocatedMem:  s.MemMonitor.MaximumBytes(),

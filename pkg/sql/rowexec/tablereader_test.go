@@ -393,7 +393,7 @@ func TestLimitScans(t *testing.T) {
 	// Now we're going to run the tableReader and trace it.
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("root", tracing.Recordable)
-	tracing.StartRecording(sp, tracing.SnowballRecording)
+	sp.StartRecording(tracing.SnowballRecording)
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx
 
@@ -412,7 +412,7 @@ func TestLimitScans(t *testing.T) {
 
 		// Simulate what the DistSQLReceiver does and ingest the trace.
 		if meta != nil && len(meta.TraceData) > 0 {
-			if err := tracing.ImportRemoteSpans(sp, meta.TraceData); err != nil {
+			if err := sp.ImportRemoteSpans(meta.TraceData); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -433,7 +433,7 @@ func TestLimitScans(t *testing.T) {
 	// scans from the same key as the DistSender retries scans when it detects
 	// splits.
 	re := regexp.MustCompile(fmt.Sprintf(`querying next range at /Table/%d/1(\S.*)?`, tableDesc.ID))
-	spans := tracing.GetRecording(sp)
+	spans := sp.GetRecording()
 	ranges := make(map[string]struct{})
 	for _, span := range spans {
 		if span.Operation == tableReaderProcName {

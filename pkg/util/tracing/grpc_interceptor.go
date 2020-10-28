@@ -71,7 +71,7 @@ func extractSpanContext(ctx context.Context, tracer *Tracer) (*SpanContext, erro
 // create a span.
 func spanInclusionFuncForServer(t *Tracer, parentSpanCtx *SpanContext) bool {
 	// Is client tracing?
-	return (parentSpanCtx != nil && !IsNoopContext(parentSpanCtx)) ||
+	return (parentSpanCtx != nil && !parentSpanCtx.IsNoop()) ||
 		// Should we trace regardless of the client? This is useful for calls coming
 		// through the HTTP->RPC gateway (i.e. the AdminUI), where client is never
 		// tracing.
@@ -207,7 +207,7 @@ func (ss *tracingServerStream) Context() context.Context {
 //
 // See #17177.
 func spanInclusionFuncForClient(parentSpanCtx *SpanContext) bool {
-	return parentSpanCtx != nil && !IsNoopContext(parentSpanCtx)
+	return parentSpanCtx != nil && !parentSpanCtx.IsNoop()
 }
 
 func injectSpanContext(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {

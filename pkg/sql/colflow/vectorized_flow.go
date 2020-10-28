@@ -176,7 +176,7 @@ func (f *vectorizedFlow) Setup(
 	}
 	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
 	recordingStats := false
-	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		recordingStats = true
 	}
 	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
@@ -885,7 +885,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 						finishVectorizedStatsCollectors(
 							ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs,
 						)
-						return []execinfrapb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
+						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},
 				},
 			)

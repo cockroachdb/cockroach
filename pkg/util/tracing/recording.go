@@ -386,7 +386,7 @@ type TraceCollection struct {
 // expected event (i.e. log message).
 //
 // Use with something like:
-// 	 if err := TestingCheckRecordedSpans(tracing.GetRecording(Span), `
+// 	 if err := TestingCheckRecordedSpans(Span.GetRecording(), `
 //     Span root:
 //       event: a
 //       event: c

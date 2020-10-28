@@ -67,7 +67,7 @@ func newOrdinalityProcessor(
 		return nil, err
 	}
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		o.input = newInputStatCollector(o.input)
 		o.FinishTrace = o.outputStatsToTrace
 	}
@@ -134,8 +134,6 @@ func (o *ordinalityProcessor) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(o.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp, &OrdinalityStats{InputStats: is},
-		)
+		sp.SetSpanStats(&OrdinalityStats{InputStats: is})
 	}
 }

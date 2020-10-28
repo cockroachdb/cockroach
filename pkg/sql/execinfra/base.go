@@ -236,7 +236,7 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 // GetTraceData returns the trace data.
 func GetTraceData(ctx context.Context) []tracingpb.RecordedSpan {
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		return tracing.GetRecording(sp)
+		return sp.GetRecording()
 	}
 	return nil
 }

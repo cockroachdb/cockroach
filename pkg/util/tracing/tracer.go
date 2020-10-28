@@ -196,7 +196,7 @@ func (t *Tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOp
 	// case) with a noop context, return a noop Span now.
 	if len(opts) == 1 {
 		if o, ok := opts[0].(opentracing.SpanReference); ok {
-			if IsNoopContext(o.ReferencedContext.(*SpanContext)) {
+			if o.ReferencedContext.(*SpanContext).IsNoop() {
 				return t.noopSpan
 			}
 		}
@@ -237,7 +237,7 @@ func (t *Tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOp
 		if r.ReferencedContext == nil {
 			continue
 		}
-		if IsNoopContext(r.ReferencedContext.(*SpanContext)) {
+		if r.ReferencedContext.(*SpanContext).IsNoop() {
 			continue
 		}
 		parentType = r.Type
@@ -422,7 +422,7 @@ func (fn textMapWriterFn) Set(key, val string) {
 func (t *Tracer) Inject(
 	osc opentracing.SpanContext, format interface{}, carrier interface{},
 ) error {
-	if IsNoopContext(osc.(*SpanContext)) {
+	if osc.(*SpanContext).IsNoop() {
 		// Fast path when tracing is disabled. Extract will accept an empty map as a
 		// noop context.
 		return nil
@@ -575,7 +575,7 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 			return ctx, sp
 		}
 		tr := sp.Tracer()
-		if IsBlackHoleSpan(sp) {
+		if sp.IsBlackHole() {
 			ns := tr.noopSpan
 			return ContextWithSpan(ctx, ns), ns
 		}
@@ -610,7 +610,7 @@ func childSpan(
 		return ctx, sp
 	}
 	tr := sp.Tracer()
-	if IsBlackHoleSpan(sp) {
+	if sp.IsBlackHole() {
 		ns := tr.noopSpan
 		return ContextWithSpan(ctx, ns), ns
 	}
@@ -679,7 +679,7 @@ func StartSnowballTrace(
 	} else {
 		span = tracer.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
 	}
-	StartRecording(span, SnowballRecording)
+	span.StartRecording(SnowballRecording)
 	return ContextWithSpan(ctx, span), span
 }
 
@@ -695,18 +695,15 @@ func ContextWithRecordingSpan(
 ) (retCtx context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
 	sp := tr.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
-	StartRecording(sp, SnowballRecording)
+	sp.StartRecording(SnowballRecording)
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ctx = ContextWithSpan(ctx, sp)
 
-	getRecording = func() Recording {
-		return GetRecording(sp)
-	}
 	cancel = func() {
 		cancelCtx()
-		StopRecording(sp)
+		sp.StopRecording()
 		sp.Finish()
 		tr.Close()
 	}
-	return ctx, getRecording, cancel
+	return ctx, sp.GetRecording, cancel
 }

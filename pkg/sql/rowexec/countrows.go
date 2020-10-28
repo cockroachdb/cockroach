@@ -47,7 +47,7 @@ func newCountAggregator(
 	ag := &countAggregator{}
 	ag.input = input
 
-	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		ag.input = newInputStatCollector(input)
 		ag.FinishTrace = ag.outputStatsToTrace
 	}
@@ -115,8 +115,8 @@ func (ag *countAggregator) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(ag.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp, &AggregatorStats{InputStats: is},
+		sp.SetSpanStats(
+			&AggregatorStats{InputStats: is},
 		)
 	}
 }

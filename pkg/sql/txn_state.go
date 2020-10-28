@@ -189,17 +189,13 @@ func (ts *txnState) resetForNewSQLTxn(
 	alreadyRecording := tranCtx.sessionTracing.Enabled()
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
 	if !alreadyRecording && (duration > 0) {
-		tracing.StartRecording(sp, tracing.SnowballRecording)
+		sp.StartRecording(tracing.SnowballRecording)
 		ts.recordingThreshold = duration
 		ts.recordingStart = timeutil.Now()
 	}
 
 	// Put the new span in the context.
 	txnCtx := tracing.ContextWithSpan(connCtx, sp)
-
-	if !tracing.IsRecordable(sp) {
-		log.Fatalf(connCtx, "non-recordable transaction span of type: %T", sp)
-	}
 
 	ts.sp = sp
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
@@ -243,7 +239,7 @@ func (ts *txnState) finishSQLTxn() {
 	}
 
 	if ts.recordingThreshold > 0 {
-		if r := tracing.GetRecording(ts.sp); r != nil {
+		if r := ts.sp.GetRecording(); r != nil {
 			if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
 				dump := r.String()
 				if len(dump) > 0 {
