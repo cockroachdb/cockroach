@@ -1,0 +1,31 @@
+# Test that check constraints are handled correctly.
+
+sql
+CREATE DATABASE d;
+CREATE TABLE d.t (
+  x INT,
+  y INT,
+  CHECK (x > 0)
+);
+INSERT INTO d.t VALUES (1, 1);
+ALTER TABLE d.t ADD CONSTRAINT c CHECK (y > 100) NOT VALID;
+----
+ALTER TABLE
+
+# Test basic dumping of a database.
+dump d
+noroundtrip
+----
+----
+CREATE TABLE public.t (
+	x INT8 NULL,
+	y INT8 NULL,
+	FAMILY "primary" (x, y, rowid),
+	CONSTRAINT check_x CHECK (x > 0:::INT8),
+	CONSTRAINT c CHECK (y > 100:::INT8) NOT VALID
+);
+
+INSERT INTO public.t (x, y) VALUES
+	(1, 1);
+----
+----
