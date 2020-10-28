@@ -56,8 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
 	"go.etcd.io/etcd/raft"
 )
 
@@ -297,12 +295,12 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		// except that one does not currently support FollowsFrom relationships.
 		sp = tr.StartSpan(
 			opName,
-			opentracing.FollowsFrom(parentSp.Context()),
-			tracing.LogTagsFromCtx(parentCtx),
+			tracing.WithParent(parentSp),
+			tracing.WithFollowsFrom(),
+			tracing.WithCtxLogTags(parentCtx),
 		)
 	} else {
-		sp = tr.StartRootSpan(
-			opName, logtags.FromContext(parentCtx), tracing.NonRecordableSpan)
+		sp = tr.StartSpan(opName, tracing.WithCtxLogTags(parentCtx))
 	}
 
 	// Create a new context *without* a timeout. Instead, we multiplex the

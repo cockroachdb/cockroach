@@ -144,7 +144,7 @@ var _ roachpb.InternalClient = &mockInternalClient{}
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	sp := m.tr.StartRootSpan("mock", nil /* logTags */, tracing.RecordableSpan)
+	sp := m.tr.StartSpan("mock", tracing.WithForceRealSpan())
 	defer sp.Finish()
 	sp.StartRecording(tracing.SnowballRecording)
 	ctx = tracing.ContextWithSpan(ctx, sp)

@@ -65,7 +65,7 @@ func TestTrace(t *testing.T) {
 	Event(ctx, "should-not-show-up")
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartRootSpan("s", nil /* logTags */, tracing.RecordableSpan)
+	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
 	sp.StartRecording(tracing.SingleNodeRecording)
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
@@ -94,7 +94,7 @@ func TestTraceWithTags(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "tag", 1)
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartRootSpan("s", nil /* logTags */, tracing.RecordableSpan)
+	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 	sp.StartRecording(tracing.SingleNodeRecording)
 
@@ -180,7 +180,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	VErrEvent(ctxWithEventLog, noLogV(), "testerr")
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartRootSpan("s", nil /* logTags */, tracing.RecordableSpan)
+	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
 	sp.StartRecording(tracing.SingleNodeRecording)
 	ctxWithBoth := tracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.

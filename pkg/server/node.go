@@ -979,8 +979,8 @@ func (n *Node) setupSpanForIncomingRPC(
 			// If tracing information was passed via gRPC metadata, the gRPC interceptor
 			// should have opened a span for us. If not, open a span now (if tracing is
 			// disabled, this will be a noop span).
-			newSpan = n.storeCfg.AmbientCtx.Tracer.StartRootSpan(
-				opName, n.storeCfg.AmbientCtx.LogTags(), tracing.NonRecordableSpan,
+			newSpan = n.storeCfg.AmbientCtx.Tracer.StartSpan(
+				opName, tracing.WithLogTags(n.storeCfg.AmbientCtx.LogTags()),
 			)
 			ctx = tracing.ContextWithSpan(ctx, newSpan)
 		} else {
