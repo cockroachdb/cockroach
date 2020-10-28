@@ -129,7 +129,7 @@ func TestPebbleIterReuse(t *testing.T) {
 		}
 	}
 
-	iter1 := batch.NewIterator(IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
+	iter1 := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
 	valuesCount := 0
 	// Seek to a value before the lower bound. Identical to seeking to the lower bound.
 	iter1.SeekGE(MVCCKey{Key: []byte{30}})
@@ -157,7 +157,7 @@ func TestPebbleIterReuse(t *testing.T) {
 	// is lower than the previous iterator's lower bound. This should still result
 	// in the right amount of keys being returned; the lower bound from the
 	// previous iterator should get zeroed.
-	iter2 := batch.NewIterator(IterOptions{UpperBound: []byte{10}})
+	iter2 := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: []byte{10}})
 	valuesCount = 0
 	iter1.SeekGE(MVCCKey{Key: []byte{0}})
 	for ; ; iter2.Next() {

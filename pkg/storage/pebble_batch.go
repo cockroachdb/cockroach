@@ -166,15 +166,17 @@ func (p *pebbleBatch) MVCCGetProto(
 }
 
 // MVCCIterate implements the Batch interface.
-func (p *pebbleBatch) MVCCIterate(start, end roachpb.Key, f func(MVCCKeyValue) error) error {
+func (p *pebbleBatch) MVCCIterate(
+	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
-	return iterateOnReader(p, start, end, f)
+	return iterateOnReader(p, start, end, iterKind, f)
 }
 
-// NewIterator implements the Batch interface.
-func (p *pebbleBatch) NewIterator(opts IterOptions) MVCCIterator {
+// NewMVCCIterator implements the Batch interface.
+func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
@@ -211,7 +213,7 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) MVCCIterator {
 	return iter
 }
 
-// NewIterator implements the Batch interface.
+// NewMVCCIterator implements the Batch interface.
 func (p *pebbleBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
