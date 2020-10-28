@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // txnHeartbeater is a txnInterceptor in charge of a transaction's heartbeat
@@ -216,7 +216,7 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) error {
 	// put our span in the new context and expect RunAsyncTask to fork it
 	// immediately.
 	hbCtx := h.AnnotateCtx(context.Background())
-	hbCtx = opentracing.ContextWithSpan(hbCtx, opentracing.SpanFromContext(ctx))
+	hbCtx = tracing.ContextWithSpan(hbCtx, tracing.SpanFromContext(ctx))
 	hbCtx, h.mu.loopCancel = context.WithCancel(hbCtx)
 
 	return h.stopper.RunAsyncTask(hbCtx, "kv.TxnCoordSender: heartbeat loop", h.heartbeatLoop)

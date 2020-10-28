@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -356,7 +355,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		p.collectBundle = true
 		tr := ex.server.cfg.AmbientCtx.Tracer
 		origCtx := ctx
-		var sp opentracing.Span
+		var sp *tracing.Span
 		ctx, sp = tracing.StartSnowballTrace(ctx, tr, "traced statement")
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx
@@ -386,7 +385,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if ex.server.cfg.TestingKnobs.WithStatementTrace != nil {
 		tr := ex.server.cfg.AmbientCtx.Tracer
-		var sp opentracing.Span
+		var sp *tracing.Span
 		ctx, sp = tracing.StartSnowballTrace(ctx, tr, stmt.SQL)
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx

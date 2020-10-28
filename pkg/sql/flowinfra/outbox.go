@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 const outboxBufRows = 16
@@ -201,7 +200,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	// writers could be writing to it as soon as we are started.
 	defer m.RowChannel.ConsumerClosed()
 
-	var span opentracing.Span
+	var span *tracing.Span
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
 	if span != nil && tracing.IsRecording(span) {
 		m.statsCollectionEnabled = true

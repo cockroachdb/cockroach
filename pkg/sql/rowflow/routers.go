@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 type router interface {
@@ -261,7 +260,7 @@ func (rb *routerBase) setupStreams(
 // init must be called after setupStreams but before Start.
 func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []*types.T) {
 	// Check if we're recording stats.
-	if s := opentracing.SpanFromContext(ctx); s != nil && tracing.IsRecording(s) {
+	if s := tracing.SpanFromContext(ctx); s != nil && tracing.IsRecording(s) {
 		rb.statsCollectionEnabled = true
 	}
 
@@ -308,7 +307,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput, wg *sync.WaitGroup) {
-			var span opentracing.Span
+			var span *tracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
 				span.SetTag(execinfrapb.StreamIDTagKey, ro.streamID)

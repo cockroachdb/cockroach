@@ -61,7 +61,6 @@ go_test(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "//vendor/github.com/opentracing/opentracing-go",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )

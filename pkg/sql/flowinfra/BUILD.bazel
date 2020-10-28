@@ -41,7 +41,6 @@ go_library(
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/redact",
         "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/opentracing/opentracing-go",
     ],
 )
 
@@ -98,9 +97,9 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/opentracing/opentracing-go",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )

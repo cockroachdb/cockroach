@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
 
@@ -117,7 +116,7 @@ func TestSpanImport(t *testing.T) {
 	recCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
 	defer cancel()
 
-	server.tr = opentracing.SpanFromContext(recCtx).Tracer().(*tracing.Tracer)
+	server.tr = tracing.SpanFromContext(recCtx).Tracer()
 
 	br, err := gt.sendBatch(recCtx, roachpb.NodeID(1), &server, roachpb.BatchRequest{})
 	if err != nil {
@@ -148,7 +147,7 @@ func (m *mockInternalClient) Batch(
 	sp := m.tr.StartRootSpan("mock", nil /* logTags */, tracing.RecordableSpan)
 	defer sp.Finish()
 	tracing.StartRecording(sp, tracing.SnowballRecording)
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	log.Eventf(ctx, "mockInternalClient processing batch")
 	br := &roachpb.BatchResponse{}

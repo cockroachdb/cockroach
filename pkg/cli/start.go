@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -324,7 +323,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	// TODO(andrei): we don't close the span on the early returns below.
 	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartRootSpan("server start", nil /* logTags */, tracing.NonRecordableSpan)
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	// Set up the logging and profiling output.
 	//
@@ -697,7 +696,7 @@ If problems persist, please see %s.`
 	// We'll want to log any shutdown activity against a separate span.
 	shutdownSpan := tracer.StartSpan("server shutdown")
 	defer shutdownSpan.Finish()
-	shutdownCtx := opentracing.ContextWithSpan(context.Background(), shutdownSpan)
+	shutdownCtx := tracing.ContextWithSpan(context.Background(), shutdownSpan)
 
 	// returnErr will be populated with the error to use to exit the
 	// process (reported to the shell).

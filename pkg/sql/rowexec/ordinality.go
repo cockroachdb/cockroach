@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 // ordinalityProcessor is the processor of the WITH ORDINALITY operator, which
@@ -68,7 +67,7 @@ func newOrdinalityProcessor(
 		return nil, err
 	}
 
-	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		o.input = newInputStatCollector(o.input)
 		o.FinishTrace = o.outputStatsToTrace
 	}
@@ -134,7 +133,7 @@ func (o *ordinalityProcessor) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(o.Ctx); sp != nil {
+	if sp := tracing.SpanFromContext(o.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp, &OrdinalityStats{InputStats: is},
 		)

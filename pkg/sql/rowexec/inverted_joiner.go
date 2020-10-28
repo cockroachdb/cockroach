@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // TODO(sumeer): adjust this batch size dynamically to balance between the
@@ -286,7 +285,7 @@ func newInvertedJoiner(
 	}
 
 	collectingStats := false
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		collectingStats = true
 	}
 	if collectingStats {
@@ -738,7 +737,7 @@ func (ij *invertedJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(ij.Ctx); sp != nil {
+	if sp := tracing.SpanFromContext(ij.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&InvertedJoinerStats{

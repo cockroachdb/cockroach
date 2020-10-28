@@ -715,7 +715,7 @@ func TestLint(t *testing.T) {
 			":!util/timeutil/time.go",
 			":!util/timeutil/now_unix.go",
 			":!util/timeutil/now_windows.go",
-			":!util/tracing/tracer_span.go",
+			":!util/tracing/span.go",
 			":!util/tracing/tracer.go",
 		)
 		if err != nil {
@@ -1064,7 +1064,7 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
-			":!util/tracing/tracer_span.go",
+			":!util/tracing/span.go",
 		)
 		if err != nil {
 			t.Fatal(err)

@@ -79,13 +79,11 @@ func (m *mockTracerManager) Name() string {
 	return "mock"
 }
 
-func (m *mockTracerManager) Close(tr opentracing.Tracer) {}
+func (m *mockTracerManager) Close(opentracing.Tracer) {}
 
 type mockSpan struct {
 	tags opentracing.Tags
 }
-
-var _ opentracing.Span = &mockSpan{}
 
 func (m *mockSpan) Finish() {}
 

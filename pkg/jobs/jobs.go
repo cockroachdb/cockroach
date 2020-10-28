@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/opentracing/opentracing-go"
 )
 
 // Job manages logging the progress of long-running system processes, like
@@ -89,7 +89,7 @@ type StartableJob struct {
 	resumerCtx context.Context
 	cancel     context.CancelFunc
 	resultsCh  chan<- tree.Datums
-	span       opentracing.Span
+	span       *tracing.Span
 	starts     int64 // used to detect multiple calls to Start()
 }
 

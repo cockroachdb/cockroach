@@ -287,9 +287,9 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	leaseReq roachpb.Request,
 ) error {
 	const opName = "request range lease"
-	var sp opentracing.Span
+	var sp *tracing.Span
 	tr := p.repl.AmbientContext.Tracer
-	if parentSp := opentracing.SpanFromContext(parentCtx); parentSp != nil {
+	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {
 		// We use FollowsFrom because the lease request's span can outlive the
 		// parent request. This is possible if parentCtx is canceled after others
 		// have coalesced on to this lease request (see leaseRequestHandle.Cancel).
@@ -301,7 +301,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			tracing.LogTagsFromCtx(parentCtx),
 		)
 	} else {
-		sp = tr.(*tracing.Tracer).StartRootSpan(
+		sp = tr.StartRootSpan(
 			opName, logtags.FromContext(parentCtx), tracing.NonRecordableSpan)
 	}
 
@@ -310,7 +310,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
 	// cancel function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	ctx = tracing.ContextWithSpan(ctx, sp)
 	ctx, cancel := context.WithCancel(ctx)
 
 	// Make sure we clean up the context and request state. This will be called

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // Processor is a common interface implemented by all processors, used by the
@@ -476,7 +475,7 @@ type ProcessorBase struct {
 	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not be otherwise
 	// used).
 	Ctx  context.Context
-	span opentracing.Span
+	span *tracing.Span
 	// origCtx is the context from which ctx was derived. InternalClose() resets
 	// ctx to this.
 	origCtx context.Context
@@ -849,7 +848,7 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 
 // ProcessorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
-func ProcessorSpan(ctx context.Context, name string) (context.Context, opentracing.Span) {
+func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.Span) {
 	return tracing.ChildSpanSeparateRecording(ctx, name)
 }
 
