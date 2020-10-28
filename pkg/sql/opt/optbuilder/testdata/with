@@ -1459,3 +1459,55 @@ with &1 (a)
       ├── columns: testval:2!null
       └── mapping:
            └──  testval:1 => testval:2
+
+# Verify that we don't incorrectly project a+1 again (#55196).
+build
+WITH cte AS (SELECT a+1 FROM x ORDER BY a+b LIMIT 10) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: "?column?":6
+ ├── project
+ │    ├── columns: "?column?":4
+ │    └── limit
+ │         ├── columns: "?column?":4 column5:5
+ │         ├── internal-ordering: +5
+ │         ├── sort
+ │         │    ├── columns: "?column?":4 column5:5
+ │         │    ├── ordering: +5
+ │         │    ├── limit hint: 10.00
+ │         │    └── project
+ │         │         ├── columns: "?column?":4 column5:5
+ │         │         ├── scan x
+ │         │         │    └── columns: a:1 b:2 rowid:3!null
+ │         │         └── projections
+ │         │              ├── a:1 + 1 [as="?column?":4]
+ │         │              └── a:1 + b:2 [as=column5:5]
+ │         └── 10
+ └── with-scan &1 (cte)
+      ├── columns: "?column?":6
+      └── mapping:
+           └──  "?column?":4 => "?column?":6
+
+build
+WITH cte AS (SELECT DISTINCT ON (b) a+1 FROM x) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: "?column?":5
+ ├── project
+ │    ├── columns: "?column?":4
+ │    └── distinct-on
+ │         ├── columns: b:2 "?column?":4
+ │         ├── grouping columns: b:2
+ │         ├── project
+ │         │    ├── columns: "?column?":4 b:2
+ │         │    ├── scan x
+ │         │    │    └── columns: a:1 b:2 rowid:3!null
+ │         │    └── projections
+ │         │         └── a:1 + 1 [as="?column?":4]
+ │         └── aggregations
+ │              └── first-agg [as="?column?":4]
+ │                   └── "?column?":4
+ └── with-scan &1 (cte)
+      ├── columns: "?column?":5
+      └── mapping:
+           └──  "?column?":4 => "?column?":5

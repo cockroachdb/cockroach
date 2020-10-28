@@ -60,8 +60,12 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 func (b *Builder) dropOrderingAndExtraCols(s *scope) {
 	s.ordering = nil
 	if len(s.extraCols) > 0 {
+		var passthrough opt.ColSet
+		for i := range s.cols {
+			passthrough.Add(s.cols[i].id)
+		}
+		s.expr = b.factory.ConstructProject(s.expr, nil /* projections */, passthrough)
 		s.extraCols = nil
-		s.expr = b.constructProject(s.expr, s.cols)
 	}
 }
 
