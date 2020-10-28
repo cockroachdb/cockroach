@@ -250,8 +250,9 @@ func doCreateBackupSchedules(
 	// Evaluate encryption KMS URIs if set.
 	// Only one of encryption passphrase and KMS URI should be set, but this check
 	// is done during backup planning so we do not need to worry about it here.
+	var kmsURIs []string
 	if eval.kmsURIs != nil {
-		kmsURIs, err := eval.kmsURIs()
+		kmsURIs, err = eval.kmsURIs()
 		if err != nil {
 			return errors.Wrapf(err, "failed to evaluate backup kms_uri")
 		}
@@ -345,7 +346,8 @@ func doCreateBackupSchedules(
 		if err := inc.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
 			return err
 		}
-		if err := emitSchedule(inc, tree.AsString(backupNode), resultsCh); err != nil {
+		if err := emitSchedule(inc, backupNode, destinations, nil /* incrementalFrom */, kmsURIs,
+			resultsCh); err != nil {
 			return err
 		}
 		unpauseOnSuccessID = inc.ScheduleID()
@@ -353,7 +355,6 @@ func doCreateBackupSchedules(
 
 	// Create FULL backup schedule.
 	backupNode.AppendToLatest = false
-	fullBackupStmt := tree.AsString(backupNode)
 	full, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel,
 		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
@@ -377,7 +378,8 @@ func doCreateBackupSchedules(
 		return err
 	}
 	collectScheduledBackupTelemetry(incRecurrence, firstRun, fullRecurrencePicked, details)
-	return emitSchedule(full, fullBackupStmt, resultsCh)
+	return emitSchedule(full, backupNode, destinations, nil /* incrementalFrom */, kmsURIs,
+		resultsCh)
 }
 
 // checkForExistingBackupsInCollection checks that there are no existing backups
@@ -468,7 +470,12 @@ func makeBackupSchedule(
 	return sj, nil
 }
 
-func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tree.Datums) error {
+func emitSchedule(
+	sj *jobs.ScheduledJob,
+	backupNode *tree.Backup,
+	to, incrementalFrom, kmsURIs []string,
+	resultsCh chan<- tree.Datums,
+) error {
 	var nextRun tree.Datum
 	status := "ACTIVE"
 	if sj.IsPaused() {
@@ -485,13 +492,19 @@ func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tre
 		nextRun = next
 	}
 
+	redactedBackupNode, err := GetRedactedBackupNode(backupNode, to, incrementalFrom, kmsURIs, "",
+		false /* hasBeenPlanned */)
+	if err != nil {
+		return err
+	}
+
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(sj.ScheduleID())),
 		tree.NewDString(sj.ScheduleLabel()),
 		tree.NewDString(status),
 		nextRun,
 		tree.NewDString(sj.ScheduleExpr()),
-		tree.NewDString(backupStmt),
+		tree.NewDString(tree.AsString(redactedBackupNode)),
 	}
 	return nil
 }
