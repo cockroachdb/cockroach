@@ -1300,6 +1300,11 @@ func (oi *optIndex) GeoConfig() *geoindex.Config {
 	return &oi.desc.GeoConfig
 }
 
+// Version is part of the cat.Index interface.
+func (oi *optIndex) Version() descpb.IndexDescriptorVersion {
+	return oi.desc.Version
+}
+
 type optTableStat struct {
 	stat           *stats.TableStatistic
 	columnOrdinals []int
@@ -1938,6 +1943,11 @@ func (oi *optVirtualIndex) InterleavedBy(i int) (table, index cat.StableID) {
 // GeoConfig is part of the cat.Index interface.
 func (oi *optVirtualIndex) GeoConfig() *geoindex.Config {
 	return nil
+}
+
+// Version is part of the cat.Index interface.
+func (oi *optVirtualIndex) Version() descpb.IndexDescriptorVersion {
+	return 0
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

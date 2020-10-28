@@ -411,6 +411,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionSecondaryIndexColumnFamilies) {
 		encodingVersion = descpb.SecondaryIndexFamilyFormatVersion
 	}
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionEmptyArraysInInvertedIndexes) {
+		encodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
+	}
 	indexDesc.Version = encodingVersion
 
 	if n.n.PartitionBy != nil {
