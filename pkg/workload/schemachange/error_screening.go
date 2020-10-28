@@ -74,3 +74,19 @@ func schemaExists(tx *pgx.Tx, schemaName string) (bool, error) {
    WHERE schema_name = $1
 	)`, schemaName)
 }
+
+func tableHasDependencies(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(tx, `SELECT EXISTS (
+		SELECT fd.descriptor_name
+		  FROM crdb_internal.forward_dependencies AS fd
+		 WHERE fd.descriptor_id =
+				(
+				SELECT c.oid
+				  FROM pg_catalog.pg_class AS c
+					JOIN pg_catalog.pg_namespace AS ns
+            ON ns.oid = c.relnamespace
+         WHERE c.relname = $1
+           AND ns.nspname = $2
+				)
+	)`, tableName.Object(), tableName.Schema())
+}
