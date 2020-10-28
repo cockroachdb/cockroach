@@ -87,6 +87,7 @@ func ClearRange(
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
 		if err := readWriter.MVCCIterate(from, to, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+			// TODO(sumeer): cannot clear separated intents in this manner.
 			return readWriter.Clear(kv.Key)
 		}); err != nil {
 			return result.Result{}, err
