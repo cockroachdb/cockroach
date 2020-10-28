@@ -106,7 +106,7 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	csvComment:      sql.KVStringOptRequireValue,
 	csvNullIf:       sql.KVStringOptRequireValue,
 	csvSkip:         sql.KVStringOptRequireValue,
-	csvRowLimit:	 sql.KVStringOptRequireValue,
+	csvRowLimit:     sql.KVStringOptRequireValue,
 	csvStrictQuotes: sql.KVStringOptRequireNoValue,
 
 	mysqlOutfileRowSep:   sql.KVStringOptRequireValue,
@@ -148,14 +148,14 @@ var allowedCommonOptions = makeStringSet(
 // Format specific allowed options.
 var avroAllowedOptions = makeStringSet(
 	avroStrict, avroBinRecords, avroJSONRecords,
-	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize,
+	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize, csvRowLimit,
 )
 var csvAllowedOptions = makeStringSet(
 	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes, csvRowLimit,
 )
 var mysqlOutAllowedOptions = makeStringSet(
 	mysqlOutfileRowSep, mysqlOutfileFieldSep, mysqlOutfileEnclose,
-	mysqlOutfileEscape, csvNullIf, csvSkip,
+	mysqlOutfileEscape, csvNullIf, csvSkip, csvRowLimit,
 )
 var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
@@ -519,6 +519,17 @@ func importPlanHook(
 			if _, ok := opts[importOptionSaveRejected]; ok {
 				format.SaveRejected = true
 			}
+			// TODO(mokaixu): rename csvRowLimit to rowLimit
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.MysqlOut.RowLimit = uint32(rowLimit)
+			}
 		case "MYSQLDUMP":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlDumpAllowedOptions); err != nil {
 				return err
@@ -873,7 +884,10 @@ func importPlanHook(
 }
 
 func parseAvroOptions(
-	ctx context.Context, opts map[string]string, p sql.PlanHookState, format *roachpb.IOFileFormat,
+	ctx context.Context,
+	opts map[string]string,
+	p sql.PlanHookState,
+	format *roachpb.IOFileFormat,
 ) error {
 	format.Format = roachpb.IOFileFormat_Avro
 	// Default input format is OCF.
@@ -885,6 +899,17 @@ func parseAvroOptions(
 
 	if haveBinRecs && haveJSONRecs {
 		return errors.Errorf("only one of the %s or %s options can be set", avroBinRecords, avroJSONRecords)
+	}
+
+	if override, ok := opts[csvRowLimit]; ok {
+		rowLimit, err := strconv.Atoi(override)
+		if err != nil {
+			return pgerror.Wrapf(err, pgcode.Syntax, "invalid %s value", csvRowLimit)
+		}
+		if rowLimit <= 0 {
+			return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+		}
+		format.Avro.RowLimit = uint32(rowLimit)
 	}
 
 	if haveBinRecs || haveJSONRecs {

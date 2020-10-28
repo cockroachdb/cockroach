@@ -358,7 +358,7 @@ d
 			typ:    "CSV",
 			data:   "a string, b string\nfoo,normal\nbar,baz\nchocolate,cake\n",
 			err:    "invalid row_limit value",
-		},		
+		},
 		{
 			name:   "row limit > max rows",
 			create: `a string, b string`,
@@ -1342,6 +1342,21 @@ func TestImportRowLimit(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	avroField := []map[string]interface{}{
+		{
+			"name": "a",
+			"type": "int",
+		},
+		{
+			"name": "b",
+			"type": "int",
+		},
+	}
+	avroRows := []map[string]interface{}{
+		{"a": 1, "b": 2}, {"a": 3, "b": 4}, {"a": 5, "b": 6},
+	}
+	avroData := createAvroData(t, "t", avroField, avroRows)
+
 	tests := []struct {
 		name        string
 		create      string
@@ -1398,6 +1413,26 @@ func TestImportRowLimit(t *testing.T) {
 			data:        "a string, b string\nfoo,normal\nbar,baz\nchocolate,cake\n",
 			verifyQuery: `SELECT * from t`,
 			expected:    [][]string{{"foo", "normal"}, {"bar", "baz"}, {"chocolate", "cake"}},
+		},
+		// Test DELIMITED imports.
+		{
+			name:        "tsv row limit",
+			create:      "a string, b string",
+			with:        `WITH row_limit = '1', skip='1'`,
+			typ:         "DELIMITED",
+			data:        "hello\thello\navocado\ttoast\npoached\tegg\n",
+			verifyQuery: `SELECT * from t`,
+			expected:    [][]string{{"avocado", "toast"}},
+		},
+		// Test AVRO imports.
+		{
+			name:        "avro row limit",
+			create:      "a INT, b INT",
+			with:        `WITH row_limit = '1'`,
+			typ:         "AVRO",
+			data:        avroData,
+			verifyQuery: "SELECT * FROM t",
+			expected:    [][]string{{"1", "2"}},
 		},
 	}
 

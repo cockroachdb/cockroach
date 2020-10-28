@@ -486,7 +486,11 @@ func (a *avroInputReader) readFiles(
 }
 
 func (a *avroInputReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	producer, consumer, err := newImportAvroPipeline(a, input)
 	if err != nil {
@@ -497,6 +501,7 @@ func (a *avroInputReader) readFile(
 		source:   inputIdx,
 		skip:     resumePos,
 		rejected: rejected,
+		rowLimit: a.opts.RowLimit,
 	}
 	return runParallelImport(ctx, a.importContext, fileCtx, producer, consumer)
 }
