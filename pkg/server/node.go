@@ -1000,7 +1000,7 @@ func (n *Node) setupSpanForIncomingRPC(
 			// spans in the BatchResponse at the end of the request.
 			// We don't want to do this if the operation is on the same host, in which
 			// case everything is already part of the same recording.
-			if rec := tracing.GetRecording(grpcSpan); rec != nil {
+			if rec := grpcSpan.GetRecording(); rec != nil {
 				br.CollectedSpans = append(br.CollectedSpans, rec...)
 			}
 		}

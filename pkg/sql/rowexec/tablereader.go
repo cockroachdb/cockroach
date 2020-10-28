@@ -159,7 +159,7 @@ func newTableReader(
 		tr.spans[i] = s.Span
 	}
 
-	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		tr.fetcher = newRowFetcherStatCollector(&fetcher)
 		tr.FinishTrace = tr.outputStatsToTrace
 	} else {
@@ -299,7 +299,7 @@ func (tr *tableReader) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(tr.Ctx); sp != nil {
-		tracing.SetSpanStats(sp, &TableReaderStats{
+		sp.SetSpanStats(&TableReaderStats{
 			InputStats: is,
 			BytesRead:  tr.GetBytesRead(),
 		})

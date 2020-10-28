@@ -204,8 +204,8 @@ func (s *Span) isNoop() bool {
 }
 
 // IsRecording returns true if the Span is recording its events.
-func IsRecording(sp *Span) bool {
-	return sp.crdb.isRecording()
+func (s *Span) IsRecording() bool {
+	return s.crdb.isRecording()
 }
 
 // enableRecording start recording on the Span. From now on, log events and child spans
@@ -248,18 +248,18 @@ func (s *crdbSpan) enableRecording(
 //
 // Children spans created from the Span while it is *not* recording will not
 // necessarily be recordable.
-func StartRecording(sp *Span, recType RecordingType) {
+func (s *Span) StartRecording(recType RecordingType) {
 	if recType == NoRecording {
 		panic("StartRecording called with NoRecording")
 	}
-	if sp.isNoop() {
+	if s.isNoop() {
 		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
 	}
 
 	// If we're already recording (perhaps because the parent was recording when
 	// this Span was created), there's nothing to do.
-	if !sp.crdb.isRecording() {
-		sp.crdb.enableRecording(nil /* parent */, recType, false /* separateRecording */)
+	if !s.crdb.isRecording() {
+		s.crdb.enableRecording(nil /* parent */, recType, false /* separateRecording */)
 	}
 }
 
@@ -270,11 +270,7 @@ func StartRecording(sp *Span, recType RecordingType) {
 // when all the spans finish.
 //
 // StopRecording() can be called on a Finish()ed Span.
-func StopRecording(sp *Span) {
-	sp.disableRecording()
-}
-
-func (s *Span) disableRecording() {
+func (s *Span) StopRecording() {
 	if s.isNoop() {
 		panic("can't disable recording a noop Span")
 	}
@@ -295,20 +291,11 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
-// IsRecordable returns true if {Start,Stop}Recording() can be called on this
-// Span.
-//
-// In other words, this tests if the Span is our custom type, and not a noopSpan
-// or anything else.
-func IsRecordable(sp *Span) bool {
-	return !sp.isNoop()
-}
-
 // GetRecording retrieves the current recording, if the Span has recording
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
-func GetRecording(sp *Span) Recording {
-	return sp.crdb.getRecording()
+func (s *Span) GetRecording() Recording {
+	return s.crdb.getRecording()
 }
 
 func (s *crdbSpan) getRecording() Recording {
@@ -341,8 +328,8 @@ func (s *crdbSpan) getRecording() Recording {
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
-func ImportRemoteSpans(sp *Span, remoteSpans []tracingpb.RecordedSpan) error {
-	return sp.crdb.ImportRemoteSpans(remoteSpans)
+func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
+	return s.crdb.ImportRemoteSpans(remoteSpans)
 }
 
 func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
@@ -360,7 +347,7 @@ func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error
 	return nil
 }
 
-// IsBlackHoleSpan returns true if events for this Span are just dropped. This
+// IsBlackHole returns true if events for this Span are just dropped. This
 // is the case when the Span is not recording and no external tracer is configured.
 // Tracing clients can use this method to figure out if they can short-circuit some
 // tracing-related work that would be discarded anyway.
@@ -368,35 +355,31 @@ func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error
 // The child of a blackhole Span is a non-recordable blackhole Span[*]. These incur
 // only minimal overhead. It is therefore not worth it to call this method to avoid
 // starting spans.
-func IsBlackHoleSpan(sp *Span) bool {
-	return sp.isBlackHole()
+func (s *Span) IsBlackHole() bool {
+	return s.isBlackHole()
 }
 
-// IsNoopContext returns true if the Span context is from a "no-op" Span. If
+// IsNoop returns true if the Span context is from a "no-op" Span. If
 // this is true, any Span derived from this context will be a "black hole Span".
 //
 // You should never need to care about this method. It is exported for technical
 // reasons.
-func IsNoopContext(sc *SpanContext) bool {
-	return sc.isNoop()
-}
-
-func (sc *SpanContext) isNoop() bool {
+func (sc *SpanContext) IsNoop() bool {
 	return sc.recordingType == NoRecording && sc.shadowTr == nil
 }
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
 // the Span tags.
-func SetSpanStats(sp *Span, stats SpanStats) {
-	if sp.isNoop() {
+func (s *Span) SetSpanStats(stats SpanStats) {
+	if s.isNoop() {
 		return
 	}
-	sp.crdb.mu.Lock()
-	sp.crdb.mu.stats = stats
+	s.crdb.mu.Lock()
+	s.crdb.mu.stats = stats
 	for name, value := range stats.Stats() {
-		sp.setTagInner(StatTagPrefix+name, value, true /* locked */)
+		s.setTagInner(StatTagPrefix+name, value, true /* locked */)
 	}
-	sp.crdb.mu.Unlock()
+	s.crdb.mu.Unlock()
 }
 
 // Finish is part of the opentracing.Span interface.

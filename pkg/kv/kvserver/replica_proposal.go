@@ -894,7 +894,7 @@ func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
 	if sp == nil {
 		return nil
 	}
-	if tracing.IsBlackHoleSpan(sp) {
+	if sp.IsBlackHole() {
 		return nil
 	}
 	traceData := opentracing.TextMapCarrier{}

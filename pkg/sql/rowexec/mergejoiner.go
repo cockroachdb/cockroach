@@ -74,7 +74,7 @@ func newMergeJoiner(
 		rightSource: rightSource,
 	}
 
-	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		m.leftSource = newInputStatCollector(m.leftSource)
 		m.rightSource = newInputStatCollector(m.rightSource)
 		m.FinishTrace = m.outputStatsToTrace
@@ -295,8 +295,7 @@ func (m *mergeJoiner) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(m.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
+		sp.SetSpanStats(
 			&MergeJoinerStats{
 				LeftInputStats:  lis,
 				RightInputStats: ris,

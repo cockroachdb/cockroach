@@ -164,6 +164,6 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		vsc.NumBatches = 0
 		vsc.BytesRead = 0
 	}
-	tracing.SetSpanStats(span, &vsc.VectorizedStats)
+	span.SetSpanStats(&vsc.VectorizedStats)
 	span.Finish()
 }

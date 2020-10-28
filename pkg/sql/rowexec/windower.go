@@ -206,7 +206,7 @@ func newWindower(
 	// them to reuse the same shared memory account with the windower.
 	evalCtx.SingleDatumAggMemAccount = &w.acc
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		w.input = newInputStatCollector(w.input)
 		w.FinishTrace = w.outputStatsToTrace
 	}
@@ -878,8 +878,7 @@ func (w *windower) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(w.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
+		sp.SetSpanStats(
 			&WindowerStats{
 				InputStats:       is,
 				MaxAllocatedMem:  w.MemMonitor.MaximumBytes(),

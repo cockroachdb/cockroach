@@ -56,7 +56,7 @@ func TestTxnSnowballTrace(t *testing.T) {
 	}
 	log.Event(ctx, "txn complete")
 	sp.Finish()
-	collectedSpans := tracing.GetRecording(sp)
+	collectedSpans := sp.GetRecording()
 	dump := collectedSpans.String()
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn

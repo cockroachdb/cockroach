@@ -253,7 +253,7 @@ func newJoinReader(
 	}
 
 	collectingStats := false
-	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		collectingStats = true
 	}
 
@@ -690,7 +690,7 @@ func (jr *joinReader) outputStatsToTrace() {
 		IndexLookupStats: ils,
 	}
 	if sp := tracing.SpanFromContext(jr.Ctx); sp != nil {
-		tracing.SetSpanStats(sp, jrs)
+		sp.SetSpanStats(jrs)
 	}
 }
 

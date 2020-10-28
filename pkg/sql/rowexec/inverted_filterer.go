@@ -125,7 +125,7 @@ func newInvertedFilterer(
 		ifr.diskMonitor,
 	)
 
-	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		ifr.input = newInputStatCollector(ifr.input)
 		ifr.FinishTrace = ifr.outputStatsToTrace
 	}
@@ -321,8 +321,7 @@ func (ifr *invertedFilterer) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(ifr.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
+		sp.SetSpanStats(
 			&InvertedFiltererStats{
 				InputStats:       is,
 				MaxAllocatedMem:  ifr.MemMonitor.MaximumBytes(),
