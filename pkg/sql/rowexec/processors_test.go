@@ -701,6 +701,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 // in which an UncertaintyError is expected.
 func TestUncertaintyErrorIsReturned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 56027, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	const numNodes = 3
