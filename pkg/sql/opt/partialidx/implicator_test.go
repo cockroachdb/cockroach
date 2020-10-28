@@ -155,6 +155,12 @@ func BenchmarkImplicator(b *testing.B) {
 			pred:    "a > 0 AND a < 100",
 		},
 		{
+			name:    "two-var-comparison",
+			vars:    "a int, b int",
+			filters: "a > b",
+			pred:    "b <= a",
+		},
+		{
 			name:    "single-exact-match-extra-filters",
 			vars:    "a int, b int, c int, d int, e int",
 			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND @5 = 5",
@@ -177,6 +183,12 @@ func BenchmarkImplicator(b *testing.B) {
 			vars:    "a int, b string",
 			filters: "a >= 10 AND b = 'foo'",
 			pred:    "a >= 0 AND b IN ('foo', 'bar')",
+		},
+		{
+			name:    "multi-column-and-two-var-comparisons",
+			vars:    "a int, b int, c int, d int",
+			filters: "a > b AND c < d",
+			pred:    "b <= a AND c != d",
 		},
 		{
 			name:    "multi-column-or-exact-match",
