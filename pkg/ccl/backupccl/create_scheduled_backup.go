@@ -68,6 +68,7 @@ type scheduledBackupEval struct {
 	// backup statement in the schedule.
 	destination          func() ([]string, error)
 	encryptionPassphrase func() (string, error)
+	kmsURIs              func() ([]string, error)
 }
 
 func parseOnError(onError string, details *jobspb.ScheduleDetails) error {
@@ -244,6 +245,20 @@ func doCreateBackupSchedules(
 			return errors.Wrapf(err, "failed to evaluate backup encryption_passphrase")
 		}
 		backupNode.Options.EncryptionPassphrase = tree.NewDString(pw)
+	}
+
+	// Evaluate encryption KMS URIs if set.
+	// Only one of encryption passphrase and KMS URI should be set, but this check
+	// is done during backup planning so we do not need to worry about it here.
+	if eval.kmsURIs != nil {
+		kmsURIs, err := eval.kmsURIs()
+		if err != nil {
+			return errors.Wrapf(err, "failed to evaluate backup kms_uri")
+		}
+		for _, kmsURI := range kmsURIs {
+			backupNode.Options.EncryptionKMSURI = append(backupNode.Options.EncryptionKMSURI,
+				tree.NewDString(kmsURI))
+		}
 	}
 
 	// Evaluate required backup destinations.
@@ -568,6 +583,14 @@ func makeScheduledBackupEval(
 	if schedule.BackupOptions.EncryptionPassphrase != nil {
 		eval.encryptionPassphrase, err =
 			p.TypeAsString(ctx, schedule.BackupOptions.EncryptionPassphrase, scheduleBackupOp)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if schedule.BackupOptions.EncryptionKMSURI != nil {
+		eval.kmsURIs, err = p.TypeAsStringArray(ctx, tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
+			scheduleBackupOp)
 		if err != nil {
 			return nil, err
 		}
