@@ -336,6 +336,7 @@ func createDiskBackedSorter(
 		Post: execinfrapb.PostProcessSpec{
 			Limit: uint64(k),
 		},
+		ResultTypes: typs,
 	}
 	args := &NewColOperatorArgs{
 		Spec:                spec,

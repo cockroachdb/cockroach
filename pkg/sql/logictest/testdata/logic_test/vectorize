@@ -571,8 +571,8 @@ SELECT * FROM t38908 WHERE x IN (1, 2)
 1
 
 # For now, we use the default vectorize setting for this query.
-# TODO(yuzefovich): with distributed configs this fails with 'zero length
-# schema unsupported' coming from NewRecordBatchSerializer(). Investigate this.
+# TODO(yuzefovich): this fails with 'can't plan vectorized hash joins with an
+# empty input schema'. Update this once #46205 is resolved.
 
 statement ok
 RESET vectorize
@@ -730,8 +730,8 @@ RESET vectorize;
 CREATE TABLE t_40227 AS SELECT g FROM generate_series(0, 5) AS g
 
 # For now, we use the default vectorize setting for this query.
-# TODO(yuzefovich): with distributed configs this fails with 'zero length
-# schema unsupported' coming from NewRecordBatchSerializer(). Investigate this.
+# TODO(yuzefovich): this fails with 'can't plan vectorized hash joins with an
+# empty input schema'. Update this once #46205 is resolved.
 
 statement ok
 SELECT '' FROM t_40227 AS t1 JOIN t_40227 AS t2 ON true
@@ -746,13 +746,15 @@ CREATE TABLE t39417 (x int8);
 INSERT INTO t39417 VALUES (10);
 SET vectorize = experimental_always
 
-statement error .* decimal casts with rounding unsupported
-select (x/1) from t39417
+query R
+select x/1 from t39417
+----
+10
 
 # Regression tests for #39540, an issue caused by shallow copying decimals.
 # For now, we use the default vectorize setting for this query.
-# TODO(yuzefovich): with distributed configs this fails with 'zero length
-# schema unsupported' coming from NewRecordBatchSerializer(). Investigate this.
+# TODO(yuzefovich): this fails with 'can't plan vectorized hash joins with an
+# empty input schema'. Update this once #46205 is resolved.
 statement ok
 RESET vectorize;
 CREATE TABLE IF NOT EXISTS t_39540 AS

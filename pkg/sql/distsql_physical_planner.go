@@ -1319,7 +1319,7 @@ func (dsp *DistSQLPlanner) addSorters(
 			},
 		},
 		execinfrapb.PostProcessSpec{},
-		p.ResultTypes,
+		p.GetResultTypes(),
 		outputOrdering,
 	)
 }
@@ -1406,7 +1406,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		aggType = execinfrapb.AggregatorSpec_SCALAR
 	}
 
-	inputTypes := p.ResultTypes
+	inputTypes := p.GetResultTypes()
 
 	groupCols := make([]uint32, len(info.groupCols))
 	for i, idx := range info.groupCols {
@@ -1461,7 +1461,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 			}
 			// Add distinct processors local to each existing current result
 			// processor.
-			p.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes, p.MergeOrdering)
+			p.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, inputTypes, p.MergeOrdering)
 		}
 	}
 
@@ -1865,20 +1865,22 @@ func (dsp *DistSQLPlanner) planAggregators(
 		// somewhat arbitrary decision; we could have a different number of nodes
 		// working on the final stage.
 		pIdxStart := physicalplan.ProcessorIdx(len(p.Processors))
+		prevStageResultTypes := p.GetResultTypes()
 		for _, resultProc := range p.ResultRouters {
 			proc := physicalplan.Processor{
 				Node: p.Processors[resultProc].Node,
 				Spec: execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{
 						// The other fields will be filled in by mergeResultStreams.
-						ColumnTypes: p.ResultTypes,
+						ColumnTypes: prevStageResultTypes,
 					}},
 					Core: execinfrapb.ProcessorCoreUnion{Aggregator: &finalAggsSpec},
 					Post: finalAggsPost,
 					Output: []execinfrapb.OutputRouterSpec{{
 						Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 					}},
-					StageID: stageID,
+					StageID:     stageID,
+					ResultTypes: finalOutTypes,
 				},
 			}
 			p.AddProcessor(proc)
@@ -1895,7 +1897,6 @@ func (dsp *DistSQLPlanner) planAggregators(
 			p.ResultRouters[i] = pIdxStart + physicalplan.ProcessorIdx(i)
 		}
 
-		p.ResultTypes = finalOutTypes
 		p.SetMergeOrdering(dsp.convertOrdering(info.reqOrdering, p.PlanToStreamColMap))
 	}
 
@@ -2054,7 +2055,8 @@ func mappingHelperForLookupJoins(
 	// the corresponding projection.
 	// The internal schema of the join reader is:
 	//    <input columns>... <table columns>...[continuation col]
-	numLeftCols := len(plan.ResultTypes)
+	inputTypes := plan.GetResultTypes()
+	numLeftCols := len(inputTypes)
 	numOutCols := numLeftCols + len(table.cols)
 	if addContinuationCol {
 		numOutCols++
@@ -2065,7 +2067,7 @@ func mappingHelperForLookupJoins(
 	outTypes = make([]*types.T, numOutCols)
 
 	for i := 0; i < numLeftCols; i++ {
-		outTypes[i] = plan.ResultTypes[i]
+		outTypes[i] = inputTypes[i]
 		post.OutputColumns[i] = uint32(i)
 	}
 	for i := range table.cols {
@@ -2106,7 +2108,7 @@ func makeIndexVarMapForLookupJoins(
 	// starting from numInputNodeCols.
 	indexVarMap = makePlanToStreamColMap(numInputNodeCols + len(table.cols))
 	copy(indexVarMap, plan.PlanToStreamColMap)
-	numLeftCols := len(plan.ResultTypes)
+	numLeftCols := len(plan.GetResultTypes())
 	for i := range table.cols {
 		indexVarMap[numInputNodeCols+i] = int(post.OutputColumns[numLeftCols+i])
 	}
@@ -2328,7 +2330,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 			execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: invertedFiltererSpec,
 			},
-			execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+			execinfrapb.PostProcessSpec{}, plan.GetResultTypes())
 		return plan, nil
 	}
 	// Must be distributable.
@@ -2339,7 +2341,8 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 	// Instantiate one inverted filterer for every stream.
 	plan.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{InvertedFilterer: invertedFiltererSpec},
-		execinfrapb.PostProcessSpec{}, plan.ResultTypes, execinfrapb.Ordering{})
+		execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), execinfrapb.Ordering{},
+	)
 	// De-duplicate the PKs. Note that the inverted filterer output includes
 	// the inverted column always set to NULL, so we exclude it from the
 	// distinct columns.
@@ -2355,7 +2358,9 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 		execinfrapb.ProcessorCoreUnion{
 			Distinct: &execinfrapb.DistinctSpec{DistinctColumns: distinctColumns},
 		},
-		execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+		execinfrapb.PostProcessSpec{},
+		plan.GetResultTypes(),
+	)
 	return plan, nil
 }
 
@@ -2407,7 +2412,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	helper := &joinPlanningHelper{
 		numLeftOutCols:          n.pred.numLeftCols,
 		numRightOutCols:         n.pred.numRightCols,
-		numAllLeftCols:          len(leftPlan.ResultTypes),
+		numAllLeftCols:          len(leftPlan.GetResultTypes()),
 		leftPlanToStreamColMap:  leftMap,
 		rightPlanToStreamColMap: rightMap,
 	}
@@ -2500,13 +2505,12 @@ func (dsp *DistSQLPlanner) planJoiners(
 	p.AddJoinStage(
 		nodes, info.makeCoreSpec(), info.post,
 		info.leftEqCols, info.rightEqCols,
-		info.leftPlan.ResultTypes, info.rightPlan.ResultTypes,
+		info.leftPlan.GetResultTypes(), info.rightPlan.GetResultTypes(),
 		info.leftMergeOrd, info.rightMergeOrd,
-		leftRouters, rightRouters,
+		leftRouters, rightRouters, info.joinResultTypes,
 	)
 
 	p.PlanToStreamColMap = info.joinToStreamColMap
-	p.ResultTypes = info.joinResultTypes
 
 	// Joiners may guarantee an ordering to outputs, so we ensure that
 	// ordering is propagated through the input synchronizer of the next stage.
@@ -2655,7 +2659,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 				}
 			},
 			execinfrapb.PostProcessSpec{},
-			plan.ResultTypes,
+			plan.GetResultTypes(),
 			plan.MergeOrdering,
 		)
 	}
@@ -2744,7 +2748,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 		// We found a DistSQL-plannable subtree - create an input spec for it.
 		input = []execinfrapb.InputSyncSpec{{
 			Type:        execinfrapb.InputSyncSpec_UNORDERED,
-			ColumnTypes: p.ResultTypes,
+			ColumnTypes: p.GetResultTypes(),
 		}}
 	}
 	name := nodeName(n)
@@ -2762,12 +2766,11 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 			}},
 			// This stage consists of a single processor planned on the gateway.
-			StageID: p.NewStage(false /* containsRemoteProcessor */),
+			StageID:     p.NewStage(false /* containsRemoteProcessor */),
+			ResultTypes: wrapper.outputTypes,
 		},
 	}
 	pIdx := p.AddProcessor(proc)
-	p.ResultTypes = wrapper.outputTypes
-	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(p.ResultTypes)))
 	if firstNotWrapped != nil {
 		// If we found a DistSQL-plannable subtree, we need to add a result stream
 		// between it and the physicalPlan we're creating here.
@@ -2783,6 +2786,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 		p.ResultRouters = p.ResultRouters[:1]
 	}
 	p.ResultRouters[0] = pIdx
+	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(p.GetResultTypes())))
 	return p, nil
 }
 
@@ -2810,12 +2814,12 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 			// TODO: find a better node to place processor at
 			Node: dsp.gatewayNodeID,
 			Spec: execinfrapb.ProcessorSpec{
-				Core:   execinfrapb.ProcessorCoreUnion{Values: &s},
-				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				Core:        execinfrapb.ProcessorCoreUnion{Values: &s},
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				ResultTypes: resultTypes,
 			},
 		}},
 		ResultRouters: []physicalplan.ProcessorIdx{0},
-		ResultTypes:   resultTypes,
 		GatewayNodeID: dsp.gatewayNodeID,
 		Distribution:  physicalplan.LocalPlan,
 	}
@@ -2946,7 +2950,7 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 	}()
 
 	// Add distinct processors local to each existing current result processor.
-	plan.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+	plan.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), plan.MergeOrdering)
 	if !plan.IsLastStageDistributed() {
 		return
 	}
@@ -2954,8 +2958,8 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 	nodes := getNodesOfRouters(plan.ResultRouters, plan.Processors)
 	plan.AddStageOnNodes(
 		nodes, distinctSpec, execinfrapb.PostProcessSpec{},
-		distinctSpec.Distinct.DistinctColumns, plan.ResultTypes,
-		plan.MergeOrdering, plan.ResultRouters,
+		distinctSpec.Distinct.DistinctColumns, plan.GetResultTypes(),
+		plan.GetResultTypes(), plan.MergeOrdering, plan.ResultRouters,
 	)
 }
 
@@ -2971,8 +2975,8 @@ func (dsp *DistSQLPlanner) createPlanForOrdinality(
 		Ordinality: &execinfrapb.OrdinalitySpec{},
 	}
 
-	plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, len(plan.ResultTypes))
-	outputTypes := append(plan.ResultTypes, types.Int)
+	plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, len(plan.GetResultTypes()))
+	outputTypes := append(plan.GetResultTypes(), types.Int)
 
 	// WITH ORDINALITY never gets distributed so that the gateway node can
 	// always number each row in order.
@@ -3021,7 +3025,7 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 func (dsp *DistSQLPlanner) addProjectSet(
 	plan *PhysicalPlan, planCtx *PlanningCtx, info *projectSetPlanningInfo,
 ) error {
-	numResults := len(plan.ResultTypes)
+	numResults := len(plan.GetResultTypes())
 
 	// Create the project set processor spec.
 	projectSetSpec, err := createProjectSetSpec(planCtx, info, plan.PlanToStreamColMap)
@@ -3037,7 +3041,7 @@ func (dsp *DistSQLPlanner) addProjectSet(
 	// cases in the future where this is non-optimal (perhaps if its output is
 	// filtered), we could try to detect these cases and use AddNoGroupingStage
 	// instead.
-	outputTypes := append(plan.ResultTypes, projectSetSpec.GeneratedColumns...)
+	outputTypes := append(plan.GetResultTypes(), projectSetSpec.GeneratedColumns...)
 	plan.AddSingleGroupStage(dsp.gatewayNodeID, spec, execinfrapb.PostProcessSpec{}, outputTypes)
 
 	// Add generated columns to PlanToStreamColMap.
@@ -3166,7 +3170,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			if !dsp.isOnlyOnGateway(plan) {
 				// TODO(solon): We could skip this stage if there is a strong key on
 				// the result columns.
-				plan.AddNoGroupingStage(*distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, distinctOrds[side])
+				plan.AddNoGroupingStage(*distinctSpec, execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), distinctOrds[side])
 				plan.AddProjection(streamCols)
 			}
 		}
@@ -3179,7 +3183,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	p.PlanToStreamColMap = planToStreamColMap
 
 	// Merge the plans' result types and merge ordering.
-	resultTypes, err := physicalplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+	resultTypes, err := physicalplan.MergeResultTypes(leftPlan.GetResultTypes(), rightPlan.GetResultTypes())
 	if err != nil {
 		return nil, err
 	}
@@ -3209,7 +3213,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		// the left and right output routers.
 		p.ResultRouters = append(leftRouters, rightRouters...)
 
-		p.ResultTypes = resultTypes
 		p.SetMergeOrdering(mergeOrdering)
 
 		if !n.all {
@@ -3219,7 +3222,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			distinctSpec := execinfrapb.ProcessorCoreUnion{
 				Distinct: &execinfrapb.DistinctSpec{DistinctColumns: streamCols},
 			}
-			p.AddSingleGroupStage(dsp.gatewayNodeID, distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes)
+			p.AddSingleGroupStage(dsp.gatewayNodeID, distinctSpec, execinfrapb.PostProcessSpec{}, resultTypes)
 		} else {
 			// With UNION ALL, we can end up with multiple streams on the same node.
 			// We don't want to have unnecessary routers and cross-node streams, so
@@ -3280,16 +3283,16 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		if n.all {
 			p.AddJoinStage(
 				nodes, core, post, eqCols, eqCols,
-				leftPlan.ResultTypes, rightPlan.ResultTypes,
+				leftPlan.GetResultTypes(), rightPlan.GetResultTypes(),
 				leftPlan.MergeOrdering, rightPlan.MergeOrdering,
-				leftRouters, rightRouters,
+				leftRouters, rightRouters, resultTypes,
 			)
 		} else {
 			p.AddDistinctSetOpStage(
 				nodes, core, distinctSpecs[:], post, eqCols,
-				leftPlan.ResultTypes, rightPlan.ResultTypes,
+				leftPlan.GetResultTypes(), rightPlan.GetResultTypes(),
 				leftPlan.MergeOrdering, rightPlan.MergeOrdering,
-				leftRouters, rightRouters,
+				leftRouters, rightRouters, resultTypes,
 			)
 		}
 
@@ -3298,7 +3301,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			mergeOrdering = execinfrapb.Ordering{}
 		}
 
-		p.ResultTypes = resultTypes
 		p.SetMergeOrdering(mergeOrdering)
 	}
 
@@ -3338,8 +3340,8 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 			WindowFns:   make([]execinfrapb.WindowerSpec_WindowFn, len(samePartitionFuncs)),
 		}
 
-		newResultTypes := make([]*types.T, len(plan.ResultTypes)+len(samePartitionFuncs))
-		copy(newResultTypes, plan.ResultTypes)
+		newResultTypes := make([]*types.T, len(plan.GetResultTypes())+len(samePartitionFuncs))
+		copy(newResultTypes, plan.GetResultTypes())
 		for windowFnSpecIdx, windowFn := range samePartitionFuncs {
 			windowFnSpec, outputType, err := windowPlanState.createWindowFnSpec(windowFn)
 			if err != nil {
@@ -3395,6 +3397,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 			// SourceRouterSlot - namely, position in which
 			// a node appears in nodes.
 			prevStageRouters := plan.ResultRouters
+			prevStageResultTypes := plan.GetResultTypes()
 			plan.ResultRouters = make([]physicalplan.ProcessorIdx, 0, len(nodes))
 			for bucket, nodeID := range nodes {
 				proc := physicalplan.Processor{
@@ -3402,14 +3405,15 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 					Spec: execinfrapb.ProcessorSpec{
 						Input: []execinfrapb.InputSyncSpec{{
 							Type:        execinfrapb.InputSyncSpec_UNORDERED,
-							ColumnTypes: plan.ResultTypes,
+							ColumnTypes: prevStageResultTypes,
 						}},
 						Core: execinfrapb.ProcessorCoreUnion{Windower: &windowerSpec},
 						Post: execinfrapb.PostProcessSpec{},
 						Output: []execinfrapb.OutputRouterSpec{{
 							Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 						}},
-						StageID: stageID,
+						StageID:     stageID,
+						ResultTypes: newResultTypes,
 					},
 				}
 				pIdx := plan.AddProcessor(proc)
@@ -3424,15 +3428,13 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 				}
 				plan.ResultRouters = append(plan.ResultRouters, pIdx)
 			}
-
-			plan.ResultTypes = newResultTypes
 		}
 	}
 
 	// We definitely added columns throughout all the stages of windowers, so we
 	// need to update PlanToStreamColMap. We need to update the map before adding
 	// rendering or projection because it is used there.
-	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.ResultTypes))
+	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.GetResultTypes()))
 
 	// windowers do not guarantee maintaining the order at the moment, so we
 	// reset MergeOrdering. There shouldn't be an ordering here, but we reset it
@@ -3445,10 +3447,10 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 		return nil, err
 	}
 
-	if len(plan.ResultTypes) != len(plan.PlanToStreamColMap) {
+	if len(plan.GetResultTypes()) != len(plan.PlanToStreamColMap) {
 		// We added/removed columns while rendering or projecting, so we need to
 		// update PlanToStreamColMap.
-		plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.ResultTypes))
+		plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.GetResultTypes()))
 	}
 
 	return plan, nil
@@ -3527,7 +3529,7 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 
 	// Add a final projection so that DistSQLReceiver gets the rows of the
 	// desired schema.
-	projection := make([]uint32, 0, len(plan.ResultTypes))
+	projection := make([]uint32, 0, len(plan.GetResultTypes()))
 	for _, outputCol := range plan.PlanToStreamColMap {
 		if outputCol >= 0 {
 			projection = append(projection, uint32(outputCol))
@@ -3546,7 +3548,7 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 				},
 			},
 			execinfrapb.PostProcessSpec{},
-			plan.ResultTypes,
+			plan.GetResultTypes(),
 		)
 	}
 

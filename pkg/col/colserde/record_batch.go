@@ -71,9 +71,6 @@ type RecordBatchSerializer struct {
 // typs. Note that Serializing or Deserializing data that does not follow the
 // passed in schema results in undefined behavior.
 func NewRecordBatchSerializer(typs []*types.T) (*RecordBatchSerializer, error) {
-	if len(typs) == 0 {
-		return nil, errors.Errorf("zero length schema unsupported")
-	}
 	s := &RecordBatchSerializer{
 		numBuffers: make([]int, len(typs)),
 		builder:    flatbuffers.NewBuilder(flatbufferBuilderInitialCapacity),
@@ -97,14 +94,11 @@ func calculatePadding(numBytes int) int {
 // Serializing a schema that does not match the schema given in
 // NewRecordBatchSerializer results in undefined behavior.
 func (s *RecordBatchSerializer) Serialize(
-	w io.Writer, data []*array.Data,
+	w io.Writer, data []*array.Data, headerLength int,
 ) (metadataLen uint32, dataLen uint64, _ error) {
 	if len(data) != len(s.numBuffers) {
 		return 0, 0, errors.Errorf("mismatched schema length and number of columns: %d != %d", len(s.numBuffers), len(data))
 	}
-	// Ensure equal data length and expected number of buffers. We don't support
-	// zero-length schemas, so data[0] is in bounds at this point.
-	headerLength := data[0].Len()
 	for i := range data {
 		if data[i].Len() != headerLength {
 			return 0, 0, errors.Errorf("mismatched data lengths at column %d: %d != %d", i, headerLength, data[i].Len())
@@ -229,9 +223,10 @@ func (s *RecordBatchSerializer) Serialize(
 }
 
 // Deserialize deserializes an arrow IPC RecordBatch message contained in bytes
-// into data. Deserializing a schema that does not match the schema given in
-// NewRecordBatchSerializer results in undefined behavior.
-func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) error {
+// into data and returns the length of the batch. Deserializing a schema that
+// does not match the schema given in NewRecordBatchSerializer results in
+// undefined behavior.
+func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) (int, error) {
 	// Read the metadata by first reading its length.
 	metadataLen := int(binary.LittleEndian.Uint32(bytes[:metadataLengthNumBytes]))
 	metadata := arrowserde.GetRootAsMessage(
@@ -246,7 +241,7 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) e
 	_ = metadata.Version()
 
 	if metadata.HeaderType() != arrowserde.MessageHeaderRecordBatch {
-		return errors.Errorf(
+		return 0, errors.Errorf(
 			`cannot decode RecordBatch from %s message`,
 			arrowserde.EnumNamesMessageHeader[metadata.HeaderType()],
 		)
@@ -258,12 +253,12 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) e
 	)
 
 	if !metadata.Header(&headerTab) {
-		return errors.New(`unable to decode metadata table`)
+		return 0, errors.New(`unable to decode metadata table`)
 	}
 
 	header.Init(headerTab.Bytes, headerTab.Pos)
 	if len(s.numBuffers) != header.NodesLength() {
-		return errors.Errorf(
+		return 0, errors.Errorf(
 			`mismatched schema and header lengths: %d != %d`, len(s.numBuffers), header.NodesLength(),
 		)
 	}
@@ -279,7 +274,7 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) e
 		// length in the header, which specifies how many rows there are in the
 		// message body.
 		if node.Length() != header.Length() {
-			return errors.Errorf(
+			return 0, errors.Errorf(
 				`mismatched field and header lengths: %d != %d`, node.Length(), header.Length(),
 			)
 		}
@@ -307,5 +302,5 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) e
 		)
 	}
 
-	return nil
+	return int(header.Length()), nil
 }

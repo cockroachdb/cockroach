@@ -279,15 +279,15 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 						})
 					}
 					pspec := &execinfrapb.ProcessorSpec{
-						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-						Core:  execinfrapb.ProcessorCoreUnion{Aggregator: aggregatorSpec},
+						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:        execinfrapb.ProcessorCoreUnion{Aggregator: aggregatorSpec},
+						ResultTypes: outputTypes,
 					}
 					args := verifyColOperatorArgs{
-						anyOrder:    hashAgg,
-						inputTypes:  [][]*types.T{inputTypes},
-						inputs:      []rowenc.EncDatumRows{rows},
-						outputTypes: outputTypes,
-						pspec:       pspec,
+						anyOrder:   hashAgg,
+						inputTypes: [][]*types.T{inputTypes},
+						inputs:     []rowenc.EncDatumRows{rows},
+						pspec:      pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
 						if strings.Contains(err.Error(), "different errors returned") {
@@ -381,15 +381,15 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 						OrderedColumns:  orderedCols,
 					}
 					pspec := &execinfrapb.ProcessorSpec{
-						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-						Core:  execinfrapb.ProcessorCoreUnion{Distinct: spec},
+						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:        execinfrapb.ProcessorCoreUnion{Distinct: spec},
+						ResultTypes: inputTypes,
 					}
 					args := verifyColOperatorArgs{
-						anyOrder:    false,
-						inputTypes:  [][]*types.T{inputTypes},
-						inputs:      []rowenc.EncDatumRows{rows},
-						outputTypes: inputTypes,
-						pspec:       pspec,
+						anyOrder:   false,
+						inputTypes: [][]*types.T{inputTypes},
+						inputs:     []rowenc.EncDatumRows{rows},
+						pspec:      pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
 						fmt.Printf("--- seed = %d run = %d nCols = %d distinct cols = %v ordered cols = %v ---\n",
@@ -450,14 +450,14 @@ func TestSorterAgainstProcessor(t *testing.T) {
 						limit = topK - offset
 					}
 					pspec := &execinfrapb.ProcessorSpec{
-						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-						Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
-						Post:  execinfrapb.PostProcessSpec{Limit: limit, Offset: offset},
+						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:        execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
+						Post:        execinfrapb.PostProcessSpec{Limit: limit, Offset: offset},
+						ResultTypes: inputTypes,
 					}
 					args := verifyColOperatorArgs{
 						inputTypes:     [][]*types.T{inputTypes},
 						inputs:         []rowenc.EncDatumRows{rows},
-						outputTypes:    inputTypes,
 						pspec:          pspec,
 						forceDiskSpill: spillForced,
 					}
@@ -529,13 +529,13 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 						OrderingMatchLen: uint32(matchLen),
 					}
 					pspec := &execinfrapb.ProcessorSpec{
-						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-						Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
+						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:        execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
+						ResultTypes: inputTypes,
 					}
 					args := verifyColOperatorArgs{
 						inputTypes:     [][]*types.T{inputTypes},
 						inputs:         []rowenc.EncDatumRows{rows},
-						outputTypes:    inputTypes,
 						pspec:          pspec,
 						forceDiskSpill: spillForced,
 					}
@@ -681,12 +681,12 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 										OutputColumns: outputColumns,
 										Filter:        filter,
 									},
+									ResultTypes: outputTypes,
 								}
 								args := verifyColOperatorArgs{
 									anyOrder:       true,
 									inputTypes:     [][]*types.T{lInputTypes, rInputTypes},
 									inputs:         []rowenc.EncDatumRows{lRows, rRows},
-									outputTypes:    outputTypes,
 									pspec:          pspec,
 									forceDiskSpill: spillForced,
 									// It is possible that we have a filter that is always false, and this
@@ -891,17 +891,17 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								NullEquality:  testSpec.joinType.IsSetOpJoin(),
 							}
 							pspec := &execinfrapb.ProcessorSpec{
-								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: lInputTypes}, {ColumnTypes: rInputTypes}},
-								Core:  execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
-								Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
+								Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: lInputTypes}, {ColumnTypes: rInputTypes}},
+								Core:        execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
+								Post:        execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
+								ResultTypes: outputTypes,
 							}
 							args := verifyColOperatorArgs{
-								anyOrder:    testSpec.anyOrder,
-								inputTypes:  [][]*types.T{lInputTypes, rInputTypes},
-								inputs:      []rowenc.EncDatumRows{lRows, rRows},
-								outputTypes: outputTypes,
-								pspec:       pspec,
-								rng:         rng,
+								anyOrder:   testSpec.anyOrder,
+								inputTypes: [][]*types.T{lInputTypes, rInputTypes},
+								inputs:     []rowenc.EncDatumRows{lRows, rRows},
+								pspec:      pspec,
+								rng:        rng,
 							}
 							if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
 								// The output of set operation joins is not fully
@@ -1072,20 +1072,20 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						continue
 					}
 
-					pspec := &execinfrapb.ProcessorSpec{
-						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-						Core:  execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
-					}
 					// Currently, we only support window functions that take no
 					// arguments, so we leave the second argument empty.
 					_, outputType, err := execinfrapb.GetWindowFunctionInfo(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn})
 					require.NoError(t, err)
+					pspec := &execinfrapb.ProcessorSpec{
+						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:        execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
+						ResultTypes: append(inputTypes, outputType),
+					}
 					args := verifyColOperatorArgs{
-						anyOrder:    true,
-						inputTypes:  [][]*types.T{inputTypes},
-						inputs:      []rowenc.EncDatumRows{rows},
-						outputTypes: append(inputTypes, outputType),
-						pspec:       pspec,
+						anyOrder:   true,
+						inputTypes: [][]*types.T{inputTypes},
+						inputs:     []rowenc.EncDatumRows{rows},
+						pspec:      pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
 						fmt.Printf("seed = %d\n", seed)

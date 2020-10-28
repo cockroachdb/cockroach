@@ -293,7 +293,7 @@ func TestInboxShutdown(t *testing.T) {
 											return
 										}
 										var buffer bytes.Buffer
-										_, _, err = r.Serialize(&buffer, arrowData)
+										_, _, err = r.Serialize(&buffer, arrowData, batch.Length())
 										if err != nil {
 											errCh <- err
 											return

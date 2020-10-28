@@ -31,8 +31,11 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	castRe := makeFunctionRegex("_CAST", 3)
-	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 3))
+	setValues := makeFunctionRegex("_CAST_TUPLES", 2)
+	s = setValues.ReplaceAllString(s, `{{template "castTuples" buildDict "Global" . "HasNulls" $1 "HasSel" $2}}`)
+
+	castRe := makeFunctionRegex("_CAST", 4)
+	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 4))
 
 	s = strings.ReplaceAll(s, "_L_SLICE", "execgen.SLICE")
 	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
@@ -44,7 +47,7 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_R_SET", "execgen.SET")
 	s = replaceManipulationFuncsAmbiguous(".Right", s)
 
-	tmpl, err := template.New("cast").Parse(s)
+	tmpl, err := template.New("cast").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}

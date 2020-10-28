@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -80,8 +81,9 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		proc := physicalplan.Processor{
 			Node: sp.Node,
 			Spec: execinfrapb.ProcessorSpec{
-				Core:   execinfrapb.ProcessorCoreUnion{Backfiller: ib},
-				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				Core:        execinfrapb.ProcessorCoreUnion{Backfiller: ib},
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				ResultTypes: []*types.T{},
 			},
 		}
 

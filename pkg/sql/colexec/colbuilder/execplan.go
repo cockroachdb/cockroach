@@ -526,7 +526,9 @@ func NewColOperator(
 		args.ExprHelper = colexec.NewDefaultExprHelper()
 	}
 
-	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
+	if log.V(2) {
+		log.Infof(ctx, "planning col operator for spec %q", spec)
+	}
 
 	core := &spec.Core
 	post := &spec.Post
@@ -573,7 +575,9 @@ func NewColOperator(
 			// For now, we do not vectorize flows with inverted filterers.
 			return r, errors.Newf("core.InvertedFilterer is not supported")
 		}
-		log.VEventf(ctx, 1, "planning a wrapped processor because %s", err.Error())
+		if log.V(1) {
+			log.Infof(ctx, "planning a wrapped processor because %s", err.Error())
+		}
 
 		inputTypes := make([][]*types.T, len(spec.Input))
 		for inputIdx, input := range spec.Input {
@@ -623,7 +627,9 @@ func NewColOperator(
 			result.MetadataSources = append(result.MetadataSources, scanOp)
 			// colBatchScan is wrapped with a cancel checker below, so we need to
 			// log its creation separately.
-			log.VEventf(ctx, 1, "made op %T\n", result.Op)
+			if log.V(1) {
+				log.Infof(ctx, "made op %T\n", result.Op)
+			}
 
 			// We want to check for cancellation once per input batch, and wrapping
 			// only colBatchScan with a CancelChecker allows us to do just that.
@@ -1053,7 +1059,9 @@ func NewColOperator(
 	if sMem, ok := result.Op.(colexec.InternalMemoryOperator); ok {
 		result.InternalMemUsage += sMem.InternalMemoryUsage()
 	}
-	log.VEventf(ctx, 1, "made op %T\n", result.Op)
+	if log.V(1) {
+		log.Infof(ctx, "made op %T\n", result.Op)
+	}
 
 	// Note: at this point, it is legal for ColumnTypes to be empty (it is
 	// legal for empty rows to be passed between processors).
@@ -1064,11 +1072,13 @@ func NewColOperator(
 	}
 	err = ppr.planPostProcessSpec(ctx, flowCtx, args, post, factory)
 	if err != nil {
-		log.VEventf(
-			ctx, 2,
-			"vectorized post process planning failed with error %v post spec is %s, attempting to wrap as a row source",
-			err, post,
-		)
+		if log.V(2) {
+			log.Infof(
+				ctx,
+				"vectorized post process planning failed with error %v post spec is %s, attempting to wrap as a row source",
+				err, post,
+			)
+		}
 		if core.TableReader != nil {
 			// We cannot naively wrap a TableReader's post-processing spec since it
 			// might project out unneeded columns that are of unsupported types. These
@@ -1084,10 +1094,6 @@ func NewColOperator(
 			}
 			result.resetToState(ctx, resultPreSpecPlanningStateShallowCopy)
 			err = result.createAndWrapRowSource(ctx, flowCtx, args, inputs, inputTypes, spec, factory, err)
-			if err != nil {
-				// There was an error wrapping the TableReader.
-				return r, err
-			}
 		} else {
 			err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, factory, err)
 		}
@@ -1095,6 +1101,32 @@ func NewColOperator(
 		// The result can be updated with the post process result.
 		result.updateWithPostProcessResult(ppr)
 	}
+	if err != nil {
+		return r, err
+	}
+
+	// Check that the actual output types are equal to the expected ones and
+	// plan casts if they are not.
+	if len(args.Spec.ResultTypes) != len(r.ColumnTypes) {
+		return r, errors.AssertionFailedf("unexpectedly different number of columns are output: expected %v, actual %v", args.Spec.ResultTypes, r.ColumnTypes)
+	}
+	projection := make([]uint32, len(args.Spec.ResultTypes))
+	for i := range args.Spec.ResultTypes {
+		expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
+		if !actual.Identical(expected) {
+			r.Op, err = colexec.GetCastOperator(
+				streamingAllocator, r.Op, i, len(r.ColumnTypes), actual, expected,
+			)
+			if err != nil {
+				return r, err
+			}
+			projection[i] = uint32(len(r.ColumnTypes))
+			r.ColumnTypes = appendOneType(r.ColumnTypes, expected)
+		} else {
+			projection[i] = uint32(i)
+		}
+	}
+	r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, projection)
 	return r, err
 }
 
@@ -1122,11 +1154,13 @@ func (r opResult) planAndMaybeWrapOnExprAsFilter(
 	); err != nil {
 		// ON expression planning failed. Fall back to planning the filter
 		// using row execution.
-		log.VEventf(
-			ctx, 2,
-			"vectorized join ON expr planning failed with error %v ON expr is %s, attempting to wrap as a row source",
-			err, onExpr.String(),
-		)
+		if log.V(2) {
+			log.Infof(
+				ctx,
+				"vectorized join ON expr planning failed with error %v ON expr is %s, attempting to wrap as a row source",
+				err, onExpr.String(),
+			)
+		}
 
 		onExprAsFilter := &execinfrapb.PostProcessSpec{Filter: onExpr}
 		return r.wrapPostProcessSpec(ctx, flowCtx, args, onExprAsFilter, factory, err)
@@ -1152,7 +1186,8 @@ func (r opResult) wrapPostProcessSpec(
 		Core: execinfrapb.ProcessorCoreUnion{
 			Noop: &execinfrapb.NoopCoreSpec{},
 		},
-		Post: *post,
+		Post:        *post,
+		ResultTypes: args.Spec.ResultTypes,
 	}
 	return r.createAndWrapRowSource(
 		ctx, flowCtx, args, []colexecbase.Operator{r.Op}, [][]*types.T{r.ColumnTypes},
@@ -1178,9 +1213,11 @@ func (r *postProcessResult) planPostProcessSpec(
 	}
 
 	if post.Projection {
-		r.addProjection(post.OutputColumns)
+		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, post.OutputColumns)
 	} else if post.RenderExprs != nil {
-		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
+		if log.V(2) {
+			log.Infof(ctx, "planning render expressions %+v", post.RenderExprs)
+		}
 		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
 		var renderedCols []uint32
 		for _, renderExpr := range post.RenderExprs {
@@ -1355,16 +1392,16 @@ func (r *postProcessResult) planFilterExpr(
 	return nil
 }
 
-// addProjection adds a simple projection to r (Op and ColumnTypes are updated
-// accordingly).
-func (r *postProcessResult) addProjection(projection []uint32) {
-	r.Op = colexec.NewSimpleProjectOp(r.Op, len(r.ColumnTypes), projection)
-	// Update output ColumnTypes.
+// addProjection adds a simple projection on top of op according to projection
+// and returns the updated operator and type schema.
+func addProjection(
+	op colexecbase.Operator, typs []*types.T, projection []uint32,
+) (colexecbase.Operator, []*types.T) {
 	newTypes := make([]*types.T, len(projection))
 	for i, j := range projection {
-		newTypes[i] = r.ColumnTypes[j]
+		newTypes[i] = typs[j]
 	}
-	r.ColumnTypes = newTypes
+	return colexec.NewSimpleProjectOp(op, len(typs), projection), newTypes
 }
 
 func planSelectionOperators(
@@ -1438,6 +1475,9 @@ func planSelectionOperators(
 		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory,
 		)
+		if err != nil {
+			return op, resultIdx, typs, internalMemUsed, err
+		}
 		op = colexec.NewIsNullSelOp(
 			op, resultIdx, false /* negate */, typs[resultIdx].Family() == types.TupleFamily,
 		)
@@ -1446,6 +1486,9 @@ func planSelectionOperators(
 		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory,
 		)
+		if err != nil {
+			return op, resultIdx, typs, internalMemUsed, err
+		}
 		op = colexec.NewIsNullSelOp(
 			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
 		)
@@ -1491,7 +1534,7 @@ func planSelectionOperators(
 				negate := cmpOp == tree.IsDistinctFrom
 				op = colexec.NewIsNullSelOp(leftOp, leftIdx, negate, false /* isTupleNull */)
 			}
-			if op == nil {
+			if op == nil || err != nil {
 				// op hasn't been created yet, so let's try the constructor for
 				// all other selection operators.
 				op, err = colexec.GetSelectionConstOperator(
@@ -1506,29 +1549,13 @@ func planSelectionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, internalMemUsed, err
 		}
-		op, err := colexec.GetSelectionOperator(
+		op, err = colexec.GetSelectionOperator(
 			cmpOp, rightOp, ct, leftIdx, rightIdx, evalCtx, t,
 		)
 		return op, resultIdx, ct, internalMemUsedLeft + internalMemUsedRight, err
 	default:
 		return nil, resultIdx, nil, internalMemUsed, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
 	}
-}
-
-func checkCastSupported(fromType, toType *types.T) error {
-	switch toType.Family() {
-	case types.DecimalFamily:
-		// If we're casting to a decimal, we're only allowing casting from the
-		// decimal of the same precision due to the fact that we're losing
-		// precision information once we start operating on coltypes.T. For
-		// such casts we will fallback to row-by-row engine.
-		// TODO(yuzefovich): coltypes.T type system has been removed,
-		// reevaluate the situation.
-		if !fromType.Identical(toType) {
-			return errors.New("decimal casts with rounding unsupported")
-		}
-	}
-	return nil
 }
 
 // planCastOperator plans a CAST operator that casts the column at index
@@ -1544,9 +1571,6 @@ func planCastOperator(
 	toType *types.T,
 	factory coldata.ColumnFactory,
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, err error) {
-	if err := checkCastSupported(fromType, toType); err != nil {
-		return op, resultIdx, typs, err
-	}
 	outputIdx := len(columnTypes)
 	op, err = colexec.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType)
 	typs = appendOneType(columnTypes, toType)
@@ -1922,7 +1946,7 @@ func planProjectionExpr(
 					allocator, input, leftIdx, resultIdx, negate, false, /* isTupleNull */
 				)
 			}
-			if op == nil {
+			if op == nil || err != nil {
 				// op hasn't been created yet, so let's try the constructor for
 				// all other projection operators.
 				op, err = colexec.GetProjectionRConstOperator(
@@ -1975,10 +1999,10 @@ func planLogicalProjectionOp(
 	resultIdx = len(columnTypes)
 	typs = appendOneType(columnTypes, types.Bool)
 	var (
-		typedLeft, typedRight                       tree.TypedExpr
-		leftProjOpChain, rightProjOpChain, outputOp colexecbase.Operator
-		leftIdx, rightIdx                           int
-		internalMemUsedLeft, internalMemUsedRight   int
+		typedLeft, typedRight                     tree.TypedExpr
+		leftProjOpChain, rightProjOpChain         colexecbase.Operator
+		leftIdx, rightIdx                         int
+		internalMemUsedLeft, internalMemUsedRight int
 	)
 	leftFeedOp := colexec.NewFeedOperator()
 	rightFeedOp := colexec.NewFeedOperator()
@@ -2008,7 +2032,7 @@ func planLogicalProjectionOp(
 	input = colexec.NewBatchSchemaSubsetEnforcer(allocator, input, typs, resultIdx, len(typs))
 	switch expr.(type) {
 	case *tree.AndExpr:
-		outputOp, err = colexec.NewAndProjOp(
+		op, err = colexec.NewAndProjOp(
 			allocator,
 			input, leftProjOpChain, rightProjOpChain,
 			leftFeedOp, rightFeedOp,
@@ -2016,7 +2040,7 @@ func planLogicalProjectionOp(
 			leftIdx, rightIdx, resultIdx,
 		)
 	case *tree.OrExpr:
-		outputOp, err = colexec.NewOrProjOp(
+		op, err = colexec.NewOrProjOp(
 			allocator,
 			input, leftProjOpChain, rightProjOpChain,
 			leftFeedOp, rightFeedOp,
@@ -2024,7 +2048,7 @@ func planLogicalProjectionOp(
 			leftIdx, rightIdx, resultIdx,
 		)
 	}
-	return outputOp, resultIdx, typs, internalMemUsedLeft + internalMemUsedRight, err
+	return op, resultIdx, typs, internalMemUsedLeft + internalMemUsedRight, err
 }
 
 // planIsNullProjectionOp plans the operator for IS NULL and IS NOT NULL
@@ -2043,13 +2067,16 @@ func planIsNullProjectionOp(
 	op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
 		ctx, evalCtx, expr, columnTypes, input, acc, factory,
 	)
+	if err != nil {
+		return op, resultIdx, typs, internalMemUsed, err
+	}
 	outputIdx := len(typs)
 	isTupleNull := typs[resultIdx].Family() == types.TupleFamily
 	op = colexec.NewIsNullProjOp(
 		colmem.NewAllocator(ctx, acc, factory), op, resultIdx, outputIdx, negate, isTupleNull,
 	)
 	typs = appendOneType(typs, outputType)
-	return op, outputIdx, typs, internalMemUsed, err
+	return op, outputIdx, typs, internalMemUsed, nil
 }
 
 // appendOneType appends a *types.T to then end of a []*types.T. The size of the

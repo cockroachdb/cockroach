@@ -111,6 +111,7 @@ func createTestOrdinalityOperator(
 		Core: execinfrapb.ProcessorCoreUnion{
 			Ordinality: &execinfrapb.OrdinalitySpec{},
 		},
+		ResultTypes: append(inputTypes, types.Int),
 	}
 	args := &NewColOperatorArgs{
 		Spec:                spec,

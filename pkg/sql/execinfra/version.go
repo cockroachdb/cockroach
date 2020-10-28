@@ -39,17 +39,23 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 39
+const Version execinfrapb.DistSQLVersion = 40
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 39
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 40
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 40 (MinAcceptedVersion: 40)
+  - A new field was added execinfrapb.ProcessorSpec to propagate the result
+    column types of a processor. This change is not backwards compatible
+    because from now on the specs are expected to have that field set and the
+    field can be used during the flow setup.
 
 - Version: 39 (MinAcceptedVersion: 39)
   - Many parameters from sessiondata.SessionData object were pulled into a

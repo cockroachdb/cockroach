@@ -383,7 +383,7 @@ func (dsp *DistSQLPlanner) Run(
 	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
-	recv.outputTypes = plan.ResultTypes
+	recv.outputTypes = plan.GetResultTypes()
 
 	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
 
@@ -895,7 +895,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		subqueryRecv.noColsRequired = true
 		typ = colinfo.ColTypeInfoFromColTypes([]*types.T{})
 	} else {
-		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
+		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.GetResultTypes())
 	}
 	rows = rowcontainer.NewRowContainer(subqueryMemAccount, typ)
 	defer rows.Close(ctx)

@@ -60,7 +60,7 @@ const _RIGHT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
 // _RIGHT_TYPE_WIDTH is the template variable.
 const _RIGHT_TYPE_WIDTH = 0
 
-func _CAST(to, from, fromCol interface{}) {
+func _CAST(to, from, fromCol, toType interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
@@ -111,6 +111,7 @@ func GetCastOperator(
 						allocator:            allocator,
 						colIdx:               colIdx,
 						outputIdx:            resultIdx,
+						toType:               toType,
 					}, nil
 					// {{end}}
 				}
@@ -188,6 +189,7 @@ type cast_NAMEOp struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	toType    *types.T
 }
 
 var _ ResettableOperator = &cast_NAMEOp{}
@@ -212,66 +214,27 @@ func (c *cast_NAMEOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec._L_TYP()
 			outputCol := outputVec._R_TYP()
+			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
-				outputNulls := outputVec.Nulls()
+				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					for _, i := range sel {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r _R_GO_TYPE
-							_CAST(r, v, inputCol)
-							_R_SET(outputCol, i, r)
-						}
-					}
+					_CAST_TUPLES(true, true)
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = _L_SLICE(inputCol, 0, n)
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					for i := 0; i < n; i++ {
-						if inputNulls.NullAt(i) {
-							outputNulls.SetNull(i)
-						} else {
-							v := inputCol.Get(i)
-							var r _R_GO_TYPE
-							_CAST(r, v, inputCol)
-							_R_SET(outputCol, i, r)
-						}
-					}
+					_CAST_TUPLES(true, false)
 				}
 			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					for _, i := range sel {
-						v := inputCol.Get(i)
-						var r _R_GO_TYPE
-						_CAST(r, v, inputCol)
-						_R_SET(outputCol, i, r)
-					}
+					_CAST_TUPLES(false, true)
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = _L_SLICE(inputCol, 0, n)
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					for i := 0; i < n; i++ {
-						v := inputCol.Get(i)
-						var r _R_GO_TYPE
-						_CAST(r, v, inputCol)
-						_R_SET(outputCol, i, r)
-					}
+					_CAST_TUPLES(false, false)
 				}
 			}
 		},
@@ -283,3 +246,51 @@ func (c *cast_NAMEOp) Next(ctx context.Context) coldata.Batch {
 // {{end}}
 // {{end}}
 // {{end}}
+
+// {{/*
+// This code snippet casts all non-null tuples from the vector named 'inputCol'
+// to the vector named 'outputCol'.
+func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
+	// {{define "castTuples" -}}
+	// {{$hasNulls := .HasNulls}}
+	// {{$hasSel := .HasSel}}
+	// {{with .Global}}
+	// {{if $hasSel}}
+	sel = sel[:n]
+	// {{else}}
+	// Remove bounds checks for inputCol[i] and outputCol[i].
+	inputCol = _L_SLICE(inputCol, 0, n)
+	_ = inputCol.Get(n - 1)
+	_ = outputCol.Get(n - 1)
+	// {{end}}
+	var tupleIdx int
+	for i := 0; i < n; i++ {
+		// {{if $hasSel}}
+		tupleIdx = sel[i]
+		// {{else}}
+		tupleIdx = i
+		// {{end}}
+		// {{if $hasNulls}}
+		if inputNulls.NullAt(tupleIdx) {
+			continue
+		}
+		// {{end}}
+		v := inputCol.Get(tupleIdx)
+		var r _R_GO_TYPE
+		_CAST(r, v, inputCol, c.toType)
+		_R_SET(outputCol, tupleIdx, r)
+		// {{if eq .Right.VecMethod "Datum"}}
+		// Casting to datum-backed vector might produce a null value on
+		// non-null tuple, so we need to check that case after the cast was
+		// performed.
+		if r == tree.DNull {
+			outputNulls.SetNull(tupleIdx)
+		}
+		// {{end}}
+	}
+	// {{end}}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
