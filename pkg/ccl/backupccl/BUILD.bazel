@@ -27,6 +27,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/ccl/backupccl/ccl_testing",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
         "//pkg/clusterversion",
@@ -123,6 +124,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/ccl/backupccl/ccl_testing",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
