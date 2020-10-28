@@ -13,8 +13,10 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/ccl_testing"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -76,6 +78,8 @@ const (
 	tableSpan
 	completedSpan
 )
+
+const TXN_RETRY_RATE_KEY = "txn_retry_rate"
 
 type importEntry struct {
 	roachpb.Span
@@ -1300,7 +1304,7 @@ func insertStats(
 		return nil
 	}
 
-	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := withNewRetryableTxn(ctx, execCfg.DB, func(ctx context.Context, txn *kv.Txn) error {
 		if err := stats.InsertNewStats(ctx, execCfg.InternalExecutor, txn, latestStats); err != nil {
 			return errors.Wrapf(err, "inserting stats from backup")
 		}
@@ -1309,11 +1313,31 @@ func insertStats(
 			return errors.Wrapf(err, "updating job marking stats insertion complete")
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	return nil
+}
+
+func withNewRetryableTxn(
+	ctx context.Context, db *kv.DB, retryable func(context.Context, *kv.Txn) error,
+) error {
+	var retryRate = 0.0
+	if testingRetryRate, ok := ccl_testing.Get(TXN_RETRY_RATE_KEY).(float64); ok {
+		retryRate = testingRetryRate
+	}
+
+	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := retryable(ctx, txn); err != nil {
+			return err
+		}
+		if r := rand.Float64(); r < retryRate {
+			log.Infof(ctx, "injecting retry: %v < %v", r, retryRate)
+			return txn.GenerateForcedRetryableError(ctx, "forced retry")
+		}
+
+		return nil
+	})
 }
 
 // publishDescriptors updates the RESTORED descriptors' status from OFFLINE to
@@ -1844,7 +1868,7 @@ func (r *restoreResumer) restoreSystemTables(
 		}
 		systemTableName := table.GetName()
 
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := withNewRetryableTxn(ctx, db, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
 			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTableName)
 			// Don't clear the jobs table as to not delete the jobs that are performing

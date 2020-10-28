@@ -203,7 +203,7 @@ func backup(
 	var lastCheckpoint time.Time
 
 	var ranges []roachpb.RangeDescriptor
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := withNewRetryableTxn(ctx, db, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		// TODO(benesch): limit the range descriptors we fetch to the ranges that
 		// are actually relevant in the backup to speed up small backups on large
@@ -533,7 +533,7 @@ func (b *backupResumer) Resume(
 	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
 
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := withNewRetryableTxn(ctx, p.ExecCfg().DB, func(ctx context.Context, txn *kv.Txn) error {
 			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
 		}); err != nil {
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
@@ -616,7 +616,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		}
 	}
 
-	if err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := withNewRetryableTxn(ctx, exec.DB, func(ctx context.Context, txn *kv.Txn) error {
 		// Do not rely on b.job containing created_by_id.  Query it directly.
 		datums, err := exec.InternalExecutor.QueryRowEx(
 			ctx,
@@ -661,7 +661,7 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 		return err
 	}
 	details.BackupManifest = descBytes
-	err = DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err = withNewRetryableTxn(ctx, DB, func(ctx context.Context, txn *kv.Txn) error {
 		return b.job.WithTxn(txn).SetDetails(ctx, details)
 	})
 	return err
@@ -685,7 +685,7 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
 	}
 	b.deleteCheckpoint(ctx, cfg, p.User())
-	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return withNewRetryableTxn(ctx, cfg.DB, func(ctx context.Context, txn *kv.Txn) error {
 		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
 	})
 }
