@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -31,10 +32,11 @@ import (
 )
 
 const (
-	defaultUserfileScheme      = "userfile"
-	defaultQualifiedNamePrefix = "defaultdb.public.userfiles_"
-	tmpSuffix                  = ".tmp"
-	fileTableNameSuffix        = "_upload_files"
+	defaultUserfileScheme         = "userfile"
+	defaultQualifiedNamePrefix    = "defaultdb.public.userfiles_"
+	defaultQualifiedHexNamePrefix = "defaultdb.public.userfilesx_"
+	tmpSuffix                     = ".tmp"
+	fileTableNameSuffix           = "_upload_files"
 )
 
 var userFileUploadCmd = &cobra.Command{
@@ -167,6 +169,23 @@ func openUserFile(source string) (io.ReadCloser, error) {
 	return f, nil
 }
 
+// getDefaultQualifiedTableName returns the default table name prefix for the
+// tables backing userfile.
+// To account for all supported usernames, we adopt a naming scheme whereby if
+// the normalized username remains unquoted after encoding to a SQL identifier,
+// we use it as is. Otherwise we use its hex representation.
+//
+// This schema gives us the two properties we desire from this table name prefix:
+// - Uniqueness amongst users with different usernames.
+// - Support for all current and future valid usernames.
+func getDefaultQualifiedTableName(user security.SQLUsername) string {
+	normalizedUsername := user.Normalized()
+	if lexbase.IsBareIdentifier(normalizedUsername) {
+		return defaultQualifiedNamePrefix + normalizedUsername
+	}
+	return defaultQualifiedHexNamePrefix + fmt.Sprintf("%x", normalizedUsername)
+}
+
 // Construct the userfile ExternalStorage URI from CLI args.
 func constructUserfileDestinationURI(source, destination string, user security.SQLUsername) string {
 	// User has not specified a destination URI/path. We use the default URI
@@ -175,10 +194,8 @@ func constructUserfileDestinationURI(source, destination string, user security.S
 		sourceFilename := path.Base(source)
 		userFileURL := url.URL{
 			Scheme: defaultUserfileScheme,
-			// TODO(knz): This looks suspicious, see
-			// https://github.com/cockroachdb/cockroach/issues/55389
-			Host: defaultQualifiedNamePrefix + user.Normalized(),
-			Path: sourceFilename,
+			Host:   getDefaultQualifiedTableName(user),
+			Path:   sourceFilename,
 		}
 		return userFileURL.String()
 	}
@@ -194,9 +211,7 @@ func constructUserfileDestinationURI(source, destination string, user security.S
 	if userfileURI, err = url.ParseRequestURI(destination); err == nil {
 		if userfileURI.Scheme == defaultUserfileScheme {
 			if userfileURI.Host == "" {
-				// TODO(knz): This looks suspicious, see
-				// https://github.com/cockroachdb/cockroach/issues/55389
-				userfileURI.Host = defaultQualifiedNamePrefix + user.Normalized()
+				userfileURI.Host = getDefaultQualifiedTableName(user)
 			}
 			return userfileURI.String()
 		}
@@ -206,21 +221,19 @@ func constructUserfileDestinationURI(source, destination string, user security.S
 	// userfile URI schema and host, and the destination as the path.
 	userFileURL := url.URL{
 		Scheme: defaultUserfileScheme,
-		// TODO(knz): This looks suspicious, see
-		// https://github.com/cockroachdb/cockroach/issues/55389
-		Host: defaultQualifiedNamePrefix + user.Normalized(),
-		Path: destination,
+		Host:   getDefaultQualifiedTableName(user),
+		Path:   destination,
 	}
 	return userFileURL.String()
 }
 
-func constructUserfileListURI(glob, user string) string {
+func constructUserfileListURI(glob string, user security.SQLUsername) string {
 	// User has not specified a glob pattern and so we construct a URI which will
 	// list all the files stored in the UserFileTableStorage.
 	if glob == "" || glob == "*" {
 		userFileURL := url.URL{
 			Scheme: defaultUserfileScheme,
-			Host:   defaultQualifiedNamePrefix + user,
+			Host:   getDefaultQualifiedTableName(user),
 			Path:   "",
 		}
 		return userFileURL.String()
@@ -239,7 +252,7 @@ func constructUserfileListURI(glob, user string) string {
 	// userfile URI schema and host, and the glob as the path.
 	userfileURL := url.URL{
 		Scheme: defaultUserfileScheme,
-		Host:   defaultQualifiedNamePrefix + user,
+		Host:   getDefaultQualifiedTableName(user),
 		Path:   glob,
 	}
 
@@ -256,13 +269,13 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 		return nil, err
 	}
 
-	userfileListURI := constructUserfileListURI(glob, connURL.User.Username())
+	reqUsername, _ := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameValidation)
+
+	userfileListURI := constructUserfileListURI(glob, reqUsername)
 	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
 	if err != nil {
 		return nil, err
 	}
-
-	reqUsername, _ := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameValidation)
 
 	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
@@ -288,13 +301,13 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 		return nil, err
 	}
 
-	userfileListURI := constructUserfileListURI(glob, connURL.User.Username())
+	reqUsername, _ := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameValidation)
+
+	userfileListURI := constructUserfileListURI(glob, reqUsername)
 	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
 	if err != nil {
 		return nil, err
 	}
-
-	reqUsername, _ := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameValidation)
 
 	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
@@ -426,7 +439,6 @@ func uploadUserFile(
 	if err != nil {
 		return "", err
 	}
-
 	// Construct the userfile URI as the destination for the CopyIn stmt.
 	// Currently we hardcode the db.schema prefix, in the future we might allow
 	// users to specify this.
