@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func TestAnnotateCtxTags(t *testing.T) {
@@ -50,7 +49,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 
 	sp1 := tracer.StartSpan("root")
 	tracing.StartRecording(sp1, tracing.SingleNodeRecording)
-	ctx1 := opentracing.ContextWithSpan(context.Background(), sp1)
+	ctx1 := tracing.ContextWithSpan(context.Background(), sp1)
 	Event(ctx1, "a")
 
 	ctx2, sp2 := ac.AnnotateCtxWithSpan(ctx1, "child")

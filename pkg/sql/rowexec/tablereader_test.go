@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/types"
-	"github.com/opentracing/opentracing-go"
 )
 
 func TestTableReader(t *testing.T) {
@@ -395,7 +394,7 @@ func TestLimitScans(t *testing.T) {
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("root", tracing.Recordable)
 	tracing.StartRecording(sp, tracing.SnowballRecording)
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx
 
 	tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)

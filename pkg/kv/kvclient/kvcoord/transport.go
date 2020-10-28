@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
@@ -165,7 +164,7 @@ func (gt *grpcTransport) sendBatch(
 		}
 		// Import the remotely collected spans, if any.
 		if len(reply.CollectedSpans) != 0 {
-			span := opentracing.SpanFromContext(ctx)
+			span := tracing.SpanFromContext(ctx)
 			if span == nil {
 				return nil, errors.Errorf(
 					"trying to ingest remote spans but there is no recording span set up")
@@ -252,7 +251,7 @@ func (h byHealth) Less(i, j int) bool {
 // SenderTransportFactory wraps a client.Sender for use as a KV
 // Transport. This is useful for tests that want to use DistSender
 // without a full RPC stack.
-func SenderTransportFactory(tracer opentracing.Tracer, sender kv.Sender) TransportFactory {
+func SenderTransportFactory(tracer *tracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
 		_ SendOptions, _ *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
 	) (Transport, error) {
@@ -263,7 +262,7 @@ func SenderTransportFactory(tracer opentracing.Tracer, sender kv.Sender) Transpo
 }
 
 type senderTransport struct {
-	tracer  opentracing.Tracer
+	tracer  *tracing.Tracer
 	sender  kv.Sender
 	replica roachpb.ReplicaDescriptor
 
@@ -302,7 +301,7 @@ func (s *senderTransport) SendNext(
 
 	// Import the remotely collected spans, if any.
 	if len(br.CollectedSpans) != 0 {
-		span := opentracing.SpanFromContext(ctx)
+		span := tracing.SpanFromContext(ctx)
 		if span == nil {
 			panic("trying to ingest remote spans but there is no recording span set up")
 		}

@@ -836,7 +836,7 @@ type ExecutorTestingKnobs struct {
 
 	// WithStatementTrace is called after the statement is executed in
 	// execStmtInOpenState.
-	WithStatementTrace func(span opentracing.Span, stmt string)
+	WithStatementTrace func(span *tracing.Span, stmt string)
 
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.
@@ -1416,10 +1416,10 @@ type SessionTracing struct {
 
 	// firstTxnSpan is the span of the first txn that was active when session
 	// tracing was enabled.
-	firstTxnSpan opentracing.Span
+	firstTxnSpan *tracing.Span
 
 	// connSpan is the connection's span. This is recording.
-	connSpan opentracing.Span
+	connSpan *tracing.Span
 
 	// lastRecording will collect the recording when stopping tracing.
 	lastRecording []traceRow
@@ -1499,7 +1499,7 @@ func (st *SessionTracing) StartTracing(
 
 	// If we're inside a transaction, start recording on the txn span.
 	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
-		sp := opentracing.SpanFromContext(st.ex.state.Ctx)
+		sp := tracing.SpanFromContext(st.ex.state.Ctx)
 		if sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
@@ -1515,13 +1515,13 @@ func (st *SessionTracing) StartTracing(
 	// Now hijack the conn's ctx with one that has a recording span.
 
 	opName := "session recording"
-	var sp opentracing.Span
+	var sp *tracing.Span
 	connCtx := st.ex.ctxHolder.connCtx
 
 	// TODO(andrei): use tracing.EnsureChildSpan() or something more efficient
 	// than StartSpan(). The problem is that the current interface doesn't allow
 	// the Recordable option to be passed.
-	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
+	if parentSp := tracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(
 			opName,
@@ -1539,7 +1539,7 @@ func (st *SessionTracing) StartTracing(
 	st.connSpan = sp
 
 	// Hijack the connections context.
-	newConnCtx := opentracing.ContextWithSpan(st.ex.ctxHolder.connCtx, sp)
+	newConnCtx := tracing.ContextWithSpan(st.ex.ctxHolder.connCtx, sp)
 	st.ex.ctxHolder.hijack(newConnCtx)
 
 	return nil

@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -84,7 +84,7 @@ type LocalTestCluster struct {
 type InitFactoryFn func(
 	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
-	tracer opentracing.Tracer,
+	tracer *tracing.Tracer,
 	clock *hlc.Clock,
 	latency time.Duration,
 	stores kv.Sender,

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // windowerState represents the state of the processor.
@@ -207,7 +206,7 @@ func newWindower(
 	// them to reuse the same shared memory account with the windower.
 	evalCtx.SingleDatumAggMemAccount = &w.acc
 
-	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		w.input = newInputStatCollector(w.input)
 		w.FinishTrace = w.outputStatsToTrace
 	}
@@ -878,7 +877,7 @@ func (w *windower) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(w.Ctx); sp != nil {
+	if sp := tracing.SpanFromContext(w.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&WindowerStats{

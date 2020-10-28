@@ -85,7 +85,6 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/sentry-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -235,9 +234,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	registry := metric.NewRegistry()
 	// If the tracer has a Close function, call it after the server stops.
-	if tr, ok := cfg.AmbientCtx.Tracer.(stop.Closer); ok {
-		stopper.AddCloser(tr)
-	}
+	stopper.AddCloser(cfg.AmbientCtx.Tracer)
 
 	// Add a dynamic log tag value for the node ID.
 	//
@@ -695,7 +692,7 @@ func (s *Server) AnnotateCtx(ctx context.Context) context.Context {
 // AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
 func (s *Server) AnnotateCtxWithSpan(
 	ctx context.Context, opName string,
-) (context.Context, opentracing.Span) {
+) (context.Context, *tracing.Span) {
 	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 

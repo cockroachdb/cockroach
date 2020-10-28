@@ -561,7 +561,6 @@ go_test(
         "//vendor/github.com/jackc/pgx/pgtype",
         "//vendor/github.com/jackc/pgx/v4:pgx",
         "//vendor/github.com/lib/pq",
-        "//vendor/github.com/opentracing/opentracing-go",
         "//vendor/github.com/pmezard/go-difflib/difflib",
         "//vendor/github.com/stretchr/testify/assert",
         "//vendor/github.com/stretchr/testify/require",

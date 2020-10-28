@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -330,7 +329,7 @@ func (n *Node) AnnotateCtx(ctx context.Context) context.Context {
 // AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
 func (n *Node) AnnotateCtxWithSpan(
 	ctx context.Context, opName string,
-) (context.Context, opentracing.Span) {
+) (context.Context, *tracing.Span) {
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
@@ -970,20 +969,20 @@ func (n *Node) setupSpanForIncomingRPC(
 	// The operation name matches the one created by the interceptor in the
 	// remoteTrace case below.
 	const opName = "/cockroach.roachpb.Internal/Batch"
-	var newSpan, grpcSpan opentracing.Span
+	var newSpan, grpcSpan *tracing.Span
 	if isLocalRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
 		ctx, newSpan = tracing.ChildSpan(ctx, opName)
 	} else {
-		grpcSpan = opentracing.SpanFromContext(ctx)
+		grpcSpan = tracing.SpanFromContext(ctx)
 		if grpcSpan == nil {
 			// If tracing information was passed via gRPC metadata, the gRPC interceptor
 			// should have opened a span for us. If not, open a span now (if tracing is
 			// disabled, this will be a noop span).
-			newSpan = n.storeCfg.AmbientCtx.Tracer.(*tracing.Tracer).StartRootSpan(
+			newSpan = n.storeCfg.AmbientCtx.Tracer.StartRootSpan(
 				opName, n.storeCfg.AmbientCtx.LogTags(), tracing.NonRecordableSpan,
 			)
-			ctx = opentracing.ContextWithSpan(ctx, newSpan)
+			ctx = tracing.ContextWithSpan(ctx, newSpan)
 		} else {
 			grpcSpan.SetTag("node", n.Descriptor.NodeID)
 		}

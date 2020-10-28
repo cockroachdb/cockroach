@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // localTestClusterTransport augments senderTransport with an optional
@@ -49,7 +49,7 @@ func (l *localTestClusterTransport) SendNext(
 func InitFactoryForLocalTestCluster(
 	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
-	tracer opentracing.Tracer,
+	tracer *tracing.Tracer,
 	clock *hlc.Clock,
 	latency time.Duration,
 	stores kv.Sender,
@@ -71,7 +71,7 @@ func InitFactoryForLocalTestCluster(
 func NewDistSenderForLocalTestCluster(
 	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
-	tracer opentracing.Tracer,
+	tracer *tracing.Tracer,
 	clock *hlc.Clock,
 	latency time.Duration,
 	stores kv.Sender,

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 // countAggregator is a simple processor that counts the number of rows it
@@ -48,7 +47,7 @@ func newCountAggregator(
 	ag := &countAggregator{}
 	ag.input = input
 
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		ag.input = newInputStatCollector(input)
 		ag.FinishTrace = ag.outputStatsToTrace
 	}
@@ -115,7 +114,7 @@ func (ag *countAggregator) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(ag.Ctx); sp != nil {
+	if sp := tracing.SpanFromContext(ag.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp, &AggregatorStats{InputStats: is},
 		)

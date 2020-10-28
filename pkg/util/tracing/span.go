@@ -218,9 +218,6 @@ type Span struct {
 	ot otSpan
 }
 
-// TODO(tbg): remove this. We don't need *Span to be an opentracing.Span.
-var _ opentracing.Span = &Span{}
-
 func (s *Span) isBlackHole() bool {
 	return !s.crdb.isRecording() && s.netTr == nil && s.ot == (otSpan{})
 }
@@ -233,8 +230,8 @@ func (s *Span) isNoop() bool {
 }
 
 // IsRecording returns true if the Span is recording its events.
-func IsRecording(s opentracing.Span) bool {
-	return s.(*Span).crdb.isRecording()
+func IsRecording(sp *Span) bool {
+	return sp.crdb.isRecording()
 }
 
 // enableRecording start recording on the Span. From now on, log events and child spans
@@ -277,11 +274,10 @@ func (s *crdbSpan) enableRecording(
 //
 // Children spans created from the Span while it is *not* recording will not
 // necessarily be recordable.
-func StartRecording(os opentracing.Span, recType RecordingType) {
+func StartRecording(sp *Span, recType RecordingType) {
 	if recType == NoRecording {
 		panic("StartRecording called with NoRecording")
 	}
-	sp := os.(*Span)
 	if sp.isNoop() {
 		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
 	}
@@ -300,8 +296,8 @@ func StartRecording(os opentracing.Span, recType RecordingType) {
 // when all the spans finish.
 //
 // StopRecording() can be called on a Finish()ed Span.
-func StopRecording(os opentracing.Span) {
-	os.(*Span).disableRecording()
+func StopRecording(sp *Span) {
+	sp.disableRecording()
 }
 
 func (s *Span) disableRecording() {
@@ -330,9 +326,8 @@ func (s *crdbSpan) disableRecording() {
 //
 // In other words, this tests if the Span is our custom type, and not a noopSpan
 // or anything else.
-func IsRecordable(os opentracing.Span) bool {
-	sp, isCockroachSpan := os.(*Span)
-	return isCockroachSpan && !sp.isNoop()
+func IsRecordable(sp *Span) bool {
+	return !sp.isNoop()
 }
 
 // Recording represents a group of RecordedSpans, as returned by GetRecording.
@@ -342,8 +337,8 @@ type Recording []tracingpb.RecordedSpan
 // GetRecording retrieves the current recording, if the Span has recording
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
-func GetRecording(os opentracing.Span) Recording {
-	return os.(*Span).crdb.getRecording()
+func GetRecording(sp *Span) Recording {
+	return sp.crdb.getRecording()
 }
 
 func (s *crdbSpan) getRecording() Recording {
@@ -709,8 +704,8 @@ type TraceCollection struct {
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
-func ImportRemoteSpans(os opentracing.Span, remoteSpans []tracingpb.RecordedSpan) error {
-	return os.(*Span).crdb.ImportRemoteSpans(remoteSpans)
+func ImportRemoteSpans(sp *Span, remoteSpans []tracingpb.RecordedSpan) error {
+	return sp.crdb.ImportRemoteSpans(remoteSpans)
 }
 
 func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
@@ -736,8 +731,7 @@ func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error
 // The child of a blackhole Span is a non-recordable blackhole Span[*]. These incur
 // only minimal overhead. It is therefore not worth it to call this method to avoid
 // starting spans.
-func IsBlackHoleSpan(s opentracing.Span) bool {
-	sp := s.(*Span)
+func IsBlackHoleSpan(sp *Span) bool {
 	return sp.isBlackHole()
 }
 
@@ -746,8 +740,7 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 //
 // You should never need to care about this method. It is exported for technical
 // reasons.
-func IsNoopContext(spanCtx opentracing.SpanContext) bool {
-	sc := spanCtx.(*SpanContext)
+func IsNoopContext(sc *SpanContext) bool {
 	return sc.isNoop()
 }
 
@@ -757,17 +750,16 @@ func (sc *SpanContext) isNoop() bool {
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
 // the Span tags.
-func SetSpanStats(os opentracing.Span, stats SpanStats) {
-	s := os.(*Span)
-	if s.isNoop() {
+func SetSpanStats(sp *Span, stats SpanStats) {
+	if sp.isNoop() {
 		return
 	}
-	s.crdb.mu.Lock()
-	s.crdb.mu.stats = stats
+	sp.crdb.mu.Lock()
+	sp.crdb.mu.stats = stats
 	for name, value := range stats.Stats() {
-		s.setTagInner(StatTagPrefix+name, value, true /* locked */)
+		sp.setTagInner(StatTagPrefix+name, value, true /* locked */)
 	}
-	s.crdb.mu.Unlock()
+	sp.crdb.mu.Unlock()
 }
 
 // Finish is part of the opentracing.Span interface.
@@ -800,7 +792,7 @@ func (s *Span) FinishWithOptions(opts opentracing.FinishOptions) {
 // TODO(andrei, radu): Should this return noopSpanContext for a Recordable Span
 // that's not currently recording? That might save work and allocations when
 // creating child spans.
-func (s *Span) Context() opentracing.SpanContext {
+func (s *Span) Context() *SpanContext {
 	s.crdb.mu.Lock()
 	defer s.crdb.mu.Unlock()
 	sc := s.SpanContext()
@@ -836,7 +828,7 @@ func (s *Span) SpanContext() SpanContext {
 }
 
 // SetOperationName is part of the opentracing.Span interface.
-func (s *Span) SetOperationName(operationName string) opentracing.Span {
+func (s *Span) SetOperationName(operationName string) *Span {
 	if s.isNoop() {
 		return s
 	}
@@ -848,7 +840,7 @@ func (s *Span) SetOperationName(operationName string) opentracing.Span {
 }
 
 // SetTag is part of the opentracing.Span interface.
-func (s *Span) SetTag(key string, value interface{}) opentracing.Span {
+func (s *Span) SetTag(key string, value interface{}) *Span {
 	if s.isNoop() {
 		return s
 	}
@@ -862,7 +854,7 @@ func (s *crdbSpan) setTagLocked(key string, value interface{}) {
 	s.mu.tags[key] = value
 }
 
-func (s *Span) setTagInner(key string, value interface{}, locked bool) opentracing.Span {
+func (s *Span) setTagInner(key string, value interface{}, locked bool) *Span {
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetTag(key, value)
 	}
@@ -935,7 +927,7 @@ func (s *Span) LogKV(alternatingKeyValues ...interface{}) {
 }
 
 // SetBaggageItem is part of the opentracing.Span interface.
-func (s *Span) SetBaggageItem(restrictedKey, value string) opentracing.Span {
+func (s *Span) SetBaggageItem(restrictedKey, value string) *Span {
 	if s.isNoop() {
 		return s
 	}
@@ -968,47 +960,9 @@ func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
 	s.setTagLocked(restrictedKey, value)
 }
 
-// BaggageItem is part of the opentracing.Span interface.
-func (s *Span) BaggageItem(restrictedKey string) string {
-	if s := s.crdb.BaggageItem(restrictedKey); s != "" {
-		return s
-	}
-	if s.ot.shadowSpan == nil {
-		return ""
-	}
-	return s.ot.shadowSpan.BaggageItem(restrictedKey)
-}
-
-func (s *crdbSpan) BaggageItem(restrictedKey string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.Baggage[restrictedKey]
-}
-
 // Tracer is part of the opentracing.Span interface.
-func (s *Span) Tracer() opentracing.Tracer {
+func (s *Span) Tracer() *Tracer {
 	return s.tracer
-}
-
-// LogEvent is part of the opentracing.Span interface. Deprecated.
-func (s *Span) LogEvent(event string) {
-	if s.isNoop() {
-		return
-	}
-	s.LogFields(otlog.String(tracingpb.LogMessageField, event))
-}
-
-// LogEventWithPayload is part of the opentracing.Span interface. Deprecated.
-func (s *Span) LogEventWithPayload(event string, payload interface{}) {
-	if s.isNoop() {
-		return
-	}
-	s.LogFields(otlog.String(tracingpb.LogMessageField, event), otlog.Object("payload", payload))
-}
-
-// Log is part of the opentracing.Span interface. Deprecated.
-func (s *Span) Log(data opentracing.LogData) {
-	panic("unimplemented")
 }
 
 // getRecordingLocked returns the Span's recording. This does not include

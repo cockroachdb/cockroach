@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // Functions deprecated in release 20.2 that should be removed in release 21.1.
@@ -355,7 +355,7 @@ func (r *Registry) deprecatedResume(
 		phs, cleanup := r.planFn("resume-"+job.taskName(), payload.UsernameProto.Decode())
 		defer cleanup()
 		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
-		var span opentracing.Span
+		var span *tracing.Span
 		ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
 		defer span.Finish()
 

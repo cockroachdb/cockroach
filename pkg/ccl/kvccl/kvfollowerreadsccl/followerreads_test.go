@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -197,8 +196,6 @@ func TestOracleFactory(t *testing.T) {
 func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 50032, "temporary")
-
 	// This test sleeps for a few sec.
 	skip.UnderShort(t)
 
@@ -230,7 +227,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 							},
 						},
 						SQLExecutor: &sql.ExecutorTestingKnobs{
-							WithStatementTrace: func(sp opentracing.Span, stmt string) {
+							WithStatementTrace: func(sp *tracing.Span, stmt string) {
 								if stmt == historicalQuery {
 									recCh <- tracing.GetRecording(sp)
 								}
