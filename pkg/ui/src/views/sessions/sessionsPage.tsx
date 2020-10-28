@@ -187,10 +187,10 @@ export class SessionsPage extends React.Component<SessionsPageProps, SessionsPag
     const app = getMatchParamByName(match, appAttr);
     return (
       <React.Fragment>
-        <Helmet title={app ? `${app} App | Active Sessions` : "Active Sessions"} />
+        <Helmet title={app ? `${app} App | Sessions` : "Sessions"} />
 
         <section className={cx("section")}>
-          <h1 className={cx("base-heading")}>Active Sessions</h1>
+          <h1 className={cx("base-heading")}>Sessions</h1>
         </section>
 
         <Loading
