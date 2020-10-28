@@ -234,7 +234,7 @@ func (r *Registry) runJob(
 	job.mu.Unlock()
 
 	// Bookkeeping.
-	phs, cleanup := r.planFn("resume-"+taskName, username)
+	execCtx, cleanup := r.execCtx("resume-"+taskName, username)
 	defer cleanup()
 	spanName := fmt.Sprintf(`%s-%d`, typ, *job.ID())
 	var span *tracing.Span
@@ -242,7 +242,7 @@ func (r *Registry) runJob(
 	defer span.Finish()
 
 	// Run the actual job.
-	err := r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, finalResumeError)
+	err := r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, status, finalResumeError)
 	if err != nil {
 		// TODO (lucy): This needs to distinguish between assertion errors in
 		// the job registry and assertion errors in job execution returned from
@@ -269,7 +269,7 @@ SET status =
 			WHEN status = $1 THEN $2
 			WHEN status = $3 THEN $4
 			ELSE status
-		END 
+		END
 WHERE (status IN ($1, $3)) AND (claim_session_id = $5 AND claim_instance_id = $6)
 RETURNING id, status`,
 			StatusPauseRequested, StatusPaused,

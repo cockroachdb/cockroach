@@ -285,11 +285,12 @@ func readMysqlCreateTable(
 	ctx context.Context,
 	input io.Reader,
 	evalCtx *tree.EvalContext,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	startingID, parentID descpb.ID,
 	match string,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
+	owner security.SQLUsername,
 ) ([]*tabledesc.Mutable, error) {
 	match = lexbase.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
@@ -321,7 +322,7 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := descpb.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentID, id, name, i.TableSpec, fks, seqVals)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentID, id, name, i.TableSpec, fks, seqVals, owner)
 			if err != nil {
 				return nil, err
 			}
@@ -361,12 +362,13 @@ func safeName(in mysqlIdent) tree.Name {
 func mysqlTableToCockroach(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	parentID, id descpb.ID,
 	name string,
 	in *mysql.TableSpec,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
+	owner security.SQLUsername,
 ) ([]*tabledesc.Mutable, []delayedFK, error) {
 	if in == nil {
 		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupported type?)", name)
@@ -400,7 +402,6 @@ func mysqlTableToCockroach(
 
 	var seqDesc *tabledesc.Mutable
 	// If we have an auto-increment seq, create it and increment the id.
-	owner := security.AdminRoleName()
 	if seqName != "" {
 		var opts tree.SequenceOptions
 		if startingValue != 0 {
@@ -409,10 +410,6 @@ func mysqlTableToCockroach(
 		}
 		var err error
 		if p != nil {
-			params := p.RunParams(ctx)
-			if params.SessionData() != nil {
-				owner = params.SessionData().User()
-			}
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
 			seqDesc, err = sql.NewSequenceTableDesc(
 				ctx,
@@ -424,7 +421,7 @@ func mysqlTableToCockroach(
 				time,
 				priv,
 				tree.PersistencePermanent,
-				&params,
+				nil, /* params */
 			)
 		} else {
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)

@@ -1680,7 +1680,7 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	if _, err := sqlDB.Exec(`
      -- Create a corrupted progress field.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1; 
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1;
 	`, jobID); err != nil {
 		t.Fatal(err)
 	}
@@ -1956,7 +1956,7 @@ func TestJobInTxn(t *testing.T) {
 	defer sql.ClearPlanHooks()
 	// Piggy back on BACKUP to be able to create a succeeding test job.
 	sql.AddPlanHook(
-		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
+		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
 		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 			st, ok := stmt.(*tree.Backup)
 			if !ok {
@@ -1964,7 +1964,7 @@ func TestJobInTxn(t *testing.T) {
 			}
 			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
-				job, err = phs.ExtendedEvalContext().QueueJob(
+				job, err = execCtx.ExtendedEvalContext().QueueJob(
 					jobs.Record{
 						Description: st.String(),
 						Details:     jobspb.BackupDetails{},
@@ -1991,7 +1991,7 @@ func TestJobInTxn(t *testing.T) {
 	})
 	// Piggy back on RESTORE to be able to create a failing test job.
 	sql.AddPlanHook(
-		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
+		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
 		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 			_, ok := stmt.(*tree.Restore)
 			if !ok {
@@ -1999,7 +1999,7 @@ func TestJobInTxn(t *testing.T) {
 			}
 			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
-				job, err = phs.ExtendedEvalContext().QueueJob(
+				job, err = execCtx.ExtendedEvalContext().QueueJob(
 					jobs.Record{
 						Description: "RESTORE",
 						Details:     jobspb.RestoreDetails{},

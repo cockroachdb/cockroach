@@ -31,7 +31,7 @@ import (
 // build up the BulkOpSummary.
 func distBackup(
 	ctx context.Context,
-	phs sql.PlanHookState,
+	execCtx sql.JobExecContext,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
 	pkIDs map[uint64]bool,
@@ -45,10 +45,10 @@ func distBackup(
 	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
 	var noTxn *kv.Txn
 
-	dsp := phs.DistSQLPlanner()
-	evalCtx := phs.ExtendedEvalContext()
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
 
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
+	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
 		return err
 	}
@@ -64,8 +64,8 @@ func distBackup(
 		mvccFilter,
 		encryption,
 		startTime, endTime,
-		phs.User(),
-		phs.ExecCfg(),
+		execCtx.User(),
+		execCtx.ExecCfg(),
 	)
 	if err != nil {
 		return err
