@@ -287,14 +287,16 @@ func resolveOptionsForBackupJobDescription(
 	return newOpts, nil
 }
 
-func backupJobDescription(
-	p sql.PlanHookState,
+// GetRedactedBackupNode returns a copy of the argument `backup`, but with all
+// the secret information redacted.
+func GetRedactedBackupNode(
 	backup *tree.Backup,
 	to []string,
 	incrementalFrom []string,
 	kmsURIs []string,
 	resolvedSubdir string,
-) (string, error) {
+	hasBeenPlanned bool,
+) (*tree.Backup, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
 		Targets: backup.Targets,
@@ -309,14 +311,14 @@ func backupJobDescription(
 	// LATEST, where we are appending an incremental BACKUP.
 	// - For `BACKUP INTO x` this would be the sub-directory we have selected to
 	// write the BACKUP to.
-	if b.Nested {
+	if b.Nested && hasBeenPlanned {
 		b.Subdir = tree.NewDString(resolvedSubdir)
 	}
 
 	for _, t := range to {
 		sanitizedTo, err := cloudimpl.SanitizeExternalStorageURI(t, nil /* extraParams */)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		b.To = append(b.To, tree.NewDString(sanitizedTo))
 	}
@@ -324,16 +326,32 @@ func backupJobDescription(
 	for _, from := range incrementalFrom {
 		sanitizedFrom, err := cloudimpl.SanitizeExternalStorageURI(from, nil /* extraParams */)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
 	}
 
 	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options, kmsURIs)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	b.Options = resolvedOpts
+	return b, nil
+}
+
+func backupJobDescription(
+	p sql.PlanHookState,
+	backup *tree.Backup,
+	to []string,
+	incrementalFrom []string,
+	kmsURIs []string,
+	resolvedSubdir string,
+) (string, error) {
+	b, err := GetRedactedBackupNode(backup, to, incrementalFrom, kmsURIs, resolvedSubdir,
+		true /* hasBeenPlanned */)
+	if err != nil {
+		return "", err
+	}
 
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(b, ann), nil
