@@ -208,7 +208,7 @@ norm expect=SimplifyExplainOrdering
 EXPLAIN SELECT b, b+1 AS plus, c FROM abcde ORDER BY b, plus, c
 ----
 explain
- ├── columns: tree:8 field:9 description:10
+ ├── columns: info:8
  ├── immutable
  └── sort
       ├── columns: b:2 plus:7 c:3
@@ -231,15 +231,4 @@ explain
 norm
 SELECT field FROM [EXPLAIN SELECT 123 AS k]
 ----
-project
- ├── columns: field:6
- ├── explain
- │    ├── columns: tree:2 field:3 description:4
- │    └── values
- │         ├── columns: k:1!null
- │         ├── cardinality: [1 - 1]
- │         ├── key: ()
- │         ├── fd: ()-->(1)
- │         └── (123,)
- └── projections
-      └── field:3 [as=field:6, outer=(3)]
+error (42703): column "field" does not exist

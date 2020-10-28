@@ -249,12 +249,13 @@ SHOW TABLES
 ----
 public  kv  table  root  0
 
-query TTT
+query T
 EXPLAIN ALTER TABLE kv RENAME TO kv2
 ----
-·             distribution  local
-·             vectorized    false
-rename table  ·             ·
+distribution: local
+vectorized: false
+·
+• rename table
 
 # Verify that the EXPLAIN above does not actually rename the table (#30543)
 query TTTTI

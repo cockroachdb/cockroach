@@ -1824,11 +1824,7 @@ func (ef *execFactory) ConstructExplainPlan(
 		flags: flags,
 		plan:  plan.(*explain.Plan),
 	}
-	if flags.Verbose {
-		n.columns = colinfo.ExplainPlanVerboseColumns
-	} else {
-		n.columns = colinfo.ExplainPlanColumns
-	}
+	n.columns = colinfo.ExplainPlanColumns
 	return n, nil
 }
 

@@ -1,63 +1,75 @@
 # LogicTest: local
 
 # Tests for the implicit one row, zero column values operator.
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT 1 a
 ----
-·       distribution   local            ·    ·
-·       vectorized     false            ·    ·
-values  ·              ·                (a)  ·
-·       size           1 column, 1 row  ·    ·
-·       row 0, expr 0  1                ·    ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (a)
+  size: 1 column, 1 row
+  row 0, expr 0: 1
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT 1 + 2 a
 ----
-·       distribution   local            ·    ·
-·       vectorized     false            ·    ·
-values  ·              ·                (a)  ·
-·       size           1 column, 1 row  ·    ·
-·       row 0, expr 0  3                ·    ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (a)
+  size: 1 column, 1 row
+  row 0, expr 0: 3
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
-·       distribution   local              ·                            ·
-·       vectorized     false              ·                            ·
-values  ·              ·                  (column1, column2, column3)  ·
-·       size           3 columns, 2 rows  ·                            ·
-·       row 0, expr 0  1                  ·                            ·
-·       row 0, expr 1  2                  ·                            ·
-·       row 0, expr 2  3                  ·                            ·
-·       row 1, expr 0  4                  ·                            ·
-·       row 1, expr 1  5                  ·                            ·
-·       row 1, expr 2  6                  ·                            ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (column1, column2, column3)
+  size: 3 columns, 2 rows
+  row 0, expr 0: 1
+  row 0, expr 1: 2
+  row 0, expr 2: 3
+  row 1, expr 0: 4
+  row 1, expr 1: 5
+  row 1, expr 2: 6
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 ----
-·       distribution   local             ·          ·
-·       vectorized     false             ·          ·
-values  ·              ·                 (column1)  ·
-·       size           1 column, 4 rows  ·          ·
-·       row 0, expr 0  1                 ·          ·
-·       row 1, expr 0  2                 ·          ·
-·       row 2, expr 0  3                 ·          ·
-·       row 3, expr 0  4                 ·          ·
+distribution: local
+vectorized: false
+·
+• values
+  columns: (column1)
+  size: 1 column, 4 rows
+  row 0, expr 0: 1
+  row 1, expr 0: 2
+  row 2, expr 0: 3
+  row 3, expr 0: 4
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT a + b AS r FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-·            distribution         local              ·                   ·
-·            vectorized           false              ·                   ·
-render       ·                    ·                  (r)                 ·
- │           estimated row count  3                  ·                   ·
- │           render 0             column1 + column2  ·                   ·
- └── values  ·                    ·                  (column1, column2)  ·
-·            size                 2 columns, 3 rows  ·                   ·
-·            row 0, expr 0        1                  ·                   ·
-·            row 0, expr 1        2                  ·                   ·
-·            row 1, expr 0        3                  ·                   ·
-·            row 1, expr 1        4                  ·                   ·
-·            row 2, expr 0        5                  ·                   ·
-·            row 2, expr 1        6                  ·                   ·
+distribution: local
+vectorized: false
+·
+• render
+│ columns: (r)
+│ estimated row count: 3
+│ render 0: column1 + column2
+│
+└── • values
+      columns: (column1, column2)
+      size: 2 columns, 3 rows
+      row 0, expr 0: 1
+      row 0, expr 1: 2
+      row 1, expr 0: 3
+      row 1, expr 1: 4
+      row 2, expr 0: 5
+      row 2, expr 1: 6

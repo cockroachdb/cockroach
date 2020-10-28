@@ -39,7 +39,7 @@ EXPLAIN
     SELECT * FROM x NATURAL JOIN t
 ----
 explain
- ├── columns: tree:9 field:10 description:11
+ ├── columns: info:9
  └── with &1 (t)
       ├── columns: a:4!null b:5
       ├── project
@@ -811,26 +811,20 @@ build
 WITH cte AS (EXPLAIN (VERBOSE) SELECT 1) SELECT * FROM cte
 ----
 with &1 (cte)
- ├── columns: tree:9 field:10 description:11 columns:12 ordering:13
- ├── project
- │    ├── columns: tree:2 field:5 description:6 columns:7 ordering:8
- │    └── explain
- │         ├── columns: tree:2 level:3 node_type:4 field:5 description:6 columns:7 ordering:8
- │         ├── mode: verbose
- │         └── project
- │              ├── columns: "?column?":1!null
- │              ├── values
- │              │    └── ()
- │              └── projections
- │                   └── 1 [as="?column?":1]
+ ├── columns: info:3
+ ├── explain
+ │    ├── columns: info:2
+ │    ├── mode: verbose
+ │    └── project
+ │         ├── columns: "?column?":1!null
+ │         ├── values
+ │         │    └── ()
+ │         └── projections
+ │              └── 1 [as="?column?":1]
  └── with-scan &1 (cte)
-      ├── columns: tree:9 field:10 description:11 columns:12 ordering:13
+      ├── columns: info:3
       └── mapping:
-           ├──  tree:2 => tree:9
-           ├──  field:5 => field:10
-           ├──  description:6 => description:11
-           ├──  columns:7 => columns:12
-           └──  ordering:8 => ordering:13
+           └──  info:2 => info:3
 
 # WITH RECURSIVE examples from postgres docs.
 
@@ -1355,7 +1349,7 @@ build
 EXPLAIN WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo
 ----
 explain
- ├── columns: tree:7 field:8 description:9
+ ├── columns: info:7
  └── with &1 (foo)
       ├── columns: a:6!null
       ├── project
