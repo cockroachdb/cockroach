@@ -124,7 +124,7 @@ func TestPebbleIterReuse(t *testing.T) {
 	batch := eng.NewBatch()
 	for i := 0; i < 100; i++ {
 		key := MVCCKey{[]byte{byte(i)}, hlc.Timestamp{WallTime: 100}}
-		if err := batch.Put(key, []byte("foo")); err != nil {
+		if err := batch.PutMVCC(key, []byte("foo")); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -1047,7 +1047,7 @@ func runExportToSst(
 		key = encoding.EncodeUint32Ascending(key, uint32(i))
 
 		for j := 0; j < numRevisions; j++ {
-			err := batch.Put(MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}, []byte("foobar"))
+			err := batch.PutMVCC(MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}, []byte("foobar"))
 			if err != nil {
 				b.Fatal(err)
 			}

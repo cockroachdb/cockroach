@@ -127,9 +127,9 @@ func TestOpenReadOnlyStore(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			key := storage.MakeMVCCMetadataKey(roachpb.Key("key"))
+			key := roachpb.Key("key")
 			val := []byte("value")
-			err = db.Put(key, val)
+			err = db.PutUnversioned(key, val)
 			if !testutils.IsError(err, test.expErr) {
 				t.Fatalf("wanted %s but got %v", test.expErr, err)
 			}

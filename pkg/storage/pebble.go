@@ -742,24 +742,47 @@ func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 	return batch.Commit(opts)
 }
 
-// Clear implements the Engine interface.
-func (p *Pebble) Clear(key MVCCKey) error {
+// ClearMVCC implements the Engine interface.
+func (p *Pebble) ClearMVCC(key MVCCKey) error {
+	if key.Timestamp.IsEmpty() {
+		panic("ClearMVCC timestamp is empty")
+	}
+	return p.clear(key)
+}
+
+// ClearUnversioned implements the Engine interface.
+func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
+	return p.clear(MVCCKey{Key: key})
+}
+
+// ClearIntent implements the Engine interface.
+func (p *Pebble) ClearIntent(key roachpb.Key) error {
+	return p.clear(MVCCKey{Key: key})
+}
+
+func (p *Pebble) clear(key MVCCKey) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
 	return p.db.Delete(EncodeKey(key), pebble.Sync)
 }
 
-// SingleClear implements the Engine interface.
-func (p *Pebble) SingleClear(key MVCCKey) error {
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-	return p.db.SingleDelete(EncodeKey(key), pebble.Sync)
+// ClearRawRange implements the Engine interface.
+func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
+	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
 }
 
-// ClearRange implements the Engine interface.
-func (p *Pebble) ClearRange(start, end MVCCKey) error {
+// ClearMVCCRangeAndIntents implements the Engine interface.
+func (p *Pebble) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+}
+
+// ClearMVCCRange implements the Engine interface.
+func (p *Pebble) ClearMVCCRange(start, end MVCCKey) error {
+	return p.clearRange(start, end)
+}
+
+func (p *Pebble) clearRange(start, end MVCCKey) error {
 	bufStart := EncodeKey(start)
 	bufEnd := EncodeKey(end)
 	return p.db.DeleteRange(bufStart, bufEnd, pebble.Sync)
@@ -785,8 +808,25 @@ func (p *Pebble) Merge(key MVCCKey, value []byte) error {
 	return p.db.Merge(EncodeKey(key), value, pebble.Sync)
 }
 
-// Put implements the Engine interface.
-func (p *Pebble) Put(key MVCCKey, value []byte) error {
+// PutMVCC implements the Engine interface.
+func (p *Pebble) PutMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutMVCC timestamp is empty")
+	}
+	return p.put(key, value)
+}
+
+// PutUnversioned implements the Engine interface.
+func (p *Pebble) PutUnversioned(key roachpb.Key, value []byte) error {
+	return p.put(MVCCKey{Key: key}, value)
+}
+
+// PutIntent implements the Engine interface.
+func (p *Pebble) PutIntent(key roachpb.Key, value []byte) error {
+	return p.put(MVCCKey{Key: key}, value)
+}
+
+func (p *Pebble) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
@@ -1204,15 +1244,27 @@ func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) Clear(key MVCCKey) error {
+func (p *pebbleReadOnly) ClearMVCC(key MVCCKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) SingleClear(key MVCCKey) error {
+func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearRange(start, end MVCCKey) error {
+func (p *pebbleReadOnly) ClearIntent(key roachpb.Key) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ClearMVCCRange(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
@@ -1224,7 +1276,15 @@ func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) Put(key MVCCKey, value []byte) error {
+func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value []byte) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) PutUnversioned(key roachpb.Key, value []byte) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) PutIntent(key roachpb.Key, value []byte) error {
 	panic("not implemented")
 }
 
@@ -1379,8 +1439,16 @@ func pebbleExportToSst(
 				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
 				break
 			}
-			if err := sstWriter.Put(unsafeKey, unsafeValue); err != nil {
-				return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+			if unsafeKey.Timestamp.IsEmpty() {
+				// This should never be an intent since the incremental iterator returns
+				// an error when encountering intents.
+				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
+					return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+				}
+			} else {
+				if err := sstWriter.PutMVCC(unsafeKey, unsafeValue); err != nil {
+					return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+				}
 			}
 			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
 			if maxSize > 0 && newSize > int64(maxSize) {
