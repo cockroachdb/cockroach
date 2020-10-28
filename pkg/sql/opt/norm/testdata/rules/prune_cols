@@ -2388,6 +2388,176 @@ upsert mutation
       └── projections
            └── CASE WHEN a:11 IS NULL THEN column2:8 ELSE 10 END [as=upsert_b:19, outer=(8,11)]
 
+exec-ddl
+CREATE TABLE checks (
+    a INT PRIMARY KEY,
+    b INT DEFAULT 20,
+    c INT,
+    d INT,
+    CHECK (a > 0),
+    CHECK (b > 10),
+    CHECK (c > b)
+)
+----
+
+# Prune all check columns when none of the referenced columns are updated.
+norm expect=PruneMutationInputCols
+UPDATE checks SET d = 0
+----
+update checks
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8 d:9
+ ├── update-mapping:
+ │    └── d_new:11 => d:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: d_new:11!null a:6!null b:7 c:8 d:9
+      ├── key: (6)
+      ├── fd: ()-->(11), (6)-->(7-9)
+      ├── scan checks
+      │    ├── columns: a:6!null b:7 c:8 d:9
+      │    ├── check constraint expressions
+      │    │    └── a:6 > 0 [outer=(6), constraints=(/6: [/1 - ]; tight)]
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7-9)
+      └── projections
+           └── 0 [as=d_new:11]
+
+# Do not prune check columns when their referenced columns are updated.
+norm expect=PruneMutationInputCols
+UPDATE checks SET b = 5
+----
+update checks
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8 d:9
+ ├── update-mapping:
+ │    └── b_new:11 => b:2
+ ├── check columns: check2:13 check3:14
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: check2:13!null check3:14 b_new:11!null a:6!null b:7 c:8 d:9
+      ├── key: (6)
+      ├── fd: ()-->(11,13), (6)-->(7-9), (8)-->(14)
+      ├── scan checks
+      │    ├── columns: a:6!null b:7 c:8 d:9
+      │    ├── check constraint expressions
+      │    │    └── a:6 > 0 [outer=(6), constraints=(/6: [/1 - ]; tight)]
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7-9)
+      └── projections
+           ├── false [as=check2:13]
+           ├── c:8 > 5 [as=check3:14, outer=(8)]
+           └── 5 [as=b_new:11]
+
+
+# Do not prune check columns for an insert.
+norm expect-not=PruneMutationInputCols
+INSERT INTO checks (a, c, d) VALUES (1, 3, 4)
+----
+insert checks
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column9:9 => b:2
+ │    ├── column2:7 => c:3
+ │    └── column3:8 => d:4
+ ├── check columns: check1:10 check2:11 check3:12
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:6!null column2:7!null column3:8!null column9:9!null check1:10!null check2:11!null check3:12!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-12)
+      └── (1, 3, 4, 20, true, true, false)
+
+# Do not prune check columns for an upsert that does not require a scan.
+norm expect-not=PruneMutationInputCols
+UPSERT INTO checks (a, b, c, d) VALUES (1, 2, 3, 4)
+----
+upsert checks
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column3:8 => c:3
+ │    └── column4:9 => d:4
+ ├── check columns: check1:10 check2:11 check3:12
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null check1:10!null check2:11!null check3:12!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-12)
+      └── (1, 2, 3, 4, true, false, true)
+
+# Do not prune check columns for an upsert that requires a scan.
+norm
+UPSERT INTO checks (a, c, d) VALUES (1, 3, 4)
+----
+upsert checks
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:10
+ ├── fetch columns: a:10 b:11 c:12 d:13
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column9:9 => b:2
+ │    ├── column2:7 => c:3
+ │    └── column3:8 => d:4
+ ├── update-mapping:
+ │    ├── column2:7 => c:3
+ │    └── column3:8 => d:4
+ ├── check columns: check1:17 check2:18 check3:19
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: check1:17 check2:18 check3:19 column1:6!null column2:7!null column3:8!null column9:9!null a:10 b:11 c:12 d:13
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-13,17-19)
+      ├── project
+      │    ├── columns: upsert_a:15 upsert_b:16 column1:6!null column2:7!null column3:8!null column9:9!null a:10 b:11 c:12 d:13
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-13,15,16)
+      │    ├── left-join (cross)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9!null a:10 b:11 c:12 d:13
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6-13)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9!null
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(6-9)
+      │    │    │    └── (1, 3, 4, 20)
+      │    │    ├── select
+      │    │    │    ├── columns: a:10!null b:11 c:12 d:13
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(10-13)
+      │    │    │    ├── scan checks
+      │    │    │    │    ├── columns: a:10!null b:11 c:12 d:13
+      │    │    │    │    ├── check constraint expressions
+      │    │    │    │    │    └── a:10 > 0 [outer=(10), constraints=(/10: [/1 - ]; tight)]
+      │    │    │    │    ├── key: (10)
+      │    │    │    │    └── fd: (10)-->(11-13)
+      │    │    │    └── filters
+      │    │    │         └── a:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+      │    │    └── filters (true)
+      │    └── projections
+      │         ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a:10 END [as=upsert_a:15, outer=(6,10)]
+      │         └── CASE WHEN a:10 IS NULL THEN column9:9 ELSE b:11 END [as=upsert_b:16, outer=(9-11)]
+      └── projections
+           ├── upsert_a:15 > 0 [as=check1:17, outer=(15)]
+           ├── upsert_b:16 > 10 [as=check2:18, outer=(16)]
+           └── column2:7 > upsert_b:16 [as=check3:19, outer=(7,16)]
+
 # ------------------------------------------------------------------------------
 # PruneMutationReturnCols
 # ------------------------------------------------------------------------------
