@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -41,9 +42,11 @@ import (
 )
 
 const (
-	maxSyncDurationDefault                = 60 * time.Second
 	maxSyncDurationFatalOnExceededDefault = true
 )
+
+// Default for MaxSyncDuration below.
+var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 60*time.Second)
 
 // MaxSyncDuration is the threshold above which an observed engine sync duration
 // triggers either a warning or a fatal error.
@@ -358,6 +361,24 @@ func DefaultPebbleOptions() *pebble.Options {
 	// of the benefit of having bloom filters on every level for only 10% of the
 	// memory cost.
 	opts.Levels[6].FilterPolicy = nil
+
+	// Set disk health check interval to min(5s, maxSyncDurationDefault). This
+	// is mostly to ease testing; the default of 5s is too infrequent to test
+	// conveniently. See the disk-stalled roachtest for an example of how this
+	// is used.
+	diskHealthCheckInterval := 5 * time.Second
+	if diskHealthCheckInterval.Seconds() > maxSyncDurationDefault.Seconds() {
+		diskHealthCheckInterval = maxSyncDurationDefault
+	}
+	// Instantiate a file system with disk health checking enabled. This FS wraps
+	// vfs.Default, and can be wrapped for encryption-at-rest.
+	opts.FS = vfs.WithDiskHealthChecks(vfs.Default, diskHealthCheckInterval,
+		func(name string, duration time.Duration) {
+			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
+				Path:     name,
+				Duration: duration,
+			})
+		})
 	return opts
 }
 
