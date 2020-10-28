@@ -35,9 +35,6 @@ SET vectorize = on
 statement ok
 SET distsql = on
 
-statement ok
-SET vectorize_row_count_threshold = 0
-
 query T
 SELECT url FROM [EXPLAIN ANALYZE SELECT a FROM a]
 ----
@@ -54,7 +51,7 @@ SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d
 https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kkFv00AQhe_8itGcWrG0titxWKlSAhjkKrGLkwNQ-bDZHVJLjtfMrkWrKP8deV1EU7VB7aE379v3jf3eeIvuV4MSF-ks_biEnhv4XBZzuEq_Xc6mWQ7TfDr7_iOFo0_ZYrn4OjuGO6s-UaNVQ5bnaQnztPySwkWR5WCgyIPhHMzJqkKBrTWUqw05lFcYYyWwY6vJOcuDtA2GzNygjATWbdf7Qa4EasuEcou-9g2hxKVaNVSSMsSnEQo05FXdhLF60nG9UXyLAhedap2Edyiw6L2ESYwCV8rra3Jge98N4sD7vmvuSQkKzArw9YYkRG6Abj05YFJGQvwePqBAtr__KglWO4EjfffFzqs1oYx34mWp4v1U5lCq5LVTJU-m-hemby0bYjJ7QaqB_J_lkWrmxGu6sHVLfJrsV9PQT380id8en3O9vh4fX7JwuiHd-9q2Bxt6qpKz5yy6JNfZ1tHDah6dHA19kFnT2K-zPWu6ZKvDa8ZjEbggGHJ-vE3GQ9aGq_An3ofjZ8DJQzg5CJ_twdGu2r35EwAA__-ut2bA
 
 statement ok
-RESET vectorize; RESET distsql; RESET vectorize_row_count_threshold
+RESET vectorize; RESET distsql
 
 statement ok
 SET tracing=off
