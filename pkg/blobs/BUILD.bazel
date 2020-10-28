@@ -18,6 +18,7 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/util/fileutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/google.golang.org/grpc/codes",
         "//vendor/google.golang.org/grpc/metadata",
         "//vendor/google.golang.org/grpc/status",
@@ -45,6 +46,7 @@ go_test(
         "//pkg/util/netutil",
         "//pkg/util/stop",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/stretchr/testify/assert",
     ],
 )

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // Options are the options to Download().
@@ -157,7 +158,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 	destFileName := filepath.Join(opts.Dir, opts.filename())
 
 	if stat, err := os.Stat(destFileName); err != nil {
-		if !os.IsNotExist(err) {
+		if !oserror.IsNotExist(err) {
 			return "", err
 		}
 	} else if stat.Size() > 0 && opts.Version != "LATEST" {
@@ -206,7 +207,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 		}
 	}
 
-	if stat, err := os.Stat(destFileName); err != nil && !os.IsNotExist(err) {
+	if stat, err := os.Stat(destFileName); err != nil && !oserror.IsNotExist(err) {
 		return "", errors.Wrap(err, "checking downloaded binary")
 	} else if stat.Size() == 0 {
 		return "", errors.Errorf("%s is unexpectedly empty", destFileName)
