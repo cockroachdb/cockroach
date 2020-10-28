@@ -24,6 +24,7 @@ package migration
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -109,9 +110,34 @@ func NewManager(
 //
 // TODO(irfansharif): We want to eventually be able to send out a Migrate
 // request spanning the entire keyspace. We'll need to make sure all stores have
-// synced once to persist any raft command applications. Implement this.
+// synced once to persist any raft command applications.
 //lint:ignore U1001 unused
-func (h *Helper) IterateRangeDescriptors(f func(...roachpb.RangeDescriptor) error) error {
+func (h *Helper) IterateRangeDescriptors(
+	ctx context.Context, blockSize int, f func(...roachpb.RangeDescriptor) error,
+) error {
+	descriptors := make([]roachpb.RangeDescriptor, blockSize)
+	if err := h.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Iterate through the meta ranges to pull out all the range descriptors.
+		return txn.Iterate(ctx, keys.MetaMin, keys.MetaMax, blockSize,
+			func(rows []kv.KeyValue) error {
+				for i, row := range rows {
+					if err := row.ValueProto(&descriptors[i]); err != nil {
+						return errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
+					}
+				}
+
+				// Invoke f with the current chunk (of size ~blockSize) of range
+				// descriptors.
+				if err := f(descriptors...); err != nil {
+					return err
+				}
+
+				return nil
+			})
+	}); err != nil {
+		return err
+	}
+
 	return nil
 }
 
