@@ -123,8 +123,8 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	// which does not take part in an index scan). Note that the OrderingColumn
 	// slice cannot be reused, as Instance.Init can use it in the constraint.
 	md := c.e.mem.Metadata()
-	tab := md.Table(tabID)
-	index := tab.Index(indexOrd)
+	tabMeta := md.TableMeta(tabID)
+	index := tabMeta.Table.Index(indexOrd)
 	columns := make([]opt.OrderingColumn, index.LaxKeyColumnCount())
 	var notNullCols opt.ColSet
 	for i := range columns {
@@ -147,6 +147,10 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	}
 
 	// Generate index constraints.
-	ic.Init(requiredFilters, optionalFilters, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
+	ic.Init(
+		requiredFilters, optionalFilters,
+		columns, notNullCols, tabMeta.ComputedCols,
+		isInverted, c.e.evalCtx, c.e.f,
+	)
 	return ic
 }

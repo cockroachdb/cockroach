@@ -829,6 +829,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
+			ex.server.cfg.LeaseManager,
 			ex.server.cfg.DB,
 			ex.server.cfg.Codec,
 			&ie,

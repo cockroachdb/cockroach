@@ -122,8 +122,23 @@ func TestIndexConstraints(t *testing.T) {
 					d.Fatalf(t, "%v", err)
 				}
 
+				var computedCols map[opt.ColumnID]opt.ScalarExpr
+				if sv.ComputedCols() != nil {
+					computedCols = make(map[opt.ColumnID]opt.ScalarExpr)
+					for col, expr := range sv.ComputedCols() {
+						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
+						if err := b.Build(expr); err != nil {
+							d.Fatalf(t, "error building computed column expression: %v", err)
+						}
+						computedCols[col] = f.Memo().RootExpr().(opt.ScalarExpr)
+					}
+				}
+
 				var ic idxconstraint.Instance
-				ic.Init(filters, optionalFilters, indexCols, sv.NotNullCols(), invertedIndex, &evalCtx, &f)
+				ic.Init(
+					filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
+					invertedIndex, &evalCtx, &f,
+				)
 				result := ic.Constraint()
 				var buf bytes.Buffer
 				for i := 0; i < result.Spans.Count(); i++ {
@@ -233,7 +248,10 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic idxconstraint.Instance
-				ic.Init(filters, nil /* optionalFilters */, indexCols, sv.NotNullCols(), false /*isInverted */, &evalCtx, &f)
+				ic.Init(
+					filters, nil /* optionalFilters */, indexCols, sv.NotNullCols(),
+					nil /* computedCols */, false /*isInverted */, &evalCtx, &f,
+				)
 				_ = ic.Constraint()
 				_ = ic.RemainingFilters()
 			}
