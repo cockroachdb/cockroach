@@ -1294,13 +1294,21 @@ func TestImportRowLimit(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
-	var data string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			_, _ = w.Write([]byte(data))
-		}
-	}))
-	defer srv.Close()
+
+	avroField := []map[string]interface{}{
+		{
+			"name": "a",
+			"type": "int",
+		},
+		{
+			"name": "b",
+			"type": "int",
+		},
+	}
+	avroRows := []map[string]interface{}{
+		{"a": 1, "b": 2}, {"a": 3, "b": 4}, {"a": 5, "b": 6},
+	}
+	avroData := createAvroData(t, "t", avroField, avroRows)
 
 	tests := []struct {
 		name        string
@@ -1358,8 +1366,45 @@ func TestImportRowLimit(t *testing.T) {
 			verifyQuery: `SELECT * from t`,
 			expected:    [][]string{{"foo", "normal"}, {"bar", "baz"}, {"chocolate", "cake"}},
 		},
+		// Test DELIMITED imports.
+		{
+			name:        "tsv row limit",
+			create:      "a string, b string",
+			with:        `WITH row_limit = '1', skip='1'`,
+			typ:         "DELIMITED",
+			data:        "hello\thello\navocado\ttoast\npoached\tegg\n",
+			verifyQuery: `SELECT * from t`,
+			expected:    [][]string{{"avocado", "toast"}},
+		},
+		{
+			name:        "tsv invalid row limit",
+			create:      `a string, b string`,
+			with:        `WITH row_limit = 'potato', skip='1'`,
+			typ:         "DELIMITED",
+			data:        "hello\thello\navocado\ttoast\npoached\tegg\n",
+			verifyQuery: `SELECT * from t`,
+			err:         "invalid numeric row_limit value",
+		},
+		// Test AVRO imports.
+		{
+			name:        "avro row limit",
+			create:      "a INT, b INT",
+			with:        `WITH row_limit = '1'`,
+			typ:         "AVRO",
+			data:        avroData,
+			verifyQuery: "SELECT * FROM t",
+			expected:    [][]string{{"1", "2"}},
+		},
+		{
+			name:        "avro invalid row limit",
+			create:      "a INT, b INT",
+			with:        `WITH row_limit = 'potato'`,
+			typ:         "AVRO",
+			data:        avroData,
+			verifyQuery: `SELECT * from t`,
+			err:         "invalid numeric row_limit value",
+		},
 	}
-	
 	for testNumber, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
