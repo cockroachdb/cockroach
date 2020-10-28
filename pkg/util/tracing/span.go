@@ -145,10 +145,15 @@ func (s *crdbSpan) isRecording() bool {
 	return s != nil && atomic.LoadInt32(&s.recording) != 0
 }
 
+// otSpan is an span for an external opentracing compatible tracer
+// such as lightstep, zipkin, jaeger, etc.
 type otSpan struct {
-	// TODO(tbg): see if we can lose the shadowTr here and rely on shadowSpan.Tracer().
-	// Probably not - but worth checking.
-	// TODO(tbg): consider renaming 'shadow' -> 'ot' or 'external'.
+	// shadowTr is the shadowTracer this span was created from. We need
+	// to hold on to it separately because shadowSpan.Tracer() returns
+	// the wrapper tracer directly and we lose the ability to find out
+	// what tracer it is. This is important when deriving children from
+	// this span, as we want to avoid mixing different tracers, which
+	// would otherwise be the result of cluster settings changed.
 	shadowTr   *shadowTracer
 	shadowSpan opentracing.Span
 }
