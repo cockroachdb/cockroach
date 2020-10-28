@@ -359,6 +359,7 @@ func (d *mysqloutfileReader) readFile(
 		source:   inputIdx,
 		skip:     resumePos,
 		rejected: rejected,
+		rowLimit: d.opts.RowLimit,
 	}
 
 	return runParallelImport(ctx, d.importCtx, fileCtx, producer, consumer)
