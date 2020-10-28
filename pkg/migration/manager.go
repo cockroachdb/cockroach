@@ -220,9 +220,6 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	// TODO(irfansharif): We'll need to acquire a lease here and refresh it
 	// throughout during the migration to ensure mutual exclusion.
 
-	// TODO(irfansharif): We'll need to create a system table to store
-	// in-progress state of long running migrations, for introspection.
-
 	// TODO(irfansharif): We'll want to either write to a KV key to record the
 	// version up until which we've already migrated to, or consult the system
 	// table mentioned above. Perhaps it makes sense to consult any given

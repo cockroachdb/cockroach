@@ -77,6 +77,7 @@ const (
 	Version20_2
 	VersionStart21_1
 	VersionNoopMigration
+	VersionMigrationTable
 
 	// Add new versions here (step one of two).
 )
@@ -440,6 +441,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// TODO(irfansharif): Remove and replace this with something real.
 		Key:     VersionNoopMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 2},
+	},
+	{
+		// VersionMigrationTable introduces the new system.migrations table.
+		Key:     VersionMigrationTable,
+		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 3},
 	},
 
 	// Add new versions here (step two of two).

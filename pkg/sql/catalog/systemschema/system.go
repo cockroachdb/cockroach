@@ -342,6 +342,17 @@ CREATE TABLE system.sqlliveness (
     expiration       DECIMAL NOT NULL,
   	FAMILY fam0_session_id_expiration (session_id, expiration)
 )`
+
+	MigrationsTableSchema = `
+CREATE TABLE system.migrations (
+	id INT8 NOT NULL DEFAULT unique_rowid(),
+	metadata STRING NOT NULL,
+	started TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	progress BYTES NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, metadata, started),
+	FAMILY progress (progress)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -595,6 +606,34 @@ var (
 		NextIndexID:  2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.SettingsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// MigrationsTable is the descriptor for the migrations table. It contains
+	// details for all past and ongoing migrations.
+	MigrationsTable = tabledesc.NewImmutable(descpb.TableDescriptor{
+		Name:                    "migrations",
+		ID:                      keys.MigrationsID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "metadata", ID: 2, Type: types.String},
+			{Name: "started", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
+			{Name: "progress", ID: 4, Type: types.Bytes, Nullable: true},
+		},
+		NextColumnID: 5,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"id", "metadata", "started"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
+			{Name: "progress", ID: 1, ColumnNames: []string{"progress"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
+		},
+		NextFamilyID: 2,
+		PrimaryIndex: pk("id"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.MigrationsID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
