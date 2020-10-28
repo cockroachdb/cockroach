@@ -287,11 +287,17 @@ func TestWindowFunctions(t *testing.T) {
 				for i := range ct {
 					ct[i] = types.Int
 				}
+				resultType := types.Int
+				wf := tc.windowerSpec.WindowFns[0].Func.WindowFunc
+				if wf == &percentRankFn || wf == &cumeDistFn {
+					resultType = types.Float
+				}
 				spec := &execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: ct}},
 					Core: execinfrapb.ProcessorCoreUnion{
 						Windower: &tc.windowerSpec,
 					},
+					ResultTypes: append(ct, resultType),
 				}
 				sem := colexecbase.NewTestingSemaphore(maxNumberFDs)
 				args := &NewColOperatorArgs{

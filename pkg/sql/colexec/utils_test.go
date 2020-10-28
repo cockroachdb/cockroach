@@ -1589,6 +1589,7 @@ func createTestProjectingOperator(
 		Post: execinfrapb.PostProcessSpec{
 			RenderExprs: renderExprs,
 		},
+		ResultTypes: append(inputTypes, typedExpr.ResolvedType()),
 	}
 	args := &NewColOperatorArgs{
 		Spec:                spec,

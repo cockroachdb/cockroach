@@ -99,13 +99,6 @@ type PhysicalPlan struct {
 	// index.
 	ResultRouters []ProcessorIdx
 
-	// ResultTypes is the schema (column types) of the rows produced by the
-	// ResultRouters.
-	//
-	// This is aliased with InputSyncSpec.ColumnTypes, so it must not be modified
-	// in-place during planning.
-	ResultTypes []*types.T
-
 	// ResultColumns is the schema (result columns) of the rows produced by the
 	// ResultRouters.
 	ResultColumns colinfo.ResultColumns
@@ -139,6 +132,17 @@ type PhysicalPlan struct {
 	GatewayNodeID roachpb.NodeID
 	// Distribution is the indicator of the distribution of the physical plan.
 	Distribution PlanDistribution
+}
+
+// GetResultTypes returns the schema (column types) of the rows produced by the
+// ResultRouters which *must* contain at least one index into Processors slice.
+// This is aliased with ColumnTypes of the processor spec, so it must not be
+// modified in-place during planning.
+func (p *PhysicalPlan) GetResultTypes() []*types.T {
+	if len(p.ResultRouters) == 0 {
+		panic(errors.AssertionFailedf("unexpectedly no result routers in %v", *p))
+	}
+	return p.Processors[p.ResultRouters[0]].Spec.ResultTypes
 }
 
 // NewStage updates the distribution of the plan given the fact whether the new
@@ -218,14 +222,14 @@ func (p *PhysicalPlan) AddNoInputStage(
 				Output: []execinfrapb.OutputRouterSpec{{
 					Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				}},
-				StageID: stageID,
+				StageID:     stageID,
+				ResultTypes: outputTypes,
 			},
 		}
 
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
 	}
-	p.ResultTypes = outputTypes
 	p.SetMergeOrdering(newOrdering)
 }
 
@@ -258,6 +262,7 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 	// New stage has the same distribution as the previous one, so we need to
 	// figure out whether the last stage contains a remote processor.
 	stageID := p.NewStage(p.IsLastStageDistributed())
+	prevStageResultTypes := p.GetResultTypes()
 	for i, resultProc := range p.ResultRouters {
 		prevProc := &p.Processors[resultProc]
 
@@ -266,14 +271,15 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 			Spec: execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{
 					Type:        execinfrapb.InputSyncSpec_UNORDERED,
-					ColumnTypes: p.ResultTypes,
+					ColumnTypes: prevStageResultTypes,
 				}},
 				Core: coreFunc(int(resultProc), prevProc),
 				Post: post,
 				Output: []execinfrapb.OutputRouterSpec{{
 					Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				}},
-				StageID: stageID,
+				StageID:     stageID,
+				ResultTypes: outputTypes,
 			},
 		}
 
@@ -288,7 +294,6 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 
 		p.ResultRouters[i] = pIdx
 	}
-	p.ResultTypes = outputTypes
 	p.SetMergeOrdering(newOrdering)
 }
 
@@ -348,7 +353,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 		Spec: execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
 				// The other fields will be filled in by mergeResultStreams.
-				ColumnTypes: p.ResultTypes,
+				ColumnTypes: p.GetResultTypes(),
 			}},
 			Core: core,
 			Post: post,
@@ -358,7 +363,8 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 			// We're planning a single processor on the node nodeID, so we'll
 			// have a remote processor only when the node is different from the
 			// gateway.
-			StageID: p.NewStage(nodeID != p.GatewayNodeID),
+			StageID:     p.NewStage(nodeID != p.GatewayNodeID),
+			ResultTypes: outputTypes,
 		},
 	}
 
@@ -371,7 +377,6 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	p.ResultRouters = p.ResultRouters[:1]
 	p.ResultRouters[0] = pIdx
 
-	p.ResultTypes = outputTypes
 	p.MergeOrdering = execinfrapb.Ordering{}
 }
 
@@ -387,7 +392,7 @@ func (p *PhysicalPlan) EnsureSingleStreamOnGateway() {
 			p.GatewayNodeID,
 			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			execinfrapb.PostProcessSpec{},
-			p.ResultTypes,
+			p.GetResultTypes(),
 		)
 		if len(p.ResultRouters) != 1 || p.Processors[p.ResultRouters[0]].Node != p.GatewayNodeID {
 			panic("ensuring a single stream on the gateway failed")
@@ -440,8 +445,8 @@ func (p *PhysicalPlan) GetLastStagePost() execinfrapb.PostProcessSpec {
 func (p *PhysicalPlan) SetLastStagePost(post execinfrapb.PostProcessSpec, outputTypes []*types.T) {
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post = post
+		p.Processors[pIdx].Spec.ResultTypes = outputTypes
 	}
-	p.ResultTypes = outputTypes
 }
 
 func isIdentityProjection(columns []uint32, numExistingCols int) bool {
@@ -468,7 +473,7 @@ func isIdentityProjection(columns []uint32, numExistingCols int) bool {
 func (p *PhysicalPlan) AddProjection(columns []uint32) {
 	// If the projection we are trying to apply projects every column, don't
 	// update the spec.
-	if isIdentityProjection(columns, len(p.ResultTypes)) {
+	if isIdentityProjection(columns, len(p.GetResultTypes())) {
 		return
 	}
 
@@ -497,7 +502,7 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 
 	newResultTypes := make([]*types.T, len(columns))
 	for i, c := range columns {
-		newResultTypes[i] = p.ResultTypes[c]
+		newResultTypes[i] = p.GetResultTypes()[c]
 	}
 
 	post := p.GetLastStagePost()
@@ -553,7 +558,7 @@ func (p *PhysicalPlan) AddRendering(
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
 	needRendering := false
-	identity := (len(exprs) == len(p.ResultTypes))
+	identity := len(exprs) == len(p.GetResultTypes())
 
 	for exprIdx, e := range exprs {
 		varIdx, ok := exprColumn(e, indexVarMap)
@@ -592,7 +597,7 @@ func (p *PhysicalPlan) AddRendering(
 		p.AddNoGroupingStage(
 			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			post,
-			p.ResultTypes,
+			p.GetResultTypes(),
 			p.MergeOrdering,
 		)
 	}
@@ -633,7 +638,7 @@ func (p *PhysicalPlan) AddRendering(
 				}
 				newExpr, err := MakeExpression(tree.NewTypedOrdinalReference(
 					int(internalColIdx),
-					p.ResultTypes[c.ColIdx]),
+					p.GetResultTypes()[c.ColIdx]),
 					exprCtx, nil /* indexVarMap */)
 				if err != nil {
 					return err
@@ -641,7 +646,7 @@ func (p *PhysicalPlan) AddRendering(
 
 				found = len(post.RenderExprs)
 				post.RenderExprs = append(post.RenderExprs, newExpr)
-				outTypes = append(outTypes, p.ResultTypes[c.ColIdx])
+				outTypes = append(outTypes, p.GetResultTypes()[c.ColIdx])
 			}
 			newOrdering[i].ColIdx = uint32(found)
 			newOrdering[i].Direction = c.Direction
@@ -736,7 +741,7 @@ func (p *PhysicalPlan) AddFilter(
 		p.AddNoGroupingStage(
 			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			post,
-			p.ResultTypes,
+			p.GetResultTypes(),
 			p.MergeOrdering,
 		)
 	}
@@ -774,9 +779,9 @@ func (p *PhysicalPlan) AddFilter(
 // p produces.
 func (p *PhysicalPlan) emptyPlan() {
 	s := execinfrapb.ValuesCoreSpec{
-		Columns: make([]execinfrapb.DatumInfo, len(p.ResultTypes)),
+		Columns: make([]execinfrapb.DatumInfo, len(p.GetResultTypes())),
 	}
-	for i, t := range p.ResultTypes {
+	for i, t := range p.GetResultTypes() {
 		s.Columns[i].Encoding = descpb.DatumEncoding_VALUE
 		s.Columns[i].Type = t
 	}
@@ -785,12 +790,12 @@ func (p *PhysicalPlan) emptyPlan() {
 		Processors: []Processor{{
 			Node: p.GatewayNodeID,
 			Spec: execinfrapb.ProcessorSpec{
-				Core:   execinfrapb.ProcessorCoreUnion{Values: &s},
-				Output: make([]execinfrapb.OutputRouterSpec, 1),
+				Core:        execinfrapb.ProcessorCoreUnion{Values: &s},
+				Output:      make([]execinfrapb.OutputRouterSpec, 1),
+				ResultTypes: p.GetResultTypes(),
 			},
 		}},
 		ResultRouters: []ProcessorIdx{0},
-		ResultTypes:   p.ResultTypes,
 		ResultColumns: p.ResultColumns,
 		GatewayNodeID: p.GatewayNodeID,
 		Distribution:  LocalPlan,
@@ -867,7 +872,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 		if count != math.MaxInt64 && (post.Limit == 0 || post.Limit > uint64(count)) {
 			post.Limit = uint64(count)
 		}
-		p.SetLastStagePost(post, p.ResultTypes)
+		p.SetLastStagePost(post, p.GetResultTypes())
 		if limitZero {
 			if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
 				return err
@@ -886,7 +891,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 		localLimit := uint64(count + offset)
 		if post.Limit == 0 || post.Limit > localLimit {
 			post.Limit = localLimit
-			p.SetLastStagePost(post, p.ResultTypes)
+			p.SetLastStagePost(post, p.GetResultTypes())
 		}
 	}
 
@@ -900,7 +905,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 		p.GatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 		post,
-		p.ResultTypes,
+		p.GetResultTypes(),
 	)
 	if limitZero {
 		if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
@@ -1072,6 +1077,7 @@ func (p *PhysicalPlan) AddJoinStage(
 	leftTypes, rightTypes []*types.T,
 	leftMergeOrd, rightMergeOrd execinfrapb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
+	resultTypes []*types.T,
 ) {
 	pIdxStart := ProcessorIdx(len(p.Processors))
 	stageID := p.NewStageOnNodes(nodes)
@@ -1084,11 +1090,12 @@ func (p *PhysicalPlan) AddJoinStage(
 		proc := Processor{
 			Node: n,
 			Spec: execinfrapb.ProcessorSpec{
-				Input:   inputs,
-				Core:    core,
-				Post:    post,
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
+				Input:       inputs,
+				Core:        core,
+				Post:        post,
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     stageID,
+				ResultTypes: resultTypes,
 			},
 		}
 		p.Processors = append(p.Processors, proc)
@@ -1138,7 +1145,7 @@ func (p *PhysicalPlan) AddStageOnNodes(
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
 	hashCols []uint32,
-	types []*types.T,
+	inputTypes, resultTypes []*types.T,
 	mergeOrd execinfrapb.Ordering,
 	routers []ProcessorIdx,
 ) {
@@ -1150,12 +1157,13 @@ func (p *PhysicalPlan) AddStageOnNodes(
 			Node: n,
 			Spec: execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{
-					{ColumnTypes: types},
+					{ColumnTypes: inputTypes},
 				},
-				Core:    core,
-				Post:    post,
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: newStageID,
+				Core:        core,
+				Post:        post,
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     newStageID,
+				ResultTypes: resultTypes,
 			},
 		}
 		p.AddProcessor(proc)
@@ -1198,6 +1206,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	leftTypes, rightTypes []*types.T,
 	leftMergeOrd, rightMergeOrd execinfrapb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
+	resultTypes []*types.T,
 ) {
 	// Create distinct stages for the left and right sides, where left and right
 	// sources are sent by hash to the node which will contain the join processor.
@@ -1208,7 +1217,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	distinctProcs := make(map[roachpb.NodeID][]ProcessorIdx)
 	p.AddStageOnNodes(
 		nodes, distinctCores[0], execinfrapb.PostProcessSpec{}, eqCols,
-		leftTypes, leftMergeOrd, leftRouters,
+		leftTypes, leftTypes, leftMergeOrd, leftRouters,
 	)
 	for _, leftDistinctProcIdx := range p.ResultRouters {
 		node := p.Processors[leftDistinctProcIdx].Node
@@ -1216,7 +1225,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	}
 	p.AddStageOnNodes(
 		nodes, distinctCores[1], execinfrapb.PostProcessSpec{}, eqCols,
-		rightTypes, rightMergeOrd, rightRouters,
+		rightTypes, rightTypes, rightMergeOrd, rightRouters,
 	)
 	for _, rightDistinctProcIdx := range p.ResultRouters {
 		node := p.Processors[rightDistinctProcIdx].Node
@@ -1236,10 +1245,11 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 					{ColumnTypes: leftTypes},
 					{ColumnTypes: rightTypes},
 				},
-				Core:    joinCore,
-				Post:    post,
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: joinStageID,
+				Core:        joinCore,
+				Post:        post,
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     joinStageID,
+				ResultTypes: resultTypes,
 			},
 		}
 		pIdx := p.AddProcessor(proc)
@@ -1308,10 +1318,11 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode(forceSerialization bool) {
 			Spec: execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{
 					// The other fields will be filled in by MergeResultStreams.
-					ColumnTypes: p.ResultTypes,
+					ColumnTypes: p.GetResultTypes(),
 				}},
-				Core:   execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				Core:        execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				ResultTypes: p.GetResultTypes(),
 			},
 		}
 		mergedProcIdx := p.AddProcessor(proc)

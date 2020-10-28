@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -159,7 +160,8 @@ func distRestore(
 						RangeRouterSpec: rangeRouterSpec,
 					},
 				},
-				StageID: splitAndScatterStageID,
+				StageID:     splitAndScatterStageID,
+				ResultTypes: splitAndScatterOutputTypes,
 			},
 		}
 		pIdx := p.AddProcessor(proc)
@@ -176,10 +178,11 @@ func distRestore(
 				Input: []execinfrapb.InputSyncSpec{
 					{ColumnTypes: splitAndScatterOutputTypes},
 				},
-				Core:    execinfrapb.ProcessorCoreUnion{RestoreData: &restoreDataSpec},
-				Post:    execinfrapb.PostProcessSpec{},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: restoreDataStageID,
+				Core:        execinfrapb.ProcessorCoreUnion{RestoreData: &restoreDataSpec},
+				Post:        execinfrapb.PostProcessSpec{},
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     restoreDataStageID,
+				ResultTypes: []*types.T{},
 			},
 		}
 		pIdx := p.AddProcessor(proc)

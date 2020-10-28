@@ -942,6 +942,14 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 	for _, outCol := range tc.rightOutCols {
 		projection = append(projection, rColOffset+outCol)
 	}
+	resultTypes := make([]*types.T, 0, len(projection))
+	for _, i := range projection {
+		if int(i) < len(tc.leftTypes) {
+			resultTypes = append(resultTypes, tc.leftTypes[i])
+		} else {
+			resultTypes = append(resultTypes, tc.rightTypes[i-rColOffset])
+		}
+	}
 	return &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{
 			{ColumnTypes: tc.leftTypes},
@@ -954,6 +962,7 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 			Projection:    true,
 			OutputColumns: projection,
 		},
+		ResultTypes: resultTypes,
 	}
 }
 
@@ -1173,6 +1182,7 @@ func TestHashJoinerProjection(t *testing.T) {
 			// from the left and from the right are intertwined.
 			OutputColumns: []uint32{3, 1, 0, 5, 4, 2},
 		},
+		ResultTypes: []*types.T{types.Int, types.Int, types.Bool, types.Decimal, types.Float, types.Bytes},
 	}
 
 	leftSource := newOpTestInput(1, leftTuples, leftTypes)

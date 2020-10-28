@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
@@ -174,7 +175,9 @@ func (f *vectorizedFlow) Setup(
 	if err != nil {
 		return ctx, err
 	}
-	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
+	if log.V(1) {
+		log.Infof(ctx, "setting up vectorize flow %s", f.ID.Short())
+	}
 	recordingStats := false
 	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		recordingStats = true
@@ -225,22 +228,24 @@ func (f *vectorizedFlow) Setup(
 		return ctx, err
 	}
 	f.countingSemaphore = &countingSemaphore{Semaphore: f.Cfg.VecFDSemaphore, globalCount: f.Cfg.Metrics.VecOpenFDs}
+	flowCtx := f.GetFlowCtx()
 	creator := newVectorizedFlowCreator(
 		helper,
 		vectorizedRemoteComponentCreator{},
 		recordingStats,
 		f.GetWaitGroup(),
 		f.GetSyncFlowConsumer(),
-		f.GetFlowCtx().Cfg.NodeDialer,
+		flowCtx.Cfg.NodeDialer,
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
 		colexec.DefaultExprDeserialization,
+		flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
 	)
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(creator)
 	}
-	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
+	_, err = creator.setupFlow(ctx, flowCtx, spec.Processors, opt)
 	if err == nil {
 		f.testingInfo.numClosers = creator.numClosers
 		f.testingInfo.numClosed = &creator.numClosed
@@ -248,7 +253,9 @@ func (f *vectorizedFlow) Setup(
 		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
 		f.monitors = append(f.monitors, creator.monitors...)
 		f.accounts = append(f.accounts, creator.accounts...)
-		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
+		if log.V(1) {
+			log.Info(ctx, "vectorized flow setup succeeded")
+		}
 		return ctx, nil
 	}
 	// It is (theoretically) possible that some of the memory monitoring
@@ -263,7 +270,9 @@ func (f *vectorizedFlow) Setup(
 	for _, mon := range creator.monitors {
 		mon.Stop(ctx)
 	}
-	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+	if log.V(1) {
+		log.Infof(ctx, "failed to vectorize: %s", err)
+	}
 	return ctx, err
 }
 
@@ -458,6 +467,7 @@ type vectorizedFlowCreator struct {
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
 	exprHelper                     colexec.ExprHelper
+	typeResolver                   *descs.DistSQLTypeResolver
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
 	// It must be accessed atomically.
@@ -499,6 +509,7 @@ func newVectorizedFlowCreator(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	exprDeserialization colexec.ExprDeserialization,
+	typeResolver *descs.DistSQLTypeResolver,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
@@ -513,6 +524,7 @@ func newVectorizedFlowCreator(
 		diskQueueCfg:                   diskQueueCfg,
 		fdSemaphore:                    fdSemaphore,
 		exprHelper:                     colexec.NewExprHelper(exprDeserialization),
+		typeResolver:                   typeResolver,
 	}
 }
 
@@ -725,11 +737,8 @@ func (s *vectorizedFlowCreator) setupInput(
 	// Before we can safely use types we received over the wire in the
 	// operators, we need to make sure they are hydrated. In row execution
 	// engine it is done during the processor initialization, but operators
-	// don't do that. However, all operators (apart from the colBatchScan) get
-	// their types from InputSyncSpec, so this is a convenient place to do the
-	// hydration so that all operators get the valid types.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn)
-	if err := resolver.HydrateTypeSlice(ctx, input.ColumnTypes); err != nil {
+	// don't do that.
+	if err := s.typeResolver.HydrateTypeSlice(ctx, input.ColumnTypes); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -900,14 +909,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// node.
 		s.leaves = append(s.leaves, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
-		if s.syncFlowConsumer == nil {
-			return errors.New("syncFlowConsumer unset, unable to create materializer")
-		}
 		// Make the materializer, which will write to the given receiver.
-		columnTypes := s.syncFlowConsumer.Types()
-		if err := assertTypesMatch(columnTypes, opOutputTypes); err != nil {
-			return err
-		}
 		var outputStatsToTrace func()
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
@@ -923,7 +925,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			flowCtx,
 			pspec.ProcessorID,
 			op,
-			columnTypes,
+			opOutputTypes,
 			s.syncFlowConsumer,
 			metadataSourcesQueue,
 			toClose,
@@ -1004,6 +1006,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 				metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
 				toClose = append(toClose, closers...)
 				inputs = append(inputs, input)
+			}
+
+			// Before we can safely use types we received over the wire in the
+			// operators, we need to make sure they are hydrated.
+			if err = s.typeResolver.HydrateTypeSlice(ctx, pspec.ResultTypes); err != nil {
+				return
 			}
 
 			args := &colexec.NewColOperatorArgs{
@@ -1093,11 +1101,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 					for k := range outputSpec.Input {
 						for l := range outputSpec.Input[k].Streams {
 							inputStream := outputSpec.Input[k].Streams[l]
-							if inputStream.StreamID == outputStream.StreamID {
-								if err = assertTypesMatch(outputSpec.Input[k].ColumnTypes, result.ColumnTypes); err != nil {
-									return
-								}
-							}
 							if inputStream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
 								// Remote streams are not present in streamIDToInputOp. The
 								// Inboxes that consume these streams are created at the same time
@@ -1123,19 +1126,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 		return s.leaves, vecErr
 	}
 	return s.leaves, err
-}
-
-// assertTypesMatch checks whether expected types match with actual types and
-// returns an error if not.
-func assertTypesMatch(expected []*types.T, actual []*types.T) error {
-	for i := range expected {
-		if !expected[i].Identical(actual[i]) {
-			return errors.Errorf("mismatched types at index %d: expected %v\tactual %v ",
-				i, expected, actual,
-			)
-		}
-	}
-	return nil
 }
 
 type vectorizedInboundStreamHandler struct {
@@ -1277,6 +1267,7 @@ func SupportsVectorized(
 		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
 		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
 		flowCtx.Cfg.VecFDSemaphore, exprDeserialization,
+		flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
 	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying

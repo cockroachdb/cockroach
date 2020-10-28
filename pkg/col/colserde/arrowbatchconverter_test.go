@@ -56,15 +56,14 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	arrowData, err := c.BatchToArrow(b)
 	require.NoError(t, err)
 	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
-	require.NoError(t, c.ArrowToBatch(arrowData, actual))
+	require.NoError(t, c.ArrowToBatch(arrowData, b.Length(), actual))
 
 	coldata.AssertEquivalentBatches(t, expected, actual)
 }
 
 // roundTripBatch is a helper function that round trips a batch through the
-// ArrowBatchConverter and RecordBatchSerializer and asserts that the output
-// batch is equal to the input batch. Make sure to copy the input batch before
-// passing it to this function to assert equality.
+// ArrowBatchConverter and RecordBatchSerializer. Make sure to copy the input
+// batch before passing it to this function to assert equality.
 func roundTripBatch(
 	b coldata.Batch,
 	c *colserde.ArrowBatchConverter,
@@ -76,17 +75,18 @@ func roundTripBatch(
 	if err != nil {
 		return nil, err
 	}
-	_, _, err = r.Serialize(&buf, arrowDataIn)
+	_, _, err = r.Serialize(&buf, arrowDataIn, b.Length())
 	if err != nil {
 		return nil, err
 	}
 
 	var arrowDataOut []*array.Data
-	if err := r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
+	batchLength, err := r.Deserialize(&arrowDataOut, buf.Bytes())
+	if err != nil {
 		return nil, err
 	}
-	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
-	if err := c.ArrowToBatch(arrowDataOut, actual); err != nil {
+	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, batchLength)
+	if err := c.ArrowToBatch(arrowDataOut, batchLength, actual); err != nil {
 		return nil, err
 	}
 	return actual, nil
@@ -95,8 +95,17 @@ func roundTripBatch(
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	rng, _ := randutil.NewPseudoRand()
 	for run := 0; run < 10; run++ {
-		typs, b := randomBatch(testAllocator)
+		var typs []*types.T
+		var b coldata.Batch
+		if rng.Float64() < 0.1 {
+			// In 10% of cases we'll use a zero length schema.
+			b = testAllocator.NewMemBatchWithFixedCapacity(typs, rng.Intn(coldata.BatchSize())+1)
+			b.SetLength(b.Capacity())
+		} else {
+			typs, b = randomBatch(testAllocator)
+		}
 		c, err := colserde.NewArrowBatchConverter(typs)
 		require.NoError(t, err)
 		r, err := colserde.NewRecordBatchSerializer(typs)
@@ -210,7 +219,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					// Using require.NoError here causes large enough allocations to
 					// affect the result.
-					if err := c.ArrowToBatch(data, result); err != nil {
+					if err := c.ArrowToBatch(data, batch.Length(), result); err != nil {
 						b.Fatal(err)
 					}
 					if result.Width() != 1 {

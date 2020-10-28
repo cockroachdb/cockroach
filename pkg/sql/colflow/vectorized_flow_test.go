@@ -138,6 +138,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 					},
 				},
 			},
+			ResultTypes: intCols(numInputTypesToMaterializer),
 		},
 		// This is the root of the flow. The noop operator that will read from i1
 		// and the materializer.
@@ -156,6 +157,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 					Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 				},
 			},
+			ResultTypes: intCols(numInputTypesToMaterializer),
 		},
 		{
 			// Because creating a table reader is too complex (you need to create a
@@ -179,6 +181,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 					Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_REMOTE}},
 				},
 			},
+			ResultTypes: intCols(numInputTypesToOutbox),
 		},
 	}
 
@@ -216,7 +219,8 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
 		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{},
-		nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil, colexec.DefaultExprDeserialization,
+		nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil,
+		colexec.DefaultExprDeserialization, nil, /* typeResolver */
 	)
 
 	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, flowinfra.FuseNormally)

@@ -307,15 +307,12 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		}
 		i.bytesRead += int64(len(m.Data.RawBytes))
 		i.scratch.data = i.scratch.data[:0]
-		if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
+		batchLength, err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes)
+		if err != nil {
 			colexecerror.InternalError(err)
 		}
-		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(
-			// We don't support type-less schema, so len(i.scratch.data) is
-			// always at least 1.
-			i.typs, i.scratch.b, i.scratch.data[0].Len(),
-		)
-		if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
+		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength)
+		if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
 			colexecerror.InternalError(err)
 		}
 		i.rowsRead += int64(i.scratch.b.Length())
