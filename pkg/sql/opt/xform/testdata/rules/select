@@ -3845,6 +3845,98 @@ select
  └── filters
       └── j:4 @> '{"a": 1, "c": 2}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
+exec-ddl
+CREATE TABLE inv_zz_partial (
+    k INT PRIMARY KEY,
+    j JSON,
+    b BOOL,
+    s STRING
+)
+----
+
+exec-ddl
+CREATE INVERTED INDEX zz_idx ON inv_zz_partial (j) WHERE b
+----
+
+# Generate a zigzag join on a single index with no remaining filter.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM inv_zz_partial WHERE j @> '{"a": 1, "b": 2}' AND b
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup inv_zz_partial)
+      ├── columns: k:1!null j:2!null b:3!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = ['{"a": 1}']
+      │    ├── right fixed columns: [2] = ['{"b": 2}']
+      │    └── filters (true)
+      └── filters
+           └── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# Generate a zigzag join on a single index with a remaining filter.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM inv_zz_partial WHERE j @> '{"a": 1, "b": 2}' AND b AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup inv_zz_partial)
+      ├── columns: k:1!null j:2!null b:3!null s:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3,4), (1)-->(2)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = ['{"a": 1}']
+      │    ├── right fixed columns: [2] = ['{"b": 2}']
+      │    └── filters (true)
+      └── filters
+           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Don't generate a zigzag join when the predicate is not implied.
+opt expect-not=GenerateInvertedIndexZigzagJoins format=hide-all
+SELECT k FROM inv_zz_partial WHERE j @> '{"a": 1, "b": 2}'
+----
+project
+ └── select
+      ├── scan inv_zz_partial
+      │    └── partial index predicates
+      │         └── zz_idx: filters
+      │              └── b
+      └── filters
+           └── j @> '{"a": 1, "b": 2}'
+
+exec-ddl
+DROP INDEX zz_idx
+----
+
+exec-ddl
+CREATE INVERTED INDEX zz_idx ON inv_zz_partial (j) WHERE j->'a' = '1'
+----
+
+# Don't generate a zigzag join when one of the the expressions that fixes the
+# columns is removed while proving partial index implication.
+opt expect-not=GenerateInvertedIndexZigzagJoins format=hide-all
+SELECT k FROM inv_zz_partial WHERE j->'a' = '1' AND j->'b' = '2'
+----
+project
+ └── scan inv_zz_partial@zz_idx,partial
+      └── constraint: /2/1: [/'{"b": 2}' - /'{"b": 2}']
+
 # --------------------------------------------------
 # SplitDisjunction
 # --------------------------------------------------
