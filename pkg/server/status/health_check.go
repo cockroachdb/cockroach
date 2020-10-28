@@ -74,7 +74,6 @@ var trackedMetrics = map[string]threshold{
 	//
 	// TODO(tbg): as the comment above suspected, these were usually spammy and
 	// not useful to the untrained eye.
-	// "compactor.compactions.failure":       counterZero,
 	// "queue.replicagc.process.failure":     counterZero,
 	// "queue.raftlog.process.failure":       counterZero,
 	// "queue.gc.process.failure":            counterZero,

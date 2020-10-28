@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -105,22 +104,6 @@ func (r *Replica) preDestroyRaftMuLocked(
 }
 
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
-	// Suggest the cleared range to the compactor queue.
-	//
-	// TODO(benesch): we would ideally atomically suggest the compaction with
-	// the deletion of the data itself.
-	if ms != (enginepb.MVCCStats{}) && r.store.compactor != nil {
-		desc := r.Desc()
-		r.store.compactor.Suggest(ctx, kvserverpb.SuggestedCompaction{
-			StartKey: roachpb.Key(desc.StartKey),
-			EndKey:   roachpb.Key(desc.EndKey),
-			Compaction: kvserverpb.Compaction{
-				Bytes:            ms.Total(),
-				SuggestedAtNanos: timeutil.Now().UnixNano(),
-			},
-		})
-	}
-
 	// NB: we need the nil check below because it's possible that we're GC'ing a
 	// Replica without a replicaID, in which case it does not have a sideloaded
 	// storage.

@@ -207,12 +207,6 @@ var (
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
-	// LocalStoreSuggestedCompactionsMin is the start of the span of
-	// possible suggested compaction keys for a store.
-	LocalStoreSuggestedCompactionsMin = MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
-	// LocalStoreSuggestedCompactionsMax is the end of the span of
-	// possible suggested compaction keys for a store.
-	LocalStoreSuggestedCompactionsMax = LocalStoreSuggestedCompactionsMin.PrefixEnd()
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.
