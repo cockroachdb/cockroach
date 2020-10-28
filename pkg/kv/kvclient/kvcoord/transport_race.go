@@ -94,7 +94,14 @@ func (tr raceTransport) SendNext(
 // a) the server doesn't hold on to any memory, and
 // b) the server doesn't mutate the request
 func GRPCTransportFactory(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	opts SendOptions,
+	curNode *roachpb.NodeDescriptor,
+	nodeDescStore NodeDescStore,
+	nodeDialer *nodedialer.Dialer,
+	latencyFn LatencyFunc,
+	desc *roachpb.RangeDescriptor,
+	leaseholder roachpb.ReplicaID,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
 		// NB: We can't use Stopper.RunWorker because doing so would race with
@@ -152,7 +159,8 @@ func GRPCTransportFactory(
 		}
 	}
 
-	t, err := grpcTransportFactoryImpl(opts, nodeDialer, replicas)
+	t, err := grpcTransportFactoryImpl(
+		ctx, opts, curNode, nodeDescStore, nodeDialer, latencyFn, desc, leaseholder)
 	if err != nil {
 		return nil, err
 	}

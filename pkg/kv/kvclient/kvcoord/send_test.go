@@ -142,6 +142,10 @@ func (f *firstNErrorTransport) SkipReplica() {
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 
+func (f *firstNErrorTransport) Replicas() []roachpb.ReplicaDescriptor {
+	return f.replicas
+}
+
 // TestComplexScenarios verifies various complex success/failure scenarios by
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
@@ -189,12 +193,17 @@ func TestComplexScenarios(t *testing.T) {
 			context.Background(),
 			t,
 			func(
-				_ SendOptions,
-				_ *nodedialer.Dialer,
-				replicas []roachpb.ReplicaDescriptor,
+				ctx context.Context,
+				opts SendOptions,
+				curNode *roachpb.NodeDescriptor,
+				nodeDescStore NodeDescStore,
+				nodeDialer *nodedialer.Dialer,
+				latencyFn LatencyFunc,
+				desc *roachpb.RangeDescriptor,
+				leaseholder roachpb.ReplicaID,
 			) (Transport, error) {
 				return &firstNErrorTransport{
-					replicas:  replicas,
+					replicas:  desc.Replicas().Voters(),
 					numErrors: test.numErrors,
 				}, nil
 			},

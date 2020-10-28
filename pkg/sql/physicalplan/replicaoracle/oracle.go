@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -40,10 +41,11 @@ var (
 
 // Config is used to construct an OracleFactory.
 type Config struct {
-	NodeDescs  kvcoord.NodeDescStore
-	NodeDesc   roachpb.NodeDescriptor // current node
-	Settings   *cluster.Settings
-	RPCContext *rpc.Context
+	NodeDescs     kvcoord.NodeDescStore
+	HealthChecker nodedialer.HealthChecker
+	NodeDesc      roachpb.NodeDescriptor // current node
+	Settings      *cluster.Settings
+	RPCContext    *rpc.Context
 }
 
 // Oracle is used to choose the lease holder for ranges. This
@@ -119,13 +121,14 @@ func MakeQueryState() QueryState {
 // randomOracle is a Oracle that chooses the lease holder randomly
 // among the replicas in a range descriptor.
 type randomOracle struct {
-	nodeDescs kvcoord.NodeDescStore
+	nodeDescs     kvcoord.NodeDescStore
+	healthChecker nodedialer.HealthChecker
 }
 
 var _ OracleFactory = &randomOracle{}
 
 func newRandomOracleFactory(cfg Config) OracleFactory {
-	return &randomOracle{nodeDescs: cfg.NodeDescs}
+	return &randomOracle{nodeDescs: cfg.NodeDescs, healthChecker: cfg.HealthChecker}
 }
 
 func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
@@ -135,26 +138,33 @@ func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
 func (o *randomOracle) ChoosePreferredReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.ReplicaDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
+	replicas, err := orderReplicasOrErr(
+		ctx, kvcoord.DontOrderByLatency,
+		nil, /* curNode - we don't want ordering so we don't care */
+		o.nodeDescs,
+		o.healthChecker, nil /* latencyFunc */, desc,
+		roachpb.ReplicaDescriptor{} /* leaseholder - we don't want ordering so we don't care */)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	return replicas[rand.Intn(len(replicas))].ReplicaDescriptor, nil
+	return replicas[rand.Intn(len(replicas))], nil
 }
 
 type closestOracle struct {
 	nodeDescs kvcoord.NodeDescStore
 	// nodeDesc is the descriptor of the current node. It will be used to give
 	// preference to the current node and others "close" to it.
-	nodeDesc    roachpb.NodeDescriptor
-	latencyFunc kvcoord.LatencyFunc
+	nodeDesc      roachpb.NodeDescriptor
+	latencyFunc   kvcoord.LatencyFunc
+	healthChecker nodedialer.HealthChecker
 }
 
 func newClosestOracleFactory(cfg Config) OracleFactory {
 	return &closestOracle{
-		nodeDescs:   cfg.NodeDescs,
-		nodeDesc:    cfg.NodeDesc,
-		latencyFunc: latencyFunc(cfg.RPCContext),
+		nodeDescs:     cfg.NodeDescs,
+		nodeDesc:      cfg.NodeDesc,
+		latencyFunc:   latencyFunc(cfg.RPCContext),
+		healthChecker: cfg.HealthChecker,
 	}
 }
 
@@ -165,12 +175,15 @@ func (o *closestOracle) Oracle(_ *kv.Txn) Oracle {
 func (o *closestOracle) ChoosePreferredReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.ReplicaDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
+	replicas, err := orderReplicasOrErr(
+		ctx, kvcoord.OrderByLatency, &o.nodeDesc, o.nodeDescs,
+		o.healthChecker, o.latencyFunc, desc,
+		roachpb.ReplicaDescriptor{}, /* leaseholder - this oracle ignores it */
+	)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	replicas.OptimizeReplicaOrder(&o.nodeDesc, o.latencyFunc)
-	return replicas[0].ReplicaDescriptor, nil
+	return replicas[0], nil
 }
 
 // maxPreferredRangesPerLeaseHolder applies to the binPackingOracle.
@@ -193,8 +206,9 @@ type binPackingOracle struct {
 	nodeDescs                        kvcoord.NodeDescStore
 	// nodeDesc is the descriptor of the current node. It will be used to give
 	// preference to the current node and others "close" to it.
-	nodeDesc    roachpb.NodeDescriptor
-	latencyFunc kvcoord.LatencyFunc
+	nodeDesc      roachpb.NodeDescriptor
+	latencyFunc   kvcoord.LatencyFunc
+	healthChecker nodedialer.HealthChecker
 }
 
 func newBinPackingOracleFactory(cfg Config) OracleFactory {
@@ -203,6 +217,7 @@ func newBinPackingOracleFactory(cfg Config) OracleFactory {
 		nodeDescs:                        cfg.NodeDescs,
 		nodeDesc:                         cfg.NodeDesc,
 		latencyFunc:                      latencyFunc(cfg.RPCContext),
+		healthChecker:                    cfg.HealthChecker,
 	}
 }
 
@@ -223,11 +238,13 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 		return *leaseholder, nil
 	}
 
-	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
+	replicas, err := orderReplicasOrErr(
+		ctx, kvcoord.OrderByLatency, &o.nodeDesc, o.nodeDescs,
+		o.healthChecker, o.latencyFunc, desc,
+		roachpb.ReplicaDescriptor{} /* leaseholder - if it were known, we'd have returned above */)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	replicas.OptimizeReplicaOrder(&o.nodeDesc, o.latencyFunc)
 
 	// Look for a replica that has been assigned some ranges, but it's not yet full.
 	minLoad := int(math.MaxInt32)
@@ -235,7 +252,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	for i, repl := range replicas {
 		assignedRanges := queryState.RangesPerNode[repl.NodeID]
 		if assignedRanges != 0 && assignedRanges < o.maxPreferredRangesPerLeaseHolder {
-			return repl.ReplicaDescriptor, nil
+			return repl, nil
 		}
 		if assignedRanges < minLoad {
 			leastLoadedIdx = i
@@ -245,25 +262,34 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	// Either no replica was assigned any previous ranges, or all replicas are
 	// full. Use the least-loaded one (if all the load is 0, then the closest
 	// replica is returned).
-	return replicas[leastLoadedIdx].ReplicaDescriptor, nil
+	return replicas[leastLoadedIdx], nil
 }
 
-// replicaSliceOrErr returns a ReplicaSlice for the given range descriptor.
-// ReplicaSlices are restricted to replicas on nodes for which a NodeDescriptor
-// is available in the provided NodeDescStore. If no nodes are available, a
-// RangeUnavailableError is returned.
-func replicaSliceOrErr(
-	ctx context.Context, nodeDescs kvcoord.NodeDescStore, desc *roachpb.RangeDescriptor,
-) (kvcoord.ReplicaSlice, error) {
-	replicas, err := kvcoord.NewReplicaSlice(ctx, nodeDescs, desc, nil /* leaseholder */)
+// orderReplicasOrErr orders the replicas to be tried for contacting a range. If
+// no replicas are available, a RangeUnavailableError is returned.
+//
+// TODO(andrei): Consider returning RangeUnavailableError directly from
+// kvcoord.OrderReplicas.
+func orderReplicasOrErr(
+	ctx context.Context,
+	orderOpt kvcoord.ReorderReplicasOpt,
+	curNode *roachpb.NodeDescriptor,
+	nodeDescStore kvcoord.NodeDescStore,
+	healthChecker nodedialer.HealthChecker,
+	latencyFn kvcoord.LatencyFunc,
+	desc *roachpb.RangeDescriptor,
+	leaseholder roachpb.ReplicaDescriptor,
+) ([]roachpb.ReplicaDescriptor, error) {
+	replicas, err := kvcoord.OrderReplicas(
+		ctx, orderOpt, curNode, nodeDescStore,
+		healthChecker, latencyFn, desc, leaseholder)
 	if err != nil {
-		return kvcoord.ReplicaSlice{}, sqlerrors.NewRangeUnavailableError(desc.RangeID, err)
+		return nil, sqlerrors.NewRangeUnavailableError(desc.RangeID, err)
 	}
 	return replicas, nil
 }
 
-// latencyFunc returns a kv.LatencyFunc for use with
-// Replicas.OptimizeReplicaOrder.
+// latencyFunc returns a kv.LatencyFunc for use with OrderReplicas.
 func latencyFunc(rpcCtx *rpc.Context) kvcoord.LatencyFunc {
 	if rpcCtx != nil {
 		return rpcCtx.RemoteClocks.Latency

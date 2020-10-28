@@ -13,18 +13,251 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/rpcutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
+func TestOrderReplicasExcludesVoters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	rd := &roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 2},
+			{NodeID: 3, StoreID: 3},
+		},
+	}
+	ns := &mockNodeStore{
+		nodes: []roachpb.NodeDescriptor{
+			{
+				NodeID:  1,
+				Address: util.UnresolvedAddr{},
+			},
+			{
+				NodeID:  2,
+				Address: util.UnresolvedAddr{},
+			},
+			{
+				NodeID:  3,
+				Address: util.UnresolvedAddr{},
+			},
+		},
+	}
+	replicas, err := OrderReplicas(
+		ctx, DontOrderByLatency,
+		nil, /* curNode - we don't care about ordering */
+		ns,
+		rpcutils.AllGoodHealthChecker{},
+		nil, /* latencyFn - we don't care about ordering */
+		rd,
+		roachpb.ReplicaDescriptor{}, /* leaseholder - we don't care about ordering */
+	)
+	require.NoError(t, err)
+	require.Len(t, replicas, 3)
+
+	// Check that learners are not included.
+	typLearner := roachpb.LEARNER
+	rd.InternalReplicas[2].Type = &typLearner
+	replicas, err = OrderReplicas(
+		ctx, DontOrderByLatency,
+		nil, /* curNode - we don't care about ordering */
+		ns,
+		rpcutils.AllGoodHealthChecker{},
+		nil, /* latencyFn - we don't care about ordering */
+		rd,
+		roachpb.ReplicaDescriptor{}, /* leaseholder - we don't care about ordering */
+	)
+	require.NoError(t, err)
+	require.Len(t, replicas, 2)
+
+	// Check that, if the leasehoder points to a learner, that learner is
+	// included.
+	leaseholder := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3}
+
+	replicas, err = OrderReplicas(
+		ctx, DontOrderByLatency,
+		nil, /* curNode - we don't care about ordering */
+		ns,
+		rpcutils.AllGoodHealthChecker{},
+		nil, /* latencyFn - we don't care about ordering */
+		rd,
+		leaseholder,
+	)
+	require.NoError(t, err)
+	require.Len(t, replicas, 3)
+}
+
+func TestOrderReplicasOrdersByLatency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	testCases := []struct {
+		name       string
+		node       *roachpb.NodeDescriptor
+		latencies  map[string]time.Duration
+		slice      []testReplica
+		expOrdered []roachpb.NodeID
+	}{
+		{
+			name: "order by locality matching",
+			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			slice: []testReplica{
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+			},
+			expOrdered: []roachpb.NodeID{2, 4, 3},
+		},
+		{
+			name: "order by locality matching, put node first",
+			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			slice: []testReplica{
+				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+			},
+			expOrdered: []roachpb.NodeID{1, 2, 4, 3},
+		},
+		{
+			name: "order by latency",
+			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			latencies: map[string]time.Duration{
+				"2:2": time.Hour,
+				"3:3": time.Minute,
+				"4:4": time.Second,
+			},
+			slice: []testReplica{
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+			},
+			expOrdered: []roachpb.NodeID{4, 3, 2},
+		},
+	}
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			var latencyFn LatencyFunc
+			if test.latencies != nil {
+				latencyFn = func(addr string) (time.Duration, bool) {
+					lat, ok := test.latencies[addr]
+					return lat, ok
+				}
+			}
+			var desc roachpb.RangeDescriptor
+			ns := mockNodeStore{}
+			ns.nodes = append(ns.nodes, *test.node)
+			for _, r := range test.slice {
+				desc.InternalReplicas = append(desc.InternalReplicas, r.ReplicaDescriptor)
+				ns.nodes = append(ns.nodes, *r.NodeDesc)
+			}
+			replicas, err := OrderReplicas(
+				ctx,
+				OrderByLatency,
+				test.node,
+				&ns,
+				rpcutils.AllGoodHealthChecker{},
+				latencyFn,
+				&desc,
+				roachpb.ReplicaDescriptor{}, // leaseholder
+			)
+			require.NoError(t, err)
+			res := make([]roachpb.NodeID, len(replicas))
+			for i, r := range replicas {
+				res[i] = r.NodeID
+			}
+			require.Equal(t, test.expOrdered, res)
+		})
+	}
+}
+
+func nodeDesc(
+	t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string,
+) *roachpb.NodeDescriptor {
+	return &roachpb.NodeDescriptor{
+		NodeID:   nid,
+		Locality: locality(t, locStrs),
+		Address:  addr(nid, sid),
+	}
+}
+
+func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string) testReplica {
+	return testReplica{
+		ReplicaDescriptor: desc(nid, sid),
+		NodeDesc:          nodeDesc(t, nid, sid, locStrs),
+	}
+}
+
+// testReplica extends the Replica structure with the associated node
+// descriptor.
+type testReplica struct {
+	roachpb.ReplicaDescriptor
+	NodeDesc *roachpb.NodeDescriptor
+}
+
+func (i testReplica) locality() []roachpb.Tier {
+	return i.NodeDesc.Locality.Tiers
+}
+
+func (i testReplica) addr() string {
+	return i.NodeDesc.Address.String()
+}
+
+func desc(nid roachpb.NodeID, sid roachpb.StoreID) roachpb.ReplicaDescriptor {
+	return roachpb.ReplicaDescriptor{NodeID: nid, StoreID: sid}
+}
+
+func addr(nid roachpb.NodeID, sid roachpb.StoreID) util.UnresolvedAddr {
+	return util.MakeUnresolvedAddr("tcp", fmt.Sprintf("%d:%d", nid, sid))
+}
+
+func locality(t *testing.T, locStrs []string) roachpb.Locality {
+	var locality roachpb.Locality
+	for _, l := range locStrs {
+		idx := strings.IndexByte(l, '=')
+		if idx == -1 {
+			t.Fatalf("locality %s not specified as <key>=<value>", l)
+		}
+		tier := roachpb.Tier{
+			Key:   l[:idx],
+			Value: l[idx+1:],
+		}
+		locality.Tiers = append(locality.Tiers, tier)
+	}
+	return locality
+}
+
+type mockNodeStore struct {
+	nodes []roachpb.NodeDescriptor
+}
+
+var _ NodeDescStore = &mockNodeStore{}
+
+// GetNodeDesc is part of the NodeDescStore interface.
+func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	for _, nd := range ns.nodes {
+		if nd.NodeID == nodeID {
+			return &nd, nil
+		}
+	}
+	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+}
 func TestTransportMoveToFront(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

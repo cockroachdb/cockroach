@@ -94,11 +94,17 @@ func NewDistSenderForLocalTestCluster(
 		FirstRangeProvider: g,
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: func(
+
+				ctx context.Context,
 				opts SendOptions,
+				curNode *roachpb.NodeDescriptor,
+				nodeDescStore NodeDescStore,
 				nodeDialer *nodedialer.Dialer,
-				replicas []roachpb.ReplicaDescriptor,
+				latencyFn LatencyFunc,
+				desc *roachpb.RangeDescriptor,
+				leaseholder roachpb.ReplicaID,
 			) (Transport, error) {
-				transport, err := senderTransportFactory(opts, nodeDialer, replicas)
+				transport, err := senderTransportFactory(ctx, opts, curNode, nodeDescStore, nodeDialer, latencyFn, desc, leaseholder)
 				if err != nil {
 					return nil, err
 				}

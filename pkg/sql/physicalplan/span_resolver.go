@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -130,16 +131,18 @@ func NewSpanResolver(
 	nodeDescs kvcoord.NodeDescStore,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
+	healthChecker nodedialer.HealthChecker,
 	policy replicaoracle.Policy,
 ) SpanResolver {
 	return &spanResolver{
 		st:       st,
 		nodeDesc: nodeDesc,
 		oracleFactory: replicaoracle.NewOracleFactory(policy, replicaoracle.Config{
-			NodeDescs:  nodeDescs,
-			NodeDesc:   nodeDesc,
-			Settings:   st,
-			RPCContext: rpcCtx,
+			NodeDescs:     nodeDescs,
+			NodeDesc:      nodeDesc,
+			Settings:      st,
+			RPCContext:    rpcCtx,
+			HealthChecker: healthChecker,
 		}),
 		distSender: distSender,
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/rpcutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -90,7 +91,9 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 		s3.Cfg.Settings,
 		s3.DistSenderI().(*kvcoord.DistSender),
 		s3.Gossip(),
-		s3.GetNode().Descriptor, nil,
+		s3.GetNode().Descriptor,
+		nil, /* rpcCtx */
+		rpcutils.AllGoodHealthChecker{},
 		replicaoracle.BinPackingChoice)
 
 	var spans []spanWithDir
@@ -199,7 +202,9 @@ func TestSpanResolver(t *testing.T) {
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
-		s.(*server.TestServer).GetNode().Descriptor, nil,
+		s.(*server.TestServer).GetNode().Descriptor,
+		nil, /* rpcCtx */
+		rpcutils.AllGoodHealthChecker{},
 		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()
@@ -296,7 +301,8 @@ func TestMixedDirections(t *testing.T) {
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor,
-		nil,
+		nil, /* rpcCtx */
+		rpcutils.AllGoodHealthChecker{},
 		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()

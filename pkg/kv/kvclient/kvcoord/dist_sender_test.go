@@ -126,10 +126,26 @@ var stubRPCSendFn simpleSendFn = func(
 // tests to the newer transport interface.
 func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
-		_ SendOptions,
-		_ *nodedialer.Dialer,
-		replicas []roachpb.ReplicaDescriptor,
+		ctx context.Context,
+		opts SendOptions,
+		curNode *roachpb.NodeDescriptor,
+		nodeDescStore NodeDescStore,
+		nodeDialer *nodedialer.Dialer,
+		latencyFn LatencyFunc,
+		desc *roachpb.RangeDescriptor,
+		leaseholder roachpb.ReplicaID,
 	) (Transport, error) {
+		// Create a grpcTransport in order to let it sort the replicas. We're not actually
+		// going to use this transport, but we'll take the sorted replicas from it.
+		//
+		// TODO(andrei): We should actually return the grpcTransport, and mock out
+		// the send function inside it.
+		tr, err := grpcTransportFactoryImpl(
+			ctx, opts, curNode, nodeDescStore, nodeDialer, latencyFn, desc, leaseholder)
+		if err != nil {
+			return nil, err
+		}
+		replicas := tr.(*grpcTransport).replicas
 		return &simpleTransportAdapter{
 			fn:       fn,
 			replicas: replicas,
@@ -193,6 +209,10 @@ func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) 
 	}
 }
 
+func (l *simpleTransportAdapter) Replicas() []roachpb.ReplicaDescriptor {
+	return l.replicas
+}
+
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
 	server := rpc.NewServer(rpcContext)
 
@@ -215,9 +235,9 @@ func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 	}
 }
 
-// TestSendRPCOrder verifies that sendRPC correctly takes into account the
-// lease holder, attributes and required consistency to determine where to send
-// remote requests.
+// TestSendRPCOrder verifies that the DistSender in cooperation with the
+// gRPCTransport correctly take into account the leaseholder, attributes and
+// required consistency to determine where to send remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -238,7 +258,6 @@ func TestSendRPCOrder(t *testing.T) {
 		5: {roachpb.Tier{Key: "country", Value: "us"}, roachpb.Tier{Key: "region", Value: "east"}, roachpb.Tier{Key: "city", Value: "mia"}},
 	}
 
-	// Gets filled below to identify the replica by its address.
 	makeVerifier := func(expNodes []roachpb.NodeID) func(SendOptions, []roachpb.ReplicaDescriptor) error {
 		return func(o SendOptions, replicas []roachpb.ReplicaDescriptor) error {
 			var actualAddrs []roachpb.NodeID
@@ -260,10 +279,21 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	testCases := []struct {
-		args        roachpb.Request
-		tiers       []roachpb.Tier
-		expReplica  []roachpb.NodeID
-		leaseHolder int32 // 0 for not caching a lease holder.
+		args roachpb.Request
+		// tiers, if set, will be used as the locality of the node sending the
+		// request. Replicas in the same locality with it will be tried first if a
+		// leaseholder is not known. Note that the localities for the nodes in the
+		// descriptor have been fixed above.
+		tiers []roachpb.Tier
+		// expReplica is a list of node ids expected to correspond to replicas
+		// passed to the transport factory. Positions filled with 0 are not checked
+		// against the actual replica passed it, but the array length is still
+		// checked.
+		expReplica []roachpb.NodeID
+		// If set, leaseholder will represent the index of the replica cached as the
+		// leaseholder on the sending node. 0 for the cache not having a
+		// leaseholder.
+		leaseholder int32
 		// Naming is somewhat off, as eventually consistent reads usually
 		// do not have to go to the lease holder when a node has a read lease.
 		// Would really want CONSENSUS here, but that is not implemented.
@@ -319,7 +349,7 @@ func TestSendRPCOrder(t *testing.T) {
 			// Compare only the first resulting address as we have a lease holder
 			// and that means we're only trying to send there.
 			expReplica:  []roachpb.NodeID{2, 0, 0, 0, 0},
-			leaseHolder: 2,
+			leaseholder: 2,
 		},
 		// Inconsistent Get without matching attributes but lease holder (node 3). Should just
 		// go random as the lease holder does not matter.
@@ -327,7 +357,7 @@ func TestSendRPCOrder(t *testing.T) {
 			args:        &roachpb.GetRequest{},
 			tiers:       []roachpb.Tier{},
 			expReplica:  []roachpb.NodeID{1, 2, 3, 4, 5},
-			leaseHolder: 2,
+			leaseholder: 2,
 		},
 	}
 
@@ -356,17 +386,32 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor) error
 
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+		ctx context.Context,
+		opts SendOptions,
+		curNode *roachpb.NodeDescriptor,
+		nodeDescStore NodeDescStore,
+		nodeDialer *nodedialer.Dialer,
+		latencyFn LatencyFunc,
+		desc *roachpb.RangeDescriptor,
+		leaseholder roachpb.ReplicaID,
 	) (Transport, error) {
+		// Call the real transport factory to see how it configures the transport.
+		tr, err := grpcTransportFactoryImpl(
+			ctx, opts, curNode, nodeDescStore, nodeDialer, latencyFn, desc, leaseholder)
+		if err != nil {
+			return nil, err
+		}
+		replicas := tr.(*grpcTransport).replicas
 		reps := make([]roachpb.ReplicaDescriptor, len(replicas))
 		copy(reps, replicas)
+		// Check that the transport is created with the expected replicas.
 		if err := verifyCall(opts, reps); err != nil {
 			return nil, err
 		}
 		return adaptSimpleTransport(
 			func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				return ba.CreateReply(), nil
-			})(opts, dialer, replicas)
+			})(ctx, opts, curNode, nodeDescStore, nodeDialer, latencyFn, desc, leaseholder)
 	}
 
 	cfg := DistSenderConfig{
@@ -405,8 +450,8 @@ func TestSendRPCOrder(t *testing.T) {
 
 			ds.rangeCache.Clear()
 			var lease roachpb.Lease
-			if tc.leaseHolder != 0 {
-				lease.Replica = descriptor.InternalReplicas[tc.leaseHolder-1]
+			if tc.leaseholder != 0 {
+				lease.Replica = descriptor.InternalReplicas[tc.leaseholder-1]
 			}
 			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 				Desc:  descriptor,
@@ -2999,6 +3044,7 @@ func TestCountRanges(t *testing.T) {
 func TestSenderTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	transport, err := SenderTransportFactory(
 		tracing.NewTracer(),
 		kv.SenderFunc(
@@ -3008,11 +3054,15 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &nodedialer.Dialer{}, []roachpb.ReplicaDescriptor{{}})
+		))(ctx, SendOptions{}, nil /* curNode */, nil, /* nodeDescStore */
+		&nodedialer.Dialer{}, nil, /* latencyFn */
+		&roachpb.RangeDescriptor{
+			InternalReplicas: []roachpb.ReplicaDescriptor{{}},
+		}, 0 /* leaseholder */)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = transport.SendNext(context.Background(), roachpb.BatchRequest{})
+	_, err = transport.SendNext(ctx, roachpb.BatchRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3764,13 +3814,20 @@ func TestConnectionClass(t *testing.T) {
 	// created.
 	var class rpc.ConnectionClass
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+		ctx context.Context,
+		opts SendOptions,
+		curNode *roachpb.NodeDescriptor,
+		nodeDescStore NodeDescStore,
+		nodeDialer *nodedialer.Dialer,
+		latencyFn LatencyFunc,
+		desc *roachpb.RangeDescriptor,
+		leaseholder roachpb.ReplicaID,
 	) (Transport, error) {
 		class = opts.class
 		return adaptSimpleTransport(
 			func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				return ba.CreateReply(), nil
-			})(opts, dialer, replicas)
+			})(ctx, opts, curNode, nodeDescStore, nodeDialer, latencyFn, desc, leaseholder)
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)

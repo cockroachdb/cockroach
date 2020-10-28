@@ -259,3 +259,33 @@ var _ closedts.Dialer = (*Dialer)(nil).CTDialer()
 func (n *Dialer) CTDialer() closedts.Dialer {
 	return (*dialerAdapter)(n)
 }
+
+// HealthChecker is used to check the health of the connection to a specified
+// node.
+type HealthChecker interface {
+	// ConnHealth returns nil if we have an open connection of the request class
+	// to the given node that succeeded on its most recent heartbeat. See the
+	// method of the same name on rpc.Context for more details.
+	ConnHealth(roachpb.NodeID) error
+}
+
+// HealthCheckerForClass returns adapts the Dialer to be a HealthChecker, and
+// binds the connection class.
+func (n *Dialer) HealthCheckerForClass(class rpc.ConnectionClass) HealthChecker {
+	return nodeDialerHealthChecker{
+		dialer: n,
+		class:  class,
+	}
+}
+
+type nodeDialerHealthChecker struct {
+	dialer *Dialer
+	class  rpc.ConnectionClass
+}
+
+var _ HealthChecker = nodeDialerHealthChecker{}
+
+// ConnHealth implements the HealthChecker interface.
+func (n nodeDialerHealthChecker) ConnHealth(nodeID roachpb.NodeID) error {
+	return n.dialer.ConnHealth(nodeID, n.class)
+}
