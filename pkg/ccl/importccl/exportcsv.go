@@ -167,7 +167,7 @@ func (sp *csvWriter) OutputTypes() []*types.T {
 
 func (sp *csvWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 
 	err := func() error {
 		typs := sp.input.OutputTypes()

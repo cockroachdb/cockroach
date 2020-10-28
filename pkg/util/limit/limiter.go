@@ -44,7 +44,7 @@ func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) error {
 	}
 	// If not, start a span and begin waiting.
 	ctx, span := tracing.ChildSpan(ctx, l.spanName)
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	return l.sem.Acquire(ctx, 1)
 }
 

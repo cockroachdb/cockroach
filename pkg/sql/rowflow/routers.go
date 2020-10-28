@@ -372,7 +372,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 						ro.stats.MaxAllocatedMem = ro.memoryMonitor.MaximumBytes()
 						ro.stats.MaxAllocatedDisk = ro.diskMonitor.MaximumBytes()
 						span.SetSpanStats(&ro.stats)
-						tracing.FinishSpan(span)
+						span.Finish()
 						if trace := execinfra.GetTraceData(ctx); trace != nil {
 							ro.mu.Unlock()
 							rb.semaphore <- struct{}{}

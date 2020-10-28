@@ -85,7 +85,7 @@ func runImport(
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 		var inputs map[int32]string
 		if spec.ResumePos != nil {
 			// Filter out files that were completely processed.
@@ -540,7 +540,7 @@ func runParallelImport(
 	minEmited := make([]int64, parallelism)
 	group.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "inputconverter")
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 		return ctxgroup.GroupWorkers(ctx, parallelism, func(ctx context.Context, id int) error {
 			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmited)
 		})

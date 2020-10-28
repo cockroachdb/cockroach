@@ -45,7 +45,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	sqltelemetry.IncIAMRevokeCounter(n.AdminOption)
 
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 
 	hasAdminRole, err := p.HasAdminRole(ctx)
 	if err != nil {

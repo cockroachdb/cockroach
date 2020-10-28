@@ -48,7 +48,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	sqltelemetry.IncIAMGrantCounter(n.AdminOption)
 
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 
 	hasAdminRole, err := p.HasAdminRole(ctx)
 	if err != nil {

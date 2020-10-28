@@ -138,7 +138,7 @@ func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposal
 	proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
 	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
-		tracing.FinishSpan(proposal.sp)
+		proposal.sp.Finish()
 		proposal.sp = nil
 	}
 }

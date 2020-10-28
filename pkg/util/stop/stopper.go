@@ -341,7 +341,7 @@ func (s *Stopper) RunAsyncTask(
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		f(ctx)
 	}()
@@ -400,7 +400,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
 		defer alloc.Release()
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		f(ctx)
 	}()

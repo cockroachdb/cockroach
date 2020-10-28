@@ -885,7 +885,7 @@ func (pb *ProcessorBase) InternalClose() bool {
 		}
 
 		pb.Closed = true
-		tracing.FinishSpan(pb.span)
+		pb.span.Finish()
 		pb.span = nil
 		// Reset the context so that any incidental uses after this point do not
 		// access the finished span.

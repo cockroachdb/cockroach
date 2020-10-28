@@ -294,7 +294,7 @@ func WriteDescriptors(
 	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	err := func() error {
 		b := txn.NewBatch()
 		wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -580,7 +580,7 @@ func restore(
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
 	g.GoCtx(func(ctx context.Context) error {
 		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
-		defer tracing.FinishSpan(progressSpan)
+		defer progressSpan.Finish()
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
 

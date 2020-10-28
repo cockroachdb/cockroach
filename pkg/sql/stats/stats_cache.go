@@ -318,7 +318,7 @@ func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID d
 	ctx, span := tracing.ForkCtxSpan(ctx, "refresh-table-stats")
 	// Perform an asynchronous refresh of the cache.
 	go func() {
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 		sc.refreshCacheEntry(ctx, tableID)
 	}()
 }

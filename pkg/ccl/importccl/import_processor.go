@@ -77,7 +77,7 @@ func newReadImportDataProcessor(
 
 func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	defer cp.output.ProducerDone()
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
@@ -209,7 +209,7 @@ func ingestKvs(
 	kvCh <-chan row.KVBatch,
 ) (*roachpb.BulkOpSummary, error) {
 	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
 
