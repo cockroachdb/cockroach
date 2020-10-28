@@ -213,7 +213,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	spanFinished := false
 	defer func() {
 		if !spanFinished {
-			tracing.FinishSpan(span)
+			span.Finish()
 		}
 	}()
 
@@ -286,7 +286,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 						m.stats.BytesSent = 0
 					}
 					span.SetSpanStats(&m.stats)
-					tracing.FinishSpan(span)
+					span.Finish()
 					spanFinished = true
 					if trace := execinfra.GetTraceData(ctx); trace != nil {
 						err := m.addRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})

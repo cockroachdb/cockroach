@@ -161,7 +161,7 @@ func (ib *indexBackfiller) runChunk(
 	}
 
 	ctx, traceSpan := tracing.ChildSpan(tctx, "chunk")
-	defer tracing.FinishSpan(traceSpan)
+	defer traceSpan.Finish()
 
 	var key roachpb.Key
 

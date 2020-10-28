@@ -95,7 +95,7 @@ func showBackupPlanHook(
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		str, err := toFn()
 		if err != nil {
@@ -487,7 +487,7 @@ func showBackupsInCollectionPlanHook(
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, backup.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		collection, err := collectionFn()
 		if err != nil {

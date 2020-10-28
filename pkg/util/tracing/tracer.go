@@ -552,14 +552,6 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanContext,
 	return &sc, nil
 }
 
-// FinishSpan closes the given Span (if not nil). It is a convenience wrapper
-// for Span.Finish() which tolerates nil spans.
-func FinishSpan(span *Span) {
-	if span != nil {
-		span.Finish()
-	}
-}
-
 // ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
 // that "follows from" the original Span. This allows the resulting context to be
 // used in an async task that might outlive the original operation.

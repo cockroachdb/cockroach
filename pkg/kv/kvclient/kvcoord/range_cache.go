@@ -655,7 +655,7 @@ func (rdc *RangeDescriptorCache) tryLookup(
 		var lookupRes EvictionToken
 		if err := rdc.stopper.RunTaskWithErr(ctx, "rangecache: range lookup", func(ctx context.Context) error {
 			ctx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
-			defer tracing.FinishSpan(reqSpan)
+			defer reqSpan.Finish()
 			// Clear the context's cancelation. This request services potentially many
 			// callers waiting for its result, and using the flight's leader's
 			// cancelation doesn't make sense.

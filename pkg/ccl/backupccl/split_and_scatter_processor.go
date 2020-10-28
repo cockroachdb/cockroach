@@ -158,7 +158,7 @@ type entryNode struct {
 // Run implements the execinfra.Processor interface.
 func (ssp *splitAndScatterProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "splitAndScatterProcessor")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	defer ssp.output.ProducerDone()
 
 	numEntries := 0

@@ -382,20 +382,15 @@ func (s *Span) SetSpanStats(stats SpanStats) {
 	s.crdb.mu.Unlock()
 }
 
-// Finish is part of the opentracing.Span interface.
+// Finish marks the Span as completed. Finishing a nil *Span is a noop.
 func (s *Span) Finish() {
-	s.FinishWithOptions(opentracing.FinishOptions{})
-}
-
-// FinishWithOptions is part of the opentracing.Span interface.
-func (s *Span) FinishWithOptions(opts opentracing.FinishOptions) {
+	if s == nil {
+		return
+	}
 	if s.isNoop() {
 		return
 	}
-	finishTime := opts.FinishTime
-	if finishTime.IsZero() {
-		finishTime = time.Now()
-	}
+	finishTime := time.Now()
 	s.crdb.mu.Lock()
 	s.crdb.mu.duration = finishTime.Sub(s.crdb.startTime)
 	s.crdb.mu.Unlock()
