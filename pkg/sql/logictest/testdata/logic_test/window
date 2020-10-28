@@ -3686,7 +3686,7 @@ ORDER BY
 
 # Check that telemetry is being collected on the window functions' usage.
 query B
-SELECT count(*) = 26 FROM crdb_internal.feature_usage WHERE feature_name LIKE 'sql.plan.window_function%' AND usage_count > 0
+SELECT count(*) >= 26 FROM crdb_internal.feature_usage WHERE feature_name LIKE 'sql.plan.window_function%' AND usage_count > 0
 ----
 true
 
@@ -3840,3 +3840,37 @@ statement ok
 SELECT max(b::INT8) OVER (PARTITION BY b ORDER BY a RANGE 1 PRECEDING)
 FROM t53442_b NATURAL JOIN t53442_a
 WHERE false
+
+# Regression test for window aggregate functions not making a deep copy of
+# decimals on each iteration (#55944).
+statement ok
+CREATE TABLE t55944 (x decimal);
+INSERT INTO t55944 (x)
+VALUES (1.0),
+       (20.0),
+       (25.0),
+       (41.0),
+       (55.5),
+       (60.9),
+       (72.0),
+       (88.0),
+       (88.0),
+       (89.0);
+
+query RRR
+SELECT x,
+       round(sqrdiff(x) OVER (ORDER BY x), 20) as sqrdiff,
+       round(stddev_samp(x) OVER (ORDER BY x), 17) as stddev_samp
+FROM t55944
+ORDER BY x
+----
+1.0   0E-20                      NULL
+20.0  180.50000000000000000000   13.43502884254440296
+25.0  320.66666666666666666667   12.66227994214838599
+41.0  814.75000000000000000000   16.47978559731082586
+55.5  1726.00000000000000000000  20.77257807784098810
+60.9  2600.80000000000000000000  22.80701646423749132
+72.0  3845.03714285714285714286  25.31480838974539443
+88.0  7527.84222222222222222222  30.67540183563660797
+88.0  7527.84222222222222222222  30.67540183563660797
+89.0  8885.84400000000000000000  31.42158493774621802
