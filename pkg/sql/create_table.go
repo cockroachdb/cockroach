@@ -1229,9 +1229,13 @@ func NewTableDesc(
 	// We can't use st.Version.IsActive because this method is used during
 	// server setup before the cluster version has been initialized.
 	version := st.Version.ActiveVersionOrEmpty(ctx)
-	if version != (clusterversion.ClusterVersion{}) &&
-		version.IsActive(clusterversion.VersionSecondaryIndexColumnFamilies) {
-		indexEncodingVersion = descpb.SecondaryIndexFamilyFormatVersion
+	if version != (clusterversion.ClusterVersion{}) {
+		if version.IsActive(clusterversion.VersionSecondaryIndexColumnFamilies) {
+			indexEncodingVersion = descpb.SecondaryIndexFamilyFormatVersion
+		}
+		if version.IsActive(clusterversion.VersionEmptyArraysInInvertedIndexes) {
+			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
+		}
 	}
 
 	for i, def := range n.Defs {

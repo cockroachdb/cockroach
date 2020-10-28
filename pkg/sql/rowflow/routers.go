@@ -114,6 +114,9 @@ type routerOutput struct {
 	// infrastructure of rowBufToPushFrom.
 	rowBufToPushFromMon *mon.BytesMonitor
 	rowBufToPushFromAcc *mon.BoundAccount
+	// rowBufToPushFromRowSize stores the size of the row that we have
+	// accounted for when adding it to rowBufToPushFrom buffer in ith position.
+	rowBufToPushFromRowSize [routerRowBufSize]int64
 }
 
 func (ro *routerOutput) addMetadataLocked(meta *execinfrapb.ProducerMetadata) {
@@ -152,11 +155,10 @@ func (ro *routerOutput) popRowsLocked(ctx context.Context) ([]rowenc.EncDatumRow
 		// We're reusing the same rowBufToPushFrom slice, so we can only
 		// release the memory under the "old" row once we overwrite it in
 		// rowBufToPushFrom which we're about to do for rowBufToPushFrom[n].
-		prevSize := uintptr(0)
-		if ro.rowBufToPushFrom[n] != nil {
-			prevSize = ro.rowBufToPushFrom[n].Size()
-		}
-		if err := ro.rowBufToPushFromAcc.Grow(ctx, int64(row.Size()-prevSize)); err != nil {
+		rowSize := int64(row.Size())
+		delta := rowSize - ro.rowBufToPushFromRowSize[n]
+		ro.rowBufToPushFromRowSize[n] = rowSize
+		if err := ro.rowBufToPushFromAcc.Grow(ctx, delta); err != nil {
 			return err
 		}
 		ro.rowBufToPushFrom[n] = row

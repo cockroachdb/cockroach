@@ -772,7 +772,7 @@ func EncodeInvertedIndexKeys(
 	if !geoindex.IsEmptyConfig(&index.GeoConfig) {
 		return EncodeGeoInvertedIndexTableKeys(val, keyPrefix, index)
 	}
-	return EncodeInvertedIndexTableKeys(val, keyPrefix)
+	return EncodeInvertedIndexTableKeys(val, keyPrefix, index.Version)
 }
 
 // EncodeInvertedIndexTableKeys produces one inverted index key per element in
@@ -782,16 +782,26 @@ func EncodeInvertedIndexKeys(
 // not guaranteed to be round-trippable during decoding. If the input Datum
 // is (SQL) NULL, no inverted index keys will be produced, because inverted
 // indexes cannot and do not need to satisfy the predicate col IS NULL.
-func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
+//
+// This function does not return keys for empty arrays unless the version is at
+// least descpb.EmptyArraysInInvertedIndexesVersion. (Note that this only
+// applies to arrays, not JSONs. This function returns keys for all non-null
+// JSONs regardless of the version.)
+func EncodeInvertedIndexTableKeys(
+	val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
+) (key [][]byte, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
 	datum := tree.UnwrapDatum(nil, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
+		// We do not need to pass the version for JSON types, since all prior
+		// versions of JSON inverted indexes include keys for empty objects and
+		// arrays.
 		return json.EncodeInvertedIndexKeys(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
-		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey)
+		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey, version)
 	}
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
@@ -799,8 +809,18 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 // encodeArrayInvertedIndexTableKeys returns a list of inverted index keys for
 // the given input array, one per entry in the array. The input inKey is
 // prefixed to all returned keys.
-// N.B.: This won't return any keys for
-func encodeArrayInvertedIndexTableKeys(val *tree.DArray, inKey []byte) (key [][]byte, err error) {
+//
+// This function does not return keys for empty arrays unless the version is at
+// least descpb.EmptyArraysInInvertedIndexesVersion.
+func encodeArrayInvertedIndexTableKeys(
+	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
+) (key [][]byte, err error) {
+	if val.Array.Len() == 0 {
+		if version >= descpb.EmptyArraysInInvertedIndexesVersion {
+			return [][]byte{encoding.EncodeEmptyArray(inKey)}, nil
+		}
+	}
+
 	outKeys := make([][]byte, 0, len(val.Array))
 	for i := range val.Array {
 		d := val.Array[i]

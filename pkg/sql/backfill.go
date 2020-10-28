@@ -1266,8 +1266,8 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 				var stmt string
 				if geoindex.IsEmptyConfig(&idx.GeoConfig) {
 					stmt = fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q)), 0) FROM [%d AS t]`,
-						col, tableDesc.ID,
+						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q, %d)), 0) FROM [%d AS t]`,
+						col, idx.Version, tableDesc.ID,
 					)
 				} else {
 					stmt = fmt.Sprintf(

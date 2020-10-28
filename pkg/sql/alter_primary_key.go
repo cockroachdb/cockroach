@@ -134,7 +134,7 @@ func (p *planner) AlterPrimaryKey(
 		CreatedExplicitly: true,
 		EncodingType:      descpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
-		Version:           descpb.SecondaryIndexFamilyFormatVersion,
+		Version:           descpb.EmptyArraysInInvertedIndexesVersion,
 	}
 
 	// If the new index is requested to be sharded, set up the index descriptor
