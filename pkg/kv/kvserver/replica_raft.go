@@ -1693,7 +1693,7 @@ func handleTruncatedStateBelowRaft(
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
 		// avoid allocating when constructing Raft log keys (16 bytes).
 		unsafeKey := prefixBuf.RaftLogKey(idx)
-		if err := readWriter.Clear(storage.MakeMVCCMetadataKey(unsafeKey)); err != nil {
+		if err := readWriter.ClearUnversioned(unsafeKey); err != nil {
 			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
 		}
 	}

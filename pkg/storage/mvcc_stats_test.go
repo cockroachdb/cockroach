@@ -1593,7 +1593,7 @@ func TestMVCCComputeStatsError(t *testing.T) {
 
 			// Write a MVCC metadata key where the value is not an encoded MVCCMetadata
 			// protobuf.
-			if err := engine.Put(mvccKey(roachpb.Key("garbage")), []byte("garbage")); err != nil {
+			if err := engine.PutUnversioned(roachpb.Key("garbage"), []byte("garbage")); err != nil {
 				t.Fatal(err)
 			}
 

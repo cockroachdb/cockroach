@@ -723,9 +723,12 @@ func clearRangeData(
 	var clearRangeFn func(storage.Reader, storage.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
 		clearRangeFn = func(reader storage.Reader, writer storage.Writer, start, end roachpb.Key) error {
-			return writer.ClearRange(storage.MakeMVCCMetadataKey(start), storage.MakeMVCCMetadataKey(end))
+			return writer.ClearRawRange(start, end)
 		}
 	} else {
+		// TODO(sumeer): ClearRangeWithHeuristic uses MVCCKeyAndIntentsIterKind. But it is
+		// also going to be passed the lock table ranges explicitly. It should be using
+		// EngineIterator.
 		clearRangeFn = storage.ClearRangeWithHeuristic
 	}
 
@@ -835,9 +838,9 @@ func (r *Replica) applySnapshot(
 
 	// Clearing the unreplicated state.
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
-	unreplicatedStart := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey)
-	unreplicatedEnd := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())
-	if err = unreplicatedSST.ClearRange(unreplicatedStart, unreplicatedEnd); err != nil {
+	unreplicatedStart := unreplicatedPrefixKey
+	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
+	if err = unreplicatedSST.ClearRawRange(unreplicatedStart, unreplicatedEnd); err != nil {
 		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 	}
 
@@ -1101,6 +1104,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			subsumedReplSSTFile := &storage.MemFile{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
 			defer subsumedReplSST.Close()
+			// TODO(sumeer): ClearRangeWithHeuristic should use EngineIterator.
 			if err := storage.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,

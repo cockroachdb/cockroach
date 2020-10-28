@@ -227,8 +227,25 @@ func (p *pebbleBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 	return p.batch.Apply(&batch, nil)
 }
 
-// Clear implements the Batch interface.
-func (p *pebbleBatch) Clear(key MVCCKey) error {
+// ClearMVCC implements the Batch interface.
+func (p *pebbleBatch) ClearMVCC(key MVCCKey) error {
+	if key.Timestamp.IsEmpty() {
+		panic("ClearMVCC timestamp is empty")
+	}
+	return p.clear(key)
+}
+
+// ClearUnversioned implements the Batch interface.
+func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
+	return p.clear(MVCCKey{Key: key})
+}
+
+// ClearIntent implements the Batch interface.
+func (p *pebbleBatch) ClearIntent(key roachpb.Key) error {
+	return p.clear(MVCCKey{Key: key})
+}
+
+func (p *pebbleBatch) clear(key MVCCKey) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -240,8 +257,8 @@ func (p *pebbleBatch) Clear(key MVCCKey) error {
 	return p.batch.Delete(p.buf, nil)
 }
 
-// SingleClear implements the Batch interface.
-func (p *pebbleBatch) SingleClear(key MVCCKey) error {
+// SingleClearEngine implements the Batch interface.
+func (p *pebbleBatch) SingleClearEngine(key EngineKey) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -249,12 +266,26 @@ func (p *pebbleBatch) SingleClear(key MVCCKey) error {
 		return emptyKeyError()
 	}
 
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
+	p.buf = key.EncodeToBuf(p.buf[:0])
 	return p.batch.SingleDelete(p.buf, nil)
 }
 
-// ClearRange implements the Batch interface.
-func (p *pebbleBatch) ClearRange(start, end MVCCKey) error {
+// ClearRawRange implements the Batch interface.
+func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
+	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+}
+
+// ClearMVCCRangeAndIntents implements the Batch interface.
+func (p *pebbleBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+}
+
+// ClearMVCCRange implements the Batch interface.
+func (p *pebbleBatch) ClearMVCCRange(start, end MVCCKey) error {
+	return p.clearRange(start, end)
+}
+
+func (p *pebbleBatch) clearRange(start, end MVCCKey) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -307,8 +338,25 @@ func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 	return p.batch.Merge(p.buf, value, nil)
 }
 
-// Put implements the Batch interface.
-func (p *pebbleBatch) Put(key MVCCKey, value []byte) error {
+// PutMVCC implements the Batch interface.
+func (p *pebbleBatch) PutMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutMVCC timestamp is empty")
+	}
+	return p.put(key, value)
+}
+
+// PutUnversioned implements the Batch interface.
+func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
+	return p.put(MVCCKey{Key: key}, value)
+}
+
+// PutIntent implements the Batch interface.
+func (p *pebbleBatch) PutIntent(key roachpb.Key, value []byte) error {
+	return p.put(MVCCKey{Key: key}, value)
+}
+
+func (p *pebbleBatch) put(key MVCCKey, value []byte) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
