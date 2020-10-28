@@ -623,14 +623,11 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		policy := zonepb.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)}
 		now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		thresh := gc.CalculateThreshold(now, policy)
-		info, err := gc.Run(
-			context.Background(),
-			&desc, snap,
-			now, thresh, policy,
+		info, err := gc.Run(context.Background(), &desc, snap, now, thresh, policy,
 			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
-		)
+			false /* canUseClearRange */)
 		if err != nil {
 			return err
 		}

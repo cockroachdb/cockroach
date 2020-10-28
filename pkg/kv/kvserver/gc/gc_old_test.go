@@ -48,6 +48,7 @@ func runGCOld(
 	gcer GCer,
 	cleanupIntentsFn CleanupIntentsFunc,
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
+	_ bool,
 ) (Info, error) {
 
 	iter := rditer.NewReplicaDataIterator(desc, snap,
