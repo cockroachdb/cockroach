@@ -4,9 +4,8 @@
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
-# Check that vectorize row count threshold is respected. The test relies on the
-# fact that DistSQL and vectorized execution engines output execution stats in
-# a different format.
+# Check that vectorize row count threshold is respected.
+
 statement ok
 CREATE TABLE small (a INT PRIMARY KEY)
 
