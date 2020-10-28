@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 )
@@ -55,7 +56,7 @@ func runGenManCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if _, err := os.Stat(manPath); err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			if err := os.MkdirAll(manPath, 0755); err != nil {
 				return err
 			}

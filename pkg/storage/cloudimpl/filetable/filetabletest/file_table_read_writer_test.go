@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 	"sort"
 	"testing"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -534,5 +534,5 @@ func TestDatabaseScope(t *testing.T) {
 		"newdb.file_table_read_writer", executor, security.RootUserName())
 	require.NoError(t, err)
 	_, err = newFileTableReadWriter.ReadFile(ctx, "file1")
-	require.True(t, os.IsNotExist(err))
+	require.True(t, oserror.IsNotExist(err))
 }

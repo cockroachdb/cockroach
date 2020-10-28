@@ -37,5 +37,6 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors/oserror",
     ],
 )

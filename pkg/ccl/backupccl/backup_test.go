@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
 	"github.com/jackc/pgx"
 	"github.com/kr/pretty"
@@ -1405,7 +1406,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 
 	if _, err := os.Stat(checkpointPath); err == nil {
 		t.Fatalf("backup checkpoint descriptor at %s not cleaned up", checkpointPath)
-	} else if !os.IsNotExist(err) {
+	} else if !oserror.IsNotExist(err) {
 		t.Fatal(err)
 	}
 }

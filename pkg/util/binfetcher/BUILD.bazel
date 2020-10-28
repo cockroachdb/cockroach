@@ -12,6 +12,7 @@ go_library(
         "//pkg/util/httputil",
         "//pkg/util/log",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
     ],
 )
 

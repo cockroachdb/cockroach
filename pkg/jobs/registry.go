@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -1207,7 +1208,7 @@ func (r *Registry) stepThroughStateMachine(
 func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 	if r.preventAdoptionFile != "" {
 		if _, err := os.Stat(r.preventAdoptionFile); err != nil {
-			if !os.IsNotExist(err) {
+			if !oserror.IsNotExist(err) {
 				log.Warningf(ctx, "error checking if job adoption is currently disabled: %v", err)
 			}
 			return false

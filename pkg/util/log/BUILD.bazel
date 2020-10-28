@@ -51,6 +51,7 @@ go_library(
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/cockroachdb/logtags",
         "//vendor/github.com/cockroachdb/redact",
         "//vendor/github.com/cockroachdb/sentry-go",

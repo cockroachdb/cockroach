@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"strings"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -113,7 +113,7 @@ func (l *localFileStorage) ReadFile(ctx context.Context, basename string) (io.Re
 		// on whether we are reading from a local or remote nodelocal store.
 		// The local store returns a golang native ErrNotFound, whereas the remote
 		// store returns a gRPC native NotFound error.
-		if os.IsNotExist(err) || status.Code(err) == codes.NotFound {
+		if oserror.IsNotExist(err) || status.Code(err) == codes.NotFound {
 			return nil, errors.Wrapf(ErrFileDoesNotExist, "nodelocal storage file does not exist: %s", err.Error())
 		}
 		return nil, err

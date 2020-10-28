@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//vendor/github.com/MichaelTJones/walk",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/spf13/pflag",
     ],
 )

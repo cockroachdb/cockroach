@@ -17,6 +17,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/spf13/pflag",
         "//vendor/golang.org/x/sync/errgroup",
         "//vendor/golang.org/x/time/rate",

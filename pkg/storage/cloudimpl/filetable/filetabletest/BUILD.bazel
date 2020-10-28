@@ -18,6 +18,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )

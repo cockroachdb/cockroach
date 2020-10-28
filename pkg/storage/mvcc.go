@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 )
@@ -3802,13 +3803,13 @@ func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, er
 		if err != nil {
 			// This can happen if rocksdb removes files out from under us - just keep
 			// going to get the best estimate we can.
-			if os.IsNotExist(err) {
+			if oserror.IsNotExist(err) {
 				return nil
 			}
 			// Special-case: if the store-dir is configured using the root of some fs,
 			// e.g. "/mnt/db", we might have special fs-created files like lost+found
 			// that we can't read, so just ignore them rather than crashing.
-			if os.IsPermission(err) && filepath.Base(path) == "lost+found" {
+			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
 				return nil
 			}
 			return err
