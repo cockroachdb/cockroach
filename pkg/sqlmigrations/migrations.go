@@ -1224,7 +1224,14 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return err
 	}
 
-	if err := r.execAsRoot(
+	// XXX: This is a bit of a problem.. This gets executed at the very
+	// beginning, and through the join RPC when nodes join, n1 creates expired
+	// liveness records for them. The expired records indicate a non-live node.
+	// Yet this command expects all nodes to be fully up and running. What's to
+	// be done here? Retry? Or should we create the liveness records with just a
+	// bit of room. We definitely want to push the version gates out to them
+	// early.
+	if err := r.execAsRootWithRetry(
 		ctx, "set-setting", "SET CLUSTER SETTING version = $1", v.String(),
 	); err != nil {
 		return err

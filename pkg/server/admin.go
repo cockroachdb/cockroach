@@ -1764,6 +1764,7 @@ func (s *adminServer) EveryNode(
 
 	switch op.(type) {
 	case *serverpb.AckClusterVersionRequest:
+		// XXX: We'll need something similar to the "persist" then set setting code in init.go
 		versionSetting := s.server.ClusterSettings().Version
 		prevCV, err := kvserver.SynthesizeClusterVersionFromEngines(
 			ctx, s.server.engines, versionSetting.BinaryVersion(),

@@ -1135,22 +1135,20 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	}
 
+	initialDiskClusterVersion := initServer.DiskClusterVersion()
 	{
-		// Set up the callback that persists gossiped version bumps to the
-		// engines. The invariant we uphold here is that the bump needs to be
+		// The invariant we uphold here is that any version bump needs to be
 		// persisted on all engines before it becomes "visible" to the version
 		// setting. To this end,
 		//
-		// a) make sure Gossip is not started yet, and
-		// b) set up the BeforeChange callback on the version setting to persist
-		//    incoming updates to all engines.
-		// c) write back the disk-loaded cluster version to all engines,
-		// d) initialize the version setting (with the disk-loaded version).
+		// a) write back the disk-loaded cluster version to all engines,
+		// b) initialize the version setting (with the disk-loaded version).
+		// c) learn from the init server we're activating a higher version, and
+		// if so, persist and then initialize accordingly.
 		//
 		// Note that "all engines" means "all engines", not "all initialized
 		// engines". We cannot initialize engines this early in the boot
 		// sequence.
-		s.gossip.AssertNotStarted(ctx)
 
 		diskClusterVersion := initServer.DiskClusterVersion()
 		// The version setting loaded from disk is the maximum cluster version
@@ -1164,25 +1162,23 @@ func (s *Server) PreStart(ctx context.Context) error {
 			return err
 		}
 
-		// NB: if we bootstrap a new server (in initServer.ServeAndWait below)
+		// Note that at this point in the code we don't know if we'll bootstrap
+		// or join an existing cluster, so we have to conservatively go with the
+		// version from disk, which in the case of no initialized engines is the
+		// binary min supported version.
+		//
+		// NB: If we bootstrap a new server (in initServer.ServeAndWait below)
 		// we will call Initialize a second time, to eagerly move it to the
-		// bootstrap version (from the min supported version). Initialize()
-		// tolerates that. Note that in that case we know that the callback
-		// has not fired yet, since Gossip won't connect (to itself) until
-		// the server starts and so the callback will never fire prior to
-		// that second Initialize() call. Note also that at this point in
-		// the code we don't know if we'll bootstrap or join an existing
-		// cluster, so we have to conservatively go with the version from
-		// disk, which in the case of no initialized engines is the binary
-		// min supported version.
+		// binary version (from the min supported version). Initialize()
+		// tolerates that.
 		if err := clusterversion.Initialize(ctx, diskClusterVersion.Version, &s.cfg.Settings.SV); err != nil {
 			return err
 		}
 
 		// At this point, we've established the invariant: all engines hold the
-		// version currently visible to the setting. And we have the callback in
-		// place that will persist an incoming updated version on all engines
-		// before making it visible to the setting.
+		// version currently visible to the setting. Going forward whenever we
+		// set an active cluster version, we'll be sure to persist it to all the
+		// engines first.
 	}
 
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
@@ -1385,6 +1381,20 @@ func (s *Server) PreStart(ctx context.Context) error {
 	state, initialStart, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV, startGossipFn)
 	if err != nil {
 		return errors.Wrap(err, "during init")
+	}
+
+	// XXX: If our version setting will need to get updated, we'll need to do so
+	// here. Document this better.
+	if state.clusterVersion != initialDiskClusterVersion {
+		if err := kvserver.WriteClusterVersionToEngines(
+			ctx, s.engines, state.clusterVersion,
+		); err != nil {
+			return err
+		}
+
+		if err := s.ClusterSettings().Version.SetActiveVersion(ctx, state.clusterVersion); err != nil {
+			return err
+		}
 	}
 
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
