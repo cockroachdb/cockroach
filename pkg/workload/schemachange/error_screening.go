@@ -12,6 +12,7 @@ package schemachange
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -89,4 +90,81 @@ func tableHasDependencies(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
            AND ns.nspname = $2
 				)
 	)`, tableName.Object(), tableName.Schema())
+}
+
+func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+	hasDeps, err := tableHasDependencies(tx, tableName)
+	if err != nil {
+		return false, err
+	}
+	if !hasDeps {
+		return false, nil
+	}
+
+	columnPositions, err := scanString(tx, `
+	SELECT fd.dependedonby_details
+		  FROM crdb_internal.forward_dependencies AS fd
+		 WHERE fd.descriptor_id =
+				(
+				SELECT c.oid
+				  FROM pg_catalog.pg_class AS c
+					JOIN pg_catalog.pg_namespace AS ns
+            ON ns.oid = c.relnamespace
+         WHERE c.relname = $1
+           AND ns.nspname = $2
+				)
+   `, tableName.Object(), tableName.Schema())
+
+	if err != nil {
+		return false, err
+	}
+
+	position, err := scanInt(tx, `
+	SELECT ordinal_position
+    FROM information_schema.columns 
+   WHERE table_schema = $1
+     AND table_name = $2
+     AND column_name = $3
+   `, tableName.Schema(), tableName.Object(), columnName)
+
+	if err != nil {
+		return false, err
+	}
+
+	columnPositionsArray := strings.Split(columnPositions, ": ")
+	if len(columnPositionsArray) != 2 {
+		return false, fmt.Errorf("failed to parse dependedonby_details in columnIsDependedOn")
+	}
+	columns := strings.Split(columnPositionsArray[1][1:len(columnPositionsArray[1])-1], " ")
+	for _, ordinalPositionString := range columns {
+		ordinalPosition, err := strconv.Atoi(ordinalPositionString)
+		if err != nil {
+			return false, err
+		}
+
+		if position == ordinalPosition {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func colIsPrimaryKey(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+	return scanBool(tx, `SELECT EXISTS(
+	SELECT column_name from information_schema.table_constraints AS c
+    JOIN information_schema.constraint_column_usage AS ccu
+      ON ccu.table_name = c.table_name AND ccu.table_schema = c.table_schema AND ccu.constraint_name = c.constraint_name
+   WHERE c.table_schema = $1 AND c.table_name = $2 AND ccu.column_name = $3 AND c.constraint_type = 'PRIMARY KEY'
+	)`, tableName.Schema(), tableName.Object(), columnName)
+}
+
+func scanInt(tx *pgx.Tx, query string, args ...interface{}) (i int, err error) {
+	err = tx.QueryRow(query, args...).Scan(&i)
+	return i, err
+}
+
+func scanString(tx *pgx.Tx, query string, args ...interface{}) (s string, err error) {
+	err = tx.QueryRow(query, args...).Scan(&s)
+	return s, err
 }
