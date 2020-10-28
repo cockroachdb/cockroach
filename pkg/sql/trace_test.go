@@ -603,6 +603,10 @@ func TestTraceDistSQL(t *testing.T) {
 	defer cluster.Stopper().Stop(ctx)
 
 	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
+	// TODO(yuzefovich): tracing in the vectorized engine is very limited since
+	// only wrapped processors and the materializers use it outside of the
+	// stats information propagation. We should fix that (#55821).
+	r.Exec(t, "SET vectorize=off")
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY)")
 	// Put the table on the 2nd node so that the flow is planned on the 2nd node
