@@ -104,3 +104,9 @@ func IsIdentStart(ch int) bool {
 func IsIdentMiddle(ch int) bool {
 	return IsIdentStart(ch) || IsDigit(ch) || ch == '$'
 }
+
+// IsRestrictedSQLIdentQuotedOnEncode returns true if the restricted SQL
+// identifier for s would be quoted on encoding.
+func IsRestrictedSQLIdentQuotedOnEncode(s string) bool {
+	return isReservedKeyword(s) || !isBareIdentifier(s)
+}
