@@ -1177,7 +1177,7 @@ func NewColOperator(
 			result.resetToState(ctx, resultPreSpecPlanningStateShallowCopy)
 			err = result.createAndWrapRowSource(ctx, flowCtx, args, inputs, inputTypes, spec, factory, err)
 		} else {
-			err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, factory, err)
+			err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, args.Spec.ResultTypes, factory, err)
 		}
 	} else {
 		// The result can be updated with the post process result.
@@ -1196,14 +1196,31 @@ func NewColOperator(
 	for i := range args.Spec.ResultTypes {
 		expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
 		if !actual.Identical(expected) {
+			input := r.Op
+			castedIdx := len(r.ColumnTypes)
+			resultTypes := appendOneType(r.ColumnTypes, expected)
 			r.Op, err = colexec.GetCastOperator(
-				streamingAllocator, r.Op, i, len(r.ColumnTypes), actual, expected,
+				streamingAllocator, input, i, castedIdx, actual, expected,
 			)
 			if err != nil {
-				return r, err
+				// We don't support a native vectorized cast between these
+				// types, so we will plan a noop row-execution processor to
+				// handle it with a post-processing spec that simply passes
+				// through all of the columns from the input and appends the
+				// result of the cast to the end of the schema.
+				post := &execinfrapb.PostProcessSpec{}
+				post.RenderExprs = make([]execinfrapb.Expression, castedIdx+1)
+				for j := 0; j < castedIdx; j++ {
+					post.RenderExprs[j].Expr = fmt.Sprintf("@%d", j+1)
+				}
+				post.RenderExprs[castedIdx].Expr = fmt.Sprintf("@%d::%s", i+1, expected.SQLStandardName())
+				result.Op = input
+				if err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, resultTypes, factory, err); err != nil {
+					return r, err
+				}
 			}
-			projection[i] = uint32(len(r.ColumnTypes))
-			r.ColumnTypes = appendOneType(r.ColumnTypes, expected)
+			r.ColumnTypes = resultTypes
+			projection[i] = uint32(castedIdx)
 		} else {
 			projection[i] = uint32(i)
 		}
@@ -1245,7 +1262,7 @@ func (r opResult) planAndMaybeWrapOnExprAsFilter(
 		}
 
 		onExprAsFilter := &execinfrapb.PostProcessSpec{Filter: onExpr}
-		return r.wrapPostProcessSpec(ctx, flowCtx, args, onExprAsFilter, factory, err)
+		return r.wrapPostProcessSpec(ctx, flowCtx, args, onExprAsFilter, args.Spec.ResultTypes, factory, err)
 	}
 	r.updateWithPostProcessResult(ppr)
 	return nil
@@ -1261,6 +1278,7 @@ func (r opResult) wrapPostProcessSpec(
 	flowCtx *execinfra.FlowCtx,
 	args *colexec.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
+	resultTypes []*types.T,
 	factory coldata.ColumnFactory,
 	causeToWrap error,
 ) error {
@@ -1269,7 +1287,7 @@ func (r opResult) wrapPostProcessSpec(
 			Noop: &execinfrapb.NoopCoreSpec{},
 		},
 		Post:        *post,
-		ResultTypes: args.Spec.ResultTypes,
+		ResultTypes: resultTypes,
 	}
 	return r.createAndWrapRowSource(
 		ctx, flowCtx, args, []colexecbase.Operator{r.Op}, [][]*types.T{r.ColumnTypes},
