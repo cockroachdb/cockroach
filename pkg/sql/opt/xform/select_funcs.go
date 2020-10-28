@@ -1342,11 +1342,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all inverted indexes.
-	// TODO(mgartner): Use partial indexes for inverted zigzag joins when the
-	// predicate is implied by the filter.
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, nil /* originalFilters */, rejectNonInvertedIndexes|rejectPartialIndexes)
-	iter.ForEach(func(index cat.Index, _ memo.FiltersExpr, indexCols opt.ColSet, _ bool) {
+	iter.init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool) {
 		// See if there are two or more constraints that can be satisfied
 		// by this inverted index. This is possible with inverted indexes as
 		// opposed to secondary indexes, because one row in the primary index
