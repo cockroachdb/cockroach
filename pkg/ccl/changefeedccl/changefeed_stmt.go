@@ -576,10 +576,10 @@ func generateChangefeedSessionID() string {
 
 // Resume is part of the jobs.Resumer interface.
 func (b *changefeedResumer) Resume(
-	ctx context.Context, planHookState interface{}, startedCh chan<- tree.Datums,
+	ctx context.Context, exec interface{}, startedCh chan<- tree.Datums,
 ) error {
-	phs := planHookState.(sql.PlanHookState)
-	execCfg := phs.ExecCfg()
+	jobExec := exec.(sql.JobExecContext)
+	execCfg := jobExec.ExecCfg()
 	jobID := *b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
@@ -595,7 +595,7 @@ func (b *changefeedResumer) Resume(
 	}
 	var err error
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		if err = distChangefeedFlow(ctx, phs, jobID, details, progress, startedCh); err == nil {
+		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
 			return nil
 		}
 		if !IsRetryableError(err) {
@@ -646,9 +646,9 @@ func (b *changefeedResumer) Resume(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, planHookState interface{}) error {
-	phs := planHookState.(sql.PlanHookState)
-	execCfg := phs.ExecCfg()
+func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, jobExec interface{}) error {
+	exec := jobExec.(sql.JobExecContext)
+	execCfg := exec.ExecCfg()
 	progress := b.job.Progress()
 	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.DB, execCfg.ProtectedTimestampProvider,
 		progress.GetChangefeed().ProtectedTimestampRecord)
@@ -660,7 +660,7 @@ func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, planHookState in
 		telemetry.Count(`changefeed.enterprise.cancel`)
 	} else {
 		telemetry.Count(`changefeed.enterprise.fail`)
-		phs.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
+		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
 	}
 	return nil
 }
@@ -688,7 +688,7 @@ var _ jobs.PauseRequester = (*changefeedResumer)(nil)
 // paused, we want to install a protected timestamp at the most recent high
 // watermark if there isn't already one.
 func (b *changefeedResumer) OnPauseRequest(
-	ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress,
+	ctx context.Context, jobExec interface{}, txn *kv.Txn, progress *jobspb.Progress,
 ) error {
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	if _, shouldPause := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldPause {
@@ -713,7 +713,7 @@ func (b *changefeedResumer) OnPauseRequest(
 		return nil
 	}
 
-	pts := planHookState.(sql.PlanHookState).ExecCfg().ProtectedTimestampProvider
+	pts := jobExec.(sql.JobExecContext).ExecCfg().ProtectedTimestampProvider
 	return createProtectedTimestampRecord(ctx, pts, txn, *b.job.ID(),
 		details.Targets, *resolved, cp)
 }

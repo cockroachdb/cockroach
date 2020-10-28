@@ -181,7 +181,7 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 //   file.
 func backup(
 	ctx context.Context,
-	phs sql.PlanHookState,
+	execCtx sql.JobExecContext,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
 	db *kv.DB,
@@ -295,7 +295,7 @@ func backup(
 
 	if err := distBackup(
 		ctx,
-		phs,
+		execCtx,
 		spans,
 		introducedSpans,
 		pkIDs,
@@ -412,10 +412,10 @@ type backupResumer struct {
 
 // Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(
-	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	details := b.job.Details().(jobspb.BackupDetails)
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
@@ -668,18 +668,18 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	defer b.maybeNotifyScheduledJobCompletion(
 		ctx,
 		jobs.StatusFailed,
-		phs.(sql.PlanHookState).ExecCfg(),
+		execCtx.(sql.JobExecContext).ExecCfg(),
 	)
 
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
 
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
 	if err := b.clearStats(ctx, p.ExecCfg().DB); err != nil {
 		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)

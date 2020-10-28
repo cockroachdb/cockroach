@@ -107,7 +107,7 @@ type Registry struct {
 	clock    *hlc.Clock
 	nodeID   *base.SQLIDContainer
 	settings *cluster.Settings
-	planFn   planHookMaker
+	execCtx  jobExecCtxMaker
 	metrics  Metrics
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
@@ -117,7 +117,7 @@ type Registry struct {
 
 	// sessionBoundInternalExecutorFactory provides a way for jobs to create
 	// internal executors. This is rarely needed, and usually job resumers should
-	// use the internal executor from the PlanHookState. The intended user of this
+	// use the internal executor from the JobExecCtx. The intended user of this
 	// interface is the schema change job resumer, which needs to set the
 	// tableCollectionModifier on the internal executor to different values in
 	// multiple concurrent queries. This situation is an exception to the internal
@@ -166,26 +166,26 @@ type Registry struct {
 	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
 }
 
-// planHookMaker is a wrapper around sql.NewInternalPlanner. It returns an
+// jobExecCtxMaker is a wrapper around sql.NewInternalPlanner. It returns an
 // *sql.planner as an interface{} due to package dependency cycles. It should
 // be cast to that type in the sql package when it is used. Returns a cleanup
 // function that must be called once the caller is done with the planner.
 //
 // TODO(mjibson): Can we do something to avoid passing an interface{} here
 // that must be type casted in a Resumer? It cannot be done here because
-// PlanHookState lives in the sql package, which would create a dependency
-// cycle if listed here. Furthermore, moving PlanHookState into a common
+// JobExecContext lives in the sql package, which would create a dependency
+// cycle if listed here. Furthermore, moving JobExecContext into a common
 // subpackage like sqlbase is difficult because of the amount of sql-only
-// stuff that PlanHookState exports. One other choice is to merge this package
+// stuff that JobExecContext exports. One other choice is to merge this package
 // back into the sql package. There's maybe a better way that I'm unaware of.
-type planHookMaker func(opName string, user security.SQLUsername) (interface{}, func())
+type jobExecCtxMaker func(opName string, user security.SQLUsername) (interface{}, func())
 
 // PreventAdoptionFile is the name of the file which, if present in the first
 // on-disk store, will prevent the adoption of background jobs by that node.
 const PreventAdoptionFile = "DISABLE_STARTING_BACKGROUND_JOBS"
 
 // MakeRegistry creates a new Registry. planFn is a wrapper around
-// sql.newInternalPlanner. It returns a sql.PlanHookState, but must be
+// sql.newInternalPlanner. It returns a sql.JobExecCtx, but must be
 // coerced into that in the Resumer functions.
 func MakeRegistry(
 	ac log.AmbientContext,
@@ -198,7 +198,7 @@ func MakeRegistry(
 	sqlInstance sqlliveness.Instance,
 	settings *cluster.Settings,
 	histogramWindowInterval time.Duration,
-	planFn planHookMaker,
+	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
 ) *Registry {
 	r := &Registry{
@@ -211,7 +211,7 @@ func MakeRegistry(
 		nodeID:              nodeID,
 		sqlInstance:         sqlInstance,
 		settings:            settings,
-		planFn:              planFn,
+		execCtx:             execCtxFn,
 		preventAdoptionFile: preventAdoptionFile,
 		adoptionCh:          make(chan adoptionNotice),
 	}
@@ -983,9 +983,9 @@ func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id int64) error {
 //
 type Resumer interface {
 	// Resume is called when a job is started or resumed. Sending results on the
-	// chan will return them to a user, if a user's session is connected. phs
-	// is a sql.PlanHookState.
-	Resume(ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums) error
+	// chan will return them to a user, if a user's session is connected. execCtx
+	// is a sql.JobExecCtx.
+	Resume(ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums) error
 
 	// OnFailOrCancel is called when a job fails or is cancel-requested.
 	//
@@ -993,7 +993,7 @@ type Resumer interface {
 	// which is not guaranteed to run on the node where the job is running. So it
 	// cannot assume that any other methods have been called on this Resumer
 	// object.
-	OnFailOrCancel(ctx context.Context, phs interface{}) error
+	OnFailOrCancel(ctx context.Context, execCtx interface{}) error
 }
 
 // PauseRequester is an extension of Resumer which allows job implementers to inject
@@ -1002,9 +1002,9 @@ type PauseRequester interface {
 	Resumer
 
 	// OnPauseRequest is called in the transaction that moves a job to PauseRequested.
-	// If an error is returned, the pause request will fail. phs is a
-	// sql.PlanHookState.
-	OnPauseRequest(ctx context.Context, phs interface{}, txn *kv.Txn, details *jobspb.Progress) error
+	// If an error is returned, the pause request will fail. execCtx is a
+	// sql.JobExecCtx.
+	OnPauseRequest(ctx context.Context, execCtx interface{}, txn *kv.Txn, details *jobspb.Progress) error
 }
 
 // Constructor creates a resumable job of a certain type. The Resumer is
@@ -1058,7 +1058,7 @@ func (r retryJobError) Error() string {
 // the job was not completed with success. status is the current job status.
 func (r *Registry) stepThroughStateMachine(
 	ctx context.Context,
-	phs interface{},
+	execCtx interface{},
 	resumer Resumer,
 	resultsCh chan<- tree.Datums,
 	job *Job,
@@ -1085,11 +1085,11 @@ func (r *Registry) stepThroughStateMachine(
 		func() {
 			jm.CurrentlyRunning.Inc(1)
 			defer jm.CurrentlyRunning.Dec(1)
-			err = resumer.Resume(resumeCtx, phs, resultsCh)
+			err = resumer.Resume(resumeCtx, execCtx, resultsCh)
 		}()
 		if err == nil {
 			jm.ResumeCompleted.Inc(1)
-			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusSucceeded, nil)
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, StatusSucceeded, nil)
 		}
 		if resumeCtx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to
@@ -1115,7 +1115,7 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return sErr
 		}
-		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, err)
+		return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, StatusReverting, err)
 	case StatusPauseRequested:
 		return errors.Errorf("job %s", status)
 	case StatusCancelRequested:
@@ -1141,7 +1141,7 @@ func (r *Registry) stepThroughStateMachine(
 			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
 			// execute them in resume so that the client can handle these errors
 			// better.
-			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.ID()))
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.ID()))
 		}
 		return nil
 	case StatusReverting:
@@ -1155,7 +1155,7 @@ func (r *Registry) stepThroughStateMachine(
 		func() {
 			jm.CurrentlyRunning.Inc(1)
 			defer jm.CurrentlyRunning.Dec(1)
-			err = resumer.OnFailOrCancel(onFailOrCancelCtx, phs)
+			err = resumer.OnFailOrCancel(onFailOrCancelCtx, execCtx)
 		}()
 		if successOnFailOrCancel := err == nil; successOnFailOrCancel {
 			jm.FailOrCancelCompleted.Inc(1)
@@ -1165,7 +1165,7 @@ func (r *Registry) stepThroughStateMachine(
 			if HasErrJobCanceled(jobErr) {
 				nextStatus = StatusCanceled
 			}
-			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, nextStatus, jobErr)
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, nextStatus, jobErr)
 		}
 		if onFailOrCancelCtx.Err() != nil {
 			jm.FailOrCancelRetryError.Inc(1)
@@ -1185,7 +1185,7 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return sErr
 		}
-		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed,
+		return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, StatusFailed,
 			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", *job.ID()))
 	case StatusFailed:
 		if jobErr == nil {

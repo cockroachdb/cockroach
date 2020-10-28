@@ -352,7 +352,7 @@ func (r *Registry) deprecatedResume(
 		}
 		// Bookkeeping.
 		payload := job.Payload()
-		phs, cleanup := r.planFn("resume-"+job.taskName(), payload.UsernameProto.Decode())
+		execCtx, cleanup := r.execCtx("resume-"+job.taskName(), payload.UsernameProto.Decode())
 		defer cleanup()
 		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
 		var span *tracing.Span
@@ -366,7 +366,7 @@ func (r *Registry) deprecatedResume(
 			if job.Payload().FinalResumeError != nil {
 				finalResumeError = errors.DecodeError(ctx, *job.Payload().FinalResumeError)
 			}
-			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, finalResumeError)
+			err = r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, status, finalResumeError)
 			if err != nil {
 				// TODO (lucy): This needs to distinguish between assertion errors in
 				// the job registry and assertion errors in job execution returned from

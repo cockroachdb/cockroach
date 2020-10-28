@@ -499,9 +499,9 @@ func (j *Job) pauseRequested(ctx context.Context, fn onPauseRequestFunc) error {
 			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
 		}
 		if fn != nil {
-			phs, cleanup := j.registry.planFn("pause request", j.Payload().UsernameProto.Decode())
+			execCtx, cleanup := j.registry.execCtx("pause request", j.Payload().UsernameProto.Decode())
 			defer cleanup()
-			if err := fn(ctx, phs, txn, md.Progress); err != nil {
+			if err := fn(ctx, execCtx, txn, md.Progress); err != nil {
 				return err
 			}
 			ju.UpdateProgress(md.Progress)

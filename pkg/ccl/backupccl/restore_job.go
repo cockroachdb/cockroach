@@ -481,7 +481,7 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 // files.
 func restore(
 	restoreCtx context.Context,
-	phs sql.PlanHookState,
+	execCtx sql.JobExecContext,
 	numClusterNodes int,
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
@@ -492,7 +492,7 @@ func restore(
 	job *jobs.Job,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (RowCount, error) {
-	user := phs.User()
+	user := execCtx.User()
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
@@ -621,7 +621,7 @@ func restore(
 	// TODO(pbardea): Improve logging in processors.
 	if err := distRestore(
 		restoreCtx,
-		phs,
+		execCtx,
 		importSpanChunks,
 		pkIDs,
 		encryption,
@@ -653,7 +653,7 @@ func restore(
 // be broken down into two methods.
 func loadBackupSQLDescs(
 	ctx context.Context,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
 ) ([]BackupManifest, BackupManifest, []catalog.Descriptor, error) {
@@ -833,7 +833,7 @@ func getTempSystemDBID(details jobspb.RestoreDetails) descpb.ID {
 // createImportingDescriptors create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingDescriptors(
-	ctx context.Context, p sql.PlanHookState, sqlDescs []catalog.Descriptor, r *restoreResumer,
+	ctx context.Context, p sql.JobExecContext, sqlDescs []catalog.Descriptor, r *restoreResumer,
 ) (tables []catalog.TableDescriptor, oldTableIDs []descpb.ID, spans []roachpb.Span, err error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
@@ -1095,10 +1095,10 @@ func createImportingDescriptors(
 
 // Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(
-	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 	r.versionAtLeast20_2 = p.ExecCfg().Settings.Version.IsActive(
 		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
 
@@ -1480,14 +1480,14 @@ func (r *restoreResumer) publishDescriptors(
 // has been committed from a restore that has failed or been canceled. It does
 // this by adding the table descriptors in DROP state, which causes the schema
 // change stuff to delete the keys in the background.
-func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	telemetry.Count("restore.total.failed")
 	telemetry.CountBucketed("restore.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
 
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	execCfg := phs.(sql.PlanHookState).ExecCfg()
+	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	return descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
 		execCfg.DB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, tenant := range details.Tenants {

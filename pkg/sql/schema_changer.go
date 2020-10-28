@@ -2049,9 +2049,9 @@ type schemaChangeResumer struct {
 }
 
 func (r schemaChangeResumer) Resume(
-	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	p := phs.(PlanHookState)
+	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
 	if p.ExecCfg().SchemaChangerTestingKnobs.SchemaChangeJobNoOp != nil &&
 		p.ExecCfg().SchemaChangerTestingKnobs.SchemaChangeJobNoOp() {
@@ -2221,8 +2221,8 @@ func (r schemaChangeResumer) Resume(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
-	p := phs.(PlanHookState)
+func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
 
 	if details.DroppedDatabaseID != descpb.InvalidID {
