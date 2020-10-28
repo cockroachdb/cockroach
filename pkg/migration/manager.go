@@ -187,6 +187,7 @@ func (h *Helper) EveryNode(ctx context.Context, op serverpb.EveryNodeOp) error {
 	// TODO(irfansharif): We can/should send out these RPCs in parallel.
 	log.Infof(ctx, "executing op=%s on nodes=%s", redact.Safe(op.Op()), redact.Safe(nodeIDs))
 	for _, nodeID := range nodeIDs {
+		// XXX: We're holding something here incorrectly.
 		conn, err := h.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 		if err != nil {
 			return err
