@@ -885,7 +885,7 @@ func (r *Replica) requestToProposal(
 	return proposal, pErr
 }
 
-// getTraceData extracts the SpanContext of the current span.
+// getTraceData extracts the SpanMeta of the current span.
 func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
 	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
@@ -896,9 +896,9 @@ func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
 	}
 	traceData := opentracing.TextMapCarrier{}
 	if err := r.AmbientContext.Tracer.Inject(
-		sp.Context(), opentracing.TextMap, traceData,
+		sp.Meta(), opentracing.TextMap, traceData,
 	); err != nil {
-		log.Errorf(ctx, "failed to inject sp context (%+v) as trace data: %s", sp.Context(), err)
+		log.Errorf(ctx, "failed to inject sp context (%+v) as trace data: %s", sp.Meta(), err)
 		return nil
 	}
 	return traceData
