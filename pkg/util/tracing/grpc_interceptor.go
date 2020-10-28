@@ -58,7 +58,7 @@ func (w metadataReaderWriter) ForeachKey(handler func(key, val string) error) er
 	return nil
 }
 
-func extractSpanContext(ctx context.Context, tracer *Tracer) (*SpanContext, error) {
+func extractSpanContext(ctx context.Context, tracer *Tracer) (*SpanMeta, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		md = metadata.New(nil)
@@ -69,13 +69,12 @@ func extractSpanContext(ctx context.Context, tracer *Tracer) (*SpanContext, erro
 // spanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
 // of RPCs, deciding for which operations the gRPC opentracing interceptor should
 // create a span.
-func spanInclusionFuncForServer(t *Tracer, parentSpanCtx *SpanContext) bool {
-	// Is client tracing?
-	return (parentSpanCtx != nil && !parentSpanCtx.IsNoop()) ||
-		// Should we trace regardless of the client? This is useful for calls coming
-		// through the HTTP->RPC gateway (i.e. the AdminUI), where client is never
-		// tracing.
-		t.AlwaysTrace()
+func spanInclusionFuncForServer(t *Tracer, parentSpanCtx *SpanMeta) bool {
+	// If there is an incoming trace on the RPC (parentSpanCtx) or the tracer is
+	// configured to always trace, return true. The second part is particularly
+	// useful for calls coming through the HTTP->RPC gateway (i.e. the AdminUI),
+	// where client is never tracing.
+	return !parentSpanCtx.isNilOrNoop() || t.AlwaysTrace()
 }
 
 // SetSpanTags sets one or more tags on the given span according to the
@@ -105,9 +104,9 @@ func SetSpanTags(sp *Span, err error, client bool) {
 //         ...,  // (existing ServerOptions)
 //         grpc.UnaryInterceptor(ServerInterceptor(tracer)))
 //
-// All gRPC server spans will look for an tracing SpanContext in the gRPC
+// All gRPC server spans will look for an tracing SpanMeta in the gRPC
 // metadata; if found, the server span will act as the ChildOf that RPC
-// SpanContext.
+// SpanMeta.
 //
 // Root or not, the server Span will be embedded in the context.Context for the
 // application-specific gRPC handler(s) to access.
@@ -128,8 +127,8 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 
 		serverSpan := tracer.StartSpan(
 			info.FullMethod,
-			ext.RPCServerOption(spanContext),
-			gRPCComponentTag,
+			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
+			WithRemoteParent(spanContext),
 		)
 		defer serverSpan.Finish()
 
@@ -153,9 +152,9 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 //         ...,  // (existing ServerOptions)
 //         grpc.StreamInterceptor(StreamServerInterceptor(tracer)))
 //
-// All gRPC server spans will look for a SpanContext in the gRPC
+// All gRPC server spans will look for a SpanMeta in the gRPC
 // metadata; if found, the server span will act as the ChildOf that RPC
-// SpanContext.
+// SpanMeta.
 //
 // Root or not, the server Span will be embedded in the context.Context for the
 // application-specific gRPC handler(s) to access.
@@ -171,8 +170,8 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 
 		serverSpan := tracer.StartSpan(
 			info.FullMethod,
-			ext.RPCServerOption(spanContext),
-			gRPCComponentTag,
+			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
+			WithRemoteParent(spanContext),
 		)
 		defer serverSpan.Finish()
 		ss = &tracingServerStream{
@@ -206,8 +205,8 @@ func (ss *tracingServerStream) Context() context.Context {
 // number of packets (even with an empty context!).
 //
 // See #17177.
-func spanInclusionFuncForClient(parentSpanCtx *SpanContext) bool {
-	return parentSpanCtx != nil && !parentSpanCtx.IsNoop()
+func spanInclusionFuncForClient(parent *Span) bool {
+	return parent != nil && !parent.isNoop()
 }
 
 func injectSpanContext(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
@@ -236,7 +235,7 @@ func injectSpanContext(ctx context.Context, tracer *Tracer, clientSpan *Span) co
 //         ...,  // (existing DialOptions)
 //         grpc.WithUnaryInterceptor(ClientInterceptor(tracer)))
 //
-// All gRPC client spans will inject the tracing SpanContext into the gRPC
+// All gRPC client spans will inject the tracing SpanMeta into the gRPC
 // metadata; they will also look in the context.Context for an active
 // in-process parent Span and establish a ChildOf reference if such a parent
 // Span could be found.
@@ -252,24 +251,19 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		var err error
-		var parentCtx *SpanContext
-		if parent := SpanFromContext(ctx); parent != nil {
-			parentCtx = parent.Context()
-		}
-		if !spanInclusionFuncForClient(parentCtx) {
+		parent := SpanFromContext(ctx)
+		if !spanInclusionFuncForClient(parent) {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
 		clientSpan := tracer.StartSpan(
 			method,
-			opentracing.ChildOf(parentCtx),
-			ext.SpanKindRPCClient,
-			gRPCComponentTag,
+			WithParent(parent),
+			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
 		init(clientSpan)
 		defer clientSpan.Finish()
 		ctx = injectSpanContext(ctx, tracer, clientSpan)
-		err = invoker(ctx, method, req, resp, cc, opts...)
+		err := invoker(ctx, method, req, resp, cc, opts...)
 		if err != nil {
 			SetSpanTags(clientSpan, err, true)
 			clientSpan.LogFields(log.String("event", "error"), log.String("message", err.Error()))
@@ -287,9 +281,9 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 //     conn, err := grpc.Dial(
 //         address,
 //         ...,  // (existing DialOptions)
-//         grpc.WithStreamInterceptor(otgrpc.StreamClientInterceptor(tracer)))
+//         grpc.WithStreamInterceptor(StreamClientInterceptor(tracer)))
 //
-// All gRPC client spans will inject the tracing SpanContext into the gRPC
+// All gRPC client spans will inject the tracing SpanMeta into the gRPC
 // metadata; they will also look in the context.Context for an active
 // in-process parent Span and establish a ChildOf reference if such a parent
 // Span could be found.
@@ -305,20 +299,15 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
-		var err error
-		var parentCtx *SpanContext
-		if parent := SpanFromContext(ctx); parent != nil {
-			parentCtx = parent.Context()
-		}
-		if !spanInclusionFuncForClient(parentCtx) {
+		parent := SpanFromContext(ctx)
+		if !spanInclusionFuncForClient(parent) {
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 
 		clientSpan := tracer.StartSpan(
 			method,
-			opentracing.ChildOf(parentCtx),
-			ext.SpanKindRPCClient,
-			gRPCComponentTag,
+			WithParent(parent),
+			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
 		init(clientSpan)
 		ctx = injectSpanContext(ctx, tracer, clientSpan)

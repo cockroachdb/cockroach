@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -168,14 +167,14 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			!parentSp.IsRecording() {
 			tracer := parentSp.Tracer()
 			sp = tracer.StartSpan(
-				"explain-distsql", tracing.Recordable,
-				opentracing.ChildOf(parentSp.Context()),
-				tracing.LogTagsFromCtx(params.ctx))
+				"explain-distsql", tracing.WithForceRealSpan(),
+				tracing.WithParent(parentSp),
+				tracing.WithCtxLogTags(params.ctx))
 		} else {
 			tracer := params.extendedEvalCtx.ExecCfg.AmbientCtx.Tracer
 			sp = tracer.StartSpan(
-				"explain-distsql", tracing.Recordable,
-				tracing.LogTagsFromCtx(params.ctx))
+				"explain-distsql", tracing.WithForceRealSpan(),
+				tracing.WithCtxLogTags(params.ctx))
 		}
 		sp.StartRecording(tracing.SnowballRecording)
 		ctx := tracing.ContextWithSpan(params.ctx, sp)

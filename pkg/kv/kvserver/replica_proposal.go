@@ -885,7 +885,7 @@ func (r *Replica) requestToProposal(
 	return proposal, pErr
 }
 
-// getTraceData extracts the SpanContext of the current span.
+// getTraceData extracts the SpanMeta of the current span.
 func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
 	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
