@@ -539,6 +539,7 @@ func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState
 	s.mu.inspectState.clusterID = clusterID
 	s.mu.inspectState.nodeID = roachpb.NodeID(resp.NodeID)
 	s.mu.inspectState.clusterVersion = clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
+	// XXX: What are we doing with this received version?
 	diskState := *s.mu.inspectState
 	s.mu.Unlock()
 

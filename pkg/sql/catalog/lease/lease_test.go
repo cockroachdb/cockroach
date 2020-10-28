@@ -17,7 +17,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2401,6 +2400,7 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 					atomic.AddInt64(&called, 1) <= timesToFail {
 					return nil, errors.Errorf("boom")
 				}
+				log.Info(ctx, "xxx: here")
 				return streamer(ctx, desc, cc, method, opts...)
 			}
 		},
@@ -2410,16 +2410,16 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 		syncutil.Mutex
 		entries []log.Entry
 	}
-	restartingRE := regexp.MustCompile("restarting rangefeed.*after.*")
-	log.Intercept(ctx, func(entry log.Entry) {
-		if !restartingRE.MatchString(entry.Message) {
-			return
-		}
-		seen.Lock()
-		defer seen.Unlock()
-		seen.entries = append(seen.entries, entry)
-	})
-	defer log.Intercept(ctx, nil)
+	//restartingRE := regexp.MustCompile("restarting rangefeed.*after.*")
+	//log.Intercept(ctx, func(entry log.Entry) {
+	//	if !restartingRE.MatchString(entry.Message) {
+	//		return
+	//	}
+	//	seen.Lock()
+	//	defer seen.Unlock()
+	//	seen.entries = append(seen.entries, entry)
+	//})
+	//defer log.Intercept(ctx, nil)
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{

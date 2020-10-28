@@ -1191,7 +1191,7 @@ func (n *Node) Join(
 		return nil, err
 	}
 
-	log.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
+	log.Infof(ctx, "allocated IDs: n%d, s%d; active-version=%s", nodeID, storeID, activeVersion)
 
 	return &roachpb.JoinNodeResponse{
 		ClusterID:     n.clusterID.Get().GetBytes(),
