@@ -459,12 +459,12 @@ message DecommissionStatusResponse {
 // TODO(irfansharif): Should all these definitions for the orchestrator process
 // sit in a new server entirely? They're pretty self contained. We've only
 // dumped them into the admin server out of laziness.
+//
+// TODO(irfansharif): Implement custom stringer method for these.
 
 // AckClusterVersionRequest is used to inform the target node of a cluster
 // version bump. The target node is responsible for durably persisting the
 // message and enabling the corresponding version gates.
-//
-// TODO(irfansharif): Implement custom stringer method for these.
 message AckClusterVersionRequest {
   roachpb.Version version = 1;
 }
@@ -472,11 +472,26 @@ message AckClusterVersionRequest {
 // AckClusterVersionResponse is the response to an AckClusterVersionRequest.
 message AckClusterVersionResponse { }
 
+// ValidateTargetClusterVersionRequest is used to verify that the target node is
+// running a binary that's able to support the specified cluster version.
+// Specifically:
+//
+//   node's minimum supported version <= version <= node's binary version
+message ValidateTargetClusterVersionRequest {
+  roachpb.Version version = 1;
+}
+
+// ValidateTargetClusterVersionResponse is the response to an
+// ValidateTargetClusterVersionRequest.
+message ValidateTargetClusterVersionResponse {
+}
+
 // An EveryNodeRequestUnion contains exactly one of the requests. The values
 // added here must match those in EveryNodeResponseUnion.
 message EveryNodeRequestUnion {
   oneof value {
     AckClusterVersionRequest ack_cluster_version = 1;
+    ValidateTargetClusterVersionRequest validate_target_version = 2;
   }
 }
 
@@ -485,6 +500,7 @@ message EveryNodeRequestUnion {
 message EveryNodeResponseUnion {
   oneof value {
     AckClusterVersionResponse ack_cluster_version = 1;
+    ValidateTargetClusterVersionResponse validate_target_version = 2;
   }
 }
 

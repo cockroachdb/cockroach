@@ -27,3 +27,9 @@ func (a *AckClusterVersionRequest) Op() string { return "ack-cluster-version" }
 
 // everyNodeOpResp implements the EveryNodeOpResp interface.
 func (a *AckClusterVersionResponse) everyNodeOpResp() {}
+
+// Op implements the EveryNodeOp interface.
+func (a *ValidateTargetClusterVersionRequest) Op() string { return "validate-target-cluster-version" }
+
+// everyNodeOpResp implements the EveryNodeOpResp interface.
+func (a *ValidateTargetClusterVersionResponse) everyNodeOpResp() {}

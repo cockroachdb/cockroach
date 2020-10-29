@@ -1764,6 +1764,32 @@ func (s *adminServer) EveryNode(
 	ctx = logtags.AddTag(ctx, "every-node", redact.Safe(op.Op()))
 
 	switch op.(type) {
+	case *serverpb.ValidateTargetClusterVersionRequest:
+		valReq := req.Request.GetValidateTargetVersion()
+		targetVersion := *valReq.Version
+		versionSetting := s.server.ClusterSettings().Version
+
+		// We're validating the following:
+		//
+		//   node's minimum supported version <= target version <= node's binary version
+		if targetVersion.Less(versionSetting.BinaryMinSupportedVersion()) {
+			msg := fmt.Sprintf("target version %s less than binary's min supported version %s",
+				targetVersion, versionSetting.BinaryMinSupportedVersion())
+			log.Warningf(ctx, "%s", msg)
+			return nil, errors.Newf("%s", redact.Safe(msg))
+		}
+
+		if versionSetting.BinaryVersion().Less(targetVersion) {
+			msg := fmt.Sprintf("binary version %s less than target version %s",
+				versionSetting.BinaryVersion(), targetVersion)
+			log.Warningf(ctx, "%s", msg)
+			return nil, errors.Newf("%s", redact.Safe(msg))
+		}
+
+		valResp := &serverpb.ValidateTargetClusterVersionResponse{}
+		resp := &serverpb.EveryNodeResponse{}
+		resp.Response.SetInner(valResp)
+		return resp, nil
 	case *serverpb.AckClusterVersionRequest:
 		versionSetting := s.server.ClusterSettings().Version
 		prevCV, err := kvserver.SynthesizeClusterVersionFromEngines(

@@ -3,11 +3,14 @@
 
 package serverpb
 
+
 // GetInner returns the EveryNodeOp contained in the union.
 func (ru EveryNodeRequestUnion) GetInner() EveryNodeOp {
 	switch t := ru.GetValue().(type) {
 	case *EveryNodeRequestUnion_AckClusterVersion:
 		return t.AckClusterVersion
+	case *EveryNodeRequestUnion_ValidateTargetVersion:
+		return t.ValidateTargetVersion
 	default:
 		return nil
 	}
@@ -18,6 +21,8 @@ func (ru EveryNodeResponseUnion) GetInner() EveryNodeOpResp {
 	switch t := ru.GetValue().(type) {
 	case *EveryNodeResponseUnion_AckClusterVersion:
 		return t.AckClusterVersion
+	case *EveryNodeResponseUnion_ValidateTargetVersion:
+		return t.ValidateTargetVersion
 	default:
 		return nil
 	}
@@ -29,6 +34,8 @@ func (ru *EveryNodeRequestUnion) SetInner(r EveryNodeOp) bool {
 	switch t := r.(type) {
 	case *AckClusterVersionRequest:
 		union = &EveryNodeRequestUnion_AckClusterVersion{t}
+	case *ValidateTargetClusterVersionRequest:
+		union = &EveryNodeRequestUnion_ValidateTargetVersion{t}
 	default:
 		return false
 	}
@@ -42,6 +49,8 @@ func (ru *EveryNodeResponseUnion) SetInner(r EveryNodeOpResp) bool {
 	switch t := r.(type) {
 	case *AckClusterVersionResponse:
 		union = &EveryNodeResponseUnion_AckClusterVersion{t}
+	case *ValidateTargetClusterVersionResponse:
+		union = &EveryNodeResponseUnion_ValidateTargetVersion{t}
 	default:
 		return false
 	}

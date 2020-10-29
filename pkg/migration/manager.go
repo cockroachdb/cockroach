@@ -210,9 +210,26 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 		// return. The migration associated with the specific version can assume
 		// that every node in the cluster has the corresponding version
 		// activated.
-		op := &serverpb.AckClusterVersionRequest{Version: &version}
-		if err := h.EveryNode(ctx, op); err != nil {
-			return err
+		{
+			// First sanity check that we'll actually be able to perform the
+			// cluster version bump, cluster-wide.
+			//
+			// TODO(irfansharif): Do we want to worry about the case where we
+			// validate N nodes running the right binary versions, and the user
+			// adding another node that would no longer be able to? As written,
+			// we'll be bumping the version gates down below anyway.
+			op := &serverpb.ValidateTargetClusterVersionRequest{Version: &version}
+			if err := h.EveryNode(ctx, op); err != nil {
+				return err
+			}
+		}
+		{
+			// TODO(irfansharif): Should we rename this request type to
+			// something like "BumpClusterVersion" instead?
+			op := &serverpb.AckClusterVersionRequest{Version: &version}
+			if err := h.EveryNode(ctx, op); err != nil {
+				return err
+			}
 		}
 
 		// TODO(irfansharif): We'll want a testing override here to be able to
