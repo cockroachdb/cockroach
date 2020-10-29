@@ -1669,10 +1669,10 @@ alter_database_to_schema_stmt ::=
 	'ALTER' 'DATABASE' database_name 'CONVERT' 'TO' 'SCHEMA' 'WITH' 'PARENT' database_name
 
 alter_database_add_region_stmt ::=
-	'ALTER' 'DATABASE' database_name 'ADD' region_or_regions name_list
+	'ALTER' 'DATABASE' database_name 'ADD' 'REGION' region_name
 
 alter_database_drop_region_stmt ::=
-	'ALTER' 'DATABASE' database_name 'DROP' region_or_regions name_list
+	'ALTER' 'DATABASE' database_name 'DROP' 'REGION' region_name
 
 alter_database_survive_stmt ::=
 	'ALTER' 'DATABASE' database_name survive_clause
@@ -2134,9 +2134,8 @@ alter_index_cmds ::=
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
 
-region_or_regions ::=
-	'REGION'
-	| 'REGIONS'
+region_name ::=
+	name
 
 survive_clause ::=
 	'SURVIVE' 'REGION' 'FAILURE'
@@ -2228,6 +2227,10 @@ opt_equal ::=
 signed_iconst ::=
 	'ICONST'
 	| only_signed_iconst
+
+region_or_regions ::=
+	'REGION'
+	| 'REGIONS'
 
 region_name_list ::=
 	name_list
@@ -2461,9 +2464,6 @@ alter_table_cmd ::=
 
 var_set_list ::=
 	( var_name '=' 'COPY' 'FROM' 'PARENT' | var_name '=' var_value ) ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*
-
-region_name ::=
-	name
 
 alter_index_cmd ::=
 	partition_by

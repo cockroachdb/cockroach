@@ -1357,8 +1357,8 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
 
 		{`ALTER DATABASE a RENAME TO b`},
-		{`ALTER DATABASE a ADD REGION "us-west-1", "us-west-2"`},
-		{`ALTER DATABASE a DROP REGION "us-west-1", "us-west-2"`},
+		{`ALTER DATABASE a ADD REGION "us-west-1"`},
+		{`ALTER DATABASE a DROP REGION "us-west-1"`},
 		{`ALTER DATABASE a SURVIVE REGION FAILURE`},
 		{`EXPLAIN ALTER DATABASE a RENAME TO b`},
 
@@ -2362,14 +2362,6 @@ $function$`,
 			`ALTER RANGE meta CONFIGURE ZONE USING "foo.bar" = yay`},
 		{`ALTER DATABASE db CONFIGURE ZONE USING foo.bar = yay`,
 			`ALTER DATABASE db CONFIGURE ZONE USING "foo.bar" = yay`},
-		{
-			`ALTER DATABASE a ADD REGIONS "us-west-1", "us-west-2"`,
-			`ALTER DATABASE a ADD REGION "us-west-1", "us-west-2"`,
-		},
-		{
-			`ALTER DATABASE a DROP REGIONS "us-west-1", "us-west-2"`,
-			`ALTER DATABASE a DROP REGION "us-west-1", "us-west-2"`,
-		},
 		{`ALTER TABLE db.t CONFIGURE ZONE USING foo.bar = yay`,
 			`ALTER TABLE db.t CONFIGURE ZONE USING "foo.bar" = yay`},
 		{`ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE USING foo.bar = yay`,
