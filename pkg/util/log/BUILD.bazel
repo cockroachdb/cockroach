@@ -145,6 +145,7 @@ go_test(
         "//vendor/github.com/kr/pretty",
         "//vendor/github.com/pmezard/go-difflib/difflib",
         "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/github.com/stretchr/testify/require",
         "//vendor/golang.org/x/net/trace",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [

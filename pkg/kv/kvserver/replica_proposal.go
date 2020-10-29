@@ -137,7 +137,7 @@ func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposal
 	proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
 	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
-		tracing.FinishSpan(proposal.sp)
+		proposal.sp.Finish()
 		proposal.sp = nil
 	}
 }
@@ -891,7 +891,7 @@ func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
 	if sp == nil {
 		return nil
 	}
-	if tracing.IsBlackHoleSpan(sp) {
+	if sp.IsBlackHole() {
 		return nil
 	}
 	traceData := opentracing.TextMapCarrier{}

@@ -12,12 +12,8 @@ package tracing
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -28,7 +24,6 @@ import (
 	"github.com/cockroachdb/logtags"
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	jaegerjson "github.com/jaegertracing/jaeger/model/json"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/trace"
@@ -95,27 +90,6 @@ func (sc *SpanContext) ForeachBaggageItem(handler func(k, v string) bool) {
 	}
 }
 
-// RecordingType is the type of recording that a Span might be performing.
-type RecordingType int
-
-const (
-	// NoRecording means that the Span isn't recording. Child spans created from
-	// it similarly won't be recording by default.
-	NoRecording RecordingType = iota
-	// SnowballRecording means that the Span is recording and that derived
-	// spans will be as well, in the same mode (this includes remote spans,
-	// i.e. this mode crosses RPC boundaries). Derived spans will maintain
-	// their own recording, and this recording will be included in that of
-	// any local parent spans.
-	SnowballRecording
-	// SingleNodeRecording means that the Span is recording and that locally
-	// derived spans will as well (i.e. a remote Span typically won't be
-	// recording by default, in contrast to SnowballRecording). Similar to
-	// SnowballRecording, children have their own recording which is also
-	// included in that of their parents.
-	SingleNodeRecording
-)
-
 type crdbSpan struct {
 	spanMeta
 
@@ -171,10 +145,15 @@ func (s *crdbSpan) isRecording() bool {
 	return s != nil && atomic.LoadInt32(&s.recording) != 0
 }
 
+// otSpan is a span for an external opentracing compatible tracer
+// such as lightstep, zipkin, jaeger, etc.
 type otSpan struct {
-	// TODO(tbg): see if we can lose the shadowTr here and rely on shadowSpan.Tracer().
-	// Probably not - but worth checking.
-	// TODO(tbg): consider renaming 'shadow' -> 'ot' or 'external'.
+	// shadowTr is the shadowTracer this span was created from. We need
+	// to hold on to it separately because shadowSpan.Tracer() returns
+	// the wrapper tracer and we lose the ability to find out
+	// what tracer it is. This is important when deriving children from
+	// this span, as we want to avoid mixing different tracers, which
+	// would otherwise be the result of cluster settings changed.
 	shadowTr   *shadowTracer
 	shadowSpan opentracing.Span
 }
@@ -230,8 +209,8 @@ func (s *Span) isNoop() bool {
 }
 
 // IsRecording returns true if the Span is recording its events.
-func IsRecording(sp *Span) bool {
-	return sp.crdb.isRecording()
+func (s *Span) IsRecording() bool {
+	return s.crdb.isRecording()
 }
 
 // enableRecording start recording on the Span. From now on, log events and child spans
@@ -274,18 +253,18 @@ func (s *crdbSpan) enableRecording(
 //
 // Children spans created from the Span while it is *not* recording will not
 // necessarily be recordable.
-func StartRecording(sp *Span, recType RecordingType) {
+func (s *Span) StartRecording(recType RecordingType) {
 	if recType == NoRecording {
 		panic("StartRecording called with NoRecording")
 	}
-	if sp.isNoop() {
+	if s.isNoop() {
 		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
 	}
 
 	// If we're already recording (perhaps because the parent was recording when
 	// this Span was created), there's nothing to do.
-	if !sp.crdb.isRecording() {
-		sp.crdb.enableRecording(nil /* parent */, recType, false /* separateRecording */)
+	if !s.crdb.isRecording() {
+		s.crdb.enableRecording(nil /* parent */, recType, false /* separateRecording */)
 	}
 }
 
@@ -296,11 +275,7 @@ func StartRecording(sp *Span, recType RecordingType) {
 // when all the spans finish.
 //
 // StopRecording() can be called on a Finish()ed Span.
-func StopRecording(sp *Span) {
-	sp.disableRecording()
-}
-
-func (s *Span) disableRecording() {
+func (s *Span) StopRecording() {
 	if s.isNoop() {
 		panic("can't disable recording a noop Span")
 	}
@@ -321,24 +296,11 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
-// IsRecordable returns true if {Start,Stop}Recording() can be called on this
-// Span.
-//
-// In other words, this tests if the Span is our custom type, and not a noopSpan
-// or anything else.
-func IsRecordable(sp *Span) bool {
-	return !sp.isNoop()
-}
-
-// Recording represents a group of RecordedSpans, as returned by GetRecording.
-// Spans are sorted by StartTime.
-type Recording []tracingpb.RecordedSpan
-
 // GetRecording retrieves the current recording, if the Span has recording
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
-func GetRecording(sp *Span) Recording {
-	return sp.crdb.getRecording()
+func (s *Span) GetRecording() Recording {
+	return s.crdb.getRecording()
 }
 
 func (s *crdbSpan) getRecording() Recording {
@@ -368,344 +330,11 @@ func (s *crdbSpan) getRecording() Recording {
 	return result
 }
 
-type traceLogData struct {
-	opentracing.LogRecord
-	depth int
-	// timeSincePrev represents the duration since the previous log line (previous in the
-	// set of log lines that this is part of). This is always computed relative to a log line
-	// from the same Span, except for start of Span in which case the duration is computed relative
-	// to the last log in the parent occurring before this start. For example:
-	// start Span A
-	// log 1           // duration relative to "start Span A"
-	//   start Span B  // duration relative to "log 1"
-	//   log 2  			 // duration relative to "start Span B"
-	// log 3  				 // duration relative to "log 1"
-	timeSincePrev time.Duration
-}
-
-// String formats the given spans for human consumption, showing the
-// relationship using nesting and times as both relative to the previous event
-// and cumulative.
-//
-// Child spans are inserted into the parent at the point of the child's
-// StartTime; see the diagram on generateSessionTraceVTable() for the ordering
-// of messages.
-//
-// Each log line show the time since the beginning of the trace
-// and since the previous log line. Span starts are shown with special "===
-// <operation>" lines. For a Span start, the time since the relative log line
-// can be negative when the Span start follows a message from the parent that
-// was generated after the child Span started (or even after the child
-// finished).
-//
-// TODO(andrei): this should be unified with
-// SessionTracing.generateSessionTraceVTable().
-func (r Recording) String() string {
-	if len(r) == 0 {
-		return "<empty recording>"
-	}
-
-	var buf strings.Builder
-	start := r[0].StartTime
-	writeLogs := func(logs []traceLogData) {
-		for _, entry := range logs {
-			fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
-				1000*entry.Timestamp.Sub(start).Seconds(),
-				1000*entry.timeSincePrev.Seconds(),
-				strings.Repeat("    ", entry.depth+1))
-			for i, f := range entry.Fields {
-				if i != 0 {
-					buf.WriteByte(' ')
-				}
-				fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
-			}
-			buf.WriteByte('\n')
-		}
-	}
-
-	logs := r.visitSpan(r[0], 0 /* depth */)
-	writeLogs(logs)
-
-	// Check if there's any orphan spans (spans for which the parent is missing).
-	// This shouldn't happen, but we're protecting against incomplete traces. For
-	// example, ingesting of remote spans through DistSQL is complex. Orphan spans
-	// would not be reflected in the output string at all without this.
-	orphans := r.OrphanSpans()
-	if len(orphans) > 0 {
-		// This shouldn't happen.
-		buf.WriteString("orphan spans (trace is missing spans):\n")
-		for _, o := range orphans {
-			logs := r.visitSpan(o, 0 /* depth */)
-			writeLogs(logs)
-		}
-	}
-	return buf.String()
-}
-
-// OrphanSpans returns the spans with parents missing from the recording.
-func (r Recording) OrphanSpans() []tracingpb.RecordedSpan {
-	spanIDs := make(map[uint64]struct{})
-	for _, sp := range r {
-		spanIDs[sp.SpanID] = struct{}{}
-	}
-
-	var orphans []tracingpb.RecordedSpan
-	for i, sp := range r {
-		if i == 0 {
-			// The first Span can be a root Span. Note that any other root Span will
-			// be considered an orphan.
-			continue
-		}
-		if _, ok := spanIDs[sp.ParentSpanID]; !ok {
-			orphans = append(orphans, sp)
-		}
-	}
-	return orphans
-}
-
-// FindLogMessage returns the first log message in the recording that matches
-// the given regexp. The bool return value is true if such a message is found.
-func (r Recording) FindLogMessage(pattern string) (string, bool) {
-	re := regexp.MustCompile(pattern)
-	for _, sp := range r {
-		for _, l := range sp.Logs {
-			msg := l.Msg()
-			if re.MatchString(msg) {
-				return msg, true
-			}
-		}
-	}
-	return "", false
-}
-
-// FindSpan returns the Span with the given operation. The bool retval is false
-// if the Span is not found.
-func (r Recording) FindSpan(operation string) (tracingpb.RecordedSpan, bool) {
-	for _, sp := range r {
-		if sp.Operation == operation {
-			return sp, true
-		}
-	}
-	return tracingpb.RecordedSpan{}, false
-}
-
-// visitSpan returns the log messages for sp, and all of sp's children.
-//
-// All messages from a Span are kept together. Sibling spans are ordered within
-// the parent in their start order.
-func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogData {
-	ownLogs := make([]traceLogData, 0, len(sp.Logs)+1)
-
-	conv := func(l opentracing.LogRecord, ref time.Time) traceLogData {
-		var timeSincePrev time.Duration
-		if ref != (time.Time{}) {
-			timeSincePrev = l.Timestamp.Sub(ref)
-		}
-		return traceLogData{
-			LogRecord:     l,
-			depth:         depth,
-			timeSincePrev: timeSincePrev,
-		}
-	}
-
-	// Add a log line representing the start of the Span.
-	lr := opentracing.LogRecord{
-		Timestamp: sp.StartTime,
-		Fields:    []otlog.Field{otlog.String("=== operation", sp.Operation)},
-	}
-	if len(sp.Tags) > 0 {
-		tags := make([]string, 0, len(sp.Tags))
-		for k := range sp.Tags {
-			tags = append(tags, k)
-		}
-		sort.Strings(tags)
-		for _, k := range tags {
-			lr.Fields = append(lr.Fields, otlog.String(k, sp.Tags[k]))
-		}
-	}
-	ownLogs = append(ownLogs, conv(
-		lr,
-		// ref - this entries timeSincePrev will be computed when we merge it into the parent
-		time.Time{}))
-
-	for _, l := range sp.Logs {
-		lr := opentracing.LogRecord{
-			Timestamp: l.Time,
-			Fields:    make([]otlog.Field, len(l.Fields)),
-		}
-		for i, f := range l.Fields {
-			lr.Fields[i] = otlog.String(f.Key, f.Value)
-		}
-		lastLog := ownLogs[len(ownLogs)-1]
-		ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
-	}
-
-	childSpans := make([][]traceLogData, 0)
-	for _, osp := range r {
-		if osp.ParentSpanID != sp.SpanID {
-			continue
-		}
-		childSpans = append(childSpans, r.visitSpan(osp, depth+1))
-	}
-
-	// Merge ownLogs with childSpans.
-	mergedLogs := make([]traceLogData, 0, len(ownLogs))
-	timeMax := time.Date(2200, 0, 0, 0, 0, 0, 0, time.UTC)
-	i, j := 0, 0
-	var lastTimestamp time.Time
-	for i < len(ownLogs) || j < len(childSpans) {
-		if len(mergedLogs) > 0 {
-			lastTimestamp = mergedLogs[len(mergedLogs)-1].Timestamp
-		}
-		nextLog, nextChild := timeMax, timeMax
-		if i < len(ownLogs) {
-			nextLog = ownLogs[i].Timestamp
-		}
-		if j < len(childSpans) {
-			nextChild = childSpans[j][0].Timestamp
-		}
-		if nextLog.After(nextChild) {
-			// Fill in timeSincePrev for the first one of the child's entries.
-			if lastTimestamp != (time.Time{}) {
-				childSpans[j][0].timeSincePrev = childSpans[j][0].Timestamp.Sub(lastTimestamp)
-			}
-			mergedLogs = append(mergedLogs, childSpans[j]...)
-			lastTimestamp = childSpans[j][0].Timestamp
-			j++
-		} else {
-			mergedLogs = append(mergedLogs, ownLogs[i])
-			lastTimestamp = ownLogs[i].Timestamp
-			i++
-		}
-	}
-
-	return mergedLogs
-}
-
-// ToJaegerJSON returns the trace as a JSON that can be imported into Jaeger for
-// visualization.
-//
-// The format is described here: https://github.com/jaegertracing/jaeger-ui/issues/381#issuecomment-494150826
-//
-// The statement is passed in so it can be included in the trace.
-func (r Recording) ToJaegerJSON(stmt string) (string, error) {
-	if len(r) == 0 {
-		return "", nil
-	}
-
-	cpy := make(Recording, len(r))
-	copy(cpy, r)
-	r = cpy
-	tagsCopy := make(map[string]string)
-	for k, v := range r[0].Tags {
-		tagsCopy[k] = v
-	}
-	tagsCopy["statement"] = stmt
-	r[0].Tags = tagsCopy
-
-	toJaegerSpanID := func(spanID uint64) jaegerjson.SpanID {
-		return jaegerjson.SpanID(strconv.FormatUint(spanID, 10))
-	}
-
-	// Each Span in Jaeger belongs to a "process" that generated it. Spans
-	// belonging to different colors are colored differently in Jaeger. We're
-	// going to map our different nodes to different processes.
-	processes := make(map[jaegerjson.ProcessID]jaegerjson.Process)
-	// getProcessID figures out what "process" a Span belongs to. It looks for an
-	// "node: <node id>" tag. The processes map is populated with an entry for every
-	// node present in the trace.
-	getProcessID := func(sp tracingpb.RecordedSpan) jaegerjson.ProcessID {
-		node := "unknown node"
-		for k, v := range sp.Tags {
-			if k == "node" {
-				node = fmt.Sprintf("node %s", v)
-				break
-			}
-		}
-		pid := jaegerjson.ProcessID(node)
-		if _, ok := processes[pid]; !ok {
-			processes[pid] = jaegerjson.Process{
-				ServiceName: node,
-				Tags:        nil,
-			}
-		}
-		return pid
-	}
-
-	var t jaegerjson.Trace
-	t.TraceID = jaegerjson.TraceID(strconv.FormatUint(r[0].TraceID, 10))
-	t.Processes = processes
-
-	for _, sp := range r {
-		var s jaegerjson.Span
-
-		s.TraceID = t.TraceID
-		s.Duration = uint64(sp.Duration.Microseconds())
-		s.StartTime = uint64(sp.StartTime.UnixNano() / 1000)
-		s.SpanID = toJaegerSpanID(sp.SpanID)
-		s.OperationName = sp.Operation
-		s.ProcessID = getProcessID(sp)
-
-		if sp.ParentSpanID != 0 {
-			s.References = []jaegerjson.Reference{{
-				RefType: jaegerjson.ChildOf,
-				TraceID: s.TraceID,
-				SpanID:  toJaegerSpanID(sp.ParentSpanID),
-			}}
-		}
-
-		for k, v := range sp.Tags {
-			s.Tags = append(s.Tags, jaegerjson.KeyValue{
-				Key:   k,
-				Value: v,
-				Type:  "STRING",
-			})
-		}
-		for _, l := range sp.Logs {
-			jl := jaegerjson.Log{Timestamp: uint64(l.Time.UnixNano() / 1000)}
-			for _, field := range l.Fields {
-				jl.Fields = append(jl.Fields, jaegerjson.KeyValue{
-					Key:   field.Key,
-					Value: field.Value,
-					Type:  "STRING",
-				})
-			}
-			s.Logs = append(s.Logs, jl)
-		}
-		t.Spans = append(t.Spans, s)
-	}
-
-	data := TraceCollection{
-		Data: []jaegerjson.Trace{t},
-		// Add a comment that will show-up at the top of the JSON file, is someone opens the file.
-		// NOTE: This comment is scarce on newlines because they appear as \n in the
-		// generated file doing more harm than good.
-		Comment: fmt.Sprintf(`This is a trace for SQL statement: %s
-This trace can be imported into Jaeger for visualization. From the Jaeger Search screen, select JSON File.
-Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16686 jaegertracing/all-in-one:1.17
-The UI can then be accessed at http://localhost:16686/search`,
-			stmt),
-	}
-	json, err := json.MarshalIndent(data, "" /* prefix */, "\t" /* indent */)
-	if err != nil {
-		return "", err
-	}
-	return string(json), nil
-}
-
-// TraceCollection is the format accepted by the Jaegar upload feature, as per
-// https://github.com/jaegertracing/jaeger-ui/issues/381#issuecomment-494150826
-type TraceCollection struct {
-	// Comment is a dummy field we use to put instructions on how to load the trace.
-	Comment string             `json:"_comment"`
-	Data    []jaegerjson.Trace `json:"data"`
-}
-
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
-func ImportRemoteSpans(sp *Span, remoteSpans []tracingpb.RecordedSpan) error {
-	return sp.crdb.ImportRemoteSpans(remoteSpans)
+func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
+	return s.crdb.ImportRemoteSpans(remoteSpans)
 }
 
 func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
@@ -723,7 +352,7 @@ func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error
 	return nil
 }
 
-// IsBlackHoleSpan returns true if events for this Span are just dropped. This
+// IsBlackHole returns true if events for this Span are just dropped. This
 // is the case when the Span is not recording and no external tracer is configured.
 // Tracing clients can use this method to figure out if they can short-circuit some
 // tracing-related work that would be discarded anyway.
@@ -731,51 +360,42 @@ func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error
 // The child of a blackhole Span is a non-recordable blackhole Span[*]. These incur
 // only minimal overhead. It is therefore not worth it to call this method to avoid
 // starting spans.
-func IsBlackHoleSpan(sp *Span) bool {
-	return sp.isBlackHole()
+func (s *Span) IsBlackHole() bool {
+	return s.isBlackHole()
 }
 
-// IsNoopContext returns true if the Span context is from a "no-op" Span. If
+// IsNoop returns true if the Span context is from a "no-op" Span. If
 // this is true, any Span derived from this context will be a "black hole Span".
 //
 // You should never need to care about this method. It is exported for technical
 // reasons.
-func IsNoopContext(sc *SpanContext) bool {
-	return sc.isNoop()
-}
-
-func (sc *SpanContext) isNoop() bool {
+func (sc *SpanContext) IsNoop() bool {
 	return sc.recordingType == NoRecording && sc.shadowTr == nil
 }
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
 // the Span tags.
-func SetSpanStats(sp *Span, stats SpanStats) {
-	if sp.isNoop() {
-		return
-	}
-	sp.crdb.mu.Lock()
-	sp.crdb.mu.stats = stats
-	for name, value := range stats.Stats() {
-		sp.setTagInner(StatTagPrefix+name, value, true /* locked */)
-	}
-	sp.crdb.mu.Unlock()
-}
-
-// Finish is part of the opentracing.Span interface.
-func (s *Span) Finish() {
-	s.FinishWithOptions(opentracing.FinishOptions{})
-}
-
-// FinishWithOptions is part of the opentracing.Span interface.
-func (s *Span) FinishWithOptions(opts opentracing.FinishOptions) {
+func (s *Span) SetSpanStats(stats SpanStats) {
 	if s.isNoop() {
 		return
 	}
-	finishTime := opts.FinishTime
-	if finishTime.IsZero() {
-		finishTime = time.Now()
+	s.crdb.mu.Lock()
+	s.crdb.mu.stats = stats
+	for name, value := range stats.Stats() {
+		s.setTagInner(StatTagPrefix+name, value, true /* locked */)
 	}
+	s.crdb.mu.Unlock()
+}
+
+// Finish marks the Span as completed. Finishing a nil *Span is a noop.
+func (s *Span) Finish() {
+	if s == nil {
+		return
+	}
+	if s.isNoop() {
+		return
+	}
+	finishTime := time.Now()
 	s.crdb.mu.Lock()
 	s.crdb.mu.duration = finishTime.Sub(s.crdb.startTime)
 	s.crdb.mu.Unlock()

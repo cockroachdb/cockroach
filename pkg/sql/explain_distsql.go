@@ -165,7 +165,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		// don't get a noopSpan.
 		var sp *tracing.Span
 		if parentSp := tracing.SpanFromContext(params.ctx); parentSp != nil &&
-			!tracing.IsRecording(parentSp) {
+			!parentSp.IsRecording() {
 			tracer := parentSp.Tracer()
 			sp = tracer.StartSpan(
 				"explain-distsql", tracing.Recordable,
@@ -177,7 +177,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 				"explain-distsql", tracing.Recordable,
 				tracing.LogTagsFromCtx(params.ctx))
 		}
-		tracing.StartRecording(sp, tracing.SnowballRecording)
+		sp.StartRecording(tracing.SnowballRecording)
 		ctx := tracing.ContextWithSpan(params.ctx, sp)
 		planCtx.ctx = ctx
 		// Make a copy of the evalContext with the recording span in it; we can't
@@ -218,7 +218,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		n.run.executedStatement = true
 
 		sp.Finish()
-		spans := tracing.GetRecording(sp)
+		spans := sp.GetRecording()
 
 		if err := rw.Err(); err != nil {
 			return err

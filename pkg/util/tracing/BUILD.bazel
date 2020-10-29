@@ -6,6 +6,7 @@ go_library(
         "annotate.go",
         "annotate_nocgo.go",
         "grpc_interceptor.go",
+        "recording.go",
         "shadow.go",
         "span.go",
         "tags.go",

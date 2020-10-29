@@ -191,7 +191,7 @@ func newHashJoiner(
 	}
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
-	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		h.leftSource = newInputStatCollector(h.leftSource)
 		h.rightSource = newInputStatCollector(h.rightSource)
 		h.FinishTrace = h.outputStatsToTrace
@@ -804,8 +804,7 @@ func (h *hashJoiner) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(h.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
+		sp.SetSpanStats(
 			&HashJoinerStats{
 				LeftInputStats:   lis,
 				RightInputStats:  ris,

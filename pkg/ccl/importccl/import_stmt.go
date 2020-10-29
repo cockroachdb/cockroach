@@ -283,7 +283,7 @@ func importPlanHook(
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		walltime := p.ExecCfg().Clock.Now().WallTime
 

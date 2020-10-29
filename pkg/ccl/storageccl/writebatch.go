@@ -41,7 +41,7 @@ func evalWriteBatch(
 	ms := cArgs.Stats
 
 	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("WriteBatch [%s,%s)", args.Key, args.EndKey))
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	if log.V(1) {
 		log.Infof(ctx, "writebatch [%s,%s)", args.Key, args.EndKey)
 	}

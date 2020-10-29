@@ -263,7 +263,7 @@ func (ds *ServerImpl) setupFlow(
 
 		sd, err := sessiondata.UnmarshalNonLocal(req.EvalContext.SessionData)
 		if err != nil {
-			tracing.FinishSpan(sp)
+			sp.Finish()
 			return ctx, nil, err
 		}
 		ie := &lazyInternalExecutor{
@@ -329,7 +329,7 @@ func (ds *ServerImpl) setupFlow(
 		// Flow.Cleanup will not be called, so we have to close the memory monitor
 		// and finish the span manually.
 		monitor.Stop(ctx)
-		tracing.FinishSpan(sp)
+		sp.Finish()
 		ctx = tracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
 	}

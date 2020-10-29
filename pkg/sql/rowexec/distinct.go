@@ -134,7 +134,7 @@ func newDistinct(
 	// So we have to set up the account here.
 	d.arena = stringarena.Make(&d.memAcc)
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		d.input = newInputStatCollector(d.input)
 		d.FinishTrace = d.outputStatsToTrace
 	}
@@ -376,8 +376,8 @@ func (d *distinct) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(d.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp, &DistinctStats{InputStats: is, MaxAllocatedMem: d.MemMonitor.MaximumBytes()},
+		sp.SetSpanStats(
+			&DistinctStats{InputStats: is, MaxAllocatedMem: d.MemMonitor.MaximumBytes()},
 		)
 	}
 }

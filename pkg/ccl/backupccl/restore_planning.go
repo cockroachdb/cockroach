@@ -1225,7 +1225,7 @@ func restorePlanHook(
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		if !(p.ExtendedEvalContext().TxnImplicit || restoreStmt.Options.Detached) {
 			return errors.Errorf("RESTORE cannot be used inside a transaction without DETACHED option")

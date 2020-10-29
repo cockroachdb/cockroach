@@ -541,7 +541,7 @@ func backupPlanHook(
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		if !(p.ExtendedEvalContext().TxnImplicit || backupStmt.Options.Detached) {
 			return errors.Errorf("BACKUP cannot be used inside a transaction without DETACHED option")

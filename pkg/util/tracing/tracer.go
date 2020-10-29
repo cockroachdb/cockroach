@@ -12,10 +12,7 @@ package tracing
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
-	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -23,10 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/trace"
@@ -94,12 +88,6 @@ type Tracer struct {
 	// x/net/trace or lightstep and we are not recording.
 	noopSpan *Span
 
-	// If forceRealSpans is set, this Tracer will always create real spans (never
-	// noopSpans), regardless of the recording or lightstep configuration. Used
-	// by tests for situations when they need to indirectly create spans and don't
-	// have the option of passing the Recordable option to their constructor.
-	forceRealSpans bool
-
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
@@ -151,14 +139,6 @@ func (t *Tracer) Close() {
 	t.setShadowTracer(nil, nil)
 }
 
-// SetForceRealSpans sets forceRealSpans option to v and returns the previous
-// value.
-func (t *Tracer) SetForceRealSpans(v bool) bool {
-	prevVal := t.forceRealSpans
-	t.forceRealSpans = v
-	return prevVal
-}
-
 func (t *Tracer) setShadowTracer(manager shadowTracerManager, tr opentracing.Tracer) {
 	var shadow *shadowTracer
 	if manager != nil {
@@ -202,7 +182,7 @@ func (t *Tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOp
 	// case) with a noop context, return a noop Span now.
 	if len(opts) == 1 {
 		if o, ok := opts[0].(opentracing.SpanReference); ok {
-			if IsNoopContext(o.ReferencedContext.(*SpanContext)) {
+			if o.ReferencedContext.(*SpanContext).IsNoop() {
 				return t.noopSpan
 			}
 		}
@@ -243,7 +223,7 @@ func (t *Tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOp
 		if r.ReferencedContext == nil {
 			continue
 		}
-		if IsNoopContext(r.ReferencedContext.(*SpanContext)) {
+		if r.ReferencedContext.(*SpanContext).IsNoop() {
 			continue
 		}
 		parentType = r.Type
@@ -276,7 +256,7 @@ const (
 // context.
 func (t *Tracer) AlwaysTrace() bool {
 	shadowTracer := t.getShadowTracer()
-	return t.useNetTrace() || shadowTracer != nil || t.forceRealSpans
+	return t.useNetTrace() || shadowTracer != nil
 }
 
 // StartRootSpan creates a root Span. This is functionally equivalent to:
@@ -428,7 +408,7 @@ func (fn textMapWriterFn) Set(key, val string) {
 func (t *Tracer) Inject(
 	osc opentracing.SpanContext, format interface{}, carrier interface{},
 ) error {
-	if IsNoopContext(osc.(*SpanContext)) {
+	if osc.(*SpanContext).IsNoop() {
 		// Fast path when tracing is disabled. Extract will accept an empty map as a
 		// noop context.
 		return nil
@@ -558,14 +538,6 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanContext,
 	return &sc, nil
 }
 
-// FinishSpan closes the given Span (if not nil). It is a convenience wrapper
-// for Span.Finish() which tolerates nil spans.
-func FinishSpan(span *Span) {
-	if span != nil {
-		span.Finish()
-	}
-}
-
 // ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
 // that "follows from" the original Span. This allows the resulting context to be
 // used in an async task that might outlive the original operation.
@@ -581,7 +553,7 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 			return ctx, sp
 		}
 		tr := sp.Tracer()
-		if IsBlackHoleSpan(sp) {
+		if sp.IsBlackHole() {
 			ns := tr.noopSpan
 			return ContextWithSpan(ctx, ns), ns
 		}
@@ -616,7 +588,7 @@ func childSpan(
 		return ctx, sp
 	}
 	tr := sp.Tracer()
-	if IsBlackHoleSpan(sp) {
+	if sp.IsBlackHole() {
 		ns := tr.noopSpan
 		return ContextWithSpan(ctx, ns), ns
 	}
@@ -685,89 +657,8 @@ func StartSnowballTrace(
 	} else {
 		span = tracer.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
 	}
-	StartRecording(span, SnowballRecording)
+	span.StartRecording(SnowballRecording)
 	return ContextWithSpan(ctx, span), span
-}
-
-// TestingCheckRecordedSpans checks whether a recording looks like an expected
-// one represented by a string with one line per expected Span and one line per
-// expected event (i.e. log message).
-//
-// Use with something like:
-// 	 if err := TestingCheckRecordedSpans(tracing.GetRecording(Span), `
-//     Span root:
-//       event: a
-//       event: c
-//     Span child:
-//       event: [ambient] b
-//   `); err != nil {
-//   	t.Fatal(err)
-//   }
-//
-// The event lines can (and generally should) omit the file:line part that they
-// might contain (depending on the level at which they were logged).
-//
-// Note: this test function is in this file because it needs to be used by
-// both tests in the tracing package and tests outside of it, and the function
-// itself depends on tracing.
-func TestingCheckRecordedSpans(recSpans []tracingpb.RecordedSpan, expected string) error {
-	expected = strings.TrimSpace(expected)
-	var rows []string
-	row := func(format string, args ...interface{}) {
-		rows = append(rows, fmt.Sprintf(format, args...))
-	}
-
-	for _, rs := range recSpans {
-		row("Span %s:", rs.Operation)
-		if len(rs.Tags) > 0 {
-			var tags []string
-			for k, v := range rs.Tags {
-				tags = append(tags, fmt.Sprintf("%s=%v", k, v))
-			}
-			sort.Strings(tags)
-			row("  tags: %s", strings.Join(tags, " "))
-		}
-		for _, l := range rs.Logs {
-			msg := ""
-			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("  %s: %v", f.Key, f.Value)
-			}
-			row("%s", msg)
-		}
-	}
-	var expRows []string
-	if expected != "" {
-		expRows = strings.Split(expected, "\n")
-	}
-	match := false
-	if len(expRows) == len(rows) {
-		match = true
-		for i := range expRows {
-			e := strings.Trim(expRows[i], " \t")
-			r := strings.Trim(rows[i], " \t")
-			if e != r && !matchesWithoutFileLine(r, e) {
-				match = false
-				break
-			}
-		}
-	}
-	if !match {
-		file, line, _ := caller.Lookup(1)
-		return errors.Errorf(
-			"%s:%d expected:\n%s\ngot:\n%s",
-			file, line, expected, strings.Join(rows, "\n"))
-	}
-	return nil
-}
-
-// matchesWithoutFileLine tries to match an event by stripping a file:line from
-// it. For example:
-// "event: util/log/trace_test.go:111 log" will match "event: log".
-//
-// Returns true if it matches.
-func matchesWithoutFileLine(msg string, expected string) bool {
-	groups := regexp.MustCompile(`^(event: ).*:[0-9]* (.*)$`).FindStringSubmatch(msg)
-	return len(groups) == 3 && fmt.Sprintf("event: %s", groups[2]) == expected
 }
 
 // ContextWithRecordingSpan returns a context with an embedded trace Span which
@@ -782,18 +673,15 @@ func ContextWithRecordingSpan(
 ) (retCtx context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
 	sp := tr.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
-	StartRecording(sp, SnowballRecording)
+	sp.StartRecording(SnowballRecording)
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ctx = ContextWithSpan(ctx, sp)
 
-	getRecording = func() Recording {
-		return GetRecording(sp)
-	}
 	cancel = func() {
 		cancelCtx()
-		StopRecording(sp)
+		sp.StopRecording()
 		sp.Finish()
 		tr.Close()
 	}
-	return ctx, getRecording, cancel
+	return ctx, sp.GetRecording, cancel
 }

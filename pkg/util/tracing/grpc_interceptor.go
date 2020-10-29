@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
@@ -70,7 +71,7 @@ func extractSpanContext(ctx context.Context, tracer *Tracer) (*SpanContext, erro
 // create a span.
 func spanInclusionFuncForServer(t *Tracer, parentSpanCtx *SpanContext) bool {
 	// Is client tracing?
-	return (parentSpanCtx != nil && !IsNoopContext(parentSpanCtx)) ||
+	return (parentSpanCtx != nil && !parentSpanCtx.IsNoop()) ||
 		// Should we trace regardless of the client? This is useful for calls coming
 		// through the HTTP->RPC gateway (i.e. the AdminUI), where client is never
 		// tracing.
@@ -206,7 +207,7 @@ func (ss *tracingServerStream) Context() context.Context {
 //
 // See #17177.
 func spanInclusionFuncForClient(parentSpanCtx *SpanContext) bool {
-	return parentSpanCtx != nil && !IsNoopContext(parentSpanCtx)
+	return parentSpanCtx != nil && !parentSpanCtx.IsNoop()
 }
 
 func injectSpanContext(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
@@ -425,3 +426,7 @@ func (cs *tracingClientStream) CloseSend() error {
 	}
 	return err
 }
+
+// Recording represents a group of RecordedSpans, as returned by GetRecording.
+// Spans are sorted by StartTime.
+type Recording []tracingpb.RecordedSpan

@@ -181,7 +181,7 @@ func (c *replicatedCmd) FinishNonLocal(ctx context.Context) {
 }
 
 func (c *replicatedCmd) finishTracingSpan() {
-	tracing.FinishSpan(c.sp)
+	c.sp.Finish()
 	c.ctx, c.sp = nil, nil
 }
 

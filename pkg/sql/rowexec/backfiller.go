@@ -119,7 +119,7 @@ func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	meta := b.doRun(ctx)
 	execinfra.SendTraceData(ctx, b.output)
 	if emitHelper(ctx, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
@@ -332,7 +332,7 @@ func WriteResumeSpan(
 	jobsRegistry *jobs.Registry,
 ) error {
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
-	defer tracing.FinishSpan(traceSpan)
+	defer traceSpan.Finish()
 
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		resumeSpans, job, mutationIdx, error := GetResumeSpans(

@@ -28,7 +28,7 @@ func TestRecordingString(t *testing.T) {
 	tr2 := NewTracer()
 
 	root := tr.StartSpan("root", Recordable)
-	StartRecording(root, SnowballRecording)
+	root.StartRecording(SnowballRecording)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 1"))
 	// Hackily fix the timing on the first log message, so that we can check it later.
 	root.crdb.mu.recording.recordedLogs[0].Timestamp = root.crdb.startTime.Add(time.Millisecond)
@@ -45,8 +45,8 @@ func TestRecordingString(t *testing.T) {
 	remoteChild.LogFields(otlog.String(tracingpb.LogMessageField, "remote child 1"))
 	require.NoError(t, err)
 	remoteChild.Finish()
-	remoteRec := GetRecording(remoteChild)
-	err = ImportRemoteSpans(root, remoteRec)
+	remoteRec := remoteChild.GetRecording()
+	err = root.ImportRemoteSpans(remoteRec)
 	require.NoError(t, err)
 	root.Finish()
 
@@ -60,7 +60,7 @@ func TestRecordingString(t *testing.T) {
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 5"))
 	root.Finish()
 
-	rec := GetRecording(root)
+	rec := root.GetRecording()
 	// Sanity check that the recording looks like we want. Note that this is not
 	// its String() representation; this just list all the spans in order.
 	err = TestingCheckRecordedSpans(rec, `
@@ -146,15 +146,15 @@ func TestRecordingInRecording(t *testing.T) {
 	tr := NewTracer()
 
 	root := tr.StartSpan("root", Recordable)
-	StartRecording(root, SnowballRecording)
+	root.StartRecording(SnowballRecording)
 	child := tr.StartSpan("child", opentracing.ChildOf(root.Context()), Recordable)
-	StartRecording(child, SnowballRecording)
+	child.StartRecording(SnowballRecording)
 	grandChild := tr.StartSpan("grandchild", opentracing.ChildOf(child.Context()))
 	grandChild.Finish()
 	child.Finish()
 	root.Finish()
 
-	rootRec := GetRecording(root)
+	rootRec := root.GetRecording()
 	require.NoError(t, TestingCheckRecordedSpans(rootRec, `
 Span root:
 	tags: sb=1
@@ -164,7 +164,7 @@ Span grandchild:
 	tags: sb=1
 `))
 
-	childRec := GetRecording(child)
+	childRec := child.GetRecording()
 	require.NoError(t, TestingCheckRecordedSpans(childRec, `
 Span child:
 	tags: sb=1
