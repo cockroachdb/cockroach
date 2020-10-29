@@ -14,11 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,41 +63,10 @@ func gcTenant(
 		return errors.AssertionFailedf("GC state for tenant %+v is DELETED yet the tenant row still exists", info)
 	}
 
-	if info.State != descpb.TenantInfo_DROP {
-		return errors.AssertionFailedf("tenant %+v is not in state DROP", info)
-	}
-
-	// First, delete all the tenant data.
-	if err := clearTenantData(ctx, execCfg.DB, info); err != nil {
-		return errors.Wrapf(err, "clearing data for tenant %d", info.ID)
-	}
-
-	// Finished deleting all the table data, now delete the tenant row.
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return errors.Wrapf(
-			sql.DeleteTenantRecord(ctx, execCfg, txn, info), "deleting tenant %d", info.ID,
-		)
-	}); err != nil {
-		return err
+	if err := sql.GCTenantSync(ctx, execCfg, info); err != nil {
+		return errors.Wrapf(err, "gc tenant %d", info.ID)
 	}
 
 	progress.Tenant.Status = jobspb.SchemaChangeGCProgress_DELETED
 	return nil
-}
-
-// clearTenantData deletes all of the data in the specified table.
-func clearTenantData(ctx context.Context, db *kv.DB, tenant *descpb.TenantInfo) error {
-	log.Infof(ctx, "clearing data for tenant %d", tenant.ID)
-
-	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenant.ID))
-	prefixEnd := prefix.PrefixEnd()
-
-	log.VEventf(ctx, 2, "ClearRange %s - %s", prefix, prefixEnd)
-	// ClearRange cannot be run in a transaction, so create a non-transactional
-	// batch to send the request.
-	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{Key: prefix, EndKey: prefixEnd},
-	})
-	return db.Run(ctx, b)
 }
