@@ -35,7 +35,7 @@ import (
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, nil /* originalFilters */, rejectPrimaryIndex|rejectInvertedIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		// If the secondary index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
