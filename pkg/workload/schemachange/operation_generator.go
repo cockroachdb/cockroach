@@ -418,6 +418,8 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 		From: tree.From{Tables: sourceTableNames},
 	}
 
+	uniqueColumnNames := map[string]bool{}
+	duplicateColumns := false
 	for i := 0; i < numSourceTables; i++ {
 		tableName := sourceTableNames[i]
 		tableExists := sourceTableExistence[i]
@@ -429,11 +431,18 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
-			for i := range columnNamesForTable {
+			for j := range columnNamesForTable {
 				colItem := tree.ColumnItem{
-					ColumnName: tree.Name(columnNamesForTable[i]),
+					TableName:  tableName.(*tree.TableName).ToUnresolvedObjectName(),
+					ColumnName: tree.Name(columnNamesForTable[j]),
 				}
 				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+
+				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
+					duplicateColumns = true
+				} else {
+					uniqueColumnNames[columnNamesForTable[j]] = true
+				}
 			}
 		} else {
 			og.expectedExecErrors.add(pgcode.UndefinedTable)
@@ -462,6 +471,7 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 		{code: pgcode.DuplicateRelation, condition: tableExists},
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
+		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`CREATE TABLE %s AS %s`,
@@ -518,6 +528,8 @@ func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
 		From: tree.From{Tables: sourceTableNames},
 	}
 
+	uniqueColumnNames := map[string]bool{}
+	duplicateColumns := false
 	for i := 0; i < numSourceTables; i++ {
 		tableName := sourceTableNames[i]
 		tableExists := sourceTableExistence[i]
@@ -529,11 +541,18 @@ func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
 			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
-			for i := range columnNamesForTable {
+			for j := range columnNamesForTable {
 				colItem := tree.ColumnItem{
-					ColumnName: tree.Name(columnNamesForTable[i]),
+					TableName:  tableName.(*tree.TableName).ToUnresolvedObjectName(),
+					ColumnName: tree.Name(columnNamesForTable[j]),
 				}
 				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+
+				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
+					duplicateColumns = true
+				} else {
+					uniqueColumnNames[columnNamesForTable[j]] = true
+				}
 			}
 		} else {
 			og.expectedExecErrors.add(pgcode.UndefinedTable)
@@ -562,6 +581,7 @@ func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
 		{code: pgcode.DuplicateRelation, condition: viewExists},
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
+		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`CREATE VIEW %s AS %s`,
