@@ -100,6 +100,9 @@ func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
 // Put puts a kv entry into the sstable being built. An error is returned if it
 // is not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Close` cannot have been called.
+//
+// TODO(sumeer): Put has been removed from the Writer interface, but there
+// are many callers of this SSTWriter method. Fix those callers and remove.
 func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Put on a closed writer")
@@ -110,6 +113,9 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 }
 
 // PutMVCC implements the Writer interface.
+// An error is returned if it is not greater than any previously added entry
+// (according to the comparator configured during writer creation). `Close`
+// cannot have been called.
 func (fw *SSTWriter) PutMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
@@ -118,11 +124,17 @@ func (fw *SSTWriter) PutMVCC(key MVCCKey, value []byte) error {
 }
 
 // PutUnversioned implements the Writer interface.
+// An error is returned if it is not greater than any previously added entry
+// (according to the comparator configured during writer creation). `Close`
+// cannot have been called.
 func (fw *SSTWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 	return fw.put(MVCCKey{Key: key}, value)
 }
 
 // PutIntent implements the Writer interface.
+// An error is returned if it is not greater than any previously added entry
+// (according to the comparator configured during writer creation). `Close`
+// cannot have been called.
 func (fw *SSTWriter) PutIntent(key roachpb.Key, value []byte) error {
 	return fw.put(MVCCKey{Key: key}, value)
 }

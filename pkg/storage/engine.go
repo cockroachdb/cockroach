@@ -409,8 +409,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutIntent(key roachpb.Key, value []byte) error
-	// TODO: remove
-	Put(key MVCCKey, value []byte) error
 
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
@@ -671,23 +669,22 @@ func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
-// of msg and the provided timestamp. Returns the length in bytes of
-// key and the value.
+// of msg. Returns the length in bytes of key and the value.
 //
 // Deprecated: use MVCCPutProto instead.
 func PutProto(
-	writer Writer, key MVCCKey, msg protoutil.Message,
+	writer Writer, key roachpb.Key, msg protoutil.Message,
 ) (keyBytes, valBytes int64, err error) {
 	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	if err := writer.Put(key, bytes); err != nil {
+	if err := writer.PutUnversioned(key, bytes); err != nil {
 		return 0, 0, err
 	}
 
-	return int64(key.EncodedSize()), int64(len(bytes)), nil
+	return int64(MVCCKey{Key: key}.EncodedSize()), int64(len(bytes)), nil
 }
 
 // Scan returns up to max key/value objects starting from

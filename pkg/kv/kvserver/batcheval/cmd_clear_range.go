@@ -92,9 +92,8 @@ func ClearRange(
 				// TODO(sumeer): cannot clear separated intents in this manner. Write the iteration code
 				// here instead of using Reader.MVCCIterate.
 				return readWriter.ClearUnversioned(kv.Key.Key)
-			} else {
-				return readWriter.ClearMVCC(kv.Key)
 			}
+			return readWriter.ClearMVCC(kv.Key)
 		}); err != nil {
 			return result.Result{}, err
 		}

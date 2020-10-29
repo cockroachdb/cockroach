@@ -338,19 +338,6 @@ func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 	return p.batch.Merge(p.buf, value, nil)
 }
 
-// Put implements the Batch interface.
-func (p *pebbleBatch) Put(key MVCCKey, value []byte) error {
-	if p.distinctOpen {
-		panic("distinct batch open")
-	}
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	return p.batch.Set(p.buf, value, nil)
-}
-
 // PutMVCC implements the Batch interface.
 func (p *pebbleBatch) PutMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {

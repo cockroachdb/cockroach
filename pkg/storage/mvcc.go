@@ -1194,7 +1194,7 @@ func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err erro
 }
 
 func (b *putBuffer) putMeta(
-	writer Writer, key MVCCKey, meta *enginepb.MVCCMetadata,
+	writer Writer, key MVCCKey, meta *enginepb.MVCCMetadata, inlineMeta bool,
 ) (keyBytes, valBytes int64, err error) {
 	if meta.Txn != nil && !meta.Timestamp.Equal(hlc.LegacyTimestamp(meta.Txn.WriteTimestamp)) {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
@@ -1206,8 +1206,14 @@ func (b *putBuffer) putMeta(
 	if err != nil {
 		return 0, 0, err
 	}
-	if err := writer.Put(key, bytes); err != nil {
-		return 0, 0, err
+	if inlineMeta {
+		if err := writer.PutUnversioned(key.Key, bytes); err != nil {
+			return 0, 0, err
+		}
+	} else {
+		if err := writer.PutIntent(key.Key, bytes); err != nil {
+			return 0, 0, err
+		}
 	}
 	return int64(key.EncodedSize()), int64(len(bytes)), nil
 }
@@ -1566,7 +1572,7 @@ func mvccPutInternal(
 			metaKeySize, metaValSize, err = 0, 0, writer.ClearUnversioned(metaKey.Key)
 		} else {
 			buf.meta = enginepb.MVCCMetadata{RawBytes: value}
-			metaKeySize, metaValSize, err = buf.putMeta(writer, metaKey, &buf.meta)
+			metaKeySize, metaValSize, err = buf.putMeta(writer, metaKey, &buf.meta, true /* inlineMeta */)
 		}
 		if ms != nil {
 			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
@@ -1861,7 +1867,7 @@ func mvccPutInternal(
 
 	var metaKeySize, metaValSize int64
 	if newMeta.Txn != nil {
-		metaKeySize, metaValSize, err = buf.putMeta(writer, metaKey, newMeta)
+		metaKeySize, metaValSize, err = buf.putMeta(writer, metaKey, newMeta, false /* inlineMeta */)
 		if err != nil {
 			return err
 		}
@@ -1882,7 +1888,7 @@ func mvccPutInternal(
 	// sequential insertion patterns.
 	versionKey := metaKey
 	versionKey.Timestamp = writeTimestamp
-	if err := writer.Put(versionKey, value); err != nil {
+	if err := writer.PutMVCC(versionKey, value); err != nil {
 		return err
 	}
 
@@ -2954,7 +2960,7 @@ func mvccResolveWriteIntent(
 			// overwriting a newer epoch (see comments above). The pusher's job isn't
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
-			metaKeySize, metaValSize, err = buf.putMeta(rw, metaKey, &buf.newMeta)
+			metaKeySize, metaValSize, err = buf.putMeta(rw, metaKey, &buf.newMeta, false /* inlineMeta */)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
 			err = rw.ClearIntent(metaKey.Key)
@@ -2986,7 +2992,7 @@ func mvccResolveWriteIntent(
 			if rolledBackVal != nil {
 				value = rolledBackVal
 			}
-			if err = rw.Put(newKey, value); err != nil {
+			if err = rw.PutMVCC(newKey, value); err != nil {
 				return false, err
 			}
 			if err = rw.ClearMVCC(oldKey); err != nil {
@@ -3137,7 +3143,7 @@ func mvccMaybeRewriteIntentHistory(
 	meta.Deleted = len(restoredVal) == 0
 	meta.ValBytes = int64(len(restoredVal))
 	// And also overwrite whatever was there in storage.
-	err = engine.Put(latestKey, restoredVal)
+	err = engine.PutMVCC(latestKey, restoredVal)
 
 	return false, restoredVal, err
 }

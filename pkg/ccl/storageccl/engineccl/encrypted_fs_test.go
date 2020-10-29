@@ -241,7 +241,7 @@ func TestPebbleEncryption(t *testing.T) {
 	t.Logf("EnvStats:\n%+v\n\n", *stats)
 
 	batch := db.NewWriteOnlyBatch()
-	require.NoError(t, batch.Put(storage.MVCCKey{Key: roachpb.Key("a")}, []byte("a")))
+	require.NoError(t, batch.PutUnversioned(roachpb.Key("a"), []byte("a")))
 	require.NoError(t, batch.Commit(true))
 	require.NoError(t, db.Flush())
 	val, err := db.MVCCGet(storage.MVCCKey{Key: roachpb.Key("a")})

@@ -342,7 +342,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				{"e", 1, "e"},
 				{"z", 2, "zzzzzz"},
 			}) {
-				if err := e.Put(kv.Key, kv.Value); err != nil {
+				if err := e.PutMVCC(kv.Key, kv.Value); err != nil {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -499,7 +499,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				{"y", 5, "yyy"},
 				{"z", 2, "zz"},
 			}) {
-				if err := e.Put(kv.Key, kv.Value); err != nil {
+				if err := e.PutMVCC(kv.Key, kv.Value); err != nil {
 					t.Fatalf("%+v", err)
 				}
 			}
@@ -974,7 +974,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				// ingesting the perfectly shadowing KVs (same ts and same value) in the
 				// second SST.
 				for _, kv := range sstKVs {
-					if err := e.Put(kv.Key, kv.Value); err != nil {
+					if err := e.PutMVCC(kv.Key, kv.Value); err != nil {
 						t.Fatalf("%+v", err)
 					}
 				}
