@@ -34,12 +34,18 @@ func MakeServer(descriptor *roachpb.NodeDescriptor, stores *Stores) Server {
 	return Server{stores}
 }
 
-func (is Server) execStoreCommand(h StoreRequestHeader, f func(*Store) error) error {
+func (is Server) execStoreCommand(
+	ctx context.Context, h StoreRequestHeader, f func(context.Context, *Store) error,
+) error {
 	store, err := is.stores.GetStore(h.StoreID)
 	if err != nil {
 		return err
 	}
-	return f(store)
+	// NB: we use a task here to prevent errant RPCs that arrive after stopper shutdown from
+	// causing crashes. See #56085 for an example of such a crash.
+	return store.stopper.RunTaskWithErr(ctx, "store command", func(ctx context.Context) error {
+		return f(ctx, store)
+	})
 }
 
 // CollectChecksum implements PerReplicaServer.
@@ -47,8 +53,8 @@ func (is Server) CollectChecksum(
 	ctx context.Context, req *CollectChecksumRequest,
 ) (*CollectChecksumResponse, error) {
 	resp := &CollectChecksumResponse{}
-	err := is.execStoreCommand(req.StoreRequestHeader,
-		func(s *Store) error {
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
 			r, err := s.GetReplica(req.RangeID)
 			if err != nil {
 				return err
@@ -85,7 +91,7 @@ func (is Server) WaitForApplication(
 	ctx context.Context, req *WaitForApplicationRequest,
 ) (*WaitForApplicationResponse, error) {
 	resp := &WaitForApplicationResponse{}
-	err := is.execStoreCommand(req.StoreRequestHeader, func(s *Store) error {
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader, func(ctx context.Context, s *Store) error {
 		// TODO(benesch): Once Replica changefeeds land, see if we can implement
 		// this request handler without polling.
 		retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond}
@@ -130,7 +136,7 @@ func (is Server) WaitForReplicaInit(
 	ctx context.Context, req *WaitForReplicaInitRequest,
 ) (*WaitForReplicaInitResponse, error) {
 	resp := &WaitForReplicaInitResponse{}
-	err := is.execStoreCommand(req.StoreRequestHeader, func(s *Store) error {
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader, func(ctx context.Context, s *Store) error {
 		retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond}
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			// Long-lived references to replicas are frowned upon, so re-fetch the
