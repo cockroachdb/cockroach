@@ -788,7 +788,7 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
 ) error {
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
-		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username)
+		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
 	_, err := ie.QueryEx(ctx, "grant-user-file-payload-table-access", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		grantQuery)
@@ -815,14 +815,15 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 		return errors.Wrap(err, "failed to get all the users of the cluster")
 	}
 
-	var users []string
+	var users []security.SQLUsername
 	for _, row := range rows {
-		users = append(users, string(tree.MustBeDString(row[0])))
+		username := security.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))
+		users = append(users, username)
 	}
 
 	for _, user := range users {
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
-			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user)
+			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user.SQLIdentifier())
 		_, err = ie.QueryEx(ctx, "revoke-user-privileges", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			revokeQuery)
