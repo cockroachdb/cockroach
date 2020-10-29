@@ -97,7 +97,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if err := batch.ClearUnversioned(outsideKey3.Key); !isWriteSpanErr(err) {
 			t.Errorf("Clear: unexpected error %v", err)
 		}
-		if err := batch.ClearRange(insideKey2, outsideKey4); !isWriteSpanErr(err) {
+		if err := batch.ClearRawRange(insideKey2, outsideKey4); !isWriteSpanErr(err) {
 			t.Errorf("ClearRange: unexpected error %v", err)
 		}
 		{

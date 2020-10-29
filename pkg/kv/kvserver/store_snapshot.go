@@ -144,7 +144,8 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	}
 	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
-	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+	if err := msstw.currSST.ClearRawRange(
+		msstw.keyRanges[msstw.currRange].Start.Key, msstw.keyRanges[msstw.currRange].End.Key); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}

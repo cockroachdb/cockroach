@@ -73,16 +73,6 @@ func (fw *SSTWriter) Finish() error {
 	return nil
 }
 
-// ClearRange implements the Writer interface.
-func (fw *SSTWriter) ClearRange(start, end MVCCKey) error {
-	if fw.fw == nil {
-		return errors.New("cannot call ClearRange on a closed writer")
-	}
-	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], start)
-	return fw.fw.DeleteRange(fw.scratch, EncodeKey(end))
-}
-
 // ClearRawRange implements the Writer interface.
 func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
 	return fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})

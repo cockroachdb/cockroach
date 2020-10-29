@@ -359,21 +359,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearMVCCRange(start, end MVCCKey) error
-	// TODO: remove
-	// ClearRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). Similar to Clear, this method actually removes entries from
-	// the storage engine.
-	//
-	// Note that when used on batches, subsequent reads may not reflect the result
-	// of the ClearRange.
-	//
-	// It is safe to modify the contents of the arguments after ClearRange
-	// returns.
-	//
-	// TODO(peter): Most callers want to pass roachpb.Key, except for
-	// MVCCClearTimeRange. That function actually does what to clear records
-	// between specific versions.
-	ClearRange(start, end MVCCKey) error
 
 	// ClearIterRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear and ClearRange, this method actually removes
@@ -775,7 +760,7 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	}
 	var err error
 	if count > clearRangeMinKeys {
-		err = writer.ClearRange(MakeMVCCMetadataKey(start), MakeMVCCMetadataKey(end))
+		err = writer.ClearRawRange(start, end)
 	} else {
 		err = writer.ClearIterRange(iter, start, end)
 	}

@@ -270,17 +270,6 @@ func (p *pebbleBatch) SingleClearEngine(key EngineKey) error {
 	return p.batch.SingleDelete(p.buf, nil)
 }
 
-// ClearRange implements the Batch interface.
-func (p *pebbleBatch) ClearRange(start, end MVCCKey) error {
-	if p.distinctOpen {
-		panic("distinct batch open")
-	}
-
-	p.buf = EncodeKeyToBuf(p.buf[:0], start)
-	buf2 := EncodeKey(end)
-	return p.batch.DeleteRange(p.buf, buf2, nil)
-}
-
 // ClearRawRange implements the Batch interface.
 func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
 	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})

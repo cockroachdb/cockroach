@@ -101,8 +101,7 @@ func ClearRange(
 		return pd, nil
 	}
 
-	if err := readWriter.ClearRange(storage.MakeMVCCMetadataKey(from),
-		storage.MakeMVCCMetadataKey(to)); err != nil {
+	if err := readWriter.ClearMVCCRangeAndIntents(from, to); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil

@@ -2249,7 +2249,7 @@ func MVCCClearTimeRange(
 
 	flushClearedKeys := func(nonMatch MVCCKey) error {
 		if len(clearRangeStart.Key) != 0 {
-			if err := rw.ClearRange(clearRangeStart, nonMatch); err != nil {
+			if err := rw.ClearMVCCRange(clearRangeStart, nonMatch); err != nil {
 				return err
 			}
 			batchSize++
