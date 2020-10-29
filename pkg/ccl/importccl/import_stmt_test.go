@@ -1165,7 +1165,7 @@ func TestImportUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	baseDir, cleanup := testutils.TempDir(t)
+	baseDir, cleanup := testutils.TestTempDir(t)
 	defer cleanup()
 	tc := testcluster.StartTestCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
@@ -1379,7 +1379,7 @@ func TestImportCSVStmt(t *testing.T) {
 	blockGC := make(chan struct{})
 
 	ctx := context.Background()
-	baseDir := filepath.Join("testdata", "csv")
+	baseDir := filepath.Join(testutils.TestSrcDir(), testDataPath, "csv")
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
@@ -1419,27 +1419,7 @@ func TestImportCSVStmt(t *testing.T) {
 	}
 
 	// Table schema used in IMPORT TABLE tests.
-	tablePath := filepath.Join(baseDir, "table")
-	if err := ioutil.WriteFile(tablePath, []byte(`
-		CREATE TABLE t (
-			a int8 primary key,
-			b string,
-			index (b),
-			index (a, b)
-		)
-	`), 0666); err != nil {
-		t.Fatal(err)
-	}
 	schema := []interface{}{"nodelocal://0/table"}
-
-	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.csv"), nil, 0666); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.schema"), nil, 0666); err != nil {
-		t.Fatal(err)
-	}
-
 	empty := []string{"'nodelocal://0/empty.csv'"}
 	emptySchema := []interface{}{"nodelocal://0/empty.schema"}
 
@@ -2244,6 +2224,8 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 }
 
+var testDataPath = filepath.Join("cockroach", "pkg", "ccl", "importccl", "testdata")
+
 // TODO(adityamaru): Tests still need to be added incrementally as
 // relevant IMPORT INTO logic is added. Some of them include:
 // -> FK and constraint violation
@@ -2262,7 +2244,7 @@ func TestImportIntoCSV(t *testing.T) {
 	rowsPerRaceFile := 16
 
 	ctx := context.Background()
-	baseDir := filepath.Join("testdata", "csv")
+	baseDir := filepath.Join(testutils.TestSrcDir(), testDataPath, "csv")
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
@@ -2305,9 +2287,6 @@ func TestImportIntoCSV(t *testing.T) {
 		rowsPerFile = rowsPerRaceFile
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.csv"), nil, 0666); err != nil {
-		t.Fatal(err)
-	}
 	empty := []string{"'nodelocal://0/empty.csv'"}
 
 	// Support subtests by keeping track of the number of jobs that are executed.

@@ -107,6 +107,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":importccl"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/blobs",
