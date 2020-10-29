@@ -121,7 +121,48 @@ const (
 	insertRow // INSERT INTO <table> (<cols>) VALUES (<values>)
 
 	validate // validate all table descriptors
+
+	numOpTypes int = iota
 )
+
+var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
+	addColumn:         (*operationGenerator).addColumn,
+	addConstraint:     (*operationGenerator).addConstraint,
+	createIndex:       (*operationGenerator).createIndex,
+	createSequence:    (*operationGenerator).createSequence,
+	createTable:       (*operationGenerator).createTable,
+	createTableAs:     (*operationGenerator).createTableAs,
+	createView:        (*operationGenerator).createView,
+	createEnum:        (*operationGenerator).createEnum,
+	createSchema:      (*operationGenerator).createSchema,
+	dropColumn:        (*operationGenerator).dropColumn,
+	dropColumnDefault: (*operationGenerator).dropColumnDefault,
+	dropColumnNotNull: (*operationGenerator).dropColumnNotNull,
+	dropColumnStored:  (*operationGenerator).dropColumnStored,
+	dropConstraint:    (*operationGenerator).dropConstraint,
+	dropIndex:         (*operationGenerator).dropIndex,
+	dropSequence:      (*operationGenerator).dropSequence,
+	dropTable:         (*operationGenerator).dropTable,
+	dropView:          (*operationGenerator).dropView,
+	dropSchema:        (*operationGenerator).dropSchema,
+	renameColumn:      (*operationGenerator).renameColumn,
+	renameIndex:       (*operationGenerator).renameIndex,
+	renameSequence:    (*operationGenerator).renameSequence,
+	renameTable:       (*operationGenerator).renameTable,
+	renameView:        (*operationGenerator).renameView,
+	setColumnDefault:  (*operationGenerator).setColumnDefault,
+	setColumnNotNull:  (*operationGenerator).setColumnNotNull,
+	setColumnType:     (*operationGenerator).setColumnType,
+	insertRow:         (*operationGenerator).insertRow,
+	validate:          (*operationGenerator).validate,
+}
+
+func init() {
+	// Validate that we have an operation function for each opType.
+	if len(opFuncs) != numOpTypes {
+		panic(errors.Errorf("expected %d opFuncs, got %d", numOpTypes, len(opFuncs)))
+	}
+}
 
 var opWeights = []int{
 	addColumn:         1,
@@ -163,98 +204,8 @@ var opWeights = []int{
 func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 	var log strings.Builder
 	for {
-		var stmt string
-		var err error
 		op := opType(og.params.ops.Int())
-		switch op {
-		case addColumn:
-			stmt, err = og.addColumn(tx)
-
-		case addConstraint:
-			stmt, err = og.addConstraint(tx)
-
-		case createIndex:
-			stmt, err = og.createIndex(tx)
-
-		case createSequence:
-			stmt, err = og.createSequence(tx)
-
-		case createTable:
-			stmt, err = og.createTable(tx)
-
-		case createTableAs:
-			stmt, err = og.createTableAs(tx)
-
-		case createView:
-			stmt, err = og.createView(tx)
-
-		case createEnum:
-			stmt, err = og.createEnum(tx)
-
-		case createSchema:
-			stmt, err = og.createSchema(tx)
-
-		case dropColumn:
-			stmt, err = og.dropColumn(tx)
-
-		case dropColumnDefault:
-			stmt, err = og.dropColumnDefault(tx)
-
-		case dropColumnNotNull:
-			stmt, err = og.dropColumnNotNull(tx)
-
-		case dropColumnStored:
-			stmt, err = og.dropColumnStored(tx)
-
-		case dropConstraint:
-			stmt, err = og.dropConstraint(tx)
-
-		case dropIndex:
-			stmt, err = og.dropIndex(tx)
-
-		case dropSequence:
-			stmt, err = og.dropSequence(tx)
-
-		case dropTable:
-			stmt, err = og.dropTable(tx)
-
-		case dropView:
-			stmt, err = og.dropView(tx)
-
-		case dropSchema:
-			stmt, err = og.dropSchema(tx)
-
-		case renameColumn:
-			stmt, err = og.renameColumn(tx)
-
-		case renameIndex:
-			stmt, err = og.renameIndex(tx)
-
-		case renameSequence:
-			stmt, err = og.renameSequence(tx)
-
-		case renameTable:
-			stmt, err = og.renameTable(tx)
-
-		case renameView:
-			stmt, err = og.renameView(tx)
-
-		case setColumnDefault:
-			stmt, err = og.setColumnDefault(tx)
-
-		case setColumnNotNull:
-			stmt, err = og.setColumnNotNull(tx)
-
-		case setColumnType:
-			stmt, err = og.setColumnType(tx)
-
-		case insertRow:
-			stmt, err = og.insertRow(tx)
-
-		case validate:
-			stmt, err = og.validate(tx)
-		}
-
+		stmt, err := opFuncs[op](og, tx)
 		// TODO(spaskob): use more fine-grained error reporting.
 		if stmt == "" || errors.Is(err, pgx.ErrNoRows) {
 			log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
