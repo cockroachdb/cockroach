@@ -831,6 +831,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> drop_schema_stmt
 %type <tree.Statement> drop_table_stmt
 %type <tree.Statement> drop_type_stmt
+%type <tree.Statement> drop_all_stmt
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 
@@ -3362,6 +3363,7 @@ drop_ddl_stmt:
 | drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
+| drop_all_stmt      // EXTEND WITH HELP: DROP ALL
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -3495,6 +3497,16 @@ drop_type_stmt:
     }
   }
 | DROP TYPE error // SHOW HELP: DROP TYPE
+
+// %Help: DROP ALL - remove everything
+// %Category: DDL
+// %Text: DROP ALL
+drop_all_stmt:
+  DROP ALL
+  {
+    $$.val = &tree.DropAll{ }
+  }
+| DROP ALL error // SHOW HELP: DROP ALL
 
 target_types:
   type_name_list

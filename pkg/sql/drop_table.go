@@ -350,7 +350,7 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	err := p.removeTableComments(ctx, tableDesc)
+	err := p.removeTableComments(ctx, tableDesc.ID)
 	if err != nil {
 		return droppedViews, err
 	}
@@ -682,14 +682,14 @@ func removeMatchingReferences(
 	return updatedRefs
 }
 
-func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.Mutable) error {
+func (p *planner) removeTableComments(ctx context.Context, tableID descpb.ID) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"delete-table-comments",
 		p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE object_id=$1",
-		tableDesc.ID)
+		tableID)
 	if err != nil {
 		return err
 	}

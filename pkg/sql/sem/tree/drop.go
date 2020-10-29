@@ -196,6 +196,16 @@ func (node *DropType) Format(ctx *FmtCtx) {
 	}
 }
 
+// DropAll represents a DROP ALL command.
+type DropAll struct{}
+
+var _ Statement = &DropAll{}
+
+// Format implements the NodeFormatter interface.
+func (node *DropAll) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP ALL")
+}
+
 // DropSchema represents a DROP SCHEMA command.
 type DropSchema struct {
 	Names        ObjectNamePrefixList

@@ -525,6 +525,12 @@ func (*DropType) StatementType() StatementType { return DDL }
 func (*DropType) StatementTag() string { return "DROP TYPE" }
 
 // StatementType implements the Statement interface.
+func (*DropAll) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropAll) StatementTag() string { return "DROP ALL" }
+
+// StatementType implements the Statement interface.
 func (*DropSchema) StatementType() StatementType { return DDL }
 
 // StatementTag implements the Statement interface.
@@ -1109,6 +1115,7 @@ func (n *DropSchema) String() string                     { return AsString(n) }
 func (n *DropSequence) String() string                   { return AsString(n) }
 func (n *DropTable) String() string                      { return AsString(n) }
 func (n *DropType) String() string                       { return AsString(n) }
+func (n *DropAll) String() string                        { return AsString(n) }
 func (n *DropView) String() string                       { return AsString(n) }
 func (n *DropRole) String() string                       { return AsString(n) }
 func (n *Execute) String() string                        { return AsString(n) }

@@ -362,6 +362,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropSchemaNode{}):              "drop schema",
 	reflect.TypeOf(&dropTableNode{}):               "drop table",
 	reflect.TypeOf(&dropTypeNode{}):                "drop type",
+	reflect.TypeOf(&dropAllNode{}):                 "drop all",
 	reflect.TypeOf(&DropRoleNode{}):                "drop user/role",
 	reflect.TypeOf(&dropViewNode{}):                "drop view",
 	reflect.TypeOf(&errorIfRowsNode{}):             "error if rows",
