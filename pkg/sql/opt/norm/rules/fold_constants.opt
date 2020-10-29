@@ -79,9 +79,9 @@
 # should not be triggered.
 [FoldBinary, Normalize]
 (Binary
-    $left:* & (IsConstValueOrTuple $left)
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
     $right:* &
-        (IsConstValueOrTuple $right) &
+        (IsConstValueOrGroupOfConstValues $right) &
         (Succeeded $result:(FoldBinary (OpName) $left $right))
 )
 =>
@@ -93,7 +93,7 @@ $result
 [FoldUnary, Normalize]
 (Unary
     $input:* &
-        (IsConstValueOrTuple $input) &
+        (IsConstValueOrGroupOfConstValues $input) &
         (Succeeded $result:(FoldUnary (OpName) $input))
 )
 =>
@@ -104,9 +104,9 @@ $result
 # evaluation would not cause an error.
 [FoldComparison, Normalize]
 (Comparison
-    $left:* & (IsConstValueOrTuple $left)
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
     $right:* &
-        (IsConstValueOrTuple $right) &
+        (IsConstValueOrGroupOfConstValues $right) &
         (Succeeded
             $result:(FoldComparison (OpName) $left $right)
         )
@@ -121,7 +121,7 @@ $result
 (Cast
     $input:*
     $typ:* &
-        (IsConstValueOrTuple $input) &
+        (IsConstValueOrGroupOfConstValues $input) &
         (Succeeded $result:(FoldCast $input $typ))
 )
 =>
@@ -138,7 +138,7 @@ $result
 (Indirection
     $input:*
     $index:* &
-        (IsConstValueOrTuple $index) &
+        (IsConstValueOrGroupOfConstValues $index) &
         (Succeeded $result:(FoldIndirection $input $index))
 )
 =>
