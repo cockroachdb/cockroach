@@ -4,6 +4,7 @@ go_library(
     name = "testutils",
     srcs = [
         "base.go",
+        "bazel.go",
         "dir.go",
         "error.go",
         "files.go",
