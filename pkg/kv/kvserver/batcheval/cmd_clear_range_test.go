@@ -36,11 +36,6 @@ type wrappedBatch struct {
 // TODO(sbhola): narrow the calls where we increment counters to
 // make this test stricter.
 
-func (wb *wrappedBatch) Clear(key storage.MVCCKey) error {
-	wb.clearCount++
-	return wb.Batch.Clear(key)
-}
-
 func (wb *wrappedBatch) ClearMVCC(key storage.MVCCKey) error {
 	wb.clearCount++
 	return wb.Batch.ClearMVCC(key)

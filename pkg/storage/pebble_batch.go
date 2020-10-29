@@ -227,19 +227,6 @@ func (p *pebbleBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 	return p.batch.Apply(&batch, nil)
 }
 
-// Clear implements the Batch interface.
-func (p *pebbleBatch) Clear(key MVCCKey) error {
-	if p.distinctOpen {
-		panic("distinct batch open")
-	}
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	return p.batch.Delete(p.buf, nil)
-}
-
 // ClearMVCC implements the Batch interface.
 func (p *pebbleBatch) ClearMVCC(key MVCCKey) error {
 	if key.Timestamp.IsEmpty() {
