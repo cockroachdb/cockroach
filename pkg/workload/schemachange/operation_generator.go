@@ -81,6 +81,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropColumn: true,
 
 	renameTable: true,
+	renameView:  true,
 }
 
 func opScreensForExecErrors(op opType) bool {
@@ -853,6 +854,35 @@ func (og *operationGenerator) renameView(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	srcViewExists, err := viewExists(tx, srcViewName)
+	if err != nil {
+		return "", err
+	}
+
+	destSchemaExists, err := schemaExists(tx, destViewName.Schema())
+	if err != nil {
+		return "", err
+	}
+
+	destViewExists, err := viewExists(tx, destViewName)
+	if err != nil {
+		return "", err
+	}
+
+	srcTableHasDependencies, err := tableHasDependencies(tx, srcViewName)
+	if err != nil {
+		return "", err
+	}
+
+	srcEqualsDest := destViewName.String() == srcViewName.String()
+	codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !srcViewExists},
+		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destViewExists},
+		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
+		{code: pgcode.InvalidName, condition: srcViewName.Schema() != destViewName.Schema()},
+	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName), nil
 }
