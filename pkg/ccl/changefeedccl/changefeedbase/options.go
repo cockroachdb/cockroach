@@ -82,6 +82,7 @@ const (
 	SinkParamFileSize         = `file_size`
 	SinkParamSchemaTopic      = `schema_topic`
 	SinkParamTLSEnabled       = `tls_enabled`
+	SinkParamSkipTLSVerify    = `insecure_tls_skip_verify`
 	SinkParamTopicPrefix      = `topic_prefix`
 	SinkSchemeBuffer          = ``
 	SinkSchemeExperimentalSQL = `experimental-sql`
