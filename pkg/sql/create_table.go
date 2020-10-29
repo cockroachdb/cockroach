@@ -1411,6 +1411,9 @@ func NewTableDesc(
 				Version:          indexEncodingVersion,
 			}
 			if d.Inverted {
+				if !sessionData.EnableMultiColumnInvertedIndexes && len(d.Columns) > 1 {
+					return nil, pgerror.New(pgcode.FeatureNotSupported, "indexing more than one column with an inverted index is not supported")
+				}
 				idx.Type = descpb.IndexDescriptor_INVERTED
 			}
 			if d.Sharded != nil {
@@ -1425,7 +1428,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			if d.Inverted {
-				columnDesc, _, err := desc.FindColumnByName(tree.Name(idx.ColumnNames[0]))
+				columnDesc, _, err := desc.FindColumnByName(tree.Name(idx.InvertedColumnName()))
 				if err != nil {
 					return nil, err
 				}
