@@ -306,7 +306,7 @@ type Writer interface {
 	// requires that the timestamp is non-empty (see
 	// {ClearUnversioned,ClearIntent} if the timestamp is empty). Note that
 	// clear actually removes entries from the storage engine, rather than
-	// inserting tombstones.
+	// inserting MVCC tombstones.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearMVCC(key MVCCKey) error
@@ -361,11 +361,12 @@ type Writer interface {
 	ClearMVCCRange(start, end MVCCKey) error
 
 	// ClearIterRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). Similar to Clear and ClearRange, this method actually removes
-	// entries from the storage engine. Unlike ClearRange, the entries to remove
-	// are determined by iterating over iter and per-key tombstones are
-	// generated. If the MVCCIterator was constructed using MVCCKeyAndIntentsIterKind,
-	// any separated intents/locks will also be cleared.
+	// (exclusive). Similar to Clear and ClearRange, this method actually
+	// removes entries from the storage engine. Unlike ClearRange, the entries
+	// to remove are determined by iterating over iter and per-key storage
+	// tombstones (not MVCC tombstones) are generated. If the MVCCIterator was
+	// constructed using MVCCKeyAndIntentsIterKind, any separated intents/locks
+	// will also be cleared.
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
@@ -409,8 +410,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutIntent(key roachpb.Key, value []byte) error
-	// TODO: remove
-	Put(key MVCCKey, value []byte) error
 
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
@@ -543,10 +542,11 @@ type Batch interface {
 	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
 	// for details on the SingleDelete operation that this method invokes. Note
 	// that clear actually removes entries from the storage engine, rather than
-	// inserting tombstones. This is a low-level interface that must not be
+	// inserting MVCC tombstones. This is a low-level interface that must not be
 	// called from outside the storage package. It is part of the interface because
 	// there are structs that wrap Batch and implement the Batch interface, that are
 	// not part of the storage package.
+	// TODO(sumeer): try to remove it from this exported interface.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	SingleClearEngine(key EngineKey) error
@@ -671,23 +671,22 @@ func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
-// of msg and the provided timestamp. Returns the length in bytes of
-// key and the value.
+// of msg. Returns the length in bytes of key and the value.
 //
 // Deprecated: use MVCCPutProto instead.
 func PutProto(
-	writer Writer, key MVCCKey, msg protoutil.Message,
+	writer Writer, key roachpb.Key, msg protoutil.Message,
 ) (keyBytes, valBytes int64, err error) {
 	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	if err := writer.Put(key, bytes); err != nil {
+	if err := writer.PutUnversioned(key, bytes); err != nil {
 		return 0, 0, err
 	}
 
-	return int64(key.EncodedSize()), int64(len(bytes)), nil
+	return int64(MVCCKey{Key: key}.EncodedSize()), int64(len(bytes)), nil
 }
 
 // Scan returns up to max key/value objects starting from
@@ -733,7 +732,8 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	// minimum number of keys. The value here was pulled out of thin air. It might
 	// be better to make this dependent on the size of the data being deleted. Or
 	// perhaps we should fix RocksDB to handle large numbers of tombstones in an
-	// sstable better.
+	// sstable better. Note that we are referring to storage-level tombstones here,
+	// and not MVCC tombstones.
 	const clearRangeMinKeys = 64
 	// Peek into the range to see whether it's large enough to justify
 	// ClearRange. Note that the work done here is bounded by

@@ -423,19 +423,6 @@ func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	return s.w.Merge(key, value)
 }
 
-func (s spanSetWriter) Put(key storage.MVCCKey, value []byte) error {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
-			return err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return err
-		}
-	}
-	return s.w.Put(key, value)
-}
-
 func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value []byte) error {
 	if err := s.checkAllowed(key.Key); err != nil {
 		return err

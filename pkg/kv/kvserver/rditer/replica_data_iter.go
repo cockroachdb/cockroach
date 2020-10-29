@@ -36,6 +36,8 @@ type KeyRange struct {
 // This is problematic as it requires of every user careful tracking of when
 // to call that method; some just never call it and pull the whole replica
 // into memory. Use of an allocator should be opt-in.
+//
+// TODO(sumeer): Should return EngineKeys, to handle separated lock table.
 type ReplicaDataIterator struct {
 	curIndex int
 	ranges   []KeyRange

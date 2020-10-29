@@ -808,14 +808,6 @@ func (p *Pebble) Merge(key MVCCKey, value []byte) error {
 	return p.db.Merge(EncodeKey(key), value, pebble.Sync)
 }
 
-// Put implements the Engine interface.
-func (p *Pebble) Put(key MVCCKey, value []byte) error {
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-	return p.db.Set(EncodeKey(key), value, pebble.Sync)
-}
-
 // PutMVCC implements the Engine interface.
 func (p *Pebble) PutMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
@@ -1284,10 +1276,6 @@ func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) Put(key MVCCKey, value []byte) error {
-	panic("not implemented")
-}
-
 func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
@@ -1451,8 +1439,16 @@ func pebbleExportToSst(
 				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
 				break
 			}
-			if err := sstWriter.Put(unsafeKey, unsafeValue); err != nil {
-				return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+			if unsafeKey.Timestamp.IsEmpty() {
+				// This should never be an intent since the incremental iterator returns
+				// an error when encountering intents.
+				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
+					return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+				}
+			} else {
+				if err := sstWriter.PutMVCC(unsafeKey, unsafeValue); err != nil {
+					return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+				}
 			}
 			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
 			if maxSize > 0 && newSize > int64(maxSize) {
