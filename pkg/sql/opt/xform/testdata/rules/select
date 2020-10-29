@@ -3767,15 +3767,6 @@ select
 # GenerateInvertedIndexZigzagJoins
 # --------------------------------------------------
 
-exec-ddl
-CREATE TABLE t5 (
-    a INT PRIMARY KEY,
-    b JSONB,
-    c INT,
-    INVERTED INDEX b_idx(b)
-)
-----
-
 # Query only the primary key with a remaining filter. 2+ paths in containment
 # query should favor zigzag joins.
 opt
@@ -3841,6 +3832,26 @@ inner-join (lookup b)
  └── filters
       └── j:4 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
+# Three or more paths. Should generate zigzag joins.
+opt
+SELECT * FROM b WHERE j @> '{"a":[{"b":"c", "d":3}, 5]}'
+----
+inner-join (lookup b)
+ ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── inner-join (zigzag b@inv_idx b@inv_idx)
+ │    ├── columns: k:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [4] = ['{"a": [{"b": "c"}]}']
+ │    ├── right fixed columns: [4] = ['{"a": [{"d": 3}]}']
+ │    └── filters (true)
+ └── filters
+      └── j:4 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
 opt
 SELECT k FROM c WHERE a @> ARRAY[1,3,1,5]
 ----
@@ -3864,104 +3875,121 @@ project
       └── filters
            └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
-# Two paths. Should generate a zigzag join.
-opt
-SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}'
-----
-inner-join (lookup t5)
- ├── columns: b:2!null a:1!null
- ├── key columns: [1] = [1]
- ├── lookup columns are key
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── inner-join (zigzag t5@b_idx t5@b_idx)
- │    ├── columns: a:1!null
- │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [2] = ['{"a": 1}']
- │    ├── right fixed columns: [2] = ['{"c": 2}']
- │    └── filters (true)
- └── filters
-      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
-
-memo
-SELECT a FROM t5 WHERE b @> '{"a":1, "c":2}'
-----
-memo (optimized, ~14KB, required=[presentation: a:1])
- ├── G1: (project G2 G3 a)
- │    └── [presentation: a:1]
- │         ├── best: (project G2 G3 a)
- │         └── cost: 100.53
- ├── G2: (select G4 G5) (select G6 G5) (lookup-join G7 G5 t5,keyCols=[1],outCols=(1,2))
- │    └── []
- │         ├── best: (lookup-join G7 G5 t5,keyCols=[1],outCols=(1,2))
- │         └── cost: 100.40
- ├── G3: (projections)
- ├── G4: (scan t5,cols=(1,2))
- │    └── []
- │         ├── best: (scan t5,cols=(1,2))
- │         └── cost: 1054.02
- ├── G5: (filters G8)
- ├── G6: (index-join G9 t5,cols=(1,2))
- │    └── []
- │         ├── best: (index-join G9 t5,cols=(1,2))
- │         └── cost: 782.82
- ├── G7: (zigzag-join G10 t5@b_idx t5@b_idx)
- │    └── []
- │         ├── best: (zigzag-join G10 t5@b_idx t5@b_idx)
- │         └── cost: 25.69
- ├── G8: (contains G11 G12)
- ├── G9: (scan t5@b_idx,cols=(1),constrained)
- │    └── []
- │         ├── best: (scan t5@b_idx,cols=(1),constrained)
- │         └── cost: 117.31
- ├── G10: (filters)
- ├── G11: (variable b)
- └── G12: (const '{"a": 1, "c": 2}')
-
-# Three or more paths. Should generate zigzag joins.
-opt
-SELECT b,a FROM t5 WHERE b @> '{"a":[{"b":"c", "d":3}, 5]}'
-----
-inner-join (lookup t5)
- ├── columns: b:2!null a:1!null
- ├── key columns: [1] = [1]
- ├── lookup columns are key
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── inner-join (zigzag t5@b_idx t5@b_idx)
- │    ├── columns: a:1!null
- │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [2] = ['{"a": [{"b": "c"}]}']
- │    ├── right fixed columns: [2] = ['{"a": [{"d": 3}]}']
- │    └── filters (true)
- └── filters
-      └── b:2 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
-
 # GenerateInvertedIndexZigzagJoins is disabled in the presence of a row-level
 # locking clause.
 opt expect-not=GenerateInvertedIndexZigzagJoins
-SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}' FOR UPDATE
+SELECT * FROM b WHERE j @> '{"a":1, "c":2}' FOR UPDATE
 ----
 select
- ├── columns: b:2!null a:1!null
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── volatile
  ├── key: (1)
- ├── fd: (1)-->(2)
- ├── index-join t5
- │    ├── columns: a:1!null b:2
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── volatile
  │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t5@b_idx
- │         ├── columns: a:1!null
- │         ├── constraint: /2/1: [/'{"a": 1}' - /'{"a": 1}']
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── scan b@inv_idx
+ │         ├── columns: k:1!null
+ │         ├── constraint: /4/1: [/'{"a": 1}' - /'{"a": 1}']
  │         ├── locking: for-update
  │         ├── volatile
  │         └── key: (1)
  └── filters
-      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── j:4 @> '{"a": 1, "c": 2}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+exec-ddl
+CREATE TABLE inv_zz_partial (
+    k INT PRIMARY KEY,
+    j JSON,
+    b BOOL,
+    s STRING
+)
+----
+
+exec-ddl
+CREATE INVERTED INDEX zz_idx ON inv_zz_partial (j) WHERE b
+----
+
+# Generate a zigzag join on a single index with no remaining filter.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM inv_zz_partial WHERE j @> '{"a": 1, "b": 2}' AND b
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup inv_zz_partial)
+      ├── columns: k:1!null j:2!null b:3!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = ['{"a": 1}']
+      │    ├── right fixed columns: [2] = ['{"b": 2}']
+      │    └── filters (true)
+      └── filters
+           └── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# Generate a zigzag join on a single index with a remaining filter.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM inv_zz_partial WHERE j @> '{"a": 1, "b": 2}' AND b AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup inv_zz_partial)
+      ├── columns: k:1!null j:2!null b:3!null s:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3,4), (1)-->(2)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = ['{"a": 1}']
+      │    ├── right fixed columns: [2] = ['{"b": 2}']
+      │    └── filters (true)
+      └── filters
+           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Don't generate a zigzag join when the predicate is not implied.
+opt expect-not=GenerateInvertedIndexZigzagJoins format=hide-all
+SELECT k FROM inv_zz_partial WHERE j @> '{"a": 1, "b": 2}'
+----
+project
+ └── select
+      ├── scan inv_zz_partial
+      │    └── partial index predicates
+      │         └── zz_idx: filters
+      │              └── b
+      └── filters
+           └── j @> '{"a": 1, "b": 2}'
+
+exec-ddl
+DROP INDEX zz_idx
+----
+
+exec-ddl
+CREATE INVERTED INDEX zz_idx ON inv_zz_partial (j) WHERE j->'a' = '1'
+----
+
+# Don't generate a zigzag join when one of the the expressions that fixes the
+# columns is removed while proving partial index implication.
+opt expect-not=GenerateInvertedIndexZigzagJoins format=hide-all
+SELECT k FROM inv_zz_partial WHERE j->'a' = '1' AND j->'b' = '2'
+----
+project
+ └── scan inv_zz_partial@zz_idx,partial
+      └── constraint: /2/1: [/'{"b": 2}' - /'{"b": 2}']
 
 # --------------------------------------------------
 # SplitDisjunction
