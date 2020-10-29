@@ -46,6 +46,7 @@ func distRestore(
 	rekeys []roachpb.ImportRequest_TableRekey,
 	restoreTime hlc.Timestamp,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	dryRun bool,
 ) error {
 	ctx = logtags.AddTag(ctx, "restore-distsql", nil)
 	defer close(progCh)
@@ -83,7 +84,7 @@ func distRestore(
 
 	nodes := getAllCompatibleNodes(planCtx)
 
-	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(nodes, chunks, rekeys)
+	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(nodes, chunks, rekeys, dryRun)
 	if err != nil {
 		return err
 	}
@@ -93,6 +94,7 @@ func distRestore(
 		Encryption:  fileEncryption,
 		Rekeys:      rekeys,
 		PKIDs:       pkIDs,
+		DryRun:      dryRun,
 	}
 
 	if len(splitAndScatterSpecs) == 0 {
@@ -251,6 +253,7 @@ func makeSplitAndScatterSpecs(
 	nodes []roachpb.NodeID,
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	rekeys []roachpb.ImportRequest_TableRekey,
+	dryRun bool,
 ) (map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec, error) {
 	specsByNodes := make(map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec)
 	for i, chunk := range chunks {
@@ -265,6 +268,7 @@ func makeSplitAndScatterSpecs(
 					Entries: chunk,
 				}},
 				Rekeys: rekeys,
+				DryRun: dryRun,
 			}
 		}
 	}

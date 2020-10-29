@@ -129,7 +129,7 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		return nil, rd.DrainHelper()
 	}
 
-	log.VEventf(rd.Ctx, 1 /* level */, "importing span %v", entry.Span)
+	log.VEventf(rd.Ctx, 1 /* level */, "importing span %v (dry-run %v)", entry.Span, rd.spec.DryRun)
 	importRequest := &roachpb.ImportRequest{
 		// Import is a point request because we don't want DistSender to split
 		// it. Assume (but don't require) the entire post-rewrite span is on the
@@ -140,6 +140,7 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		EndTime:       rd.spec.RestoreTime,
 		Rekeys:        rd.spec.Rekeys,
 		Encryption:    rd.spec.Encryption,
+		DryRun:        rd.spec.DryRun,
 	}
 
 	importRes, pErr := kv.SendWrapped(rd.Ctx, rd.flowCtx.Cfg.DB.NonTransactionalSender(), importRequest)

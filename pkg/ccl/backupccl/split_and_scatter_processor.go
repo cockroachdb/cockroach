@@ -147,6 +147,9 @@ func newSplitAndScatterProcessor(
 		output:    output,
 		scatterer: dbSplitAndScatterer{},
 	}
+	if spec.DryRun {
+		ssp.scatterer = dryRunScatterer(0)
+	}
 	return ssp, nil
 }
 
@@ -301,6 +304,20 @@ func routingSpanForNode(nodeID roachpb.NodeID) ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 	return startBytes, endBytes, nil
+}
+
+// dryRunScatterer is the  implementation of this processor's scatterer used in
+// "dry-run" mode, where no ranges are actually split and the destination is
+// this node.
+type dryRunScatterer roachpb.NodeID
+
+// splitAndScatterKey implements the splitAndScatterer interface without doing
+// any actual splits or scatters and simply returns the configured node id as
+// the scattered-to destination.
+func (node dryRunScatterer) splitAndScatterKey(
+	ctx context.Context, db *kv.DB, kr *storageccl.KeyRewriter, key roachpb.Key, randomizeLeases bool,
+) (roachpb.NodeID, error) {
+	return roachpb.NodeID(node), nil
 }
 
 func init() {
