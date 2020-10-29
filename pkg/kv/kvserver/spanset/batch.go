@@ -369,19 +369,6 @@ func (s spanSetWriter) ClearIntent(key roachpb.Key) error {
 	return s.w.ClearIntent(key)
 }
 
-func (s spanSetWriter) SingleClear(key storage.MVCCKey) error {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
-			return err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return err
-		}
-	}
-	return s.w.SingleClear(key)
-}
-
 func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {

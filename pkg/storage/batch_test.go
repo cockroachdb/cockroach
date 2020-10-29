@@ -98,7 +98,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			if err := e.Put(mvccKey("d"), []byte("before")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.SingleClear(mvccKey("d")); err != nil {
+			if err := b.SingleClearEngine(EngineKey{Key: mvccKey("d").Key}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -235,7 +235,6 @@ func TestReadOnlyBasics(t *testing.T) {
 			failureTestCases := []func(){
 				func() { _ = ro.ApplyBatchRepr(nil, false) },
 				func() { _ = ro.ClearUnversioned(a.Key) },
-				func() { _ = ro.SingleClear(a) },
 				func() { _ = ro.ClearRange(a, a) },
 				func() { _ = ro.Merge(a, nil) },
 				func() { _ = ro.Put(a, nil) },
@@ -260,9 +259,6 @@ func TestReadOnlyBasics(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := e.Put(mvccKey("d"), []byte("value")); err != nil {
-				t.Fatal(err)
-			}
-			if err := e.SingleClear(mvccKey("d")); err != nil {
 				t.Fatal(err)
 			}
 
@@ -452,7 +448,7 @@ func TestBatchGet(t *testing.T) {
 			if err := b.Put(mvccKey("d"), []byte("before")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.SingleClear(mvccKey("d")); err != nil {
+			if err := b.SingleClearEngine(EngineKey{Key: mvccKey("d").Key}); err != nil {
 				t.Fatal(err)
 			}
 			if err := b.Put(mvccKey("d"), []byte("after")); err != nil {
@@ -1011,7 +1007,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 				func() { _ = batch.Put(a, nil) },
 				func() { _ = batch.Merge(a, nil) },
 				func() { _ = batch.ClearUnversioned(a.Key) },
-				func() { _ = batch.SingleClear(a) },
+				func() { _ = batch.SingleClearEngine(EngineKey{Key: a.Key}) },
 				func() { _ = batch.ApplyBatchRepr(nil, false) },
 				func() { _, _ = batch.MVCCGet(a) },
 				func() { _, _, _, _ = batch.MVCCGetProto(a, nil) },

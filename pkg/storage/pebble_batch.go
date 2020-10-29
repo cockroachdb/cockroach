@@ -257,19 +257,6 @@ func (p *pebbleBatch) clear(key MVCCKey) error {
 	return p.batch.Delete(p.buf, nil)
 }
 
-// SingleClear implements the Batch interface.
-func (p *pebbleBatch) SingleClear(key MVCCKey) error {
-	if p.distinctOpen {
-		panic("distinct batch open")
-	}
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	return p.batch.SingleDelete(p.buf, nil)
-}
-
 // SingleClearEngine implements the Batch interface.
 func (p *pebbleBatch) SingleClearEngine(key EngineKey) error {
 	if p.distinctOpen {

@@ -767,14 +767,6 @@ func (p *Pebble) clear(key MVCCKey) error {
 	return p.db.Delete(EncodeKey(key), pebble.Sync)
 }
 
-// SingleClear implements the Engine interface.
-func (p *Pebble) SingleClear(key MVCCKey) error {
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-	return p.db.SingleDelete(EncodeKey(key), pebble.Sync)
-}
-
 // ClearRange implements the Engine interface.
 func (p *Pebble) ClearRange(start, end MVCCKey) error {
 	bufStart := EncodeKey(start)
@@ -1276,10 +1268,6 @@ func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key) error {
 }
 
 func (p *pebbleReadOnly) ClearIntent(key roachpb.Key) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) SingleClear(key MVCCKey) error {
 	panic("not implemented")
 }
 
