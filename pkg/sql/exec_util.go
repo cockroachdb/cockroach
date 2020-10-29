@@ -276,6 +276,15 @@ var clusterIdleInSessionTimeout = settings.RegisterNonNegativeDurationSetting(
 	0,
 )
 
+// TODO(mgartner): remove this once multi-column inverted indexes are fully
+// supported.
+var experimentalMultiColumnInvertedIndexesMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_multi_column_inverted_indexes.enabled",
+	"default value for experimental_enable_multi_column_inverted_indexes session setting;"+
+		"disables multi column inverted indexes by default",
+	false,
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -2169,6 +2178,12 @@ func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
+}
+
+// TODO(mgartner): remove this once multi-column inverted indexes are fully
+// supported.
+func (m *sessionDataMutator) SetMutliColumnInvertedIndexes(val bool) {
+	m.data.EnableMultiColumnInvertedIndexes = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

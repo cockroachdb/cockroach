@@ -214,6 +214,11 @@ type LocalOnlySessionData struct {
 	SynchronousCommit bool
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
+	// EnableMultiColumnInvertedIndexes indicates whether creating multi-column
+	// inverted indexes is allowed.
+	// TODO(mgartner): remove this once multi-column inverted indexes are fully
+	// supported.
+	EnableMultiColumnInvertedIndexes bool
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //
