@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
+	"github.com/cockroachdb/errors"
 )
 
 // indexRejectFlags contains flags designating types of indexes to skip during
@@ -61,13 +62,17 @@ type scanIndexIter struct {
 	// (the originalFilters are passed as-is for non-partial indexes).
 	originalFilters memo.FiltersExpr
 
+	// alternativeFilters is an alternative set of filters used to determine if
+	// a partial index can be enumerated.
+	alternativeFilters memo.FiltersExpr
+
 	// rejectFlags is a set of flags that designate which types of indexes to
 	// skip during iteration.
 	rejectFlags indexRejectFlags
 }
 
-// init initializes a new scanIndexIter.
-func (it *scanIndexIter) init(
+// Init initializes a new scanIndexIter.
+func (it *scanIndexIter) Init(
 	mem *memo.Memo,
 	im *partialidx.Implicator,
 	scanPrivate *memo.ScanPrivate,
@@ -80,6 +85,27 @@ func (it *scanIndexIter) init(
 	it.scanPrivate = scanPrivate
 	it.originalFilters = originalFilters
 	it.rejectFlags = rejectFlags
+}
+
+// SetAlternativeFilters specifies an alternative set of filters used to
+// determine if a partial index can be enumerated. If the originalFilters do not
+// imply a partial index predicate, the scanIndexIter will check if the
+// alternative filters imply the predicate and enumerate the partial index if
+// successful.
+//
+// Specifying alternative filters is useful in nested iteration when two partial
+// indexes have the same or similar predicate. The outer loop may remove an
+// implicating expression from the remaining filters when proving implication of
+// the first partial index. As a result, the inner loop, with the outer loop's
+// remaining filters as its original filters, will be unable to prove
+// implication of the second partial index. By specifying the original filters
+// of the outer loop as alternative filters of the inner loop, implication can
+// be proven for the second partial index.
+func (it *scanIndexIter) SetAlternativeFilters(filters memo.FiltersExpr) {
+	if it.originalFilters == nil {
+		panic(errors.AssertionFailedf("cannot specify alternativeFilters without originalFilters"))
+	}
+	it.alternativeFilters = filters
 }
 
 // enumerateIndexFunc defines the callback function for the ForEach and
@@ -174,10 +200,10 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			}
 
 			if filters != nil {
-				remainingFilters, ok := it.im.FiltersImplyPredicate(filters, pred)
+				remainingFilters, ok := it.filtersImplyPredicate(pred)
 				if !ok {
-					// The originalFilters do not imply the predicate, so skip
-					// over the partial index.
+					// The predicate is not implied by the filters, so skip over
+					// the partial index.
 					continue
 				}
 
@@ -192,6 +218,32 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 
 		f(index, filters, indexCols, isCovering)
 	}
+}
+
+// filtersImplyPredicate attempts to prove that the originalFilters imply the
+// given partial index predicate expression. If the originalFilters imply the
+// predicate, it returns the remaining filters that must be applied after a scan
+// over the partial index and true. If the originalFilters do not imply the
+// predicate and alternativeFilters is not null, it tries to prove that the
+// alternativeFilters imply the predicate. If the predicate is not implied by
+// the filters, ok=false is returned.
+func (it *scanIndexIter) filtersImplyPredicate(
+	pred memo.FiltersExpr,
+) (remainingFilters memo.FiltersExpr, ok bool) {
+	// First check if the originalFilters imply the predicate.
+	if remainingFilters, ok = it.im.FiltersImplyPredicate(it.originalFilters, pred); ok {
+		return remainingFilters, true
+	}
+
+	// If the originalFilters did not imply the predicate, then check if the
+	// alternativeFilters imply the predicate, if they exist.
+	if it.alternativeFilters != nil {
+		if remainingFilters, ok = it.im.FiltersImplyPredicate(it.alternativeFilters, pred); ok {
+			return remainingFilters, true
+		}
+	}
+
+	return nil, false
 }
 
 // hasRejectFlag returns true if the given flag is set in the rejectFlags.
