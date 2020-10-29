@@ -183,7 +183,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 	var pkCols opt.ColList
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
@@ -434,7 +434,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	var pkCols opt.ColList
 
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, on memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		// Check whether the filter can constrain the index.
 		invertedExpr := invertedidx.TryJoinGeoIndex(
