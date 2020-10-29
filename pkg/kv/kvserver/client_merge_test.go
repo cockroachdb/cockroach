@@ -2021,7 +2021,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 
 	// Wait for store2 to hear about the split.
 	testutils.SucceedsSoon(t, func() error {
-		if rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
+		if rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsRangeInitialized() {
 			return errors.Errorf("store2 has not yet processed split. err: %v", err)
 		}
 		return nil
@@ -2152,7 +2152,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	// Wait for store2 to hear about the split.
 	var rhsRepl2 *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
-		if rhsRepl2, err = store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
+		if rhsRepl2, err = store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsRangeInitialized() {
 			return errors.New("store2 has not yet processed split")
 		}
 		return nil
@@ -2481,7 +2481,7 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if !lhsRepl2.IsInitialized() {
+			if !lhsRepl2.IsRangeInitialized() {
 				// Make sure the replica is initialized before unreplicating.
 				// Uninitialized replicas that have a replicaID are hard to
 				// GC (not implemented at the time of writing).
@@ -2625,7 +2625,7 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	bRangeID := split(bKey)
 	var bRepl2 *kvserver.Replica
 	testutils.SucceedsSoon(t, func() (err error) {
-		if bRepl2, err = store2.GetReplica(bRangeID); err != nil || !bRepl2.IsInitialized() {
+		if bRepl2, err = store2.GetReplica(bRangeID); err != nil || !bRepl2.IsRangeInitialized() {
 			return errors.New("store2 has not yet processed split of c")
 		}
 		return nil

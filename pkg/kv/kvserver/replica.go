@@ -650,7 +650,7 @@ func (r *Replica) SetZoneConfig(zone *zonepb.ZoneConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.isInitializedRLocked() &&
+	if r.isRangeInitializedRLocked() &&
 		r.mu.zone != nil &&
 		zone != nil {
 		total := r.mu.state.Stats.Total()

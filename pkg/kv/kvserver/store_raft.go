@@ -492,7 +492,7 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 		log.Warningf(ctx, "handle raft ready: %.1fs [applied=%d, batches=%d, state_assertions=%d]",
 			elapsed.Seconds(), stats.entriesProcessed, stats.batchesProcessed, stats.stateAssertions)
 	}
-	if !removed && !r.IsInitialized() {
+	if !removed && !r.IsRangeInitialized() {
 		// Only an uninitialized replica can have a placeholder since, by
 		// definition, an initialized replica will be present in the
 		// replicasByKey map. While the replica will usually consume the

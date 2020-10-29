@@ -26,7 +26,7 @@ type replicaMsgAppDropper Replica
 func (rd *replicaMsgAppDropper) Args() (initialized bool, ticks int) {
 	r := (*Replica)(rd)
 	r.mu.RLock()
-	initialized = r.isInitializedRLocked()
+	initialized = r.isRangeInitializedRLocked()
 	ticks = r.mu.ticks
 	r.mu.RUnlock()
 	return initialized, ticks

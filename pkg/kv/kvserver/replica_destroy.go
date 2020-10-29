@@ -140,7 +140,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	ms := r.GetMVCCStats()
 	batch := r.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
-	clearRangeIDLocalOnly := !r.IsInitialized()
+	clearRangeIDLocalOnly := !r.IsRangeInitialized()
 	if err := r.preDestroyRaftMuLocked(
 		ctx,
 		r.Engine(),
@@ -166,7 +166,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
 		return err
 	}
-	if r.IsInitialized() {
+	if r.IsRangeInitialized() {
 		log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
 			commitTime.Sub(startTime).Seconds()*1000,

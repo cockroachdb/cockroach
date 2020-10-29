@@ -671,7 +671,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if !r.IsInitialized() && rd.HardState.Commit != 0 {
+		if !r.IsRangeInitialized() && rd.HardState.Commit != 0 {
 			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
 		}
 		// NB: Note that without additional safeguards, it's incorrect to write
@@ -1607,7 +1607,7 @@ func (r *Replica) acquireSplitLock(
 	if err != nil {
 		return nil, err
 	}
-	if rightRepl.IsInitialized() {
+	if rightRepl.IsRangeInitialized() {
 		return nil, errors.Errorf("RHS of split %s / %s already initialized before split application",
 			&split.LeftDesc, &split.RightDesc)
 	}

@@ -237,7 +237,7 @@ type replicaInQueue interface {
 	ReplicaID() roachpb.ReplicaID
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
-	IsInitialized() bool
+	IsRangeInitialized() bool
 	IsDestroyed() (DestroyReason, error)
 	Desc() *roachpb.RangeDescriptor
 	maybeInitializeRaftGroup(context.Context)
@@ -623,7 +623,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		return
 	}
 
-	if !repl.IsInitialized() {
+	if !repl.IsRangeInitialized() {
 		return
 	}
 
@@ -918,7 +918,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		bq.processTimeoutFunc(bq.store.ClusterSettings(), repl), func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "processing replica")
 
-			if !repl.IsInitialized() {
+			if !repl.IsRangeInitialized() {
 				// We checked this when adding the replica, but we need to check it again
 				// in case this is a different replica with the same range ID (see #14193).
 				// This is possible in the case where the replica was enqueued while not

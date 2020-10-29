@@ -1164,7 +1164,7 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 	// key never changes.
 	for _, s := range m.stores {
 		rep, err := s.GetReplica(rangeID)
-		if err == nil && rep.IsInitialized() {
+		if err == nil && rep.IsRangeInitialized() {
 			return rep.Desc().StartKey
 		}
 	}

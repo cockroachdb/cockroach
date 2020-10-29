@@ -224,7 +224,7 @@ func (s *Store) AssertInvariants() {
 		// acquiring repl.raftMu challenging; instead we require that this method is
 		// called only when there is no in-flight traffic to the store, at which
 		// point acquiring repl.raftMu is unnecessary.
-		if repl.IsInitialized() {
+		if repl.IsRangeInitialized() {
 			if ex := s.mu.replicasByKey.Get(repl); ex != repl {
 				log.Fatalf(ctx, "%v misplaced in replicasByKey; found %v instead", repl, ex)
 			}

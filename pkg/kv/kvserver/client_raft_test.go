@@ -4232,7 +4232,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 			repl42, err = store.GetReplica(42)
 			return err
 		})
-		if repl42.IsInitialized() {
+		if repl42.IsRangeInitialized() {
 			t.Fatalf("test bug: repl42 is initialized")
 		}
 

@@ -135,7 +135,7 @@ func (is Server) WaitForReplicaInit(
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			// Long-lived references to replicas are frowned upon, so re-fetch the
 			// replica on every turn of the loop.
-			if repl, err := s.GetReplica(req.RangeID); err == nil && repl.IsInitialized() {
+			if repl, err := s.GetReplica(req.RangeID); err == nil && repl.IsRangeInitialized() {
 				return nil
 			}
 		}

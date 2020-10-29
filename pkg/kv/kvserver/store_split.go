@@ -87,7 +87,7 @@ func splitPreApply(
 			// Assert that the rightRepl is not initialized. We're about to clear out
 			// the data of the RHS of the split; we cannot have already accepted a
 			// snapshot to initialize this newer RHS.
-			if rightRepl.IsInitialized() {
+			if rightRepl.IsRangeInitialized() {
 				log.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
 			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)

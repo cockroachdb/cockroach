@@ -251,7 +251,7 @@ func fromReplicaIsTooOld(toReplica *Replica, fromReplica *roachpb.ReplicaDescrip
 // the same Range ID or a KeyRange that overlaps has already been added to
 // this store. addReplicaInternalLocked requires that the store lock is held.
 func (s *Store) addReplicaInternalLocked(repl *Replica) error {
-	if !repl.IsInitialized() {
+	if !repl.IsRangeInitialized() {
 		return errors.Errorf("attempted to add uninitialized replica %s", repl)
 	}
 
@@ -319,7 +319,7 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 // internal bookkeeping. It requires that Store.mu and Replica.raftMu
 // are locked.
 func (s *Store) maybeMarkReplicaInitializedLocked(ctx context.Context, repl *Replica) error {
-	if !repl.IsInitialized() {
+	if !repl.IsRangeInitialized() {
 		return errors.Errorf("attempted to process uninitialized range %s", repl)
 	}
 

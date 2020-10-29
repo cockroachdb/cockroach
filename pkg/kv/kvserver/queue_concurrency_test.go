@@ -162,7 +162,7 @@ func (fr *fakeReplica) StoreID() roachpb.StoreID {
 }
 func (fr *fakeReplica) GetRangeID() roachpb.RangeID         { return fr.rangeID }
 func (fr *fakeReplica) ReplicaID() roachpb.ReplicaID        { return fr.replicaID }
-func (fr *fakeReplica) IsInitialized() bool                 { return true }
+func (fr *fakeReplica) IsRangeInitialized() bool            { return true }
 func (fr *fakeReplica) IsDestroyed() (DestroyReason, error) { return destroyReasonAlive, nil }
 func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{RangeID: fr.rangeID, EndKey: roachpb.RKey("z")}

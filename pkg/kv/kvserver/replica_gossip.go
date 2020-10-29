@@ -77,7 +77,7 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
 		return nil
 	}
-	if !r.IsInitialized() {
+	if !r.IsRangeInitialized() {
 		log.VEventf(ctx, 2, "not gossiping system config because the replica isn't initialized")
 		return nil
 	}
@@ -139,7 +139,7 @@ func (r *Replica) MaybeGossipSystemConfigIfHaveFailure(ctx context.Context) erro
 // against what's already in gossip and only gossips records which
 // are out of date.
 func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span) error {
-	if r.store.Gossip() == nil || !r.IsInitialized() {
+	if r.store.Gossip() == nil || !r.IsRangeInitialized() {
 		return nil
 	}
 
@@ -235,7 +235,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 // should gossip; the bool returned indicates whether it's us.
 func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
-	if r.store.Gossip() == nil || !r.IsInitialized() {
+	if r.store.Gossip() == nil || !r.IsRangeInitialized() {
 		return false, roachpb.NewErrorf("no gossip or range not initialized")
 	}
 	var hasLease bool

@@ -166,7 +166,7 @@ func (s *Store) Send(
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	if !repl.IsInitialized() {
+	if !repl.IsRangeInitialized() {
 		repl.mu.RLock()
 		replicaID := repl.mu.replicaID
 		repl.mu.RUnlock()

@@ -374,7 +374,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		rs.visited++
 		repl.mu.RLock()
 		destroyed := repl.mu.destroyStatus
-		initialized := repl.isInitializedRLocked()
+		initialized := repl.isRangeInitializedRLocked()
 		repl.mu.RUnlock()
 		if initialized && destroyed.IsAlive() && !visitor(repl) {
 			break
@@ -2444,7 +2444,7 @@ func (s *Store) RangeFeed(
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	if !repl.IsInitialized() {
+	if !repl.IsRangeInitialized() {
 		// (*Store).Send has an optimization for uninitialized replicas to send back
 		// a NotLeaseHolderError with a hint of where an initialized replica might
 		// be found. RangeFeeds can always be served from followers and so don't

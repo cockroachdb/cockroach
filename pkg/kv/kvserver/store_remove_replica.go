@@ -49,7 +49,7 @@ func (s *Store) removeReplicaRaftMuLocked(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
 	rep.raftMu.AssertHeld()
-	if rep.IsInitialized() {
+	if rep.IsRangeInitialized() {
 		return errors.Wrap(s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts),
 			"failed to remove replica")
 	}
@@ -98,7 +98,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 		// This is a fatal error as an initialized replica can never become
 		/// uninitialized.
-		if !rep.isInitializedRLocked() {
+		if !rep.isRangeInitializedRLocked() {
 			rep.mu.Unlock()
 			log.Fatalf(ctx, "uninitialized replica cannot be removed with removeInitializedReplica: %v", rep)
 		}
@@ -197,7 +197,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 			log.Fatalf(ctx, "uninitialized replica unexpectedly already removed")
 		}
 
-		if rep.isInitializedRLocked() {
+		if rep.isRangeInitializedRLocked() {
 			rep.mu.Unlock()
 			log.Fatalf(ctx, "cannot remove initialized replica in removeUninitializedReplica: %v", rep)
 		}

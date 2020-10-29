@@ -134,7 +134,7 @@ func newUnloadedReplica(
 //
 func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
 	ctx := r.AnnotateCtx(context.TODO())
-	if r.mu.state.Desc != nil && r.isInitializedRLocked() {
+	if r.mu.state.Desc != nil && r.isRangeInitializedRLocked() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	} else if r.mu.replicaID == 0 {
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
@@ -204,14 +204,14 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	return nil
 }
 
-// IsInitialized is true if we know the metadata of this range, either
+// IsRangeInitialized is true if we know the metadata of this range, either
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
-func (r *Replica) IsInitialized() bool {
+func (r *Replica) IsRangeInitialized() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.isInitializedRLocked()
+	return r.isRangeInitializedRLocked()
 }
 
 // TenantID returns the associated tenant ID and a boolean to indicate that it
@@ -226,12 +226,12 @@ func (r *Replica) getTenantIDRLocked() (roachpb.TenantID, bool) {
 	return r.mu.tenantID, r.mu.tenantID != (roachpb.TenantID{})
 }
 
-// isInitializedRLocked is true if we know the metadata of this range, either
+// isRangeInitializedRLocked is true if we know the metadata of this range, either
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 // isInitializedLocked requires that the replica lock is held.
-func (r *Replica) isInitializedRLocked() bool {
+func (r *Replica) isRangeInitializedRLocked() bool {
 	return r.mu.state.Desc.IsInitialized()
 }
 

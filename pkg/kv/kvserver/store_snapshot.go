@@ -709,7 +709,7 @@ func (s *Store) shouldAcceptSnapshotData(
 		func(ctx context.Context, r *Replica) *roachpb.Error {
 			// If the current replica is not initialized then we should accept this
 			// snapshot if it doesn't overlap existing ranges.
-			if !r.IsInitialized() {
+			if !r.IsRangeInitialized() {
 				s.mu.Lock()
 				defer s.mu.Unlock()
 				return roachpb.NewError(s.checkSnapshotOverlapLocked(ctx, snapHeader))
