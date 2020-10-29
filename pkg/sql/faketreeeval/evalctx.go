@@ -212,3 +212,8 @@ func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ uint64) error {
 func (c *DummyTenantOperator) DestroyTenant(_ context.Context, _ uint64) error {
 	return errors.WithStack(errEvalTenant)
 }
+
+// GCTenant is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) GCTenant(_ context.Context, _ uint64) error {
+	return errors.WithStack(errEvalTenant)
+}
