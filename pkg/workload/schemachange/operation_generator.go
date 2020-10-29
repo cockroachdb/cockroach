@@ -77,6 +77,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	createTable:   true,
 	createTableAs: true,
 	createView:    true,
+	createEnum:    true,
 
 	dropColumn: true,
 
@@ -365,6 +366,17 @@ func (og *operationGenerator) createEnum(tx *pgx.Tx) (string, error) {
 	typName, err := og.randEnum(tx, og.pctExisting(false))
 	if err != nil {
 		return "", err
+	}
+	typ, err := typName.ToUnresolvedObjectName(tree.NoAnnotation)
+	if err != nil {
+		return "", err
+	}
+	typeExists, err := typeExists(tx, typ)
+	if err != nil {
+		return "", err
+	}
+	if typeExists {
+		og.expectedExecErrors.add(pgcode.DuplicateObject)
 	}
 	stmt := rowenc.RandCreateType(og.params.rng, typName.String(), "asdf")
 	return tree.Serialize(stmt), nil
