@@ -71,10 +71,10 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	}
 
 	t.Run("writes before range", func(t *testing.T) {
-		if err := batch.Clear(outsideKey); !isWriteSpanErr(err) {
+		if err := batch.ClearUnversioned(outsideKey.Key); !isWriteSpanErr(err) {
 			t.Errorf("Clear: unexpected error %v", err)
 		}
-		if err := batch.ClearRange(outsideKey, outsideKey2); !isWriteSpanErr(err) {
+		if err := batch.ClearRawRange(outsideKey.Key, outsideKey2.Key); !isWriteSpanErr(err) {
 			t.Errorf("ClearRange: unexpected error %v", err)
 		}
 		{
@@ -94,7 +94,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	})
 
 	t.Run("writes after range", func(t *testing.T) {
-		if err := batch.Clear(outsideKey3); !isWriteSpanErr(err) {
+		if err := batch.ClearUnversioned(outsideKey3.Key); !isWriteSpanErr(err) {
 			t.Errorf("Clear: unexpected error %v", err)
 		}
 		if err := batch.ClearRange(insideKey2, outsideKey4); !isWriteSpanErr(err) {
@@ -284,7 +284,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 	value := []byte("value")
 
 	// Write value that we can try to read later.
-	if err := eng.Put(rkey, value); err != nil {
+	if err := eng.PutUnversioned(rkey.Key, value); err != nil {
 		t.Fatalf("direct write failed: %+v", err)
 	}
 
@@ -308,7 +308,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 	}
 
 	for _, batch := range []storage.Batch{batchBefore, batchNonMVCC} {
-		if err := batch.Put(wkey, value); err == nil {
+		if err := batch.PutUnversioned(wkey.Key, value); err == nil {
 			t.Fatalf("was able to write inside the range at ts less than latch declaration: %+v", err)
 		}
 	}
@@ -321,7 +321,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 	}
 
 	for _, batch := range []storage.Batch{batchBefore, batchNonMVCC} {
-		if err := batch.Clear(wkey); !isWriteSpanErr(err) {
+		if err := batch.ClearUnversioned(wkey.Key); !isWriteSpanErr(err) {
 			t.Errorf("Clear: unexpected error %v", err)
 		}
 		{

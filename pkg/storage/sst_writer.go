@@ -154,16 +154,6 @@ func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("unimplemented")
 }
 
-// Clear implements the Writer interface.
-func (fw *SSTWriter) Clear(key MVCCKey) error {
-	if fw.fw == nil {
-		return errors.New("cannot call Clear on a closed writer")
-	}
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
-	fw.DataSize += int64(len(key.Key))
-	return fw.fw.Delete(fw.scratch)
-}
-
 // ClearMVCC implements the Writer interface.
 func (fw *SSTWriter) ClearMVCC(key MVCCKey) error {
 	if key.Timestamp.IsEmpty() {

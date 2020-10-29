@@ -2126,7 +2126,7 @@ func TestOptimizePuts(t *testing.T) {
 			t.Errorf("%d: expected %+v; got %+v", i, c.expBlind, blind)
 		}
 		if c.exKey != nil {
-			if err := tc.engine.Clear(storage.MakeMVCCMetadataKey(c.exKey)); err != nil {
+			if err := tc.engine.ClearUnversioned(c.exKey); err != nil {
 				t.Fatal(err)
 			}
 		}

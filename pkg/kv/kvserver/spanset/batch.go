@@ -335,19 +335,6 @@ func (s spanSetWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 	return s.w.ApplyBatchRepr(repr, sync)
 }
 
-func (s spanSetWriter) Clear(key storage.MVCCKey) error {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
-			return err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return err
-		}
-	}
-	return s.w.Clear(key)
-}
-
 func (s spanSetWriter) checkAllowed(key roachpb.Key) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key}); err != nil {

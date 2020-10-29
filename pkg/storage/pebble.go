@@ -742,14 +742,6 @@ func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 	return batch.Commit(opts)
 }
 
-// Clear implements the Engine interface.
-func (p *Pebble) Clear(key MVCCKey) error {
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-	return p.db.Delete(EncodeKey(key), pebble.Sync)
-}
-
 // ClearMVCC implements the Engine interface.
 func (p *Pebble) ClearMVCC(key MVCCKey) error {
 	if key.Timestamp.IsEmpty() {
@@ -1272,10 +1264,6 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 
 // Writer is the write interface to an engine's data.
 func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) Clear(key MVCCKey) error {
 	panic("not implemented")
 }
 

@@ -325,13 +325,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearIntent(key roachpb.Key) error
-	// TODO: remove
-	// Clear removes the item from the db with the given key. Note that clear
-	// actually removes entries from the storage engine, rather than inserting
-	// tombstones.
-	//
-	// It is safe to modify the contents of the arguments after it returns.
-	Clear(key MVCCKey) error
 
 	// TODO: remove
 	// SingleClear removes the most recent write to the item from the db with

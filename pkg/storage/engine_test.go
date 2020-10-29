@@ -154,7 +154,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 				iter.SeekGE(key)
 
-				if err := batch.Clear(key); err != nil {
+				if err := batch.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 
@@ -255,7 +255,7 @@ func TestEngineBatch(t *testing.T) {
 
 			apply := func(rw ReadWriter, d data) error {
 				if d.value == nil {
-					return rw.Clear(d.key)
+					return rw.ClearUnversioned(d.key.Key)
 				} else if d.merge {
 					return rw.Merge(d.key, d.value)
 				}
@@ -289,7 +289,7 @@ func TestEngineBatch(t *testing.T) {
 					currentBatch[k] = batch[shuffledIndices[k]]
 				}
 				// Reset the key
-				if err := engine.Clear(key); err != nil {
+				if err := engine.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 				// Run it once with individual operations and remember the result.
@@ -303,7 +303,7 @@ func TestEngineBatch(t *testing.T) {
 				// Run the whole thing as a batch and compare.
 				b := engine.NewBatch()
 				defer b.Close()
-				if err := b.Clear(key); err != nil {
+				if err := b.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 				for _, op := range currentBatch {
@@ -370,13 +370,13 @@ func TestEnginePutGetDelete(t *testing.T) {
 					_, err := engine.MVCCGet(mvccKey(""))
 					return err
 				}(),
-				engine.Clear(NilKey),
+				engine.ClearUnversioned(NilKey.Key),
 				func() error {
 					_, err := engine.MVCCGet(NilKey)
 					return err
 				}(),
-				engine.Clear(NilKey),
-				engine.Clear(mvccKey("")),
+				engine.ClearUnversioned(NilKey.Key),
+				engine.ClearUnversioned(mvccKey("").Key),
 			} {
 				if err == nil {
 					t.Fatalf("%d: illegal handling of empty key", i)
@@ -412,7 +412,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 				if !bytes.Equal(val, c.value) {
 					t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 				}
-				if err := engine.Clear(c.key); err != nil {
+				if err := engine.ClearUnversioned(c.key.Key); err != nil {
 					t.Errorf("delete: expected no error, but got %s", err)
 				}
 				val, err = engine.MVCCGet(c.key)

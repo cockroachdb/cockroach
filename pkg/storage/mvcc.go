@@ -1563,7 +1563,7 @@ func mvccPutInternal(
 			return err
 		}
 		if value == nil {
-			metaKeySize, metaValSize, err = 0, 0, writer.Clear(metaKey)
+			metaKeySize, metaValSize, err = 0, 0, writer.ClearUnversioned(metaKey.Key)
 		} else {
 			buf.meta = enginepb.MVCCMetadata{RawBytes: value}
 			metaKeySize, metaValSize, err = buf.putMeta(writer, metaKey, &buf.meta)
@@ -1736,7 +1736,7 @@ func mvccPutInternal(
 
 				versionKey := metaKey
 				versionKey.Timestamp = metaTimestamp
-				if err := writer.Clear(versionKey); err != nil {
+				if err := writer.ClearMVCC(versionKey); err != nil {
 					return err
 				}
 			} else if writeTimestamp.Less(metaTimestamp) {
@@ -2256,8 +2256,16 @@ func MVCCClearTimeRange(
 			clearRangeStart = MVCCKey{}
 		} else if bufSize > 0 {
 			for i := 0; i < bufSize; i++ {
-				if err := rw.Clear(buf[i]); err != nil {
-					return err
+				if buf[i].Timestamp.IsEmpty() {
+					// Inline metadata. Not an intent because iteration below fails
+					// if it sees an intent.
+					if err := rw.ClearUnversioned(buf[i].Key); err != nil {
+						return err
+					}
+				} else {
+					if err := rw.ClearMVCC(buf[i]); err != nil {
+						return err
+					}
 				}
 			}
 			batchSize += int64(bufSize)
@@ -2949,7 +2957,7 @@ func mvccResolveWriteIntent(
 			metaKeySize, metaValSize, err = buf.putMeta(rw, metaKey, &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
-			err = rw.Clear(metaKey)
+			err = rw.ClearIntent(metaKey.Key)
 		}
 		if err != nil {
 			return false, err
@@ -2981,7 +2989,7 @@ func mvccResolveWriteIntent(
 			if err = rw.Put(newKey, value); err != nil {
 				return false, err
 			}
-			if err = rw.Clear(oldKey); err != nil {
+			if err = rw.ClearMVCC(oldKey); err != nil {
 				return false, err
 			}
 
@@ -3033,8 +3041,8 @@ func mvccResolveWriteIntent(
 	// - writer2 dispatches ResolveIntent to key0 (with epoch 0)
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
-	// First clear the intent value.
-	if err := rw.Clear(latestKey); err != nil {
+	// First clear the provisional value.
+	if err := rw.ClearMVCC(latestKey); err != nil {
 		return false, err
 	}
 
@@ -3052,7 +3060,7 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if err = rw.Clear(metaKey); err != nil {
+		if err = rw.ClearIntent(metaKey.Key); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -3070,7 +3078,7 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: valueSize,
 	}
-	if err := rw.Clear(metaKey); err != nil {
+	if err := rw.ClearIntent(metaKey.Key); err != nil {
 		return false, err
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
@@ -3331,7 +3339,9 @@ func MVCCGarbageCollect(
 				}
 			}
 			if !implicitMeta {
-				if err := rw.Clear(iter.UnsafeKey()); err != nil {
+				// This must be an inline entry since we are not allowed to clear
+				// intents, and we've confirmed that meta.Txn == nil earlier.
+				if err := rw.ClearUnversioned(iter.UnsafeKey().Key); err != nil {
 					return err
 				}
 				count++
@@ -3450,7 +3460,7 @@ func MVCCGarbageCollect(
 					valSize, nil, fromNS))
 			}
 			count++
-			if err := rw.Clear(unsafeIterKey); err != nil {
+			if err := rw.ClearMVCC(unsafeIterKey); err != nil {
 				return err
 			}
 			prevNanos = unsafeIterKey.Timestamp.WallTime
