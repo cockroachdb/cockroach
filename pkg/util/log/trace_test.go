@@ -65,9 +65,8 @@ func TestTrace(t *testing.T) {
 	Event(ctx, "should-not-show-up")
 
 	tracer := tracing.NewTracer()
-	tracer.SetForceRealSpans(true)
-	sp := tracer.StartSpan("s")
-	tracing.StartRecording(sp, tracing.SingleNodeRecording)
+	sp := tracer.StartRootSpan("s", nil /* logTags */, tracing.RecordableSpan)
+	sp.StartRecording(tracing.SingleNodeRecording)
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
 	VEvent(ctxWithSpan, noLogV(), "test2")
@@ -79,7 +78,7 @@ func TestTrace(t *testing.T) {
 
 	sp.Finish()
 
-	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
+	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
 		  event: test1
 		  event: test2
@@ -95,10 +94,9 @@ func TestTraceWithTags(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "tag", 1)
 
 	tracer := tracing.NewTracer()
-	tracer.SetForceRealSpans(true)
-	sp := tracer.StartSpan("s")
+	sp := tracer.StartRootSpan("s", nil /* logTags */, tracing.RecordableSpan)
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
-	tracing.StartRecording(sp, tracing.SingleNodeRecording)
+	sp.StartRecording(tracing.SingleNodeRecording)
 
 	Event(ctxWithSpan, "test1")
 	VEvent(ctxWithSpan, noLogV(), "test2")
@@ -106,7 +104,7 @@ func TestTraceWithTags(t *testing.T) {
 	Info(ctxWithSpan, "log")
 
 	sp.Finish()
-	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
+	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
 		  event: [tag=1] test1
 		  event: [tag=1] test2
@@ -182,9 +180,8 @@ func TestEventLogAndTrace(t *testing.T) {
 	VErrEvent(ctxWithEventLog, noLogV(), "testerr")
 
 	tracer := tracing.NewTracer()
-	tracer.SetForceRealSpans(true)
-	sp := tracer.StartSpan("s")
-	tracing.StartRecording(sp, tracing.SingleNodeRecording)
+	sp := tracer.StartRootSpan("s", nil /* logTags */, tracing.RecordableSpan)
+	sp.StartRecording(tracing.SingleNodeRecording)
 	ctxWithBoth := tracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.
 	Event(ctxWithBoth, "test3")
@@ -197,7 +194,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	sp.Finish()
 	el.Finish()
 
-	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
+	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
 		  event: test3
 		  event: test4

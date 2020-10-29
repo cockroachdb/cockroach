@@ -363,7 +363,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			// Record the statement information that we've collected.
 			// Note that in case of implicit transactions, the trace contains the auto-commit too.
 			sp.Finish()
-			trace := tracing.GetRecording(sp)
+			trace := sp.GetRecording()
 			ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 			placeholders := p.extendedEvalCtx.Placeholders
 			if finishCollectionDiagnostics != nil {

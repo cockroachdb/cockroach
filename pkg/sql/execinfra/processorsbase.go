@@ -857,7 +857,7 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
 	pb.origCtx = ctx
 	pb.Ctx, pb.span = ProcessorSpan(ctx, name)
-	if pb.span != nil && tracing.IsRecording(pb.span) {
+	if pb.span != nil && pb.span.IsRecording() {
 		pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
 		pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
 	}
@@ -885,7 +885,7 @@ func (pb *ProcessorBase) InternalClose() bool {
 		}
 
 		pb.Closed = true
-		tracing.FinishSpan(pb.span)
+		pb.span.Finish()
 		pb.span = nil
 		// Reset the context so that any incidental uses after this point do not
 		// access the finished span.

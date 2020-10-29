@@ -146,13 +146,13 @@ func (m *mockInternalClient) Batch(
 ) (*roachpb.BatchResponse, error) {
 	sp := m.tr.StartRootSpan("mock", nil /* logTags */, tracing.RecordableSpan)
 	defer sp.Finish()
-	tracing.StartRecording(sp, tracing.SnowballRecording)
+	sp.StartRecording(tracing.SnowballRecording)
 	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	log.Eventf(ctx, "mockInternalClient processing batch")
 	br := &roachpb.BatchResponse{}
 	br.Error = m.pErr
-	if rec := tracing.GetRecording(sp); rec != nil {
+	if rec := sp.GetRecording(); rec != nil {
 		br.CollectedSpans = append(br.CollectedSpans, rec...)
 	}
 	return br, nil

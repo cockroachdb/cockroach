@@ -95,7 +95,7 @@ func (ag *aggregatorBase) init(
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
-	if sp := tracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		input = newInputStatCollector(input)
 		ag.FinishTrace = ag.outputStatsToTrace
 	}
@@ -182,8 +182,7 @@ func (ag *aggregatorBase) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(ag.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
+		sp.SetSpanStats(
 			&AggregatorStats{
 				InputStats:      is,
 				MaxAllocatedMem: ag.MemMonitor.MaximumBytes(),

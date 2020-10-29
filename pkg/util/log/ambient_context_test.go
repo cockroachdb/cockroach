@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAnnotateCtxTags(t *testing.T) {
@@ -40,15 +41,14 @@ func TestAnnotateCtxTags(t *testing.T) {
 
 func TestAnnotateCtxSpan(t *testing.T) {
 	tracer := tracing.NewTracer()
-	tracer.SetForceRealSpans(true)
 
 	ac := AmbientContext{Tracer: tracer}
 	ac.AddLogTag("ambient", nil)
 
 	// Annotate a context that has an open span.
 
-	sp1 := tracer.StartSpan("root")
-	tracing.StartRecording(sp1, tracing.SingleNodeRecording)
+	sp1 := tracer.StartRootSpan("root", nil /* logTags */, tracing.RecordableSpan)
+	sp1.StartRecording(tracing.SingleNodeRecording)
 	ctx1 := tracing.ContextWithSpan(context.Background(), sp1)
 	Event(ctx1, "a")
 
@@ -59,7 +59,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	sp2.Finish()
 	sp1.Finish()
 
-	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp1), `
+	if err := tracing.TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span root:
 			event: a
 			event: c
@@ -70,20 +70,15 @@ func TestAnnotateCtxSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Annotate a context that has no span.
+	// Annotate a context that has no span. The tracer will create a non-recordable
+	// span. We just check here that AnnotateCtxWithSpan properly returns it to the
+	// caller.
 
 	ac.Tracer = tracer
 	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s")
-	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	Event(ctx, "a")
-	sp.Finish()
-	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
-	  Span s:
-			tags: ambient=
-			event: [ambient] a
-	`); err != nil {
-		t.Fatal(err)
-	}
+	require.Equal(t, sp, tracing.SpanFromContext(ctx))
+	require.NotNil(t, sp)
+	require.True(t, sp.IsBlackHole())
 }
 
 func TestAnnotateCtxNodeStoreReplica(t *testing.T) {

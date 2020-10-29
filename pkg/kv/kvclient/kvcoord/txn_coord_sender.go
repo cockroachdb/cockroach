@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -472,7 +471,7 @@ func (tc *TxnCoordSender) Send(
 	if tc.mu.txn.ID == (uuid.UUID{}) {
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
-	if !tracing.IsBlackHoleSpan(sp) {
+	if !sp.IsBlackHole() {
 		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
 	}
 	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))

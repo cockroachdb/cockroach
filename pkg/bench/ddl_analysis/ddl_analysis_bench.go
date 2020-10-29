@@ -47,7 +47,7 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 			beforePlan := func(sp *tracing.Span, stmt string) {
 				if _, ok := stmtToKvBatchRequests.Load(stmt); ok {
 					sp.Finish()
-					trace := tracing.GetRecording(sp)
+					trace := sp.GetRecording()
 					count := countKvBatchRequestsInRecording(trace)
 					stmtToKvBatchRequests.Store(stmt, count)
 				}

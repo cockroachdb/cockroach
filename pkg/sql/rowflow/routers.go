@@ -262,7 +262,7 @@ func (rb *routerBase) setupStreams(
 // init must be called after setupStreams but before Start.
 func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []*types.T) {
 	// Check if we're recording stats.
-	if s := tracing.SpanFromContext(ctx); s != nil && tracing.IsRecording(s) {
+	if s := tracing.SpanFromContext(ctx); s != nil && s.IsRecording() {
 		rb.statsCollectionEnabled = true
 	}
 
@@ -373,8 +373,8 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					if rb.statsCollectionEnabled {
 						ro.stats.MaxAllocatedMem = ro.memoryMonitor.MaximumBytes()
 						ro.stats.MaxAllocatedDisk = ro.diskMonitor.MaximumBytes()
-						tracing.SetSpanStats(span, &ro.stats)
-						tracing.FinishSpan(span)
+						span.SetSpanStats(&ro.stats)
+						span.Finish()
 						if trace := execinfra.GetTraceData(ctx); trace != nil {
 							ro.mu.Unlock()
 							rb.semaphore <- struct{}{}

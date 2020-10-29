@@ -285,7 +285,7 @@ func newInvertedJoiner(
 	}
 
 	collectingStats := false
-	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		collectingStats = true
 	}
 	if collectingStats {
@@ -738,8 +738,7 @@ func (ij *invertedJoiner) outputStatsToTrace() {
 		return
 	}
 	if sp := tracing.SpanFromContext(ij.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
+		sp.SetSpanStats(
 			&InvertedJoinerStats{
 				InputStats:       is,
 				IndexScanStats:   fis,

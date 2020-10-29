@@ -108,7 +108,7 @@ func changefeedPlanHook(
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
 		if err != nil {

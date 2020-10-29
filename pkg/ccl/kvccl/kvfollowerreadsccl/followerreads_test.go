@@ -229,7 +229,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 						SQLExecutor: &sql.ExecutorTestingKnobs{
 							WithStatementTrace: func(sp *tracing.Span, stmt string) {
 								if stmt == historicalQuery {
-									recCh <- tracing.GetRecording(sp)
+									recCh <- sp.GetRecording()
 								}
 							},
 						},

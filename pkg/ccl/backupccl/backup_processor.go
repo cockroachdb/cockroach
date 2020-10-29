@@ -88,7 +88,7 @@ func newBackupDataProcessor(
 
 func (cp *backupDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "backupDataProcessor")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	defer cp.output.ProducerDone()
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
