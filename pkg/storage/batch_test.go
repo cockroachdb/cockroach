@@ -235,7 +235,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			failureTestCases := []func(){
 				func() { _ = ro.ApplyBatchRepr(nil, false) },
 				func() { _ = ro.ClearUnversioned(a.Key) },
-				func() { _ = ro.ClearRange(a, a) },
+				func() { _ = ro.ClearRawRange(a.Key, a.Key) },
 				func() { _ = ro.Merge(a, nil) },
 				func() { _ = ro.Put(a, nil) },
 			}

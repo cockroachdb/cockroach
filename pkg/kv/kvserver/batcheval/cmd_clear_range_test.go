@@ -51,11 +51,6 @@ func (wb *wrappedBatch) ClearIntent(key roachpb.Key) error {
 	return wb.Batch.ClearIntent(key)
 }
 
-func (wb *wrappedBatch) ClearRange(start, end storage.MVCCKey) error {
-	wb.clearRangeCount++
-	return wb.Batch.ClearRange(start, end)
-}
-
 func (wb *wrappedBatch) ClearRawRange(start, end roachpb.Key) error {
 	wb.clearRangeCount++
 	return wb.Batch.ClearRawRange(start, end)

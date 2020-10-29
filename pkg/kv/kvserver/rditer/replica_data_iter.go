@@ -18,6 +18,8 @@ import (
 )
 
 // KeyRange is a helper struct for the ReplicaDataIterator.
+// TODO(sumeer): change these to roachpb.Key since the timestamp is
+// always empty.
 type KeyRange struct {
 	Start, End storage.MVCCKey
 }

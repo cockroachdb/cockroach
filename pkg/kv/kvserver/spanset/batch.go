@@ -382,19 +382,6 @@ func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	return nil
 }
 
-func (s spanSetWriter) ClearRange(start, end storage.MVCCKey) error {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
-			return err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}, s.ts); err != nil {
-			return err
-		}
-	}
-	return s.w.ClearRange(start, end)
-}
-
 func (s spanSetWriter) ClearRawRange(start, end roachpb.Key) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
