@@ -360,10 +360,10 @@ vectorized: true
 • render
 │ columns: (r)
 │ estimated row count: 1000 (missing stats)
-│ render 0: (a, b) IS NOT DISTINCT FROM NULL
+│ render 0: false
 │
 └── • scan
-      columns: (a, b)
+      columns: ()
       estimated row count: 1000 (missing stats)
       table: t@primary
       spans: FULL SCAN
@@ -445,10 +445,10 @@ vectorized: true
 • render
 │ columns: (r)
 │ estimated row count: 1000 (missing stats)
-│ render 0: (a, b) IS DISTINCT FROM NULL
+│ render 0: true
 │
 └── • scan
-      columns: (a, b)
+      columns: ()
       estimated row count: 1000 (missing stats)
       table: t@primary
       spans: FULL SCAN

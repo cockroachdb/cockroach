@@ -168,7 +168,7 @@ func (c *CustomFuncs) AllowNullArgs(op opt.Operator, left, right opt.ScalarExpr)
 // tuples.
 func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
 	for _, elem := range elems {
-		if !c.IsConstValueOrTuple(elem) {
+		if !c.IsConstValueOrGroupOfConstValues(elem) {
 			return false
 		}
 	}
@@ -192,10 +192,21 @@ func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.Sca
 	return c.f.ConstructConst(a, typ)
 }
 
-// IsConstValueOrTuple returns true if the input is a constant or a tuple of
-// constants.
-func (c *CustomFuncs) IsConstValueOrTuple(input opt.ScalarExpr) bool {
+// IsConstValueOrGroupOfConstValues returns true if the input is a constant,
+// or an array or tuple with only constant elements.
+func (c *CustomFuncs) IsConstValueOrGroupOfConstValues(input opt.ScalarExpr) bool {
 	return memo.CanExtractConstDatum(input)
+}
+
+// IsNeverNull returns true if the input is a non-null constant value,
+// any tuple, or any array.
+func (c *CustomFuncs) IsNeverNull(input opt.ScalarExpr) bool {
+	switch input.Op() {
+	case opt.TrueOp, opt.FalseOp, opt.ConstOp, opt.TupleOp, opt.ArrayOp:
+		return true
+	}
+
+	return false
 }
 
 // HasNullElement returns true if the input tuple has at least one constant,

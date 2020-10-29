@@ -49,7 +49,12 @@ $item
 # operand is a constant, replaces with that constant. Note that ConstValue
 # matches nulls as well as other constants.
 [SimplifyCoalesce, Normalize]
-(Coalesce $args:[ $arg:* & (IsConstValueOrTuple $arg) ... ])
+(Coalesce
+    $args:[
+        $arg:* & (IsConstValueOrGroupOfConstValues $arg)
+        ...
+    ]
+)
 =>
 (SimplifyCoalesce $args)
 

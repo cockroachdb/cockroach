@@ -367,6 +367,36 @@ values
  ├── fd: ()-->(1)
  └── (false,)
 
+norm expect=FoldNonNullIsNull
+SELECT (i,f) IS NOT DISTINCT FROM NULL FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── false [as="?column?":8]
+
+norm expect=FoldNonNullIsNull
+SELECT ARRAY[k,i] IS NOT DISTINCT FROM NULL FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── false [as="?column?":8]
+
+norm expect-not=FoldNonNullIsNull
+SELECT (i,f) IS NULL FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── scan a
+ │    └── columns: i:2 f:3
+ └── projections
+      └── (i:2, f:3) IS NULL [as="?column?":8, outer=(2,3)]
+
 # --------------------------------------------------
 # FoldNullTupleIsTupleNull
 # --------------------------------------------------
@@ -528,6 +558,36 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── (true,)
+
+norm expect=FoldNonNullIsNotNull
+SELECT (i,f) IS DISTINCT FROM NULL FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── true [as="?column?":8]
+
+norm expect=FoldNonNullIsNotNull
+SELECT ARRAY[k,i] IS DISTINCT FROM NULL FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── true [as="?column?":8]
+
+norm expect-not=FoldNonNullIsNotNull
+SELECT (i,f) IS NOT NULL FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── scan a
+ │    └── columns: i:2 f:3
+ └── projections
+      └── (i:2, f:3) IS NOT NULL [as="?column?":8, outer=(2,3)]
 
 # --------------------------------------------------
 # FoldNonNullTupleIsTupleNotNull

@@ -83,7 +83,7 @@ func (c *CustomFuncs) SimplifyCoalesce(args memo.ScalarListExpr) opt.ScalarExpr 
 
 		// If item is not a constant value, then its value may turn out to be
 		// null, so no more folding. Return operands from then on.
-		if !c.IsConstValueOrTuple(item) {
+		if !c.IsConstValueOrGroupOfConstValues(item) {
 			return c.f.ConstructCoalesce(args[i:])
 		}
 
