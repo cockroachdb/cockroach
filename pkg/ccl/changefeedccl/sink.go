@@ -102,6 +102,13 @@ func getSink(
 			}
 		}
 		q.Del(changefeedbase.SinkParamTLSEnabled)
+		if tlsVerifyBool := q.Get(changefeedbase.SinkParamSkipTLSVerify); tlsVerifyBool != `` {
+			var err error
+			if cfg.tlsSkipVerify, err = strconv.ParseBool(tlsVerifyBool); err != nil {
+				return nil, errors.Errorf(`param %s must be a bool: %s`, changefeedbase.SinkParamSkipTLSVerify, err)
+			}
+		}
+		q.Del(changefeedbase.SinkParamSkipTLSVerify)
 		if caCertHex := q.Get(changefeedbase.SinkParamCACert); caCertHex != `` {
 			// TODO(dan): There's a straightforward and unambiguous transformation
 			// between the base 64 encoding defined in RFC 4648 and the URL variant
@@ -289,6 +296,7 @@ func init() {
 type kafkaSinkConfig struct {
 	kafkaTopicPrefix string
 	tlsEnabled       bool
+	tlsSkipVerify    bool
 	caCert           []byte
 	clientCert       []byte
 	clientKey        []byte
@@ -349,6 +357,13 @@ func makeKafkaSink(
 		config.Net.TLS.Enable = true
 	}
 
+	if cfg.tlsEnabled {
+		if config.Net.TLS.Config == nil {
+			config.Net.TLS.Config = &tls.Config{}
+		}
+		config.Net.TLS.Config.InsecureSkipVerify = cfg.tlsSkipVerify
+	}
+
 	if cfg.clientCert != nil {
 		if !cfg.tlsEnabled {
 			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamTLSEnabled)
@@ -359,9 +374,6 @@ func makeKafkaSink(
 		cert, err := tls.X509KeyPair(cfg.clientCert, cfg.clientKey)
 		if err != nil {
 			return nil, errors.Errorf(`invalid client certificate data provided: %s`, err)
-		}
-		if config.Net.TLS.Config == nil {
-			config.Net.TLS.Config = &tls.Config{}
 		}
 		config.Net.TLS.Config.Certificates = []tls.Certificate{cert}
 	} else if cfg.clientKey != nil {

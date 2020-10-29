@@ -1891,6 +1891,12 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
 	)
 
+	// Test that a well-formed URI gets as far as unavailable kafka error.
+	sqlDB.ExpectErr(
+		t, `client has run out of available brokers`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true'`,
+	)
+
 	// kafka_topic_prefix was referenced by an old version of the RFC, it's
 	// "topic_prefix" now.
 	sqlDB.ExpectErr(
@@ -1908,6 +1914,10 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `param tls_enabled must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=foo`,
+	)
+	sqlDB.ExpectErr(
+		t, `param insecure_tls_skip_verify must be a bool`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=foo`,
 	)
 	sqlDB.ExpectErr(
 		t, `param ca_cert must be base 64 encoded`,
