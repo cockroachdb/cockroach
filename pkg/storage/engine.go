@@ -326,19 +326,6 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearIntent(key roachpb.Key) error
 
-	// TODO: remove
-	// SingleClear removes the most recent write to the item from the db with
-	// the given key. Whether older version of the item will come back to life
-	// if not also removed with SingleClear is undefined. See the following:
-	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
-	// for details on the SingleDelete operation that this method invokes. Note
-	// that clear actually removes entries from the storage engine, rather than
-	// inserting tombstones.
-	//
-	// It is safe to modify the contents of the arguments after SingleClear
-	// returns.
-	SingleClear(key MVCCKey) error
-
 	// ClearRawRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). It can be applied to a range consisting of MVCCKeys or the
 	// more general EngineKeys -- it simply uses the roachpb.Key parameters as
