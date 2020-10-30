@@ -14,5 +14,44 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
 func F() {
 	var d sqlbase.Descriptor
-	d.GetTable() // want `Illegal call to Descriptor.GetTable\(\) in F, see Descriptor.Table\(\)`
+	d.GetTable() // want `Illegal call to Descriptor.GetTable\(\), see sqlbase.TableFromDescriptor\(\)`
+
+	//nolint:descriptormarshal
+	d.GetTable()
+
+	// nolint:descriptormarshal
+	d.GetTable()
+
+	// nolint:descriptormarshal
+	if t := d.GetTable(); t != nil {
+		panic("foo")
+	}
+
+	if t := d.
+		// nolint:descriptormarshal
+		GetTable(); t != nil {
+		panic("foo")
+	}
+
+	if t :=
+		// nolint:descriptormarshal
+		d.GetTable(); t != nil {
+		panic("foo")
+	}
+
+	if t := d.GetTable(); t != // want `Illegal call to Descriptor.GetTable\(\), see sqlbase.TableFromDescriptor\(\)`
+		// nolint:descriptormarshal
+		nil {
+		panic("foo")
+	}
+
+	// It does not work to put the comment as an inline with the preamble to an
+	// if statement.
+	if t := d.GetTable(); t != nil { // nolint:descriptormarshal // want `Illegal call to Descriptor.GetTable\(\), see sqlbase.TableFromDescriptor\(\)`
+		panic("foo")
+	}
+
+	if t := d.GetTable(); t != nil { // want `Illegal call to Descriptor.GetTable\(\), see sqlbase.TableFromDescriptor\(\)`
+		panic("foo")
+	}
 }

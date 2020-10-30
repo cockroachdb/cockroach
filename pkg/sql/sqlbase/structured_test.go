@@ -1316,6 +1316,7 @@ func TestKeysPerRow(t *testing.T) {
 				t.Fatalf("%+v", err)
 			}
 
+			// nolint:descriptormarshal
 			keys, err := desc.GetTable().KeysPerRow(test.indexID)
 			if err != nil {
 				t.Fatal(err)
@@ -1381,6 +1382,7 @@ func TestDefaultExprNil(t *testing.T) {
 		}
 		// Test and verify that the default expressions of the column descriptors
 		// are all nil.
+		// nolint:descriptormarshal
 		for _, col := range desc.GetTable().Columns {
 			if col.DefaultExpr != nil {
 				t.Errorf("expected Column Default Expression to be 'nil', got %s instead.", *col.DefaultExpr)
