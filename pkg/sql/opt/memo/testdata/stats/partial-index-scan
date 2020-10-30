@@ -460,11 +460,6 @@ ALTER TABLE hist INJECT STATISTICS '[
 ]'
 ----
 
-# TODO(mgartner): The distinct(2) stat for the partial index scan should be 5.454545
-# not 6.454545. It is currently one more than it should be because
-# updateDistinctCountFromHistogram increments the distinct count before the null
-# count has been set to zero.
-
 exec-ddl
 CREATE INDEX idx ON hist (s) WHERE i > 100 AND i <= 150
 ----
@@ -474,7 +469,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 150
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) s:3(string)
- ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0]
  │   histogram(2)=  0   0   41.818 1.8182
  │                <--- 125 -------- 149 -
  ├── key: (1)
@@ -486,7 +481,7 @@ select
  │    ├── fd: (1)-->(2,3)
  │    └── scan hist@idx,partial
  │         ├── columns: k:1(int!null) s:3(string)
- │         ├── stats: [rows=90.9090909, distinct(2)=6.45454545, null(2)=0]
+ │         ├── stats: [rows=90.9090909, distinct(2)=5.45454545, null(2)=0]
  │         │   histogram(2)=  0   0   89.091 1.8182
  │         │                <--- 100 -------- 150 -
  │         ├── key: (1)
@@ -509,7 +504,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 150
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string)
- ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0]
  │   histogram(2)=  0   0   41.818 1.8182
  │                <--- 125 -------- 149 -
  ├── key: (1)
@@ -517,7 +512,7 @@ index-join hist
  └── scan hist@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
       ├── constraint: /2/1: [/126 - /149]
-      ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+      ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0]
       │   histogram(2)=  0   0   41.818 1.8182
       │                <--- 125 -------- 149 -
       ├── key: (1)
@@ -528,7 +523,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 150
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string)
- ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0]
  │   histogram(2)=  0   0   41.818 1.8182
  │                <--- 125 -------- 149 -
  ├── key: (1)
@@ -542,7 +537,7 @@ index-join hist
       ├── fd: (1)-->(2)
       ├── scan hist@idx,partial
       │    ├── columns: k:1(int!null) i:2(int!null)
-      │    ├── stats: [rows=190, distinct(1)=190, null(1)=0, distinct(2)=11, null(2)=0]
+      │    ├── stats: [rows=190, distinct(1)=190, null(1)=0, distinct(2)=10, null(2)=0]
       │    │   histogram(2)=  0   0   180  10
       │    │                <--- 100 ----- 200
       │    ├── key: (1)
@@ -555,7 +550,7 @@ SELECT * FROM hist WHERE (i > 100 AND i < 125) OR (i > 150 AND i < 175)
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string)
- ├── stats: [rows=87.2727273, distinct(2)=7.18181818, null(2)=0]
+ ├── stats: [rows=87.2727273, distinct(2)=6.18181818, null(2)=0]
  │   histogram(2)=  0   0   41.818 1.8182 0   0   41.818 1.8182
  │                <--- 100 -------- 124 ---- 150 -------- 174 -
  ├── key: (1)
@@ -565,7 +560,7 @@ index-join hist
       ├── constraint: /2/1
       │    ├── [/101 - /124]
       │    └── [/151 - /174]
-      ├── stats: [rows=87.2727273, distinct(2)=7.18181818, null(2)=0]
+      ├── stats: [rows=87.2727273, distinct(2)=6.18181818, null(2)=0]
       │   histogram(2)=  0   0   41.818 1.8182 0   0   41.818 1.8182
       │                <--- 100 -------- 124 ---- 150 -------- 174 -
       ├── key: (1)
@@ -587,7 +582,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mang
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
- ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=3.81818182, null(2,3)=0]
  │   histogram(2)=  0   0   3.4572 1.1524
  │                <--- 125 -------- 129 -
  │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -597,7 +592,7 @@ index-join hist
  └── scan hist@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
       ├── constraint: /2/1: [/126 - /129]
-      ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+      ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=3.81818182, null(2,3)=0]
       │   histogram(2)=  0   0   3.4572 1.1524
       │                <--- 125 -------- 129 -
       │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -610,7 +605,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'mango'
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
- ├── stats: [rows=2.30477976, distinct(2)=2.27272727, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2.27272727, null(2,3)=0]
+ ├── stats: [rows=2.30477976, distinct(2)=1.27272727, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1.27272727, null(2,3)=0]
  │   histogram(2)=  0   0   1.7286 0.57619
  │                <--- 125 --------- 129 -
  │   histogram(3)=  0  2.3048
@@ -625,7 +620,7 @@ select
  │    └── scan hist@idx,partial
  │         ├── columns: k:1(int!null) i:2(int!null)
  │         ├── constraint: /2/1: [/126 - /129]
- │         ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │         ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=3.81818182, null(2,3)=0]
  │         │   histogram(2)=  0   0   3.4572 1.1524
  │         │                <--- 125 -------- 129 -
  │         │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -653,7 +648,7 @@ select
  │         ├── constraint: /2/1
  │         │    ├── [/100 - /100]
  │         │    └── [/200 - /200]
- │         ├── stats: [rows=12.6762887, distinct(2)=3, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=9, null(2,3)=0]
+ │         ├── stats: [rows=12.6762887, distinct(2)=2, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=6, null(2,3)=0]
  │         │   histogram(2)=  0 6.3381 0 6.3381
  │         │                <--- 100 ---- 200 -
  │         │   histogram(3)=  0   3.1691   0   3.1691   0  6.3381
@@ -679,7 +674,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 150 AND s = 'banana'
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
- ├── stats: [rows=6.91433927, distinct(2)=4.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=4.09090909, null(2,3)=0]
+ ├── stats: [rows=6.91433927, distinct(2)=3.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=3.09090909, null(2,3)=0]
  │   histogram(2)=  0   0   6.6262 0.2881
  │                <--- 125 -------- 149 -
  │   histogram(3)=  0   6.9143
@@ -689,7 +684,7 @@ index-join hist
  └── scan hist@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
       ├── constraint: /2/1: [/126 - /149]
-      ├── stats: [rows=6.91433927, distinct(2)=4.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=4.09090909, null(2,3)=0]
+      ├── stats: [rows=6.91433927, distinct(2)=3.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=3.09090909, null(2,3)=0]
       │   histogram(2)=  0   0   6.6262 0.2881
       │                <--- 125 -------- 149 -
       │   histogram(3)=  0   6.9143
@@ -714,7 +709,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mang
 scan hist@idx,partial
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
  ├── constraint: /2/3/1: [/126 - /129]
- ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=3.81818182, null(2,3)=0]
  │   histogram(2)=  0   0   3.4572 1.1524
  │                <--- 125 -------- 129 -
  │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -727,7 +722,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'mango'
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
- ├── stats: [rows=2.30477976, distinct(2)=2.27272727, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2.27272727, null(2,3)=0]
+ ├── stats: [rows=2.30477976, distinct(2)=1.27272727, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1.27272727, null(2,3)=0]
  │   histogram(2)=  0   0   1.7286 0.57619
  │                <--- 125 --------- 129 -
  │   histogram(3)=  0  2.3048
@@ -737,7 +732,7 @@ select
  ├── scan hist@idx,partial
  │    ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
  │    ├── constraint: /2/3/1: [/126/'mango' - /129/'mango']
- │    ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │    ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=3.81818182, null(2,3)=0]
  │    │   histogram(2)=  0   0   3.4572 1.1524
  │    │                <--- 125 -------- 129 -
  │    │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -1539,7 +1534,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.2222222, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0]
+      ├── stats: [rows=22.2222222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
@@ -1589,7 +1584,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.1111111, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      ├── stats: [rows=11.1111111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
