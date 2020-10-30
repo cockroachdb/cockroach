@@ -841,7 +841,11 @@ func populateTableConstraints(
 			}
 			consrc = tree.NewDString(fmt.Sprintf("(%s)", displayExpr))
 			conbin = consrc
-			condef = tree.NewDString(fmt.Sprintf("CHECK ((%s))", displayExpr))
+			validity := ""
+			if con.CheckConstraint.Validity != descpb.ConstraintValidity_Validated {
+				validity = " NOT VALID"
+			}
+			condef = tree.NewDString(fmt.Sprintf("CHECK ((%s))%s", displayExpr, validity))
 		}
 
 		if err := addRow(

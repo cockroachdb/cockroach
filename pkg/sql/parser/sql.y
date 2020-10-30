@@ -5760,9 +5760,18 @@ table_elem:
   }
 | index_def
 | family_def
-| table_constraint
+| table_constraint opt_validate_behavior
   {
-    $$.val = $1.constraintDef()
+    def := $1.constraintDef()
+    valBehavior := $2.validationBehavior()
+    if u, ok := def.(*tree.UniqueConstraintTableDef); ok && valBehavior == tree.ValidationSkip {
+      typ := "PRIMARY KEY"
+      if !u.PrimaryKey {
+        typ = "UNIQUE"
+      }
+      return purposelyUnimplemented(sqllex, "table constraint", typ + " constraints cannot be marked NOT VALID")
+    }
+    $$.val = def
   }
 | LIKE table_name like_table_option_list
   {

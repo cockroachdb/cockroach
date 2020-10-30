@@ -1418,7 +1418,7 @@ table_elem ::=
 	column_def
 	| index_def
 	| family_def
-	| table_constraint
+	| table_constraint opt_validate_behavior
 	| 'LIKE' table_name like_table_option_list
 
 insert_column_item ::=
@@ -1912,6 +1912,10 @@ family_def ::=
 table_constraint ::=
 	'CONSTRAINT' constraint_name constraint_elem
 	| constraint_elem
+
+opt_validate_behavior ::=
+	'NOT' 'VALID'
+	| 
 
 like_table_option_list ::=
 	(  ) ( ( 'INCLUDING' like_table_option | 'EXCLUDING' like_table_option ) )*
@@ -2733,10 +2737,6 @@ opt_collate ::=
 
 opt_alter_column_using ::=
 	'USING' a_expr
-	| 
-
-opt_validate_behavior ::=
-	'NOT' 'VALID'
 	| 
 
 audit_mode ::=

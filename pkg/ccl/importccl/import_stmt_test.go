@@ -834,7 +834,7 @@ END;
 
 				// Verify the constraint is unvalidated.
 				`SHOW CONSTRAINTS FROM weather
-				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city)", "false"}},
+				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city) NOT VALID", "false"}},
 			},
 		},
 		{
@@ -865,25 +865,25 @@ END;
 	i INT8 NOT NULL,
 	k INT8 NULL,
 	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
-	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j),
-	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i),
+	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j) NOT VALID,
+	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i) NOT VALID,
 	FAMILY "primary" (i, k)
 )`}, {
 					`CREATE TABLE public.b (
 	j INT8 NOT NULL,
 	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
-	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i),
+	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i) NOT VALID,
 	FAMILY "primary" (j)
 )`,
 				}},
 
 				`SHOW CONSTRAINTS FROM a`: {
-					{"a", "a_i_fkey", "FOREIGN KEY", "FOREIGN KEY (i) REFERENCES b(j)", "false"},
-					{"a", "a_k_fkey", "FOREIGN KEY", "FOREIGN KEY (k) REFERENCES a(i)", "false"},
+					{"a", "a_i_fkey", "FOREIGN KEY", "FOREIGN KEY (i) REFERENCES b(j) NOT VALID", "false"},
+					{"a", "a_k_fkey", "FOREIGN KEY", "FOREIGN KEY (k) REFERENCES a(i) NOT VALID", "false"},
 					{"a", "a_pkey", "PRIMARY KEY", "PRIMARY KEY (i ASC)", "true"},
 				},
 				`SHOW CONSTRAINTS FROM b`: {
-					{"b", "b_j_fkey", "FOREIGN KEY", "FOREIGN KEY (j) REFERENCES a(i)", "false"},
+					{"b", "b_j_fkey", "FOREIGN KEY", "FOREIGN KEY (j) REFERENCES a(i) NOT VALID", "false"},
 					{"b", "b_pkey", "PRIMARY KEY", "PRIMARY KEY (j ASC)", "true"},
 				},
 			},
@@ -1294,7 +1294,7 @@ const (
 	temp_hi INT8 NULL,
 	prcp FLOAT4 NULL,
 	date DATE NULL,
-	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city),
+	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city) NOT VALID,
 	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
 )`
 	testPgdumpFk = `
@@ -5195,7 +5195,7 @@ func TestImportCockroachDump(t *testing.T) {
 		{"a", `CREATE TABLE public.a (
 	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES public.t(i),
+	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES public.t(i) NOT VALID,
 	FAMILY "primary" (i)
 )`},
 	})

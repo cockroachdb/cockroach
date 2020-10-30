@@ -214,6 +214,9 @@ func showForeignKeyConstraint(
 		buf.WriteString(" ON UPDATE ")
 		buf.WriteString(fk.OnUpdate.String())
 	}
+	if fk.Validity != descpb.ConstraintValidity_Validated {
+		buf.WriteString(" NOT VALID")
+	}
 	return nil
 }
 
@@ -424,6 +427,9 @@ func showConstraintClause(
 		}
 		f.WriteString(expr)
 		f.WriteString(")")
+		if e.Validity != descpb.ConstraintValidity_Validated {
+			f.WriteString(" NOT VALID")
+		}
 	}
 	f.WriteString("\n)")
 	return nil
