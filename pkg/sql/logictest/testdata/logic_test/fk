@@ -2757,8 +2757,8 @@ ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person 
 query TTTTB
 SHOW CONSTRAINTS FROM pet
 ----
-pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  false
-pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
+pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id) NOT VALID  false
+pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                              true
 
 statement error pq: foreign key violation: "pet" row id=0 has no match in "person"
 ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint

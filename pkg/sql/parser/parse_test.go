@@ -1826,6 +1826,11 @@ func TestParse2(t *testing.T) {
 		{`CREATE TABLE a (b BIT VARYING(2), c BIT(1))`,
 			`CREATE TABLE a (b VARBIT(2), c BIT)`},
 
+		{`CREATE TABLE a (b INT, CHECK (b > 0) NOT VALID)`,
+			`CREATE TABLE a (b INT8, CHECK (b > 0))`},
+		{`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other (b) NOT VALID)`,
+			`CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other (b))`},
+
 		{`CREATE STATISTICS a ON col1 FROM t AS OF SYSTEM TIME '2016-01-01'`,
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
 
@@ -3253,6 +3258,11 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b TSVECTOR)`, 7821, `tsvector`, ``},
 		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`, ``},
 		{`CREATE TABLE a(b XML)`, 0, `xml`, ``},
+
+		{`CREATE TABLE a(a INT, PRIMARY KEY (a) NOT VALID)`, 0, `table constraint`,
+			`PRIMARY KEY constraints cannot be marked NOT VALID`},
+		{`CREATE TABLE a(a INT, UNIQUE (a) NOT VALID)`, 0, `table constraint`,
+			`UNIQUE constraints cannot be marked NOT VALID`},
 
 		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``},
 		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},
