@@ -18,9 +18,10 @@ TABLE kv
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── k int not null
- └── INDEX idx
-      ├── v int
-      └── k int not null
+ ├── INDEX idx
+ │    ├── v int
+ │    └── k int not null
+ └── UNIQUE (k)
 
 exec-ddl
 CREATE INDEX idx2 ON kv (v)
@@ -55,11 +56,12 @@ TABLE kv
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── k int not null
- └── INDEX idx
-      ├── v int
-      ├── k int not null
-      └── WHERE
-           └── v > 1
+ ├── INDEX idx
+ │    ├── v int
+ │    ├── k int not null
+ │    └── WHERE
+ │         └── v > 1
+ └── UNIQUE (k)
 
 exec-ddl
 CREATE TABLE g (
@@ -89,11 +91,12 @@ TABLE g
  │    ├── a int
  │    ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
  │    └── k int not null
- └── INVERTED INDEX secondary
-      ├── a int
-      ├── b int
-      ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
-      └── k int not null
+ ├── INVERTED INDEX secondary
+ │    ├── a int
+ │    ├── b int
+ │    ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
+ │    └── k int not null
+ └── UNIQUE (k)
 
 # Test for expression-based index columns.
 exec-ddl
@@ -135,10 +138,11 @@ TABLE xyz
  │    ├── idx_expr_2 int as (y + 1) stored [hidden] [virtual-computed]
  │    ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
  │    └── x int not null
- └── INDEX idx4
-      ├── idx_expr_3 int as (x + y) stored [hidden] [virtual-computed]
-      ├── y int
-      ├── x int not null
-      ├── z string (storing)
-      └── WHERE
-           └── v > 1
+ ├── INDEX idx4
+ │    ├── idx_expr_3 int as (x + y) stored [hidden] [virtual-computed]
+ │    ├── y int
+ │    ├── x int not null
+ │    ├── z string (storing)
+ │    └── WHERE
+ │         └── v > 1
+ └── UNIQUE (x)

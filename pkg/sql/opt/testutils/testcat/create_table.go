@@ -12,14 +12,14 @@ package testcat
 
 import (
 	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -183,11 +183,8 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		switch def := def.(type) {
 		case *tree.UniqueConstraintTableDef:
 			if def.WithoutIndex {
-				panic(pgerror.New(pgcode.FeatureNotSupported,
-					"unique constraints without an index are not yet supported",
-				))
-			}
-			if !def.PrimaryKey {
+				tab.addUniqueConstraint(def.Name, def.Columns, def.WithoutIndex)
+			} else if !def.PrimaryKey {
 				tab.addIndex(&def.IndexTableDef, uniqueIndex)
 			}
 
@@ -198,19 +195,22 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			tab.addFamily(def)
 
 		case *tree.ColumnTableDef:
-			if def.Unique.WithoutIndex {
-				panic(pgerror.New(pgcode.FeatureNotSupported,
-					"unique constraints without an index are not yet supported",
-				))
-			}
 			if def.Unique.IsUnique {
-				tab.addIndex(
-					&tree.IndexTableDef{
-						Name:    tree.Name(fmt.Sprintf("%s_%s_key", stmt.Table.ObjectName, def.Name)),
-						Columns: tree.IndexElemList{{Column: def.Name}},
-					},
-					uniqueIndex,
-				)
+				if def.Unique.WithoutIndex {
+					tab.addUniqueConstraint(
+						def.Unique.ConstraintName,
+						tree.IndexElemList{{Column: def.Name}},
+						def.Unique.WithoutIndex,
+					)
+				} else {
+					tab.addIndex(
+						&tree.IndexTableDef{
+							Name:    tree.Name(fmt.Sprintf("%s_%s_key", stmt.Table.ObjectName, def.Name)),
+							Columns: tree.IndexElemList{{Column: def.Name}},
+						},
+						uniqueIndex,
+					)
+				}
 			}
 		}
 	}
@@ -450,6 +450,33 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
 }
 
+func (tt *Table) addUniqueConstraint(
+	name tree.Name, columns tree.IndexElemList, withoutIndex bool,
+) {
+	cols := make([]int, len(columns))
+	for i, c := range columns {
+		cols[i] = tt.FindOrdinal(string(c.Column))
+	}
+	sort.Ints(cols)
+
+	// Don't add duplicate constraints.
+	for _, c := range tt.uniqueConstraints {
+		if reflect.DeepEqual(c.columnOrdinals, cols) && c.withoutIndex == withoutIndex {
+			return
+		}
+	}
+
+	// We didn't find an existing constraint, so add a new one.
+	u := UniqueConstraint{
+		name:           string(name),
+		tabID:          tt.TabID,
+		columnOrdinals: cols,
+		withoutIndex:   withoutIndex,
+		validated:      true,
+	}
+	tt.uniqueConstraints = append(tt.uniqueConstraints, u)
+}
+
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	ordinal := len(tt.Columns)
 	nullable := !def.PrimaryKey.IsPrimaryKey && def.Nullable.Nullability != tree.NotNull
@@ -494,6 +521,11 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 }
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
+	// Add a unique constraint if this is a primary or unique index.
+	if typ != nonUniqueIndex {
+		tt.addUniqueConstraint(def.Name, def.Columns, false /* withoutIndex */)
+	}
+
 	idx := &Index{
 		IdxName:     tt.makeIndexName(def.Name, typ),
 		Unique:      typ != nonUniqueIndex,

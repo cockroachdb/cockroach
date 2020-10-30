@@ -582,6 +582,8 @@ type Table struct {
 
 	outboundFKs []ForeignKeyConstraint
 	inboundFKs  []ForeignKeyConstraint
+
+	uniqueConstraints []UniqueConstraint
 }
 
 var _ cat.Table = &Table{}
@@ -709,6 +711,16 @@ func (tt *Table) InboundForeignKeyCount() int {
 // InboundForeignKey is part of the cat.Table interface.
 func (tt *Table) InboundForeignKey(i int) cat.ForeignKeyConstraint {
 	return &tt.inboundFKs[i]
+}
+
+// UniqueCount is part of the cat.Table interface.
+func (tt *Table) UniqueCount() int {
+	return len(tt.uniqueConstraints)
+}
+
+// Unique is part of the cat.Table interface.
+func (tt *Table) Unique(i int) cat.UniqueConstraint {
+	return &tt.uniqueConstraints[i]
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
@@ -1112,6 +1124,54 @@ func (fk *ForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
 // UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *ForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
 	return fk.updateAction
+}
+
+// UniqueConstraint implements cat.UniqueConstraint. See that interface
+// for more information on the fields.
+type UniqueConstraint struct {
+	name           string
+	tabID          cat.StableID
+	columnOrdinals []int
+	withoutIndex   bool
+	validated      bool
+}
+
+var _ cat.UniqueConstraint = &UniqueConstraint{}
+
+// Name is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) Name() string {
+	return u.name
+}
+
+// TableID is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) TableID() cat.StableID {
+	return u.tabID
+}
+
+// ColumnCount is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) ColumnCount() int {
+	return len(u.columnOrdinals)
+}
+
+// ColumnOrdinal is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) ColumnOrdinal(tab cat.Table, i int) int {
+	if tab.ID() != u.tabID {
+		panic(errors.AssertionFailedf(
+			"invalid table %d passed to ColumnOrdinal (expected %d)",
+			tab.ID(), u.tabID,
+		))
+	}
+	return u.columnOrdinals[i]
+}
+
+// WithoutIndex is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) WithoutIndex() bool {
+	return u.withoutIndex
+}
+
+// Validated is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) Validated() bool {
+	return u.validated
 }
 
 // Sequence implements the cat.Sequence interface for testing purposes.

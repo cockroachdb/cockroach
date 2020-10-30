@@ -28,10 +28,12 @@ TABLE abc
  │    ├── b int
  │    ├── c string
  │    └── a int not null (storing)
- └── INDEX bc2
-      ├── b int
-      ├── c string
-      └── a int not null (storing)
+ ├── INDEX bc2
+ │    ├── b int
+ │    ├── c string
+ │    └── a int not null (storing)
+ ├── UNIQUE (a)
+ └── UNIQUE (b, c)
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=east]'
@@ -55,10 +57,12 @@ TABLE abc
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=east]
- └── INDEX bc2
-      ├── b int
-      ├── c string
-      └── a int not null (storing)
+ ├── INDEX bc2
+ │    ├── b int
+ │    ├── c string
+ │    └── a int not null (storing)
+ ├── UNIQUE (a)
+ └── UNIQUE (b, c)
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=west]'
@@ -82,12 +86,14 @@ TABLE abc
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=east]
- └── INDEX bc2
-      ├── b int
-      ├── c string
-      ├── a int not null (storing)
-      └── ZONE
-           └── constraints: [+region=west]
+ ├── INDEX bc2
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=west]
+ ├── UNIQUE (a)
+ └── UNIQUE (b, c)
 
 exec-ddl
 ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=us,+dc=central,+rack=1]'
@@ -111,12 +117,14 @@ TABLE abc
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=east]
- └── INDEX bc2
-      ├── b int
-      ├── c string
-      ├── a int not null (storing)
-      └── ZONE
-           └── constraints: [+region=west]
+ ├── INDEX bc2
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=west]
+ ├── UNIQUE (a)
+ └── UNIQUE (b, c)
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east,+rack=1]'
@@ -140,12 +148,14 @@ TABLE abc
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=east,+rack=1]
- └── INDEX bc2
-      ├── b int
-      ├── c string
-      ├── a int not null (storing)
-      └── ZONE
-           └── constraints: [+region=west]
+ ├── INDEX bc2
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=west]
+ ├── UNIQUE (a)
+ └── UNIQUE (b, c)
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+dc=west]'
@@ -169,9 +179,11 @@ TABLE abc
  │    ├── a int not null (storing)
  │    └── ZONE
  │         └── constraints: [+region=us,+dc=east,+rack=1]
- └── INDEX bc2
-      ├── b int
-      ├── c string
-      ├── a int not null (storing)
-      └── ZONE
-           └── constraints: [+dc=west]
+ ├── INDEX bc2
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+dc=west]
+ ├── UNIQUE (a)
+ └── UNIQUE (b, c)
