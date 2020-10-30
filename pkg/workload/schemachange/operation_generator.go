@@ -81,6 +81,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 
 	dropColumn:        true,
 	dropColumnDefault: true,
+	dropColumnNotNull: true,
 
 	renameTable: true,
 	renameView:  true,
@@ -675,9 +676,33 @@ func (og *operationGenerator) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "IrrelevantColumnName" DROP NOT NULL`, tableName), nil
+	}
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
+	}
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	colIsPrimaryKey, err := colIsPrimaryKey(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{pgcode.UndefinedColumn, !columnExists},
+		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
+	}.add(og.expectedExecErrors)
+	if !columnExists {
+		og.expectedExecErrors.add(pgcode.UndefinedColumn)
 	}
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
 }
