@@ -216,18 +216,6 @@ RUN chmod -R a+w $(go env GOTOOLDIR)
 # Allow Go support files in gdb.
 RUN echo "add-auto-load-safe-path $(go env GOROOT)/src/runtime/runtime-gdb.py" > ~/.gdbinit
 
-RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - \
- && echo 'deb https://deb.nodesource.com/node_12.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list \
- && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
- && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list \
- && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
- && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
- && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
- && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
- && echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list \
- && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
- && apt-get update
-
 # bazel - build system
 # ccache - speed up C and C++ compilation
 # lsof - roachprod monitor
@@ -239,8 +227,19 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # yarn - ui
 # chrome - ui
 # unzip - for installing awscli
-RUN apt-get install -y --no-install-recommends \
-    bazel-3.7.0 \
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - \
+ && echo 'deb https://deb.nodesource.com/node_12.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list \
+ && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
+ && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list \
+ && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
+ && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
+ && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+ && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
+ && echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list \
+ && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+    bazel-3.6.0 \
     ccache \
     google-cloud-sdk \
     lsof \
@@ -288,7 +287,7 @@ RUN apt-get purge -y \
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /usr/local/bin/mkrelease \
-    && ln -s /usr/bin/bazel-3.7.0 /usr/bin/bazel
+    && ln -s /usr/bin/bazel-3.6.0 /usr/bin/bazel
 
 RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz \
     | tar xz -C / --strip-components 1
