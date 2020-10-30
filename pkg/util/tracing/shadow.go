@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
@@ -61,12 +62,35 @@ type shadowTracer struct {
 	manager shadowTracerManager
 }
 
-func (st *shadowTracer) Typ() string {
-	return st.manager.Name()
+// Type returns the underlying type of the shadow tracer manager.
+// It is valid to call this on a nil shadowTracer; it will
+// return zero values in this case.
+func (st *shadowTracer) Type() (string, bool) {
+	if st == nil || st.manager == nil {
+		return "", false
+	}
+	return st.manager.Name(), true
 }
 
 func (st *shadowTracer) Close() {
 	st.manager.Close(st)
+}
+
+// otLogTagsOption is an opentracing.StartSpanOption that inserts the log
+// tags into newly created spans.
+type otLogTagsOption logtags.Buffer
+
+func (o *otLogTagsOption) Apply(opts *opentracing.StartSpanOptions) {
+	tags := (*logtags.Buffer)(o).Get()
+	if len(tags) == 0 {
+		return
+	}
+	if opts.Tags == nil {
+		opts.Tags = map[string]interface{}{}
+	}
+	for _, tag := range tags {
+		opts.Tags[tagName(tag.Key())] = tag.Value()
+	}
 }
 
 // linkShadowSpan creates and links a Shadow Span to the passed-in Span (i.e.
@@ -88,7 +112,7 @@ func linkShadowSpan(
 	// Replicate the options, using the lightstep context in the reference.
 	opts = append(opts, opentracing.StartTime(s.crdb.startTime))
 	if s.crdb.logTags != nil {
-		opts = append(opts, LogTags(s.crdb.logTags))
+		opts = append(opts, (*otLogTagsOption)(s.crdb.logTags))
 	}
 	if s.crdb.mu.tags != nil {
 		opts = append(opts, s.crdb.mu.tags)

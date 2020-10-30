@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTracerRecording(t *testing.T) {
@@ -27,23 +28,23 @@ func TestTracerRecording(t *testing.T) {
 	}
 	noop1.LogKV("hello", "void")
 
-	noop2 := tr.StartSpan("noop2", opentracing.ChildOf(noop1.Context()))
+	noop2 := tr.StartSpan("noop2", WithRemoteParent(noop1.Meta()))
 	if !noop2.isNoop() {
 		t.Error("expected noop child Span")
 	}
 	noop2.Finish()
 	noop1.Finish()
 
-	s1 := tr.StartSpan("a", Recordable)
+	s1 := tr.StartSpan("a", WithForceRealSpan())
 	if s1.isNoop() {
-		t.Error("Recordable (but not recording) Span should not be noop")
+		t.Error("WithForceRealSpan (but not recording) Span should not be noop")
 	}
 	if !s1.IsBlackHole() {
-		t.Error("Recordable Span should be black hole")
+		t.Error("WithForceRealSpan Span should be black hole")
 	}
 
 	// Unless recording is actually started, child spans are still noop.
-	noop3 := tr.StartSpan("noop3", opentracing.ChildOf(s1.Context()))
+	noop3 := tr.StartSpan("noop3", WithRemoteParent(s1.Meta()))
 	if !noop3.isNoop() {
 		t.Error("expected noop child Span")
 	}
@@ -52,7 +53,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.LogKV("x", 1)
 	s1.StartRecording(SingleNodeRecording)
 	s1.LogKV("x", 2)
-	s2 := tr.StartSpan("b", opentracing.ChildOf(s1.Context()))
+	s2 := tr.StartSpan("b", WithParent(s1))
 	if s2.IsBlackHole() {
 		t.Error("recording Span should not be black hole")
 	}
@@ -77,7 +78,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s3 := tr.StartSpan("c", opentracing.FollowsFrom(s2.Context()))
+	s3 := tr.StartSpan("c", WithParent(s2))
 	s3.LogKV("x", 4)
 	s3.SetTag("tag", "val")
 
@@ -129,9 +130,9 @@ func TestTracerRecording(t *testing.T) {
 
 func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
-	sp1 := tr.StartSpan("parent", Recordable)
+	sp1 := tr.StartSpan("parent", WithForceRealSpan())
 	sp1.StartRecording(SingleNodeRecording)
-	sp2 := tr.StartChildSpan("child", sp1.SpanContext(), nil /* logTags */, false /* recordable */, false /*separateRecording*/)
+	sp2 := tr.StartSpan("child", WithParent(sp1))
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
@@ -141,9 +142,9 @@ func TestStartChildSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sp1 = tr.StartSpan("parent", Recordable)
+	sp1 = tr.StartSpan("parent", WithForceRealSpan())
 	sp1.StartRecording(SingleNodeRecording)
-	sp2 = tr.StartChildSpan("child", sp1.SpanContext(), nil /* logTags */, false /* recordable */, true /*separateRecording*/)
+	sp2 = tr.StartSpan("child", WithParent(sp1), WithSeparateRecording())
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
@@ -157,11 +158,10 @@ func TestStartChildSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sp1 = tr.StartSpan("parent", Recordable)
+	sp1 = tr.StartSpan("parent", WithForceRealSpan())
 	sp1.StartRecording(SingleNodeRecording)
-	sp2 = tr.StartChildSpan(
-		"child", sp1.SpanContext(), logtags.SingleTagBuffer("key", "val"), false /* recordable */, false, /*separateRecording*/
-	)
+	sp2 = tr.StartSpan("child", WithParent(sp1),
+		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
@@ -184,7 +184,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Fatalf("expected noop Span: %+v", noop1)
 	}
 	carrier := make(opentracing.HTTPHeadersCarrier)
-	if err := tr.Inject(noop1.Context(), opentracing.HTTPHeaders, carrier); err != nil {
+	if err := tr.Inject(noop1.Meta(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
 	if len(carrier) != 0 {
@@ -195,10 +195,10 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !wireContext.IsNoop() {
+	if !wireContext.isNilOrNoop() {
 		t.Errorf("expected noop context: %v", wireContext)
 	}
-	noop2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
+	noop2 := tr2.StartSpan("remote op", WithRemoteParent(wireContext))
 	if !noop2.isNoop() {
 		t.Fatalf("expected noop Span: %+v", noop2)
 	}
@@ -208,11 +208,11 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that snowball tracing is propagated and triggers recording on the
 	// remote side.
 
-	s1 := tr.StartSpan("a", Recordable)
+	s1 := tr.StartSpan("a", WithForceRealSpan())
 	s1.StartRecording(SnowballRecording)
 
 	carrier = make(opentracing.HTTPHeadersCarrier)
-	if err := tr.Inject(s1.Context(), opentracing.HTTPHeaders, carrier); err != nil {
+	if err := tr.Inject(s1.Meta(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
 
@@ -220,13 +220,13 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
+	s2 := tr2.StartSpan("remote op", WithRemoteParent(wireContext))
 
 	// Compare TraceIDs
-	trace1 := s1.Context().TraceID
-	trace2 := s2.Context().TraceID
+	trace1 := s1.Meta().traceID
+	trace2 := s2.Meta().traceID
 	if trace1 != trace2 {
-		t.Errorf("TraceID doesn't match: parent %d child %d", trace1, trace2)
+		t.Errorf("traceID doesn't match: parent %d child %d", trace1, trace2)
 	}
 	s2.LogKV("x", 1)
 	s2.Finish()
@@ -284,7 +284,7 @@ func TestLightstepContext(t *testing.T) {
 	s.SetBaggageItem(testBaggageKey, testBaggageVal)
 
 	carrier := make(opentracing.HTTPHeadersCarrier)
-	if err := tr.Inject(s.Context(), opentracing.HTTPHeaders, carrier); err != nil {
+	if err := tr.Inject(s.Meta(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
 
@@ -294,21 +294,19 @@ func TestLightstepContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext))
+	s2 := tr.StartSpan("child", WithRemoteParent(wireContext))
 	s2Ctx := s2.ot.shadowSpan.Context()
 
 	// Verify that the baggage is correct in both the tracer context and in the
 	// lightstep context.
-	for i, spanCtx := range []interface {
-		ForeachBaggageItem(func(string, string) bool)
-	}{s2.Context(), s2Ctx} {
-		baggage := make(map[string]string)
-		spanCtx.ForeachBaggageItem(func(k, v string) bool {
-			baggage[k] = v
-			return true
-		})
-		if len(baggage) != 1 || baggage[testBaggageKey] != testBaggageVal {
-			t.Errorf("%d: expected baggage %s=%s, got %v", i, testBaggageKey, testBaggageVal, baggage)
-		}
+	shadowBaggage := make(map[string]string)
+	s2Ctx.ForeachBaggageItem(func(k, v string) bool {
+		shadowBaggage[k] = v
+		return true
+	})
+	exp := map[string]string{
+		testBaggageKey: testBaggageVal,
 	}
+	require.Equal(t, exp, s2.Meta().Baggage)
+	require.Equal(t, exp, shadowBaggage)
 }

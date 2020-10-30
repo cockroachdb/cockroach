@@ -29,35 +29,35 @@ import (
 	"golang.org/x/net/trace"
 )
 
-// spanMeta stores Span information that is common to Span and SpanContext.
-type spanMeta struct {
-	// A probabilistically unique identifier for a [multi-Span] trace.
-	TraceID uint64
+// SpanMeta is information about a Span that is not local to this
+// process. Typically, SpanMeta is populated from information
+// about a Span on the other end of an RPC, and is used to derive
+// a child span via `Tracer.StartSpan`. For local spans, SpanMeta
+// is not used, as the *Span directly can be derived from.
+//
+// SpanMeta contains the trace and span identifiers of the parent,
+// along with additional metadata. In particular, this specifies
+// whether the child should be recording, in which case the contract
+// is that the recording is to be returned to the caller when the
+// child finishes, so that the caller can inductively construct the
+// entire trace.
+type SpanMeta struct {
+	traceID uint64
+	spanID  uint64
 
-	// A probabilistically unique identifier for a Span.
-	SpanID uint64
-}
-
-// SpanContext is information about a Span, used to derive spans
-// from a parent in a way that's uniform between local and remote
-// parents. For local parents, this generally references their Span
-// to unlock features such as sharing recordings with the parent. For
-// remote parents, it only contains the TraceID and related metadata.
-type SpanContext struct {
-	spanMeta
-
-	// Underlying shadow tracer info and context (optional).
-	shadowTr  *shadowTracer
-	shadowCtx opentracing.SpanContext
+	// Underlying shadow tracer info and span context (optional). This
+	// will only be populated when the remote Span is reporting to an
+	// external opentracing tracer. We hold on to the type of tracer to
+	// avoid mixing spans when the tracer is reconfigured, as impls are
+	// not typically robust to being shown spans they did not create.
+	shadowTracerType string
+	shadowCtx        opentracing.SpanContext
 
 	// If set, all spans derived from this context are being recorded.
+	//
+	// NB: at the time of writing, this is only ever set to SnowballTracing
+	// and only if Baggage[Snowball] is set.
 	recordingType RecordingType
-	// span is set if this context corresponds to a local span. If so, pointing
-	// back to the span is used for registering child spans with their parent.
-	// Children of remote spans act as roots when it comes to recordings - someone
-	// is responsible for calling GetRecording() on them and marshaling the
-	// recording back to the parent (generally an RPC handler does this).
-	span *Span
 
 	// The Span's associated baggage.
 	Baggage map[string]string
@@ -79,19 +79,11 @@ type SpanStats interface {
 	Stats() map[string]string
 }
 
-var _ opentracing.SpanContext = &SpanContext{}
-
-// ForeachBaggageItem is part of the opentracing.SpanContext interface.
-func (sc *SpanContext) ForeachBaggageItem(handler func(k, v string) bool) {
-	for k, v := range sc.Baggage {
-		if !handler(k, v) {
-			break
-		}
-	}
-}
-
 type crdbSpan struct {
-	spanMeta
+	// The traceID, probabilistically unique.
+	traceID uint64
+	// The spanID, probabilistically unique.
+	spanID uint64
 
 	parentSpanID uint64
 
@@ -205,7 +197,7 @@ func (s *Span) isNoop() bool {
 	// NB: this is the same as `s` being zero with the exception
 	// of the `tracer` field. However, `Span` is not comparable,
 	// so this can't be expressed easily.
-	return s.isBlackHole() && s.crdb.TraceID == 0
+	return s.isBlackHole() && s.crdb.traceID == 0
 }
 
 // IsRecording returns true if the Span is recording its events.
@@ -246,7 +238,7 @@ func (s *crdbSpan) enableRecording(
 // will be part of the same recording.
 //
 // Recording is not supported by noop spans; to ensure a real Span is always
-// created, use the Recordable option to StartSpan.
+// created, use the WithForceRealSpan option to StartSpan.
 //
 // If recording was already started on this Span (either directly or because a
 // parent Span is recording), the old recording is lost.
@@ -258,7 +250,7 @@ func (s *Span) StartRecording(recType RecordingType) {
 		panic("StartRecording called with NoRecording")
 	}
 	if s.isNoop() {
-		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
+		panic("StartRecording called on NoopSpan; use the WithForceRealSpan option for StartSpan")
 	}
 
 	// If we're already recording (perhaps because the parent was recording when
@@ -330,6 +322,12 @@ func (s *crdbSpan) getRecording() Recording {
 	return result
 }
 
+func (s *crdbSpan) getRecordingType() RecordingType {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.recording.recordingType
+}
+
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
@@ -344,7 +342,7 @@ func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error
 	// Change the root of the remote recording to be a child of this Span. This is
 	// usually already the case, except with DistSQL traces where remote
 	// processors run in spans that FollowFrom an RPC Span that we don't collect.
-	remoteSpans[0].ParentSpanID = s.SpanID
+	remoteSpans[0].ParentSpanID = s.spanID
 
 	s.mu.Lock()
 	s.mu.recording.remoteSpans = append(s.mu.recording.remoteSpans, remoteSpans...)
@@ -364,13 +362,11 @@ func (s *Span) IsBlackHole() bool {
 	return s.isBlackHole()
 }
 
-// IsNoop returns true if the Span context is from a "no-op" Span. If
-// this is true, any Span derived from this context will be a "black hole Span".
-//
-// You should never need to care about this method. It is exported for technical
-// reasons.
-func (sc *SpanContext) IsNoop() bool {
-	return sc.recordingType == NoRecording && sc.shadowTr == nil
+// isNilOrNoop returns true if the Span context is either nil
+// or corresponds to a "no-op" Span. If this is true, any Span
+// derived from this context will be a "black hole Span".
+func (sc *SpanMeta) isNilOrNoop() bool {
+	return sc.recordingType == NoRecording && sc.shadowTracerType == ""
 }
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
@@ -407,21 +403,15 @@ func (s *Span) Finish() {
 	}
 }
 
-// Context is part of the opentracing.Span interface.
+// Meta returns the information which needs to be propagated across
+// process boundaries in order to derive child spans from this Span.
 //
-// TODO(andrei, radu): Should this return noopSpanContext for a Recordable Span
+// TODO(andrei, radu): Should this return nil for a WithForceRealSpan Span
 // that's not currently recording? That might save work and allocations when
 // creating child spans.
-func (s *Span) Context() *SpanContext {
+func (s *Span) Meta() *SpanMeta {
 	s.crdb.mu.Lock()
 	defer s.crdb.mu.Unlock()
-	sc := s.SpanContext()
-	return &sc
-}
-
-// SpanContext returns a SpanContext. Note that this returns a value,
-// not a pointer, which the caller can use to avoid heap allocations.
-func (s *Span) SpanContext() SpanContext {
 	n := len(s.crdb.mu.Baggage)
 	// In the common case, we have no baggage, so avoid making an empty map.
 	var baggageCopy map[string]string
@@ -431,20 +421,26 @@ func (s *Span) SpanContext() SpanContext {
 	for k, v := range s.crdb.mu.Baggage {
 		baggageCopy[k] = v
 	}
-	sc := SpanContext{
-		spanMeta: s.crdb.spanMeta,
-		span:     s,
-		Baggage:  baggageCopy,
-	}
+	var shadowTrTyp string
+	var shadowCtx opentracing.SpanContext
 	if s.ot.shadowSpan != nil {
-		sc.shadowTr = s.ot.shadowTr
-		sc.shadowCtx = s.ot.shadowSpan.Context()
+		shadowTrTyp, _ = s.ot.shadowTr.Type()
+		shadowCtx = s.ot.shadowSpan.Context()
 	}
 
+	var recordingType RecordingType
 	if s.crdb.isRecording() {
-		sc.recordingType = s.crdb.mu.recording.recordingType
+		recordingType = s.crdb.mu.recording.recordingType
 	}
-	return sc
+
+	return &SpanMeta{
+		traceID:          s.crdb.traceID,
+		spanID:           s.crdb.spanID,
+		shadowTracerType: shadowTrTyp,
+		shadowCtx:        shadowCtx,
+		recordingType:    recordingType,
+		Baggage:          baggageCopy,
+	}
 }
 
 // SetOperationName is part of the opentracing.Span interface.
@@ -589,8 +585,8 @@ func (s *Span) Tracer() *Tracer {
 // children.
 func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
-		TraceID:      s.TraceID,
-		SpanID:       s.SpanID,
+		TraceID:      s.traceID,
+		SpanID:       s.spanID,
 		ParentSpanID: s.parentSpanID,
 		Operation:    s.operation,
 		StartTime:    s.startTime,
