@@ -416,7 +416,7 @@ func (sc *TableStatisticsCache) parseStats(
 		}
 
 		// Decode the histogram data so that it's usable by the opt catalog.
-		res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
+		res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets)+1)
 		// Hydrate the type in case any user defined types are present.
 		// There are cases where typ is nil, so don't do anything if so.
 		if typ := res.HistogramData.ColumnType; typ != nil && typ.UserDefined() {
@@ -441,9 +441,22 @@ func (sc *TableStatisticsCache) parseStats(
 				return nil, err
 			}
 		}
+
+		// Add a bucket for Nulls based on the NullCount.
+		var distinctNulls float64 = 0
+		if res.NullCount > 0 {
+			distinctNulls = 1
+		}
+		res.Histogram[0] = cat.HistogramBucket{
+			NumEq:         float64(res.NullCount),
+			NumRange:      0,
+			DistinctRange: distinctNulls,
+			UpperBound:    tree.DNull,
+		}
+
 		var a rowenc.DatumAlloc
-		for i := range res.Histogram {
-			bucket := &res.HistogramData.Buckets[i]
+		for i := 1; i < len(res.Histogram); i++ {
+			bucket := &res.HistogramData.Buckets[i-1]
 			datum, _, err := rowenc.DecodeTableKey(&a, res.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
 			if err != nil {
 				return nil, err
