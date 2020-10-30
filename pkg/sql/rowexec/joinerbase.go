@@ -50,6 +50,7 @@ func (jb *joinerBase) init(
 	onExpr execinfrapb.Expression,
 	leftEqColumns []uint32,
 	rightEqColumns []uint32,
+	outputContinuationColumn bool,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 	opts execinfra.ProcStateOpts,
@@ -74,18 +75,26 @@ func (jb *joinerBase) init(
 	jb.eqCols[leftSide] = leftEqColumns
 	jb.eqCols[rightSide] = rightEqColumns
 
-	size := len(leftTypes) + len(rightTypes)
-	jb.combinedRow = make(rowenc.EncDatumRow, size)
+	rowSize := len(leftTypes) + len(rightTypes)
+	if outputContinuationColumn {
+		// NB: Can only be true for inner joins and left outer joins.
+		rowSize++
+	}
+	jb.combinedRow = make(rowenc.EncDatumRow, rowSize)
 
-	condTypes := make([]*types.T, 0, size)
+	// condTypes does not include the continuation column, but the slice has the
+	// capacity for it, since outputTypes later adds the continuation column.
+	condTypes := make([]*types.T, 0, rowSize)
 	condTypes = append(condTypes, leftTypes...)
 	condTypes = append(condTypes, rightTypes...)
 
-	outputSize := len(leftTypes)
-	if jb.joinType.ShouldIncludeRightColsInOutput() {
-		outputSize += len(rightTypes)
+	outputTypes := condTypes
+	// NB: outputContinuationCol implies jb.joinType.ShouldIncludeRightColsInOutput()
+	if !jb.joinType.ShouldIncludeRightColsInOutput() {
+		outputTypes = outputTypes[:len(leftTypes)]
+	} else if outputContinuationColumn {
+		outputTypes = append(outputTypes, types.Bool)
 	}
-	outputTypes := condTypes[:outputSize]
 
 	if err := jb.ProcessorBase.Init(
 		self, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
@@ -119,7 +128,9 @@ func (j joinSide) String() string {
 }
 
 // renderUnmatchedRow creates a result row given an unmatched row on either
-// side. Only used for outer joins.
+// side. Only used for outer joins. Note that if the join is outputting a
+// continuation column, the returned slice does not include the continuation
+// column, but has the capacity for it.
 func (jb *joinerBase) renderUnmatchedRow(row rowenc.EncDatumRow, side joinSide) rowenc.EncDatumRow {
 	lrow, rrow := jb.emptyLeft, jb.emptyRight
 	if side == leftSide {
@@ -158,7 +169,9 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 }
 
 // render constructs a row with columns from both sides. The ON condition is
-// evaluated; if it fails, returns nil.
+// evaluated; if it fails, returns nil. Note that if the join is outputting a
+// continuation column, the returned slice does not include the continuation
+// column, but has the capacity for it.
 func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	jb.combinedRow = jb.combinedRow[:len(lrow)+len(rrow)]
 	copy(jb.combinedRow, lrow)
