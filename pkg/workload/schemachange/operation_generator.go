@@ -79,7 +79,8 @@ var opsWithExecErrorScreening = map[opType]bool{
 	createView:    true,
 	createEnum:    true,
 
-	dropColumn: true,
+	dropColumn:        true,
+	dropColumnDefault: true,
 
 	renameTable: true,
 	renameView:  true,
@@ -667,9 +668,24 @@ func (og *operationGenerator) dropColumnDefault(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "IrrelevantColumnName" DROP DEFAULT`, tableName), nil
+	}
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
+	}
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	if !columnExists {
+		og.expectedExecErrors.add(pgcode.UndefinedColumn)
 	}
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName), nil
 }
