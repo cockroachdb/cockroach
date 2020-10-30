@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -111,6 +113,10 @@ type Inbox struct {
 	// node.
 	latency int64
 
+	// deserializationStopWatch records the time Inbox spends deserializing
+	// batches.
+	deserializationStopWatch *timeutil.StopWatch
+
 	scratch struct {
 		data []*array.Data
 		b    coldata.Batch
@@ -138,17 +144,18 @@ func NewInbox(
 		return nil, err
 	}
 	i := &Inbox{
-		typs:       typs,
-		allocator:  allocator,
-		converter:  c,
-		serializer: s,
-		streamID:   streamID,
-		streamCh:   make(chan flowStreamServer, 1),
-		contextCh:  make(chan context.Context, 1),
-		timeoutCh:  make(chan error, 1),
-		errCh:      make(chan error, 1),
-		flowCtx:    ctx,
-		latency:    latency,
+		typs:                     typs,
+		allocator:                allocator,
+		converter:                c,
+		serializer:               s,
+		streamID:                 streamID,
+		streamCh:                 make(chan flowStreamServer, 1),
+		contextCh:                make(chan context.Context, 1),
+		timeoutCh:                make(chan error, 1),
+		errCh:                    make(chan error, 1),
+		flowCtx:                  ctx,
+		latency:                  latency,
+		deserializationStopWatch: timeutil.NewStopWatch(),
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
 	return i, nil
@@ -252,6 +259,7 @@ func (i *Inbox) Init() {}
 // The Inbox will exit when either the context passed in on the first call to
 // Next is canceled or when DrainMeta goroutine tells it to do so.
 func (i *Inbox) Next(ctx context.Context) coldata.Batch {
+	i.deserializationStopWatch.Start()
 	if i.done {
 		return coldata.ZeroBatch
 	}
@@ -266,6 +274,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 			i.close()
 			colexecerror.InternalError(log.PanicAsError(0, err))
 		}
+		i.deserializationStopWatch.Stop()
 	}()
 
 	// NOTE: It is very important to close i.errCh only when execution terminates
@@ -279,7 +288,9 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	}
 
 	for {
+		i.deserializationStopWatch.Stop()
 		m, err := i.stream.Recv()
+		i.deserializationStopWatch.Start()
 		if err != nil {
 			if err == io.EOF {
 				// Done.
@@ -344,6 +355,11 @@ func (i *Inbox) GetRowsRead() int64 {
 // GetLatency is part of the colexec.NetworkReader interface.
 func (i *Inbox) GetLatency() int64 {
 	return i.latency
+}
+
+// GetDeserializationTime is part of the colexec.NetworkReader interface.
+func (i *Inbox) GetDeserializationTime() time.Duration {
+	return i.deserializationStopWatch.Elapsed()
 }
 
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {

@@ -31,6 +31,7 @@ import (
 // with the colrpc file. This interface should only be implemented by the inbox.
 type NetworkReader interface {
 	GetLatency() int64
+	GetDeserializationTime() time.Duration
 }
 
 // VectorizedStatsCollector exists so that the vectorizedStatsCollectorsQueue
@@ -196,10 +197,12 @@ func (vsc *VectorizedStatsCollectorBase) finalizeStats() {
 }
 
 // finalizeStats records the stats for the VectorizedStatsCollectorBase and
-// network latency.
+// network latency. It also adjusts the time recorded to be the Inbox
+// deserialization time.
 func (nvsc *NetworkVectorizedStatsCollector) finalizeStats() {
 	nvsc.VectorizedStatsCollectorBase.finalizeStats()
 	nvsc.NetworkLatency = nvsc.networkReader.GetLatency()
+	nvsc.Time = nvsc.networkReader.GetDeserializationTime()
 }
 
 func (vsc *VectorizedStatsCollectorBase) createSpan(
