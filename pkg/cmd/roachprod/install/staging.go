@@ -99,7 +99,7 @@ curl -sfSL -o "./lib/%s" "%s" 2>/dev/null || echo 'optional library %s not found
 
 // StageCockroachRelease downloads an official CockroachDB release binary with
 // the specified version.
-func StageCockroachRelease(c *SyncedCluster, version, arch string) error {
+func StageCockroachRelease(c *SyncedCluster, version, arch, dir string) error {
 	if len(version) == 0 {
 		return fmt.Errorf(
 			"release application cannot be staged without specifying a specific version",
@@ -115,16 +115,17 @@ func StageCockroachRelease(c *SyncedCluster, version, arch string) error {
 	// This command incantation:
 	// - Creates a temporary directory on the remote machine
 	// - Downloads and unpacks the cockroach release into the temp directory
-	// - Moves the cockroach executable from the binary to '/.' and gives it
-	// the correct permissions.
+	// - Moves the cockroach executable from the binary to the provided directory
+	//   and gives it the correct permissions.
 	cmdStr := fmt.Sprintf(`
 tmpdir="$(mktemp -d /tmp/cockroach-release.XXX)" && \
+dir=%s && \
 curl -f -s -S -o- %s | tar xfz - -C "${tmpdir}" --strip-components 1 && \
-mv ${tmpdir}/cockroach ./cockroach && \
-mkdir -p ./lib && \
-if [ -d ${tmpdir}/lib ]; then mv ${tmpdir}/lib/* ./lib; fi && \
-chmod 755 ./cockroach
-`, binURL)
+mv ${tmpdir}/cockroach ${dir}/cockroach && \
+mkdir -p ${dir}/lib && \
+if [ -d ${tmpdir}/lib ]; then mv ${tmpdir}/lib/* ${dir}/lib; fi && \
+chmod 755 ${dir}/cockroach
+`, dir, binURL)
 	return c.Run(
 		os.Stdout, os.Stderr, c.Nodes, "staging cockroach release binary", cmdStr,
 	)

@@ -94,6 +94,7 @@ var (
 	sig               = 9
 	waitFlag          = false
 	stageOS           string
+	stageDir          string
 	logsDir           string
 	logsFilter        string
 	logsProgramFilter string
@@ -1324,6 +1325,12 @@ Some examples of usage:
 			return errors.Errorf("cannot stage binary on %s", os)
 		}
 
+		// TODO (lucy): !!! Also make cockroach and workload respect this.
+		dir := "."
+		if stageDir != "" {
+			dir = stageDir
+		}
+
 		applicationName := args[1]
 		versionArg := ""
 		if len(args) == 3 {
@@ -1358,7 +1365,7 @@ Some examples of usage:
 			)
 			return err
 		case "release":
-			return install.StageCockroachRelease(c, versionArg, releaseArch)
+			return install.StageCockroachRelease(c, versionArg, releaseArch, dir)
 		default:
 			return fmt.Errorf("unknown application %s", applicationName)
 		}
@@ -1736,6 +1743,7 @@ func main() {
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
 
 	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
+	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")
 
 	logsCmd.Flags().StringVar(
 		&logsFilter, "filter", "", "re to filter log messages")
