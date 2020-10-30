@@ -1479,20 +1479,20 @@ alter_database_owner:
   }
 
 alter_database_add_region_stmt:
-  ALTER DATABASE database_name ADD region_or_regions name_list
+  ALTER DATABASE database_name ADD REGION region_name
   {
     $$.val = &tree.AlterDatabaseAddRegion{
       Name: tree.Name($3),
-      Regions: $6.nameList(),
+      Region: tree.Name($6),
     }
   }
 
 alter_database_drop_region_stmt:
-  ALTER DATABASE database_name DROP region_or_regions name_list
+  ALTER DATABASE database_name DROP REGION region_name
   {
     $$.val = &tree.AlterDatabaseDropRegion{
       Name: tree.Name($3),
-      Regions: $6.nameList(),
+      Region: tree.Name($6),
     }
   }
 
@@ -1504,10 +1504,6 @@ alter_database_survive_stmt:
       Survive: $4.survive(),
     }
   }
-
-region_or_regions:
-  REGION
-| REGIONS
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL
@@ -7578,6 +7574,10 @@ opt_regions_list:
   {
     $$.val = tree.NameList(nil)
   }
+
+region_or_regions:
+  REGION
+| REGIONS
 
 survive_clause:
   SURVIVE REGION FAILURE

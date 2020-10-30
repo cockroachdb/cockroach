@@ -28,10 +28,10 @@ func (node *AlterDatabaseOwner) Format(ctx *FmtCtx) {
 	ctx.FormatUsername(node.Owner)
 }
 
-// AlterDatabaseAddRegion represents a ALTER DATABASE ADD REGION(S) statement.
+// AlterDatabaseAddRegion represents a ALTER DATABASE ADD REGION statement.
 type AlterDatabaseAddRegion struct {
-	Name    Name
-	Regions NameList
+	Name   Name
+	Region Name
 }
 
 var _ Statement = &AlterDatabaseAddRegion{}
@@ -41,13 +41,13 @@ func (node *AlterDatabaseAddRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ADD REGION ")
-	node.Regions.Format(ctx)
+	ctx.FormatNode(&node.Region)
 }
 
-// AlterDatabaseDropRegion represents a ALTER DATABASE DROP REGION(S) statement.
+// AlterDatabaseDropRegion represents a ALTER DATABASE DROP REGION statement.
 type AlterDatabaseDropRegion struct {
-	Name    Name
-	Regions NameList
+	Name   Name
+	Region Name
 }
 
 var _ Statement = &AlterDatabaseDropRegion{}
@@ -57,7 +57,7 @@ func (node *AlterDatabaseDropRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" DROP REGION ")
-	node.Regions.Format(ctx)
+	ctx.FormatNode(&node.Region)
 }
 
 // AlterDatabaseSurvive represents a ALTER DATABASE SURVIVE ... statement.
