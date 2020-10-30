@@ -86,12 +86,17 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	}
 
 	// Queue the refresh mutation.
-	n.desc.AddMaterializedViewRefreshMutation(&descpb.MaterializedViewRefresh{
+	refreshProto := &descpb.MaterializedViewRefresh{
 		NewPrimaryIndex: *newPrimaryIndex,
 		NewIndexes:      newIndexes,
-		AsOf:            params.p.Txn().ReadTimestamp(),
 		ShouldBackfill:  n.n.RefreshDataOption != tree.RefreshDataClear,
-	})
+	}
+	if params.p.semaCtx.AsOfTimestampForBackfill != nil {
+		refreshProto.AsOf = *params.p.semaCtx.AsOfTimestampForBackfill
+	} else {
+		refreshProto.AsOf = params.p.Txn().ReadTimestamp()
+	}
+	n.desc.AddMaterializedViewRefreshMutation(refreshProto)
 
 	return params.p.writeSchemaChange(
 		params.ctx,

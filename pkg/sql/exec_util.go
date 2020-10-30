@@ -1140,6 +1140,7 @@ func (p *planner) isAsOf(
 	ctx context.Context, stmt tree.Statement,
 ) (*hlc.Timestamp, asOfTimestampType, error) {
 	var asOf tree.AsOfClause
+	timestampType := transactionTimestamp
 	switch s := stmt.(type) {
 	case *tree.Select:
 		selStmt := s.Select
@@ -1178,11 +1179,26 @@ func (p *planner) isAsOf(
 		}
 		ts, _, err := p.isAsOf(ctx, s.AsSource)
 		return ts, backfillTimestamp, err
+	case *tree.CreateView:
+		if !s.Materialized {
+			return nil, 0, nil
+		}
+		// N.B.: If the AS OF SYSTEM TIME value here is older than the most recent
+		// schema change to any of the tables that the view depends on, we should
+		// reject this update.
+		ts, _, err := p.isAsOf(ctx, s.AsSource)
+		return ts, backfillTimestamp, err
+	case *tree.RefreshMaterializedView:
+		if s.AsOf.Expr == nil {
+			return nil, 0, nil
+		}
+		asOf = s.AsOf
+		timestampType = backfillTimestamp
 	default:
 		return nil, 0, nil
 	}
 	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
-	return &ts, transactionTimestamp, err
+	return &ts, timestampType, err
 }
 
 // isSavepoint returns true if stmt is a SAVEPOINT statement.

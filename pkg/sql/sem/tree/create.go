@@ -1703,6 +1703,7 @@ type RefreshMaterializedView struct {
 	Name              *UnresolvedObjectName
 	Concurrently      bool
 	RefreshDataOption RefreshDataOption
+	AsOf              AsOfClause
 }
 
 // RefreshDataOption corresponds to arguments for the REFRESH MATERIALIZED VIEW
