@@ -1666,8 +1666,13 @@ func verifyRecomputedStats(
 ) error {
 	if ms, err := rditer.ComputeStatsForRange(d, reader, nowNanos); err != nil {
 		return err
-	} else if expMS != ms {
-		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
+	} else {
+		// When used with a real wall clock these will not be the same, since it
+		// takes time to load stats.
+		expMS.LastUpdateNanos = ms.LastUpdateNanos
+		if expMS != ms {
+			return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
+		}
 	}
 	return nil
 }
