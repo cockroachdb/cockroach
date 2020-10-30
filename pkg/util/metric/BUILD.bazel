@@ -20,6 +20,7 @@ go_library(
         "//vendor/github.com/VividCortex/ewma",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/codahale/hdrhistogram",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/prometheus/client_golang/prometheus",
         "//vendor/github.com/prometheus/client_golang/prometheus/graphite",

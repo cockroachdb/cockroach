@@ -6,7 +6,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/blobs/blobspb",
     visibility = ["//visibility:public"],
     deps = [
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/google.golang.org/grpc",
+        "//vendor/google.golang.org/grpc/codes",
+        "//vendor/google.golang.org/grpc/status",
     ],
 )

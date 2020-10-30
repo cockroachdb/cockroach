@@ -36,6 +36,7 @@ go_library(
         "//vendor/github.com/cockroachdb/errors/errorspb",
         "//vendor/github.com/cockroachdb/pebble",
         "//vendor/github.com/cockroachdb/pebble/vfs",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
     ],
 )

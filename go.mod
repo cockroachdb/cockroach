@@ -36,7 +36,7 @@ require (
 	github.com/cockroachdb/cockroach-go v0.0.0-20200504194139-73ffeee90b62
 	github.com/cockroachdb/crlfmt v0.0.0-20200116191136-a78e1c207bc0
 	github.com/cockroachdb/datadriven v1.0.1-0.20201022032720-3e27adf87325
-	github.com/cockroachdb/errors v1.7.5
+	github.com/cockroachdb/errors v1.8.0
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
@@ -71,11 +71,11 @@ require (
 	github.com/golang-commonmark/mdurl v0.0.0-20180910110917-8d018c6567d6 // indirect
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
-	github.com/golang/protobuf v1.4.2
+	github.com/golang/protobuf v1.4.3
 	github.com/golang/snappy v0.0.2
 	github.com/google/btree v1.0.0
 	github.com/google/flatbuffers v1.11.0
-	github.com/google/go-cmp v0.4.0
+	github.com/google/go-cmp v0.5.0
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/google/pprof v0.0.0-20190109223431-e84dfd68c163
@@ -83,7 +83,7 @@ require (
 	github.com/gorhill/cronexpr v0.0.0-20140423231348-a557574d6c02
 	github.com/gorilla/mux v1.7.4 // indirect
 	github.com/goware/modvendor v0.3.0
-	github.com/grpc-ecosystem/grpc-gateway v1.13.0
+	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
 	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20201002210021-dda951febc36 // indirect
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
@@ -149,13 +149,13 @@ require (
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
-	golang.org/x/net v0.0.0-20200602114024-627f9648deb9
+	golang.org/x/net v0.0.0-20201029221708-28c70e62bb1d
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/sys v0.0.0-20201022201747-fb209a7c41cd
-	golang.org/x/text v0.3.3
-	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
+	golang.org/x/sys v0.0.0-20201029080932-201ba4db2418
+	golang.org/x/text v0.3.4
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347
 	google.golang.org/api v0.1.0
 	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
@@ -170,8 +170,6 @@ require (
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
-replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.2.1-0.20190102194534-ca10b809dba0
-
 replace github.com/grpc-ecosystem/grpc-gateway => github.com/cockroachdb/grpc-gateway v1.14.6-0.20200519165156-52697fc4a249
 
 replace github.com/olekukonko/tablewriter => github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847
@@ -182,6 +180,6 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v2.2.0-rc.1.0.20180830
 
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641
 
-replace go.etcd.io/etcd => github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955
+replace go.etcd.io/etcd => github.com/cockroachdb/etcd v0.4.7-0.20201030172626-327328454bad
 
 replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201016212517-2c66cfe9603c

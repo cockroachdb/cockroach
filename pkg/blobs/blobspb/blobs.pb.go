@@ -3,16 +3,18 @@
 
 package blobspb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
 import (
 	context "context"
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
-
-import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -23,7 +25,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // GetRequest is used to read a file from a remote node.
 // It's path is specified by `filename`, which can either
@@ -37,21 +39,21 @@ func (m *GetRequest) Reset()         { *m = GetRequest{} }
 func (m *GetRequest) String() string { return proto.CompactTextString(m) }
 func (*GetRequest) ProtoMessage()    {}
 func (*GetRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{0}
+	return fileDescriptor_fa8b478c5729691d, []int{0}
 }
 func (m *GetRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *GetRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *GetRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetRequest.Merge(dst, src)
+func (m *GetRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetRequest.Merge(m, src)
 }
 func (m *GetRequest) XXX_Size() int {
 	return m.Size()
@@ -71,21 +73,21 @@ func (m *GetResponse) Reset()         { *m = GetResponse{} }
 func (m *GetResponse) String() string { return proto.CompactTextString(m) }
 func (*GetResponse) ProtoMessage()    {}
 func (*GetResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{1}
+	return fileDescriptor_fa8b478c5729691d, []int{1}
 }
 func (m *GetResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *GetResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *GetResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetResponse.Merge(dst, src)
+func (m *GetResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetResponse.Merge(m, src)
 }
 func (m *GetResponse) XXX_Size() int {
 	return m.Size()
@@ -107,21 +109,21 @@ func (m *PutRequest) Reset()         { *m = PutRequest{} }
 func (m *PutRequest) String() string { return proto.CompactTextString(m) }
 func (*PutRequest) ProtoMessage()    {}
 func (*PutRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{2}
+	return fileDescriptor_fa8b478c5729691d, []int{2}
 }
 func (m *PutRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *PutRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *PutRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PutRequest.Merge(dst, src)
+func (m *PutRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PutRequest.Merge(m, src)
 }
 func (m *PutRequest) XXX_Size() int {
 	return m.Size()
@@ -140,21 +142,21 @@ func (m *PutResponse) Reset()         { *m = PutResponse{} }
 func (m *PutResponse) String() string { return proto.CompactTextString(m) }
 func (*PutResponse) ProtoMessage()    {}
 func (*PutResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{3}
+	return fileDescriptor_fa8b478c5729691d, []int{3}
 }
 func (m *PutResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *PutResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *PutResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PutResponse.Merge(dst, src)
+func (m *PutResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PutResponse.Merge(m, src)
 }
 func (m *PutResponse) XXX_Size() int {
 	return m.Size()
@@ -174,21 +176,21 @@ func (m *GlobRequest) Reset()         { *m = GlobRequest{} }
 func (m *GlobRequest) String() string { return proto.CompactTextString(m) }
 func (*GlobRequest) ProtoMessage()    {}
 func (*GlobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{4}
+	return fileDescriptor_fa8b478c5729691d, []int{4}
 }
 func (m *GlobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *GlobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *GlobRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GlobRequest.Merge(dst, src)
+func (m *GlobRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GlobRequest.Merge(m, src)
 }
 func (m *GlobRequest) XXX_Size() int {
 	return m.Size()
@@ -208,21 +210,21 @@ func (m *GlobResponse) Reset()         { *m = GlobResponse{} }
 func (m *GlobResponse) String() string { return proto.CompactTextString(m) }
 func (*GlobResponse) ProtoMessage()    {}
 func (*GlobResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{5}
+	return fileDescriptor_fa8b478c5729691d, []int{5}
 }
 func (m *GlobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *GlobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *GlobResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GlobResponse.Merge(dst, src)
+func (m *GlobResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GlobResponse.Merge(m, src)
 }
 func (m *GlobResponse) XXX_Size() int {
 	return m.Size()
@@ -243,21 +245,21 @@ func (m *DeleteRequest) Reset()         { *m = DeleteRequest{} }
 func (m *DeleteRequest) String() string { return proto.CompactTextString(m) }
 func (*DeleteRequest) ProtoMessage()    {}
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{6}
+	return fileDescriptor_fa8b478c5729691d, []int{6}
 }
 func (m *DeleteRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *DeleteRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *DeleteRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DeleteRequest.Merge(dst, src)
+func (m *DeleteRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DeleteRequest.Merge(m, src)
 }
 func (m *DeleteRequest) XXX_Size() int {
 	return m.Size()
@@ -276,21 +278,21 @@ func (m *DeleteResponse) Reset()         { *m = DeleteResponse{} }
 func (m *DeleteResponse) String() string { return proto.CompactTextString(m) }
 func (*DeleteResponse) ProtoMessage()    {}
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{7}
+	return fileDescriptor_fa8b478c5729691d, []int{7}
 }
 func (m *DeleteResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *DeleteResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *DeleteResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DeleteResponse.Merge(dst, src)
+func (m *DeleteResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DeleteResponse.Merge(m, src)
 }
 func (m *DeleteResponse) XXX_Size() int {
 	return m.Size()
@@ -311,21 +313,21 @@ func (m *StatRequest) Reset()         { *m = StatRequest{} }
 func (m *StatRequest) String() string { return proto.CompactTextString(m) }
 func (*StatRequest) ProtoMessage()    {}
 func (*StatRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{8}
+	return fileDescriptor_fa8b478c5729691d, []int{8}
 }
 func (m *StatRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *StatRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *StatRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StatRequest.Merge(dst, src)
+func (m *StatRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatRequest.Merge(m, src)
 }
 func (m *StatRequest) XXX_Size() int {
 	return m.Size()
@@ -345,21 +347,21 @@ func (m *BlobStat) Reset()         { *m = BlobStat{} }
 func (m *BlobStat) String() string { return proto.CompactTextString(m) }
 func (*BlobStat) ProtoMessage()    {}
 func (*BlobStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{9}
+	return fileDescriptor_fa8b478c5729691d, []int{9}
 }
 func (m *BlobStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *BlobStat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *BlobStat) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BlobStat.Merge(dst, src)
+func (m *BlobStat) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BlobStat.Merge(m, src)
 }
 func (m *BlobStat) XXX_Size() int {
 	return m.Size()
@@ -379,21 +381,21 @@ func (m *StreamChunk) Reset()         { *m = StreamChunk{} }
 func (m *StreamChunk) String() string { return proto.CompactTextString(m) }
 func (*StreamChunk) ProtoMessage()    {}
 func (*StreamChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{10}
+	return fileDescriptor_fa8b478c5729691d, []int{10}
 }
 func (m *StreamChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *StreamChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *StreamChunk) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StreamChunk.Merge(dst, src)
+func (m *StreamChunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamChunk.Merge(m, src)
 }
 func (m *StreamChunk) XXX_Size() int {
 	return m.Size()
@@ -412,21 +414,21 @@ func (m *StreamResponse) Reset()         { *m = StreamResponse{} }
 func (m *StreamResponse) String() string { return proto.CompactTextString(m) }
 func (*StreamResponse) ProtoMessage()    {}
 func (*StreamResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_cee2a8f681c337ac, []int{11}
+	return fileDescriptor_fa8b478c5729691d, []int{11}
 }
 func (m *StreamResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *StreamResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *StreamResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StreamResponse.Merge(dst, src)
+func (m *StreamResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamResponse.Merge(m, src)
 }
 func (m *StreamResponse) XXX_Size() int {
 	return m.Size()
@@ -450,6 +452,39 @@ func init() {
 	proto.RegisterType((*BlobStat)(nil), "cockroach.blobs.BlobStat")
 	proto.RegisterType((*StreamChunk)(nil), "cockroach.blobs.StreamChunk")
 	proto.RegisterType((*StreamResponse)(nil), "cockroach.blobs.StreamResponse")
+}
+
+func init() { proto.RegisterFile("blobs/blobspb/blobs.proto", fileDescriptor_fa8b478c5729691d) }
+
+var fileDescriptor_fa8b478c5729691d = []byte{
+	// 418 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0x41, 0x8f, 0xd2, 0x40,
+	0x14, 0xc7, 0x67, 0x76, 0x71, 0x77, 0xfb, 0xd8, 0x5d, 0x37, 0x93, 0x3d, 0xb0, 0x55, 0x47, 0x32,
+	0x31, 0x5a, 0x62, 0x52, 0x8c, 0x7e, 0x02, 0x51, 0x43, 0xa2, 0xc6, 0x90, 0x72, 0xf3, 0xd6, 0xe2,
+	0x08, 0x84, 0xd2, 0xa9, 0xed, 0xf4, 0xa0, 0x9f, 0xc2, 0x8f, 0xc5, 0x91, 0x23, 0x47, 0x2d, 0x9f,
+	0xc2, 0x9b, 0xe9, 0x4c, 0xa7, 0x81, 0x2d, 0x10, 0x2e, 0xd0, 0xd7, 0xf7, 0xeb, 0xff, 0xbd, 0xff,
+	0xbf, 0x1d, 0xb8, 0x0b, 0x42, 0x11, 0xa4, 0x5d, 0xf5, 0x1b, 0x07, 0xfa, 0xdf, 0x8d, 0x13, 0x21,
+	0x05, 0x79, 0x38, 0x12, 0xa3, 0x59, 0x22, 0xfc, 0xd1, 0xc4, 0x55, 0xb7, 0xed, 0xdb, 0xb1, 0x18,
+	0x0b, 0xd5, 0xeb, 0x16, 0x57, 0x1a, 0x63, 0x0e, 0x40, 0x9f, 0x4b, 0x8f, 0xff, 0xc8, 0x78, 0x2a,
+	0x89, 0x0d, 0x17, 0xdf, 0xa7, 0x21, 0x8f, 0xfc, 0x39, 0x6f, 0xe1, 0x36, 0x76, 0x2c, 0xaf, 0xaa,
+	0xd9, 0x0b, 0x68, 0x2a, 0x32, 0x8d, 0x45, 0x94, 0x72, 0xd2, 0x82, 0xf3, 0xd8, 0xff, 0x19, 0x0a,
+	0xff, 0x9b, 0x22, 0x2f, 0x3d, 0x53, 0xb2, 0x1e, 0xc0, 0x20, 0x3b, 0x46, 0x72, 0x53, 0xe3, 0x64,
+	0x5b, 0xe3, 0x0a, 0x9a, 0x4a, 0x43, 0x0f, 0x53, 0xb3, 0x43, 0x11, 0x18, 0x4d, 0xf5, 0x9c, 0x94,
+	0x3c, 0x89, 0x4a, 0x49, 0x53, 0xb2, 0x67, 0x70, 0xa9, 0xc1, 0x72, 0xcb, 0x5b, 0x78, 0x50, 0x4c,
+	0x4b, 0x5b, 0xb8, 0x7d, 0xea, 0x58, 0x9e, 0x2e, 0xd8, 0x4b, 0xb8, 0x7a, 0xcf, 0x43, 0x2e, 0xf9,
+	0x31, 0xbe, 0x6f, 0xe0, 0xda, 0xc0, 0xe5, 0x36, 0x1d, 0x68, 0x0e, 0xa5, 0x7f, 0x54, 0x68, 0xcf,
+	0xe1, 0xa2, 0x17, 0x8a, 0xa0, 0xc0, 0x0d, 0x97, 0x4e, 0x7f, 0x69, 0xee, 0xd4, 0xab, 0xea, 0xc2,
+	0xe0, 0x50, 0x26, 0xdc, 0x9f, 0xbf, 0x9b, 0x64, 0xd1, 0xec, 0x40, 0xb8, 0x37, 0x70, 0xad, 0x41,
+	0xb3, 0xcd, 0xeb, 0x7f, 0x27, 0xd0, 0x28, 0x66, 0x90, 0x0f, 0xd0, 0xf8, 0x3c, 0x4d, 0x25, 0x79,
+	0xec, 0xde, 0x7b, 0xf5, 0xee, 0x46, 0x76, 0xf6, 0x93, 0x3d, 0xdd, 0xd2, 0x1b, 0x22, 0x9f, 0xe0,
+	0x4c, 0xfb, 0x25, 0xb4, 0x86, 0x6e, 0xa5, 0x66, 0x3f, 0xdd, 0xdb, 0xaf, 0xc4, 0xde, 0x42, 0x43,
+	0x79, 0xaf, 0xef, 0xb4, 0x91, 0xa0, 0x7d, 0x57, 0xeb, 0x9a, 0xd0, 0x18, 0x22, 0x1f, 0xc1, 0xea,
+	0x73, 0xa9, 0x4d, 0x93, 0x47, 0xf5, 0xed, 0xab, 0xaf, 0xd7, 0xde, 0x35, 0xa4, 0xca, 0x94, 0xa1,
+	0x57, 0x98, 0x7c, 0x01, 0x6b, 0x90, 0x19, 0xad, 0x83, 0xf8, 0x0e, 0x73, 0xdb, 0xb9, 0x33, 0xe4,
+	0xe0, 0x5e, 0x67, 0xf1, 0x97, 0xa2, 0x45, 0x4e, 0xf1, 0x32, 0xa7, 0x78, 0x95, 0x53, 0xfc, 0x27,
+	0xa7, 0xf8, 0xf7, 0x9a, 0xa2, 0xe5, 0x9a, 0xa2, 0xd5, 0x9a, 0xa2, 0xaf, 0xe7, 0xe5, 0xd9, 0x0c,
+	0xce, 0xd4, 0x79, 0x7b, 0xf3, 0x3f, 0x00, 0x00, 0xff, 0xff, 0x8a, 0xc1, 0xfa, 0x95, 0xb3, 0x03,
+	0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -579,6 +614,26 @@ type BlobServer interface {
 	Stat(context.Context, *StatRequest) (*BlobStat, error)
 	GetStream(*GetRequest, Blob_GetStreamServer) error
 	PutStream(Blob_PutStreamServer) error
+}
+
+// UnimplementedBlobServer can be embedded to have forward compatible implementations.
+type UnimplementedBlobServer struct {
+}
+
+func (*UnimplementedBlobServer) List(ctx context.Context, req *GlobRequest) (*GlobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
+}
+func (*UnimplementedBlobServer) Delete(ctx context.Context, req *DeleteRequest) (*DeleteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
+}
+func (*UnimplementedBlobServer) Stat(ctx context.Context, req *StatRequest) (*BlobStat, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Stat not implemented")
+}
+func (*UnimplementedBlobServer) GetStream(req *GetRequest, srv Blob_GetStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetStream not implemented")
+}
+func (*UnimplementedBlobServer) PutStream(srv Blob_PutStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method PutStream not implemented")
 }
 
 func RegisterBlobServer(s *grpc.Server, srv BlobServer) {
@@ -721,7 +776,7 @@ var _Blob_serviceDesc = grpc.ServiceDesc{
 func (m *GetRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -729,23 +784,29 @@ func (m *GetRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *GetRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Filename) > 0 {
-		dAtA[i] = 0xa
-		i++
+		i -= len(m.Filename)
+		copy(dAtA[i:], m.Filename)
 		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Filename)))
-		i += copy(dAtA[i:], m.Filename)
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *GetResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -753,23 +814,29 @@ func (m *GetResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *GetResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Payload) > 0 {
-		dAtA[i] = 0xa
-		i++
+		i -= len(m.Payload)
+		copy(dAtA[i:], m.Payload)
 		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Payload)))
-		i += copy(dAtA[i:], m.Payload)
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *PutRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -777,29 +844,36 @@ func (m *PutRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PutRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PutRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Filename) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Filename)))
-		i += copy(dAtA[i:], m.Filename)
-	}
 	if len(m.Payload) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.Payload)
+		copy(dAtA[i:], m.Payload)
 		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Payload)))
-		i += copy(dAtA[i:], m.Payload)
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if len(m.Filename) > 0 {
+		i -= len(m.Filename)
+		copy(dAtA[i:], m.Filename)
+		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Filename)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *PutResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -807,17 +881,22 @@ func (m *PutResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PutResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PutResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *GlobRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -825,23 +904,29 @@ func (m *GlobRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *GlobRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GlobRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Pattern) > 0 {
-		dAtA[i] = 0xa
-		i++
+		i -= len(m.Pattern)
+		copy(dAtA[i:], m.Pattern)
 		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Pattern)))
-		i += copy(dAtA[i:], m.Pattern)
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *GlobResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -849,32 +934,31 @@ func (m *GlobResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *GlobResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GlobResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Files) > 0 {
-		for _, s := range m.Files {
+		for iNdEx := len(m.Files) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Files[iNdEx])
+			copy(dAtA[i:], m.Files[iNdEx])
+			i = encodeVarintBlobs(dAtA, i, uint64(len(m.Files[iNdEx])))
+			i--
 			dAtA[i] = 0xa
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
 		}
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *DeleteRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -882,23 +966,29 @@ func (m *DeleteRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DeleteRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DeleteRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Filename) > 0 {
-		dAtA[i] = 0xa
-		i++
+		i -= len(m.Filename)
+		copy(dAtA[i:], m.Filename)
 		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Filename)))
-		i += copy(dAtA[i:], m.Filename)
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *DeleteResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -906,17 +996,22 @@ func (m *DeleteResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DeleteResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DeleteResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *StatRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -924,23 +1019,29 @@ func (m *StatRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *StatRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Filename) > 0 {
-		dAtA[i] = 0xa
-		i++
+		i -= len(m.Filename)
+		copy(dAtA[i:], m.Filename)
 		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Filename)))
-		i += copy(dAtA[i:], m.Filename)
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *BlobStat) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -948,22 +1049,27 @@ func (m *BlobStat) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *BlobStat) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BlobStat) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.Filesize != 0 {
-		dAtA[i] = 0x8
-		i++
 		i = encodeVarintBlobs(dAtA, i, uint64(m.Filesize))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *StreamChunk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -971,23 +1077,29 @@ func (m *StreamChunk) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *StreamChunk) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StreamChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Payload) > 0 {
-		dAtA[i] = 0xa
-		i++
+		i -= len(m.Payload)
+		copy(dAtA[i:], m.Payload)
 		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Payload)))
-		i += copy(dAtA[i:], m.Payload)
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *StreamResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -995,21 +1107,28 @@ func (m *StreamResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *StreamResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StreamResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintBlobs(dAtA []byte, offset int, v uint64) int {
+	offset -= sovBlobs(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *GetRequest) Size() (n int) {
 	if m == nil {
@@ -1161,14 +1280,7 @@ func (m *StreamResponse) Size() (n int) {
 }
 
 func sovBlobs(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozBlobs(x uint64) (n int) {
 	return sovBlobs(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1188,7 +1300,7 @@ func (m *GetRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1216,7 +1328,7 @@ func (m *GetRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1226,6 +1338,9 @@ func (m *GetRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1238,6 +1353,9 @@ func (m *GetRequest) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1267,7 +1385,7 @@ func (m *GetResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1295,7 +1413,7 @@ func (m *GetResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1304,6 +1422,9 @@ func (m *GetResponse) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1319,6 +1440,9 @@ func (m *GetResponse) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1348,7 +1472,7 @@ func (m *PutRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1376,7 +1500,7 @@ func (m *PutRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1386,6 +1510,9 @@ func (m *PutRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1405,7 +1532,7 @@ func (m *PutRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1414,6 +1541,9 @@ func (m *PutRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1429,6 +1559,9 @@ func (m *PutRequest) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1458,7 +1591,7 @@ func (m *PutResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1479,6 +1612,9 @@ func (m *PutResponse) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1508,7 +1644,7 @@ func (m *GlobRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1536,7 +1672,7 @@ func (m *GlobRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1546,6 +1682,9 @@ func (m *GlobRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1558,6 +1697,9 @@ func (m *GlobRequest) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1587,7 +1729,7 @@ func (m *GlobResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1615,7 +1757,7 @@ func (m *GlobResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1625,6 +1767,9 @@ func (m *GlobResponse) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1637,6 +1782,9 @@ func (m *GlobResponse) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1666,7 +1814,7 @@ func (m *DeleteRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1694,7 +1842,7 @@ func (m *DeleteRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1704,6 +1852,9 @@ func (m *DeleteRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1716,6 +1867,9 @@ func (m *DeleteRequest) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1745,7 +1899,7 @@ func (m *DeleteResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1766,6 +1920,9 @@ func (m *DeleteResponse) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1795,7 +1952,7 @@ func (m *StatRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1823,7 +1980,7 @@ func (m *StatRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1833,6 +1990,9 @@ func (m *StatRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1845,6 +2005,9 @@ func (m *StatRequest) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1874,7 +2037,7 @@ func (m *BlobStat) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1902,7 +2065,7 @@ func (m *BlobStat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Filesize |= (int64(b) & 0x7F) << shift
+				m.Filesize |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1914,6 +2077,9 @@ func (m *BlobStat) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1943,7 +2109,7 @@ func (m *StreamChunk) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1971,7 +2137,7 @@ func (m *StreamChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1980,6 +2146,9 @@ func (m *StreamChunk) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthBlobs
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1995,6 +2164,9 @@ func (m *StreamChunk) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -2024,7 +2196,7 @@ func (m *StreamResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2047,6 +2219,9 @@ func (m *StreamResponse) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthBlobs
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthBlobs
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2062,6 +2237,7 @@ func (m *StreamResponse) Unmarshal(dAtA []byte) error {
 func skipBlobs(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -2093,10 +2269,8 @@ func skipBlobs(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -2113,86 +2287,34 @@ func skipBlobs(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthBlobs
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowBlobs
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipBlobs(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupBlobs
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthBlobs
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthBlobs = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowBlobs   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthBlobs        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowBlobs          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupBlobs = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() { proto.RegisterFile("blobs/blobspb/blobs.proto", fileDescriptor_blobs_cee2a8f681c337ac) }
-
-var fileDescriptor_blobs_cee2a8f681c337ac = []byte{
-	// 418 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0x41, 0x8f, 0xd2, 0x40,
-	0x14, 0xc7, 0x67, 0x76, 0x71, 0x77, 0xfb, 0xd8, 0x5d, 0x37, 0x93, 0x3d, 0xb0, 0x55, 0x47, 0x32,
-	0x31, 0x5a, 0x62, 0x52, 0x8c, 0x7e, 0x02, 0x51, 0x43, 0xa2, 0xc6, 0x90, 0x72, 0xf3, 0xd6, 0xe2,
-	0x08, 0x84, 0xd2, 0xa9, 0xed, 0xf4, 0xa0, 0x9f, 0xc2, 0x8f, 0xc5, 0x91, 0x23, 0x47, 0x2d, 0x9f,
-	0xc2, 0x9b, 0xe9, 0x4c, 0xa7, 0x81, 0x2d, 0x10, 0x2e, 0xd0, 0xd7, 0xf7, 0xeb, 0xff, 0xbd, 0xff,
-	0xbf, 0x1d, 0xb8, 0x0b, 0x42, 0x11, 0xa4, 0x5d, 0xf5, 0x1b, 0x07, 0xfa, 0xdf, 0x8d, 0x13, 0x21,
-	0x05, 0x79, 0x38, 0x12, 0xa3, 0x59, 0x22, 0xfc, 0xd1, 0xc4, 0x55, 0xb7, 0xed, 0xdb, 0xb1, 0x18,
-	0x0b, 0xd5, 0xeb, 0x16, 0x57, 0x1a, 0x63, 0x0e, 0x40, 0x9f, 0x4b, 0x8f, 0xff, 0xc8, 0x78, 0x2a,
-	0x89, 0x0d, 0x17, 0xdf, 0xa7, 0x21, 0x8f, 0xfc, 0x39, 0x6f, 0xe1, 0x36, 0x76, 0x2c, 0xaf, 0xaa,
-	0xd9, 0x0b, 0x68, 0x2a, 0x32, 0x8d, 0x45, 0x94, 0x72, 0xd2, 0x82, 0xf3, 0xd8, 0xff, 0x19, 0x0a,
-	0xff, 0x9b, 0x22, 0x2f, 0x3d, 0x53, 0xb2, 0x1e, 0xc0, 0x20, 0x3b, 0x46, 0x72, 0x53, 0xe3, 0x64,
-	0x5b, 0xe3, 0x0a, 0x9a, 0x4a, 0x43, 0x0f, 0x53, 0xb3, 0x43, 0x11, 0x18, 0x4d, 0xf5, 0x9c, 0x94,
-	0x3c, 0x89, 0x4a, 0x49, 0x53, 0xb2, 0x67, 0x70, 0xa9, 0xc1, 0x72, 0xcb, 0x5b, 0x78, 0x50, 0x4c,
-	0x4b, 0x5b, 0xb8, 0x7d, 0xea, 0x58, 0x9e, 0x2e, 0xd8, 0x4b, 0xb8, 0x7a, 0xcf, 0x43, 0x2e, 0xf9,
-	0x31, 0xbe, 0x6f, 0xe0, 0xda, 0xc0, 0xe5, 0x36, 0x1d, 0x68, 0x0e, 0xa5, 0x7f, 0x54, 0x68, 0xcf,
-	0xe1, 0xa2, 0x17, 0x8a, 0xa0, 0xc0, 0x0d, 0x97, 0x4e, 0x7f, 0x69, 0xee, 0xd4, 0xab, 0xea, 0xc2,
-	0xe0, 0x50, 0x26, 0xdc, 0x9f, 0xbf, 0x9b, 0x64, 0xd1, 0xec, 0x40, 0xb8, 0x37, 0x70, 0xad, 0x41,
-	0xb3, 0xcd, 0xeb, 0x7f, 0x27, 0xd0, 0x28, 0x66, 0x90, 0x0f, 0xd0, 0xf8, 0x3c, 0x4d, 0x25, 0x79,
-	0xec, 0xde, 0x7b, 0xf5, 0xee, 0x46, 0x76, 0xf6, 0x93, 0x3d, 0xdd, 0xd2, 0x1b, 0x22, 0x9f, 0xe0,
-	0x4c, 0xfb, 0x25, 0xb4, 0x86, 0x6e, 0xa5, 0x66, 0x3f, 0xdd, 0xdb, 0xaf, 0xc4, 0xde, 0x42, 0x43,
-	0x79, 0xaf, 0xef, 0xb4, 0x91, 0xa0, 0x7d, 0x57, 0xeb, 0x9a, 0xd0, 0x18, 0x22, 0x1f, 0xc1, 0xea,
-	0x73, 0xa9, 0x4d, 0x93, 0x47, 0xf5, 0xed, 0xab, 0xaf, 0xd7, 0xde, 0x35, 0xa4, 0xca, 0x94, 0xa1,
-	0x57, 0x98, 0x7c, 0x01, 0x6b, 0x90, 0x19, 0xad, 0x83, 0xf8, 0x0e, 0x73, 0xdb, 0xb9, 0x33, 0xe4,
-	0xe0, 0x5e, 0x67, 0xf1, 0x97, 0xa2, 0x45, 0x4e, 0xf1, 0x32, 0xa7, 0x78, 0x95, 0x53, 0xfc, 0x27,
-	0xa7, 0xf8, 0xf7, 0x9a, 0xa2, 0xe5, 0x9a, 0xa2, 0xd5, 0x9a, 0xa2, 0xaf, 0xe7, 0xe5, 0xd9, 0x0c,
-	0xce, 0xd4, 0x79, 0x7b, 0xf3, 0x3f, 0x00, 0x00, 0xff, 0xff, 0x8a, 0xc1, 0xfa, 0x95, 0xb3, 0x03,
-	0x00, 0x00,
-}

@@ -66,7 +66,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 12720006657210437557,
+		populatedSum: 16530675952743747470,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
@@ -78,10 +78,12 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
-				Term             uint64
-				Vote             uint64
-				Commit           uint64
-				XXX_unrecognized []byte
+				Term                 uint64
+				Vote                 uint64
+				Commit               uint64
+				XXX_NoUnkeyedLiteral struct{}
+				XXX_unrecognized     []byte
+				XXX_sizecache        int32
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.
@@ -89,10 +91,12 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 
 			n := r.Uint64()
 			return &raftpb.HardState{
-				Term:             n % 3,
-				Vote:             n % 7,
-				Commit:           n % 11,
-				XXX_unrecognized: nil,
+				Term:                 n % 3,
+				Vote:                 n % 7,
+				Commit:               n % 11,
+				XXX_NoUnkeyedLiteral: struct{}{},
+				XXX_unrecognized:     nil,
+				XXX_sizecache:        0,
 			}
 		},
 		emptySum:     13621293256077144893,
@@ -120,7 +124,7 @@ func init() {
 			return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
 		},
 		emptySum:     5531676819244041709,
-		populatedSum: 8911200268508796945,
+		populatedSum: 17471291891947207032,
 	}
 	belowRaftGoldenProtos[reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{})] =
 		fixture{
@@ -128,7 +132,7 @@ func init() {
 				return enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
 			},
 			emptySum:     14695981039346656037,
-			populatedSum: 7432412240713840291,
+			populatedSum: 11144914200223313236,
 		}
 }
 

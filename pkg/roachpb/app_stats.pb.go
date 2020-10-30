@@ -3,16 +3,18 @@
 
 package roachpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import time "time"
-
-import encoding_binary "encoding/binary"
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-
-import io "io"
+import (
+	encoding_binary "encoding/binary"
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/gogo/protobuf/types"
+	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	time "time"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -24,7 +26,7 @@ var _ = time.Kitchen
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // N.B. When fields are added to this struct, make sure to update
 // (*StatementStatistics).Add and (*StatementStatistics).AlmostEqual
@@ -85,21 +87,21 @@ func (m *StatementStatistics) Reset()         { *m = StatementStatistics{} }
 func (m *StatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*StatementStatistics) ProtoMessage()    {}
 func (*StatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{0}
+	return fileDescriptor_81c296505f9d1940, []int{0}
 }
 func (m *StatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *StatementStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *StatementStatistics) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StatementStatistics.Merge(dst, src)
+func (m *StatementStatistics) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatementStatistics.Merge(m, src)
 }
 func (m *StatementStatistics) XXX_Size() int {
 	return m.Size()
@@ -134,21 +136,21 @@ func (m *TransactionStatistics) Reset()         { *m = TransactionStatistics{} }
 func (m *TransactionStatistics) String() string { return proto.CompactTextString(m) }
 func (*TransactionStatistics) ProtoMessage()    {}
 func (*TransactionStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{1}
+	return fileDescriptor_81c296505f9d1940, []int{1}
 }
 func (m *TransactionStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *TransactionStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *TransactionStatistics) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TransactionStatistics.Merge(dst, src)
+func (m *TransactionStatistics) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TransactionStatistics.Merge(m, src)
 }
 func (m *TransactionStatistics) XXX_Size() int {
 	return m.Size()
@@ -174,21 +176,21 @@ func (m *SensitiveInfo) Reset()         { *m = SensitiveInfo{} }
 func (m *SensitiveInfo) String() string { return proto.CompactTextString(m) }
 func (*SensitiveInfo) ProtoMessage()    {}
 func (*SensitiveInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{2}
+	return fileDescriptor_81c296505f9d1940, []int{2}
 }
 func (m *SensitiveInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SensitiveInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SensitiveInfo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SensitiveInfo.Merge(dst, src)
+func (m *SensitiveInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SensitiveInfo.Merge(m, src)
 }
 func (m *SensitiveInfo) XXX_Size() int {
 	return m.Size()
@@ -216,21 +218,21 @@ func (m *NumericStat) Reset()         { *m = NumericStat{} }
 func (m *NumericStat) String() string { return proto.CompactTextString(m) }
 func (*NumericStat) ProtoMessage()    {}
 func (*NumericStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{3}
+	return fileDescriptor_81c296505f9d1940, []int{3}
 }
 func (m *NumericStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *NumericStat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *NumericStat) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_NumericStat.Merge(dst, src)
+func (m *NumericStat) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NumericStat.Merge(m, src)
 }
 func (m *NumericStat) XXX_Size() int {
 	return m.Size()
@@ -255,21 +257,21 @@ func (m *StatementStatisticsKey) Reset()         { *m = StatementStatisticsKey{}
 func (m *StatementStatisticsKey) String() string { return proto.CompactTextString(m) }
 func (*StatementStatisticsKey) ProtoMessage()    {}
 func (*StatementStatisticsKey) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{4}
+	return fileDescriptor_81c296505f9d1940, []int{4}
 }
 func (m *StatementStatisticsKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *StatementStatisticsKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *StatementStatisticsKey) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StatementStatisticsKey.Merge(dst, src)
+func (m *StatementStatisticsKey) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatementStatisticsKey.Merge(m, src)
 }
 func (m *StatementStatisticsKey) XXX_Size() int {
 	return m.Size()
@@ -295,21 +297,21 @@ func (m *CollectedStatementStatistics) Reset()         { *m = CollectedStatement
 func (m *CollectedStatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedStatementStatistics) ProtoMessage()    {}
 func (*CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{5}
+	return fileDescriptor_81c296505f9d1940, []int{5}
 }
 func (m *CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *CollectedStatementStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *CollectedStatementStatistics) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CollectedStatementStatistics.Merge(dst, src)
+func (m *CollectedStatementStatistics) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CollectedStatementStatistics.Merge(m, src)
 }
 func (m *CollectedStatementStatistics) XXX_Size() int {
 	return m.Size()
@@ -335,21 +337,21 @@ func (m *CollectedTransactionStatistics) Reset()         { *m = CollectedTransac
 func (m *CollectedTransactionStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedTransactionStatistics) ProtoMessage()    {}
 func (*CollectedTransactionStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{6}
+	return fileDescriptor_81c296505f9d1940, []int{6}
 }
 func (m *CollectedTransactionStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *CollectedTransactionStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *CollectedTransactionStatistics) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CollectedTransactionStatistics.Merge(dst, src)
+func (m *CollectedTransactionStatistics) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CollectedTransactionStatistics.Merge(m, src)
 }
 func (m *CollectedTransactionStatistics) XXX_Size() int {
 	return m.Size()
@@ -375,21 +377,21 @@ func (m *ExplainTreePlanNode) Reset()         { *m = ExplainTreePlanNode{} }
 func (m *ExplainTreePlanNode) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode) ProtoMessage()    {}
 func (*ExplainTreePlanNode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{7}
+	return fileDescriptor_81c296505f9d1940, []int{7}
 }
 func (m *ExplainTreePlanNode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ExplainTreePlanNode) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ExplainTreePlanNode) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ExplainTreePlanNode.Merge(dst, src)
+func (m *ExplainTreePlanNode) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExplainTreePlanNode.Merge(m, src)
 }
 func (m *ExplainTreePlanNode) XXX_Size() int {
 	return m.Size()
@@ -409,21 +411,21 @@ func (m *ExplainTreePlanNode_Attr) Reset()         { *m = ExplainTreePlanNode_At
 func (m *ExplainTreePlanNode_Attr) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode_Attr) ProtoMessage()    {}
 func (*ExplainTreePlanNode_Attr) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{7, 0}
+	return fileDescriptor_81c296505f9d1940, []int{7, 0}
 }
 func (m *ExplainTreePlanNode_Attr) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ExplainTreePlanNode_Attr) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ExplainTreePlanNode_Attr) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ExplainTreePlanNode_Attr.Merge(dst, src)
+func (m *ExplainTreePlanNode_Attr) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExplainTreePlanNode_Attr.Merge(m, src)
 }
 func (m *ExplainTreePlanNode_Attr) XXX_Size() int {
 	return m.Size()
@@ -448,21 +450,21 @@ func (m *TxnStats) Reset()         { *m = TxnStats{} }
 func (m *TxnStats) String() string { return proto.CompactTextString(m) }
 func (*TxnStats) ProtoMessage()    {}
 func (*TxnStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_82983606d1915ef5, []int{8}
+	return fileDescriptor_81c296505f9d1940, []int{8}
 }
 func (m *TxnStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *TxnStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *TxnStats) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TxnStats.Merge(dst, src)
+func (m *TxnStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxnStats.Merge(m, src)
 }
 func (m *TxnStats) XXX_Size() int {
 	return m.Size()
@@ -485,6 +487,83 @@ func init() {
 	proto.RegisterType((*ExplainTreePlanNode_Attr)(nil), "cockroach.sql.ExplainTreePlanNode.Attr")
 	proto.RegisterType((*TxnStats)(nil), "cockroach.sql.TxnStats")
 }
+
+func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_81c296505f9d1940) }
+
+var fileDescriptor_81c296505f9d1940 = []byte{
+	// 1108 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x56, 0xbb, 0x6e, 0x1b, 0x47,
+	0x17, 0xd6, 0xf2, 0x22, 0x92, 0x87, 0xa4, 0xe4, 0x7f, 0x7d, 0xdb, 0x9f, 0x10, 0x48, 0x85, 0xb0,
+	0x61, 0x19, 0x49, 0x28, 0x40, 0x48, 0x93, 0x04, 0xb2, 0x2c, 0x4a, 0x2e, 0xe8, 0x08, 0x46, 0x42,
+	0xa9, 0x4a, 0xb3, 0x18, 0xed, 0x1e, 0x4a, 0x03, 0xed, 0x4d, 0x33, 0x43, 0x9a, 0xec, 0xf3, 0x00,
+	0x7e, 0x84, 0xbc, 0x47, 0xca, 0x34, 0x6a, 0x12, 0xb8, 0x34, 0x52, 0x28, 0x09, 0xd5, 0xe4, 0x09,
+	0x52, 0xa4, 0x0a, 0x66, 0x66, 0x97, 0x59, 0xd2, 0x14, 0xb2, 0x4e, 0x47, 0x9e, 0xf3, 0x7d, 0xdf,
+	0x9c, 0x39, 0xb7, 0x59, 0x78, 0xc8, 0x42, 0xe2, 0x9c, 0x47, 0xa7, 0xdb, 0x24, 0x8a, 0x6c, 0x2e,
+	0x88, 0xe0, 0x9d, 0x88, 0x85, 0x22, 0x34, 0xeb, 0x4e, 0xe8, 0x5c, 0x28, 0x67, 0x87, 0x5f, 0x7a,
+	0x8d, 0x7b, 0x67, 0xe1, 0x59, 0xa8, 0x3c, 0xdb, 0xf2, 0x97, 0x06, 0x35, 0x5a, 0x67, 0x61, 0x78,
+	0xe6, 0xe1, 0xb6, 0xfa, 0x77, 0x3a, 0x1c, 0x6c, 0x0b, 0xea, 0x23, 0x17, 0xc4, 0x8f, 0x34, 0xa0,
+	0xfd, 0xf3, 0x2a, 0xdc, 0x3d, 0x16, 0x44, 0xa0, 0x8f, 0x81, 0x90, 0x3f, 0x28, 0x17, 0xd4, 0xe1,
+	0x66, 0x03, 0x8a, 0x4e, 0x38, 0x0c, 0x84, 0x65, 0x6c, 0x1a, 0x5b, 0xf9, 0x6e, 0xe1, 0xea, 0xba,
+	0xb5, 0xd2, 0xd7, 0x26, 0xf3, 0x33, 0xb8, 0x3b, 0xa0, 0x8c, 0x0b, 0x9b, 0x08, 0x81, 0x7e, 0x24,
+	0x6c, 0x8d, 0xcc, 0xa5, 0x90, 0xff, 0x53, 0x80, 0x7d, 0xed, 0x3f, 0x50, 0xac, 0xc7, 0x50, 0xf5,
+	0xc9, 0xd8, 0x66, 0x28, 0x18, 0x45, 0x6e, 0xe5, 0x53, 0x68, 0xf0, 0xc9, 0xb8, 0xaf, 0xed, 0xe6,
+	0x27, 0xb0, 0xee, 0xe1, 0x19, 0x71, 0x26, 0xb6, 0x47, 0xb8, 0xb0, 0x91, 0x31, 0xab, 0xb0, 0x69,
+	0x6c, 0x55, 0x62, 0x68, 0x5d, 0x3b, 0x8f, 0x08, 0x17, 0x2f, 0x18, 0x33, 0x77, 0xc1, 0x5a, 0x40,
+	0xdb, 0x0c, 0x5d, 0xe2, 0x08, 0x74, 0xad, 0x6a, 0x8a, 0x76, 0x7f, 0x8e, 0xd6, 0x8f, 0x21, 0xe6,
+	0x97, 0x50, 0x0e, 0x86, 0xbe, 0xcd, 0xc2, 0xd7, 0xdc, 0x2a, 0x6e, 0x1a, 0x5b, 0xd5, 0x9d, 0x46,
+	0x67, 0x2e, 0xad, 0x9d, 0x57, 0x43, 0x1f, 0x19, 0x75, 0x64, 0x66, 0x62, 0xa9, 0x52, 0x30, 0xf4,
+	0xfb, 0xe1, 0x6b, 0x6e, 0xee, 0x42, 0x25, 0x22, 0x8c, 0xa3, 0xed, 0x11, 0x61, 0xad, 0x66, 0x64,
+	0x97, 0x15, 0xe5, 0x88, 0x08, 0x79, 0x76, 0xe4, 0x91, 0x40, 0xb1, 0x4b, 0x59, 0xcf, 0x96, 0x0c,
+	0x49, 0xfe, 0x1c, 0x4a, 0x6c, 0xa8, 0xb9, 0xe5, 0x8c, 0xdc, 0x55, 0x36, 0x54, 0xd4, 0x7d, 0xa8,
+	0x72, 0x64, 0x23, 0xea, 0xe8, 0xc0, 0x2b, 0x19, 0xe9, 0x10, 0x93, 0xa4, 0xc4, 0x01, 0xd4, 0xc2,
+	0x11, 0xb2, 0x73, 0x24, 0xae, 0xd2, 0x80, 0x8c, 0x1a, 0xd5, 0x84, 0x25, 0x45, 0x7a, 0xb0, 0xc6,
+	0x31, 0xe0, 0x54, 0xd0, 0x11, 0xda, 0x34, 0x18, 0x84, 0x56, 0x4d, 0xc9, 0x6c, 0x2c, 0xc8, 0x1c,
+	0x27, 0xa0, 0x5e, 0x30, 0x08, 0x93, 0x2e, 0xe0, 0x69, 0xa3, 0xb9, 0x07, 0x70, 0x3a, 0x11, 0xc8,
+	0x6d, 0x86, 0xc4, 0xb5, 0xd6, 0x33, 0x46, 0x53, 0x51, 0x9c, 0x3e, 0x12, 0x57, 0x96, 0x52, 0xf6,
+	0x80, 0xe6, 0xdf, 0xc9, 0x5a, 0x4a, 0x49, 0x91, 0xf4, 0x97, 0x85, 0x72, 0xfd, 0xce, 0xda, 0xcb,
+	0x42, 0x79, 0xed, 0xce, 0x7a, 0xfb, 0x97, 0x1c, 0xdc, 0x3f, 0x61, 0x24, 0xe0, 0xc4, 0x11, 0x34,
+	0x0c, 0x32, 0x8e, 0xd4, 0xc2, 0x70, 0xe4, 0x6e, 0x19, 0x8e, 0x74, 0xbf, 0xe6, 0x3f, 0xb4, 0x5f,
+	0x17, 0x0a, 0x5f, 0xf8, 0x0f, 0x85, 0x97, 0x79, 0x42, 0xc1, 0x26, 0x4a, 0xa0, 0x98, 0x39, 0x4f,
+	0x92, 0x22, 0xe9, 0x7b, 0x00, 0x4e, 0xe8, 0xfb, 0x54, 0x7c, 0xd0, 0xc8, 0x54, 0x34, 0xe7, 0x88,
+	0x88, 0xf6, 0x77, 0x39, 0xa8, 0xcf, 0xf5, 0x83, 0xd9, 0x82, 0xf2, 0x6c, 0x4f, 0x18, 0xa9, 0x81,
+	0x2f, 0x79, 0xf1, 0x86, 0xa0, 0xb0, 0xe1, 0x87, 0x5c, 0xd8, 0x0c, 0x1d, 0x0c, 0x84, 0xad, 0x46,
+	0xce, 0x45, 0xee, 0x30, 0x1a, 0xc9, 0xfa, 0xa8, 0x54, 0x57, 0x77, 0xda, 0x0b, 0x51, 0xbc, 0x18,
+	0x47, 0x1e, 0xa1, 0xc1, 0x09, 0x43, 0xfc, 0xda, 0x23, 0xc1, 0xab, 0xd0, 0xc5, 0x58, 0xf8, 0xff,
+	0x52, 0xad, 0xaf, 0xc4, 0xa4, 0xe7, 0xf0, 0x1f, 0x29, 0x93, 0x40, 0xe3, 0xbd, 0xa3, 0x66, 0xfb,
+	0x76, 0x56, 0x2f, 0xbd, 0x91, 0x3b, 0xc9, 0x46, 0xee, 0x9c, 0x24, 0x88, 0x6e, 0x59, 0x1e, 0xf0,
+	0xe6, 0xd7, 0x96, 0xd1, 0x7f, 0x38, 0x7f, 0xc8, 0x0c, 0xf2, 0x45, 0xe1, 0x8f, 0xef, 0x5b, 0x46,
+	0xbb, 0x0f, 0xd5, 0x54, 0x9a, 0x4c, 0x0b, 0x0a, 0x3e, 0x92, 0x40, 0xdd, 0xdf, 0x88, 0xc3, 0x54,
+	0x16, 0xf3, 0x29, 0xd4, 0xf9, 0xe5, 0x90, 0x30, 0x74, 0x6d, 0x97, 0x0e, 0x06, 0xba, 0xb1, 0x12,
+	0x48, 0x2d, 0x76, 0x1d, 0x4a, 0x4f, 0xfb, 0xc6, 0x80, 0x07, 0x4b, 0x1e, 0x82, 0xaf, 0x70, 0x22,
+	0x1b, 0xf7, 0x72, 0x88, 0x6c, 0x32, 0x97, 0x60, 0x6d, 0x32, 0x1f, 0x40, 0x9e, 0x44, 0x91, 0xd2,
+	0x4d, 0x3c, 0xd2, 0x60, 0x36, 0xa1, 0xe4, 0x52, 0x2e, 0x8e, 0xbf, 0x39, 0x52, 0x17, 0x2f, 0x27,
+	0x65, 0x89, 0x8d, 0xe6, 0x06, 0xac, 0x0e, 0x08, 0xf5, 0xd0, 0x55, 0x7d, 0x98, 0xb8, 0x63, 0x9b,
+	0x54, 0x0d, 0x23, 0xdd, 0x61, 0x89, 0x4b, 0x1a, 0xcc, 0x27, 0x50, 0xa3, 0x7e, 0xe4, 0x51, 0x87,
+	0x0a, 0x5b, 0x8c, 0x03, 0xd5, 0x42, 0x09, 0xa0, 0x9a, 0x78, 0x4e, 0xc6, 0x81, 0x14, 0x18, 0xa1,
+	0xa3, 0xf6, 0xea, 0x4c, 0x60, 0x84, 0x4e, 0xfb, 0x47, 0x03, 0x36, 0x0e, 0x42, 0xcf, 0x43, 0xb9,
+	0xfe, 0x97, 0xbd, 0x7b, 0x8f, 0x20, 0x47, 0x5d, 0x15, 0x72, 0xa1, 0x7b, 0x4f, 0xf2, 0xa6, 0xd7,
+	0xad, 0x5c, 0xef, 0xf0, 0xaf, 0xeb, 0xd6, 0xea, 0xb1, 0xf0, 0x45, 0xef, 0xb0, 0x9f, 0xa3, 0x72,
+	0x5f, 0xe4, 0x2f, 0x50, 0xe7, 0xa3, 0xba, 0xf3, 0x78, 0x71, 0x61, 0x2d, 0xcd, 0x62, 0x12, 0xc5,
+	0x05, 0x4e, 0xcc, 0x67, 0x50, 0x54, 0x2f, 0xf9, 0x2d, 0xcd, 0xb7, 0x44, 0x20, 0x49, 0xba, 0xa2,
+	0xb5, 0x7f, 0x30, 0xa0, 0x39, 0xbb, 0xc5, 0xf2, 0x65, 0xb3, 0x07, 0x75, 0x9e, 0xc8, 0xd8, 0xd4,
+	0xe5, 0x96, 0xb1, 0x99, 0xdf, 0x2a, 0x74, 0x1b, 0xd3, 0xeb, 0x56, 0x6d, 0xa6, 0xdf, 0x3b, 0xe4,
+	0xa9, 0x8b, 0xd5, 0x66, 0x84, 0x9e, 0xcb, 0x6f, 0x2d, 0xec, 0xf3, 0x24, 0x76, 0xdd, 0xcf, 0x8f,
+	0x16, 0x62, 0x5f, 0x1a, 0xcd, 0x7c, 0xf4, 0x7f, 0x1a, 0x70, 0x77, 0xc9, 0x7c, 0xc9, 0x36, 0x0e,
+	0x88, 0x8f, 0x73, 0x5d, 0xa6, 0x2c, 0xe6, 0x2e, 0x14, 0x89, 0x10, 0x4c, 0xe6, 0x2b, 0xbf, 0x55,
+	0xdd, 0x79, 0xf2, 0xef, 0xc3, 0xda, 0xd9, 0x17, 0x82, 0xf5, 0x35, 0xcb, 0x7c, 0x06, 0x65, 0xe7,
+	0x9c, 0x7a, 0x2e, 0xc3, 0xc0, 0xca, 0x2b, 0x85, 0x0c, 0xe3, 0xde, 0x9f, 0x71, 0x1a, 0xcf, 0xa1,
+	0x20, 0xe5, 0x64, 0x4a, 0x92, 0xaa, 0x57, 0xd2, 0xe5, 0x6c, 0x40, 0x71, 0x44, 0xbc, 0x21, 0xce,
+	0x25, 0x4b, 0x9b, 0xf4, 0xc0, 0xc6, 0x63, 0xfb, 0x93, 0x01, 0xe5, 0x93, 0xb1, 0xca, 0x0b, 0x37,
+	0x3f, 0x82, 0x8a, 0x18, 0x07, 0xf6, 0xfb, 0x2f, 0x42, 0x59, 0x8c, 0x03, 0xfd, 0xc5, 0xd4, 0x85,
+	0x9a, 0x84, 0xc8, 0x15, 0x62, 0x73, 0x74, 0xe2, 0x6e, 0xc9, 0xb0, 0xb1, 0xc5, 0x58, 0xad, 0x8c,
+	0x63, 0x74, 0xcc, 0x4f, 0x61, 0x5d, 0xaf, 0x4f, 0x81, 0x6e, 0x7c, 0x58, 0xfa, 0xcb, 0x6b, 0x6d,
+	0xe6, 0xd4, 0x47, 0x7e, 0x0c, 0x6b, 0xb3, 0x01, 0xd3, 0xe8, 0x42, 0x0a, 0x5d, 0x4f, 0x7c, 0x0a,
+	0xdc, 0x7d, 0x7a, 0xf5, 0x7b, 0x73, 0xe5, 0x6a, 0xda, 0x34, 0xde, 0x4e, 0x9b, 0xc6, 0xbb, 0x69,
+	0xd3, 0xf8, 0x6d, 0xda, 0x34, 0xde, 0xdc, 0x34, 0x57, 0xde, 0xde, 0x34, 0x57, 0xde, 0xdd, 0x34,
+	0x57, 0xbe, 0x2d, 0xc5, 0x1f, 0xaf, 0x7f, 0x07, 0x00, 0x00, 0xff, 0xff, 0x4b, 0x1c, 0xce, 0x6d,
+	0xc6, 0x0a, 0x00, 0x00,
+}
+
 func (this *SensitiveInfo) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -585,7 +664,7 @@ func (this *ExplainTreePlanNode_Attr) Equal(that interface{}) bool {
 func (m *StatementStatistics) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -593,108 +672,133 @@ func (m *StatementStatistics) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *StatementStatistics) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StatementStatistics) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.Count))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.FirstAttemptCount))
-	dAtA[i] = 0x18
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.MaxRetries))
-	dAtA[i] = 0x22
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LegacyLastErr)))
-	i += copy(dAtA[i:], m.LegacyLastErr)
-	dAtA[i] = 0x2a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.NumRows.Size()))
-	n1, err := m.NumRows.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	{
+		size, err := m.RowsRead.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
 	}
-	i += n1
-	dAtA[i] = 0x32
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.ParseLat.Size()))
-	n2, err := m.ParseLat.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	dAtA[i] = 0x3a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.PlanLat.Size()))
-	n3, err := m.PlanLat.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
-	dAtA[i] = 0x42
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.RunLat.Size()))
-	n4, err := m.RunLat.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
-	dAtA[i] = 0x4a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.ServiceLat.Size()))
-	n5, err := m.ServiceLat.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n5
-	dAtA[i] = 0x52
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.OverheadLat.Size()))
-	n6, err := m.OverheadLat.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n6
-	dAtA[i] = 0x5a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LegacyLastErrRedacted)))
-	i += copy(dAtA[i:], m.LegacyLastErrRedacted)
-	dAtA[i] = 0x62
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.SensitiveInfo.Size()))
-	n7, err := m.SensitiveInfo.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n7
-	dAtA[i] = 0x7a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.BytesRead.Size()))
-	n8, err := m.BytesRead.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n8
-	dAtA[i] = 0x82
-	i++
+	i--
 	dAtA[i] = 0x1
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.RowsRead.Size()))
-	n9, err := m.RowsRead.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	i--
+	dAtA[i] = 0x82
+	{
+		size, err := m.BytesRead.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
 	}
-	i += n9
-	return i, nil
+	i--
+	dAtA[i] = 0x7a
+	{
+		size, err := m.SensitiveInfo.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x62
+	i -= len(m.LegacyLastErrRedacted)
+	copy(dAtA[i:], m.LegacyLastErrRedacted)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LegacyLastErrRedacted)))
+	i--
+	dAtA[i] = 0x5a
+	{
+		size, err := m.OverheadLat.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x52
+	{
+		size, err := m.ServiceLat.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x4a
+	{
+		size, err := m.RunLat.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x42
+	{
+		size, err := m.PlanLat.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x3a
+	{
+		size, err := m.ParseLat.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x32
+	{
+		size, err := m.NumRows.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x2a
+	i -= len(m.LegacyLastErr)
+	copy(dAtA[i:], m.LegacyLastErr)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LegacyLastErr)))
+	i--
+	dAtA[i] = 0x22
+	i = encodeVarintAppStats(dAtA, i, uint64(m.MaxRetries))
+	i--
+	dAtA[i] = 0x18
+	i = encodeVarintAppStats(dAtA, i, uint64(m.FirstAttemptCount))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintAppStats(dAtA, i, uint64(m.Count))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *TransactionStatistics) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -702,55 +806,68 @@ func (m *TransactionStatistics) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TransactionStatistics) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TransactionStatistics) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.Count))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.MaxRetries))
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.NumRows.Size()))
-	n10, err := m.NumRows.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	{
+		size, err := m.CommitLat.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
 	}
-	i += n10
-	dAtA[i] = 0x22
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.ServiceLat.Size()))
-	n11, err := m.ServiceLat.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n11
-	dAtA[i] = 0x2a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.RetryLat.Size()))
-	n12, err := m.RetryLat.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n12
+	i--
 	dAtA[i] = 0x32
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.CommitLat.Size()))
-	n13, err := m.CommitLat.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	{
+		size, err := m.RetryLat.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
 	}
-	i += n13
-	return i, nil
+	i--
+	dAtA[i] = 0x2a
+	{
+		size, err := m.ServiceLat.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x22
+	{
+		size, err := m.NumRows.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	i = encodeVarintAppStats(dAtA, i, uint64(m.MaxRetries))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintAppStats(dAtA, i, uint64(m.Count))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *SensitiveInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -758,37 +875,45 @@ func (m *SensitiveInfo) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SensitiveInfo) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SensitiveInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LastErr)))
-	i += copy(dAtA[i:], m.LastErr)
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.MostRecentPlanDescription.Size()))
-	n14, err := m.MostRecentPlanDescription.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	n14, err14 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.MostRecentPlanTimestamp, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(m.MostRecentPlanTimestamp):])
+	if err14 != nil {
+		return 0, err14
 	}
-	i += n14
+	i -= n14
+	i = encodeVarintAppStats(dAtA, i, uint64(n14))
+	i--
 	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.MostRecentPlanTimestamp)))
-	n15, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.MostRecentPlanTimestamp, dAtA[i:])
-	if err != nil {
-		return 0, err
+	{
+		size, err := m.MostRecentPlanDescription.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
 	}
-	i += n15
-	return i, nil
+	i--
+	dAtA[i] = 0x12
+	i -= len(m.LastErr)
+	copy(dAtA[i:], m.LastErr)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LastErr)))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *NumericStat) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -796,25 +921,30 @@ func (m *NumericStat) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *NumericStat) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *NumericStat) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x9
-	i++
-	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Mean))))
-	i += 8
-	dAtA[i] = 0x11
-	i++
+	i -= 8
 	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.SquaredDiffs))))
-	i += 8
-	return i, nil
+	i--
+	dAtA[i] = 0x11
+	i -= 8
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Mean))))
+	i--
+	dAtA[i] = 0x9
+	return len(dAtA) - i, nil
 }
 
 func (m *StatementStatisticsKey) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -822,65 +952,72 @@ func (m *StatementStatisticsKey) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *StatementStatisticsKey) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StatementStatisticsKey) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Query)))
-	i += copy(dAtA[i:], m.Query)
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.App)))
-	i += copy(dAtA[i:], m.App)
-	dAtA[i] = 0x18
-	i++
-	if m.DistSQL {
-		dAtA[i] = 1
-	} else {
-		dAtA[i] = 0
-	}
-	i++
-	dAtA[i] = 0x20
-	i++
-	if m.Failed {
-		dAtA[i] = 1
-	} else {
-		dAtA[i] = 0
-	}
-	i++
-	dAtA[i] = 0x28
-	i++
-	if m.Opt {
-		dAtA[i] = 1
-	} else {
-		dAtA[i] = 0
-	}
-	i++
-	dAtA[i] = 0x30
-	i++
-	if m.ImplicitTxn {
-		dAtA[i] = 1
-	} else {
-		dAtA[i] = 0
-	}
-	i++
-	dAtA[i] = 0x38
-	i++
+	i--
 	if m.Vec {
 		dAtA[i] = 1
 	} else {
 		dAtA[i] = 0
 	}
-	i++
-	return i, nil
+	i--
+	dAtA[i] = 0x38
+	i--
+	if m.ImplicitTxn {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i--
+	dAtA[i] = 0x30
+	i--
+	if m.Opt {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i--
+	dAtA[i] = 0x28
+	i--
+	if m.Failed {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i--
+	dAtA[i] = 0x20
+	i--
+	if m.DistSQL {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i--
+	dAtA[i] = 0x18
+	i -= len(m.App)
+	copy(dAtA[i:], m.App)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.App)))
+	i--
+	dAtA[i] = 0x12
+	i -= len(m.Query)
+	copy(dAtA[i:], m.Query)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Query)))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *CollectedStatementStatistics) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -888,36 +1025,45 @@ func (m *CollectedStatementStatistics) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CollectedStatementStatistics) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CollectedStatementStatistics) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.Key.Size()))
-	n16, err := m.Key.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n16
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.Stats.Size()))
-	n17, err := m.Stats.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n17
-	dAtA[i] = 0x18
-	i++
 	i = encodeVarintAppStats(dAtA, i, uint64(m.ID))
-	return i, nil
+	i--
+	dAtA[i] = 0x18
+	{
+		size, err := m.Stats.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.Key.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *CollectedTransactionStatistics) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -925,36 +1071,44 @@ func (m *CollectedTransactionStatistics) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CollectedTransactionStatistics) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CollectedTransactionStatistics) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	{
+		size, err := m.Stats.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	i -= len(m.App)
+	copy(dAtA[i:], m.App)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.App)))
+	i--
+	dAtA[i] = 0x12
 	if len(m.StatementIDs) > 0 {
-		for _, num := range m.StatementIDs {
+		for iNdEx := len(m.StatementIDs) - 1; iNdEx >= 0; iNdEx-- {
+			i = encodeVarintAppStats(dAtA, i, uint64(m.StatementIDs[iNdEx]))
+			i--
 			dAtA[i] = 0x8
-			i++
-			i = encodeVarintAppStats(dAtA, i, uint64(num))
 		}
 	}
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.App)))
-	i += copy(dAtA[i:], m.App)
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.Stats.Size()))
-	n18, err := m.Stats.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n18
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ExplainTreePlanNode) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -962,45 +1116,55 @@ func (m *ExplainTreePlanNode) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ExplainTreePlanNode) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ExplainTreePlanNode) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Name)))
-	i += copy(dAtA[i:], m.Name)
-	if len(m.Attrs) > 0 {
-		for _, msg := range m.Attrs {
-			dAtA[i] = 0x12
-			i++
-			i = encodeVarintAppStats(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
 	if len(m.Children) > 0 {
-		for _, msg := range m.Children {
-			dAtA[i] = 0x1a
-			i++
-			i = encodeVarintAppStats(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Children) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Children[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintAppStats(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x1a
 		}
 	}
-	return i, nil
+	if len(m.Attrs) > 0 {
+		for iNdEx := len(m.Attrs) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Attrs[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintAppStats(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	i -= len(m.Name)
+	copy(dAtA[i:], m.Name)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Name)))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *ExplainTreePlanNode_Attr) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1008,25 +1172,32 @@ func (m *ExplainTreePlanNode_Attr) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ExplainTreePlanNode_Attr) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ExplainTreePlanNode_Attr) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Key)))
-	i += copy(dAtA[i:], m.Key)
-	dAtA[i] = 0x12
-	i++
+	i -= len(m.Value)
+	copy(dAtA[i:], m.Value)
 	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Value)))
-	i += copy(dAtA[i:], m.Value)
-	return i, nil
+	i--
+	dAtA[i] = 0x12
+	i -= len(m.Key)
+	copy(dAtA[i:], m.Key)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Key)))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *TxnStats) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1034,38 +1205,47 @@ func (m *TxnStats) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TxnStats) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TxnStats) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.TxnCount))
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.TxnTimeSec.Size()))
-	n19, err := m.TxnTimeSec.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n19
-	dAtA[i] = 0x18
-	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(m.CommittedCount))
-	dAtA[i] = 0x20
-	i++
 	i = encodeVarintAppStats(dAtA, i, uint64(m.ImplicitCount))
-	return i, nil
+	i--
+	dAtA[i] = 0x20
+	i = encodeVarintAppStats(dAtA, i, uint64(m.CommittedCount))
+	i--
+	dAtA[i] = 0x18
+	{
+		size, err := m.TxnTimeSec.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintAppStats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	i = encodeVarintAppStats(dAtA, i, uint64(m.TxnCount))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintAppStats(dAtA []byte, offset int, v uint64) int {
+	offset -= sovAppStats(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *StatementStatistics) Size() (n int) {
 	if m == nil {
@@ -1247,14 +1427,7 @@ func (m *TxnStats) Size() (n int) {
 }
 
 func sovAppStats(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozAppStats(x uint64) (n int) {
 	return sovAppStats(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1274,7 +1447,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1302,7 +1475,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Count |= (int64(b) & 0x7F) << shift
+				m.Count |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1321,7 +1494,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.FirstAttemptCount |= (int64(b) & 0x7F) << shift
+				m.FirstAttemptCount |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1340,7 +1513,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxRetries |= (int64(b) & 0x7F) << shift
+				m.MaxRetries |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1359,7 +1532,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1369,6 +1542,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1388,7 +1564,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1397,6 +1573,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1418,7 +1597,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1427,6 +1606,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1448,7 +1630,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1457,6 +1639,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1478,7 +1663,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1487,6 +1672,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1508,7 +1696,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1517,6 +1705,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1538,7 +1729,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1547,6 +1738,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1568,7 +1762,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1578,6 +1772,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1597,7 +1794,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1606,6 +1803,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1627,7 +1827,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1636,6 +1836,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1657,7 +1860,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1666,6 +1869,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1680,6 +1886,9 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1709,7 +1918,7 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1737,7 +1946,7 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Count |= (int64(b) & 0x7F) << shift
+				m.Count |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1756,7 +1965,7 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxRetries |= (int64(b) & 0x7F) << shift
+				m.MaxRetries |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1775,7 +1984,7 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1784,6 +1993,9 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1805,7 +2017,7 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1814,6 +2026,9 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1835,7 +2050,7 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1844,6 +2059,9 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1865,7 +2083,7 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1874,6 +2092,9 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1888,6 +2109,9 @@ func (m *TransactionStatistics) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1917,7 +2141,7 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1945,7 +2169,7 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1955,6 +2179,9 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1974,7 +2201,7 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1983,6 +2210,9 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2004,7 +2234,7 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2013,6 +2243,9 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2027,6 +2260,9 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2056,7 +2292,7 @@ func (m *NumericStat) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2101,6 +2337,9 @@ func (m *NumericStat) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthAppStats
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2128,7 +2367,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2156,7 +2395,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2166,6 +2405,9 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2185,7 +2427,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2195,6 +2437,9 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2214,7 +2459,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2234,7 +2479,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2254,7 +2499,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2274,7 +2519,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2294,7 +2539,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2307,6 +2552,9 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2336,7 +2584,7 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2364,7 +2612,7 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2373,6 +2621,9 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2394,7 +2645,7 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2403,6 +2654,9 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2424,7 +2678,7 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ID |= (StmtID(b) & 0x7F) << shift
+				m.ID |= StmtID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2436,6 +2690,9 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2465,7 +2722,7 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2491,7 +2748,7 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					v |= (StmtID(b) & 0x7F) << shift
+					v |= StmtID(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -2508,7 +2765,7 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -2517,12 +2774,15 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthAppStats
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthAppStats
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
 				var elementCount int
 				var count int
-				for _, integer := range dAtA {
+				for _, integer := range dAtA[iNdEx:postIndex] {
 					if integer < 128 {
 						count++
 					}
@@ -2542,7 +2802,7 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						v |= (StmtID(b) & 0x7F) << shift
+						v |= StmtID(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -2566,7 +2826,7 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2576,6 +2836,9 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2595,7 +2858,7 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2604,6 +2867,9 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2618,6 +2884,9 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2647,7 +2916,7 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2675,7 +2944,7 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2685,6 +2954,9 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2704,7 +2976,7 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2713,6 +2985,9 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2735,7 +3010,7 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2744,6 +3019,9 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2759,6 +3037,9 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2788,7 +3069,7 @@ func (m *ExplainTreePlanNode_Attr) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2816,7 +3097,7 @@ func (m *ExplainTreePlanNode_Attr) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2826,6 +3107,9 @@ func (m *ExplainTreePlanNode_Attr) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2845,7 +3129,7 @@ func (m *ExplainTreePlanNode_Attr) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2855,6 +3139,9 @@ func (m *ExplainTreePlanNode_Attr) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2867,6 +3154,9 @@ func (m *ExplainTreePlanNode_Attr) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2896,7 +3186,7 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2924,7 +3214,7 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TxnCount |= (int64(b) & 0x7F) << shift
+				m.TxnCount |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2943,7 +3233,7 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2952,6 +3242,9 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthAppStats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAppStats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2973,7 +3266,7 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.CommittedCount |= (int64(b) & 0x7F) << shift
+				m.CommittedCount |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2992,7 +3285,7 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ImplicitCount |= (int64(b) & 0x7F) << shift
+				m.ImplicitCount |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3004,6 +3297,9 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -3021,6 +3317,7 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 func skipAppStats(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -3052,10 +3349,8 @@ func skipAppStats(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -3072,129 +3367,34 @@ func skipAppStats(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthAppStats
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowAppStats
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipAppStats(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupAppStats
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthAppStats
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthAppStats = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowAppStats   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthAppStats        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowAppStats          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupAppStats = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_82983606d1915ef5) }
-
-var fileDescriptor_app_stats_82983606d1915ef5 = []byte{
-	// 1113 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x56, 0xbd, 0x6e, 0x1b, 0x47,
-	0x17, 0xd5, 0xf2, 0x47, 0x24, 0x2f, 0x49, 0xc9, 0xdf, 0xf8, 0x6f, 0x3f, 0x42, 0x20, 0x15, 0xc2,
-	0x86, 0x65, 0x24, 0xa1, 0x00, 0x21, 0x4d, 0x12, 0xc8, 0xb2, 0x28, 0xb9, 0xa0, 0x23, 0x18, 0x09,
-	0xa5, 0x2a, 0xcd, 0x62, 0xb4, 0x7b, 0x29, 0x0d, 0xb4, 0x7f, 0x9a, 0x19, 0xd2, 0x64, 0x9f, 0x07,
-	0xf0, 0x23, 0xe4, 0x3d, 0x52, 0xa6, 0x51, 0x93, 0xc0, 0xa5, 0x91, 0x42, 0x49, 0xa8, 0x26, 0x4f,
-	0x90, 0x22, 0x55, 0x30, 0x33, 0xbb, 0x0c, 0x49, 0x53, 0x08, 0x9d, 0x8e, 0xbc, 0xf7, 0x9c, 0x33,
-	0x33, 0x77, 0xce, 0xbd, 0xb3, 0xf0, 0x90, 0x47, 0xd4, 0x3d, 0x8f, 0x4f, 0xb7, 0x69, 0x1c, 0x3b,
-	0x42, 0x52, 0x29, 0x5a, 0x31, 0x8f, 0x64, 0x44, 0xaa, 0x6e, 0xe4, 0x5e, 0xe8, 0x64, 0x4b, 0x5c,
-	0xfa, 0xb5, 0x7b, 0x67, 0xd1, 0x59, 0xa4, 0x33, 0xdb, 0xea, 0x97, 0x01, 0xd5, 0x1a, 0x67, 0x51,
-	0x74, 0xe6, 0xe3, 0xb6, 0xfe, 0x77, 0xda, 0xef, 0x6d, 0x4b, 0x16, 0xa0, 0x90, 0x34, 0x88, 0x0d,
-	0xa0, 0xf9, 0xf3, 0x2a, 0xdc, 0x3d, 0x96, 0x54, 0x62, 0x80, 0xa1, 0x54, 0x3f, 0x98, 0x90, 0xcc,
-	0x15, 0xa4, 0x06, 0x79, 0x37, 0xea, 0x87, 0xd2, 0xb6, 0x36, 0xad, 0xad, 0x6c, 0x3b, 0x77, 0x75,
-	0xdd, 0x58, 0xe9, 0x9a, 0x10, 0xf9, 0x0c, 0xee, 0xf6, 0x18, 0x17, 0xd2, 0xa1, 0x52, 0x62, 0x10,
-	0x4b, 0xc7, 0x20, 0x33, 0x53, 0xc8, 0xff, 0x69, 0xc0, 0xbe, 0xc9, 0x1f, 0x68, 0xd6, 0x63, 0x28,
-	0x07, 0x74, 0xe8, 0x70, 0x94, 0x9c, 0xa1, 0xb0, 0xb3, 0x53, 0x68, 0x08, 0xe8, 0xb0, 0x6b, 0xe2,
-	0xe4, 0x13, 0x58, 0xf7, 0xf1, 0x8c, 0xba, 0x23, 0xc7, 0xa7, 0x42, 0x3a, 0xc8, 0xb9, 0x9d, 0xdb,
-	0xb4, 0xb6, 0x4a, 0x09, 0xb4, 0x6a, 0x92, 0x47, 0x54, 0xc8, 0x17, 0x9c, 0x93, 0x2f, 0xa1, 0x18,
-	0xf6, 0x03, 0x87, 0x47, 0xaf, 0x85, 0x9d, 0xdf, 0xb4, 0xb6, 0xca, 0x3b, 0xb5, 0xd6, 0x4c, 0x5d,
-	0x5a, 0xaf, 0xfa, 0x01, 0x72, 0xe6, 0xaa, 0xa3, 0x25, 0x12, 0x85, 0xb0, 0x1f, 0x74, 0xa3, 0xd7,
-	0x82, 0xec, 0x42, 0x29, 0xa6, 0x5c, 0xa0, 0xe3, 0x53, 0x69, 0xaf, 0x2e, 0xc9, 0x2e, 0x6a, 0xca,
-	0x11, 0x95, 0x6a, 0xed, 0xd8, 0xa7, 0xa1, 0x66, 0x17, 0x96, 0x5d, 0x5b, 0x31, 0x14, 0xf9, 0x73,
-	0x28, 0xf0, 0xbe, 0xe1, 0x16, 0x97, 0xe4, 0xae, 0xf2, 0xbe, 0xa6, 0xee, 0x43, 0x59, 0x20, 0x1f,
-	0x30, 0xd7, 0x6c, 0xbc, 0xb4, 0x24, 0x1d, 0x12, 0x92, 0x92, 0x38, 0x80, 0x4a, 0x34, 0x40, 0x7e,
-	0x8e, 0xd4, 0xd3, 0x1a, 0xb0, 0xa4, 0x46, 0x39, 0x65, 0x29, 0x91, 0x5d, 0xb0, 0xe7, 0x6e, 0xca,
-	0xe1, 0xe8, 0x51, 0x57, 0xa2, 0x67, 0x97, 0xa7, 0xae, 0xec, 0xfe, 0xcc, 0x95, 0x75, 0x13, 0x08,
-	0xe9, 0xc0, 0x9a, 0xc0, 0x50, 0x30, 0xc9, 0x06, 0xe8, 0xb0, 0xb0, 0x17, 0xd9, 0x15, 0xbd, 0x8b,
-	0x8d, 0xb9, 0x5d, 0x1c, 0xa7, 0xa0, 0x4e, 0xd8, 0x8b, 0x52, 0x17, 0x88, 0xe9, 0x20, 0xd9, 0x03,
-	0x38, 0x1d, 0x49, 0x14, 0x0e, 0x47, 0xea, 0xd9, 0xeb, 0x4b, 0x1e, 0xa6, 0xa4, 0x39, 0x5d, 0xa4,
-	0x9e, 0x72, 0x82, 0xb2, 0x90, 0xe1, 0xdf, 0x59, 0xd6, 0x09, 0x8a, 0xa2, 0xe8, 0x2f, 0x73, 0xc5,
-	0xea, 0x9d, 0xb5, 0x97, 0xb9, 0xe2, 0xda, 0x9d, 0xf5, 0xe6, 0x2f, 0x19, 0xb8, 0x7f, 0xc2, 0x69,
-	0x28, 0xa8, 0x2b, 0x59, 0x14, 0x2e, 0xd9, 0x52, 0x73, 0xcd, 0x91, 0xb9, 0xa5, 0x39, 0xa6, 0xed,
-	0x9e, 0xfd, 0x50, 0xbb, 0xcf, 0xf9, 0x26, 0xf7, 0x1f, 0x7c, 0xa3, 0xea, 0x84, 0x92, 0x8f, 0xb4,
-	0x40, 0x7e, 0xe9, 0x3a, 0x29, 0x8a, 0xa2, 0xef, 0x01, 0xb8, 0x51, 0x10, 0x30, 0xf9, 0x41, 0x1d,
-	0x57, 0x32, 0x9c, 0x23, 0x2a, 0x9b, 0xdf, 0x65, 0xa0, 0x3a, 0xe3, 0x07, 0xd2, 0x80, 0xe2, 0x64,
-	0x4e, 0x58, 0x53, 0xa6, 0x2b, 0xf8, 0xc9, 0x84, 0x60, 0xb0, 0x11, 0x44, 0x42, 0x3a, 0x1c, 0x5d,
-	0x0c, 0xa5, 0xa3, 0x3b, 0xd6, 0x43, 0xe1, 0x72, 0x16, 0xab, 0xfb, 0xd1, 0xa5, 0x2e, 0xef, 0x34,
-	0xe7, 0x76, 0xf1, 0x62, 0x18, 0xfb, 0x94, 0x85, 0x27, 0x1c, 0xf1, 0x6b, 0x9f, 0x86, 0xaf, 0x22,
-	0x0f, 0x13, 0xe1, 0xff, 0x2b, 0xb5, 0xae, 0x16, 0x53, 0x99, 0xc3, 0x7f, 0xa4, 0x08, 0x85, 0xda,
-	0x7b, 0x4b, 0x4d, 0xe6, 0xed, 0xe4, 0xbe, 0xcc, 0x44, 0x6e, 0xa5, 0x13, 0xb9, 0x75, 0x92, 0x22,
-	0xda, 0x45, 0xb5, 0xc0, 0x9b, 0x5f, 0x1b, 0x56, 0xf7, 0xe1, 0xec, 0x22, 0x13, 0xc8, 0x17, 0xb9,
-	0x3f, 0xbe, 0x6f, 0x58, 0xcd, 0x2e, 0x94, 0xa7, 0xca, 0x44, 0x6c, 0xc8, 0x05, 0x48, 0x43, 0x7d,
-	0x7e, 0x2b, 0xd9, 0xa6, 0x8e, 0x90, 0xa7, 0x50, 0x15, 0x97, 0x7d, 0xca, 0xd1, 0x73, 0x3c, 0xd6,
-	0xeb, 0x19, 0x63, 0xa5, 0x90, 0x4a, 0x92, 0x3a, 0x54, 0x99, 0xe6, 0x8d, 0x05, 0x0f, 0x16, 0x3c,
-	0x04, 0x5f, 0xe1, 0x48, 0x19, 0xf7, 0xb2, 0x8f, 0x7c, 0x34, 0x53, 0x60, 0x13, 0x22, 0x0f, 0x20,
-	0x4b, 0xe3, 0x58, 0xeb, 0xa6, 0x19, 0x15, 0x20, 0x75, 0x28, 0x78, 0x4c, 0xc8, 0xe3, 0x6f, 0x8e,
-	0xf4, 0xc1, 0x8b, 0xe9, 0xb5, 0x24, 0x41, 0xb2, 0x01, 0xab, 0x3d, 0xca, 0x7c, 0xf4, 0xb4, 0x0f,
-	0xd3, 0x74, 0x12, 0x53, 0xaa, 0x51, 0x6c, 0x1c, 0x96, 0xa6, 0x54, 0x80, 0x3c, 0x81, 0x0a, 0x0b,
-	0x62, 0x9f, 0xb9, 0x4c, 0x3a, 0x72, 0x18, 0x6a, 0x0b, 0xa5, 0x80, 0x72, 0x9a, 0x39, 0x19, 0x86,
-	0x4a, 0x60, 0x80, 0xae, 0x1e, 0xcb, 0x13, 0x81, 0x01, 0xba, 0xcd, 0x1f, 0x2d, 0xd8, 0x38, 0x88,
-	0x7c, 0x1f, 0xd5, 0x08, 0x5a, 0xf4, 0xee, 0xed, 0x42, 0xf6, 0x02, 0xcd, 0x49, 0xcb, 0x3b, 0x8f,
-	0xe7, 0x47, 0xd1, 0xc2, 0xfa, 0xa4, 0xfa, 0x17, 0x38, 0x22, 0xcf, 0x20, 0xaf, 0xdf, 0xe8, 0x5b,
-	0x6c, 0xb5, 0x40, 0x20, 0x2d, 0xa7, 0xa6, 0x91, 0x47, 0x90, 0x61, 0x9e, 0xae, 0x58, 0xae, 0x7d,
-	0x4f, 0x25, 0xc6, 0xd7, 0x8d, 0x4c, 0xe7, 0xf0, 0xaf, 0xeb, 0xc6, 0xea, 0xb1, 0x0c, 0x64, 0xe7,
-	0xb0, 0x9b, 0x61, 0x5e, 0xf3, 0x07, 0x0b, 0xea, 0x93, 0x53, 0x2c, 0x1e, 0x36, 0x7b, 0x50, 0x15,
-	0xe9, 0x62, 0x0e, 0xf3, 0x84, 0x6d, 0x6d, 0x66, 0xb7, 0x72, 0xed, 0xda, 0xf8, 0xba, 0x51, 0x99,
-	0xec, 0xa2, 0x73, 0x28, 0xa6, 0x94, 0x2b, 0x13, 0x42, 0xc7, 0x13, 0xb7, 0x5e, 0xec, 0xf3, 0xf4,
-	0x84, 0xc6, 0xcf, 0x8f, 0xe6, 0x4e, 0xb8, 0x70, 0x37, 0x33, 0x67, 0x6c, 0xfe, 0x69, 0xc1, 0xdd,
-	0x05, 0xfd, 0xa5, 0x6c, 0x1c, 0xd2, 0x00, 0x67, 0x5c, 0xa6, 0x23, 0x64, 0x17, 0xf2, 0x54, 0x4a,
-	0xae, 0xaa, 0x9a, 0xdd, 0x2a, 0xef, 0x3c, 0xf9, 0xf7, 0x66, 0x6d, 0xed, 0x4b, 0xc9, 0xbb, 0x86,
-	0x45, 0x9e, 0x41, 0xd1, 0x3d, 0x67, 0xbe, 0xc7, 0x31, 0xb4, 0xb3, 0x5a, 0x61, 0x89, 0x76, 0xef,
-	0x4e, 0x38, 0xb5, 0xe7, 0x90, 0x53, 0x72, 0xaa, 0x24, 0xa9, 0x37, 0x4a, 0xd3, 0x97, 0x5e, 0x83,
-	0xfc, 0x80, 0xfa, 0x7d, 0x9c, 0x29, 0x96, 0x09, 0x99, 0x86, 0x4d, 0xda, 0xf6, 0x27, 0x0b, 0x8a,
-	0x27, 0x43, 0x5d, 0x17, 0x41, 0x3e, 0x82, 0x92, 0x1c, 0x86, 0xce, 0xfb, 0x2f, 0x42, 0x51, 0x0e,
-	0x43, 0xf3, 0xc5, 0xd4, 0x86, 0x8a, 0x82, 0xa8, 0x11, 0xe2, 0x08, 0x74, 0x13, 0x4f, 0x2d, 0x31,
-	0xb1, 0xe5, 0x50, 0x8f, 0x8c, 0x63, 0x74, 0xc9, 0xa7, 0xb0, 0x6e, 0xc6, 0xa7, 0x44, 0x2f, 0x59,
-	0x6c, 0xfa, 0xcb, 0x6b, 0x6d, 0x92, 0x34, 0x4b, 0x7e, 0x0c, 0x6b, 0x93, 0x06, 0x33, 0xe8, 0xdc,
-	0x14, 0xba, 0x9a, 0xe6, 0x34, 0xb8, 0xfd, 0xf4, 0xea, 0xf7, 0xfa, 0xca, 0xd5, 0xb8, 0x6e, 0xbd,
-	0x1d, 0xd7, 0xad, 0x77, 0xe3, 0xba, 0xf5, 0xdb, 0xb8, 0x6e, 0xbd, 0xb9, 0xa9, 0xaf, 0xbc, 0xbd,
-	0xa9, 0xaf, 0xbc, 0xbb, 0xa9, 0xaf, 0x7c, 0x5b, 0x48, 0x3e, 0x5e, 0xff, 0x0e, 0x00, 0x00, 0xff,
-	0xff, 0xea, 0x08, 0x8c, 0xbf, 0xc6, 0x0a, 0x00, 0x00,
-}

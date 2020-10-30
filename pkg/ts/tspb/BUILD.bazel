@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/golang/protobuf/descriptor",
         "//vendor/github.com/golang/protobuf/proto",

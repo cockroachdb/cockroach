@@ -3,11 +3,14 @@
 
 package flowinfra
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import io "io"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -18,7 +21,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // OutboxStats are the stats collected by an Outbox.
 type OutboxStats struct {
@@ -29,21 +32,21 @@ func (m *OutboxStats) Reset()         { *m = OutboxStats{} }
 func (m *OutboxStats) String() string { return proto.CompactTextString(m) }
 func (*OutboxStats) ProtoMessage()    {}
 func (*OutboxStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_62f3f6a554998eb4, []int{0}
+	return fileDescriptor_675fe35fbd6d7b57, []int{0}
 }
 func (m *OutboxStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *OutboxStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *OutboxStats) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_OutboxStats.Merge(dst, src)
+func (m *OutboxStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OutboxStats.Merge(m, src)
 }
 func (m *OutboxStats) XXX_Size() int {
 	return m.Size()
@@ -57,10 +60,28 @@ var xxx_messageInfo_OutboxStats proto.InternalMessageInfo
 func init() {
 	proto.RegisterType((*OutboxStats)(nil), "cockroach.sql.distsqlrun.OutboxStats")
 }
+
+func init() { proto.RegisterFile("sql/flowinfra/stats.proto", fileDescriptor_675fe35fbd6d7b57) }
+
+var fileDescriptor_675fe35fbd6d7b57 = []byte{
+	// 176 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2c, 0x2e, 0xcc, 0xd1,
+	0x4f, 0xcb, 0xc9, 0x2f, 0xcf, 0xcc, 0x4b, 0x2b, 0x4a, 0xd4, 0x2f, 0x2e, 0x49, 0x2c, 0x29, 0xd6,
+	0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x92, 0x48, 0xce, 0x4f, 0xce, 0x2e, 0xca, 0x4f, 0x4c, 0xce,
+	0xd0, 0x2b, 0x2e, 0xcc, 0xd1, 0x4b, 0xc9, 0x2c, 0x2e, 0x29, 0x2e, 0xcc, 0x29, 0x2a, 0xcd, 0x93,
+	0x12, 0x49, 0xcf, 0x4f, 0xcf, 0x07, 0x2b, 0xd2, 0x07, 0xb1, 0x20, 0xea, 0x95, 0x74, 0xb8, 0xb8,
+	0xfd, 0x4b, 0x4b, 0x92, 0xf2, 0x2b, 0x82, 0x41, 0x86, 0x08, 0xc9, 0x72, 0x71, 0x25, 0x55, 0x96,
+	0xa4, 0x16, 0xc7, 0x17, 0xa7, 0xe6, 0x95, 0x48, 0x30, 0x2a, 0x30, 0x6a, 0x30, 0x07, 0x71, 0x82,
+	0x45, 0x82, 0x53, 0xf3, 0x4a, 0x9c, 0xb4, 0x4f, 0x3c, 0x94, 0x63, 0x38, 0xf1, 0x48, 0x8e, 0xf1,
+	0xc2, 0x23, 0x39, 0xc6, 0x1b, 0x8f, 0xe4, 0x18, 0x1f, 0x3c, 0x92, 0x63, 0x9c, 0xf0, 0x58, 0x8e,
+	0xe1, 0xc2, 0x63, 0x39, 0x86, 0x1b, 0x8f, 0xe5, 0x18, 0xa2, 0x38, 0xe1, 0xce, 0x4a, 0x62, 0x03,
+	0xdb, 0x60, 0x0c, 0x08, 0x00, 0x00, 0xff, 0xff, 0x4b, 0xb0, 0x9c, 0xab, 0xae, 0x00, 0x00, 0x00,
+}
+
 func (m *OutboxStats) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -68,26 +89,33 @@ func (m *OutboxStats) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *OutboxStats) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *OutboxStats) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.BytesSent != 0 {
-		dAtA[i] = 0x8
-		i++
 		i = encodeVarintStats(dAtA, i, uint64(m.BytesSent))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintStats(dAtA []byte, offset int, v uint64) int {
+	offset -= sovStats(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *OutboxStats) Size() (n int) {
 	if m == nil {
@@ -102,14 +130,7 @@ func (m *OutboxStats) Size() (n int) {
 }
 
 func sovStats(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozStats(x uint64) (n int) {
 	return sovStats(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -129,7 +150,7 @@ func (m *OutboxStats) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -157,7 +178,7 @@ func (m *OutboxStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.BytesSent |= (int64(b) & 0x7F) << shift
+				m.BytesSent |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -169,6 +190,9 @@ func (m *OutboxStats) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthStats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {
@@ -186,6 +210,7 @@ func (m *OutboxStats) Unmarshal(dAtA []byte) error {
 func skipStats(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -217,10 +242,8 @@ func skipStats(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -237,70 +260,34 @@ func skipStats(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthStats
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowStats
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipStats(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupStats
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthStats
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthStats = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowStats   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthStats        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowStats          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupStats = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() { proto.RegisterFile("sql/flowinfra/stats.proto", fileDescriptor_stats_62f3f6a554998eb4) }
-
-var fileDescriptor_stats_62f3f6a554998eb4 = []byte{
-	// 176 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2c, 0x2e, 0xcc, 0xd1,
-	0x4f, 0xcb, 0xc9, 0x2f, 0xcf, 0xcc, 0x4b, 0x2b, 0x4a, 0xd4, 0x2f, 0x2e, 0x49, 0x2c, 0x29, 0xd6,
-	0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x92, 0x48, 0xce, 0x4f, 0xce, 0x2e, 0xca, 0x4f, 0x4c, 0xce,
-	0xd0, 0x2b, 0x2e, 0xcc, 0xd1, 0x4b, 0xc9, 0x2c, 0x2e, 0x29, 0x2e, 0xcc, 0x29, 0x2a, 0xcd, 0x93,
-	0x12, 0x49, 0xcf, 0x4f, 0xcf, 0x07, 0x2b, 0xd2, 0x07, 0xb1, 0x20, 0xea, 0x95, 0x74, 0xb8, 0xb8,
-	0xfd, 0x4b, 0x4b, 0x92, 0xf2, 0x2b, 0x82, 0x41, 0x86, 0x08, 0xc9, 0x72, 0x71, 0x25, 0x55, 0x96,
-	0xa4, 0x16, 0xc7, 0x17, 0xa7, 0xe6, 0x95, 0x48, 0x30, 0x2a, 0x30, 0x6a, 0x30, 0x07, 0x71, 0x82,
-	0x45, 0x82, 0x53, 0xf3, 0x4a, 0x9c, 0xb4, 0x4f, 0x3c, 0x94, 0x63, 0x38, 0xf1, 0x48, 0x8e, 0xf1,
-	0xc2, 0x23, 0x39, 0xc6, 0x1b, 0x8f, 0xe4, 0x18, 0x1f, 0x3c, 0x92, 0x63, 0x9c, 0xf0, 0x58, 0x8e,
-	0xe1, 0xc2, 0x63, 0x39, 0x86, 0x1b, 0x8f, 0xe5, 0x18, 0xa2, 0x38, 0xe1, 0xce, 0x4a, 0x62, 0x03,
-	0xdb, 0x60, 0x0c, 0x08, 0x00, 0x00, 0xff, 0xff, 0x4b, 0xb0, 0x9c, 0xab, 0xae, 0x00, 0x00, 0x00,
-}

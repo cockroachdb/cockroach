@@ -22,6 +22,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
     ],
 )

@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/util/envutil",
         "//pkg/util/uuid",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/gogo/protobuf/sortkeys",
     ],

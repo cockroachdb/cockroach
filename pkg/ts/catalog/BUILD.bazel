@@ -13,6 +13,7 @@ go_library(
         "//pkg/ts/tspb",
         "//pkg/util/metric",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/prometheus/client_model/go",
     ],

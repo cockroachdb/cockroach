@@ -18,6 +18,7 @@ go_library(
         "//pkg/geo/geoprojbase",
         "//pkg/geo/geos",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/golang/geo/r3",
         "//vendor/github.com/golang/geo/s1",

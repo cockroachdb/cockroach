@@ -3,11 +3,14 @@
 
 package roachpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import io "io"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -18,7 +21,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type IOFileFormat_FileFormat int32
 
@@ -41,6 +44,7 @@ var IOFileFormat_FileFormat_name = map[int32]string{
 	5: "PgDump",
 	6: "Avro",
 }
+
 var IOFileFormat_FileFormat_value = map[string]int32{
 	"Unknown":      0,
 	"CSV":          1,
@@ -56,9 +60,11 @@ func (x IOFileFormat_FileFormat) Enum() *IOFileFormat_FileFormat {
 	*p = x
 	return p
 }
+
 func (x IOFileFormat_FileFormat) String() string {
 	return proto.EnumName(IOFileFormat_FileFormat_name, int32(x))
 }
+
 func (x *IOFileFormat_FileFormat) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(IOFileFormat_FileFormat_value, data, "IOFileFormat_FileFormat")
 	if err != nil {
@@ -67,8 +73,9 @@ func (x *IOFileFormat_FileFormat) UnmarshalJSON(data []byte) error {
 	*x = IOFileFormat_FileFormat(value)
 	return nil
 }
+
 func (IOFileFormat_FileFormat) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{0, 0}
+	return fileDescriptor_16c5b508d081359f, []int{0, 0}
 }
 
 type IOFileFormat_Compression int32
@@ -86,6 +93,7 @@ var IOFileFormat_Compression_name = map[int32]string{
 	2: "Gzip",
 	3: "Bzip",
 }
+
 var IOFileFormat_Compression_value = map[string]int32{
 	"Auto": 0,
 	"None": 1,
@@ -98,9 +106,11 @@ func (x IOFileFormat_Compression) Enum() *IOFileFormat_Compression {
 	*p = x
 	return p
 }
+
 func (x IOFileFormat_Compression) String() string {
 	return proto.EnumName(IOFileFormat_Compression_name, int32(x))
 }
+
 func (x *IOFileFormat_Compression) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(IOFileFormat_Compression_value, data, "IOFileFormat_Compression")
 	if err != nil {
@@ -109,8 +119,9 @@ func (x *IOFileFormat_Compression) UnmarshalJSON(data []byte) error {
 	*x = IOFileFormat_Compression(value)
 	return nil
 }
+
 func (IOFileFormat_Compression) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{0, 1}
+	return fileDescriptor_16c5b508d081359f, []int{0, 1}
 }
 
 type MySQLOutfileOptions_Enclose int32
@@ -126,6 +137,7 @@ var MySQLOutfileOptions_Enclose_name = map[int32]string{
 	1: "Always",
 	2: "Optional",
 }
+
 var MySQLOutfileOptions_Enclose_value = map[string]int32{
 	"Never":    0,
 	"Always":   1,
@@ -137,9 +149,11 @@ func (x MySQLOutfileOptions_Enclose) Enum() *MySQLOutfileOptions_Enclose {
 	*p = x
 	return p
 }
+
 func (x MySQLOutfileOptions_Enclose) String() string {
 	return proto.EnumName(MySQLOutfileOptions_Enclose_name, int32(x))
 }
+
 func (x *MySQLOutfileOptions_Enclose) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(MySQLOutfileOptions_Enclose_value, data, "MySQLOutfileOptions_Enclose")
 	if err != nil {
@@ -148,8 +162,9 @@ func (x *MySQLOutfileOptions_Enclose) UnmarshalJSON(data []byte) error {
 	*x = MySQLOutfileOptions_Enclose(value)
 	return nil
 }
+
 func (MySQLOutfileOptions_Enclose) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{2, 0}
+	return fileDescriptor_16c5b508d081359f, []int{2, 0}
 }
 
 type AvroOptions_Format int32
@@ -168,6 +183,7 @@ var AvroOptions_Format_name = map[int32]string{
 	1: "BIN_RECORDS",
 	2: "JSON_RECORDS",
 }
+
 var AvroOptions_Format_value = map[string]int32{
 	"OCF":          0,
 	"BIN_RECORDS":  1,
@@ -179,9 +195,11 @@ func (x AvroOptions_Format) Enum() *AvroOptions_Format {
 	*p = x
 	return p
 }
+
 func (x AvroOptions_Format) String() string {
 	return proto.EnumName(AvroOptions_Format_name, int32(x))
 }
+
 func (x *AvroOptions_Format) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(AvroOptions_Format_value, data, "AvroOptions_Format")
 	if err != nil {
@@ -190,8 +208,9 @@ func (x *AvroOptions_Format) UnmarshalJSON(data []byte) error {
 	*x = AvroOptions_Format(value)
 	return nil
 }
+
 func (AvroOptions_Format) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{5, 0}
+	return fileDescriptor_16c5b508d081359f, []int{5, 0}
 }
 
 type IOFileFormat struct {
@@ -210,21 +229,21 @@ func (m *IOFileFormat) Reset()         { *m = IOFileFormat{} }
 func (m *IOFileFormat) String() string { return proto.CompactTextString(m) }
 func (*IOFileFormat) ProtoMessage()    {}
 func (*IOFileFormat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{0}
+	return fileDescriptor_16c5b508d081359f, []int{0}
 }
 func (m *IOFileFormat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *IOFileFormat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *IOFileFormat) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_IOFileFormat.Merge(dst, src)
+func (m *IOFileFormat) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IOFileFormat.Merge(m, src)
 }
 func (m *IOFileFormat) XXX_Size() int {
 	return m.Size()
@@ -254,21 +273,21 @@ func (m *CSVOptions) Reset()         { *m = CSVOptions{} }
 func (m *CSVOptions) String() string { return proto.CompactTextString(m) }
 func (*CSVOptions) ProtoMessage()    {}
 func (*CSVOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{1}
+	return fileDescriptor_16c5b508d081359f, []int{1}
 }
 func (m *CSVOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *CSVOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *CSVOptions) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CSVOptions.Merge(dst, src)
+func (m *CSVOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CSVOptions.Merge(m, src)
 }
 func (m *CSVOptions) XXX_Size() int {
 	return m.Size()
@@ -303,21 +322,21 @@ func (m *MySQLOutfileOptions) Reset()         { *m = MySQLOutfileOptions{} }
 func (m *MySQLOutfileOptions) String() string { return proto.CompactTextString(m) }
 func (*MySQLOutfileOptions) ProtoMessage()    {}
 func (*MySQLOutfileOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{2}
+	return fileDescriptor_16c5b508d081359f, []int{2}
 }
 func (m *MySQLOutfileOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *MySQLOutfileOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *MySQLOutfileOptions) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MySQLOutfileOptions.Merge(dst, src)
+func (m *MySQLOutfileOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MySQLOutfileOptions.Merge(m, src)
 }
 func (m *MySQLOutfileOptions) XXX_Size() int {
 	return m.Size()
@@ -342,21 +361,21 @@ func (m *PgCopyOptions) Reset()         { *m = PgCopyOptions{} }
 func (m *PgCopyOptions) String() string { return proto.CompactTextString(m) }
 func (*PgCopyOptions) ProtoMessage()    {}
 func (*PgCopyOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{3}
+	return fileDescriptor_16c5b508d081359f, []int{3}
 }
 func (m *PgCopyOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *PgCopyOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *PgCopyOptions) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PgCopyOptions.Merge(dst, src)
+func (m *PgCopyOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PgCopyOptions.Merge(m, src)
 }
 func (m *PgCopyOptions) XXX_Size() int {
 	return m.Size()
@@ -377,21 +396,21 @@ func (m *PgDumpOptions) Reset()         { *m = PgDumpOptions{} }
 func (m *PgDumpOptions) String() string { return proto.CompactTextString(m) }
 func (*PgDumpOptions) ProtoMessage()    {}
 func (*PgDumpOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{4}
+	return fileDescriptor_16c5b508d081359f, []int{4}
 }
 func (m *PgDumpOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *PgDumpOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *PgDumpOptions) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PgDumpOptions.Merge(dst, src)
+func (m *PgDumpOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PgDumpOptions.Merge(m, src)
 }
 func (m *PgDumpOptions) XXX_Size() int {
 	return m.Size()
@@ -419,21 +438,21 @@ func (m *AvroOptions) Reset()         { *m = AvroOptions{} }
 func (m *AvroOptions) String() string { return proto.CompactTextString(m) }
 func (*AvroOptions) ProtoMessage()    {}
 func (*AvroOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_e2ffeab7714b237d, []int{5}
+	return fileDescriptor_16c5b508d081359f, []int{5}
 }
 func (m *AvroOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *AvroOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *AvroOptions) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AvroOptions.Merge(dst, src)
+func (m *AvroOptions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AvroOptions.Merge(m, src)
 }
 func (m *AvroOptions) XXX_Size() int {
 	return m.Size()
@@ -445,21 +464,83 @@ func (m *AvroOptions) XXX_DiscardUnknown() {
 var xxx_messageInfo_AvroOptions proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterEnum("cockroach.roachpb.IOFileFormat_FileFormat", IOFileFormat_FileFormat_name, IOFileFormat_FileFormat_value)
+	proto.RegisterEnum("cockroach.roachpb.IOFileFormat_Compression", IOFileFormat_Compression_name, IOFileFormat_Compression_value)
+	proto.RegisterEnum("cockroach.roachpb.MySQLOutfileOptions_Enclose", MySQLOutfileOptions_Enclose_name, MySQLOutfileOptions_Enclose_value)
+	proto.RegisterEnum("cockroach.roachpb.AvroOptions_Format", AvroOptions_Format_name, AvroOptions_Format_value)
 	proto.RegisterType((*IOFileFormat)(nil), "cockroach.roachpb.IOFileFormat")
 	proto.RegisterType((*CSVOptions)(nil), "cockroach.roachpb.CSVOptions")
 	proto.RegisterType((*MySQLOutfileOptions)(nil), "cockroach.roachpb.MySQLOutfileOptions")
 	proto.RegisterType((*PgCopyOptions)(nil), "cockroach.roachpb.PgCopyOptions")
 	proto.RegisterType((*PgDumpOptions)(nil), "cockroach.roachpb.PgDumpOptions")
 	proto.RegisterType((*AvroOptions)(nil), "cockroach.roachpb.AvroOptions")
-	proto.RegisterEnum("cockroach.roachpb.IOFileFormat_FileFormat", IOFileFormat_FileFormat_name, IOFileFormat_FileFormat_value)
-	proto.RegisterEnum("cockroach.roachpb.IOFileFormat_Compression", IOFileFormat_Compression_name, IOFileFormat_Compression_value)
-	proto.RegisterEnum("cockroach.roachpb.MySQLOutfileOptions_Enclose", MySQLOutfileOptions_Enclose_name, MySQLOutfileOptions_Enclose_value)
-	proto.RegisterEnum("cockroach.roachpb.AvroOptions_Format", AvroOptions_Format_name, AvroOptions_Format_value)
 }
+
+func init() { proto.RegisterFile("roachpb/io-formats.proto", fileDescriptor_16c5b508d081359f) }
+
+var fileDescriptor_16c5b508d081359f = []byte{
+	// 876 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x54, 0xdd, 0x72, 0xdb, 0x44,
+	0x14, 0x96, 0xfc, 0x27, 0xfb, 0xd8, 0x4e, 0x96, 0x85, 0x0b, 0x4d, 0x07, 0x84, 0x47, 0x50, 0x26,
+	0x05, 0xaa, 0xcc, 0x64, 0xc8, 0x0c, 0x77, 0x4c, 0xe3, 0x26, 0x90, 0x0e, 0xb1, 0xa9, 0x3d, 0xf4,
+	0x82, 0x1b, 0x8d, 0x90, 0x37, 0x8e, 0x88, 0xa4, 0x55, 0x77, 0x25, 0xbb, 0xee, 0x53, 0xf0, 0x06,
+	0xbc, 0x44, 0x2f, 0x78, 0x84, 0x5c, 0xf6, 0xb2, 0x57, 0x0c, 0x38, 0x2f, 0xc2, 0xec, 0x6a, 0x65,
+	0x4b, 0xad, 0x1b, 0xb8, 0x3b, 0xf3, 0x7d, 0xe7, 0xfb, 0xb4, 0xe7, 0x47, 0x07, 0x4c, 0x46, 0x3d,
+	0xff, 0x2a, 0xf9, 0xf5, 0x30, 0xa0, 0x0f, 0x2f, 0x29, 0x8b, 0xbc, 0x94, 0x3b, 0x09, 0xa3, 0x29,
+	0xc5, 0x1f, 0xf8, 0xd4, 0xbf, 0x96, 0xac, 0xa3, 0x72, 0xee, 0x7d, 0x34, 0xa7, 0x73, 0x2a, 0xd9,
+	0x43, 0x11, 0xe5, 0x89, 0xf6, 0xab, 0x26, 0xf4, 0xce, 0xc7, 0x67, 0x41, 0x48, 0xce, 0xa4, 0x01,
+	0xfe, 0x01, 0x5a, 0xb9, 0x95, 0xa9, 0x0f, 0xf4, 0x83, 0xbd, 0xa3, 0x2f, 0x9d, 0x77, 0xac, 0x9c,
+	0xb2, 0xc0, 0xd9, 0x86, 0x27, 0x8d, 0x9b, 0xbf, 0x3e, 0xd5, 0x26, 0x4a, 0x8f, 0x8f, 0xa1, 0xee,
+	0xf3, 0x85, 0x59, 0x1b, 0xe8, 0x07, 0xdd, 0xa3, 0x4f, 0x76, 0xd8, 0x0c, 0xa7, 0xcf, 0xc6, 0x49,
+	0x1a, 0xd0, 0x98, 0x2b, 0xa5, 0xc8, 0xc7, 0xe7, 0xd0, 0x89, 0x56, 0xfc, 0x79, 0xe8, 0xd2, 0x2c,
+	0x35, 0xeb, 0x52, 0xfc, 0xc5, 0x0e, 0xf1, 0xc5, 0x6a, 0xfa, 0xf4, 0xc7, 0x71, 0x96, 0x5e, 0x06,
+	0x21, 0xa9, 0xba, 0xb4, 0xa5, 0x7c, 0x9c, 0xa5, 0xf8, 0x3b, 0x30, 0x92, 0xb9, 0xeb, 0xd3, 0x64,
+	0x65, 0x36, 0xa4, 0xd1, 0x60, 0x87, 0xd1, 0x4f, 0xf3, 0x21, 0x4d, 0x56, 0x55, 0x8b, 0x56, 0x22,
+	0x41, 0x65, 0x30, 0xcb, 0xa2, 0xc4, 0x6c, 0xdd, 0x61, 0xf0, 0x38, 0x8b, 0x92, 0x77, 0x0c, 0x04,
+	0x88, 0xbf, 0x85, 0x86, 0xb7, 0x60, 0xd4, 0x6c, 0x4b, 0xb5, 0xb5, 0x43, 0xfd, 0x68, 0xc1, 0x68,
+	0x55, 0x2b, 0x15, 0x78, 0x0a, 0x5d, 0x9f, 0x46, 0x09, 0x23, 0x9c, 0x07, 0x34, 0x36, 0x9b, 0x72,
+	0x18, 0x5f, 0xfd, 0xd7, 0x30, 0x86, 0x5b, 0x89, 0x72, 0x2b, 0xbb, 0xe0, 0x07, 0xd0, 0xe7, 0xde,
+	0x82, 0xb8, 0x8c, 0xfc, 0x46, 0xfc, 0x94, 0xcc, 0x4c, 0x63, 0xa0, 0x1f, 0xb4, 0x55, 0x66, 0x4f,
+	0x50, 0x13, 0xc5, 0xd8, 0x04, 0xa0, 0xb4, 0x15, 0x5d, 0x30, 0x7e, 0x8e, 0xaf, 0x63, 0xba, 0x8c,
+	0x91, 0x86, 0x0d, 0xa8, 0x0f, 0xa7, 0xcf, 0x90, 0x8e, 0x11, 0xf4, 0x2e, 0x54, 0xaf, 0xc5, 0x18,
+	0x50, 0x0d, 0xf7, 0xa1, 0x23, 0x11, 0xd1, 0x32, 0x54, 0xc7, 0x00, 0xad, 0xbc, 0xbd, 0xa8, 0x91,
+	0xc7, 0xa2, 0x29, 0xa8, 0x89, 0xdb, 0xd0, 0x10, 0x75, 0xa3, 0x96, 0x7d, 0x0c, 0xdd, 0xd2, 0x9b,
+	0x25, 0x91, 0xa5, 0x14, 0x69, 0x22, 0x1a, 0xd1, 0x98, 0x20, 0x5d, 0x44, 0xdf, 0xbf, 0x0c, 0x12,
+	0x54, 0x13, 0xd1, 0x89, 0x88, 0xea, 0xf6, 0x9f, 0x3a, 0xc0, 0x76, 0x7d, 0xf0, 0x3d, 0x68, 0xfa,
+	0x34, 0x8a, 0x3c, 0xb9, 0xb3, 0x4d, 0x55, 0x4f, 0x0e, 0x61, 0x0b, 0x0c, 0x11, 0x90, 0x38, 0x95,
+	0xab, 0x58, 0xb0, 0x05, 0x28, 0x7a, 0x12, 0x67, 0x61, 0xe8, 0x92, 0xd8, 0xa7, 0xb3, 0x20, 0x9e,
+	0xcb, 0x9d, 0xeb, 0xc8, 0x2c, 0x7d, 0xd2, 0x13, 0xd4, 0xa9, 0x62, 0xb0, 0x09, 0x0d, 0x7e, 0x1d,
+	0x24, 0x72, 0x99, 0xfa, 0xc5, 0xb4, 0x04, 0x22, 0x1b, 0x9b, 0xb2, 0xc0, 0x4f, 0xdd, 0xe7, 0x19,
+	0x4d, 0x09, 0x97, 0xf3, 0xda, 0x36, 0x56, 0x52, 0x4f, 0x25, 0x63, 0xff, 0x51, 0x87, 0x0f, 0x77,
+	0x2c, 0xaf, 0xb0, 0x60, 0x74, 0xe9, 0x72, 0x92, 0x78, 0xcc, 0x4b, 0x29, 0xab, 0xd4, 0xd2, 0x63,
+	0x74, 0x39, 0x2d, 0x18, 0xfc, 0x10, 0xf6, 0x2f, 0x03, 0x12, 0xce, 0x4a, 0xc9, 0xe5, 0xd2, 0xf6,
+	0x24, 0xb9, 0x4d, 0x1f, 0x81, 0x41, 0x62, 0x3f, 0xa4, 0x9c, 0xc8, 0xda, 0xf6, 0x8e, 0x9c, 0xff,
+	0xf7, 0x3f, 0x39, 0xa7, 0xb9, 0xaa, 0xe8, 0x98, 0x32, 0xc1, 0x03, 0x68, 0xab, 0x90, 0xc9, 0x56,
+	0x14, 0xdf, 0xdd, 0xa0, 0xf8, 0x33, 0x80, 0x2b, 0x8f, 0xbb, 0x84, 0xfb, 0x5e, 0x42, 0x2a, 0xbd,
+	0xe8, 0x5c, 0x79, 0xfc, 0x54, 0xc2, 0xf8, 0x63, 0x68, 0xa9, 0x84, 0x56, 0xc9, 0x44, 0x61, 0x9b,
+	0x5e, 0x1b, 0xbb, 0x7a, 0x5d, 0x1d, 0x58, 0xfb, 0x7d, 0x03, 0xb3, 0x1d, 0x30, 0x54, 0x0d, 0xb8,
+	0x03, 0xcd, 0x11, 0x59, 0x10, 0x86, 0x34, 0xb1, 0x89, 0x8f, 0xc2, 0xa5, 0xb7, 0xe2, 0x48, 0xc7,
+	0x3d, 0x68, 0xe7, 0xd5, 0x7a, 0x21, 0xaa, 0x3d, 0x69, 0xb4, 0x3b, 0x08, 0x6c, 0x0e, 0xfd, 0xca,
+	0x51, 0xc0, 0x36, 0x74, 0x66, 0x24, 0x0c, 0xa2, 0x20, 0x25, 0xd5, 0xb1, 0x6c, 0x61, 0xf1, 0x5e,
+	0xf1, 0x69, 0x39, 0x88, 0x4e, 0xf1, 0x5e, 0x81, 0xe0, 0xcf, 0x01, 0x22, 0xef, 0xc5, 0x84, 0x2e,
+	0xa7, 0xc1, 0xcb, 0x7c, 0x02, 0x85, 0xbc, 0x84, 0xdb, 0xc7, 0xe2, 0xa3, 0xa5, 0x43, 0xf2, 0x96,
+	0x4c, 0x7f, 0x8f, 0xec, 0x55, 0x0d, 0xba, 0xa5, 0x13, 0x82, 0x87, 0x6f, 0x9d, 0xef, 0xfb, 0x77,
+	0x9f, 0x1c, 0x67, 0xe7, 0xe5, 0xbe, 0x0f, 0x5d, 0xb5, 0xcd, 0x11, 0x9d, 0x11, 0x59, 0x52, 0x31,
+	0x3f, 0xc8, 0x89, 0x0b, 0x3a, 0x23, 0xe2, 0x85, 0xdc, 0xbf, 0x22, 0x91, 0xf7, 0x64, 0x3a, 0x1e,
+	0x95, 0x7e, 0x1b, 0x91, 0xb5, 0xc1, 0xf1, 0xd7, 0xb0, 0x1f, 0x79, 0x2f, 0x5c, 0x46, 0x7c, 0xca,
+	0x66, 0x2e, 0x17, 0xc5, 0x94, 0x97, 0xa6, 0x2f, 0x8a, 0x91, 0x9c, 0xa8, 0x07, 0x1f, 0x02, 0x2a,
+	0x32, 0x37, 0xbb, 0xdd, 0x2c, 0xa5, 0xef, 0xe7, 0xec, 0x66, 0xb9, 0xed, 0x6f, 0xa0, 0xa5, 0x6e,
+	0x94, 0x01, 0xf5, 0xf1, 0xf0, 0x0c, 0x69, 0x78, 0x1f, 0xba, 0x27, 0xe7, 0x23, 0x77, 0x72, 0x3a,
+	0x1c, 0x4f, 0x1e, 0x4f, 0xf3, 0x3b, 0x25, 0x9e, 0xb2, 0x41, 0x6a, 0x27, 0x0f, 0x6e, 0xfe, 0xb1,
+	0xb4, 0x9b, 0xb5, 0xa5, 0xbf, 0x5e, 0x5b, 0xfa, 0x9b, 0xb5, 0xa5, 0xff, 0xbd, 0xb6, 0xf4, 0xdf,
+	0x6f, 0x2d, 0xed, 0xf5, 0xad, 0xa5, 0xbd, 0xb9, 0xb5, 0xb4, 0x5f, 0x0c, 0xd5, 0xad, 0x7f, 0x03,
+	0x00, 0x00, 0xff, 0xff, 0x4c, 0x58, 0x5a, 0x0a, 0x65, 0x07, 0x00, 0x00,
+}
+
 func (m *IOFileFormat) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -467,71 +548,86 @@ func (m *IOFileFormat) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *IOFileFormat) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *IOFileFormat) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Format))
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Csv.Size()))
-	n1, err := m.Csv.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	{
+		size, err := m.Avro.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintIoFormats(dAtA, i, uint64(size))
 	}
-	i += n1
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.MysqlOut.Size()))
-	n2, err := m.MysqlOut.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	dAtA[i] = 0x22
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.PgCopy.Size()))
-	n3, err := m.PgCopy.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
-	dAtA[i] = 0x28
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Compression))
-	dAtA[i] = 0x32
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.PgDump.Size()))
-	n4, err := m.PgDump.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
-	dAtA[i] = 0x38
-	i++
+	i--
+	dAtA[i] = 0x42
+	i--
 	if m.SaveRejected {
 		dAtA[i] = 1
 	} else {
 		dAtA[i] = 0
 	}
-	i++
-	dAtA[i] = 0x42
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Avro.Size()))
-	n5, err := m.Avro.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	i--
+	dAtA[i] = 0x38
+	{
+		size, err := m.PgDump.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintIoFormats(dAtA, i, uint64(size))
 	}
-	i += n5
-	return i, nil
+	i--
+	dAtA[i] = 0x32
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Compression))
+	i--
+	dAtA[i] = 0x28
+	{
+		size, err := m.PgCopy.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintIoFormats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x22
+	{
+		size, err := m.MysqlOut.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintIoFormats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.Csv.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintIoFormats(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Format))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *CSVOptions) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -539,40 +635,46 @@ func (m *CSVOptions) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CSVOptions) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CSVOptions) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Comma))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Comment))
-	if m.NullEncoding != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintIoFormats(dAtA, i, uint64(len(*m.NullEncoding)))
-		i += copy(dAtA[i:], *m.NullEncoding)
-	}
-	dAtA[i] = 0x20
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Skip))
-	dAtA[i] = 0x28
-	i++
+	i--
 	if m.StrictQuotes {
 		dAtA[i] = 1
 	} else {
 		dAtA[i] = 0
 	}
-	i++
-	return i, nil
+	i--
+	dAtA[i] = 0x28
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Skip))
+	i--
+	dAtA[i] = 0x20
+	if m.NullEncoding != nil {
+		i -= len(*m.NullEncoding)
+		copy(dAtA[i:], *m.NullEncoding)
+		i = encodeVarintIoFormats(dAtA, i, uint64(len(*m.NullEncoding)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Comment))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Comma))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *MySQLOutfileOptions) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -580,49 +682,55 @@ func (m *MySQLOutfileOptions) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *MySQLOutfileOptions) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MySQLOutfileOptions) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.RowSeparator))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.FieldSeparator))
-	dAtA[i] = 0x18
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Enclose))
-	dAtA[i] = 0x20
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Encloser))
-	dAtA[i] = 0x28
-	i++
+	if m.NullEncoding != nil {
+		i -= len(*m.NullEncoding)
+		copy(dAtA[i:], *m.NullEncoding)
+		i = encodeVarintIoFormats(dAtA, i, uint64(len(*m.NullEncoding)))
+		i--
+		dAtA[i] = 0x42
+	}
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Skip))
+	i--
+	dAtA[i] = 0x38
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Escape))
+	i--
+	dAtA[i] = 0x30
+	i--
 	if m.HasEscape {
 		dAtA[i] = 1
 	} else {
 		dAtA[i] = 0
 	}
-	i++
-	dAtA[i] = 0x30
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Escape))
-	dAtA[i] = 0x38
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Skip))
-	if m.NullEncoding != nil {
-		dAtA[i] = 0x42
-		i++
-		i = encodeVarintIoFormats(dAtA, i, uint64(len(*m.NullEncoding)))
-		i += copy(dAtA[i:], *m.NullEncoding)
-	}
-	return i, nil
+	i--
+	dAtA[i] = 0x28
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Encloser))
+	i--
+	dAtA[i] = 0x20
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Enclose))
+	i--
+	dAtA[i] = 0x18
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.FieldSeparator))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.RowSeparator))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *PgCopyOptions) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -630,27 +738,33 @@ func (m *PgCopyOptions) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PgCopyOptions) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PgCopyOptions) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Delimiter))
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(len(m.Null)))
-	i += copy(dAtA[i:], m.Null)
-	dAtA[i] = 0x18
-	i++
 	i = encodeVarintIoFormats(dAtA, i, uint64(m.MaxRowSize))
-	return i, nil
+	i--
+	dAtA[i] = 0x18
+	i -= len(m.Null)
+	copy(dAtA[i:], m.Null)
+	i = encodeVarintIoFormats(dAtA, i, uint64(len(m.Null)))
+	i--
+	dAtA[i] = 0x12
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Delimiter))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *PgDumpOptions) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -658,20 +772,25 @@ func (m *PgDumpOptions) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PgDumpOptions) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PgDumpOptions) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
 	i = encodeVarintIoFormats(dAtA, i, uint64(m.MaxRowSize))
-	return i, nil
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *AvroOptions) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -679,42 +798,50 @@ func (m *AvroOptions) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AvroOptions) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AvroOptions) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.Format))
-	dAtA[i] = 0x10
-	i++
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.RecordSeparator))
+	i--
+	dAtA[i] = 0x28
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.MaxRecordSize))
+	i--
+	dAtA[i] = 0x20
+	i -= len(m.SchemaJSON)
+	copy(dAtA[i:], m.SchemaJSON)
+	i = encodeVarintIoFormats(dAtA, i, uint64(len(m.SchemaJSON)))
+	i--
+	dAtA[i] = 0x1a
+	i--
 	if m.StrictMode {
 		dAtA[i] = 1
 	} else {
 		dAtA[i] = 0
 	}
-	i++
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(len(m.SchemaJSON)))
-	i += copy(dAtA[i:], m.SchemaJSON)
-	dAtA[i] = 0x20
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.MaxRecordSize))
-	dAtA[i] = 0x28
-	i++
-	i = encodeVarintIoFormats(dAtA, i, uint64(m.RecordSeparator))
-	return i, nil
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Format))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintIoFormats(dAtA []byte, offset int, v uint64) int {
+	offset -= sovIoFormats(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *IOFileFormat) Size() (n int) {
 	if m == nil {
@@ -814,14 +941,7 @@ func (m *AvroOptions) Size() (n int) {
 }
 
 func sovIoFormats(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozIoFormats(x uint64) (n int) {
 	return sovIoFormats(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -841,7 +961,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -869,7 +989,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Format |= (IOFileFormat_FileFormat(b) & 0x7F) << shift
+				m.Format |= IOFileFormat_FileFormat(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -888,7 +1008,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -897,6 +1017,9 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -918,7 +1041,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -927,6 +1050,9 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -948,7 +1074,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -957,6 +1083,9 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -978,7 +1107,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Compression |= (IOFileFormat_Compression(b) & 0x7F) << shift
+				m.Compression |= IOFileFormat_Compression(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -997,7 +1126,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1006,6 +1135,9 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1027,7 +1159,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1047,7 +1179,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1056,6 +1188,9 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1070,6 +1205,9 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthIoFormats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1099,7 +1237,7 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1127,7 +1265,7 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Comma |= (int32(b) & 0x7F) << shift
+				m.Comma |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1146,7 +1284,7 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Comment |= (int32(b) & 0x7F) << shift
+				m.Comment |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1165,7 +1303,7 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1175,6 +1313,9 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1195,7 +1336,7 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Skip |= (uint32(b) & 0x7F) << shift
+				m.Skip |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1214,7 +1355,7 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1227,6 +1368,9 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthIoFormats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1256,7 +1400,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1284,7 +1428,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.RowSeparator |= (int32(b) & 0x7F) << shift
+				m.RowSeparator |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1303,7 +1447,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.FieldSeparator |= (int32(b) & 0x7F) << shift
+				m.FieldSeparator |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1322,7 +1466,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Enclose |= (MySQLOutfileOptions_Enclose(b) & 0x7F) << shift
+				m.Enclose |= MySQLOutfileOptions_Enclose(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1341,7 +1485,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Encloser |= (int32(b) & 0x7F) << shift
+				m.Encloser |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1360,7 +1504,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1380,7 +1524,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Escape |= (int32(b) & 0x7F) << shift
+				m.Escape |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1399,7 +1543,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Skip |= (uint32(b) & 0x7F) << shift
+				m.Skip |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1418,7 +1562,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1428,6 +1572,9 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1441,6 +1588,9 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthIoFormats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1470,7 +1620,7 @@ func (m *PgCopyOptions) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1498,7 +1648,7 @@ func (m *PgCopyOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Delimiter |= (int32(b) & 0x7F) << shift
+				m.Delimiter |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1517,7 +1667,7 @@ func (m *PgCopyOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1527,6 +1677,9 @@ func (m *PgCopyOptions) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1546,7 +1699,7 @@ func (m *PgCopyOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxRowSize |= (int32(b) & 0x7F) << shift
+				m.MaxRowSize |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1558,6 +1711,9 @@ func (m *PgCopyOptions) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthIoFormats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1587,7 +1743,7 @@ func (m *PgDumpOptions) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1615,7 +1771,7 @@ func (m *PgDumpOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxRowSize |= (int32(b) & 0x7F) << shift
+				m.MaxRowSize |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1627,6 +1783,9 @@ func (m *PgDumpOptions) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthIoFormats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1656,7 +1815,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1684,7 +1843,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Format |= (AvroOptions_Format(b) & 0x7F) << shift
+				m.Format |= AvroOptions_Format(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1703,7 +1862,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1723,7 +1882,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1733,6 +1892,9 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthIoFormats
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthIoFormats
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1752,7 +1914,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxRecordSize |= (int32(b) & 0x7F) << shift
+				m.MaxRecordSize |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1771,7 +1933,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.RecordSeparator |= (int32(b) & 0x7F) << shift
+				m.RecordSeparator |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1783,6 +1945,9 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthIoFormats
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1800,6 +1965,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 func skipIoFormats(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -1831,10 +1997,8 @@ func skipIoFormats(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -1851,116 +2015,34 @@ func skipIoFormats(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthIoFormats
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowIoFormats
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipIoFormats(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupIoFormats
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthIoFormats
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthIoFormats = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowIoFormats   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthIoFormats        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowIoFormats          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupIoFormats = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("roachpb/io-formats.proto", fileDescriptor_io_formats_e2ffeab7714b237d)
-}
-
-var fileDescriptor_io_formats_e2ffeab7714b237d = []byte{
-	// 876 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x54, 0xcf, 0x72, 0xdb, 0x44,
-	0x18, 0x97, 0xfc, 0x4f, 0xf6, 0x67, 0x3b, 0x59, 0x16, 0x0e, 0x9a, 0x0e, 0x08, 0x8f, 0xa0, 0x4c,
-	0x0a, 0x54, 0x99, 0xc9, 0x90, 0x19, 0x6e, 0x4c, 0xe3, 0x26, 0x90, 0x0e, 0xb1, 0xa9, 0x3d, 0xf4,
-	0xc0, 0x45, 0x23, 0xe4, 0x8d, 0x23, 0x22, 0x69, 0xd5, 0x5d, 0xc9, 0xae, 0xfb, 0x14, 0xbc, 0x01,
-	0x2f, 0xd1, 0x03, 0x8f, 0x90, 0x63, 0x8f, 0x3d, 0x31, 0xe0, 0xbc, 0x08, 0xb3, 0xab, 0x95, 0x2d,
-	0xb5, 0x6e, 0xe0, 0xf6, 0xcd, 0xef, 0xf7, 0xfd, 0xff, 0x7e, 0xbb, 0x60, 0x32, 0xea, 0xf9, 0x57,
-	0xc9, 0xaf, 0x87, 0x01, 0x7d, 0x78, 0x49, 0x59, 0xe4, 0xa5, 0xdc, 0x49, 0x18, 0x4d, 0x29, 0xfe,
-	0xc0, 0xa7, 0xfe, 0xb5, 0x64, 0x1d, 0xe5, 0x73, 0xef, 0xa3, 0x39, 0x9d, 0x53, 0xc9, 0x1e, 0x0a,
-	0x2b, 0x77, 0xb4, 0x5f, 0x35, 0xa1, 0x77, 0x3e, 0x3e, 0x0b, 0x42, 0x72, 0x26, 0x13, 0xe0, 0x1f,
-	0xa0, 0x95, 0xa7, 0x32, 0xf5, 0x81, 0x7e, 0xb0, 0x77, 0xf4, 0xa5, 0xf3, 0x4e, 0x2a, 0xa7, 0x1c,
-	0xe0, 0x6c, 0xcd, 0x93, 0xc6, 0xcd, 0x5f, 0x9f, 0x6a, 0x13, 0x15, 0x8f, 0x8f, 0xa1, 0xee, 0xf3,
-	0x85, 0x59, 0x1b, 0xe8, 0x07, 0xdd, 0xa3, 0x4f, 0x76, 0xa4, 0x19, 0x4e, 0x9f, 0x8d, 0x93, 0x34,
-	0xa0, 0x31, 0x57, 0x91, 0xc2, 0x1f, 0x9f, 0x43, 0x27, 0x5a, 0xf1, 0xe7, 0xa1, 0x4b, 0xb3, 0xd4,
-	0xac, 0xcb, 0xe0, 0x2f, 0x76, 0x04, 0x5f, 0xac, 0xa6, 0x4f, 0x7f, 0x1c, 0x67, 0xe9, 0x65, 0x10,
-	0x92, 0x6a, 0x96, 0xb6, 0x0c, 0x1f, 0x67, 0x29, 0xfe, 0x0e, 0x8c, 0x64, 0xee, 0xfa, 0x34, 0x59,
-	0x99, 0x0d, 0x99, 0x68, 0xb0, 0x23, 0xd1, 0x4f, 0xf3, 0x21, 0x4d, 0x56, 0xd5, 0x14, 0xad, 0x44,
-	0x82, 0x78, 0x0a, 0x5d, 0x9f, 0x46, 0x09, 0x23, 0x9c, 0x07, 0x34, 0x36, 0x9b, 0x72, 0x23, 0x5f,
-	0xfd, 0xd7, 0x46, 0x86, 0xdb, 0x10, 0x95, 0xaf, 0x9c, 0x45, 0x75, 0x35, 0xcb, 0xa2, 0xc4, 0x6c,
-	0xdd, 0xd1, 0xd5, 0xe3, 0x2c, 0x4a, 0xde, 0xe9, 0x4a, 0x80, 0xf8, 0x01, 0xf4, 0xb9, 0xb7, 0x20,
-	0x2e, 0x23, 0xbf, 0x11, 0x3f, 0x25, 0x33, 0xd3, 0x18, 0xe8, 0x07, 0x6d, 0xe5, 0xd4, 0x13, 0xd4,
-	0x44, 0x31, 0xf8, 0x5b, 0x68, 0x78, 0x0b, 0x46, 0xcd, 0xb6, 0x2c, 0x64, 0xed, 0x28, 0xf4, 0x68,
-	0xc1, 0x68, 0xb5, 0x8c, 0x8c, 0xb0, 0x09, 0x40, 0x49, 0x15, 0x5d, 0x30, 0x7e, 0x8e, 0xaf, 0x63,
-	0xba, 0x8c, 0x91, 0x86, 0x0d, 0xa8, 0x0f, 0xa7, 0xcf, 0x90, 0x8e, 0x11, 0xf4, 0x2e, 0xd4, 0xae,
-	0xc5, 0x19, 0x50, 0x0d, 0xf7, 0xa1, 0x23, 0x11, 0x31, 0x1d, 0xaa, 0x63, 0x80, 0x56, 0xbe, 0x5e,
-	0xd4, 0xc8, 0x6d, 0xd1, 0x3f, 0x6a, 0xe2, 0x36, 0x34, 0x44, 0x5d, 0xd4, 0xb2, 0x8f, 0xa1, 0x5b,
-	0x5a, 0x97, 0x24, 0xb2, 0x94, 0x22, 0x4d, 0x58, 0x23, 0x1a, 0x13, 0xa4, 0x0b, 0xeb, 0xfb, 0x97,
-	0x41, 0x82, 0x6a, 0xc2, 0x3a, 0x11, 0x56, 0xdd, 0xfe, 0x53, 0x07, 0xd8, 0xca, 0x07, 0xdf, 0x83,
-	0xa6, 0x4f, 0xa3, 0xc8, 0x93, 0x9a, 0x6d, 0xaa, 0x39, 0x72, 0x08, 0x5b, 0x60, 0x08, 0x83, 0xc4,
-	0xa9, 0x94, 0x62, 0xc1, 0x16, 0xa0, 0xd8, 0x66, 0x9c, 0x85, 0xa1, 0x4b, 0x62, 0x9f, 0xce, 0x82,
-	0x78, 0x2e, 0x35, 0xd7, 0x91, 0x5e, 0xfa, 0xa4, 0x27, 0xa8, 0x53, 0xc5, 0x60, 0x13, 0x1a, 0xfc,
-	0x3a, 0x48, 0xa4, 0x98, 0xfa, 0xc5, 0xb6, 0x04, 0x22, 0x4f, 0x92, 0xb2, 0xc0, 0x4f, 0xdd, 0xe7,
-	0x19, 0x4d, 0x09, 0x97, 0x52, 0xd9, 0x9e, 0x44, 0x52, 0x4f, 0x25, 0x63, 0xff, 0x51, 0x87, 0x0f,
-	0x77, 0x88, 0x57, 0xa4, 0x60, 0x74, 0xe9, 0x72, 0x92, 0x78, 0xcc, 0x4b, 0x29, 0xab, 0xcc, 0xd2,
-	0x63, 0x74, 0x39, 0x2d, 0x18, 0xfc, 0x10, 0xf6, 0x2f, 0x03, 0x12, 0xce, 0x4a, 0xce, 0xe5, 0xd1,
-	0xf6, 0x24, 0xb9, 0x75, 0x1f, 0x81, 0x41, 0x62, 0x3f, 0xa4, 0x9c, 0xc8, 0xd9, 0xf6, 0x8e, 0x9c,
-	0xff, 0xf7, 0x9e, 0x9c, 0xd3, 0x3c, 0xaa, 0xd8, 0x98, 0x4a, 0x82, 0x07, 0xd0, 0x56, 0x26, 0x93,
-	0xab, 0x28, 0xea, 0x6e, 0x50, 0xfc, 0x19, 0xc0, 0x95, 0xc7, 0x5d, 0xc2, 0x7d, 0x2f, 0x21, 0x95,
-	0x5d, 0x74, 0xae, 0x3c, 0x7e, 0x2a, 0x61, 0xfc, 0x31, 0xb4, 0x94, 0x43, 0xab, 0x94, 0x44, 0x61,
-	0x9b, 0x5d, 0x1b, 0xbb, 0x76, 0x5d, 0x3d, 0x58, 0xfb, 0x7d, 0x07, 0xb3, 0x1d, 0x30, 0xd4, 0x0c,
-	0xb8, 0x03, 0xcd, 0x11, 0x59, 0x10, 0x86, 0x34, 0xa1, 0xc4, 0x47, 0xe1, 0xd2, 0x5b, 0x71, 0xa4,
-	0xe3, 0x1e, 0xb4, 0xf3, 0x69, 0xbd, 0x10, 0xd5, 0x9e, 0x34, 0xda, 0x1d, 0x04, 0x36, 0x87, 0x7e,
-	0xe5, 0x53, 0xc0, 0x36, 0x74, 0x66, 0x24, 0x0c, 0xa2, 0x20, 0x25, 0xd5, 0xb3, 0x6c, 0x61, 0xd1,
-	0xaf, 0x28, 0x2d, 0x0f, 0xd1, 0x29, 0xfa, 0x15, 0x08, 0xfe, 0x1c, 0x20, 0xf2, 0x5e, 0x4c, 0xe8,
-	0x72, 0x1a, 0xbc, 0xcc, 0x2f, 0x50, 0x84, 0x97, 0x70, 0xfb, 0x58, 0x14, 0x2d, 0xbd, 0xf9, 0xb7,
-	0xc2, 0xf4, 0xf7, 0x84, 0xbd, 0xaa, 0x41, 0xb7, 0xf4, 0x84, 0xf1, 0xf0, 0xad, 0xef, 0xfb, 0xfe,
-	0xdd, 0x4f, 0xde, 0xd9, 0xf9, 0x73, 0xdf, 0x87, 0xae, 0x52, 0x73, 0x44, 0x67, 0x44, 0x8e, 0x54,
-	0xdc, 0x0f, 0x72, 0xe2, 0x82, 0xce, 0x88, 0xe8, 0x90, 0xfb, 0x57, 0x24, 0xf2, 0x9e, 0x4c, 0xc7,
-	0xa3, 0xd2, 0xb3, 0x11, 0x5e, 0x1b, 0x1c, 0x7f, 0x0d, 0xfb, 0x91, 0xf7, 0xc2, 0x65, 0xc4, 0xa7,
-	0x6c, 0xe6, 0x72, 0x31, 0x4c, 0x59, 0x34, 0x7d, 0x31, 0x8c, 0xe4, 0xc4, 0x3c, 0xf8, 0x10, 0x50,
-	0xe1, 0xb9, 0xd1, 0x76, 0xb3, 0xe4, 0xbe, 0x9f, 0xb3, 0x1b, 0x71, 0xdb, 0xdf, 0x40, 0x4b, 0xfd,
-	0x51, 0x06, 0xd4, 0xc7, 0xc3, 0x33, 0xa4, 0xe1, 0x7d, 0xe8, 0x9e, 0x9c, 0x8f, 0xdc, 0xc9, 0xe9,
-	0x70, 0x3c, 0x79, 0x3c, 0xcd, 0xff, 0x29, 0xd1, 0xca, 0x06, 0xa9, 0x9d, 0x3c, 0xb8, 0xf9, 0xc7,
-	0xd2, 0x6e, 0xd6, 0x96, 0xfe, 0x7a, 0x6d, 0xe9, 0x6f, 0xd6, 0x96, 0xfe, 0xf7, 0xda, 0xd2, 0x7f,
-	0xbf, 0xb5, 0xb4, 0xd7, 0xb7, 0x96, 0xf6, 0xe6, 0xd6, 0xd2, 0x7e, 0x31, 0xd4, 0xb6, 0xfe, 0x0d,
-	0x00, 0x00, 0xff, 0xff, 0xe0, 0x82, 0x8d, 0xf0, 0x65, 0x07, 0x00, 0x00,
-}

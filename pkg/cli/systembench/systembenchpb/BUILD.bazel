@@ -8,5 +8,7 @@ go_library(
     deps = [
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/google.golang.org/grpc",
+        "//vendor/google.golang.org/grpc/codes",
+        "//vendor/google.golang.org/grpc/status",
     ],
 )

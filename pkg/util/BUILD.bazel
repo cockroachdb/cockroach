@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/golang.org/x/tools/container/intsets",
     ],

@@ -3,17 +3,19 @@
 
 package kvserverpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-
-import time "time"
-import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-
-import io "io"
+import (
+	fmt "fmt"
+	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/gogo/protobuf/types"
+	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	time "time"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -25,7 +27,7 @@ var _ = time.Kitchen
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type RangeLogEventType int32
 
@@ -48,6 +50,7 @@ var RangeLogEventType_name = map[int32]string{
 	1: "add",
 	2: "remove",
 }
+
 var RangeLogEventType_value = map[string]int32{
 	"split":  0,
 	"merge":  3,
@@ -58,8 +61,9 @@ var RangeLogEventType_value = map[string]int32{
 func (x RangeLogEventType) String() string {
 	return proto.EnumName(RangeLogEventType_name, int32(x))
 }
+
 func (RangeLogEventType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_log_142242c3cd66101c, []int{0}
+	return fileDescriptor_bf335f913e016030, []int{0}
 }
 
 type RangeLogEvent struct {
@@ -75,21 +79,21 @@ func (m *RangeLogEvent) Reset()         { *m = RangeLogEvent{} }
 func (m *RangeLogEvent) String() string { return proto.CompactTextString(m) }
 func (*RangeLogEvent) ProtoMessage()    {}
 func (*RangeLogEvent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_142242c3cd66101c, []int{0}
+	return fileDescriptor_bf335f913e016030, []int{0}
 }
 func (m *RangeLogEvent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *RangeLogEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *RangeLogEvent) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RangeLogEvent.Merge(dst, src)
+func (m *RangeLogEvent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeLogEvent.Merge(m, src)
 }
 func (m *RangeLogEvent) XXX_Size() int {
 	return m.Size()
@@ -114,21 +118,21 @@ func (m *RangeLogEvent_Info) Reset()         { *m = RangeLogEvent_Info{} }
 func (m *RangeLogEvent_Info) String() string { return proto.CompactTextString(m) }
 func (*RangeLogEvent_Info) ProtoMessage()    {}
 func (*RangeLogEvent_Info) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_142242c3cd66101c, []int{0, 0}
+	return fileDescriptor_bf335f913e016030, []int{0, 0}
 }
 func (m *RangeLogEvent_Info) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *RangeLogEvent_Info) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *RangeLogEvent_Info) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RangeLogEvent_Info.Merge(dst, src)
+func (m *RangeLogEvent_Info) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeLogEvent_Info.Merge(m, src)
 }
 func (m *RangeLogEvent_Info) XXX_Size() int {
 	return m.Size()
@@ -140,14 +144,63 @@ func (m *RangeLogEvent_Info) XXX_DiscardUnknown() {
 var xxx_messageInfo_RangeLogEvent_Info proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterEnum("cockroach.kv.kvserver.storagepb.RangeLogEventType", RangeLogEventType_name, RangeLogEventType_value)
 	proto.RegisterType((*RangeLogEvent)(nil), "cockroach.kv.kvserver.storagepb.RangeLogEvent")
 	proto.RegisterType((*RangeLogEvent_Info)(nil), "cockroach.kv.kvserver.storagepb.RangeLogEvent.Info")
-	proto.RegisterEnum("cockroach.kv.kvserver.storagepb.RangeLogEventType", RangeLogEventType_name, RangeLogEventType_value)
 }
+
+func init() { proto.RegisterFile("kv/kvserver/kvserverpb/log.proto", fileDescriptor_bf335f913e016030) }
+
+var fileDescriptor_bf335f913e016030 = []byte{
+	// 657 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x94, 0xc1, 0x6e, 0xd3, 0x40,
+	0x10, 0x86, 0xe3, 0x26, 0xad, 0x9b, 0x6d, 0x5a, 0xd2, 0xa5, 0x45, 0x21, 0x42, 0x76, 0x54, 0x71,
+	0x88, 0xa0, 0xb2, 0xa5, 0x94, 0x33, 0x12, 0x69, 0x11, 0x44, 0x42, 0x20, 0x4c, 0xb9, 0x70, 0x20,
+	0xd8, 0xde, 0xa9, 0x6b, 0x25, 0xf6, 0x5a, 0xeb, 0x4d, 0xaa, 0xbe, 0x02, 0xa7, 0x3e, 0x56, 0x8f,
+	0x3d, 0xf6, 0x64, 0x20, 0xbd, 0xa0, 0x3c, 0x42, 0x4f, 0x68, 0xd7, 0x76, 0x9c, 0xb4, 0x48, 0x50,
+	0xb8, 0x8d, 0xff, 0x9d, 0xf9, 0x66, 0x76, 0x66, 0xbc, 0xa8, 0x35, 0x18, 0x9b, 0x83, 0x71, 0x0c,
+	0x6c, 0x0c, 0x6c, 0x66, 0x44, 0x8e, 0x39, 0xa4, 0x9e, 0x11, 0x31, 0xca, 0x29, 0xd6, 0x5d, 0xea,
+	0x0e, 0x18, 0xb5, 0xdd, 0x63, 0x63, 0x30, 0x36, 0x72, 0x17, 0x23, 0xe6, 0x94, 0xd9, 0x1e, 0x44,
+	0x4e, 0xf3, 0x81, 0x3c, 0x8c, 0x1c, 0x33, 0x00, 0x6e, 0x13, 0x9b, 0xdb, 0x69, 0x60, 0x73, 0xcb,
+	0xa3, 0x1e, 0x95, 0xa6, 0x29, 0xac, 0x4c, 0xd5, 0x3d, 0x4a, 0xbd, 0x21, 0x98, 0xf2, 0xcb, 0x19,
+	0x1d, 0x99, 0xdc, 0x0f, 0x20, 0xe6, 0x76, 0x10, 0xa5, 0x0e, 0x3b, 0x5f, 0xab, 0x68, 0xdd, 0xb2,
+	0x43, 0x0f, 0xde, 0x50, 0xef, 0xe5, 0x18, 0x42, 0x8e, 0xbb, 0xa8, 0x3a, 0x73, 0x6a, 0x28, 0x2d,
+	0xa5, 0xbd, 0xd6, 0x69, 0x1a, 0x29, 0xc6, 0xc8, 0x31, 0xc6, 0x61, 0xee, 0xd1, 0x5d, 0x3d, 0x4f,
+	0xf4, 0xd2, 0xd9, 0x37, 0x5d, 0xb1, 0x8a, 0x30, 0xfc, 0x19, 0xad, 0x32, 0x01, 0xed, 0xfb, 0xa4,
+	0xb1, 0xd4, 0x52, 0xda, 0xe5, 0xee, 0xfe, 0x24, 0xd1, 0x55, 0x99, 0xa8, 0x77, 0x70, 0x9d, 0xe8,
+	0xcf, 0x3c, 0x9f, 0x1f, 0x8f, 0x1c, 0xc3, 0xa5, 0x81, 0x39, 0xbb, 0x31, 0x71, 0x0a, 0xdb, 0x8c,
+	0x06, 0x9e, 0x99, 0x5d, 0xd5, 0xc8, 0xe2, 0x2c, 0x55, 0x42, 0x7b, 0x44, 0xf0, 0x45, 0x47, 0x24,
+	0xbf, 0xdc, 0x52, 0xda, 0xcb, 0x29, 0xff, 0x83, 0xd0, 0xfe, 0x81, 0x9f, 0xc5, 0x59, 0xaa, 0x84,
+	0xf6, 0x08, 0x7e, 0x8f, 0x10, 0x88, 0x66, 0xf4, 0xf9, 0x69, 0x04, 0x8d, 0x4a, 0x4b, 0x69, 0x6f,
+	0x74, 0x3a, 0xc6, 0x1f, 0x46, 0x63, 0x2c, 0xf4, 0xf1, 0xf0, 0x34, 0x02, 0xab, 0x0a, 0xb9, 0x89,
+	0x43, 0xb4, 0x41, 0xf9, 0x31, 0xb0, 0xfe, 0xac, 0x31, 0xcb, 0xb2, 0x31, 0xaf, 0x27, 0x89, 0x5e,
+	0x7b, 0x27, 0x4e, 0xfe, 0xb7, 0x3b, 0x35, 0x5a, 0x50, 0x08, 0x7e, 0x85, 0x2a, 0x7e, 0x78, 0x44,
+	0x1b, 0x2b, 0x72, 0x82, 0x7b, 0x77, 0x2b, 0xde, 0xe8, 0x85, 0x47, 0xd4, 0x92, 0x80, 0xe6, 0xcf,
+	0x0a, 0xaa, 0x88, 0x4f, 0xfc, 0x05, 0xd5, 0x46, 0x11, 0xb1, 0x39, 0x90, 0x3e, 0x81, 0xd8, 0xcd,
+	0x76, 0x63, 0x67, 0x8e, 0xbc, 0x50, 0xd1, 0x01, 0xc4, 0x2e, 0xf3, 0x23, 0x4e, 0x59, 0xf7, 0xe1,
+	0x34, 0xd1, 0xb7, 0x3f, 0xa6, 0xb1, 0x42, 0xde, 0xa5, 0x81, 0xcf, 0x21, 0x88, 0xf8, 0xa9, 0xb5,
+	0x36, 0x2a, 0x64, 0x7c, 0x88, 0x56, 0x43, 0x38, 0x49, 0xe9, 0x4b, 0x7f, 0x4d, 0xdf, 0x9e, 0x26,
+	0xfa, 0xe6, 0x5b, 0x38, 0xb9, 0x41, 0x56, 0xc3, 0x54, 0x12, 0x75, 0x33, 0x08, 0xe8, 0x38, 0xaf,
+	0x5b, 0xbd, 0x5b, 0xdd, 0x56, 0x1a, 0x7b, 0xb3, 0x6e, 0x56, 0xc8, 0xd8, 0x45, 0xeb, 0x36, 0x21,
+	0x40, 0xfa, 0x0c, 0xa2, 0xa1, 0xef, 0xda, 0x72, 0x27, 0xd7, 0x3a, 0x8f, 0x7f, 0x97, 0x22, 0xf5,
+	0x98, 0x4b, 0xd2, 0x98, 0x26, 0xfa, 0xd6, 0x0b, 0x42, 0xb2, 0x93, 0xb9, 0x1c, 0x35, 0x09, 0xcd,
+	0x74, 0x3c, 0x40, 0xf7, 0xf2, 0x6b, 0xe4, 0x69, 0x2a, 0x77, 0x48, 0xf3, 0x68, 0x9a, 0xe8, 0x8d,
+	0xec, 0x2e, 0xb7, 0x53, 0x6d, 0xb0, 0x85, 0x13, 0xbc, 0x8f, 0x56, 0x18, 0xd8, 0x31, 0x0d, 0xe5,
+	0x96, 0x56, 0xbb, 0x4f, 0xa7, 0x89, 0x5e, 0xb7, 0xa4, 0x52, 0x44, 0x5d, 0x27, 0xfa, 0xfd, 0x85,
+	0xb5, 0x49, 0x1d, 0xac, 0x2c, 0x14, 0x9b, 0x48, 0x25, 0xc0, 0x6d, 0x7f, 0x18, 0xcb, 0x2d, 0xac,
+	0xa6, 0x93, 0x3a, 0x48, 0xa5, 0xf9, 0x49, 0x65, 0x5e, 0x4f, 0x9e, 0xa3, 0xcd, 0x5b, 0xff, 0x10,
+	0xae, 0xa2, 0xe5, 0x38, 0x1a, 0xfa, 0xbc, 0x5e, 0x12, 0x66, 0x00, 0xcc, 0x83, 0x7a, 0x19, 0xab,
+	0xa8, 0x6c, 0x13, 0x52, 0x57, 0x30, 0x12, 0x95, 0x8a, 0xda, 0xeb, 0x4b, 0xdd, 0xdd, 0xf3, 0x1f,
+	0x5a, 0xe9, 0x7c, 0xa2, 0x29, 0x17, 0x13, 0x4d, 0xb9, 0x9c, 0x68, 0xca, 0xf7, 0x89, 0xa6, 0x9c,
+	0x5d, 0x69, 0xa5, 0x8b, 0x2b, 0xad, 0x74, 0x79, 0xa5, 0x95, 0x3e, 0xa1, 0xe2, 0xd1, 0x75, 0x56,
+	0xe4, 0x6b, 0xb6, 0xf7, 0x2b, 0x00, 0x00, 0xff, 0xff, 0xdc, 0xd6, 0x13, 0xb2, 0x95, 0x05, 0x00,
+	0x00,
+}
+
 func (m *RangeLogEvent) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -155,55 +208,62 @@ func (m *RangeLogEvent) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *RangeLogEvent) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RangeLogEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintLog(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
-	n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	if m.RangeID != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.RangeID))
-	}
-	if m.StoreID != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.StoreID))
-	}
-	if m.EventType != 0 {
-		dAtA[i] = 0x20
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.EventType))
+	if m.Info != nil {
+		{
+			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLog(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x32
 	}
 	if m.OtherRangeID != 0 {
-		dAtA[i] = 0x28
-		i++
 		i = encodeVarintLog(dAtA, i, uint64(m.OtherRangeID))
+		i--
+		dAtA[i] = 0x28
 	}
-	if m.Info != nil {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.Info.Size()))
-		n2, err := m.Info.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
+	if m.EventType != 0 {
+		i = encodeVarintLog(dAtA, i, uint64(m.EventType))
+		i--
+		dAtA[i] = 0x20
 	}
-	return i, nil
+	if m.StoreID != 0 {
+		i = encodeVarintLog(dAtA, i, uint64(m.StoreID))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.RangeID != 0 {
+		i = encodeVarintLog(dAtA, i, uint64(m.RangeID))
+		i--
+		dAtA[i] = 0x10
+	}
+	n2, err2 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp):])
+	if err2 != nil {
+		return 0, err2
+	}
+	i -= n2
+	i = encodeVarintLog(dAtA, i, uint64(n2))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *RangeLogEvent_Info) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -211,83 +271,102 @@ func (m *RangeLogEvent_Info) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *RangeLogEvent_Info) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RangeLogEvent_Info) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.UpdatedDesc != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.UpdatedDesc.Size()))
-		n3, err := m.UpdatedDesc.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+	if m.RemovedDesc != nil {
+		{
+			size, err := m.RemovedDesc.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLog(dAtA, i, uint64(size))
 		}
-		i += n3
-	}
-	if m.NewDesc != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.NewDesc.Size()))
-		n4, err := m.NewDesc.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n4
-	}
-	if m.AddedReplica != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.AddedReplica.Size()))
-		n5, err := m.AddedReplica.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n5
-	}
-	if m.RemovedReplica != nil {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.RemovedReplica.Size()))
-		n6, err := m.RemovedReplica.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n6
-	}
-	if len(m.Reason) > 0 {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(len(m.Reason)))
-		i += copy(dAtA[i:], m.Reason)
+		i--
+		dAtA[i] = 0x3a
 	}
 	if len(m.Details) > 0 {
-		dAtA[i] = 0x32
-		i++
+		i -= len(m.Details)
+		copy(dAtA[i:], m.Details)
 		i = encodeVarintLog(dAtA, i, uint64(len(m.Details)))
-		i += copy(dAtA[i:], m.Details)
+		i--
+		dAtA[i] = 0x32
 	}
-	if m.RemovedDesc != nil {
-		dAtA[i] = 0x3a
-		i++
-		i = encodeVarintLog(dAtA, i, uint64(m.RemovedDesc.Size()))
-		n7, err := m.RemovedDesc.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+	if len(m.Reason) > 0 {
+		i -= len(m.Reason)
+		copy(dAtA[i:], m.Reason)
+		i = encodeVarintLog(dAtA, i, uint64(len(m.Reason)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.RemovedReplica != nil {
+		{
+			size, err := m.RemovedReplica.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLog(dAtA, i, uint64(size))
 		}
-		i += n7
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if m.AddedReplica != nil {
+		{
+			size, err := m.AddedReplica.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLog(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.NewDesc != nil {
+		{
+			size, err := m.NewDesc.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLog(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.UpdatedDesc != nil {
+		{
+			size, err := m.UpdatedDesc.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLog(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintLog(dAtA []byte, offset int, v uint64) int {
+	offset -= sovLog(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *RangeLogEvent) Size() (n int) {
 	if m == nil {
@@ -354,14 +433,7 @@ func (m *RangeLogEvent_Info) Size() (n int) {
 }
 
 func sovLog(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozLog(x uint64) (n int) {
 	return sovLog(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -381,7 +453,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -409,7 +481,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -418,6 +490,9 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -439,7 +514,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.RangeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
+				m.RangeID |= github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -458,7 +533,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StoreID |= (github_com_cockroachdb_cockroach_pkg_roachpb.StoreID(b) & 0x7F) << shift
+				m.StoreID |= github_com_cockroachdb_cockroach_pkg_roachpb.StoreID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -477,7 +552,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.EventType |= (RangeLogEventType(b) & 0x7F) << shift
+				m.EventType |= RangeLogEventType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -496,7 +571,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.OtherRangeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
+				m.OtherRangeID |= github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -515,7 +590,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -524,6 +599,9 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -541,6 +619,9 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthLog
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLog
 			}
 			if (iNdEx + skippy) > l {
@@ -570,7 +651,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -598,7 +679,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -607,6 +688,9 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -631,7 +715,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -640,6 +724,9 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -664,7 +751,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -673,6 +760,9 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -697,7 +787,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -706,6 +796,9 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -730,7 +823,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -740,6 +833,9 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -759,7 +855,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -769,6 +865,9 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -788,7 +887,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -797,6 +896,9 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLog
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLog
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -816,6 +918,9 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthLog
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthLog
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -831,6 +936,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 func skipLog(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -862,10 +968,8 @@ func skipLog(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -882,102 +986,34 @@ func skipLog(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthLog
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowLog
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipLog(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupLog
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthLog
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthLog = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowLog   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthLog        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowLog          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupLog = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/log.proto", fileDescriptor_log_142242c3cd66101c)
-}
-
-var fileDescriptor_log_142242c3cd66101c = []byte{
-	// 656 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x94, 0xc1, 0x6e, 0xd3, 0x40,
-	0x10, 0x86, 0xe3, 0x26, 0x6d, 0x9a, 0x6d, 0x5a, 0xd2, 0xa5, 0x45, 0x21, 0x42, 0x76, 0x54, 0x71,
-	0x88, 0xa0, 0xb2, 0xa5, 0x94, 0x33, 0x12, 0x69, 0x11, 0x44, 0x42, 0x20, 0x4c, 0xb9, 0x70, 0x20,
-	0xd8, 0xde, 0xa9, 0x6b, 0x25, 0xf6, 0xae, 0xd6, 0x9b, 0x54, 0x7d, 0x05, 0x4e, 0x7d, 0xac, 0x1e,
-	0x7b, 0xec, 0xc9, 0x40, 0x7a, 0x41, 0x79, 0x84, 0x9e, 0xd0, 0xae, 0x9d, 0x38, 0x69, 0x91, 0xa0,
-	0x70, 0x1b, 0xff, 0x3b, 0xf3, 0xad, 0xe7, 0x9f, 0xb1, 0x51, 0xb3, 0x3f, 0xb2, 0xfa, 0xa3, 0x18,
-	0xf8, 0x08, 0xf8, 0x2c, 0x60, 0xae, 0x35, 0xa0, 0xbe, 0xc9, 0x38, 0x15, 0x14, 0x1b, 0x1e, 0xf5,
-	0xfa, 0x9c, 0x3a, 0xde, 0xb1, 0xd9, 0x1f, 0x99, 0xd3, 0x14, 0x33, 0x16, 0x94, 0x3b, 0x3e, 0x30,
-	0xb7, 0xf1, 0x40, 0x1d, 0x32, 0xd7, 0x0a, 0x41, 0x38, 0xc4, 0x11, 0x4e, 0x5a, 0xd8, 0xd8, 0xf2,
-	0xa9, 0x4f, 0x55, 0x68, 0xc9, 0x28, 0x53, 0x0d, 0x9f, 0x52, 0x7f, 0x00, 0x96, 0x7a, 0x72, 0x87,
-	0x47, 0x96, 0x08, 0x42, 0x88, 0x85, 0x13, 0xb2, 0x34, 0x61, 0xe7, 0x6b, 0x05, 0xad, 0xdb, 0x4e,
-	0xe4, 0xc3, 0x1b, 0xea, 0xbf, 0x1c, 0x41, 0x24, 0x70, 0x07, 0x55, 0x66, 0x49, 0x75, 0xad, 0xa9,
-	0xb5, 0xd6, 0xda, 0x0d, 0x33, 0xc5, 0x98, 0x53, 0x8c, 0x79, 0x38, 0xcd, 0xe8, 0xac, 0x9e, 0x27,
-	0x46, 0xe1, 0xec, 0x9b, 0xa1, 0xd9, 0x79, 0x19, 0xfe, 0x8c, 0x56, 0xb9, 0x84, 0xf6, 0x02, 0x52,
-	0x5f, 0x6a, 0x6a, 0xad, 0x62, 0x67, 0x7f, 0x9c, 0x18, 0x65, 0x75, 0x51, 0xf7, 0xe0, 0x3a, 0x31,
-	0x9e, 0xf9, 0x81, 0x38, 0x1e, 0xba, 0xa6, 0x47, 0x43, 0x6b, 0xd6, 0x31, 0x71, 0xf3, 0xd8, 0x62,
-	0x7d, 0xdf, 0xca, 0x5a, 0x35, 0xb3, 0x3a, 0xbb, 0xac, 0xa0, 0x5d, 0x22, 0xf9, 0xd2, 0x11, 0xc5,
-	0x2f, 0x36, 0xb5, 0xd6, 0x72, 0xca, 0xff, 0x20, 0xb5, 0x7f, 0xe0, 0x67, 0x75, 0x76, 0x59, 0x41,
-	0xbb, 0x04, 0xbf, 0x47, 0x08, 0xa4, 0x19, 0x3d, 0x71, 0xca, 0xa0, 0x5e, 0x6a, 0x6a, 0xad, 0x8d,
-	0x76, 0xdb, 0xfc, 0xc3, 0x68, 0xcc, 0x05, 0x1f, 0x0f, 0x4f, 0x19, 0xd8, 0x15, 0x98, 0x86, 0x38,
-	0x42, 0x1b, 0x54, 0x1c, 0x03, 0xef, 0xcd, 0x8c, 0x59, 0x56, 0xc6, 0xbc, 0x1e, 0x27, 0x46, 0xf5,
-	0x9d, 0x3c, 0xf9, 0x5f, 0x77, 0xaa, 0x34, 0xa7, 0x10, 0xfc, 0x0a, 0x95, 0x82, 0xe8, 0x88, 0xd6,
-	0x57, 0xd4, 0x04, 0xf7, 0xee, 0xf6, 0xf2, 0x66, 0x37, 0x3a, 0xa2, 0xb6, 0x02, 0x34, 0x7e, 0x96,
-	0x50, 0x49, 0x3e, 0xe2, 0x2f, 0xa8, 0x3a, 0x64, 0xc4, 0x11, 0x40, 0x7a, 0x04, 0x62, 0x2f, 0xdb,
-	0x8d, 0x9d, 0x39, 0xf2, 0xc2, 0x1b, 0x1d, 0x40, 0xec, 0xf1, 0x80, 0x09, 0xca, 0x3b, 0x0f, 0x27,
-	0x89, 0xb1, 0xfd, 0x31, 0xad, 0x95, 0xf2, 0x2e, 0x0d, 0x03, 0x01, 0x21, 0x13, 0xa7, 0xf6, 0xda,
-	0x30, 0x97, 0xf1, 0x21, 0x5a, 0x8d, 0xe0, 0x24, 0xa5, 0x2f, 0xfd, 0x35, 0x7d, 0x7b, 0x92, 0x18,
-	0x9b, 0x6f, 0xe1, 0xe4, 0x06, 0xb9, 0x1c, 0xa5, 0x12, 0xf6, 0xd0, 0xba, 0x43, 0x08, 0x90, 0x1e,
-	0x07, 0x36, 0x08, 0x3c, 0x47, 0x6d, 0xcc, 0x5a, 0xfb, 0xf1, 0xef, 0xd0, 0x69, 0xc6, 0x1c, 0xbc,
-	0x3e, 0x49, 0x8c, 0xad, 0x17, 0x84, 0x64, 0x27, 0x73, 0xfc, 0xaa, 0x82, 0x66, 0x3a, 0xee, 0xa3,
-	0x7b, 0x1c, 0x42, 0x3a, 0x9a, 0xbb, 0xa6, 0x74, 0x87, 0x6b, 0x1e, 0x4d, 0x12, 0xa3, 0x6e, 0xa7,
-	0x80, 0xdb, 0x57, 0x6d, 0xf0, 0x85, 0x13, 0xbc, 0x8f, 0x56, 0x38, 0x38, 0x31, 0x8d, 0xd4, 0x0e,
-	0x55, 0x3a, 0x4f, 0x27, 0x89, 0x51, 0xb3, 0x95, 0x92, 0x57, 0x5d, 0x27, 0xc6, 0xfd, 0x85, 0xa1,
-	0xa6, 0x09, 0x76, 0x56, 0x8a, 0x2d, 0x54, 0x26, 0x20, 0x9c, 0x60, 0x10, 0xab, 0x1d, 0xa9, 0xa4,
-	0x3e, 0x1e, 0xa4, 0xd2, 0xbc, 0x8f, 0x59, 0x96, 0x9c, 0xff, 0xb4, 0x45, 0x35, 0xa1, 0xf2, 0xdd,
-	0xe6, 0x9f, 0x75, 0x77, 0x73, 0xfe, 0x3c, 0x97, 0x9f, 0x3c, 0x47, 0x9b, 0xb7, 0xbe, 0x21, 0x5c,
-	0x41, 0xcb, 0x31, 0x1b, 0x04, 0xa2, 0x56, 0x90, 0x61, 0x08, 0xdc, 0x87, 0x5a, 0x11, 0x97, 0x51,
-	0xd1, 0x21, 0xa4, 0xa6, 0x61, 0x24, 0xbd, 0x90, 0x88, 0xda, 0x52, 0x67, 0xf7, 0xfc, 0x87, 0x5e,
-	0x38, 0x1f, 0xeb, 0xda, 0xc5, 0x58, 0xd7, 0x2e, 0xc7, 0xba, 0xf6, 0x7d, 0xac, 0x6b, 0x67, 0x57,
-	0x7a, 0xe1, 0xe2, 0x4a, 0x2f, 0x5c, 0x5e, 0xe9, 0x85, 0x4f, 0x28, 0xff, 0xe9, 0xba, 0x2b, 0xea,
-	0x6f, 0xb6, 0xf7, 0x2b, 0x00, 0x00, 0xff, 0xff, 0x03, 0x5b, 0x91, 0xce, 0x95, 0x05, 0x00, 0x00,
-}

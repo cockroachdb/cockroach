@@ -1260,7 +1260,9 @@ bin/.go_protobuf_sources: $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PRO
 		-e '/import _ /d' \
 		-e 's!import (fmt|math) "github.com/cockroachdb/cockroach/pkg/(fmt|math)"! !g' \
 		-e 's!github\.com/cockroachdb/cockroach/pkg/(etcd)!go.etcd.io/\1!g' \
-		-e 's!github.com/cockroachdb/cockroach/pkg/((bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)([^a-z]|$$))!\1!g' \
+		-e '/github\.com\/cockroachdb\/cockroach\/pkg\/google\/protobuf/d' \
+		-e '/github.com\/grpc-ecosystem\/grpc-gateway\/third_party\/googleapis\/google\/api/d' \
+		-e 's!github.com/cockroachdb/cockroach/pkg/((bytes|encoding/binary|context|errors|fmt|io|math|github\.com|(google\.)?golang\.org)([^a-z]|$$))!\1!g' \
         -e 's!github.com/cockroachdb/cockroach/pkg/errorspb!github.com/cockroachdb/errors/errorspb!g' \
 		-e 's!golang.org/x/net/context!context!g' \
 		$(GO_SOURCES)

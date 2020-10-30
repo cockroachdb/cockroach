@@ -55,6 +55,7 @@ go_library(
         "//vendor/github.com/cockroachdb/redact",
         "//vendor/github.com/cockroachdb/sentry-go",
         "//vendor/github.com/cockroachdb/ttycolor",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/opentracing/opentracing-go/log",
         "//vendor/github.com/petermattis/goid",

@@ -175,6 +175,7 @@ go_library(
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",
         "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/google/btree",
         "//vendor/github.com/kr/pretty",
@@ -184,6 +185,8 @@ go_library(
         "//vendor/go.etcd.io/etcd/raft/tracker",
         "//vendor/golang.org/x/time/rate",
         "//vendor/google.golang.org/grpc",
+        "//vendor/google.golang.org/grpc/codes",
+        "//vendor/google.golang.org/grpc/status",
     ],
 )
 

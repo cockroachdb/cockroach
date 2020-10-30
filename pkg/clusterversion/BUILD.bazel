@@ -21,6 +21,7 @@ go_library(
         "//pkg/util/syncutil",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/kr/pretty",
     ],

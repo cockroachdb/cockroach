@@ -17,6 +17,7 @@ import "github.com/gogo/protobuf/proto"
 type Message interface {
 	proto.Message
 	MarshalTo(data []byte) (int, error)
+	MarshalToSizedBuffer(data []byte) (int, error)
 	Unmarshal(data []byte) error
 	Size() int
 }
@@ -29,7 +30,7 @@ var Interceptor = func(_ Message) {}
 // to intercept calls to proto.Marshal.
 func Marshal(pb Message) ([]byte, error) {
 	dest := make([]byte, pb.Size())
-	if _, err := MarshalTo(pb, dest); err != nil {
+	if _, err := MarshalToSizedBuffer(pb, dest); err != nil {
 		return nil, err
 	}
 	return dest, nil
@@ -40,6 +41,13 @@ func Marshal(pb Message) ([]byte, error) {
 func MarshalTo(pb Message, dest []byte) (int, error) {
 	Interceptor(pb)
 	return pb.MarshalTo(dest)
+}
+
+// MarshalToSizedBuffer encodes pb into the wire format. It is used
+// throughout the code base to intercept calls to pb.MarshalToSizedBuffer.
+func MarshalToSizedBuffer(pb Message, dest []byte) (int, error) {
+	Interceptor(pb)
+	return pb.MarshalToSizedBuffer(dest)
 }
 
 // Unmarshal parses the protocol buffer representation in buf and places the

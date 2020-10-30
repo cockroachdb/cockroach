@@ -34,6 +34,7 @@ go_library(
         "//vendor/github.com/docker/docker/pkg/jsonmessage",
         "//vendor/github.com/docker/docker/pkg/stdcopy",
         "//vendor/github.com/docker/go-connections/nat",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/mattn/go-isatty",
     ],

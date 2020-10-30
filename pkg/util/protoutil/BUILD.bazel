@@ -15,6 +15,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
         "//vendor/github.com/gogo/protobuf/jsonpb",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/grpc-ecosystem/grpc-gateway/runtime",
