@@ -28,9 +28,10 @@ TABLE kj
  ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
  ├── INDEX primary
  │    └── k int not null
- └── INVERTED INDEX secondary
-      ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
-      └── k int not null
+ ├── INVERTED INDEX secondary
+ │    ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
+ │    └── k int not null
+ └── UNIQUE (k)
 
 build
 SELECT j_inverted_key FROM kj
