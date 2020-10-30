@@ -243,6 +243,11 @@ message IndexSkipTableReaderSpec {
 // The output for LEFT_SEMI:
 // a2, b1, c1, d4, true
 // Again, the d, cont columns will be projected away after the join.
+//
+// The example above is for a lookup join as the second join in the
+// paired-joins. The lookup join can also be the first join in the
+// paired-joins, which is indicated by both
+// OutputGroupContinuationForLeftRow and MaintainOrdering set to true.
 message JoinReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
@@ -314,8 +319,16 @@ message JoinReaderSpec {
   optional bool has_system_columns = 13 [(gogoproto.nullable) = false];
 
   // LeftJoinWithPairedJoiner is used when a left {outer,anti,semi} join is
-  // being achieved by pairing two joins. See the comment above.
+  // being achieved by pairing two joins, and this is the second join. See
+  // the comment above.
   optional bool left_join_with_paired_joiner = 14 [(gogoproto.nullable) = false];
+
+  // OutputGroupContinuationForLeftRow indicates that this join is the first
+  // join in the paired-joins. At most one of OutputGroupContinuationForLeftRow
+  // and LeftJoinWithPairedJoiner must be true. Additionally, if
+  // OutputGroupContinuationForLeftRow is true, MaintainOrdering must also
+  // be true.
+  optional bool output_group_continuation_for_left_row = 15 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting

@@ -300,6 +300,7 @@ func newZigzagJoiner(
 		spec.OnExpr,
 		leftEqCols,
 		rightEqCols,
+		false, /* outputContinuationColumn */
 		post,
 		output,
 		execinfra.ProcStateOpts{
