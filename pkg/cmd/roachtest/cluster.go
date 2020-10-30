@@ -1983,6 +1983,28 @@ func (c *cluster) PutLibraries(ctx context.Context, libraryDir string) error {
 	return nil
 }
 
+// Stage stages a binary to the cluster.
+func (c *cluster) Stage(
+	ctx context.Context, l *logger, application, versionOrSHA, dir string, opts ...option,
+) error {
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Stage")
+	}
+
+	c.status("staging binary")
+	defer c.status("")
+
+	args := []string{roachprod, "stage", c.makeNodes(opts...), application, versionOrSHA}
+	if dir != "" {
+		args = append(args, fmt.Sprintf("--dir='%s'", dir))
+	}
+	err := execCmd(ctx, c.l, args...)
+	if err != nil {
+		return errors.Wrap(err, "cluster.Stage")
+	}
+	return nil
+}
+
 // Get gets files from remote hosts.
 func (c *cluster) Get(ctx context.Context, l *logger, src, dest string, opts ...option) error {
 	if ctx.Err() != nil {
