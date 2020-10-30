@@ -686,6 +686,15 @@ func (tc *TestCluster) TransferRangeLease(
 	return nil
 }
 
+// TransferRangeLeaseOrFatal is a convenience version of TransferRangeLease
+func (tc *TestCluster) TransferRangeLeaseOrFatal(
+	t testing.TB, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
+) {
+	if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
+		t.Fatalf(`could transfer lease for range %s error is %+v`, rangeDesc, err)
+	}
+}
+
 // FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
 // without verifying if the lease is still active. Instead, it returns a time-
 // stamp taken off the queried node's clock.
