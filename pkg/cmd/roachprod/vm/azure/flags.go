@@ -29,6 +29,7 @@ type providerOpts struct {
 	zone             string
 	networkDiskType  string
 	networkDiskSize  int32
+	ultraDiskIOPS    int64
 	diskCaching      string
 }
 
@@ -59,6 +60,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"type of network disk [premium-disk, ultra-disk]. only used if local-ssd is false")
 	flags.Int32Var(&o.networkDiskSize, ProviderName+"-volume-size", 500,
 		"Size in GB of network disk volume, only used if local-ssd=false")
+	flags.Int64Var(&o.ultraDiskIOPS, ProviderName+"-ultra-disk-iops", 5000,
+		"Number of IOPS provisioned for ultra disk, only used if network-disk-type=ultra-disk")
 	flags.StringVar(&o.diskCaching, ProviderName+"-disk-caching", "none",
 		"Disk caching behavior for attached storage.  Valid values are: none, read-only, read-write.  Not applicable to Ultra disks.")
 }
