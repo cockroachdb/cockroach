@@ -19,7 +19,7 @@ http_archive(
 # Load the go dependencies and invoke them.
 load("@io_bazel_rules_go//go:deps.bzl", "go_rules_dependencies", "go_register_toolchains")
 go_rules_dependencies()
-go_register_toolchains()
+go_register_toolchains(go_version="1.13.14")
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
 # repo.
@@ -66,7 +66,7 @@ go_deps()
 # that add autoconf support.
 git_repository(
    name = "rules_foreign_cc",
-   commit = "f6a15abd55be915b914aa618b50831bf5981340f",
+   commit = "605c77171f20840464301d7d01d6cd9e3a982888",
    remote = "https://github.com/otan-cockroach/rules_foreign_cc",
 )
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
