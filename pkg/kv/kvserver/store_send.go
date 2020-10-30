@@ -41,6 +41,20 @@ import (
 func (s *Store) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+
+	// Best effort short-circuit if the server is quiescing. Note that what we
+	// really want to do here is run the request as a stopper task, so that
+	// quiescing waits for it to finish, but we're afraid of the performance
+	// implications. We would also like to use WithCancelOnQuiesce() so that the
+	// tasks drain faster when the server is shutting down, but that introduces
+	// problems because all contexts for all requests will be canceled once they
+	// complete, which propagates to sub-tasks spawned with RunAsyncTask(), and
+	// most such async tasks don't want to be canceled because of the parent
+	// request. See discussions in #51566 around all of these.
+	if s.stopper.IsQuiescing() {
+		return nil, roachpb.NewError(&roachpb.NodeUnavailableError{})
+	}
+
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)
