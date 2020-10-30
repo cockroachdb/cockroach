@@ -184,4 +184,4 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e
 
 replace go.etcd.io/etcd => github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955
 
-replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201016212517-2c66cfe9603c
+replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7

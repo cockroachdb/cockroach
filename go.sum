@@ -609,8 +609,8 @@ github.com/openzipkin-contrib/zipkin-go-opentracing v0.3.5 h1:82Tnq9OJpn+h5xgGps
 github.com/openzipkin-contrib/zipkin-go-opentracing v0.3.5/go.mod h1:uVHyebswE1cCXr2A73cRM2frx5ld1RJUCJkFNZ90ZiI=
 github.com/openzipkin/zipkin-go v0.1.1/go.mod h1:NtoC/o8u3JlF1lSlyPNswIbeQH9bJTmOf0Erfk+hxe8=
 github.com/ory/dockertest/v3 v3.6.0/go.mod h1:4ZOpj8qBUmh8fcBSVzkH2bws2s91JdGvHUqan4GHEuQ=
-github.com/otan-cockroach/go-libedit v1.10.2-0.20201016212517-2c66cfe9603c h1:JZt/IahREIv11tegg2OoWEpTr/Zk8gtny+4EKMQqGEU=
-github.com/otan-cockroach/go-libedit v1.10.2-0.20201016212517-2c66cfe9603c/go.mod h1:X8+oa2glxe4aJyviH7x8FG5AoSdqZ0VJYOxt83gh6m8=
+github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7 h1:+sIdymRXD4aKCvmVMBLL7/bO95KZFYrbz0EzQ1Jlj4A=
+github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7/go.mod h1:X8+oa2glxe4aJyviH7x8FG5AoSdqZ0VJYOxt83gh6m8=
 github.com/pborman/uuid v1.2.0 h1:J7Q5mO4ysT1dv8hyrUGHb9+ooztCXu1D8MY8DZYsu3g=
 github.com/pborman/uuid v1.2.0/go.mod h1:X/NO0urCmaxf9VXbdlT7C2Yzkj2IKimNn4k+gtPdI/k=
 github.com/pelletier/go-toml v1.2.0 h1:T5zMGML61Wp+FlcbWjRDT7yAxhJNAiPPLOFECq181zc=
