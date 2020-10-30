@@ -832,25 +832,6 @@ func (sb *statisticsBuilder) invertedConstrainScan(
 		numUnappliedConjuncts += 2
 	}
 
-	// Set null counts to 0 for non-nullable columns
-	// ---------------------------------------------
-	// Inverted indexes don't contain NULLs, so there is no need to try to
-	// determine not-null columns from the constraint. However, the partial
-	// index predicate may guarantee that non-indexed columns are not-null.
-	notNullCols := relProps.NotNullCols.Copy()
-	if pred != nil {
-		// Add any not-null columns from the predicate constraints.
-		for i := range pred {
-			if c := pred[i].ScalarProps().Constraints; c != nil {
-				cols := c.ExtractNotNullCols(sb.evalCtx)
-				const distinctCount = math.MaxFloat64
-				sb.ensureColStat(cols, distinctCount, scan, s)
-				notNullCols.UnionWith(cols)
-			}
-		}
-	}
-	sb.updateNullCountsFromNotNullCols(notNullCols, s)
-
 	// Calculate distinct counts and histograms for the partial index predicate
 	// ------------------------------------------------------------------------
 	if pred != nil {
@@ -860,6 +841,21 @@ func (sb *statisticsBuilder) invertedConstrainScan(
 		constrainedCols = sb.tryReduceCols(constrainedCols, s, &scan.Relational().FuncDeps)
 		histCols.UnionWith(predHistCols)
 	}
+
+	// Set null counts to 0 for non-nullable columns
+	// ---------------------------------------------
+	// Inverted indexes don't contain NULLs, so there is no need to try to
+	// determine not-null columns from the constraint. However, the partial
+	// index predicate may guarantee that non-indexed columns are not-null.
+	notNullCols := relProps.NotNullCols.Copy()
+	if pred != nil {
+		for i := range pred {
+			if c := pred[i].ScalarProps().Constraints; c != nil {
+				notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
+			}
+		}
+	}
+	sb.updateNullCountsFromNotNullCols(notNullCols, s)
 
 	// Calculate row count and selectivity
 	// -----------------------------------
@@ -3396,12 +3392,6 @@ func (sb *statisticsBuilder) updateDistinctCountFromHistogram(
 	// updateDistinctCountsFromConstraint, so use the histogram estimate to
 	// replace the distinct count value.
 	colStat.DistinctCount = min(distinct, maxDistinctCount)
-
-	// The histogram does not include null values, so add 1 if there are any
-	// null values.
-	if colStat.NullCount > 0 {
-		colStat.DistinctCount++
-	}
 }
 
 func (sb *statisticsBuilder) applyEquivalencies(
