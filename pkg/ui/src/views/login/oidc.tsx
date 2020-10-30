@@ -11,7 +11,7 @@
 import React from "react";
 
 import { LoginAPIState } from "oss/src/redux/login";
-import { Button } from "src/components";
+import { Button, InlineAlert } from "src/components";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 const OIDC_LOGIN_PATH = "/oidc/v1/login";
@@ -26,13 +26,31 @@ const OIDCLoginButton = ({loginState}: {loginState: LoginAPIState}) => {
   );
 };
 
+const OIDCError = ({errorMessage, status}: {errorMessage: string, status: string}) => {
+  if (errorMessage) {
+    return <InlineAlert
+      title={errorMessage}
+      intent={parseInt(status, 10) < 500 ? "info" : "error"}
+    />;
+  }
+  return null;
+};
+
 const OIDCLogin: React.FC<{loginState: LoginAPIState} & RouteComponentProps> = (props) => {
-  const oidcAutoLoginQuery = new URLSearchParams(props.location.search).get("oidc_auto_login");
+  const params = new URLSearchParams(props.location.search);
+  const oidcAutoLoginQuery = params.get("oidc_auto_login");
+  const oidcError = params.get("error");
+  const oidcErrorStatus = params.get("status");
   if (props.loginState.oidcLoginEnabled) {
     if (props.loginState.oidcAutoLogin && !(oidcAutoLoginQuery === "false")) {
       window.location.replace(OIDC_LOGIN_PATH);
     }
-    return <OIDCLoginButton loginState={props.loginState} />;
+    return (
+      <>
+        <OIDCLoginButton loginState={props.loginState} />
+        <OIDCError errorMessage={oidcError} status={oidcErrorStatus}/>
+      </>
+    );
   }
   return null;
 };

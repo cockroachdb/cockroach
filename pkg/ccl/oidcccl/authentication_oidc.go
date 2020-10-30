@@ -13,7 +13,9 @@ import (
 	crypto_rand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -234,7 +236,12 @@ var ConfigureOIDC = func(
 		}
 
 		if !oidcAuthentication.enabled {
-			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
+			oidcHTTPErrorRedirect(w, r, "OIDC: disabled", http.StatusBadRequest)
+			return
+		}
+
+		if !oidcAuthentication.initialized {
+			oidcHTTPErrorRedirect(w, r, "OIDC: failed to initialize config", http.StatusInternalServerError)
 			return
 		}
 
@@ -246,19 +253,19 @@ var ConfigureOIDC = func(
 		stateCookie, err := r.Cookie(stateCookieName)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 		if stateCookie.Value != state {
 			log.Errorf(ctx, "OIDC: client side cookie and callback param do not match: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusBadRequest)
 			return
 		}
 
 		statePb, err := decodeOIDCState(state)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to decode state proto: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
@@ -267,7 +274,7 @@ var ConfigureOIDC = func(
 			err = oidcAuthentication.stateValidator.validateAndClear(string(statePb.Secret))
 			if err != nil {
 				log.Errorf(ctx, "OIDC: this node reported invalid state: %v", err)
-				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+				oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 				return
 			}
 		} else {
@@ -275,14 +282,14 @@ var ConfigureOIDC = func(
 			conn, err := nodeDialer.Dial(ctx, statePb.NodeID, rpc.DefaultClass)
 			if err != nil {
 				log.Errorf(ctx, "OIDC: failed to dial node %d to validate state: %v", statePb.NodeID, err)
-				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+				oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 				return
 			}
 			client := serverpb.NewLogInClient(conn)
 			_, err = client.ValidateOIDCState(ctx, &serverpb.ValidateOIDCStateRequest{State: statePb})
 			if err != nil {
 				log.Errorf(ctx, "OIDC: node %d reported invalid state: %v", statePb.NodeID, err)
-				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+				oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -290,28 +297,28 @@ var ConfigureOIDC = func(
 		oauth2Token, err := oidcAuthentication.oauth2Config.Exchange(ctx, r.URL.Query().Get(codeKey))
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
 		rawIDToken, ok := oauth2Token.Extra(idTokenKey).(string)
 		if !ok {
 			log.Error(ctx, "OIDC: failed to extract ID token from OAuth2 token")
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
 		idToken, err := oidcAuthentication.verifier.Verify(ctx, rawIDToken)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: unable to verify token: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
 		var claims map[string]json.RawMessage
 		if err := idToken.Claims(&claims); err != nil {
 			log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
@@ -319,7 +326,7 @@ var ConfigureOIDC = func(
 		claim := claims[oidcAuthentication.conf.claimJSONKey]
 		if err := json.Unmarshal(claim, &principal); err != nil {
 			log.Errorf(ctx, "OIDC: failed to complete authentication: failed to extract claim key %s: %v", oidcAuthentication.conf.claimJSONKey, err)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
@@ -327,7 +334,7 @@ var ConfigureOIDC = func(
 		numGroups := len(match)
 		if numGroups != 2 {
 			log.Errorf(ctx, "OIDC: failed to complete authentication: expected one group in regexp, got %d", numGroups)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
@@ -335,13 +342,13 @@ var ConfigureOIDC = func(
 		cookie, err := userLoginFromSSO(ctx, username)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to complete authentication: unable to create session for %s: %v", username, err)
-			http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
+			oidcHTTPErrorRedirect(w, r, genericCallbackHTTPError, http.StatusForbidden)
 			return
 		}
 
 		org := sql.ClusterOrganization.Get(&st.SV)
 		if err := utilccl.CheckEnterpriseEnabled(st, cluster, org, "OIDC"); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			oidcHTTPErrorRedirect(w, r, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -360,7 +367,12 @@ var ConfigureOIDC = func(
 		}
 
 		if !oidcAuthentication.enabled {
-			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
+			oidcHTTPErrorRedirect(w, r, "OIDC: disabled", http.StatusBadRequest)
+			return
+		}
+
+		if !oidcAuthentication.initialized {
+			oidcHTTPErrorRedirect(w, r, "OIDC: failed to initialize config", http.StatusInternalServerError)
 			return
 		}
 
@@ -368,7 +380,7 @@ var ConfigureOIDC = func(
 		state := make([]byte, size)
 		if _, err := crypto_rand.Read(state); err != nil {
 			log.Errorf(ctx, "OIDC: unable to generate oidc state cookie: %v", err)
-			http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericLoginHTTPError, http.StatusInternalServerError)
 			return
 		}
 		base64State := base64.URLEncoding.EncodeToString(state)
@@ -380,7 +392,7 @@ var ConfigureOIDC = func(
 		})
 		if err != nil {
 			log.Errorf(ctx, "OIDC: no state encoded: %v", err)
-			http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
+			oidcHTTPErrorRedirect(w, r, genericLoginHTTPError, http.StatusInternalServerError)
 			return
 		}
 
@@ -470,6 +482,14 @@ var ConfigureOIDC = func(
 	})
 
 	return oidcAuthentication, nil
+}
+
+func oidcHTTPErrorRedirect(w http.ResponseWriter, r *http.Request, error string, status int) {
+	errorParams := make(url.Values)
+	errorParams.Add("oidc_auto_login", "false")
+	errorParams.Add("error", error)
+	errorParams.Add("status", fmt.Sprintf("%d", status))
+	http.Redirect(w, r, "/#/login?"+errorParams.Encode(), http.StatusFound)
 }
 
 func (s *oidcAuthenticationServer) ValidateOIDCState(state *serverpb.OIDCState) error {
