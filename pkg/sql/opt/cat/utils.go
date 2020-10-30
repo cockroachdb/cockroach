@@ -161,6 +161,18 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 		formatCatalogFKRef(cat, true /* inbound */, tab.InboundForeignKey(i), child)
 	}
 
+	for i := 0; i < tab.UniqueCount(); i++ {
+		var withoutIndexStr string
+		if tab.Unique(i).WithoutIndex() {
+			withoutIndexStr = "WITHOUT INDEX "
+		}
+		child.Childf(
+			"UNIQUE %s%s",
+			withoutIndexStr,
+			formatCols(tab, tab.Unique(i).ColumnCount(), tab.Unique(i).ColumnOrdinal),
+		)
+	}
+
 	// TODO(radu): show stats.
 }
 
