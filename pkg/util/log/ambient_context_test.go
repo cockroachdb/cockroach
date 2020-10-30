@@ -47,7 +47,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 
 	// Annotate a context that has an open span.
 
-	sp1 := tracer.StartRootSpan("root", nil /* logTags */, tracing.RecordableSpan)
+	sp1 := tracer.StartSpan("root", tracing.WithForceRealSpan())
 	sp1.StartRecording(tracing.SingleNodeRecording)
 	ctx1 := tracing.ContextWithSpan(context.Background(), sp1)
 	Event(ctx1, "a")

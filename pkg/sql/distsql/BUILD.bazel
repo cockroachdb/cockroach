@@ -30,9 +30,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/logtags",
         "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/opentracing/opentracing-go",
     ],
 )
 

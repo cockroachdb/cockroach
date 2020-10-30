@@ -357,7 +357,6 @@ go_library(
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/lib/pq",
         "//vendor/github.com/lib/pq/oid",
-        "//vendor/github.com/opentracing/opentracing-go",
         "//vendor/github.com/prometheus/client_model/go",
         "//vendor/golang.org/x/net/trace",
         "//vendor/golang.org/x/text/collate",

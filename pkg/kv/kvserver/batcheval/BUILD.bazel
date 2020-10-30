@@ -75,7 +75,6 @@ go_library(
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/logtags",
         "//vendor/github.com/kr/pretty",
         "//vendor/golang.org/x/time/rate",
     ],

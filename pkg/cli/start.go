@@ -322,7 +322,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	// has completed.
 	// TODO(andrei): we don't close the span on the early returns below.
 	tracer := serverCfg.Settings.Tracer
-	sp := tracer.StartRootSpan("server start", nil /* logTags */, tracing.NonRecordableSpan)
+	sp := tracer.StartSpan("server start")
 	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	// Set up the logging and profiling output.

@@ -392,7 +392,7 @@ func TestLimitScans(t *testing.T) {
 
 	// Now we're going to run the tableReader and trace it.
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("root", tracing.Recordable)
+	sp := tracer.StartSpan("root", tracing.WithForceRealSpan())
 	sp.StartRecording(tracing.SnowballRecording)
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx

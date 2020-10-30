@@ -73,7 +73,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // ClusterOrganization is the organization name.
@@ -1522,21 +1521,19 @@ func (st *SessionTracing) StartTracing(
 	var sp *tracing.Span
 	connCtx := st.ex.ctxHolder.connCtx
 
-	// TODO(andrei): use tracing.EnsureChildSpan() or something more efficient
-	// than StartSpan(). The problem is that the current interface doesn't allow
-	// the Recordable option to be passed.
 	if parentSp := tracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(
 			opName,
-			opentracing.ChildOf(parentSp.Context()), tracing.Recordable,
-			tracing.LogTagsFromCtx(connCtx),
+			tracing.WithParent(parentSp),
+			tracing.WithCtxLogTags(connCtx),
+			tracing.WithForceRealSpan(),
 		)
 	} else {
 		// Create a root span while recording.
 		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(
-			opName, tracing.Recordable,
-			tracing.LogTagsFromCtx(connCtx),
+			opName, tracing.WithForceRealSpan(),
+			tracing.WithCtxLogTags(connCtx),
 		)
 	}
 	sp.StartRecording(recType)

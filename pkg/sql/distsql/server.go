@@ -40,9 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"github.com/opentracing/opentracing-go"
 )
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
@@ -197,26 +195,21 @@ func (ds *ServerImpl) setupFlow(
 	const opName = "flow"
 	var sp *tracing.Span
 	if parentSpan == nil {
-		sp = ds.Tracer.StartRootSpan(
-			opName, logtags.FromContext(ctx), tracing.NonRecordableSpan)
+		sp = ds.Tracer.StartSpan(opName, tracing.WithCtxLogTags(ctx))
 	} else if localState.IsLocal {
 		// If we're a local flow, we don't need a "follows from" relationship: we're
 		// going to run this flow synchronously.
 		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
 		//  If that field is unset, we might still want to create a child span if
 		//  this flow is run synchronously.
-		sp = ds.Tracer.StartChildSpan(
-			opName, parentSpan.SpanContext(), logtags.FromContext(ctx), tracing.NonRecordableSpan,
-			false /* separateRecording */)
+		sp = ds.Tracer.StartSpan(opName, tracing.WithParent(parentSpan), tracing.WithCtxLogTags(ctx))
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		// TODO(andrei): We should use something more efficient than StartSpan; we
-		// should use AmbientContext.AnnotateCtxWithSpan() but that interface
-		// doesn't currently support FollowsFrom relationships.
 		sp = ds.Tracer.StartSpan(
 			opName,
-			opentracing.FollowsFrom(parentSpan.Context()),
-			tracing.LogTagsFromCtx(ctx),
+			tracing.WithParent(parentSpan),
+			tracing.WithFollowsFrom(),
+			tracing.WithCtxLogTags(ctx),
 		)
 	}
 	// sp will be Finish()ed by Flow.Cleanup().

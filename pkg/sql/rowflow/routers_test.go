@@ -752,7 +752,7 @@ func TestRouterDiskSpill(t *testing.T) {
 
 	// Enable stats recording.
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("root", tracing.Recordable)
+	sp := tracer.StartSpan("root", tracing.WithForceRealSpan())
 	sp.StartRecording(tracing.SnowballRecording)
 	ctx := tracing.ContextWithSpan(context.Background(), sp)
 
