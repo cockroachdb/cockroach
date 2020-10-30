@@ -126,13 +126,8 @@ func makeEventTxnStartPayload(
 	}
 }
 
-type eventTxnFinish struct{}
-
-// eventTxnFinishPayload represents the payload for eventTxnFinish.
-type eventTxnFinishPayload struct {
-	// commit is set if the transaction committed, false if it was aborted.
-	commit bool
-}
+type eventTxnFinishCommitted struct{}
+type eventTxnFinishAborted struct{}
 
 // eventSavepointRollback is generated when we want to move from Aborted to Open
 // through a ROLLBACK TO SAVEPOINT <not cockroach_restart>. Note that it is not
@@ -194,13 +189,14 @@ type payloadWithError interface {
 	errorCause() error
 }
 
-func (eventTxnStart) Event()          {}
-func (eventTxnFinish) Event()         {}
-func (eventSavepointRollback) Event() {}
-func (eventNonRetriableErr) Event()   {}
-func (eventRetriableErr) Event()      {}
-func (eventTxnRestart) Event()        {}
-func (eventTxnReleased) Event()       {}
+func (eventTxnStart) Event()           {}
+func (eventTxnFinishCommitted) Event() {}
+func (eventTxnFinishAborted) Event()   {}
+func (eventSavepointRollback) Event()  {}
+func (eventNonRetriableErr) Event()    {}
+func (eventRetriableErr) Event()       {}
+func (eventTxnRestart) Event()         {}
+func (eventTxnReleased) Event()        {}
 
 // TxnStateTransitions describe the transitions used by a connExecutor's
 // fsm.Machine. Args.Extended is a txnState, which is muted by the Actions.
@@ -242,15 +238,22 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 
 	/// Open
 	stateOpen{ImplicitTxn: fsm.Any}: {
-		eventTxnFinish{}: {
-			Description: "COMMIT/ROLLBACK, or after a statement running as an implicit txn",
+		eventTxnFinishCommitted{}: {
+			Description: "COMMIT, or after a statement running as an implicit txn",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				// Note that the KV txn has been committed or rolled back by the
-				// statement execution by this point.
-				return args.Extended.(*txnState).finishTxn(
-					args.Payload.(eventTxnFinishPayload),
-				)
+				// Note that the KV txn has been committed by the statement execution by
+				// this point.
+				return args.Extended.(*txnState).finishTxn(txnCommit)
+			},
+		},
+		eventTxnFinishAborted{}: {
+			Description: "ROLLBACK, or after a statement running as an implicit txn fails",
+			Next:        stateNoTxn{},
+			Action: func(args fsm.Args) error {
+				// Note that the KV txn has been rolled back by the statement execution
+				// by this point.
+				return args.Extended.(*txnState).finishTxn(txnRollback)
 			},
 		},
 		// Handle the error on COMMIT cases: we move to NoTxn as per Postgres error
@@ -340,7 +343,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	// Note that we don't handle any error events here. Any statement but a
 	// ROLLBACK (TO SAVEPOINT) is expected to not be passed to the state machine.
 	stateAborted{}: {
-		eventTxnFinish{}: {
+		eventTxnFinishAborted{}: {
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
@@ -348,7 +351,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 				ts.txnAbortCount.Inc(1)
 				// Note that the KV txn has been rolled back by now by statement
 				// execution.
-				return ts.finishTxn(args.Payload.(eventTxnFinishPayload))
+				return ts.finishTxn(txnRollback)
 			},
 		},
 		// Any statement.
@@ -398,14 +401,15 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		},
 	},
 
+	/// Commit Wait
 	stateCommitWait{}: {
-		eventTxnFinish{}: {
+		eventTxnFinishCommitted{}: {
 			Description: "COMMIT",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				return args.Extended.(*txnState).finishTxn(
-					args.Payload.(eventTxnFinishPayload),
-				)
+				// A txnCommit event has been previously generated when we entered
+				// stateCommitWait.
+				return args.Extended.(*txnState).finishTxn(noEvent)
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
@@ -454,16 +458,10 @@ func noTxnToOpen(args fsm.Args) error {
 	return nil
 }
 
-// finishTxn finishes the transaction. It also calls setAdvanceInfo().
-func (ts *txnState) finishTxn(payload eventTxnFinishPayload) error {
+// finishTxn finishes the transaction. It also calls setAdvanceInfo() with the
+// given event.
+func (ts *txnState) finishTxn(ev txnEvent) error {
 	ts.finishSQLTxn()
-
-	var ev txnEvent
-	if payload.commit {
-		ev = txnCommit
-	} else {
-		ev = txnRollback
-	}
 	ts.setAdvanceInfo(advanceOne, noRewind, ev)
 	return nil
 }
