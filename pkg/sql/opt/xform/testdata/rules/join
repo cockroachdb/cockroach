@@ -3625,7 +3625,7 @@ project
  │    │    ├── lookup columns are key
  │    │    ├── immutable
  │    │    ├── fd: (9)==(14), (14)==(9)
- │    │    ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geo_idx [as=c])
+ │    │    ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geo_idx [as=c])
  │    │    │    ├── columns: c.gid:1!null n.boroname:14 name:15!null n.geom:16
  │    │    │    ├── inverted-expr
  │    │    │    │    └── st_intersects(n.geom:16, c.geom:10)
@@ -3732,7 +3732,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
@@ -3758,7 +3758,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
@@ -3783,7 +3783,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -3809,7 +3809,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_coveredby(c.geom:10, n.geom:16)
@@ -3835,7 +3835,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_dwithinexclusive(c.geom:10, n.geom:16, 50.0)
@@ -3861,7 +3861,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
@@ -3888,7 +3888,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_coveredby(c.geom:10, n.geom:16) AND (st_dwithin(c.geom:10, n.geom:16, 50.0) OR st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16))
@@ -3914,7 +3914,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_dfullywithin(c.geom:10, n.geom:16, 50.0)
@@ -3939,7 +3939,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_dfullywithinexclusive(c.geom:10, n.geom:16, 50.0)
@@ -3966,7 +3966,7 @@ project
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geo_idx [as=c])
+      ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geo_idx [as=c])
       │    ├── columns: c.gid:1!null name:15 n.geom:16!null
       │    ├── inverted-expr
       │    │    └── st_coveredby(n.geom:16, c.geom:10) AND st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', c.geom:10)
@@ -4015,7 +4015,7 @@ project
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(9)
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9!null c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -4071,7 +4071,7 @@ semi-join (lookup nyc_neighborhoods [as=n])
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+ ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null continuation:19
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -4103,7 +4103,7 @@ anti-join (lookup nyc_neighborhoods [as=n])
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- ├── left-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+ ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13 continuation:19
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -4135,7 +4135,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── left-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13 continuation:20
       │    ├── inverted-expr
       │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -4162,7 +4162,7 @@ left-join (lookup nyc_neighborhoods [as=n])
  ├── immutable
  ├── key: (1,13)
  ├── fd: (1)-->(2-10), (13)-->(14-16)
- ├── left-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+ ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13 continuation:19
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -4216,7 +4216,7 @@ with &1 (q)
       │    │    ├── key columns: [23] = [23]
       │    │    ├── lookup columns are key
       │    │    ├── immutable
-      │    │    ├── left-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      │    │    ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    │    │    ├── columns: geom:22 n.gid:23 continuation:42
       │    │    │    ├── inverted-expr
       │    │    │    │    └── st_intersects(geom:22, n.geom:26)
@@ -4313,7 +4313,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_intersects(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
@@ -4338,7 +4338,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_covers(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
@@ -4363,7 +4363,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_coveredby(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
@@ -4388,7 +4388,7 @@ project
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_coveredby(c.geom:10, n.geom:16)
@@ -4430,7 +4430,7 @@ project
       ├── lookup columns are key
       ├── immutable
       ├── fd: (1)-->(10)
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
       │    ├── columns: c.gid:1!null c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -4460,7 +4460,7 @@ project
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(14), (1)-->(10)
-      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
       │    ├── columns: c.gid:1!null c.geom:10 n.gid:13!null
       │    ├── inverted-expr
       │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -4490,7 +4490,7 @@ semi-join (lookup nyc_neighborhoods [as=n])
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
+ ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null continuation:20
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:16)
@@ -4520,7 +4520,7 @@ anti-join (lookup nyc_neighborhoods [as=n])
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- ├── left-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
+ ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13 continuation:20
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:16)
