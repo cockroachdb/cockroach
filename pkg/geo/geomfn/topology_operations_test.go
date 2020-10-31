@@ -450,6 +450,86 @@ func TestSharedPaths(t *testing.T) {
 
 }
 
+func TestNode(t *testing.T) {
+	tests := []struct {
+		name    string
+		arg     geo.Geometry
+		want    geo.Geometry
+		wantErr bool
+	}{
+		{
+			"linestring, 3 nodes",
+			geo.MustParseGeometry("LINESTRING(0 0, 10 10, 0 10, 10 0)"),
+			geo.MustParseGeometry("MULTILINESTRING((0 0,5 5),(5 5,10 10,0 10,5 5),(5 5,10 0))"),
+			false,
+		},
+		{
+			"linestring, 4 nodes",
+			geo.MustParseGeometry("LINESTRING(0 0, 10 10, 0 10, 10 0, 10 10)"),
+			geo.MustParseGeometry("MULTILINESTRING((0 0,5 5),(5 5,10 10),(10 10,0 10,5 5),(5 5,10 0,10 10))"),
+			false,
+		},
+		{
+			"linestring, two lines intersection",
+			geo.MustParseGeometry("LINESTRING(0 0, 10 10, 0 10, 10 0, 10 10, 10 5, 0 5)"),
+			geo.MustParseGeometry("MULTILINESTRING((0 0,5 5),(5 5,0 5),(10 5,5 5),(5 5,10 10),(10 10,0 10,5 5),(5 5,10 0,10 5),(10 5,10 10))"),
+			false,
+		},
+		{
+			"multilinestring",
+			geo.MustParseGeometry("MULTILINESTRING((1 1, 4 4), (1 3, 4 2))"),
+			geo.MustParseGeometry("MULTILINESTRING((1 1, 2.5 2.5), (1 3, 2.5 2.5), (2.5 2.5, 4 4), (2.5 2.5, 4 2))"),
+			false,
+		},
+		{
+			"multilinestring with duplicates",
+			geo.MustParseGeometry("MULTILINESTRING((0 0, 10 10, 0 10, 10 0), (1 1, 4 4), (1 3, 4 2), (0 0, 10 10, 0 10, 10 0))"),
+			geo.MustParseGeometry("MULTILINESTRING((0 0,1 1),(1 1,2.5 2.5),(1 3,2.5 2.5),(2.5 2.5,4 4),(4 4,5 5),(2.5 2.5,4 2),(5 5,10 10,0 10,5 5),(5 5,10 0))"),
+			false,
+		},
+		{
+			"multilinestring with no nodes",
+			geo.MustParseGeometry("MULTILINESTRING((1 1, 4 4), (0 0, -2 2))"),
+			geo.MustParseGeometry("MULTILINESTRING((0 0,-2 2),(1 1,4 4))"),
+			false,
+		},
+		{
+			"linestring with no nodes",
+			geo.MustParseGeometry("LINESTRING(0 0, -10 10, 0 10)"),
+			geo.MustParseGeometry("MULTILINESTRING((0 0, -10 10, 0 10))"),
+			false,
+		},
+		{
+			"linestring with specified SRID",
+			geo.MustParseGeometry("SRID=4269;LINESTRING(0 0, 10 10, 0 10, 10 0)"),
+			geo.MustParseGeometry("SRID=4269;MULTILINESTRING((0 0,5 5),(5 5,10 10,0 10,5 5),(5 5,10 0))"),
+			false,
+		},
+		{
+			"unsupported type: polygon",
+			geo.MustParseGeometry("SRID=4269;POLYGON((-71.1776585052917 42.3902909739571,-71.1776820268866 42.3903701743239,-71.1776063012595 42.3903825660754,-71.1775826583081 42.3903033653531,-71.1776585052917 42.3902909739571))"),
+			geo.Geometry{},
+			true,
+		},
+		{
+			"unsupported type: geometry collection",
+			geo.MustParseGeometry("GEOMETRYCOLLECTION(POINT(2 0),POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)))"),
+			geo.Geometry{},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Node(tt.arg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Node() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestUnaryUnion(t *testing.T) {
 	tests := []struct {
 		name string

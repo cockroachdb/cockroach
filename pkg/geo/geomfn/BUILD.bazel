@@ -19,6 +19,7 @@ go_library(
         "linear_reference.go",
         "linestring.go",
         "make_geometry.go",
+        "node.go",
         "orientation.go",
         "remove_repeated_points.go",
         "reverse.go",
@@ -44,6 +45,7 @@ go_library(
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/twpayne/go-geom",
         "//vendor/github.com/twpayne/go-geom/encoding/ewkb",
+        "//vendor/github.com/twpayne/go-geom/xy",
         "//vendor/github.com/twpayne/go-geom/xy/lineintersector",
     ],
 )

@@ -11,8 +11,13 @@
 package geomfn
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/errors"
+	"github.com/twpayne/go-geom"
 )
 
 // Boundary returns the boundary of a given Geometry.
@@ -187,4 +192,76 @@ func SharedPaths(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 		return geo.Geometry{}, err
 	}
 	return gm, nil
+}
+
+// Node Returns a geometry containing a set of linestrings using the least possible number of nodes while preserving all of the input ones.
+func Node(g geo.Geometry) (geo.Geometry, error) {
+	if g.ShapeType() != geopb.ShapeType_LineString && g.ShapeType() != geopb.ShapeType_MultiLineString {
+		return geo.Geometry{}, errors.New("geometry type is unsupported. Please pass a LineString or a MultiLineString")
+	}
+	ep, err := extractUniqueEndpoints(g)
+	if err != nil {
+		return geo.Geometry{}, fmt.Errorf("error extracting unique endpoints: %v", err)
+	}
+
+	res, err := geos.Node(g.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	node, err := geo.ParseGeometryFromEWKB(res)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+
+	res, err = geos.LineMerge(node.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	lines, err := geo.ParseGeometryFromEWKB(res)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	if lines.ShapeType() == geopb.ShapeType_LineString {
+		// No nodes found, return a multilinestring
+		return node, nil
+	}
+
+	glines, err := lines.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, fmt.Errorf("error transforming lines: %v", err)
+	}
+	mllines := glines.(*geom.MultiLineString)
+
+	mlout := geom.NewMultiLineString(geom.XY)
+	gep, err := ep.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, fmt.Errorf("error transforming unique endpoints: %v", err)
+	}
+	mpep := gep.(*geom.MultiPoint)
+	splitted := false
+	var splitLines []*geom.LineString
+	for i := 0; i < mllines.NumLineStrings(); i++ {
+		l := mllines.LineString(i)
+		for j := 0; j < mpep.NumPoints(); j++ {
+			p := mpep.Point(j)
+			splitted, splitLines, err = splitLineByPoint(l, p.Coords())
+			if err != nil {
+				return geo.Geometry{}, fmt.Errorf("could not split line: %v", err)
+			}
+			if splitted {
+				mlout.Push(splitLines[0])
+				mlout.Push(splitLines[1])
+				break
+			}
+		}
+		if !splitted {
+			mlout.Push(l)
+		}
+	}
+	mlout.SetSRID(int(g.SRID()))
+	out, err := geo.MakeGeometryFromGeomT(mlout)
+	if err != nil {
+		return geo.Geometry{}, fmt.Errorf("could not transform output into geometry: %v", err)
+	}
+	return out, nil
 }
