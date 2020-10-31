@@ -179,6 +179,7 @@ func EvalAddSSTable(
 
 	ms.Add(stats)
 
+	// TODO(sumeer): use EngineIterator and replace the Put hack below.
 	if args.IngestAsWrites {
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
 		dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
@@ -192,8 +193,15 @@ func EvalAddSSTable(
 			// NB: This is *not* a general transformation of any arbitrary SST to a
 			// WriteBatch: it assumes every key in the SST is a simple Set. This is
 			// already assumed elsewhere in this RPC though, so that's OK here.
-			if err := readWriter.Put(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
-				return result.Result{}, err
+			k := dataIter.UnsafeKey()
+			if k.Timestamp.IsEmpty() {
+				if err := readWriter.PutUnversioned(k.Key, dataIter.UnsafeValue()); err != nil {
+					return result.Result{}, err
+				}
+			} else {
+				if err := readWriter.PutMVCC(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
+					return result.Result{}, err
+				}
 			}
 			dataIter.Next()
 		}

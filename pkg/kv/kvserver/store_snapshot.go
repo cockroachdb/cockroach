@@ -144,7 +144,8 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	}
 	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
-	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+	if err := msstw.currSST.ClearRawRange(
+		msstw.keyRanges[msstw.currRange].Start.Key, msstw.keyRanges[msstw.currRange].End.Key); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
@@ -333,13 +334,21 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			break
 		}
 		kvs++
+		// TODO(sumeer): this is incorrect. We should be iterating using EngineIterator
+		// and Putting an EngineKey.
 		unsafeKey := iter.UnsafeKey()
 		unsafeValue := iter.UnsafeValue()
 		if b == nil {
 			b = kvSS.newBatch()
 		}
-		if err := b.Put(unsafeKey, unsafeValue); err != nil {
-			return 0, err
+		if unsafeKey.Timestamp.IsEmpty() {
+			if err := b.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
+				return 0, err
+			}
+		} else {
+			if err := b.PutMVCC(unsafeKey, unsafeValue); err != nil {
+				return 0, err
+			}
 		}
 
 		if bLen := int64(b.Len()); bLen >= kvSS.batchSize {

@@ -587,9 +587,9 @@ type clearRangeOp struct {
 }
 
 func (c clearRangeOp) run(ctx context.Context) string {
-	// All ClearRange calls in Cockroach usually happen with metadata keys, so
-	// mimic the same behavior here.
-	err := c.m.engine.ClearRange(storage.MakeMVCCMetadataKey(c.key), storage.MakeMVCCMetadataKey(c.endKey))
+	// ClearRange calls in Cockroach usually happen with boundaries demarcated
+	// using unversioned keys, so mimic the same behavior here.
+	err := c.m.engine.ClearRawRange(c.key, c.endKey)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err.Error())
 	}

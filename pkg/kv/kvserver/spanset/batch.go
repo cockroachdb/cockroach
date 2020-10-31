@@ -335,46 +335,41 @@ func (s spanSetWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 	return s.w.ApplyBatchRepr(repr, sync)
 }
 
-func (s spanSetWriter) Clear(key storage.MVCCKey) error {
+func (s spanSetWriter) checkAllowed(key roachpb.Key) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
+		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key}, s.ts); err != nil {
 			return err
 		}
 	}
-	return s.w.Clear(key)
+	return nil
 }
 
-func (s spanSetWriter) SingleClear(key storage.MVCCKey) error {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
-			return err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return err
-		}
+func (s spanSetWriter) ClearMVCC(key storage.MVCCKey) error {
+	if err := s.checkAllowed(key.Key); err != nil {
+		return err
 	}
-	return s.w.SingleClear(key)
+	return s.w.ClearMVCC(key)
 }
 
-func (s spanSetWriter) ClearRange(start, end storage.MVCCKey) error {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
-			return err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}, s.ts); err != nil {
-			return err
-		}
+func (s spanSetWriter) ClearUnversioned(key roachpb.Key) error {
+	if err := s.checkAllowed(key); err != nil {
+		return err
 	}
-	return s.w.ClearRange(start, end)
+	return s.w.ClearUnversioned(key)
 }
 
-func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+func (s spanSetWriter) ClearIntent(key roachpb.Key) error {
+	if err := s.checkAllowed(key); err != nil {
+		return err
+	}
+	return s.w.ClearIntent(key)
+}
+
+func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {
 			return err
@@ -383,6 +378,34 @@ func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roac
 		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}, s.ts); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (s spanSetWriter) ClearRawRange(start, end roachpb.Key) error {
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
+	}
+	return s.w.ClearRawRange(start, end)
+}
+
+func (s spanSetWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
+	}
+	return s.w.ClearMVCCRangeAndIntents(start, end)
+}
+
+func (s spanSetWriter) ClearMVCCRange(start, end storage.MVCCKey) error {
+	if err := s.checkAllowedRange(start.Key, end.Key); err != nil {
+		return err
+	}
+	return s.w.ClearMVCCRange(start, end)
+}
+
+func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
 	}
 	return s.w.ClearIterRange(iter, start, end)
 }
@@ -400,17 +423,25 @@ func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	return s.w.Merge(key, value)
 }
 
-func (s spanSetWriter) Put(key storage.MVCCKey, value []byte) error {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
-			return err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return err
-		}
+func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value []byte) error {
+	if err := s.checkAllowed(key.Key); err != nil {
+		return err
 	}
-	return s.w.Put(key, value)
+	return s.w.PutMVCC(key, value)
+}
+
+func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
+	if err := s.checkAllowed(key); err != nil {
+		return err
+	}
+	return s.w.PutUnversioned(key, value)
+}
+
+func (s spanSetWriter) PutIntent(key roachpb.Key, value []byte) error {
+	if err := s.checkAllowed(key); err != nil {
+		return err
+	}
+	return s.w.PutIntent(key, value)
 }
 
 func (s spanSetWriter) LogData(data []byte) error {
@@ -468,6 +499,10 @@ type spanSetBatch struct {
 }
 
 var _ storage.Batch = spanSetBatch{}
+
+func (s spanSetBatch) SingleClearEngine(key storage.EngineKey) error {
+	return s.b.SingleClearEngine(key)
+}
 
 func (s spanSetBatch) Commit(sync bool) error {
 	return s.b.Commit(sync)
