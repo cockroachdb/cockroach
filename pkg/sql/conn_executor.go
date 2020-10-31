@@ -1437,8 +1437,17 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				ex.implicitTxn(),
 			)
 			res = stmtRes
-			curStmt := Statement{Statement: tcmd.Statement}
 
+			// This shortcut is an optimization in the common case where we have an
+			// implicit transaction (and not an observer statement). The end-result is
+			// the same with the code below, but we avoid creating state that gets
+			// discarded.
+			if ex.canShortcutToNoTxnState(tcmd.AST) {
+				ev, payload = ex.execStmtInNoTxnState(ctx, tcmd.AST)
+				return nil
+			}
+
+			curStmt := Statement{Statement: tcmd.Statement}
 			stmtCtx := withStatement(ctx, ex.curStmt)
 			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, nil /* pinfo */)
 			return err
@@ -1488,14 +1497,6 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			}
 			ex.curStmt = portal.Stmt.AST
 
-			pinfo := &tree.PlaceholderInfo{
-				PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
-					TypeHints: portal.Stmt.TypeHints,
-					Types:     portal.Stmt.Types,
-				},
-				Values: portal.Qargs,
-			}
-
 			stmtRes := ex.clientComm.CreateStatementResult(
 				portal.Stmt.AST,
 				// The client is using the extended protocol, so no row description is
@@ -1509,6 +1510,22 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				ex.implicitTxn(),
 			)
 			res = stmtRes
+
+			// This shortcut is an optimization in the common case where we have an
+			// implicit transaction. The end-result is the same with the code below,
+			// but we avoid creating state that gets discarded.
+			if ex.canShortcutToNoTxnState(portal.Stmt.AST) {
+				ev, payload = ex.execStmtInNoTxnState(ctx, portal.Stmt.AST)
+				return nil
+			}
+
+			pinfo := &tree.PlaceholderInfo{
+				PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
+					TypeHints: portal.Stmt.TypeHints,
+					Types:     portal.Stmt.Types,
+				},
+				Values: portal.Qargs,
+			}
 			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo)
 			return err
 		}()
@@ -1661,6 +1678,24 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// canShortcutToNoTxnState returns true if this is a statement that will run in
+// an implicit transaction, in which case we can call execStmtInNoTxnState
+// directly to avoid some overhead.
+func (ex *connExecutor) canShortcutToNoTxnState(ast tree.Statement) bool {
+	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
+		return false
+	}
+	switch ast.(type) {
+	case tree.ObserverStatement, *tree.BeginTransaction:
+		// These statements don't need to set up an implicit transactions; let
+		// the normal path execute them.
+		return false
+
+	default:
+		return true
+	}
 }
 
 func (ex *connExecutor) idleConn() bool {

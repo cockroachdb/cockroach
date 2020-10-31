@@ -77,7 +77,7 @@ func (ex *connExecutor) execStmt(
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
 		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
-		err := ex.runObserverStatement(ctx, stmt, res)
+		err := ex.runObserverStatement(ctx, stmt.AST, res)
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
 		return nil, nil, err
@@ -93,7 +93,7 @@ func (ex *connExecutor) execStmt(
 
 	switch ex.machine.CurState().(type) {
 	case stateNoTxn:
-		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
+		ev, payload = ex.execStmtInNoTxnState(ctx, stmt.AST)
 	case stateOpen:
 		if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 			remoteAddr := "internal"
@@ -117,9 +117,9 @@ func (ex *connExecutor) execStmt(
 			ex.recordFailure()
 		}
 	case stateAborted:
-		ev, payload = ex.execStmtInAbortedState(ctx, stmt, res)
+		ev, payload = ex.execStmtInAbortedState(ctx, stmt.AST, res)
 	case stateCommitWait:
-		ev, payload = ex.execStmtInCommitWaitState(stmt, res)
+		ev, payload = ex.execStmtInCommitWaitState(stmt.AST, res)
 	default:
 		panic(errors.AssertionFailedf("unexpected txn state: %#v", ex.machine.CurState()))
 	}
@@ -235,10 +235,10 @@ func (ex *connExecutor) execPortal(
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	ex.incrementStartedStmtCounter(stmt)
+	ex.incrementStartedStmtCounter(stmt.AST)
 	defer func() {
 		if retErr == nil && !payloadHasError(retPayload) {
-			ex.incrementExecutedStmtCounter(stmt)
+			ex.incrementExecutedStmtCounter(stmt.AST)
 		}
 	}()
 
@@ -1065,14 +1065,14 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 // the cursor is not advanced. This means that the statement will run again in
 // stateOpen, at each point its results will also be flushed.
 func (ex *connExecutor) execStmtInNoTxnState(
-	ctx context.Context, stmt Statement,
+	ctx context.Context, ast tree.Statement,
 ) (_ fsm.Event, payload fsm.EventPayload) {
-	switch s := stmt.AST.(type) {
+	switch s := ast.(type) {
 	case *tree.BeginTransaction:
-		ex.incrementStartedStmtCounter(stmt)
+		ex.incrementStartedStmtCounter(ast)
 		defer func() {
 			if !payloadHasError(payload) {
-				ex.incrementExecutedStmtCounter(stmt)
+				ex.incrementExecutedStmtCounter(ast)
 			}
 		}()
 		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, s)
@@ -1088,7 +1088,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.transitionCtx)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
-		return ex.makeErrEvent(errNoTransactionInProgress, stmt.AST)
+		return ex.makeErrEvent(errNoTransactionInProgress, ast)
 	default:
 		// NB: Implicit transactions are created without a historical timestamp even
 		// though the statement might contain an AOST clause. In these cases the
@@ -1109,12 +1109,12 @@ func (ex *connExecutor) execStmtInNoTxnState(
 // - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //   allowing it to be retried.
 func (ex *connExecutor) execStmtInAbortedState(
-	ctx context.Context, stmt Statement, res RestrictedCommandResult,
+	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) (_ fsm.Event, payload fsm.EventPayload) {
-	ex.incrementStartedStmtCounter(stmt)
+	ex.incrementStartedStmtCounter(ast)
 	defer func() {
 		if !payloadHasError(payload) {
-			ex.incrementExecutedStmtCounter(stmt)
+			ex.incrementExecutedStmtCounter(ast)
 		}
 	}()
 
@@ -1126,7 +1126,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 		return ev, payload
 	}
 
-	switch s := stmt.AST.(type) {
+	switch s := ast.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		if _, ok := s.(*tree.CommitTransaction); ok {
 			// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
@@ -1163,15 +1163,15 @@ func (ex *connExecutor) execStmtInAbortedState(
 // CommitWait.
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
 func (ex *connExecutor) execStmtInCommitWaitState(
-	stmt Statement, res RestrictedCommandResult,
+	ast tree.Statement, res RestrictedCommandResult,
 ) (ev fsm.Event, payload fsm.EventPayload) {
-	ex.incrementStartedStmtCounter(stmt)
+	ex.incrementStartedStmtCounter(ast)
 	defer func() {
 		if !payloadHasError(payload) {
-			ex.incrementExecutedStmtCounter(stmt)
+			ex.incrementExecutedStmtCounter(ast)
 		}
 	}()
-	switch stmt.AST.(type) {
+	switch ast.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
 		// get a COMMIT in state Aborted.
@@ -1190,9 +1190,9 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 //
 // If an error is returned, the connection needs to stop processing queries.
 func (ex *connExecutor) runObserverStatement(
-	ctx context.Context, stmt Statement, res RestrictedCommandResult,
+	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) error {
-	switch sqlStmt := stmt.AST.(type) {
+	switch sqlStmt := ast.(type) {
 	case *tree.ShowTransactionStatus:
 		return ex.runShowTransactionState(ctx, res)
 	case *tree.ShowSavepointStatus:
@@ -1205,7 +1205,7 @@ func (ex *connExecutor) runObserverStatement(
 	case *tree.ShowLastQueryStatistics:
 		return ex.runShowLastQueryStatistics(ctx, res)
 	default:
-		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
+		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", ast))
 		return nil
 	}
 }
@@ -1400,14 +1400,14 @@ func (ex *connExecutor) handleAutoCommit(
 
 // incrementStartedStmtCounter increments the appropriate started
 // statement counter for stmt's type.
-func (ex *connExecutor) incrementStartedStmtCounter(stmt Statement) {
-	ex.metrics.StartedStatementCounters.incrementCount(ex, stmt.AST)
+func (ex *connExecutor) incrementStartedStmtCounter(ast tree.Statement) {
+	ex.metrics.StartedStatementCounters.incrementCount(ex, ast)
 }
 
 // incrementExecutedStmtCounter increments the appropriate executed
 // statement counter for stmt's type.
-func (ex *connExecutor) incrementExecutedStmtCounter(stmt Statement) {
-	ex.metrics.ExecutedStatementCounters.incrementCount(ex, stmt.AST)
+func (ex *connExecutor) incrementExecutedStmtCounter(ast tree.Statement) {
+	ex.metrics.ExecutedStatementCounters.incrementCount(ex, ast)
 }
 
 // payloadHasError returns true if the passed payload implements
