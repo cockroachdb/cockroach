@@ -92,8 +92,9 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropColumnDefault: true,
 	dropColumnNotNull: true,
 
-	renameTable: true,
-	renameView:  true,
+	renameColumn: true,
+	renameTable:  true,
+	renameView:   true,
 }
 
 func opScreensForExecErrors(op opType) bool {
@@ -814,6 +815,16 @@ func (og *operationGenerator) renameColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	srcTableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !srcTableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "IrrelevantColumnName" TO "OtherIrrelevantName"`,
+			tableName), nil
+	}
+
 	srcColumnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
@@ -823,6 +834,25 @@ func (og *operationGenerator) renameColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	srcColumnExists, err := columnExistsOnTable(tx, tableName, srcColumnName)
+	if err != nil {
+		return "", err
+	}
+	destColumnExists, err := columnExistsOnTable(tx, tableName, destColumnName)
+	if err != nil {
+		return "", err
+	}
+	columnIsDependedOn, err := columnIsDependedOn(tx, tableName, srcColumnName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{pgcode.UndefinedColumn, !srcColumnExists},
+		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
+		{pgcode.DependentObjectsStillExist, columnIsDependedOn},
+	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "%s" TO "%s"`,
 		tableName, srcColumnName, destColumnName), nil
