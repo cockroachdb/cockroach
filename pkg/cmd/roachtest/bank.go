@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -295,7 +295,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 				c.l.Printf("round %d: splitting key %v\n", curRound, key)
 				_, err := client.db.ExecContext(ctx,
 					fmt.Sprintf(`ALTER TABLE bank.accounts SPLIT AT VALUES (%d)`, key))
-				if err != nil && !(pgerror.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
+				if err != nil && !(pgerror.IsSQLRetryableError(err) || IsExpectedRelocateError(err)) {
 					s.errChan <- err
 				}
 				client.RUnlock()
@@ -316,7 +316,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 					curRound, key, nodes[1:])
 
 				_, err := client.db.ExecContext(ctx, relocateQuery)
-				if err != nil && !(pgerror.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
+				if err != nil && !(pgerror.IsSQLRetryableError(err) || IsExpectedRelocateError(err)) {
 					s.errChan <- err
 				}
 				for i := 0; i < len(s.clients); i++ {
@@ -327,24 +327,26 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 	}()
 }
 
-func isExpectedRelocateError(err error) bool {
-	// See:
-	// https://github.com/cockroachdb/cockroach/issues/33732
-	// https://github.com/cockroachdb/cockroach/issues/33708
-	// https://github.cm/cockroachdb/cockroach/issues/34012
-	// https://github.com/cockroachdb/cockroach/issues/33683#issuecomment-454889149
-	// for more failure modes not caught here. We decided to avoid adding
-	// to this catchall and to fix the root causes instead.
-	// We've also seen "breaker open" errors here.
-	whitelist := []string{
+// IsExpectedRelocateError maintains an allowlist of errors related to
+// atomic-replication-changes we want to ignore / retry on for tests.
+// See:
+// https://github.com/cockroachdb/cockroach/issues/33732
+// https://github.com/cockroachdb/cockroach/issues/33708
+// https://github.cm/cockroachdb/cockroach/issues/34012
+// https://github.com/cockroachdb/cockroach/issues/33683#issuecomment-454889149
+// for more failure modes not caught here.
+func IsExpectedRelocateError(err error) bool {
+	allowlist := []string{
 		"descriptor changed",
 		"unable to remove replica .* which is not present",
 		"unable to add replica .* which is already present",
 		"received invalid ChangeReplicasTrigger .* to remove self",
 		"failed to apply snapshot: raft group deleted",
 		"snapshot failed:",
+		"breaker open",
+		"unable to select removal target", // https://github.com/cockroachdb/cockroach/issues/49513
 	}
-	pattern := "(" + strings.Join(whitelist, "|") + ")"
+	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)
 }
 

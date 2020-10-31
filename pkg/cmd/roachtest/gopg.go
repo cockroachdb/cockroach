@@ -14,15 +14,17 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // Currently, we're running a version like 'v9.0.1'.
 var gopgReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<point>\d+))?)?$`)
+var gopgSupportedTag = "v10.0.1"
 
 // This test runs gopg full test suite against a single cockroach node.
 func registerGopg(r *testRegistry) {
@@ -54,11 +56,12 @@ func registerGopg(r *testRegistry) {
 		}
 
 		t.Status("cloning gopg and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, c, "go-pg", "pg", gopgReleaseTagRegex)
+		gopgLatestTag, err := repeatGetLatestTag(ctx, c, "go-pg", "pg", gopgReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest gopg release is %s.", latestTag)
+		c.l.Printf("Latest gopg release is %s.", gopgLatestTag)
+		c.l.Printf("Supported gopg release is %s.", gopgSupportedTag)
 
 		installLatestGolang(ctx, t, c, node)
 
@@ -85,27 +88,27 @@ func registerGopg(r *testRegistry) {
 			c,
 			"https://github.com/go-pg/pg.git",
 			destPath,
-			latestTag,
+			gopgSupportedTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, ignorelistName, ignorelist := gopgBlacklists.getLists(version)
+		blocklistName, expectedFailures, ignorelistName, ignorelist := gopgBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No gopg blacklist defined for cockroach version %s", version)
+			t.Fatalf("No gopg blocklist defined for cockroach version %s", version)
 		}
 		if ignorelist == nil {
 			t.Fatalf("No gopg ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s, using ignorelist %s",
-			version, blacklistName, ignorelistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+			version, blocklistName, ignorelistName)
 
 		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath))
 		t.Status("running gopg test suite")
 
 		// go test provides colorful output which - when redirected - interferes
-		// with matching of the blacklisted tests, so we will strip off all color
+		// with matching of the blocklisted tests, so we will strip off all color
 		// code escape sequences.
 		const removeColorCodes = `sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g"`
 		// Note that this is expected to return an error, since the test suite
@@ -123,7 +126,7 @@ func registerGopg(r *testRegistry) {
 		// gopg test suite consists of multiple tests, some of them being a full
 		// test suites in themselves. Those are run with TestGinkgo test harness.
 		// First, we parse the result of running TestGinkgo.
-		if err := gormParseTestGinkgoOutput(
+		if err := gopgParseTestGinkgoOutput(
 			results, rawResults, expectedFailures, ignorelist,
 		); err != nil {
 			t.Fatal(err)
@@ -144,7 +147,7 @@ func registerGopg(r *testRegistry) {
 
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeFailed(
-			t, "gopg", blacklistName, expectedFailures, version, latestTag,
+			t, "gopg", blocklistName, expectedFailures, version, gopgSupportedTag,
 			0, /* notRunCount */
 		)
 	}
@@ -161,11 +164,11 @@ func registerGopg(r *testRegistry) {
 	})
 }
 
-// gormParseTestGinkgoOutput parses the summary of failures of running internal
+// gopgParseTestGinkgoOutput parses the summary of failures of running internal
 // test suites from gopg ORM tests. TestGinkgo is a test harness that runs
 // several test suites described by gopg.
-func gormParseTestGinkgoOutput(
-	r *ormTestsResults, rawResults []byte, expectedFailures, ignorelist blacklist,
+func gopgParseTestGinkgoOutput(
+	r *ormTestsResults, rawResults []byte, expectedFailures, ignorelist blocklist,
 ) (err error) {
 	var (
 		totalRunCount, totalTestCount int
@@ -264,7 +267,7 @@ func gormParseTestGinkgoOutput(
 		}
 	}
 
-	// Blacklist contains both the expected failures for "global" tests as well
+	// Blocklist contains both the expected failures for "global" tests as well
 	// as TestGinkgo's tests. We need to figure the number of the latter ones.
 	testGinkgoExpectedFailures := 0
 	for failure := range expectedFailures {

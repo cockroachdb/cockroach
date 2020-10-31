@@ -27,6 +27,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,18 +53,21 @@ const (
 )
 
 var (
-	local        bool
-	cockroach    string
-	cloud                     = gce
-	encrypt      encryptValue = "false"
-	instanceType string
-	workload     string
-	roachprod    string
-	buildTag     string
-	clusterName  string
-	clusterWipe  bool
-	zonesF       string
-	teamCity     bool
+	local            bool
+	cockroach        string
+	libraryFilePaths []string
+	cloud                         = gce
+	encrypt          encryptValue = "false"
+	instanceType     string
+	localSSD         bool
+	workload         string
+	roachprod        string
+	createArgs       []string
+	buildTag         string
+	clusterName      string
+	clusterWipe      bool
+	zonesF           string
+	teamCity         bool
 )
 
 type encryptValue string
@@ -115,7 +119,7 @@ func filepathAbs(path string) (string, error) {
 	return path, nil
 }
 
-func findBinary(binary, defValue string) (string, error) {
+func findBinary(binary, defValue string) (abspath string, err error) {
 	if binary == "" {
 		binary = defValue
 	}
@@ -124,44 +128,67 @@ func findBinary(binary, defValue string) (string, error) {
 	if fi, err := os.Stat(binary); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
 		return filepathAbs(binary)
 	}
+	return findBinaryOrLibrary("bin", binary)
+}
 
+func findLibrary(libraryName string) (string, error) {
+	suffix := ".so"
+	if local {
+		switch runtime.GOOS {
+		case "linux":
+		case "freebsd":
+		case "openbsd":
+		case "dragonfly":
+		case "windows":
+			suffix = ".dll"
+		case "darwin":
+			suffix = ".dylib"
+		default:
+			return "", errors.Newf("failed to find suffix for runtime %s", runtime.GOOS)
+		}
+	}
+	return findBinaryOrLibrary("lib", libraryName+suffix)
+}
+
+func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 	// Find the binary to run and translate it to an absolute path. First, look
 	// for the binary in PATH.
-	path, err := exec.LookPath(binary)
+	path, err := exec.LookPath(name)
 	if err != nil {
-		if strings.HasPrefix(binary, "/") {
+		if strings.HasPrefix(name, "/") {
 			return "", errors.WithStack(err)
 		}
-		// We're unable to find the binary in PATH and "binary" is a relative path:
+
+		// We're unable to find the name in PATH and "name" is a relative path:
 		// look in the cockroach repo.
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
 			gopath = filepath.Join(os.Getenv("HOME"), "go")
 		}
 
-		var binSuffix string
+		var suffix string
 		if !local {
-			binSuffix = ".docker_amd64"
+			suffix = ".docker_amd64"
 		}
 		dirs := []string{
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/"),
-			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/bin"+binSuffix),
-			filepath.Join(os.ExpandEnv("$PWD"), "bin"+binSuffix),
+			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib+suffix),
+			filepath.Join(os.ExpandEnv("$PWD"), binOrLib+suffix),
 		}
 		for _, dir := range dirs {
-			path = filepath.Join(dir, binary)
+			path = filepath.Join(dir, name)
 			var err2 error
 			path, err2 = exec.LookPath(path)
 			if err2 == nil {
 				return filepathAbs(path)
 			}
 		}
-		return "", fmt.Errorf("failed to find %q in $PATH or any of %s", binary, dirs)
+		return "", fmt.Errorf("failed to find %q in $PATH or any of %s", name, dirs)
 	}
 	return filepathAbs(path)
 }
 
-func initBinaries() {
+func initBinariesAndLibraries() {
 	// If we're running against an existing "local" cluster, force the local flag
 	// to true in order to get the "local" test configurations.
 	if clusterName == "local" {
@@ -189,6 +216,16 @@ func initBinaries() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
+	}
+
+	// In v20.2 or higher, optionally expect certain library files to exist.
+	// Since they may not be found in older versions, do not hard error if they are not found.
+	for _, libraryName := range []string{"libgeos", "libgeos_c"} {
+		if libraryFilePath, err := findLibrary(libraryName); err != nil {
+			fmt.Fprintf(os.Stderr, "error finding library %s, ignoring: %+v\n", libraryName, err)
+		} else {
+			libraryFilePaths = append(libraryFilePaths, libraryFilePath)
+		}
 	}
 }
 
@@ -323,11 +360,24 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger) {
 	}
 }
 
+// execCmd is like execCmdEx, but doesn't return the command's output.
 func execCmd(ctx context.Context, l *logger, args ...string) error {
-	// NB: It is important that this waitgroup Waits after cancel() below.
-	var wg sync.WaitGroup
-	defer wg.Wait()
+	return execCmdEx(ctx, l, args...).err
+}
 
+type cmdRes struct {
+	err error
+	// stdout and stderr are the commands output. Note that this is truncated and
+	// only a tail is returned.
+	stdout, stderr string
+}
+
+// execCmdEx runs a command and returns its error and output.
+//
+// Note that the output is truncated; only a tail is returned.
+// Also note that if the command exits with an error code, its output is also
+// included in cmdRes.err.
+func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
@@ -336,32 +386,78 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	debugStdoutBuffer, _ := circbuf.NewBuffer(4096)
-	debugStderrBuffer, _ := circbuf.NewBuffer(1024)
+	debugStderrBuffer, _ := circbuf.NewBuffer(4096)
 
 	// Do a dance around https://github.com/golang/go/issues/23019.
-	// Briefly put, passing os.Std{out,err} to subprocesses isn't great for
-	// context cancellation as Run() will wait for any subprocesses to finish.
-	// For example, "roachprod run x -- sleep 20" would wait 20 seconds, even
-	// if the context got canceled right away. Work around the problem by passing
-	// pipes to the command on which we set aggressive deadlines once the context
-	// expires.
+	// When the command we run launches a subprocess, that subprocess receives
+	// a copy of our Command's Stdout/Stderr file descriptor, which effectively
+	// means that the file descriptors close only when that subcommand returns.
+	// However, proactively killing the subcommand is not really possible - we
+	// will only manage to kill the parent process that we launched directly.
+	// In practice this means that if we try to react to context cancellation,
+	// the pipes we read the output from will wait for the *subprocess* to
+	// terminate, leaving us hanging, potentially indefinitely.
+	// To work around it, use pipes and set a read deadline on our (read) end of
+	// the pipes when we detect a context cancellation.
+	//
+	// See TestExecCmd for a test.
+	var closePipes func(ctx context.Context)
+	var wg sync.WaitGroup
 	{
-		rOut, wOut, err := os.Pipe()
-		if err != nil {
-			return err
-		}
-		defer rOut.Close()
-		defer wOut.Close()
 
-		rErr, wErr, err := os.Pipe()
-		if err != nil {
-			return err
+		var wOut, wErr, rOut, rErr *os.File
+		var cwOnce sync.Once
+		closePipes = func(ctx context.Context) {
+			// Idempotently closes the writing end of the pipes. This is called either
+			// when the process returns or when it was killed due to context
+			// cancellation. In the former case, close the writing ends of the pipe
+			// so that the copy goroutines started below return (without missing any
+			// output). In the context cancellation case, we set a deadline to force
+			// the goroutines to quit eagerly. This is important since the command
+			// may have duplicated wOut and wErr to its possible subprocesses, which
+			// may continue to run for long periods of time, and would otherwise
+			// block this command. In theory this is possible also when the command
+			// returns on its own accord, so we set a (more lenient) deadline in the
+			// first case as well.
+			//
+			// NB: there's also the option (at least on *nix) to use a process group,
+			// but it doesn't look portable:
+			// https://medium.com/@felixge/killing-a-child-process-and-all-of-its-children-in-go-54079af94773
+			cwOnce.Do(func() {
+				if wOut != nil {
+					_ = wOut.Close()
+				}
+				if wErr != nil {
+					_ = wErr.Close()
+				}
+				dur := 10 * time.Second // wait up to 10s for subprocesses
+				if ctx.Err() != nil {
+					dur = 10 * time.Millisecond
+				}
+				deadline := timeutil.Now().Add(dur)
+				if rOut != nil {
+					_ = rOut.SetReadDeadline(deadline)
+				}
+				if rErr != nil {
+					_ = rErr.SetReadDeadline(deadline)
+				}
+			})
 		}
-		defer rErr.Close()
-		defer wErr.Close()
+		defer closePipes(ctx)
+
+		var err error
+		rOut, wOut, err = os.Pipe()
+		if err != nil {
+			return cmdRes{err: err}
+		}
+
+		rErr, wErr, err = os.Pipe()
+		if err != nil {
+			return cmdRes{err: err}
+		}
 
 		cmd.Stdout = wOut
-		wg.Add(3)
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			_, _ = io.Copy(l.stdout, io.TeeReader(rOut, debugStdoutBuffer))
@@ -370,50 +466,52 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 		if l.stderr == l.stdout {
 			// If l.stderr == l.stdout, we use only one pipe to avoid
 			// duplicating everything.
-			wg.Done()
 			cmd.Stderr = wOut
 		} else {
 			cmd.Stderr = wErr
+			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				_, _ = io.Copy(l.stderr, io.TeeReader(rErr, debugStderrBuffer))
 			}()
 		}
-
-		go func() {
-			defer wg.Done()
-			<-ctx.Done()
-			// NB: setting a more aggressive deadline here makes TestClusterMonitor flaky.
-			now := timeutil.Now().Add(3 * time.Second)
-			_ = rOut.SetDeadline(now)
-			_ = wOut.SetDeadline(now)
-			_ = rErr.SetDeadline(now)
-			_ = wErr.SetDeadline(now)
-		}()
 	}
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	closePipes(ctx)
+	wg.Wait()
+
+	stdoutString := debugStdoutBuffer.String()
+	if debugStdoutBuffer.TotalWritten() > debugStdoutBuffer.Size() {
+		stdoutString = "<... some data truncated by circular buffer; go to artifacts for details ...>\n" + stdoutString
+	}
+	stderrString := debugStderrBuffer.String()
+	if debugStderrBuffer.TotalWritten() > debugStderrBuffer.Size() {
+		stderrString = "<... some data truncated by circular buffer; go to artifacts for details ...>\n" + stderrString
+	}
+
+	if err != nil {
 		// Context errors opaquely appear as "signal killed" when manifested.
 		// We surface this error explicitly.
 		if ctx.Err() != nil {
 			err = errors.CombineErrors(ctx.Err(), err)
 		}
 
-		// Synchronize access to ring buffers before using them to create an
-		// error to return.
-		cancel()
-		wg.Wait()
 		if err != nil {
 			err = &withCommandDetails{
 				cause:  err,
 				cmd:    strings.Join(args, " "),
-				stderr: debugStderrBuffer.String(),
-				stdout: debugStdoutBuffer.String(),
+				stderr: stderrString,
+				stdout: stdoutString,
 			}
 		}
-		return err
 	}
-	return nil
+
+	return cmdRes{
+		err:    err,
+		stdout: stdoutString,
+		stderr: stderrString,
+	}
 }
 
 type withCommandDetails struct {
@@ -624,6 +722,10 @@ func isSSD(machineType string) bool {
 	if cloud != aws {
 		panic("can only differentiate SSDs based on machine type on AWS")
 	}
+	if !localSSD {
+		// Overridden by the user using a cmd arg.
+		return false
+	}
 
 	typeAndSize := strings.Split(machineType, ".")
 	if len(typeAndSize) == 2 {
@@ -680,6 +782,16 @@ func (n nodeListOption) merge(o nodeListOption) nodeListOption {
 
 func (n nodeListOption) randNode() nodeListOption {
 	return nodeListOption{n[rand.Intn(len(n))]}
+}
+
+// nodeIDsString returns a space separated list of all node IDs comprising this
+// list.
+func (n nodeListOption) nodeIDsString() string {
+	result := ""
+	for _, i := range n {
+		result += fmt.Sprintf("%s ", strconv.Itoa(i))
+	}
+	return result
 }
 
 func (n nodeListOption) String() string {
@@ -801,26 +913,40 @@ func (s *clusterSpec) args() []string {
 		machineTypeArg := machineTypeFlag(machineType) + "=" + machineType
 		args = append(args, machineTypeArg)
 	}
-	if s.Zones != "" {
-		switch cloud {
-		case gce:
-			if s.Geo {
-				args = append(args, "--gce-zones="+s.Zones)
-			} else {
-				args = append(args, "--gce-zones="+firstZone(s.Zones))
+
+	if !local {
+		zones := s.Zones
+		if zones == "" {
+			zones = zonesF
+		}
+		if zones != "" {
+			if !s.Geo {
+				zones = firstZone(zones)
 			}
-		case azure:
-			args = append(args, "--azure-locations="+s.Zones)
-		default:
-			fmt.Fprintf(os.Stderr, "specifying zones is not yet supported on %s", cloud)
-			os.Exit(1)
+			var arg string
+			switch cloud {
+			case aws:
+				arg = "--aws-zones=" + zones
+			case gce:
+				arg = "--gce-zones=" + zones
+			case azure:
+				arg = "--azure-locations=" + zones
+			default:
+				fmt.Fprintf(os.Stderr, "specifying zones is not yet supported on %s", cloud)
+				os.Exit(1)
+			}
+			args = append(args, arg)
 		}
 	}
+
 	if s.Geo {
 		args = append(args, "--geo")
 	}
 	if s.Lifetime != 0 {
 		args = append(args, "--lifetime="+s.Lifetime.String())
+	}
+	if len(createArgs) > 0 {
+		args = append(args, createArgs...)
 	}
 	return args
 }
@@ -1123,14 +1249,7 @@ func (f *clusterFactory) newCluster(
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
 	sargs = append(sargs, cfg.spec.args()...)
-	if !local && zonesF != "" && cfg.spec.Zones == "" {
-		if cfg.spec.Geo {
-			sargs = append(sargs, "--gce-zones="+zonesF)
-		} else {
-			sargs = append(sargs, "--gce-zones="+firstZone(zonesF))
-		}
-	}
-	if !cfg.useIOBarrier {
+	if !cfg.useIOBarrier && localSSD {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
 
@@ -1144,13 +1263,16 @@ func (f *clusterFactory) newCluster(
 	logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", name+".log")
 	l, err := rootLogger(logPath, teeOpt)
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	success := false
 	// Attempt to create a cluster several times, cause them clouds be flaky that
 	// my phone says it's snowing.
 	for i := 0; i < 3; i++ {
+		if i > 0 {
+			l.PrintfCtx(ctx, "Retrying cluster creation (attempt #%d)", i+1)
+		}
 		err = execCmd(ctx, l, sargs...)
 		if err == nil {
 			success = true
@@ -1351,6 +1473,19 @@ func (c *cluster) Range(begin, end int) nodeListOption {
 }
 
 // All returns a node list containing only the node i.
+func (c *cluster) Nodes(ns ...int) nodeListOption {
+	r := make(nodeListOption, 0, len(ns))
+	for _, n := range ns {
+		if n < 1 || n > c.spec.NodeCount {
+			c.t.Fatalf("invalid node range: %d (1-%d)", n, c.spec.NodeCount)
+		}
+
+		r = append(r, n)
+	}
+	return r
+}
+
+// All returns a node list containing only the node i.
 func (c *cluster) Node(i int) nodeListOption {
 	return c.Range(i, i)
 }
@@ -1368,12 +1503,60 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 
 	// Don't hang forever if we can't fetch the logs.
 	return contextutil.RunWithTimeout(ctx, "fetch logs", 2*time.Minute, func(ctx context.Context) error {
-		path := filepath.Join(c.t.ArtifactsDir(), "logs")
+		path := filepath.Join(c.t.ArtifactsDir(), "logs", "unredacted")
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
 
-		return execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
+		if err := execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */); err != nil {
+			log.Infof(ctx, "failed to fetch logs: %v", err)
+			if ctx.Err() != nil {
+				return err
+			}
+		}
+
+		if err := c.RunE(ctx, c.All(), "mkdir -p logs/redacted && ./cockroach debug merge-logs --redact logs/*.log > logs/redacted/combined.log"); err != nil {
+			log.Infof(ctx, "failed to redact logs: %v", err)
+			if ctx.Err() != nil {
+				return err
+			}
+		}
+
+		return execCmd(
+			ctx, c.l, roachprod, "get", c.name, "logs/redacted/combined.log" /* src */, filepath.Join(c.t.ArtifactsDir(), "logs/cockroach.log"),
+		)
+	})
+}
+
+// FetchDiskUsage collects a summary of the disk usage on nodes.
+func (c *cluster) FetchDiskUsage(ctx context.Context) error {
+	// TODO(jackson): This is temporary for debugging out-of-disk-space
+	// failures like #44845.
+	if c.spec.NodeCount == 0 || c.isLocal() {
+		// No nodes can happen during unit tests and implies nothing to do.
+		// Also, don't grab disk usage on local runs.
+		return nil
+	}
+
+	c.l.Printf("fetching disk usage\n")
+	c.status("fetching disk usage")
+
+	// Don't hang forever.
+	return contextutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
+		const name = "diskusage.txt"
+		path := filepath.Join(c.t.ArtifactsDir(), name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		if err := execCmd(
+			ctx, c.l, roachprod, "ssh", c.name, "--",
+			"/bin/bash", "-c", "'du -c /mnt/data1 > "+name+"'",
+		); err != nil {
+			// Don't error out because it might've worked on some nodes. Fetching will
+			// error out below but will get everything it can first.
+			c.l.Printf("during disk usage fetching: %s", err)
+		}
+		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
 	})
 }
 
@@ -1416,14 +1599,24 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
-		// `./cockroach debug zip` is noisy. Suppress the output unless it fails.
-		output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":1", "--",
-			"./cockroach", "debug", "zip", "--url", "{pgurl:1}", zipName)
-		if err != nil {
-			c.l.Printf("./cockroach debug zip failed: %s", output)
-			return err
+		// Some nodes might be down, so try to find one that works. We make the
+		// assumption that a down node will refuse the connection, so it won't
+		// waste our time.
+		for i := 1; i <= c.spec.NodeCount; i++ {
+			// `./cockroach debug zip` is noisy. Suppress the output unless it fails.
+			si := strconv.Itoa(i)
+			output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":"+si, "--",
+				"./cockroach", "debug", "zip", "--url", "{pgurl:"+si+"}", zipName)
+			if err != nil {
+				c.l.Printf("./cockroach debug zip failed: %s", output)
+				if i < c.spec.NodeCount {
+					continue
+				}
+				return err
+			}
+			return execCmd(ctx, c.l, roachprod, "get", c.name+":"+si, zipName /* src */, path /* dest */)
 		}
-		return execCmd(ctx, c.l, roachprod, "get", c.name+":1", zipName /* src */, path /* dest */)
+		return nil
 	})
 }
 
@@ -1459,7 +1652,13 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 // check since we know that such spurious errors are possibly without any relation
 // to the check having failed.
 func (c *cluster) CheckReplicaDivergenceOnDB(ctx context.Context, db *gosql.DB) error {
+	// NB: we set a statement_timeout since context cancellation won't work here,
+	// see:
+	// https://github.com/cockroachdb/cockroach/pull/34520
+	//
+	// We've seen the consistency checks hang indefinitely in some cases.
 	rows, err := db.QueryContext(ctx, `
+SET statement_timeout = '3m';
 SELECT t.range_id, t.start_key_pretty, t.status, t.detail
 FROM
 crdb_internal.check_consistency(true, '', '') as t
@@ -1471,24 +1670,21 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 		c.l.Printf("consistency check failed with %v; ignoring", err)
 		return nil
 	}
-	var buf bytes.Buffer
+	var finalErr error
 	for rows.Next() {
 		var rangeID int32
 		var prettyKey, status, detail string
-		if err := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
-			return err
+		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
+			return scanErr
 		}
-		fmt.Fprintf(&buf, "r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail)
+		finalErr = errors.CombineErrors(finalErr,
+			errors.Newf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail))
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		finalErr = errors.CombineErrors(finalErr, err)
 	}
 
-	msg := buf.String()
-	if msg != "" {
-		return errors.New(msg)
-	}
-	return nil
+	return finalErr
 }
 
 // FailOnReplicaDivergence fails the test if
@@ -1742,12 +1938,39 @@ func (c *cluster) PutE(ctx context.Context, l *logger, src, dest string, opts ..
 		return errors.Wrap(ctx.Err(), "cluster.Put")
 	}
 
-	c.status("uploading binary")
+	c.status("uploading file")
 	defer c.status("")
 
 	err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest)
 	if err != nil {
 		return errors.Wrap(err, "cluster.Put")
+	}
+	return nil
+}
+
+// PutLibraries inserts all available library files into all nodes on the cluster
+// at the specified location.
+func (c *cluster) PutLibraries(ctx context.Context, libraryDir string) error {
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Put")
+	}
+
+	c.status("uploading library files")
+	defer c.status("")
+
+	if err := c.RunE(ctx, c.All(), "mkdir", "-p", libraryDir); err != nil {
+		return err
+	}
+	for _, libraryFilePath := range libraryFilePaths {
+		putPath := filepath.Join(libraryDir, filepath.Base(libraryFilePath))
+		if err := c.PutE(
+			ctx,
+			c.l,
+			libraryFilePath,
+			putPath,
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -2081,20 +2304,31 @@ func (c *cluster) RunWithBuffer(
 // and communication from a test driver to nodes in a cluster should use
 // external IPs.
 func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool) []string {
-	args := []string{`pgurl`}
+	args := []string{roachprod, "pgurl"}
 	if external {
 		args = append(args, `--external`)
 	}
-	args = append(args, c.makeNodes(node))
-	cmd := exec.CommandContext(ctx, roachprod, args...)
-	output, err := cmd.Output()
-	if err != nil {
-		fmt.Println(strings.Join(cmd.Args, ` `))
-		c.t.Fatal(err)
+	nodes := c.makeNodes(node)
+	args = append(args, nodes)
+	cmd := execCmdEx(ctx, c.l, args...)
+	if cmd.err != nil {
+		c.t.Fatal(errors.Wrapf(cmd.err, "failed to get pgurl for nodes: %s", nodes))
 	}
-	urls := strings.Split(strings.TrimSpace(string(output)), " ")
+	urls := strings.Split(strings.TrimSpace(cmd.stdout), " ")
+	if len(urls) != len(node) {
+		c.t.Fatalf(
+			"pgurl for nodes %v got urls %v from stdout:\n%s\nstderr:\n%s",
+			node, urls, cmd.stdout, cmd.stderr,
+		)
+	}
 	for i := range urls {
 		urls[i] = strings.Trim(urls[i], "'")
+		if urls[i] == "" {
+			c.t.Fatalf(
+				"pgurl for nodes %s empty: %v from\nstdout:\n%s\nstderr:\n%s",
+				urls, node, cmd.stdout, cmd.stderr,
+			)
+		}
 	}
 	return urls
 }
@@ -2349,44 +2583,27 @@ func (m *monitor) ResetDeaths() {
 	atomic.StoreInt32(&m.expDeaths, 0)
 }
 
-var errGoexit = errors.New("Goexit() was called")
+var errTestFatal = errors.New("t.Fatal() was called")
 
 func (m *monitor) Go(fn func(context.Context) error) {
 	m.g.Go(func() (err error) {
-		var returned bool
 		defer func() {
-			if returned {
-				return
-			}
-			if r := recover(); r != errGoexit && r != nil {
-				// Pass any regular panics through.
-				panic(r)
-			} else {
-				// If the invoked method called runtime.Goexit (such as it
-				// happens when it calls t.Fatal), exit with a sentinel error
-				// here so that the wrapped errgroup cancels itself.
-				//
-				// Note that the trick here is that we panicked explicitly below,
-				// which somehow "overrides" the Goexit which is supposed to be
-				// un-recoverable, but we do need to recover to return an error.
-				err = errGoexit
+			if r := recover(); r != nil {
+				if r != errTestFatal {
+					// Pass any regular panics through.
+					panic(r)
+				}
+				// t.{Skip,Fatal} perform a panic(errTestFatal). If we've caught the
+				// errTestFatal sentinel we transform the panic into an error return so
+				// that the wrapped errgroup cancels itself.
+				err = errTestFatal
 			}
 		}()
 		if impl, ok := m.t.(*test); ok {
 			// Automatically clear the worker status message when the goroutine exits.
 			defer impl.WorkerStatus()
 		}
-		defer func() {
-			if !returned {
-				if r := recover(); r != nil {
-					panic(r)
-				}
-				panic(errGoexit)
-			}
-		}()
-		err = fn(m.ctx)
-		returned = true
-		return err
+		return fn(m.ctx)
 	})
 }
 
@@ -2482,7 +2699,7 @@ func (m *monitor) wait(args ...string) error {
 		cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
 		cmd.Stderr = monL.stderr
 		if err := cmd.Run(); err != nil {
-			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {
+			if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "killed") {
 				// The expected reason for an error is that the monitor was killed due
 				// to the context being canceled. Any other error is an actual error.
 				setMonitorCmdErr(err)
@@ -2522,6 +2739,7 @@ func (m *monitor) wait(args ...string) error {
 }
 
 func waitForFullReplication(t *test, db *gosql.DB) {
+	t.l.Printf("waiting for up-replication...\n")
 	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
 		if err := db.QueryRow(

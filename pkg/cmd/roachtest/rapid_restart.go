@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func runRapidRestart(ctx context.Context, t *test, c *cluster) {
@@ -47,7 +47,7 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 			exitCh := make(chan error, 1)
 			go func() {
 				err := c.RunE(ctx, nodes,
-					`mkdir -p {log-dir} && ./cockroach start --insecure --store={store-dir} `+
+					`mkdir -p {log-dir} && ./cockroach start-single-node --insecure --store={store-dir} `+
 						`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
 						`--listen-addr=:{pgport:1} --http-port=$[{pgport:1}+1] `+
 						`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
@@ -75,13 +75,12 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 					t.l.Printf("no exit status yet, killing again")
 				}
 			}
-			cause := errors.Cause(err)
-			if exitErr, ok := cause.(*exec.ExitError); ok {
+			if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
 				switch status := sysutil.ExitStatus(exitErr); status {
 				case -1:
 					// Received SIGINT before setting up our own signal handlers or
 					// SIGKILL.
-				case 30:
+				case 20:
 					// Exit code from a SIGINT received by our signal handlers.
 				default:
 					t.Fatalf("unexpected exit status %d", status)

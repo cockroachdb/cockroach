@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
-	"github.com/pkg/errors"
 )
 
 // SQLRunner is a helper for issuing SQL statements; it supports multiple

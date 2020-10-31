@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -430,7 +430,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 
 // Ops implements the Opser interface.
 func (w *interleavedPartitioned) Ops(
-	urls []string, reg *histogram.Registry,
+	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, ``, urls)
 	if err != nil {
@@ -664,12 +664,12 @@ func (w *interleavedPartitioned) fetchSessionID(
 	start := timeutil.Now()
 	baseSessionID := randomSessionID(rng, locality, localPercent)
 	var sessionID string
-	if err := w.findSessionIDStatement1.QueryRowContext(ctx, baseSessionID).Scan(&sessionID); err != nil && err != gosql.ErrNoRows {
+	if err := w.findSessionIDStatement1.QueryRowContext(ctx, baseSessionID).Scan(&sessionID); err != nil && !errors.Is(err, gosql.ErrNoRows) {
 		return "", err
 	}
 	// Didn't find a next session ID, let's try the other way.
 	if len(sessionID) == 0 {
-		if err := w.findSessionIDStatement2.QueryRowContext(ctx, baseSessionID).Scan(&sessionID); err != nil && err != gosql.ErrNoRows {
+		if err := w.findSessionIDStatement2.QueryRowContext(ctx, baseSessionID).Scan(&sessionID); err != nil && !errors.Is(err, gosql.ErrNoRows) {
 			return "", err
 		}
 	}

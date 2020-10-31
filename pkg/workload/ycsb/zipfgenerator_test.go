@@ -13,12 +13,13 @@ package ycsb
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"golang.org/x/exp/rand"
 )
 
 type params struct {
@@ -34,7 +35,7 @@ var gens = []params{
 func TestCreateZipfGenerator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, gen := range gens {
-		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 		_, err := NewZipfGenerator(rng, gen.iMin, gen.iMax, gen.theta, false)
 		if err != nil {
 			t.Fatal(err)
@@ -60,9 +61,7 @@ var tests = []struct {
 
 func TestZetaFromScratch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testing.Short() {
-		t.Skip("short")
-	}
+	skip.UnderShort(t)
 	for _, test := range tests {
 		computedZeta, err := computeZetaFromScratch(test.n, test.theta)
 		if err != nil {
@@ -76,9 +75,7 @@ func TestZetaFromScratch(t *testing.T) {
 
 func TestZetaIncrementally(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testing.Short() {
-		t.Skip("short")
-	}
+	skip.UnderShort(t)
 	// Theta cannot be 1 by definition, so this is a safe initial value.
 	oldTheta := 1.0
 	var oldZetaN float64
@@ -110,7 +107,7 @@ func TestZetaIncrementally(t *testing.T) {
 
 func runZipfGenerators(t *testing.T, withIncrements bool) {
 	gen := gens[0]
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 	z, err := NewZipfGenerator(rng, gen.iMin, gen.iMax, gen.theta, false)
 	if err != nil {
 		t.Fatal(err)

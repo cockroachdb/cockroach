@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -33,6 +32,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -62,7 +62,7 @@ func run() error {
 		var b bytes.Buffer
 		flags.SetOutput(&b)
 		flags.Usage()
-		return errors.New(b.String())
+		return errors.Newf("%s", b.String())
 	}
 
 	cluster := os.Args[1]
@@ -109,7 +109,7 @@ func run() error {
 		var b bytes.Buffer
 		flags.SetOutput(&b)
 		flags.Usage()
-		return errors.New(b.String())
+		return errors.Newf("%s", b.String())
 	}
 	if *flagFailure != "" {
 		if _, err := regexp.Compile(*flagFailure); err != nil {
@@ -136,6 +136,16 @@ func run() error {
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return err
+	}
+
+	const localLibDir = "lib.docker_amd64/"
+	if fi, err := os.Stat(localLibDir); err == nil && fi.IsDir() {
+		cmd = exec.Command("roachprod", "put", cluster, localLibDir, "lib")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
 	}
 
 	cmd = exec.Command("roachprod", "run", cluster, "mkdir -p "+pkg)
@@ -288,12 +298,13 @@ func run() error {
 				atomic.LoadInt32(&runs), atomic.LoadInt32(&fails),
 				roundToSeconds(timeutil.Since(startTime)))
 
-			switch err := ctx.Err(); err {
+			err := ctx.Err()
+			switch {
 			// A context timeout in this case is indicative of no failures
 			// being detected in the allotted duration.
-			case context.DeadlineExceeded:
+			case errors.Is(err, context.DeadlineExceeded):
 				return nil
-			case context.Canceled:
+			case errors.Is(err, context.Canceled):
 				if *flagMaxRuns > 0 && int(atomic.LoadInt32(&runs)) >= *flagMaxRuns {
 					return nil
 				}

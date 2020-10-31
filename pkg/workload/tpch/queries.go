@@ -10,30 +10,37 @@
 
 package tpch
 
-var queriesByName = map[string]string{
-	`1`:  query1,
-	`2`:  query2,
-	`3`:  query3,
-	`4`:  query4,
-	`5`:  query5,
-	`6`:  query6,
-	`7`:  query7,
-	`8`:  query8,
-	`9`:  query9,
-	`10`: query10,
-	`11`: query11,
-	`12`: query12,
-	`13`: query13,
-	`14`: query14,
-	`15`: query15,
-	`16`: query16,
-	`17`: query17,
-	`18`: query18,
-	`19`: query19,
-	`20`: query20,
-	`21`: query21,
-	`22`: query22,
-}
+var (
+	// QueriesByNumber is a mapping from the number of a TPC-H query to the actual
+	// query.
+	QueriesByNumber = map[int]string{
+		1:  query1,
+		2:  query2,
+		3:  query3,
+		4:  query4,
+		5:  query5,
+		6:  query6,
+		7:  query7,
+		8:  query8,
+		9:  query9,
+		10: query10,
+		11: query11,
+		12: query12,
+		13: query13,
+		14: query14,
+		15: query15,
+		16: query16,
+		17: query17,
+		18: query18,
+		19: query19,
+		20: query20,
+		21: query21,
+		22: query22,
+	}
+
+	// NumQueries specifies the number of queries in TPC-H benchmark.
+	NumQueries = len(QueriesByNumber)
+)
 
 const (
 	query1 = `
@@ -448,6 +455,9 @@ WHERE
 	AND l_shipdate < DATE '1995-09-01' + INTERVAL '1' MONTH;
 `
 
+	// Note that the main query has been adjusted to go around issues with
+	// floating point computations when the order of summation is different
+	// (see #53946 for more details).
 	query15 = `
 CREATE VIEW revenue0 (supplier_no, total_revenue) AS
 	SELECT
@@ -472,12 +482,12 @@ FROM
 	revenue0
 WHERE
 	s_suppkey = supplier_no
-	AND total_revenue = (
+	AND abs(total_revenue - (
 		SELECT
 			max(total_revenue)
 		FROM
 			revenue0
-	)
+	)) < 0.001
 ORDER BY
 	s_suppkey;
 

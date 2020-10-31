@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func initDirs() error {
@@ -160,6 +160,13 @@ func loadClusters() error {
 			} else {
 				return newInvalidHostsLineErr(l)
 			}
+			// NB: it turns out we do see empty hosts here if we are concurrently
+			// creating clusters and this sync is picking up a cluster that's not
+			// ready yet. See:
+			// https://github.com/cockroachdb/cockroach/issues/49542#issuecomment-634563130
+			// if n == "" {
+			// 	return newInvalidHostsLineErr(l)
+			// }
 
 			var locality string
 			if len(fields) > 0 {
@@ -181,6 +188,9 @@ func loadClusters() error {
 			c.Users = append(c.Users, u)
 			c.Localities = append(c.Localities, locality)
 			c.VPCs = append(c.VPCs, vpc)
+		}
+		if len(c.VMs) == 0 {
+			return errors.Errorf("found no VMs in %s", contents)
 		}
 		install.Clusters[file.Name()] = c
 	}

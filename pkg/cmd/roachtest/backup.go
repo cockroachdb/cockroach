@@ -18,38 +18,46 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func registerBackup(r *testRegistry) {
+	importBankData := func(ctx context.Context, rows int, t *test, c *cluster) string {
+		dest := c.name
+
+		if local {
+			rows = 100
+			dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
+		}
+
+		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, cockroach, "./cockroach")
+
+		// NB: starting the cluster creates the logs dir as a side effect,
+		// needed below.
+		c.Start(ctx, t)
+		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+		time.Sleep(time.Second) // wait for csv server to open listener
+
+		importArgs := []string{
+			"./workload", "fixtures", "import", "bank",
+			"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
+			fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
+		}
+		c.Run(ctx, c.Node(1), importArgs...)
+
+		return dest
+	}
+
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
-		Name:       fmt.Sprintf("backup2TB/%s", backup2TBSpec),
+		Name:       fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
 		Owner:      OwnerBulkIO,
 		Cluster:    backup2TBSpec,
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			rows := 65104166
-			dest := c.name
-
-			if local {
-				rows = 100
-				dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
-			}
-
-			c.Put(ctx, workload, "./workload")
-			c.Put(ctx, cockroach, "./cockroach")
-
-			// NB: starting the cluster creates the logs dir as a side effect,
-			// needed below.
-			c.Start(ctx, t)
-			c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-			time.Sleep(time.Second) // wait for csv server to open listener
-
-			c.Run(ctx, c.Node(1), "./workload", "fixtures", "import", "bank",
-				"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
-				fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}")
-
+			dest := importBankData(ctx, rows, t, c)
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
@@ -90,11 +98,14 @@ func registerBackup(r *testRegistry) {
 			incDir := backupDir + "/inc"
 
 			t.Status(`workload initialization`)
-			cmd := fmt.Sprintf(
+			cmd := []string{fmt.Sprintf(
 				"./workload init tpcc --warehouses=%d {pgurl:1-%d}",
 				warehouses, c.spec.NodeCount,
-			)
-			c.Run(ctx, c.Node(1), cmd)
+			)}
+			if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+				cmd = append(cmd, "--deprecated-fk-indexes")
+			}
+			c.Run(ctx, c.Node(1), cmd...)
 
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
@@ -126,11 +137,11 @@ func registerBackup(r *testRegistry) {
 				return
 			}
 
-			t.Status(`full backup`)
 			// Use a time slightly in the past to avoid "cannot specify timestamp in the future" errors.
 			tFull := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
 			m = newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
+				t.Status(`full backup`)
 				_, err := conn.ExecContext(ctx,
 					`BACKUP tpcc.* TO $1 AS OF SYSTEM TIME `+tFull,
 					fullDir,
@@ -146,10 +157,10 @@ func registerBackup(r *testRegistry) {
 				return
 			}
 
-			t.Status(`incremental backup`)
 			tInc := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
 			m = newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
+				t.Status(`incremental backup`)
 				_, err := conn.ExecContext(ctx,
 					`BACKUP tpcc.* TO $1 AS OF SYSTEM TIME `+tInc+` INCREMENTAL FROM $2`,
 					incDir,
@@ -190,11 +201,16 @@ func registerBackup(r *testRegistry) {
 				}
 
 				t.Status(`fingerprint`)
+				// TODO(adityamaru): Pull the fingerprint logic into a utility method
+				// which can be shared by multiple roachtests.
 				fingerprint := func(db string, asof string) (string, error) {
 					var b strings.Builder
 
 					var tables []string
-					rows, err := conn.QueryContext(ctx, fmt.Sprintf("SHOW TABLES FROM %s", db))
+					rows, err := conn.QueryContext(
+						ctx,
+						fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s] ORDER BY table_name", db),
+					)
 					if err != nil {
 						return "", err
 					}
@@ -259,4 +275,5 @@ func registerBackup(r *testRegistry) {
 			m.Wait()
 		},
 	})
+
 }

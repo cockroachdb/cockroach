@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"google.golang.org/api/iterator"
 )
@@ -60,6 +60,10 @@ type FixtureConfig struct {
 	// storage requests. This is required to be set if using a "requestor pays"
 	// bucket.
 	BillingProject string
+
+	// If TableStats is true, CREATE STATISTICS is called on all tables before
+	// creating the fixture.
+	TableStats bool
 }
 
 func (s FixtureConfig) objectPathToURI(folder string) string {
@@ -142,7 +146,7 @@ func GetFixture(
 
 			fixtureFolder := generatorToGCSFolder(config, gen)
 			_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
-			if err == iterator.Done {
+			if errors.Is(err, iterator.Done) {
 				notFound = true
 				return errors.Errorf(`fixture not found: %s`, fixtureFolder)
 			} else if err != nil {
@@ -153,7 +157,7 @@ func GetFixture(
 			for _, table := range gen.Tables() {
 				tableFolder := filepath.Join(fixtureFolder, table.Name)
 				_, err := b.Objects(ctx, &storage.Query{Prefix: tableFolder, Delimiter: `/`}).Next()
-				if err == iterator.Done {
+				if errors.Is(err, iterator.Done) {
 					return errors.Errorf(`fixture table not found: %s`, tableFolder)
 				} else if err != nil {
 					return err
@@ -277,6 +281,28 @@ func MakeFixture(
 	// yak will remain unshaved.
 	if _, err := l.InitialDataLoad(ctx, sqlDB, gen); err != nil {
 		return Fixture{}, err
+	}
+
+	if config.TableStats {
+		// Clean up any existing statistics.
+		_, err := sqlDB.Exec("DELETE FROM system.table_statistics WHERE true")
+		if err != nil {
+			return Fixture{}, errors.Wrapf(err, "while deleting table statistics")
+		}
+		g := ctxgroup.WithContext(ctx)
+		for _, t := range gen.Tables() {
+			t := t
+			g.Go(func() error {
+				log.Infof(ctx, "Creating table stats for %s", t.Name)
+				_, err := sqlDB.Exec(fmt.Sprintf(
+					`CREATE STATISTICS pre_backup FROM "%s"."%s"`, dbName, t.Name,
+				))
+				return err
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return Fixture{}, err
+		}
 	}
 
 	g := ctxgroup.WithContext(ctx)
@@ -554,11 +580,12 @@ func RestoreFixture(
 		g.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
 			importStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
+			log.Infof(ctx, "Restoring from %s", table.BackupURI)
 			var rows, index, tableBytes int64
 			var discard interface{}
 			res, err := sqlDB.Query(importStmt, table.BackupURI, database)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "backup: %s", table.BackupURI)
 			}
 			defer res.Close()
 			if !res.Next() {
@@ -619,14 +646,14 @@ func ListFixtures(
 	gensPrefix := config.GCSPrefix + `/`
 	for genIter := b.Objects(ctx, &storage.Query{Prefix: gensPrefix, Delimiter: `/`}); ; {
 		gen, err := genIter.Next()
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		} else if err != nil {
 			return nil, err
 		}
 		for genConfigIter := b.Objects(ctx, &storage.Query{Prefix: gen.Prefix, Delimiter: `/`}); ; {
 			genConfig, err := genConfigIter.Next()
-			if err == iterator.Done {
+			if errors.Is(err, iterator.Done) {
 				break
 			} else if err != nil {
 				return nil, err

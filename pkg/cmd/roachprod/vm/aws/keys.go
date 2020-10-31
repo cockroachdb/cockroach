@@ -18,7 +18,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const sshPublicKeyFile = "${HOME}/.ssh/id_rsa.pub"

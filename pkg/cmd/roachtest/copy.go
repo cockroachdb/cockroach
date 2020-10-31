@@ -17,8 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 func registerCopy(r *testRegistry) {
@@ -44,6 +44,13 @@ func registerCopy(r *testRegistry) {
 		m.Go(func(ctx context.Context) error {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
+
+			// Disable load-based splitting so that we can more accurately
+			// predict an upper-bound on the number of ranges that the cluster
+			// will end up with.
+			if err := disableLoadBasedSplitting(ctx, db); err != nil {
+				return errors.Wrap(err, "disabling load-based splitting")
+			}
 
 			t.Status("importing Bank fixture")
 			c.Run(ctx, c.Node(1), fmt.Sprintf(
