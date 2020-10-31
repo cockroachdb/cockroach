@@ -45,6 +45,10 @@ type operationGenerator struct {
 	screenForExecErrors  bool
 	expectedExecErrors   errorCodeSet
 	expectedCommitErrors errorCodeSet
+
+	// opsInTxn is a list of previous ops in the current transaction implemented
+	// as a map for fast lookups.
+	opsInTxn map[opType]bool
 }
 
 func makeOperationGenerator(params *operationGeneratorParams) *operationGenerator {
@@ -52,6 +56,7 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 		params:               params,
 		expectedExecErrors:   makeExpectedErrorSet(),
 		expectedCommitErrors: makeExpectedErrorSet(),
+		opsInTxn:             map[opType]bool{},
 	}
 }
 
@@ -64,6 +69,10 @@ func (og *operationGenerator) resetOpState() {
 // Reset internal state used per transaction
 func (og *operationGenerator) resetTxnState() {
 	og.expectedCommitErrors.reset()
+
+	for k := range og.opsInTxn {
+		delete(og.opsInTxn, k)
+	}
 }
 
 //go:generate stringer -type=opType
@@ -223,7 +232,16 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 
 		if opScreensForExecErrors(op) {
 			og.screenForExecErrors = true
+
+			// Screen for schema change after write in the same transaction.
+			if op != insertRow {
+				if _, previous := og.opsInTxn[insertRow]; previous {
+					og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+				}
+			}
 		}
+
+		og.opsInTxn[op] = true
 		return stmt, log.String(), err
 	}
 }
