@@ -520,7 +520,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
 
 	// Put some random garbage into the engine.
-	require.NoError(t, eng.Put(storage.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")))
+	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
 
 	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)

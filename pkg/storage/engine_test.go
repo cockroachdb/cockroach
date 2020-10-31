@@ -113,7 +113,7 @@ func TestEngineBatchCommit(t *testing.T) {
 			batch := e.NewBatch()
 			defer batch.Close()
 			for i := 0; i < numWrites; i++ {
-				if err := batch.Put(key, []byte(strconv.Itoa(i))); err != nil {
+				if err := batch.PutUnversioned(key.Key, []byte(strconv.Itoa(i))); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -148,13 +148,13 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 				key := MVCCKey{Key: roachpb.Key("b")}
 
-				if err := batch.Put(key, []byte("foo")); err != nil {
+				if err := batch.PutUnversioned(key.Key, []byte("foo")); err != nil {
 					t.Fatal(err)
 				}
 
 				iter.SeekGE(key)
 
-				if err := batch.Clear(key); err != nil {
+				if err := batch.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 
@@ -255,11 +255,11 @@ func TestEngineBatch(t *testing.T) {
 
 			apply := func(rw ReadWriter, d data) error {
 				if d.value == nil {
-					return rw.Clear(d.key)
+					return rw.ClearUnversioned(d.key.Key)
 				} else if d.merge {
 					return rw.Merge(d.key, d.value)
 				}
-				return rw.Put(d.key, d.value)
+				return rw.PutUnversioned(d.key.Key, d.value)
 			}
 
 			get := func(rw ReadWriter, key MVCCKey) []byte {
@@ -289,7 +289,7 @@ func TestEngineBatch(t *testing.T) {
 					currentBatch[k] = batch[shuffledIndices[k]]
 				}
 				// Reset the key
-				if err := engine.Clear(key); err != nil {
+				if err := engine.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 				// Run it once with individual operations and remember the result.
@@ -303,7 +303,7 @@ func TestEngineBatch(t *testing.T) {
 				// Run the whole thing as a batch and compare.
 				b := engine.NewBatch()
 				defer b.Close()
-				if err := b.Clear(key); err != nil {
+				if err := b.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 				for _, op := range currentBatch {
@@ -364,19 +364,19 @@ func TestEnginePutGetDelete(t *testing.T) {
 
 			// Test for correct handling of empty keys, which should produce errors.
 			for i, err := range []error{
-				engine.Put(mvccKey(""), []byte("")),
-				engine.Put(NilKey, []byte("")),
+				engine.PutUnversioned(mvccKey("").Key, []byte("")),
+				engine.PutUnversioned(NilKey.Key, []byte("")),
 				func() error {
 					_, err := engine.MVCCGet(mvccKey(""))
 					return err
 				}(),
-				engine.Clear(NilKey),
+				engine.ClearUnversioned(NilKey.Key),
 				func() error {
 					_, err := engine.MVCCGet(NilKey)
 					return err
 				}(),
-				engine.Clear(NilKey),
-				engine.Clear(mvccKey("")),
+				engine.ClearUnversioned(NilKey.Key),
+				engine.ClearUnversioned(mvccKey("").Key),
 			} {
 				if err == nil {
 					t.Fatalf("%d: illegal handling of empty key", i)
@@ -402,7 +402,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 				if len(val) != 0 {
 					t.Errorf("expected key %q value.Bytes to be nil: got %+v", c.key, val)
 				}
-				if err := engine.Put(c.key, c.value); err != nil {
+				if err := engine.PutUnversioned(c.key.Key, c.value); err != nil {
 					t.Errorf("put: expected no error, but got %s", err)
 				}
 				val, err = engine.MVCCGet(c.key)
@@ -412,7 +412,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 				if !bytes.Equal(val, c.value) {
 					t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 				}
-				if err := engine.Clear(c.key); err != nil {
+				if err := engine.ClearUnversioned(c.key.Key); err != nil {
 					t.Errorf("delete: expected no error, but got %s", err)
 				}
 				val, err = engine.MVCCGet(c.key)
@@ -618,7 +618,7 @@ func TestEngineTimeBound(t *testing.T) {
 			for i, time := range times {
 				s := fmt.Sprintf("%02d", i)
 				key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
-				if err := engine.Put(key, []byte(s)); err != nil {
+				if err := engine.PutMVCC(key, []byte(s)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -773,7 +773,7 @@ func TestFlushNumSSTables(t *testing.T) {
 			for i := 0; i < 10000; i++ {
 				key := make([]byte, 4)
 				binary.BigEndian.PutUint32(key, uint32(i))
-				err := batch.Put(MVCCKey{Key: key}, []byte("foobar"))
+				err := batch.PutUnversioned(key, []byte("foobar"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -823,7 +823,7 @@ func TestEngineScan1(t *testing.T) {
 			}
 			keyMap := map[string][]byte{}
 			for _, c := range testCases {
-				if err := engine.Put(c.key, c.value); err != nil {
+				if err := engine.PutUnversioned(c.key.Key, c.value); err != nil {
 					t.Errorf("could not put key %q: %+v", c.key, err)
 				}
 				keyMap[string(c.key.Key)] = c.value
@@ -959,7 +959,7 @@ func TestEngineDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		return engine.ClearRange(start, end)
+		return engine.ClearMVCCRange(start, end)
 	})
 }
 
@@ -969,7 +969,7 @@ func TestEngineDeleteRangeBatch(t *testing.T) {
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		batch := engine.NewWriteOnlyBatch()
 		defer batch.Close()
-		if err := batch.ClearRange(start, end); err != nil {
+		if err := batch.ClearMVCCRange(start, end); err != nil {
 			return err
 		}
 		batch2 := engine.NewWriteOnlyBatch()
@@ -1002,7 +1002,7 @@ func TestSnapshot(t *testing.T) {
 
 			key := mvccKey("a")
 			val1 := []byte("1")
-			if err := engine.Put(key, val1); err != nil {
+			if err := engine.PutUnversioned(key.Key, val1); err != nil {
 				t.Fatal(err)
 			}
 			val, _ := engine.MVCCGet(key)
@@ -1015,7 +1015,7 @@ func TestSnapshot(t *testing.T) {
 			defer snap.Close()
 
 			val2 := []byte("2")
-			if err := engine.Put(key, val2); err != nil {
+			if err := engine.PutUnversioned(key.Key, val2); err != nil {
 				t.Fatal(err)
 			}
 			val, _ = engine.MVCCGet(key)
@@ -1063,7 +1063,7 @@ func TestSnapshotMethods(t *testing.T) {
 			keys := []MVCCKey{mvccKey("a"), mvccKey("b")}
 			vals := [][]byte{[]byte("1"), []byte("2")}
 			for i := range keys {
-				if err := engine.Put(keys[i], vals[i]); err != nil {
+				if err := engine.PutUnversioned(keys[i].Key, vals[i]); err != nil {
 					t.Fatal(err)
 				}
 				if val, err := engine.MVCCGet(keys[i]); err != nil {
@@ -1114,7 +1114,7 @@ func TestSnapshotMethods(t *testing.T) {
 			// Write a new key to engine.
 			newKey := mvccKey("c")
 			newVal := []byte("3")
-			if err := engine.Put(newKey, newVal); err != nil {
+			if err := engine.PutUnversioned(newKey.Key, newVal); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1145,7 +1145,7 @@ func insertKeysAndValues(keys []MVCCKey, values [][]byte, engine Engine, t *test
 		} else {
 			val = []byte("value")
 		}
-		if err := engine.Put(keys[idx], val); err != nil {
+		if err := engine.PutUnversioned(keys[idx].Key, val); err != nil {
 			t.Errorf("put: expected no error, but got %s", err)
 		}
 	}

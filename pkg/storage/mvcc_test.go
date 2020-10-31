@@ -1361,23 +1361,23 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			err := engine.Put(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err := engine.PutMVCC(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.Put(MVCCKey{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.Put(MVCCKey{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.Put(MVCCKey{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.Put(MVCCKey{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}

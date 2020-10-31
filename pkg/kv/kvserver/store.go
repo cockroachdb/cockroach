@@ -1598,7 +1598,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		keys.StoreSuggestedCompactionKeyPrefix().PrefixEnd(),
 		storage.MVCCKeyIterKind,
 		func(res storage.MVCCKeyValue) error {
-			return s.engine.Clear(res.Key)
+			return s.engine.ClearUnversioned(res.Key.Key)
 		})
 	if err != nil {
 		log.Warningf(ctx, "error when clearing compactor keys: %s", err)

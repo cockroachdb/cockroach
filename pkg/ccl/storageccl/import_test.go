@@ -102,8 +102,17 @@ func slurpSSTablesLatestKey(
 			v := roachpb.Value{RawBytes: newKv.Value}
 			v.ClearChecksum()
 			v.InitChecksum(newKv.Key.Key)
-			if err := batch.Put(newKv.Key, v.RawBytes); err != nil {
-				t.Fatal(err)
+			// TODO(sumeer): this will not be correct with the separated
+			// lock table. We should iterate using EngineKey on the sst,
+			// and expose a PutEngine method to write directly.
+			if newKv.Key.Timestamp.IsEmpty() {
+				if err := batch.PutUnversioned(newKv.Key.Key, v.RawBytes); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := batch.PutMVCC(newKv.Key, v.RawBytes); err != nil {
+					t.Fatal(err)
+				}
 			}
 			sst.Next()
 		}

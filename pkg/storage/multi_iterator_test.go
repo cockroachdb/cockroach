@@ -100,8 +100,14 @@ func TestMultiIterator(t *testing.T) {
 						v = []byte{input[i+1]}
 					}
 					i += 2
-					if err := batch.Put(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
-						t.Fatalf("%+v", err)
+					if ts.IsEmpty() {
+						if err := batch.PutUnversioned(k, v); err != nil {
+							t.Fatalf("%+v", err)
+						}
+					} else {
+						if err := batch.PutMVCC(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
+							t.Fatalf("%+v", err)
+						}
 					}
 				}
 				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
