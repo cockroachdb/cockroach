@@ -819,6 +819,18 @@ define CountRows {
 }
 
 [Scalar, Aggregate]
+define CovarPop {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
+define CovarSamp {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
 define Max {
     Input ScalarExpr
 }

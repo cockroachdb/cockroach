@@ -2720,6 +2720,7 @@ SELECT corr(k, NULL) FROM kv
 error (42725): ambiguous call: corr(int, unknown), candidates are:
 corr(int, int) -> float
 corr(int, float) -> float
+corr(int, decimal) -> decimal
 
 build
 SELECT corr('foo', v) FROM kv
