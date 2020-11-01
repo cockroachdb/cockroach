@@ -87,6 +87,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	createTableAs: true,
 	createView:    true,
 	createEnum:    true,
+	createSchema:  true,
 
 	dropColumn:        true,
 	dropColumnDefault: true,
@@ -1412,9 +1413,18 @@ func (og *operationGenerator) createSchema(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	ifNotExists := og.randIntn(2) == 0
+
+	schemaExists, err := schemaExists(tx, schemaName)
+	if err != nil {
+		return "", err
+	}
+	if schemaExists && !ifNotExists {
+		og.expectedExecErrors.add(pgcode.DuplicateSchema)
+	}
 
 	// TODO(jayshrivastava): Support authorization
-	stmt := rowenc.MakeSchemaName(og.randIntn(2) == 0, schemaName, security.RootUserName())
+	stmt := rowenc.MakeSchemaName(ifNotExists, schemaName, security.RootUserName())
 	return tree.Serialize(stmt), nil
 }
 
