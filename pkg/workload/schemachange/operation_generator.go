@@ -92,6 +92,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropColumn:        true,
 	dropColumnDefault: true,
 	dropColumnNotNull: true,
+	dropSchema:        true,
 
 	renameColumn: true,
 	renameTable:  true,
@@ -1453,6 +1454,16 @@ func (og *operationGenerator) dropSchema(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	schemaExists, err := schemaExists(tx, schemaName)
+	if err != nil {
+		return "", err
+	}
+	codesWithConditions{
+		{pgcode.UndefinedSchema, !schemaExists},
+		{pgcode.InvalidSchemaName, schemaName == tree.PublicSchema},
+	}.add(og.expectedExecErrors)
+
 	return fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName), nil
 }
 
