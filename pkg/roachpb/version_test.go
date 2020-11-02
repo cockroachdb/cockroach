@@ -17,12 +17,12 @@ import (
 )
 
 func TestVersionLess(t *testing.T) {
-	v := func(major, minor, patch, unstable int32) Version {
+	v := func(major, minor, patch, internal int32) Version {
 		return Version{
 			Major:    major,
 			Minor:    minor,
 			Patch:    patch,
-			Unstable: unstable,
+			Internal: internal,
 		}
 	}
 	testData := []struct {

@@ -35,9 +35,9 @@ func (v Version) Less(otherV Version) bool {
 	} else if v.Patch > otherV.Patch {
 		return false
 	}
-	if v.Unstable < otherV.Unstable {
+	if v.Internal < otherV.Internal {
 		return true
-	} else if v.Unstable > otherV.Unstable {
+	} else if v.Internal > otherV.Internal {
 		return false
 	}
 	return false
@@ -48,15 +48,15 @@ func (v Version) String() string { return redact.StringWithoutMarkers(v) }
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
-	if v.Unstable == 0 {
+	if v.Internal == 0 {
 		p.Printf("%d.%d", v.Major, v.Minor)
 		return
 	}
-	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Unstable)
+	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Internal)
 }
 
 // ParseVersion parses a Version from a string of the form
-// "<major>.<minor>-<unstable>" where the "-<unstable>" is optional. We don't
+// "<major>.<minor>-<internal>" where the "-<internal>" is optional. We don't
 // use the Patch component, so it is always zero.
 func ParseVersion(s string) (Version, error) {
 	var c Version
@@ -85,7 +85,7 @@ func ParseVersion(s string) (Version, error) {
 
 	c.Major = int32(ints[0])
 	c.Minor = int32(ints[1])
-	c.Unstable = int32(ints[2])
+	c.Internal = int32(ints[2])
 
 	return c, nil
 }
