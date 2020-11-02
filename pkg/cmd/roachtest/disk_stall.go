@@ -100,12 +100,22 @@ func runDiskStalledDetection(
 		dur = 30 * time.Second
 	}
 
+	var deprecatedEnvVars string
+	// For versions 20.2 and earlier, add older env variables.
+	//
+	// TODO(bilal): Remove this block when the roachtest binary is run against
+	// the same SHA:
+	// https://github.com/cockroachdb/cockroach/issues/51897
+	if !t.IsBuildVersion("v21.1.0") {
+		deprecatedEnvVars = fmt.Sprintf(" COCKROACH_ENGINE_MAX_SYNC_DURATION=%s COCKROACH_ENGINE_MAX_SYNC_DURATION_FATAL=true", maxDataSync)
+	}
+
 	go func() {
 		t.WorkerStatus("running server")
 		out, err := c.RunWithBuffer(ctx, l, n,
-			fmt.Sprintf("timeout --signal 9 %ds env COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=%s COCKROACH_LOG_MAX_SYNC_DURATION=%s "+
+			fmt.Sprintf("timeout --signal 9 %ds env%s COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=%s COCKROACH_LOG_MAX_SYNC_DURATION=%s "+
 				"./cockroach start-single-node --insecure --logtostderr=INFO --store {store-dir}/%s --log-dir {store-dir}/%s",
-				int(dur.Seconds()), maxDataSync, maxLogSync, dataDir, logDir,
+				int(dur.Seconds()), deprecatedEnvVars, maxDataSync, maxLogSync, dataDir, logDir,
 			),
 		)
 		errCh <- result{err, string(out)}
