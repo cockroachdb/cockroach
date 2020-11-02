@@ -281,3 +281,13 @@ func RotateWithXY(g geo.Geometry, rotRadians, x, y float64) (geo.Geometry, error
 		},
 	)
 }
+
+// TransScale returns a modified Geometry whose coordinates are
+// translate by delX and delY and scale by xFactor and yFactor
+func TransScale(g geo.Geometry, delX, delY, xFactor, yFactor float64) (geo.Geometry, error) {
+	g, err := Translate(g, []float64{delX, delY})
+	if err != nil {
+		return g, err
+	}
+	return Scale(g, []float64{xFactor, yFactor})
+}
