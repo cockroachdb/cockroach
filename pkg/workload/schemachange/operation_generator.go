@@ -1318,7 +1318,7 @@ func (og *operationGenerator) randTable(
 		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 			SchemaName:     tree.Name(desiredSchema),
 			ExplicitSchema: true,
-		}, tree.Name(fmt.Sprintf("table%d", og.newUniqueSeqNum())))
+		}, tree.Name(tableName))
 		return &treeTableName, nil
 	}
 
