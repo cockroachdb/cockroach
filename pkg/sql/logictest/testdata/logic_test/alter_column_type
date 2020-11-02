@@ -546,3 +546,20 @@ INSERT INTO t30 VALUES (e'a\\01');
 
 statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES
+
+# Ensure that dependent views prevent column type modification.
+
+statement ok
+CREATE VIEW v AS SELECT x FROM t29
+
+statement error cannot alter type of column "x" because view "v" depends on it
+ALTER TABLE t29 ALTER COLUMN x TYPE INT2
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE MATERIALIZED VIEW v AS SELECT x FROM t29
+
+statement error cannot alter type of column "x" because view "v" depends on it
+ALTER TABLE t29 ALTER COLUMN x TYPE INT2

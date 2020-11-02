@@ -62,6 +62,19 @@ func AlterColumnType(
 	cmds tree.AlterTableCmds,
 	tn *tree.TableName,
 ) error {
+	for _, tableRef := range tableDesc.DependedOnBy {
+		found := false
+		for _, colID := range tableRef.ColumnIDs {
+			if colID == col.ID {
+				found = true
+			}
+		}
+		if found {
+			return params.p.dependentViewError(
+				ctx, "column", col.Name, tableDesc.ParentID, tableRef.ID, "alter type of",
+			)
+		}
+	}
 
 	typ, err := tree.ResolveType(ctx, t.ToType, params.p.semaCtx.GetTypeResolver())
 	if err != nil {
