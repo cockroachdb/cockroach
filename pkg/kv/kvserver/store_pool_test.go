@@ -1000,7 +1000,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.Add(5 * time.Minute).UnixNano(),
 				},
 				Draining: false,
@@ -1011,7 +1011,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					// Expires just slightly in the future.
 					WallTime: now.UnixNano() + 1,
 				},
@@ -1024,7 +1024,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					// Just expired.
 					WallTime: now.UnixNano(),
 				},
@@ -1037,7 +1037,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.UnixNano(),
 				},
 				Draining: false,
@@ -1049,7 +1049,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.Add(-threshold).UnixNano() + 1,
 				},
 				Draining: false,
@@ -1061,7 +1061,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.Add(-threshold).UnixNano(),
 				},
 				Draining: false,
@@ -1073,7 +1073,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.Add(time.Second).UnixNano(),
 				},
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
@@ -1086,7 +1086,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.Add(-threshold).UnixNano(),
 				},
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
@@ -1099,7 +1099,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.Add(time.Second).UnixNano(),
 				},
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONED,
@@ -1115,7 +1115,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.Add(-threshold).UnixNano(),
 				},
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONED,
@@ -1128,7 +1128,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
+				Expiration: hlc.Timestamp{
 					WallTime: now.Add(5 * time.Minute).UnixNano(),
 				},
 				Draining: true,
