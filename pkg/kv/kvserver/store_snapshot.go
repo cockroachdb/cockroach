@@ -162,7 +162,7 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 	return nil
 }
 
-func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.MVCCKey, value []byte) error {
+func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
 	for msstw.keyRanges[msstw.currRange].End.Key.Compare(key.Key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
@@ -176,7 +176,7 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.MVCCKey, value
 	if msstw.keyRanges[msstw.currRange].Start.Key.Compare(key.Key) > 0 {
 		return crdberrors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
 	}
-	if err := msstw.currSST.Put(key, value); err != nil {
+	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
 	}
 	return nil
@@ -246,7 +246,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				if batchReader.BatchType() != storage.BatchTypeValue {
 					return noSnap, crdberrors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
 				}
-				key, err := batchReader.MVCCKey()
+				key, err := batchReader.EngineKey()
 				if err != nil {
 					return noSnap, errors.Wrap(err, "failed to decode mvcc key")
 				}
@@ -334,21 +334,13 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			break
 		}
 		kvs++
-		// TODO(sumeer): this is incorrect. We should be iterating using EngineIterator
-		// and Putting an EngineKey.
 		unsafeKey := iter.UnsafeKey()
 		unsafeValue := iter.UnsafeValue()
 		if b == nil {
 			b = kvSS.newBatch()
 		}
-		if unsafeKey.Timestamp.IsEmpty() {
-			if err := b.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
-				return 0, err
-			}
-		} else {
-			if err := b.PutMVCC(unsafeKey, unsafeValue); err != nil {
-				return 0, err
-			}
+		if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
+			return 0, err
 		}
 
 		if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
