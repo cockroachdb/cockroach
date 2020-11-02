@@ -86,6 +86,9 @@ message StatementStatistics {
   // RowsRead collects the number of rows read from disk.
   optional NumericStat rows_read = 16 [(gogoproto.nullable) = false];
 
+  // BytesSentOverNetwork collects the number of bytes sent over the network.
+  optional NumericStat bytes_sent_over_network = 17 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 

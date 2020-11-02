@@ -379,6 +379,37 @@ func (ex *connExecutor) execStmtInOpenState(
 					)
 				}
 			}
+
+			stmtStats, _ := ex.appStats.getStatsForStmt(&stmt, ex.implicitTxn(), retErr, false)
+			if stmtStats == nil {
+				return
+			}
+
+			networkBytesSent := int64(0)
+			for _, flowInfo := range p.curPlan.distSQLFlowInfos {
+				analyzer := flowInfo.analyzer
+				if err := analyzer.AddTrace(trace); err != nil {
+					log.VInfof(ctx, 1, "error analyzing trace statistics for stmt %s: %v", stmt, err)
+					continue
+				}
+
+				networkBytesSentGroupedByNode, err := analyzer.GetNetworkBytesSent()
+				if err != nil {
+					log.VInfof(ctx, 1, "error calculating network bytes sent for stmt %s: %v", stmt, err)
+					continue
+				}
+				for _, bytesSentByNode := range networkBytesSentGroupedByNode {
+					networkBytesSent += bytesSentByNode
+				}
+			}
+
+			stmtStats.mu.Lock()
+			// Record trace-related statistics. A count of 1 is passed given that this
+			// statistic is only recorded when statement diagnostics are enabled.
+			// TODO(asubiotto): NumericStat properties will be properly calculated
+			//  once this statistic is always collected.
+			stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(networkBytesSent))
+			stmtStats.mu.Unlock()
 		}()
 	}
 

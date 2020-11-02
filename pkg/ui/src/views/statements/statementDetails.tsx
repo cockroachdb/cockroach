@@ -500,7 +500,17 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                 { name: "Disk Bytes Read", value: stats.bytes_read, bar: genericBarChart(stats.bytes_read, stats.count, Bytes),
                   format: Bytes,
                 },
-              ].filter(r => r.value)}
+                {
+                  name: "Network Bytes Sent", value: stats.bytes_sent_over_network, bar: genericBarChart(stats.bytes_sent_over_network, stats.count, Bytes),
+                  format: Bytes,
+                },
+              ].filter(function (r) {
+                if (r.name === "Network Bytes Sent" && r.value.mean === 0) {
+                  // Omit if empty.
+                  return false;
+                }
+                return r.value;
+              })}
             />
           </SummaryCard>
           <SummaryCard>
