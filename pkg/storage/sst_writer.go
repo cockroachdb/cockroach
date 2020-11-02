@@ -139,6 +139,19 @@ func (fw *SSTWriter) PutIntent(key roachpb.Key, value []byte) error {
 	return fw.put(MVCCKey{Key: key}, value)
 }
 
+// PutEngineKey implements the Writer interface.
+// An error is returned if it is not greater than any previously added entry
+// (according to the comparator configured during writer creation). `Close`
+// cannot have been called.
+func (fw *SSTWriter) PutEngineKey(key EngineKey, value []byte) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Put on a closed writer")
+	}
+	fw.DataSize += int64(len(key.Key)) + int64(len(value))
+	fw.scratch = key.EncodeToBuf(fw.scratch[:0])
+	return fw.fw.Set(fw.scratch, value)
+}
+
 // put puts a kv entry into the sstable being built. An error is returned if it
 // is not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Close` cannot have been called.
@@ -181,6 +194,19 @@ func (fw *SSTWriter) ClearUnversioned(key roachpb.Key) error {
 // called.
 func (fw *SSTWriter) ClearIntent(key roachpb.Key) error {
 	panic("ClearIntent is unsupported")
+}
+
+// ClearEngineKey implements the Writer interface. An error is returned if it is
+// not greater than any previous point key passed to this Writer (according to
+// the comparator configured during writer creation). `Close` cannot have been
+// called.
+func (fw *SSTWriter) ClearEngineKey(key EngineKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Clear on a closed writer")
+	}
+	fw.scratch = key.EncodeToBuf(fw.scratch[:0])
+	fw.DataSize += int64(len(key.Key))
+	return fw.fw.Delete(fw.scratch)
 }
 
 // An error is returned if it is not greater than any previous point key

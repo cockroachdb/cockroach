@@ -136,35 +136,39 @@ type MVCCIterator interface {
 
 // EngineIterator is an iterator over key-value pairs where the key is
 // an EngineKey.
-//lint:ignore U1001 unused
 type EngineIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
-	// SeekGE advances the iterator to the first key in the engine which
-	// is >= the provided key.
-	SeekGE(key EngineKey) (valid bool, err error)
-	// SeekLT advances the iterator to the first key in the engine which
-	// is < the provided key.
-	SeekLT(key EngineKey) (valid bool, err error)
-	// Next advances the iterator to the next key/value in the
-	// iteration. After this call, valid will be true if the
-	// iterator was not originally positioned at the last key.
-	Next() (valid bool, err error)
-	// Prev moves the iterator backward to the previous key/value
-	// in the iteration. After this call, valid will be true if the
-	// iterator was not originally positioned at the first key.
-	Prev() (valid bool, err error)
-	// UnsafeKey returns the same value as Key, but the memory is invalidated on
-	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	// SeekEngineKeyGE advances the iterator to the first key in the engine
+	// which is >= the provided key.
+	SeekEngineKeyGE(key EngineKey) (valid bool, err error)
+	// SeekEngineKeyLT advances the iterator to the first key in the engine
+	// which is < the provided key.
+	SeekEngineKeyLT(key EngineKey) (valid bool, err error)
+	// NextEngineKey advances the iterator to the next key/value in the
+	// iteration. After this call, valid will be true if the iterator was not
+	// originally positioned at the last key. Note that unlike
+	// MVCCIterator.NextKey, this method does not skip other versions with the
+	// same EngineKey.Key.
+	// TODO(sumeer): change MVCCIterator.Next() to match the
+	// return values, change all its callers, and rename this
+	// to Next().
+	NextEngineKey() (valid bool, err error)
+	// PrevEngineKey moves the iterator backward to the previous key/value in
+	// the iteration. After this call, valid will be true if the iterator was
+	// not originally positioned at the first key.
+	PrevEngineKey() (valid bool, err error)
+	// UnsafeEngineKey returns the same value as Key, but the memory is
+	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
-	UnsafeKey() EngineKey
+	UnsafeEngineKey() (EngineKey, error)
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
 	UnsafeValue() []byte
-	// Key returns the current key.
+	// EngineKey returns the current key.
 	// REQUIRES: latest positioning function returned valid=true.
-	Key() EngineKey
+	EngineKey() (EngineKey, error)
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
 	Value() []byte
@@ -288,6 +292,10 @@ type Reader interface {
 	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
 	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
+	// NewEngineIterator returns a new instance of an EngineIterator over this
+	// engine. The caller must invoke EngineIterator.Close() when finished
+	// with the iterator to free resources.
+	NewEngineIterator(opts IterOptions) EngineIterator
 }
 
 // Writer is the write interface to an engine's data.
@@ -325,6 +333,13 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearIntent(key roachpb.Key) error
+	// ClearEngineKey removes the item from the db with the given EngineKey.
+	// Note that clear actually removes entries from the storage engine. This is
+	// a general-purpose and low-level method that should be used sparingly,
+	// only when the other Clear* methods are not applicable.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearEngineKey(key EngineKey) error
 
 	// ClearRawRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). It can be applied to a range consisting of MVCCKeys or the
@@ -410,6 +425,12 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutIntent(key roachpb.Key, value []byte) error
+	// PutEngineKey sets the given key to the value provided. This is a
+	// general-purpose and low-level method that should be used sparingly,
+	// only when the other Put* methods are not applicable.
+	//
+	// It is safe to modify the contents of the arguments after Put returns.
+	PutEngineKey(key EngineKey, value []byte) error
 
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
@@ -535,7 +556,7 @@ type Engine interface {
 // Batch is the interface for batch specific operations.
 type Batch interface {
 	ReadWriter
-	// SingleClearEngine removes the most recent write to the item from the db
+	// SingleClearEngineKey removes the most recent write to the item from the db
 	// with the given key. Whether older writes of the item will come back
 	// to life if not also removed with SingleClear is undefined. See the
 	// following:
@@ -549,7 +570,7 @@ type Batch interface {
 	// TODO(sumeer): try to remove it from this exported interface.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	SingleClearEngine(key EngineKey) error
+	SingleClearEngineKey(key EngineKey) error
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.
@@ -720,10 +741,11 @@ func WriteSyncNoop(ctx context.Context, eng Engine) error {
 }
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
-// (exclusive). Depending on the number of keys, it will either use ClearRange
-// or ClearIterRange.
+// (exclusive). Depending on the number of keys, it will either use ClearRawRange
+// or clear individual keys. It works with EngineKeys, so don't expect it to
+// find and clear separated intents if [start, end) refers to MVCC key space.
 func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Key) error {
-	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: end})
+	iter := reader.NewEngineIterator(IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same
@@ -731,43 +753,45 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	// sstable is accessed. So we avoid using range deletion unless there is some
 	// minimum number of keys. The value here was pulled out of thin air. It might
 	// be better to make this dependent on the size of the data being deleted. Or
-	// perhaps we should fix RocksDB to handle large numbers of tombstones in an
+	// perhaps we should fix Pebble to handle large numbers of tombstones in an
 	// sstable better. Note that we are referring to storage-level tombstones here,
 	// and not MVCC tombstones.
 	const clearRangeMinKeys = 64
 	// Peek into the range to see whether it's large enough to justify
-	// ClearRange. Note that the work done here is bounded by
+	// ClearRawRange. Note that the work done here is bounded by
 	// clearRangeMinKeys, so it will be fairly cheap even for large
 	// ranges.
 	//
-	// TODO(bdarnell): Move this into ClearIterRange so we don't have
-	// to do this scan twice.
+	// TODO(sumeer): Could add the iterated keys to the batch, so we don't have
+	// to do the scan again. If there are too many keys, this will mean a mix of
+	// point tombstones and range tombstone.
 	count := 0
-	iter.SeekGE(MakeMVCCMetadataKey(start))
-	for {
-		valid, err := iter.Valid()
-		if err != nil {
-			return err
-		}
-		if !valid {
-			break
-		}
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: start})
+	for valid {
 		count++
 		if count > clearRangeMinKeys {
 			break
 		}
-		iter.Next()
-	}
-	var err error
-	if count > clearRangeMinKeys {
-		err = writer.ClearRawRange(start, end)
-	} else {
-		err = writer.ClearIterRange(iter, start, end)
+		valid, err = iter.NextEngineKey()
 	}
 	if err != nil {
 		return err
 	}
-	return nil
+	if count > clearRangeMinKeys {
+		return writer.ClearRawRange(start, end)
+	}
+	valid, err = iter.SeekEngineKeyGE(EngineKey{Key: start})
+	for valid {
+		var k EngineKey
+		if k, err = iter.UnsafeEngineKey(); err != nil {
+			break
+		}
+		if err = writer.ClearEngineKey(k); err != nil {
+			break
+		}
+		valid, err = iter.NextEngineKey()
+	}
+	return err
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(

@@ -98,7 +98,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			if err := e.PutUnversioned(mvccKey("d").Key, []byte("before")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.SingleClearEngine(EngineKey{Key: mvccKey("d").Key}); err != nil {
+			if err := b.SingleClearEngineKey(EngineKey{Key: mvccKey("d").Key}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -451,7 +451,7 @@ func TestBatchGet(t *testing.T) {
 			if err := b.PutUnversioned(mvccKey("d").Key, []byte("before")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.SingleClearEngine(EngineKey{Key: mvccKey("d").Key}); err != nil {
+			if err := b.SingleClearEngineKey(EngineKey{Key: mvccKey("d").Key}); err != nil {
 				t.Fatal(err)
 			}
 			if err := b.PutUnversioned(mvccKey("d").Key, []byte("after")); err != nil {
@@ -1010,7 +1010,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 				func() { _ = batch.PutUnversioned(a.Key, nil) },
 				func() { _ = batch.Merge(a, nil) },
 				func() { _ = batch.ClearUnversioned(a.Key) },
-				func() { _ = batch.SingleClearEngine(EngineKey{Key: a.Key}) },
+				func() { _ = batch.SingleClearEngineKey(EngineKey{Key: a.Key}) },
 				func() { _ = batch.ApplyBatchRepr(nil, false) },
 				func() { _, _ = batch.MVCCGet(a) },
 				func() { _, _, _, _ = batch.MVCCGetProto(a, nil) },
