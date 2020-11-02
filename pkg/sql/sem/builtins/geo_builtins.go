@@ -5599,6 +5599,33 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			},
 		},
 	),
+	"st_transscale": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"delta_x", types.Float},
+				{"delta_y", types.Float},
+				{"x_factor", types.Float},
+				{"y_factor", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Volatility: tree.VolatilityImmutable,
+			Info: infoBuilder{
+				info: "Translates the geometry using the deltaX and deltaY args, then scales it using the XFactor, YFactor args, working in 2D only.",
+			}.String(),
+			Fn: func(_ *tree.EvalContext, datums tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(datums[0])
+				deltaX := float64(tree.MustBeDFloat(datums[1]))
+				deltaY := float64(tree.MustBeDFloat(datums[2]))
+				xFactor := float64(tree.MustBeDFloat(datums[3]))
+				yFactor := float64(tree.MustBeDFloat(datums[4]))
+				geometry, err := geomfn.TransScale(g.Geometry, deltaX, deltaY, xFactor, yFactor)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(geometry), nil
+			},
+		}),
 
 	//
 	// Unimplemented.
@@ -5640,7 +5667,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
 	"st_subdivide":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49048}),
 	"st_tileenvelope":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
-	"st_transscale":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49061}),
 	"st_voronoilines":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49065}),
 	"st_voronoipolygons":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49066}),
 	"st_wrapx":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
