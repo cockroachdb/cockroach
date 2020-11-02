@@ -82,6 +82,7 @@ type tpcc struct {
 	expensiveChecks bool
 
 	separateColumnFamilies bool
+	replicateStaticColumns bool
 
 	randomCIDsCache struct {
 		syncutil.Mutex
@@ -199,6 +200,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		g.flags.BoolVar(&g.separateColumnFamilies, `families`, false, `Use separate column families for dynamic and static columns`)
+		g.flags.BoolVar(&g.replicateStaticColumns, `replicate-static-columns`, false, "Replicate static columns")
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
 		// Hardcode this since it doesn't seem like anyone will want to change
@@ -291,7 +293,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				w.txOpts = &pgx.TxOptions{IsoLevel: pgx.Serializable}
 			}
 
-			w.auditor = newAuditor(w.warehouses)
+			w.auditor = newAuditor(w.activeWarehouses)
 
 			// Create a partitioner to help us partition the warehouses. The base-case is
 			// where w.warehouses == w.activeWarehouses and w.partitions == 1.
@@ -741,7 +743,7 @@ func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
 		if parts, err := partitionCount(db); err != nil {
 			return errors.Wrapf(err, "could not determine if tables are partitioned")
 		} else if parts == 0 {
-			if err := partitionTables(db, w.zoneCfg, w.wPart); err != nil {
+			if err := partitionTables(db, w.zoneCfg, w.wPart, w.replicateStaticColumns); err != nil {
 				return errors.Wrapf(err, "could not partition tables")
 			}
 		} else if parts != w.partitions {
