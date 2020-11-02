@@ -96,7 +96,39 @@ type NamespaceTableRow struct {
 }
 
 // NamespaceTable represents data read from `system.namespace2`.
-type NamespaceTable []NamespaceTableRow
+type NamespaceTable struct {
+	raw []NamespaceTableRow
+	m   map[descpb.NameInfo]descpb.ID
+}
+
+func (n *NamespaceTable) GetNamespaceEntry(
+	ctx context.Context, parentID, parentSchemaID descpb.ID, name string,
+) (descpb.ID, bool, error) {
+	id, ok := n.m[descpb.NameInfo{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	}]
+	return id, ok, nil
+}
+
+func (n *NamespaceTable) NumEntries() int {
+	return len(n.m)
+}
+
+// MakeNamespaceTable constructs a new NamespaceTable.
+func MakeNamespaceTable(rows []NamespaceTableRow) NamespaceTable {
+	m := make(map[descpb.NameInfo]descpb.ID, len(rows))
+	for _, r := range rows {
+		m[r.NameInfo] = descpb.ID(r.ID)
+	}
+	return NamespaceTable{
+		raw: rows,
+		m:   m,
+	}
+}
+
+var _ catalog.NamespaceGetter = (*NamespaceTable)(nil)
 
 // namespaceReverseMap is the inverse of the namespace map stored in table
 // `system.namespace`.
@@ -136,7 +168,7 @@ func newNamespaceMap(rows []NamespaceTableRow) namespaceReverseMap {
 func Examine(
 	ctx context.Context,
 	descTable DescriptorSet,
-	namespaceTable NamespaceTable,
+	namespaceTable *NamespaceTable,
 	jobsTable JobsTable,
 	verbose bool,
 	stdout io.Writer,
@@ -155,16 +187,32 @@ func Examine(
 	return descOk && jobsOk, nil
 }
 
+type recordingNamespaceGetter struct {
+	seen map[descpb.NameInfo]struct{}
+	catalog.NamespaceGetter
+}
+
+func (r recordingNamespaceGetter) GetNamespaceEntry(
+	ctx context.Context, parentID, parentSchemaID descpb.ID, name string,
+) (descpb.ID, bool, error) {
+	r.seen[descpb.NameInfo{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	}] = struct{}{}
+	return r.NamespaceGetter.GetNamespaceEntry(ctx, parentID, parentSchemaID, name)
+}
+
 // examineDescriptors runs a suite of checks over the descriptor table.
 func examineDescriptors(
 	ctx context.Context,
 	descTable DescriptorSet,
-	namespaceTable NamespaceTable,
+	namespaceTable *NamespaceTable,
 	reportFunc func(descpb.ID, catalog.Descriptor, error),
 ) (ok bool, err error) {
 	log.Infof(ctx,
 		"examining %d descriptors and %d namespace entries...\n",
-		descTable.NumDescriptors(), len(namespaceTable))
+		descTable.NumDescriptors(), namespaceTable.NumEntries())
 	const (
 		namespaceTableID  = 2
 		namespace2TableID = 30
@@ -180,106 +228,30 @@ func examineDescriptors(
 		report(id, descriptor, errors.NewWithDepthf(1, msg, args...))
 	}
 
-	nMap := newNamespaceMap(namespaceTable)
+	ns := recordingNamespaceGetter{
+		seen:            make(map[descpb.NameInfo]struct{}),
+		NamespaceGetter: namespaceTable,
+	}
 	descTable.Iterate(func(id descpb.ID, desc catalog.Descriptor) error {
 		if desc.GetID() != id {
 			reportf(id, desc,
 				"different id in descriptor table: %d", id)
 		}
 
-		parent, err := descTable.GetDesc(ctx, desc.GetParentID())
-		if err != nil {
-			report(id, desc, errors.Wrapf(err, "failed to get parent %d", desc.GetParentID()))
-		}
-		parentExists := parent != nil
-		parentSchema, err := descTable.GetDesc(ctx, desc.GetParentID())
-		if err != nil {
-			report(id, desc, errors.Wrapf(err, "failed to get parent schema %d", desc.GetParentSchemaID()))
-		}
-		parentSchemaExists := parentSchema != nil
 		switch d := desc.(type) {
 		case catalog.TableDescriptor:
-			if err := d.Validate(ctx, descTable, nil /* ns */); err != nil {
+			if err := d.Validate(ctx, descTable, ns); err != nil {
 				report(desc.GetID(), desc, err)
 			}
-			// Table has been already validated.
-			parentExists = true
-			parentSchemaExists = true
 		case catalog.TypeDescriptor:
 			typ := typedesc.NewImmutable(*d.TypeDesc())
 			if err := typ.Validate(ctx, descTable); err != nil {
 				report(desc.GetID(), desc, err)
 			}
 		case catalog.SchemaDescriptor:
-			// parent schema id is always 0.
-			parentSchemaExists = true
-		}
-		if desc.GetParentID() != descpb.InvalidID && !parentExists {
-			reportf(desc.GetID(), desc, "invalid parent id %d", desc.GetParentID())
-		}
-		if desc.GetParentSchemaID() != descpb.InvalidID &&
-			desc.GetParentSchemaID() != keys.PublicSchemaID &&
-			!parentSchemaExists {
-			reportf(desc.GetID(), desc, "invalid parent schema id %d", desc.GetParentSchemaID())
-		}
-
-		// Process namespace entries pointing to this descriptor.
-		names, ok := nMap[id]
-		if !ok {
-			// TODO(spaskob): this check is too crude, we need more fine grained
-			// approach depending on all the possible non-20.1 possibilities and emit
-			// a warning if one of those states is encountered without returning a
-			// nonzero exit status and fail otherwise.
-			// See https://github.com/cockroachdb/cockroach/issues/55237.
-			if !desc.Dropped() && desc.GetID() != namespaceTableID {
-				reportf(desc.GetID(), desc, "not being dropped but no namespace entry found")
-			}
-			return nil
-		}
-
-		if desc.Dropped() {
-			reportf(desc.GetID(), desc, "dropped but namespace entry(s) found: %v", names)
-		}
-
-		// We delete all pointed descriptors to leave what is missing in the
-		// descriptor table.
-		delete(nMap, id)
-
-		drainingNames := desc.GetDrainingNames()
-		var found bool
-		for _, n := range names {
-			if n.Name == desc.GetName() &&
-				n.ParentSchemaID == desc.GetParentSchemaID() &&
-				n.ParentID == desc.GetParentID() {
-				found = true
-				continue
-			}
-			var foundInDraining bool
-			for i, drain := range drainingNames {
-				// If the namespace entry does not correspond to the current descriptor
-				// name then it must be found in the descriptor draining names.
-				if drain.Name == n.Name &&
-					drain.ParentID == n.ParentID &&
-					drain.ParentSchemaID == n.ParentSchemaID {
-					// Delete this draining names entry from the list.
-					last := len(drainingNames) - 1
-					drainingNames[last], drainingNames[i] = drainingNames[i], drainingNames[last]
-					drainingNames = drainingNames[:last]
-					foundInDraining = true
-					break
-				}
-			}
-			if !foundInDraining && desc.GetID() != namespace2TableID {
-				reportf(desc.GetID(), desc, "namespace entry %+v not found in draining names", n)
-				problemsFound = true
-			}
-		}
-		if !found && desc.GetID() != namespace2TableID {
-			reportf(desc.GetID(), desc, "could not find name in namespace table")
-			return nil
-		}
-		if len(drainingNames) > 0 {
-			reportf(desc.GetID(), desc, "extra draining names found %+v", drainingNames)
+			// TODO(ajwerner): Validate this.
+		case catalog.DatabaseDescriptor:
+			// TODO(ajwerner): Validate this.
 		}
 		log.VEventf(ctx, 2, "processed descriptor %d: %v", desc.GetID(), desc)
 		return nil
@@ -287,20 +259,24 @@ func examineDescriptors(
 
 	// Now go over all namespace entries that don't point to descriptors in the
 	// descriptor table.
-	for id, ni := range nMap {
-		if id == keys.PublicSchemaID {
+	for _, row := range namespaceTable.raw {
+		id := descpb.ID(row.ID)
+		if row.ID == keys.PublicSchemaID {
 			continue
 		}
 		if id == descpb.InvalidID {
-			reportf(id, nil, "Row(s) %+v: NULL value found\n", ni)
+			reportf(id, nil, "Row(s) %+v: NULL value found\n", row.NameInfo)
 			continue
 		}
-		if strings.HasPrefix(ni[0].Name, "pg_temp_") {
+		if strings.HasPrefix(row.NameInfo.Name, "pg_temp_") {
 			// Temporary schemas have namespace entries but not descriptors.
 			continue
 		}
+		if _, ok := ns.seen[row.NameInfo]; ok {
+			continue
+		}
 		reportf(id, nil,
-			"has namespace row(s) %+v but no descriptor\n", ni)
+			"has namespace row(s) %+v but no descriptor\n", row.NameInfo)
 	}
 	return !problemsFound, err
 }

@@ -116,7 +116,7 @@ func TestExamineDescriptors(t *testing.T) {
 		defer cancel()
 
 		valid, err := doctor.ExamineDescriptors(
-			ctx, test.descTable, test.namespaceTable, func(id descpb.ID, descriptor catalog.Descriptor, err error) {
+			ctx, test.descTable, &test.namespaceTable, func(id descpb.ID, descriptor catalog.Descriptor, err error) {
 				buf.WriteString(doctor.FormatDescriptorMsg(id, descriptor, "%v\n", err))
 			})
 		if test.errStr != "" {
@@ -174,9 +174,9 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			}),
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "foo"}, ID: 1},
-			},
+			}),
 			expectedLogs: []string{`examining 1 descriptors and 1 namespace entries`},
 			expected: `   Table   1: ParentID   0, ParentSchemaID 29, Name 'foo': invalid parent ID 0
 `,
@@ -205,10 +205,10 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			}),
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
-			},
+			}),
 			expectedLogs: []string{`examining 2 descriptors and 2 namespace entries`},
 			expected: `   Table   1: ParentID   2, ParentSchemaID 29, Name 't': namespace entry {ParentID:0 ParentSchemaID:29 Name:t} not found in draining names
    Table   1: ParentID   2, ParentSchemaID 29, Name 't': could not find name in namespace table
@@ -223,9 +223,9 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			}),
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{ParentID: 2, Name: "schema"}, ID: 1},
-			},
+			}),
 			expectedLogs: []string{`examining 1 descriptors and 1 namespace entries`},
 			expected:     "  Schema   1: ParentID   2, ParentSchemaID  0, Name 'schema': invalid parent id 2\n",
 		},
@@ -238,28 +238,28 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			}),
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{Name: "type"}, ID: 1},
-			},
+			}),
 			expectedLogs: []string{`examining 1 descriptors and 1 namespace entries`},
 			expected: `    Type   1: ParentID   0, ParentSchemaID  0, Name 'type': invalid parentID 0
 `,
 		},
 		{
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{Name: "foo"}, ID: keys.PublicSchemaID},
 				{NameInfo: descpb.NameInfo{Name: "bar"}, ID: keys.PublicSchemaID},
 				{NameInfo: descpb.NameInfo{Name: "pg_temp_foo"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "causes_error"}, ID: 2},
-			},
+			}),
 			expectedLogs: []string{`examining 0 descriptors and 4 namespace entries`},
 			expected: `     nil   2: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:causes_error}] but no descriptor
 `,
 		},
 		{
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{Name: "null"}, ID: int64(descpb.InvalidID)},
-			},
+			}),
 			expectedLogs: []string{`examining 0 descriptors and 1 namespace entries`},
 			expected: `     nil   0: Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 `,
@@ -275,10 +275,10 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			}),
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
-			},
+			}),
 			expectedLogs: []string{`examining 2 descriptors and 2 namespace entries`},
 		},
 		{
@@ -295,11 +295,11 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			}),
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db1"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
-			},
+			}),
 			expectedLogs: []string{`examining 1 descriptors and 3 namespace entries`},
 		},
 		{
@@ -316,11 +316,11 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			}),
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db1"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
-			},
+			}),
 			expectedLogs: []string{`examining 1 descriptors and 3 namespace entries`},
 			expected: `Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names found [{ParentID:0 ParentSchemaID:0 Name:db3}]
 `,
@@ -335,10 +335,10 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			}),
-			namespaceTable: doctor.NamespaceTable{
+			namespaceTable: doctor.MakeNamespaceTable([]doctor.NamespaceTableRow{
 				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
-			},
+			}),
 			expected: `   Table   1: ParentID   2, ParentSchemaID 29, Name 't': dropped but namespace entry(s) found: [{2 29 t}]
 `,
 		},
