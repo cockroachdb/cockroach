@@ -16,4 +16,7 @@ type Service interface {
 	// AllowRequest determines whether a request should be allowed to proceed. It
 	// rate limits requests from IP addresses regardless of tenant id.
 	AllowRequest(ipAddress string, now time.Time) error
+
+	// RequestSuccess records the result of a successful request.
+	RequestSuccess(ipAddress string)
 }

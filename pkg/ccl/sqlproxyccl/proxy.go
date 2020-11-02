@@ -59,6 +59,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 		// TODO(spaskob): check for previous successful connection from the same IP
 		// in which case allow connection.
 		if err := s.admitter.AllowRequest(conn.RemoteAddr().String(), timeutil.Now()); err != nil {
+			s.metrics.RefusedConnCount.Inc(1)
 			return newErrorf(CodeProxyRefusedConnection, "too many connection attempts")
 		}
 	}
@@ -135,6 +136,10 @@ func (s *Server) Proxy(conn net.Conn) error {
 	if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
 		s.metrics.BackendDownCount.Inc(1)
 		return newErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
+	}
+
+	if s.admitter != nil {
+		s.admitter.RequestSuccess(conn.RemoteAddr().String())
 	}
 
 	response := make([]byte, 1)
