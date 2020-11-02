@@ -273,13 +273,16 @@ filter     ·                    ·                     (a, b)  ·
 ·          spans                FULL SCAN             ·       ·
 
 
+# TODO(mgartner): It should not be required to force the index scan. It is
+# required until the statistics builder treats b->'a' = '"b"' similarly to the
+# containment operator, @>.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a' = '"b"'
 ----
 ·           distribution         local                        ·       ·
 ·           vectorized           true                         ·       ·
 index join  ·                    ·                            (a, b)  ·
- │          estimated row count  111 (missing stats)          ·       ·
+ │          estimated row count  333 (missing stats)          ·       ·
  │          table                d@primary                    ·       ·
  │          key columns          a                            ·       ·
  └── scan   ·                    ·                            (a)     ·
@@ -287,19 +290,20 @@ index join  ·                    ·                            (a, b)  ·
 ·           table                d@foo_inv                    ·       ·
 ·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
+# TODO(mgartner): Add support for building inverted index constraints for chained JSON
+# fetch operators.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
 ----
-·           distribution         local                                ·       ·
-·           vectorized           true                                 ·       ·
-index join  ·                    ·                                    (a, b)  ·
- │          estimated row count  111 (missing stats)                  ·       ·
- │          table                d@primary                            ·       ·
- │          key columns          a                                    ·       ·
- └── scan   ·                    ·                                    (a)     ·
-·           estimated row count  110 (missing stats)                  ·       ·
-·           table                d@foo_inv                            ·       ·
-·           spans                /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
+·          distribution         local                    ·       ·
+·          vectorized           true                     ·       ·
+filter     ·                    ·                        (a, b)  ·
+ │         estimated row count  333 (missing stats)      ·       ·
+ │         filter               ((b->'a')->'c') = '"b"'  ·       ·
+ └── scan  ·                    ·                        (a, b)  ·
+·          estimated row count  1000 (missing stats)     ·       ·
+·          table                d@primary                ·       ·
+·          spans                FULL SCAN                ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
@@ -308,13 +312,16 @@ EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
 ·       vectorized    true   ·       ·
 norows  ·             ·      (a, b)  ·
 
+# TODO(mgartner): It should not be required to force the index scan. It is
+# required until the statistics builder treats b->'a' = '"b"' similarly to the
+# containment operator, @>.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where '"b"' = b->'a'
 ----
 ·           distribution         local                        ·       ·
 ·           vectorized           true                         ·       ·
 index join  ·                    ·                            (a, b)  ·
- │          estimated row count  111 (missing stats)          ·       ·
+ │          estimated row count  333 (missing stats)          ·       ·
  │          table                d@primary                    ·       ·
  │          key columns          a                            ·       ·
  └── scan   ·                    ·                            (a)     ·

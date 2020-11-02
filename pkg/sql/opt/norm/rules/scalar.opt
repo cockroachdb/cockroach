@@ -167,51 +167,6 @@ $input
 =>
 (Exists $input $subqueryPrivate)
 
-# NormalizeJSONFieldAccess transforms field access into a containment with a
-# simpler LHS. This allows inverted index constraints to be generated in some
-# cases.
-# The FetchVal operator also has an overload with integers instead of strings,
-# but this transformation is not valid in that case.
-# This transforms
-#
-#   a->'b' = '"c"'
-#
-# to
-#
-#   a @> '{"b": "c"}'
-#
-# Note that we can't make this transformation in cases like
-#
-#   a->'b' = '["c"]',
-#
-# because containment is not equivalent to equality for non-scalar types.
-[NormalizeJSONFieldAccess, Normalize]
-(Eq
-    (FetchVal $val:* $key:(Const) & (IsString $key))
-    $right:(Const) & (IsJSONScalar $right)
-)
-=>
-(Contains $val (MakeSingleKeyJSONObject $key $right))
-
-# NormalizeJSONContains contains transforms a field access containment into one
-# with a simpler LHS.  This transformation is only valid if the RHS is not a
-# scalar, since a JSON array "contains" a scalar which is inside of it.
-# This transforms
-#
-#   a->'b' @> '{"x": "c"}'
-#
-# to
-#
-#   a @> '{"b": {"x": "c"}}'
-#
-[NormalizeJSONContains, Normalize]
-(Contains
-    (FetchVal $val:* $key:(Const) & (IsString $key))
-    $right:(Const) & ^(IsJSONScalar $right)
-)
-=>
-(Contains $val (MakeSingleKeyJSONObject $key $right))
-
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
 # branch known to match is used as the ELSE and further WHEN conditions
 # are skipped. If all WHEN conditions have been removed, the ELSE
