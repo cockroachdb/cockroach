@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -205,8 +206,13 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		)
 		defer recv.Release()
 
-		planCtx.saveDiagram = func(d execinfrapb.FlowDiagram) {
+		planCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+			d, err := planCtx.flowSpecsToDiagram(ctx, flows)
+			if err != nil {
+				return err
+			}
 			diagram = d
+			return nil
 		}
 		planCtx.saveDiagramShowInputTypes = n.options.Flags[tree.ExplainFlagTypes]
 
