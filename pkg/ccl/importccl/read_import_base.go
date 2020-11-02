@@ -421,6 +421,7 @@ type importFileContext struct {
 	source   int32       // Source is where the row data in the batch came from.
 	skip     int64       // Number of records to skip
 	rejected chan string // Channel for reporting corrupt "rows"
+	rowLimit int64       // Number of records to process before we stop importing from a file.
 }
 
 // handleCorruptRow reports an error encountered while processing a row
@@ -549,7 +550,7 @@ func runParallelImport(
 	// Read data from producer and send it to consumers.
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(importer.recordCh)
-
+		var numSkipped int64
 		var count int64
 		for producer.Scan() {
 			// Skip rows if needed.
@@ -558,7 +559,14 @@ func runParallelImport(
 				if err := producer.Skip(); err != nil {
 					return err
 				}
+				numSkipped++
 				continue
+			}
+
+			// Stop when we have processed row limit number of rows.
+			rowBeingProcessedIdx := count - numSkipped
+			if fileCtx.rowLimit != 0 && rowBeingProcessedIdx > fileCtx.rowLimit {
+				break
 			}
 
 			// Batch parsed data.

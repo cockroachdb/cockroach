@@ -88,6 +88,7 @@ func (c *csvInputReader) readFile(
 		source:   inputIdx,
 		skip:     resumePos,
 		rejected: rejected,
+		rowLimit: c.opts.RowLimit,
 	}
 
 	return runParallelImport(ctx, c.importCtx, fileCtx, producer, consumer)
