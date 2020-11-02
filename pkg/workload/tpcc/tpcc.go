@@ -81,6 +81,8 @@ type tpcc struct {
 
 	expensiveChecks bool
 
+	separateColumnFamilies bool
+
 	randomCIDsCache struct {
 		syncutil.Mutex
 		values [][]int
@@ -196,6 +198,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
+		g.flags.BoolVar(&g.separateColumnFamilies, `families`, false, `Use separate column families for dynamic and static columns`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
 		// Hardcode this since it doesn't seem like anyone will want to change
@@ -433,8 +436,12 @@ func (w *tpcc) Tables() []workload.Table {
 		return batches
 	}
 	warehouse := workload.Table{
-		Name:   `warehouse`,
-		Schema: tpccWarehouseSchema,
+		Name: `warehouse`,
+		Schema: maybeAddColumnFamiliesSuffix(
+			w.separateColumnFamilies,
+			tpccWarehouseSchema,
+			tpccWarehouseColumnFamiliesSuffix,
+		),
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.warehouses,
 			FillBatch:  w.tpccWarehouseInitialRowBatch,
@@ -451,7 +458,9 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `district`,
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
-			tpccDistrictSchemaBase,
+			maybeAddColumnFamiliesSuffix(
+				w.separateColumnFamilies, tpccDistrictSchemaBase, tpccDistrictColumnFamiliesSuffix,
+			),
 			tpccDistrictSchemaInterleaveSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
@@ -470,7 +479,11 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `customer`,
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
-			tpccCustomerSchemaBase,
+			maybeAddColumnFamiliesSuffix(
+				w.separateColumnFamilies,
+				tpccCustomerSchemaBase,
+				tpccCustomerColumnFamiliesSuffix,
+			),
 			tpccCustomerSchemaInterleaveSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
