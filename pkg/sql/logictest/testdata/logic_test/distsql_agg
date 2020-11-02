@@ -592,3 +592,24 @@ SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
 60000
 70000
 80000
+
+statement ok
+CREATE TABLE t55837 (
+  i  int primary key,
+  y  float,
+  x  float
+);
+INSERT INTO t55837 (i, y, x) VALUES
+  (1, 1.0,   1),
+  (2, 1.0,   1),
+  (3, 2.0,   3),
+  (4, 3.0,   3);
+ALTER TABLE t55837 SPLIT AT VALUES (3);
+ALTER TABLE t55837 EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 2);
+SELECT * FROM t55837 -- make sure that the range cache is populated
+
+# Regression test for incorrectly planning a local distinct stage (#55837).
+query RI
+SELECT corr(DISTINCT y, x), count(y) FROM t55837
+----
+0.866025403784439 4
