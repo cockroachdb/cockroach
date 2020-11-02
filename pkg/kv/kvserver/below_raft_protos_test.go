@@ -109,27 +109,23 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     5531676819244041709,
 		populatedSum: 14781226418259198098,
 	},
-}
-
-func init() {
 	// These are marshaled below Raft by the Pebble merge operator. The Pebble
 	// merge operator can be called below Raft whenever a Pebble MVCCIterator is
 	// used.
-	belowRaftGoldenProtos[reflect.TypeOf(&roachpb.InternalTimeSeriesData{})] = fixture{
+	reflect.TypeOf(&roachpb.InternalTimeSeriesData{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
 		},
 		emptySum:     5531676819244041709,
 		populatedSum: 8911200268508796945,
-	}
-	belowRaftGoldenProtos[reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{})] =
-		fixture{
-			populatedConstructor: func(r *rand.Rand) protoutil.Message {
-				return enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
-			},
-			emptySum:     14695981039346656037,
-			populatedSum: 7432412240713840291,
-		}
+	},
+	reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
+		},
+		emptySum:     14695981039346656037,
+		populatedSum: 7432412240713840291,
+	},
 }
 
 func TestBelowRaftProtos(t *testing.T) {
