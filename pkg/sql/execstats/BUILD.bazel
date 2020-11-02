@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "execstats",
+    srcs = ["traceanalyzer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/execstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql/colexec/execpb",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/flowinfra",
+        "//pkg/util/tracing/tracingpb",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/types",
+    ],
+)
+
+go_test(
+    name = "execstats_test",
+    srcs = [
+        "main_test.go",
+        "traceanalyzer_test.go",
+    ],
+    deps = [
+        ":execstats",
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

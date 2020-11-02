@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -853,6 +854,13 @@ type ExecutorTestingKnobs struct {
 	// should be performed (typically turned on during tests only to guard against
 	// wild descriptors which are corrupted due to bugs).
 	TestingDescriptorValidation bool
+
+	// TestingSaveFlows, if set, will be called with the given stmt. The resulting
+	// function will be called with the physical plan of that statement's main
+	// query (i.e. no subqueries). The physical plan is only safe for use for the
+	// lifetime of this function. Note that returning a nil function is
+	// unsupported and will lead to a panic.
+	TestingSaveFlows func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

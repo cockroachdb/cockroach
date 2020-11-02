@@ -17,6 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+// ProcessorID identifies a processor in the context of a specific flow.
+type ProcessorID int
+
 // StreamID identifies a stream; it may be local to a flow or it may cross
 // machine boundaries. The identifier can only be used in the context of a
 // specific flow.
