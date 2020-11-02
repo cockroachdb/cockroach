@@ -153,7 +153,14 @@ func (m *Outbox) flush(ctx context.Context) error {
 	}
 	msg := m.encoder.FormMessage(ctx)
 	if m.statsCollectionEnabled {
-		m.stats.BytesSent += int64(msg.Size())
+		if m.flowCtx.Cfg.TestingKnobs.DeterministicStats {
+			// Some fields in the msg have variable sizes across different runs (e.g.
+			// metadata). To keep a useful bytes value for tests, we only count the
+			// encoded row message size.
+			m.stats.BytesSent += int64(len(msg.Data.RawBytes))
+		} else {
+			m.stats.BytesSent += int64(msg.Size())
+		}
 	}
 
 	if log.V(3) {
@@ -281,9 +288,6 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 					err := m.flush(ctx)
 					if err != nil {
 						return err
-					}
-					if m.flowCtx.Cfg.TestingKnobs.DeterministicStats {
-						m.stats.BytesSent = 0
 					}
 					span.SetSpanStats(&m.stats)
 					span.Finish()
