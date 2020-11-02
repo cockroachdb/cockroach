@@ -272,6 +272,7 @@ go_library(
         "//pkg/sql/enum",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execstats",
         "//pkg/sql/faketreeeval",
         "//pkg/sql/flowinfra",
         "//pkg/sql/gcjob/gcjobnotifier",
