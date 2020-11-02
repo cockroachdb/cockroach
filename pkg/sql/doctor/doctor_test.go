@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
@@ -27,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,6 +69,14 @@ func toBytes(t *testing.T, pb protoutil.Message) []byte {
 	return res
 }
 
+type descriptorExpection func(descriptor catalog.Descriptor) error
+
+type reportExpectation struct {
+	expID   descpb.ID
+	expDesc descriptorExpection
+	expErr  string
+}
+
 func TestExamineDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -74,21 +85,45 @@ func TestExamineDescriptors(t *testing.T) {
 	descpb.TableFromDescriptor(droppedValidTableDesc, hlc.Timestamp{WallTime: 1}).
 		State = descpb.DescriptorState_DROP
 
-	tests := []struct {
+	type testCase struct {
 		descTable      doctor.DescriptorTable
 		namespaceTable doctor.NamespaceTable
 		valid          bool
 		errStr         string
 		expected       string
-	}{
+		expectedLogs   []string
+	}
+	runTest := func(t *testing.T, test testCase) {
+		var buf bytes.Buffer
+		ctx, getRecording, cancel := tracing.ContextWithRecordingSpan(context.Background(), "foo")
+		defer cancel()
+
+		valid, err := doctor.ExamineDescriptors(
+			ctx, test.descTable, test.namespaceTable, func(id descpb.ID, descriptor catalog.Descriptor, err error) {
+				buf.WriteString(doctor.FormatDescriptorMsg(id, descriptor, "%v\n", err))
+			})
+		if test.errStr != "" {
+			require.Contains(t, err.Error(), test.errStr)
+		} else {
+			require.NoError(t, err)
+		}
+		require.Equal(t, test.valid, valid)
+		rec := getRecording()
+		for _, expLog := range test.expectedLogs {
+			_, found := rec.FindLogMessage(expLog)
+			assert.Truef(t, found, "failed to find log message %q", expLog, rec.String())
+		}
+		require.Equal(t, test.expected, buf.String())
+	}
+	tests := []testCase{
 		{
-			valid:    true,
-			expected: "Examining 0 descriptors and 0 namespace entries...\n",
+			valid:        true,
+			expectedLogs: []string{"examining 0 descriptors and 0 namespace entries..."},
 		},
 		{
-			descTable: doctor.DescriptorTable{{ID: 1, DescBytes: []byte("#$@#@#$#@#")}},
-			errStr:    "failed to unmarshal descriptor",
-			expected:  "Examining 1 descriptors and 0 namespace entries...\n",
+			descTable:    doctor.DescriptorTable{{ID: 1, DescBytes: []byte("#$@#@#$#@#")}},
+			errStr:       "failed to unmarshal descriptor",
+			expectedLogs: []string{"examining 1 descriptors and 0 namespace entries..."},
 		},
 		{
 			descTable: doctor.DescriptorTable{
@@ -99,8 +134,8 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			},
-			expected: `Examining 1 descriptors and 0 namespace entries...
-   Table   2: ParentID   0, ParentSchemaID 29, Name '': different id in descriptor table: 1
+			expectedLogs: []string{`examining 1 descriptors and 0 namespace entries`},
+			expected: `   Table   2: ParentID   0, ParentSchemaID 29, Name '': different id in descriptor table: 1
 `,
 		},
 		{
@@ -112,8 +147,8 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			},
-			expected: `Examining 1 descriptors and 0 namespace entries...
-   Table   1: ParentID   0, ParentSchemaID 29, Name 'foo': invalid parent ID 0
+			expectedLogs: []string{`examining 1 descriptors and 0 namespace entries`},
+			expected: `   Table   1: ParentID   0, ParentSchemaID 29, Name 'foo': invalid parent ID 0
 `,
 		},
 		{
@@ -128,10 +163,11 @@ func TestExamineDescriptors(t *testing.T) {
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "foo"}, ID: 1},
 			},
-			expected: `Examining 1 descriptors and 1 namespace entries...
-   Table   1: ParentID   0, ParentSchemaID 29, Name 'foo': invalid parent ID 0
+			expectedLogs: []string{`examining 1 descriptors and 1 namespace entries`},
+			expected: `   Table   1: ParentID   0, ParentSchemaID 29, Name 'foo': invalid parent ID 0
 `,
 		},
+
 		{
 			descTable: doctor.DescriptorTable{
 				{
@@ -141,8 +177,8 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 			},
-			expected: `Examining 1 descriptors and 0 namespace entries...
-Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but no namespace entry found
+			expectedLogs: []string{`examining 1 descriptors and 0 namespace entries`},
+			expected: `Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but no namespace entry found
 `,
 		},
 		{
@@ -159,8 +195,8 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 			},
-			expected: `Examining 2 descriptors and 2 namespace entries...
-   Table   1: ParentID   2, ParentSchemaID 29, Name 't': namespace entry {ParentID:0 ParentSchemaID:29 Name:t} not found in draining names
+			expectedLogs: []string{`examining 2 descriptors and 2 namespace entries`},
+			expected: `   Table   1: ParentID   2, ParentSchemaID 29, Name 't': namespace entry {ParentID:0 ParentSchemaID:29 Name:t} not found in draining names
    Table   1: ParentID   2, ParentSchemaID 29, Name 't': could not find name in namespace table
 `,
 		},
@@ -176,9 +212,8 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{ParentID: 2, Name: "schema"}, ID: 1},
 			},
-			expected: `Examining 1 descriptors and 1 namespace entries...
-  Schema   1: ParentID   2, ParentSchemaID  0, Name 'schema': invalid parent id 2
-`,
+			expectedLogs: []string{`examining 1 descriptors and 1 namespace entries`},
+			expected:     "  Schema   1: ParentID   2, ParentSchemaID  0, Name 'schema': invalid parent id 2\n",
 		},
 		{
 			descTable: doctor.DescriptorTable{
@@ -192,8 +227,8 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{Name: "type"}, ID: 1},
 			},
-			expected: `Examining 1 descriptors and 1 namespace entries...
-    Type   1: ParentID   0, ParentSchemaID  0, Name 'type': invalid parentID 0
+			expectedLogs: []string{`examining 1 descriptors and 1 namespace entries`},
+			expected: `    Type   1: ParentID   0, ParentSchemaID  0, Name 'type': invalid parentID 0
 `,
 		},
 		{
@@ -203,16 +238,16 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 				{NameInfo: descpb.NameInfo{Name: "pg_temp_foo"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "causes_error"}, ID: 2},
 			},
-			expected: `Examining 0 descriptors and 4 namespace entries...
-Descriptor 2: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:causes_error}] but no descriptor
+			expectedLogs: []string{`examining 0 descriptors and 4 namespace entries`},
+			expected: `     nil   2: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:causes_error}] but no descriptor
 `,
 		},
 		{
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{Name: "null"}, ID: int64(descpb.InvalidID)},
 			},
-			expected: `Examining 0 descriptors and 1 namespace entries...
-Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
+			expectedLogs: []string{`examining 0 descriptors and 1 namespace entries`},
+			expected: `     nil   0: Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 `,
 		},
 		{
@@ -230,7 +265,7 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 			},
-			expected: "Examining 2 descriptors and 2 namespace entries...\n",
+			expectedLogs: []string{`examining 2 descriptors and 2 namespace entries`},
 		},
 		{
 			valid: true,
@@ -251,7 +286,7 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 				{NameInfo: descpb.NameInfo{Name: "db1"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
 			},
-			expected: "Examining 1 descriptors and 3 namespace entries...\n",
+			expectedLogs: []string{`examining 1 descriptors and 3 namespace entries`},
 		},
 		{
 			valid: false,
@@ -272,8 +307,8 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 				{NameInfo: descpb.NameInfo{Name: "db1"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
 			},
-			expected: `Examining 1 descriptors and 3 namespace entries...
-Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names found [{ParentID:0 ParentSchemaID:0 Name:db3}]
+			expectedLogs: []string{`examining 1 descriptors and 3 namespace entries`},
+			expected: `Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names found [{ParentID:0 ParentSchemaID:0 Name:db3}]
 `,
 		},
 		{
@@ -290,24 +325,14 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names f
 				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 			},
-			expected: `Examining 2 descriptors and 2 namespace entries...
-   Table   1: ParentID   2, ParentSchemaID 29, Name 't': dropped but namespace entry(s) found: [{2 29 t}]
+			expected: `   Table   1: ParentID   2, ParentSchemaID 29, Name 't': dropped but namespace entry(s) found: [{2 29 t}]
 `,
 		},
 	}
-
-	for i, test := range tests {
-		var buf bytes.Buffer
-		valid, err := doctor.ExamineDescriptors(
-			context.Background(), test.descTable, test.namespaceTable, false, &buf)
-		msg := fmt.Sprintf("Test %d failed!", i+1)
-		if test.errStr != "" {
-			require.Containsf(t, err.Error(), test.errStr, msg)
-		} else {
-			require.NoErrorf(t, err, msg)
-		}
-		require.Equalf(t, test.valid, valid, msg)
-		require.Equalf(t, test.expected, buf.String(), msg)
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			runTest(t, test)
+		})
 	}
 }
 

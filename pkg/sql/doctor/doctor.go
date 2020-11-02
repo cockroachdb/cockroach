@@ -93,40 +93,50 @@ func Examine(
 	verbose bool,
 	stdout io.Writer,
 ) (ok bool, err error) {
-	descOk, err := ExamineDescriptors(ctx, descTable, namespaceTable, verbose, stdout)
+	report := func(id descpb.ID, desc catalog.Descriptor, err error) {
+		io.WriteString(stdout, formatDescriptorMsg(id, desc, "%v\n", err))
+	}
+	descOk, err := examineDescriptors(ctx, descTable, namespaceTable, report)
 	if err != nil {
 		return false, err
 	}
-	jobsOk, err := ExamineJobs(ctx, descTable, jobsTable, verbose, stdout)
+	jobsOk, err := examineJobs(ctx, descTable, jobsTable, verbose, stdout)
 	if err != nil {
 		return false, err
 	}
 	return descOk && jobsOk, nil
 }
 
-// ExamineDescriptors runs a suite of checks over the descriptor table.
-func ExamineDescriptors(
+// examineDescriptors runs a suite of checks over the descriptor table.
+func examineDescriptors(
 	ctx context.Context,
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
-	verbose bool,
-	stdout io.Writer,
+	reportFunc func(descpb.ID, catalog.Descriptor, error),
 ) (ok bool, err error) {
+	log.Infof(ctx,
+		"examining %d descriptors and %d namespace entries...\n",
+		len(descTable), len(namespaceTable))
 	const (
 		namespaceTableID  = 2
 		namespace2TableID = 30
 	)
-
-	fmt.Fprintf(
-		stdout, "Examining %d descriptors and %d namespace entries...\n",
-		len(descTable), len(namespaceTable))
+	var problemsFound bool
+	report := func(id descpb.ID, descriptor catalog.Descriptor, err error) {
+		problemsFound = true
+		reportFunc(id, descriptor, err)
+	}
+	reportf := func(
+		id descpb.ID, descriptor catalog.Descriptor, msg string, args ...interface{},
+	) {
+		report(id, descriptor, errors.NewWithDepthf(1, msg, args...))
+	}
 	descGetter, err := newDescGetter(ctx, descTable)
 	if err != nil {
 		return false, err
 	}
 	nMap := newNamespaceMap(namespaceTable)
 
-	var problemsFound bool
 	for _, row := range descTable {
 		desc, ok := descGetter[descpb.ID(row.ID)]
 		if !ok {
@@ -135,8 +145,8 @@ func ExamineDescriptors(
 		}
 
 		if int64(desc.GetID()) != row.ID {
-			fmt.Fprint(stdout, reportMsg(desc, "different id in descriptor table: %d", row.ID))
-			problemsFound = true
+			reportf(descpb.ID(row.ID), desc,
+				"different id in descriptor table: %d", row.ID)
 			continue
 		}
 
@@ -145,8 +155,7 @@ func ExamineDescriptors(
 		switch d := desc.(type) {
 		case catalog.TableDescriptor:
 			if err := d.Validate(ctx, descGetter); err != nil {
-				problemsFound = true
-				fmt.Fprint(stdout, reportMsg(desc, "%s", err))
+				report(desc.GetID(), desc, err)
 			}
 			// Table has been already validated.
 			parentExists = true
@@ -154,22 +163,19 @@ func ExamineDescriptors(
 		case catalog.TypeDescriptor:
 			typ := typedesc.NewImmutable(*d.TypeDesc())
 			if err := typ.Validate(ctx, descGetter); err != nil {
-				problemsFound = true
-				fmt.Fprint(stdout, reportMsg(desc, "%s", err))
+				report(desc.GetID(), desc, err)
 			}
 		case catalog.SchemaDescriptor:
 			// parent schema id is always 0.
 			parentSchemaExists = true
 		}
 		if desc.GetParentID() != descpb.InvalidID && !parentExists {
-			problemsFound = true
-			fmt.Fprint(stdout, reportMsg(desc, "invalid parent id %d", desc.GetParentID()))
+			reportf(desc.GetID(), desc, "invalid parent id %d", desc.GetParentID())
 		}
 		if desc.GetParentSchemaID() != descpb.InvalidID &&
 			desc.GetParentSchemaID() != keys.PublicSchemaID &&
 			!parentSchemaExists {
-			problemsFound = true
-			fmt.Fprint(stdout, reportMsg(desc, "invalid parent schema id %d", desc.GetParentSchemaID()))
+			reportf(desc.GetID(), desc, "invalid parent schema id %d", desc.GetParentSchemaID())
 		}
 
 		// Process namespace entries pointing to this descriptor.
@@ -181,15 +187,13 @@ func ExamineDescriptors(
 			// nonzero exit status and fail otherwise.
 			// See https://github.com/cockroachdb/cockroach/issues/55237.
 			if !desc.Dropped() && desc.GetID() != namespaceTableID {
-				fmt.Fprint(stdout, reportMsg(desc, "not being dropped but no namespace entry found"))
-				problemsFound = true
+				reportf(desc.GetID(), desc, "not being dropped but no namespace entry found")
 			}
 			continue
 		}
 
 		if desc.Dropped() {
-			fmt.Fprint(stdout, reportMsg(desc, "dropped but namespace entry(s) found: %v", names))
-			problemsFound = true
+			reportf(desc.GetID(), desc, "dropped but namespace entry(s) found: %v", names)
 		}
 
 		// We delete all pointed descriptors to leave what is missing in the
@@ -221,25 +225,18 @@ func ExamineDescriptors(
 				}
 			}
 			if !foundInDraining && desc.GetID() != namespace2TableID {
-				fmt.Fprint(
-					stdout,
-					reportMsg(desc, "namespace entry %+v not found in draining names", n),
-				)
+				reportf(desc.GetID(), desc, "namespace entry %+v not found in draining names", n)
 				problemsFound = true
 			}
 		}
 		if !found && desc.GetID() != namespace2TableID {
-			fmt.Fprint(stdout, reportMsg(desc, "could not find name in namespace table"))
-			problemsFound = true
+			reportf(desc.GetID(), desc, "could not find name in namespace table")
 			continue
 		}
 		if len(drainingNames) > 0 {
-			fmt.Fprint(stdout, reportMsg(desc, "extra draining names found %+v", drainingNames))
-			problemsFound = true
+			reportf(desc.GetID(), desc, "extra draining names found %+v", drainingNames)
 		}
-		if verbose {
-			fmt.Fprint(stdout, reportMsg(desc, "processed"))
-		}
+		log.VEventf(ctx, 2, "processed descriptor %d: %v", desc.GetID(), desc)
 	}
 
 	// Now go over all namespace entries that don't point to descriptors in the
@@ -249,23 +246,21 @@ func ExamineDescriptors(
 			continue
 		}
 		if descpb.ID(id) == descpb.InvalidID {
-			fmt.Fprintf(stdout, "Row(s) %+v: NULL value found\n", ni)
-			problemsFound = true
+			reportf(descpb.ID(id), nil, "Row(s) %+v: NULL value found\n", ni)
 			continue
 		}
 		if strings.HasPrefix(ni[0].Name, "pg_temp_") {
 			// Temporary schemas have namespace entries but not descriptors.
 			continue
 		}
-		fmt.Fprintf(
-			stdout, "Descriptor %d: has namespace row(s) %+v but no descriptor\n", id, ni)
-		problemsFound = true
+		reportf(descpb.ID(id), nil,
+			"has namespace row(s) %+v but no descriptor\n", ni)
 	}
 	return !problemsFound, err
 }
 
-// ExamineJobs runs a suite of consistency checks over the system.jobs table.
-func ExamineJobs(
+// examineJobs runs a suite of consistency checks over the system.jobs table.
+func examineJobs(
 	ctx context.Context,
 	descTable DescriptorTable,
 	jobsTable JobsTable,
@@ -313,7 +308,9 @@ func ExamineJobs(
 	return !problemsFound, nil
 }
 
-func reportMsg(desc catalog.Descriptor, format string, args ...interface{}) string {
+func formatDescriptorMsg(
+	id descpb.ID, desc catalog.Descriptor, format string, args ...interface{},
+) string {
 	var header string
 	switch desc.(type) {
 	case catalog.TypeDescriptor:
@@ -324,8 +321,10 @@ func reportMsg(desc catalog.Descriptor, format string, args ...interface{}) stri
 		header = "  Schema"
 	case catalog.DatabaseDescriptor:
 		header = "Database"
+	case nil:
+		return fmt.Sprintf("     nil %3d: %s", id, fmt.Sprintf(format, args...))
 	}
 	return fmt.Sprintf("%s %3d: ParentID %3d, ParentSchemaID %2d, Name '%s': ",
 		header, desc.GetID(), desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName()) +
-		fmt.Sprintf(format, args...) + "\n"
+		fmt.Sprintf(format, args...)
 }

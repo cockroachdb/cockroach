@@ -73,6 +73,11 @@ type ResolvedObjectPrefix struct {
 	Schema ResolvedSchema
 }
 
+// NamespaceGetter is used to get namespace entries.
+type NamespaceGetter interface {
+	GetNamespaceEntry(parentID, parentSchemaID descpb.ID, name string) (descpb.ID, error)
+}
+
 // SchemaMeta implements the SchemaMeta interface.
 func (*ResolvedObjectPrefix) SchemaMeta() {}
 
