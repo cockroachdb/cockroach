@@ -22,13 +22,13 @@ DROP INDEX baw
 statement error index name "baw" is ambiguous
 DROP INDEX IF EXISTS baw
 
-statement error index "ark" does not exist
+statement error pgcode 42704 index "ark" does not exist
 DROP INDEX ark
 
 statement ok
 DROP INDEX IF EXISTS ark
 
-statement error index "ark" does not exist
+statement error pgcode 42704 index "ark" does not exist
 DROP INDEX users@ark
 
 statement ok

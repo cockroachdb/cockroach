@@ -329,6 +329,7 @@ endif
 vendor_rebuild: bin/.submodules-initialized
 	$(GO_INSTALL) -v github.com/goware/modvendor
 	./build/vendor_rebuild.sh
+	bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=DEPS.bzl%go_deps
 	bazel run //:gazelle
 
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
