@@ -82,14 +82,22 @@ Run doctor tool reading system data from a live cluster specified by --url.
 }
 
 func wrapExamine(
-	descTable doctor.DescriptorTable,
+	descTable []doctor.DescriptorTableRow,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
 	out io.Writer,
 ) error {
+
+	// TODO(ajwerner): Add log tags.
+	ctx := context.Background()
+
 	// TODO(spaskob): add --verbose flag.
+	descriptorTable, err := doctor.MakeDescriptorTable(ctx, descTable)
+	if err != nil {
+		return err
+	}
 	valid, err := doctor.Examine(
-		context.Background(), descTable, namespaceTable, jobsTable, false, out)
+		ctx, descriptorTable, namespaceTable, jobsTable, false, out)
 	if err != nil {
 		return &cliError{exitCode: 2, cause: errors.Wrap(err, "examine failed")}
 	}
@@ -123,7 +131,7 @@ SELECT id, descriptor, NULL AS mod_time_logical
 FROM system.descriptor ORDER BY id`
 		}
 	}
-	descTable := make([]doctor.DescriptorTableRow, 0)
+	descriptorRows := make([]doctor.DescriptorTableRow, 0)
 
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 3), func(vals []driver.Value) error {
 		var row doctor.DescriptorTableRow
@@ -152,7 +160,7 @@ FROM system.descriptor ORDER BY id`
 		} else {
 			return errors.Errorf("unexpected value: %T of %v", vals[2], vals[2])
 		}
-		descTable = append(descTable, row)
+		descriptorRows = append(descriptorRows, row)
 		return nil
 	}); err != nil {
 		return err
@@ -224,7 +232,7 @@ FROM system.namespace`
 		return err
 	}
 
-	return wrapExamine(descTable, namespaceTable, jobsTable, out)
+	return wrapExamine(descriptorRows, namespaceTable, jobsTable, out)
 }
 
 // runZipDirDoctor runs the doctors tool reading data from a debug zip dir.
@@ -237,7 +245,7 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 	defer descFile.Close()
-	descTable := make(doctor.DescriptorTable, 0)
+	var descriptorRows []doctor.DescriptorTableRow
 
 	if err := tableMap(descFile, func(row string) error {
 		fields := strings.Fields(row)
@@ -252,7 +260,7 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 			return errors.Errorf("failed to decode hex descriptor %d: %v", i, err)
 		}
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
+		descriptorRows = append(descriptorRows, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
 		return nil
 	}); err != nil {
 		return err
@@ -340,7 +348,7 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
-	return wrapExamine(descTable, namespaceTable, jobsTable, os.Stdout)
+	return wrapExamine(descriptorRows, namespaceTable, jobsTable, os.Stdout)
 }
 
 // tableMap applies `fn` to all rows in `in`.

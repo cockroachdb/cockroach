@@ -77,6 +77,23 @@ type reportExpectation struct {
 	expErr  string
 }
 
+func mkDescTable(t *testing.T, rows []doctor.DescriptorTableRow) doctor.DescriptorTable {
+	dt, err := doctor.MakeDescriptorTable(context.Background(), rows)
+	require.NoError(t, err)
+	return dt
+}
+
+func TestNewDescriptorTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	{
+		_, err := doctor.MakeDescriptorTable(context.Background(), []doctor.DescriptorTableRow{
+			{ID: 1, DescBytes: []byte("#$@#@#$#@#")},
+		})
+		require.Regexp(t, "failed to unmarshal descriptor 1: proto: wrong wireType", err)
+	}
+}
+
 func TestExamineDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -115,51 +132,48 @@ func TestExamineDescriptors(t *testing.T) {
 		}
 		require.Equal(t, test.expected, buf.String())
 	}
+
 	tests := []testCase{
 		{
 			valid:        true,
 			expectedLogs: []string{"examining 0 descriptors and 0 namespace entries..."},
 		},
 		{
-			descTable:    doctor.DescriptorTable{{ID: 1, DescBytes: []byte("#$@#@#$#@#")}},
-			errStr:       "failed to unmarshal descriptor",
-			expectedLogs: []string{"examining 1 descriptors and 0 namespace entries..."},
-		},
-		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
 						Table: &descpb.TableDescriptor{ID: 2},
 					}}),
 				},
-			},
+			}),
 			expectedLogs: []string{`examining 1 descriptors and 0 namespace entries`},
 			expected: `   Table   2: ParentID   0, ParentSchemaID 29, Name '': different id in descriptor table: 1
+   Table   2: ParentID   0, ParentSchemaID 29, Name '': empty table name
 `,
 		},
 		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
 						Table: &descpb.TableDescriptor{Name: "foo", ID: 1, State: descpb.DescriptorState_DROP},
 					}}),
 				},
-			},
+			}),
 			expectedLogs: []string{`examining 1 descriptors and 0 namespace entries`},
 			expected: `   Table   1: ParentID   0, ParentSchemaID 29, Name 'foo': invalid parent ID 0
 `,
 		},
 		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
 						Table: &descpb.TableDescriptor{Name: "foo", ID: 1},
 					}}),
 				},
-			},
+			}),
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "foo"}, ID: 1},
 			},
@@ -169,20 +183,20 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 
 		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
 						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 1},
 					}}),
 				},
-			},
+			}),
 			expectedLogs: []string{`examining 1 descriptors and 0 namespace entries`},
 			expected: `Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but no namespace entry found
 `,
 		},
 		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
 				{
 					ID: 2,
@@ -190,7 +204,7 @@ func TestExamineDescriptors(t *testing.T) {
 						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
 					}}),
 				},
-			},
+			}),
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
@@ -201,14 +215,14 @@ func TestExamineDescriptors(t *testing.T) {
 `,
 		},
 		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Schema{
 						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 1, ParentID: 2},
 					}}),
 				},
-			},
+			}),
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{ParentID: 2, Name: "schema"}, ID: 1},
 			},
@@ -216,14 +230,14 @@ func TestExamineDescriptors(t *testing.T) {
 			expected:     "  Schema   1: ParentID   2, ParentSchemaID  0, Name 'schema': invalid parent id 2\n",
 		},
 		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Type{
 						Type: &descpb.TypeDescriptor{Name: "type", ID: 1},
 					}}),
 				},
-			},
+			}),
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{Name: "type"}, ID: 1},
 			},
@@ -252,7 +266,7 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{
 			valid: true,
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
 				{
 					ID: 2,
@@ -260,7 +274,7 @@ func TestExamineDescriptors(t *testing.T) {
 						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
 					}}),
 				},
-			},
+			}),
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
@@ -269,7 +283,7 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{
 			valid: true,
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
@@ -280,7 +294,7 @@ func TestExamineDescriptors(t *testing.T) {
 						},
 					}}),
 				},
-			},
+			}),
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db1"}, ID: 1},
@@ -290,7 +304,7 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{
 			valid: false,
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
@@ -301,7 +315,7 @@ func TestExamineDescriptors(t *testing.T) {
 						},
 					}}),
 				},
-			},
+			}),
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db1"}, ID: 1},
@@ -312,7 +326,7 @@ func TestExamineDescriptors(t *testing.T) {
 `,
 		},
 		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{ID: 1, DescBytes: toBytes(t, droppedValidTableDesc)},
 				{
 					ID: 2,
@@ -320,7 +334,7 @@ func TestExamineDescriptors(t *testing.T) {
 						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
 					}}),
 				},
-			},
+			}),
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
@@ -358,14 +372,14 @@ func TestExamineJobs(t *testing.T) {
 			expected: "Examining 1 running jobs...\n",
 		},
 		{
-			descTable: doctor.DescriptorTable{
+			descTable: mkDescTable(t, []doctor.DescriptorTableRow{
 				{
 					ID: 2,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
 						Table: &descpb.TableDescriptor{ID: 2},
 					}}),
 				},
-			},
+			}),
 			jobsTable: doctor.JobsTable{
 				{
 					ID:      100,

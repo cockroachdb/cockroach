@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -39,8 +40,54 @@ type DescriptorTableRow struct {
 	ModTime   hlc.Timestamp
 }
 
+type DescriptorSet interface {
+	NumDescriptors() int
+	Iterate(func(id descpb.ID, desc catalog.Descriptor) error) error
+	catalog.DescGetter
+}
+
 // DescriptorTable represents data read from `system.descriptor`.
-type DescriptorTable []DescriptorTableRow
+type DescriptorTable struct {
+	raw       []DescriptorTableRow
+	unwrapped []catalog.Descriptor
+	catalog.DescGetter
+}
+
+func (d DescriptorTable) NumDescriptors() int {
+	return len(d.raw)
+}
+
+func (d DescriptorTable) Iterate(f func(id descpb.ID, desc catalog.Descriptor) error) error {
+	for i, desc := range d.unwrapped {
+		if err := f(descpb.ID(d.raw[i].ID), desc); err != nil {
+			if iterutil.Done(err) {
+				err = nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func MakeDescriptorTable(ctx context.Context, rows []DescriptorTableRow) (DescriptorTable, error) {
+	dg, err := newDescGetter(ctx, rows)
+	if err != nil {
+		return DescriptorTable{}, err
+	}
+	ids := make([]descpb.ID, len(rows))
+	for i := 0; i < len(rows); i++ {
+		ids[i] = descpb.ID(rows[i].ID)
+	}
+	unwrapped, err := dg.GetDescs(ctx, ids)
+	if err != nil {
+		return DescriptorTable{}, err
+	}
+	return DescriptorTable{
+		raw:        rows,
+		unwrapped:  unwrapped,
+		DescGetter: dg,
+	}, nil
+}
 
 // NamespaceTableRow represents a namespace entry from table system.namespace.
 type NamespaceTableRow struct {
@@ -53,7 +100,7 @@ type NamespaceTable []NamespaceTableRow
 
 // namespaceReverseMap is the inverse of the namespace map stored in table
 // `system.namespace`.
-type namespaceReverseMap map[int64][]descpb.NameInfo
+type namespaceReverseMap map[descpb.ID][]descpb.NameInfo
 
 // JobsTable represents data read from `system.jobs`.
 type JobsTable []jobs.JobMetadata
@@ -74,11 +121,12 @@ func newDescGetter(ctx context.Context, rows []DescriptorTableRow) (catalog.MapD
 func newNamespaceMap(rows []NamespaceTableRow) namespaceReverseMap {
 	res := make(namespaceReverseMap)
 	for _, r := range rows {
-		l, ok := res[r.ID]
+		id := descpb.ID(r.ID)
+		l, ok := res[id]
 		if !ok {
-			res[r.ID] = []descpb.NameInfo{r.NameInfo}
+			res[id] = []descpb.NameInfo{r.NameInfo}
 		} else {
-			res[r.ID] = append(l, r.NameInfo)
+			res[id] = append(l, r.NameInfo)
 		}
 	}
 	return res
@@ -87,7 +135,7 @@ func newNamespaceMap(rows []NamespaceTableRow) namespaceReverseMap {
 // Examine runs a suite of consistency checks over system tables.
 func Examine(
 	ctx context.Context,
-	descTable DescriptorTable,
+	descTable DescriptorSet,
 	namespaceTable NamespaceTable,
 	jobsTable JobsTable,
 	verbose bool,
@@ -110,13 +158,13 @@ func Examine(
 // examineDescriptors runs a suite of checks over the descriptor table.
 func examineDescriptors(
 	ctx context.Context,
-	descTable DescriptorTable,
+	descTable DescriptorSet,
 	namespaceTable NamespaceTable,
 	reportFunc func(descpb.ID, catalog.Descriptor, error),
 ) (ok bool, err error) {
 	log.Infof(ctx,
 		"examining %d descriptors and %d namespace entries...\n",
-		len(descTable), len(namespaceTable))
+		descTable.NumDescriptors(), len(namespaceTable))
 	const (
 		namespaceTableID  = 2
 		namespace2TableID = 30
@@ -131,30 +179,26 @@ func examineDescriptors(
 	) {
 		report(id, descriptor, errors.NewWithDepthf(1, msg, args...))
 	}
-	descGetter, err := newDescGetter(ctx, descTable)
-	if err != nil {
-		return false, err
-	}
 	nMap := newNamespaceMap(namespaceTable)
-
-	for _, row := range descTable {
-		desc, ok := descGetter[descpb.ID(row.ID)]
-		if !ok {
-			// This should never happen as ids are parsed and inserted from descTable.
-			log.Fatalf(ctx, "Descriptor id %d not found", row.ID)
+	descTable.Iterate(func(id descpb.ID, desc catalog.Descriptor) error {
+		if desc.GetID() != id {
+			reportf(id, desc,
+				"different id in descriptor table: %d", id)
 		}
 
-		if int64(desc.GetID()) != row.ID {
-			reportf(descpb.ID(row.ID), desc,
-				"different id in descriptor table: %d", row.ID)
-			continue
+		parent, err := descTable.GetDesc(ctx, desc.GetParentID())
+		if err != nil {
+			report(id, desc, errors.Wrapf(err, "failed to get parent %d", desc.GetParentID()))
 		}
-
-		_, parentExists := descGetter[desc.GetParentID()]
-		_, parentSchemaExists := descGetter[desc.GetParentSchemaID()]
+		parentExists := parent != nil
+		parentSchema, err := descTable.GetDesc(ctx, desc.GetParentID())
+		if err != nil {
+			report(id, desc, errors.Wrapf(err, "failed to get parent schema %d", desc.GetParentSchemaID()))
+		}
+		parentSchemaExists := parentSchema != nil
 		switch d := desc.(type) {
 		case catalog.TableDescriptor:
-			if err := d.Validate(ctx, descGetter); err != nil {
+			if err := d.Validate(ctx, descTable); err != nil {
 				report(desc.GetID(), desc, err)
 			}
 			// Table has been already validated.
@@ -162,7 +206,7 @@ func examineDescriptors(
 			parentSchemaExists = true
 		case catalog.TypeDescriptor:
 			typ := typedesc.NewImmutable(*d.TypeDesc())
-			if err := typ.Validate(ctx, descGetter); err != nil {
+			if err := typ.Validate(ctx, descTable); err != nil {
 				report(desc.GetID(), desc, err)
 			}
 		case catalog.SchemaDescriptor:
@@ -179,7 +223,7 @@ func examineDescriptors(
 		}
 
 		// Process namespace entries pointing to this descriptor.
-		names, ok := nMap[row.ID]
+		names, ok := nMap[id]
 		if !ok {
 			// TODO(spaskob): this check is too crude, we need more fine grained
 			// approach depending on all the possible non-20.1 possibilities and emit
@@ -189,7 +233,7 @@ func examineDescriptors(
 			if !desc.Dropped() && desc.GetID() != namespaceTableID {
 				reportf(desc.GetID(), desc, "not being dropped but no namespace entry found")
 			}
-			continue
+			return nil
 		}
 
 		if desc.Dropped() {
@@ -198,7 +242,7 @@ func examineDescriptors(
 
 		// We delete all pointed descriptors to leave what is missing in the
 		// descriptor table.
-		delete(nMap, row.ID)
+		delete(nMap, id)
 
 		drainingNames := desc.GetDrainingNames()
 		var found bool
@@ -231,13 +275,14 @@ func examineDescriptors(
 		}
 		if !found && desc.GetID() != namespace2TableID {
 			reportf(desc.GetID(), desc, "could not find name in namespace table")
-			continue
+			return nil
 		}
 		if len(drainingNames) > 0 {
 			reportf(desc.GetID(), desc, "extra draining names found %+v", drainingNames)
 		}
 		log.VEventf(ctx, 2, "processed descriptor %d: %v", desc.GetID(), desc)
-	}
+		return nil
+	})
 
 	// Now go over all namespace entries that don't point to descriptors in the
 	// descriptor table.
@@ -245,15 +290,15 @@ func examineDescriptors(
 		if id == keys.PublicSchemaID {
 			continue
 		}
-		if descpb.ID(id) == descpb.InvalidID {
-			reportf(descpb.ID(id), nil, "Row(s) %+v: NULL value found\n", ni)
+		if id == descpb.InvalidID {
+			reportf(id, nil, "Row(s) %+v: NULL value found\n", ni)
 			continue
 		}
 		if strings.HasPrefix(ni[0].Name, "pg_temp_") {
 			// Temporary schemas have namespace entries but not descriptors.
 			continue
 		}
-		reportf(descpb.ID(id), nil,
+		reportf(id, nil,
 			"has namespace row(s) %+v but no descriptor\n", ni)
 	}
 	return !problemsFound, err
@@ -261,14 +306,9 @@ func examineDescriptors(
 
 // examineJobs runs a suite of consistency checks over the system.jobs table.
 func examineJobs(
-	ctx context.Context,
-	descTable DescriptorTable,
-	jobsTable JobsTable,
-	verbose bool,
-	stdout io.Writer,
+	ctx context.Context, descTable DescriptorSet, jobsTable JobsTable, verbose bool, stdout io.Writer,
 ) (ok bool, err error) {
 	fmt.Fprintf(stdout, "Examining %d running jobs...\n", len(jobsTable))
-	descGetter, err := newDescGetter(ctx, descTable)
 	if err != nil {
 		return false, err
 	}
@@ -286,8 +326,14 @@ func examineJobs(
 			if table.Status == jobspb.SchemaChangeGCProgress_DELETED {
 				continue
 			}
-			_, tableExists := descGetter[table.ID]
-			if tableExists {
+			tableDesc, err := descTable.GetDesc(ctx, table.ID)
+			if err != nil {
+				// TODO(ajwerner): Report this rather than returning it. Some errors
+				// probably should lead to early termination but separating those out
+				// is hard. Maybe all errors here indicate a real problem.
+				return false, err
+			}
+			if tableExists := tableDesc != nil; tableExists {
 				existingTables = append(existingTables, int64(table.ID))
 			} else {
 				missingTables = append(missingTables, int64(table.ID))
