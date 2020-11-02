@@ -34,6 +34,15 @@ type IndexOpts struct {
 	AddMutations bool
 }
 
+// DescriptorNameInfo extracts the NameInfo from a descriptor.
+func DescriptorNameInfo(desc Descriptor) descpb.NameInfo {
+	return descpb.NameInfo{
+		ParentID:       desc.GetParentID(),
+		ParentSchemaID: desc.GetParentSchemaID(),
+		Name:           desc.GetName(),
+	}
+}
+
 // Descriptor is an interface to be shared by individual descriptor
 // types.
 type Descriptor interface {
