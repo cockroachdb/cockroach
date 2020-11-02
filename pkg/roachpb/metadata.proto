@@ -379,8 +379,9 @@ message Version {
   optional int32 minor_val = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "Minor"];
   // Note that patch is a placeholder and will always be zero.
   optional int32 patch = 3 [(gogoproto.nullable) = false];
-  // The unstable version is used to migrate during development.
-  // Users of stable, public releases will only use binaries
-  // with unstable set to 0.
-  optional int32 unstable = 4 [(gogoproto.nullable) = false];
+  // The internal version is used to introduce migrations during the development
+  // cycle. They are subversions that are never the end versions of a release,
+  // i.e. users of stable, public release will only use binaries with the
+  // internal version set to 0.
+  optional int32 internal = 4 [(gogoproto.nullable) = false];
 }
