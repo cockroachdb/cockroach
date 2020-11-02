@@ -93,6 +93,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropColumnDefault: true,
 	dropColumnNotNull: true,
 	dropTable:         true,
+	dropView:          true,
 	dropSchema:        true,
 
 	renameColumn: true,
@@ -832,7 +833,29 @@ func (og *operationGenerator) dropView(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP VIEW %s`, viewName), nil
+	viewExists, err := tableExists(tx, viewName)
+	if err != nil {
+		return "", err
+	}
+	viewHasDependencies, err := tableHasDependencies(tx, viewName)
+	if err != nil {
+		return "", err
+	}
+
+	dropBehavior := tree.DropBehavior(og.randIntn(3))
+
+	ifExists := og.randIntn(2) == 0
+	dropView := tree.DropView{
+		Names:        []tree.TableName{*viewName},
+		IfExists:     ifExists,
+		DropBehavior: dropBehavior,
+	}
+
+	codesWithConditions{
+		{pgcode.UndefinedTable, !ifExists && !viewExists},
+		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && viewHasDependencies},
+	}.add(og.expectedExecErrors)
+	return dropView.String(), nil
 }
 
 func (og *operationGenerator) renameColumn(tx *pgx.Tx) (string, error) {
