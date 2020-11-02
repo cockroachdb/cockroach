@@ -220,6 +220,11 @@ func (a *appStats) recordStatement(
 	s.mu.data.OverheadLat.Record(s.mu.data.Count, ovhLat)
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
+	// Note that some fields derived from tracing statements (such as
+	// BytesSentOverNetwork) are not updated here because they are collected
+	// on-demand.
+	// TODO(asubiotto): Record the aforementioned fields here when always-on
+	//  tracing is a thing.
 	s.mu.vectorized = vectorized
 	s.mu.distSQLUsed = distSQLUsed
 	s.mu.Unlock()
