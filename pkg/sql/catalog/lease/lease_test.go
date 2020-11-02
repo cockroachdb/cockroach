@@ -26,10 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -2177,80 +2175,6 @@ func TestIntentOnSystemConfigDoesNotPreventSchemaChange(t *testing.T) {
 	case err := <-errCh:
 		require.NoError(t, err)
 	}
-}
-
-// TestFinalizeVersionEnablesRangefeedUpdates ensures that gossip is used when
-// the version is initialized to something prior to VersionRangefeedLeases and
-// then that rangefeeds are adopted once that version is finalized.
-//
-// TODO(ajwerner): Remove this test in 21.1 as it is no longer relevant.
-func TestFinalizeVersionEnablesRangefeedUpdates(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// The test first starts a cluster at a version below VersionRangefeedLeases
-	// and ensure that schema changes don't block for too long. Meanwhile ensure
-	// that no rangefeed has been created on the system config span. Then finalize
-	// the version upgrade and ensure that a rangefeed is created and that
-	// schema changes still work.
-
-	ctx := context.Background()
-	var rangefeedsCreated int64
-	descriptorTablePrefix := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
-	descriptorTableSpan := roachpb.Span{
-		Key:    descriptorTablePrefix,
-		EndKey: descriptorTablePrefix.PrefixEnd(),
-	}
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLLeaseManager: &lease.ManagerTestingKnobs{
-					VersionPollIntervalForRangefeeds: time.Millisecond,
-				},
-				Store: &kvserver.StoreTestingKnobs{
-					// Add a filter to detect the creation of a rangefeed over the
-					// descriptor table.
-					TestingRangefeedFilter: func(
-						args *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
-					) *roachpb.Error {
-						if args.Span.Overlaps(descriptorTableSpan) {
-							atomic.AddInt64(&rangefeedsCreated, 1)
-						}
-						return nil
-					},
-				},
-				Server: &server.TestingKnobs{
-					// We're going to manually control when the upgrade takes place below
-					// so disable the automatic upgrade.
-					DisableAutomaticVersionUpgrade: 1,
-					// Bootstrap the cluster at something below VersionRangefeedLeases so
-					// that we can test the upgrade.
-					BinaryVersionOverride: clusterversion.VersionByKey(clusterversion.Version20_1),
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
-	// Lease table foo on node 2.
-	db2 := tc.ServerConn(1)
-	var junk int
-	require.EqualValues(t, gosql.ErrNoRows, db2.QueryRow("SELECT * FROM foo").Scan(&junk))
-
-	// Run a schema change which will require a notification to finish.
-	tdb.Exec(t, "ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 2")
-	require.Equal(t, int64(0), atomic.LoadInt64(&rangefeedsCreated))
-
-	// Upgrade to after VersionRangefeedLeases and ensure that a rangefeed is created.
-	tdb.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
-	testutils.SucceedsSoon(t, func() error {
-		if atomic.LoadInt64(&rangefeedsCreated) == 0 {
-			return errors.New("no rangefeeds created")
-		}
-		return nil
-	})
-	tdb.Exec(t, "ALTER TABLE foo ADD COLUMN k INT NOT NULL DEFAULT 2")
 }
 
 func ensureTestTakesLessThan(t *testing.T, allowed time.Duration) func() {
