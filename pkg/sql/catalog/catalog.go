@@ -11,6 +11,8 @@
 package catalog
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -75,7 +77,7 @@ type ResolvedObjectPrefix struct {
 
 // NamespaceGetter is used to get namespace entries.
 type NamespaceGetter interface {
-	GetNamespaceEntry(parentID, parentSchemaID descpb.ID, name string) (descpb.ID, error)
+	GetNamespaceEntry(ctx context.Context, parentID, parentSchemaID descpb.ID, name string) (descpb.ID, bool, error)
 }
 
 // SchemaMeta implements the SchemaMeta interface.
