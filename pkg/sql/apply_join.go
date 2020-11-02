@@ -249,7 +249,7 @@ func runPlanInsidePlan(
 		params.extendedEvalCtx.copy,
 		plan.subqueryPlans,
 		recv,
-		true,
+		true, /* maybeDistribute */
 	) {
 		if err := rowResultWriter.Err(); err != nil {
 			return err
