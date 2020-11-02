@@ -1434,8 +1434,14 @@ type testingDescriptorValidation bool
 var PerformTestingDescriptorValidation testingDescriptorValidation = true
 
 // Validate validates that the table descriptor is well formed. Checks include
-// both single table and cross table invariants.
-func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) error {
+// both single table and cross table invariants. If the ns parameter is non-nil,
+// it will validate the namespace entries for the table.
+//
+// TODO(ajwerner): Assert that a NamespaceGetter is provided and validate at the
+// appropriate times such that validation succeeds.
+func (desc *Immutable) Validate(
+	ctx context.Context, dg catalog.DescGetter, ns catalog.NamespaceGetter,
+) error {
 	err := desc.ValidateTable(ctx)
 	if err != nil {
 		return err
@@ -1443,7 +1449,12 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	if desc.Dropped() {
 		return nil
 	}
-	return errors.Wrapf(desc.validateCrossReferences(ctx, dg), "desc %d", desc.GetID())
+	var nsErr error
+	if ns != nil {
+		nsErr = desc.validateNamespace(ctx, ns)
+	}
+	return errors.CombineErrors(nsErr,
+		errors.Wrapf(desc.validateCrossReferences(ctx, dg), "desc %d", desc.GetID()))
 }
 
 // validateTableIfTesting is similar to validateTable, except it is only invoked

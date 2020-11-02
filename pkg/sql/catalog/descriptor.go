@@ -159,7 +159,7 @@ type TableDescriptor interface {
 		getType func(descpb.ID) (TypeDescriptor, error),
 	) (descpb.IDs, error)
 
-	Validate(ctx context.Context, txn DescGetter) error
+	Validate(ctx context.Context, dg DescGetter, ns NamespaceGetter) error
 
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
 	GetDependsOn() []descpb.ID

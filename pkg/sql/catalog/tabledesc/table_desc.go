@@ -12,8 +12,11 @@
 package tabledesc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/validateutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -103,6 +106,17 @@ func (desc *Immutable) GetPublicColumns() []descpb.ColumnDescriptor {
 // GetColumnAtIdx returns the column at the specified index.
 func (desc *Immutable) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 	return &desc.Columns[idx]
+}
+
+// validateNamespace ensures that an entry exists for this descriptor if it is
+// in a state such that one should it exist or that none exists if none should.
+//
+// TODO(ajwerner): Consider wrapping namespace errors specially so that code at
+// higher levels can detect namespace errors and warn about possible
+// inconsistencies due to independent snapshots of namespace and descriptor
+// as might happen in a debug zip.
+func (desc *Immutable) validateNamespace(ctx context.Context, ns catalog.NamespaceGetter) error {
+	return validateutil.ValidateNamespace(ctx, desc, ns)
 }
 
 // ImmutableCopy implements the MutableDescriptor interface.

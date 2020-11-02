@@ -3693,7 +3693,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 				if descriptor == nil {
 					return nil
 				}
-				err := descriptor.Validate(ctx, fn)
+				err := descriptor.Validate(ctx, fn, nil /*ns */)
 				if err == nil {
 					return nil
 				}

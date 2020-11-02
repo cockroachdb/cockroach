@@ -559,9 +559,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
-			if err := n.tableDesc.Validate(
-				params.ctx, catalogkv.NewOneLevelUncachedDescGetter(params.p.Txn(), params.ExecCfg().Codec),
-			); err != nil {
+			dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.Txn(), params.ExecCfg().Codec)
+			if err := n.tableDesc.Validate(params.ctx, dg, nil /* ns */); err != nil {
 				return err
 			}
 
@@ -588,9 +587,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-			if err := n.tableDesc.Validate(
-				params.ctx, catalogkv.NewOneLevelUncachedDescGetter(params.p.Txn(), params.ExecCfg().Codec),
-			); err != nil {
+			dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.Txn(), params.ExecCfg().Codec)
+			if err := n.tableDesc.Validate(params.ctx, dg, nil /* ns */); err != nil {
 				return err
 			}
 

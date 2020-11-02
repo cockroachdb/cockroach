@@ -301,7 +301,7 @@ func unwrapDescriptor(
 			return nil, err
 		}
 		if validate {
-			if err := immTable.Validate(ctx, dg); err != nil {
+			if err := immTable.Validate(ctx, dg, nil /* ns */); err != nil {
 				return nil, err
 			}
 		}

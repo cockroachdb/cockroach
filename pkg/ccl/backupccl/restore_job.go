@@ -419,7 +419,7 @@ func WriteDescriptors(
 		// rather than reaching into the store.
 		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, keys.SystemSQLCodec)
 		for _, table := range tables {
-			if err := table.Validate(ctx, dg); err != nil {
+			if err := table.Validate(ctx, dg, nil /* ns */); err != nil {
 				return errors.Wrapf(err,
 					"validate table %d", errors.Safe(table.GetID()))
 			}

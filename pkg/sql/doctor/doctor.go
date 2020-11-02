@@ -179,6 +179,7 @@ func examineDescriptors(
 	) {
 		report(id, descriptor, errors.NewWithDepthf(1, msg, args...))
 	}
+
 	nMap := newNamespaceMap(namespaceTable)
 	descTable.Iterate(func(id descpb.ID, desc catalog.Descriptor) error {
 		if desc.GetID() != id {
@@ -198,7 +199,7 @@ func examineDescriptors(
 		parentSchemaExists := parentSchema != nil
 		switch d := desc.(type) {
 		case catalog.TableDescriptor:
-			if err := d.Validate(ctx, descTable); err != nil {
+			if err := d.Validate(ctx, descTable, nil /* ns */); err != nil {
 				report(desc.GetID(), desc, err)
 			}
 			// Table has been already validated.

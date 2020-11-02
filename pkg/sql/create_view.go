@@ -251,7 +251,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
-	if err := newDesc.Validate(params.ctx, dg); err != nil {
+	if err := newDesc.Validate(params.ctx, dg, nil /* ns */); err != nil {
 		return err
 	}
 
