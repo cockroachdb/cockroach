@@ -162,7 +162,8 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		vsc.MaxAllocatedMem = 0
 		vsc.MaxAllocatedDisk = 0
 		vsc.NumBatches = 0
-		vsc.BytesRead = 0
+		// BytesRead is overridden to a useful value for tests.
+		vsc.BytesRead = 8 * vsc.NumTuples
 	}
 	span.SetSpanStats(&vsc.VectorizedStats)
 	span.Finish()

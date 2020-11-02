@@ -605,11 +605,10 @@ type PlanningCtx struct {
 	// be replaced by evaluation. Should only be set by EXPLAIN.
 	noEvalSubqueries bool
 
-	// If set, a diagram for the plan will be generated and passed to this
-	// function.
-	saveDiagram func(execinfrapb.FlowDiagram)
-	// If set, the diagram passed to saveDiagram will show the types of each
-	// stream.
+	// If set, the flows for the physical plan will be passed to this function.
+	// The flows are not safe for use past the lifetime of the saveFlows function.
+	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
+	// If set, the result of flowSpecsToDiagram will show the types of each stream.
 	saveDiagramShowInputTypes bool
 }
 
@@ -635,6 +634,35 @@ func (p *PlanningCtx) IsLocal() bool {
 // will run, without actually running it.
 func (p *PlanningCtx) EvaluateSubqueries() bool {
 	return !p.noEvalSubqueries
+}
+
+// flowSpecsToDiagram is a helper function used to convert flowSpecs into a
+// FlowDiagram using this PlanningCtx's information.
+func (p *PlanningCtx) flowSpecsToDiagram(
+	ctx context.Context, flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
+) (execinfrapb.FlowDiagram, error) {
+	// Local flows might not have the UUID field set. We need it to be set to
+	// distinguish statistics for processors in subqueries vs the main query vs
+	// postqueries.
+	if len(flows) == 1 {
+		for _, f := range flows {
+			if f.FlowID == (execinfrapb.FlowID{}) {
+				f.FlowID.UUID = uuid.MakeV4()
+			}
+		}
+	}
+	log.VEvent(ctx, 1, "creating plan diagram")
+	var stmtStr string
+	if p.planner != nil && p.planner.stmt != nil {
+		stmtStr = p.planner.stmt.String()
+	}
+	diagram, err := execinfrapb.GeneratePlanDiagram(
+		stmtStr, flows, p.saveDiagramShowInputTypes,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return diagram, nil
 }
 
 // PhysicalPlan is a partial physical plan which corresponds to a planNode
