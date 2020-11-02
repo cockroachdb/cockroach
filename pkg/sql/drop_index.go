@@ -245,7 +245,7 @@ func (p *planner) dropIndexByName(
 			return nil
 		}
 		// Index does not exist, but we want it to: error out.
-		return err
+		return pgerror.WithCandidateCode(err, pgcode.UndefinedObject)
 	}
 	if dropped {
 		return nil

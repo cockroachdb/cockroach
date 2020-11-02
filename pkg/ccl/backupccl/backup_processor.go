@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -138,6 +139,7 @@ func runBackupProcessor(
 	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
 	//  *2). See #49798.
 	numSenders := int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 2
+	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&settings.SV)
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
@@ -180,6 +182,7 @@ func runBackupProcessor(
 					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
 					MVCCFilter:                          spec.MVCCFilter,
 					Encryption:                          spec.Encryption,
+					TargetFileSize:                      targetFileSize,
 				}
 
 				// If we're doing re-attempts but are not yet in the priority regime,

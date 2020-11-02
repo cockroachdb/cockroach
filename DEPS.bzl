@@ -1612,8 +1612,8 @@ def go_deps():
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/go-libedit",
         replace = "github.com/otan-cockroach/go-libedit",
-        sum = "h1:JZt/IahREIv11tegg2OoWEpTr/Zk8gtny+4EKMQqGEU=",
-        version = "v1.10.2-0.20201016212517-2c66cfe9603c",
+        sum = "h1:+sIdymRXD4aKCvmVMBLL7/bO95KZFYrbz0EzQ1Jlj4A=",
+        version = "v1.10.2-0.20201030151939-7cced08450e7",
     )
     go_repository(
         name = "com_github_knz_strtime",

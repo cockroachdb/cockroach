@@ -29,7 +29,7 @@ project
       ├── stats: [rows=9801]
       ├── key: (1,4)
       ├── fd: (1)-->(2), (4)-->(5)
-      ├── inner-join (inverted-lookup rtable@geom_index)
+      ├── inner-join (inverted rtable@geom_index)
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:4(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool]
@@ -61,7 +61,7 @@ project
       ├── stats: [rows=9801]
       ├── key: (1,4)
       ├── fd: (1)-->(2), (4)-->(5)
-      ├── inner-join (inverted-lookup rtable@geom_index)
+      ├── inner-join (inverted rtable@geom_index)
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:4(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool]

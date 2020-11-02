@@ -817,7 +817,7 @@ inner-join (lookup geo_table)
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── prune: (1,5)
- ├── inner-join (inverted-lookup geo_table@geom_index)
+ ├── inner-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
@@ -903,7 +903,7 @@ left-join (lookup geo_table)
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── prune: (1,5)
- ├── left-join (inverted-lookup geo_table@geom_index)
+ ├── left-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
@@ -937,7 +937,7 @@ semi-join (lookup geo_table)
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1)
- ├── inner-join (inverted-lookup geo_table@geom_index)
+ ├── inner-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
@@ -972,7 +972,7 @@ anti-join (lookup geo_table)
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1)
- ├── left-join (inverted-lookup geo_table@geom_index)
+ ├── left-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)

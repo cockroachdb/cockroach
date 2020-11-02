@@ -193,7 +193,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		f.Buffer.WriteByte(')')
 
 	case *InvertedJoinExpr:
-		fmt.Fprintf(f.Buffer, "%v (inverted-lookup", t.JoinType)
+		fmt.Fprintf(f.Buffer, "%v (inverted", t.JoinType)
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
