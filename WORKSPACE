@@ -19,7 +19,7 @@ http_archive(
 # Load the go dependencies and invoke them.
 load("@io_bazel_rules_go//go:deps.bzl", "go_rules_dependencies", "go_register_toolchains")
 go_rules_dependencies()
-go_register_toolchains(go_version="1.13.14")
+go_register_toolchains()
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
 # repo.
