@@ -14,6 +14,8 @@ import (
 	"io"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/admitter"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -35,6 +37,8 @@ type Options struct {
 	// If set, consulted to decorate an error message to be sent to the client.
 	// The error passed to this method will contain no internal information.
 	OnSendErrToClient func(code ErrorCode, msg string) string
+
+	admitter admitter.Service
 }
 
 // Proxy takes an incoming client connection and relays it to a backend SQL
@@ -49,6 +53,14 @@ func (s *Server) Proxy(conn net.Conn) error {
 			Code:     "08004", // rejected connection
 			Message:  msg,
 		}).Encode(nil))
+	}
+
+	if s.admitter != nil {
+		// TODO(spaskob): check for previous successful connection from the same IP
+		// in which case allow connection.
+		if err := s.admitter.AllowRequest(conn.RemoteAddr().String(), timeutil.Now()); err != nil {
+			return newErrorf(CodeProxyRefusedConnection, "too many connection attempts")
+		}
 	}
 
 	{
