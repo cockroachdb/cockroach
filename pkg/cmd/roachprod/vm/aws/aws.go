@@ -75,12 +75,21 @@ type providerOpts struct {
 	EBSVolumeType      string
 	EBSVolumeSize      int
 	EBSProvisionedIOPs int
+	UseMultipleDisks   bool
+
+	// Use specified ImageAMI when provisioning.
+	// Overrides config.json AMI.
+	ImageAMI string
 
 	// CreateZones stores the list of zones for used cluster creation.
 	// When > 1 zone specified, geo is automatically used, otherwise, geo depends
 	// on the geo flag being set. If no zones specified, defaultCreateZones are
 	// used. See defaultCreateZones.
 	CreateZones []string
+	// CreateRateLimit specifies the rate limit used for aws instance creation.
+	// The request limit from aws' side can vary across regions, as well as the
+	// size of cluster being created.
+	CreateRateLimit float64
 }
 
 const (
@@ -141,6 +150,14 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"as AZ:N where N is an integer, the zone will be repeated N times. If > 1\n"+
 			"zone specified, the cluster will be spread out evenly by zone regardless\n"+
 			"of geo (default [%s])", strings.Join(defaultCreateZones, ",")))
+	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
+		"", "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
+	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
+		false, "Enable the use of multiple stores by creating one store directory per disk.  Default is to raid0 stripe all disks.")
+	flags.Float64Var(&o.CreateRateLimit, ProviderName+"-create-rate-limit", 2, "aws"+
+		" rate limit (per second) for instance creation. This is used to avoid hitting the request"+
+		" limits from aws, which can vary based on the region, and the size of the cluster being"+
+		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -251,8 +268,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		}
 	}
 	var g errgroup.Group
-	const rateLimit = 2 // per second
-	limiter := rate.NewLimiter(rateLimit, 2 /* buckets */)
+	limiter := rate.NewLimiter(rate.Limit(p.opts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
 		capName := names[i]
 		placement := zones[i]
@@ -670,7 +686,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(extraMountOpts)
+	filename, err := writeStartupScript(extraMountOpts, p.opts.UseMultipleDisks)
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
@@ -678,12 +694,19 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		_ = os.Remove(filename)
 	}()
 
+	withFlagOverride := func(cfg string, fl *string) string {
+		if *fl == "" {
+			return cfg
+		}
+		return *fl
+	}
+
 	args := []string{
 		"ec2", "run-instances",
 		"--associate-public-ip-address",
 		"--count", "1",
-		"--image-id", az.region.AMI,
 		"--instance-type", machineType,
+		"--image-id", withFlagOverride(az.region.AMI, &p.opts.ImageAMI),
 		"--key-name", keyName,
 		"--region", az.region.Name,
 		"--security-group-ids", az.region.SecurityGroup,
@@ -691,6 +714,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"--tag-specifications", tagSpecs,
 		"--user-data", "file://" + filename,
 	}
+
 	if cpuOptions != "" {
 		args = append(args, "--cpu-options", cpuOptions)
 	}
@@ -702,7 +726,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		case "gp2":
 			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,DeleteOnTermination=true}",
 				p.opts.EBSVolumeSize, t)
-		case "io1":
+		case "io1", "io2":
 			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,Iops=%d,DeleteOnTermination=true}",
 				p.opts.EBSVolumeSize, t, p.opts.EBSProvisionedIOPs)
 		default:
@@ -714,7 +738,6 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			"DeviceName=/dev/sdd,Ebs="+ebsParams,
 		)
 	}
-
 	return p.runJSONCommand(args, &data)
 }
 

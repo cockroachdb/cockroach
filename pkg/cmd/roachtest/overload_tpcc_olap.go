@@ -45,7 +45,7 @@ type tpccOLAPSpec struct {
 func (s tpccOLAPSpec) run(ctx context.Context, t *test, c *cluster) {
 	crdbNodes, workloadNode := setupTPCC(
 		ctx, t, c, tpccOptions{
-			Warehouses: s.Warehouses, SetupType: usingFixture,
+			Warehouses: s.Warehouses, SetupType: usingImport,
 		})
 	const queryFileName = "queries.sql"
 	// querybench expects the entire query to be on a single line.

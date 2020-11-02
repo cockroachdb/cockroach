@@ -1038,6 +1038,15 @@ type Mutator interface {
 	Mutate(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
 }
 
+// MakeSchemaName creates a CreateSchema definition
+func MakeSchemaName(ifNotExists bool, schema string, authRole string) *tree.CreateSchema {
+	return &tree.CreateSchema{
+		IfNotExists: ifNotExists,
+		Schema:      tree.Name(schema),
+		AuthRole:    authRole,
+	}
+}
+
 // RandCreateTables creates random table definitions.
 func RandCreateTables(
 	rng *rand.Rand, prefix string, num int, mutators ...Mutator,

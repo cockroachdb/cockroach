@@ -22,6 +22,7 @@ func registerElectionAfterRestart(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "election-after-restart",
 		Owner:   OwnerKV,
+		Skip:    "https://github.com/cockroachdb/cockroach/issues/54246",
 		Cluster: makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			skip.UnderRace(t, "race builds make this test exceed its timeout")

@@ -140,6 +140,7 @@ func registerEngineSwitch(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("engine/switch/nodes=%d", n),
 		Owner:      OwnerStorage,
+		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -149,6 +150,7 @@ func registerEngineSwitch(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("engine/switch/encrypted/nodes=%d", n),
 		Owner:      OwnerStorage,
+		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t *test, c *cluster) {

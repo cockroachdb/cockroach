@@ -372,10 +372,11 @@ func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
 		// If we get a second CTRL-C, exit immediately.
 		select {
 		case <-sig:
-			shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting.")
+			shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting. Cluster might be left behind.")
 			os.Exit(2)
 		case <-destroyCh:
 			shout(ctx, l, os.Stderr, "Done destroying all clusters.")
+			os.Exit(2)
 		}
 	}()
 }
