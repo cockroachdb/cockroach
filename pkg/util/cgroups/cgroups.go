@@ -13,7 +13,6 @@ package cgroups
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -23,13 +22,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 const (
-	cgroupV1MemLimitFilename = "memory.stat"
-	cgroupV2MemLimitFilename = "memory.max"
+	cgroupV1MemLimitFilename     = "memory.stat"
+	cgroupV2MemLimitFilename     = "memory.max"
 	cgroupV1CPUQuotaFilename     = "cpu.cfs_quota_us"
 	cgroupV1CPUPeriodFilename    = "cpu.cfs_period_us"
 	cgroupV1CPUSysUsageFilename  = "cpuacct.usage_sys"
@@ -87,7 +85,7 @@ func readFile(filepath string) (res []byte, err error) {
 	res, err = ioutil.ReadAll(f)
 	return res, err
 }
-// Finds memory limit for cgroup V1 via looking in [contoller mount path]/memory.stat
+
 func cgroupFileToUint64(filepath, desc string) (res uint64, err error) {
 	contents, err := readFile(filepath)
 	if err != nil {
@@ -307,29 +305,8 @@ func getCgroupDetails(mountinfoPath string, cRoot string, controller string) (st
 		}
 
 		ver, ok := detectCgroupVersion(fields, controller)
-		if ok {
-			mountPoint := string(fields[4])
-			if ver == 2 {
-				return mountPoint, ver, nil
-			}
-			// It is possible that the controller mount and the cgroup path are not the same (both are relative to the NS root).
-			// So start with the mount and construct the relative path of the cgroup.
-			// To test:
-			//   cgcreate -t $USER:$USER -a $USER:$USER -g memory:crdb_test
-			//   echo 3999997952 > /sys/fs/cgroup/memory/crdb_test/memory.limit_in_bytes
-			//   cgexec -g memory:crdb_test ./cockroach start-single-node
-			// cockroach.log -> server/config.go:433 ⋮ system total memory: ‹3.7 GiB›
-			//   without constructing the relative path
-			// cockroach.log -> server/config.go:433 ⋮ system total memory: ‹63 GiB›
-			nsRelativePath := string(fields[3])
-			if !strings.Contains(nsRelativePath, "..") {
-				// We don't expect to see err here ever but in case that it happens
-				// the best action is to ignore the line and hope that the rest of the lines
-				// will allow us to extract a valid path.
-				if relPath, err := filepath.Rel(nsRelativePath, cRoot); err == nil {
-					return filepath.Join(mountPoint, relPath), ver, nil
-				}
-			}
+		if ok && (ver == 1 && string(fields[3]) == cRoot) || ver == 2 {
+			return string(fields[4]), ver, nil
 		}
 	}
 
@@ -360,7 +337,7 @@ func detectCgroupVersion(fields [][]byte, controller string) (_ int, found bool)
 
 	pos++
 
-	// Check for memory controller specifically in cgroup v1 (it is listed in super options field),
+	// Check for controller specifically in cgroup v1 (it is listed in super options field),
 	// as the limit can't be found if it is not enforced
 	if bytes.Equal(fields[pos], []byte("cgroup")) && bytes.Contains(fields[pos+2], []byte(controller)) {
 		return 1, true
@@ -370,6 +347,8 @@ func detectCgroupVersion(fields [][]byte, controller string) (_ int, found bool)
 
 	return 0, false
 }
+
+// CPUUsage returns CPU usage and quotas for an entire cgroup.
 type CPUUsage struct {
 	// System time and user time taken by this cgroup or process. In nanoseconds.
 	Stime, Utime uint64
@@ -443,21 +422,4 @@ func getCgroupCPU(root string) (CPUUsage, error) {
 	}
 
 	return res, nil
-}
-
-// AdjustMaxProcs sets GOMAXPROCS (if not overridden by env variables) to be
-// the CPU limit of the current cgroup, if running inside a cgroup with a cpu
-// limit lower than runtime.NumCPU(). This is preferable to letting it fall back
-// to Go default, which is runtime.NumCPU(), as the Go scheduler would be
-// running more OS-level threads than can ever be concurrently scheduled.
-func AdjustMaxProcs(ctx context.Context) {
-	if _, set := os.LookupEnv("GOMAXPROCS"); !set {
-		if cpuInfo, err := GetCgroupCPU(); err == nil {
-			numCPUToUse := int(math.Ceil(cpuInfo.CPUShares()))
-			if numCPUToUse < runtime.NumCPU() && numCPUToUse > 0 {
-				log.Infof(ctx, "running in a container; setting GOMAXPROCS to %d", numCPUToUse)
-				runtime.GOMAXPROCS(numCPUToUse)
-			}
-		}
-	}
 }
