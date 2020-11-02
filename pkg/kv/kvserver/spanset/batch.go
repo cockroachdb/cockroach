@@ -298,6 +298,10 @@ func (s spanSetReader) NewMVCCIterator(
 	return NewIteratorAt(s.r.NewMVCCIterator(iterKind, opts), s.spans, s.ts)
 }
 
+func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.EngineIterator {
+	panic("unsupported")
+}
+
 // GetDBEngine recursively searches for the underlying rocksDB engine.
 func GetDBEngine(reader storage.Reader, span roachpb.Span) storage.Reader {
 	switch v := reader.(type) {
@@ -367,6 +371,10 @@ func (s spanSetWriter) ClearIntent(key roachpb.Key) error {
 		return err
 	}
 	return s.w.ClearIntent(key)
+}
+
+func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
+	panic("unsupported")
 }
 
 func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
@@ -444,6 +452,10 @@ func (s spanSetWriter) PutIntent(key roachpb.Key, value []byte) error {
 	return s.w.PutIntent(key, value)
 }
 
+func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
+	panic("unsupported")
+}
+
 func (s spanSetWriter) LogData(data []byte) error {
 	return s.w.LogData(data)
 }
@@ -500,8 +512,8 @@ type spanSetBatch struct {
 
 var _ storage.Batch = spanSetBatch{}
 
-func (s spanSetBatch) SingleClearEngine(key storage.EngineKey) error {
-	return s.b.SingleClearEngine(key)
+func (s spanSetBatch) SingleClearEngineKey(key storage.EngineKey) error {
+	return s.b.SingleClearEngineKey(key)
 }
 
 func (s spanSetBatch) Commit(sync bool) error {

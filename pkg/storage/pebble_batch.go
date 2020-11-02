@@ -22,15 +22,24 @@ import (
 
 // Wrapper struct around a pebble.Batch.
 type pebbleBatch struct {
-	db           *pebble.DB
-	batch        *pebble.Batch
-	buf          []byte
-	prefixIter   pebbleIterator
-	normalIter   pebbleIterator
-	closed       bool
-	isDistinct   bool
-	distinctOpen bool
-	parentBatch  *pebbleBatch
+	db    *pebble.DB
+	batch *pebble.Batch
+	buf   []byte
+	// The iterator reuse optimization in pebbleBatch is for servicing a
+	// BatchRequest, such that the iterators get reused across different
+	// requests in the batch.
+	// Reuse iterators for {normal,prefix} x {MVCCKey,EngineKey} iteration. We
+	// need separate iterators for EngineKey and MVCCKey iteration since
+	// iterators that make separated locks/intents look as interleaved need to
+	// use both simultaneously.
+	prefixIter       pebbleIterator
+	normalIter       pebbleIterator
+	prefixEngineIter pebbleIterator
+	normalEngineIter pebbleIterator
+	closed           bool
+	isDistinct       bool
+	distinctOpen     bool
+	parentBatch      *pebbleBatch
 }
 
 var _ Batch = &pebbleBatch{}
@@ -58,6 +67,16 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch) *pebbleBatch {
 			upperBoundBuf: pb.normalIter.upperBoundBuf,
 			reusable:      true,
 		},
+		prefixEngineIter: pebbleIterator{
+			lowerBoundBuf: pb.prefixIter.lowerBoundBuf,
+			upperBoundBuf: pb.prefixIter.upperBoundBuf,
+			reusable:      true,
+		},
+		normalEngineIter: pebbleIterator{
+			lowerBoundBuf: pb.normalIter.lowerBoundBuf,
+			upperBoundBuf: pb.normalIter.upperBoundBuf,
+			reusable:      true,
+		},
 	}
 	return pb
 }
@@ -72,6 +91,8 @@ func (p *pebbleBatch) Close() {
 	// Destroy the iterators before closing the batch.
 	p.prefixIter.destroy()
 	p.normalIter.destroy()
+	p.prefixEngineIter.destroy()
+	p.normalEngineIter.destroy()
 
 	if !p.isDistinct {
 		_ = p.batch.Close()
@@ -213,6 +234,39 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	return iter
 }
 
+// NewEngineIterator implements the Batch interface.
+func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
+	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
+		panic("iterator must set prefix or upper bound or lower bound")
+	}
+
+	if !p.batch.Indexed() && !p.isDistinct {
+		panic("write-only batch")
+	}
+	if p.distinctOpen {
+		panic("distinct batch open")
+	}
+
+	iter := &p.normalEngineIter
+	if opts.Prefix {
+		iter = &p.prefixEngineIter
+	}
+	if iter.inuse {
+		panic("iterator already in use")
+	}
+
+	if iter.iter != nil {
+		iter.setOptions(opts)
+	} else if p.batch.Indexed() {
+		iter.init(p.batch, opts)
+	} else {
+		iter.init(p.db, opts)
+	}
+
+	iter.inuse = true
+	return iter
+}
+
 // NewMVCCIterator implements the Batch interface.
 func (p *pebbleBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 	if p.distinctOpen {
@@ -245,6 +299,18 @@ func (p *pebbleBatch) ClearIntent(key roachpb.Key) error {
 	return p.clear(MVCCKey{Key: key})
 }
 
+// ClearEngineKey implements the Batch interface.
+func (p *pebbleBatch) ClearEngineKey(key EngineKey) error {
+	if p.distinctOpen {
+		panic("distinct batch open")
+	}
+	if len(key.Key) == 0 {
+		return emptyKeyError()
+	}
+	p.buf = key.EncodeToBuf(p.buf[:0])
+	return p.batch.Delete(p.buf, nil)
+}
+
 func (p *pebbleBatch) clear(key MVCCKey) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
@@ -257,8 +323,8 @@ func (p *pebbleBatch) clear(key MVCCKey) error {
 	return p.batch.Delete(p.buf, nil)
 }
 
-// SingleClearEngine implements the Batch interface.
-func (p *pebbleBatch) SingleClearEngine(key EngineKey) error {
+// SingleClearEngineKey implements the Batch interface.
+func (p *pebbleBatch) SingleClearEngineKey(key EngineKey) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -354,6 +420,19 @@ func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
 // PutIntent implements the Batch interface.
 func (p *pebbleBatch) PutIntent(key roachpb.Key, value []byte) error {
 	return p.put(MVCCKey{Key: key}, value)
+}
+
+// PutEngineKey implements the Batch interface.
+func (p *pebbleBatch) PutEngineKey(key EngineKey, value []byte) error {
+	if p.distinctOpen {
+		panic("distinct batch open")
+	}
+	if len(key.Key) == 0 {
+		return emptyKeyError()
+	}
+
+	p.buf = key.EncodeToBuf(p.buf[:0])
+	return p.batch.Set(p.buf, value, nil)
 }
 
 func (p *pebbleBatch) put(key MVCCKey, value []byte) error {

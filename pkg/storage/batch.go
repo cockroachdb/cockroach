@@ -275,6 +275,15 @@ func (r *RocksDBBatchReader) MVCCKey() (MVCCKey, error) {
 	return decodeMVCCKey(r.Key())
 }
 
+// EngineKey returns the EngineKey for the current batch entry.
+func (r *RocksDBBatchReader) EngineKey() (EngineKey, error) {
+	key, ok := DecodeEngineKey(r.Key())
+	if !ok {
+		return key, errors.Errorf("invalid encoded engine key: %x", r.Key())
+	}
+	return key, nil
+}
+
 // Value returns the value of the current batch entry. Value panics if the
 // BatchType is BatchTypeDeleted.
 func (r *RocksDBBatchReader) Value() []byte {
