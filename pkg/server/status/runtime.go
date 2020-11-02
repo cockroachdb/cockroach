@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -440,6 +441,14 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	if err := cpuTime.Get(pid); err != nil {
 		log.Errorf(ctx, "unable to get cpu usage: %v", err)
 	}
+	cpuShare := float64(runtime.NumCPU())
+	cgroupCpu, err := cgroups.GetCgroupCPU()
+	// It's possible for GetCgroupCPU to return an error that also didn't affect
+	// the part where it reads cpu quotas. Skip over the error if the quota is
+	// set.
+	if err == nil || (cgroupCpu.Period > 0 && cgroupCpu.Quota > 0) {
+		cpuShare = float64(cgroupCpu.Quota) / float64(cgroupCpu.Period)
+	}
 
 	fds := gosigar.ProcFDUsage{}
 	if err := fds.Get(pid); err != nil {
@@ -500,7 +509,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	stime := int64(cpuTime.Sys) * 1e6
 	uPerc := float64(utime-rsr.last.utime) / dur
 	sPerc := float64(stime-rsr.last.stime) / dur
-	combinedNormalizedPerc := (sPerc + uPerc) / float64(runtime.NumCPU())
+	combinedNormalizedPerc := (sPerc + uPerc) / cpuShare
 	gcPausePercent := float64(uint64(gc.PauseTotal)-rsr.last.gcPauseTime) / dur
 	rsr.last.now = now
 	rsr.last.utime = utime
