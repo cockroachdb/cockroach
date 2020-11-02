@@ -69,7 +69,7 @@ func registerClusterVersionSetting() *clusterVersionSetting {
 	s.VersionSetting = settings.MakeVersionSetting(s)
 	settings.RegisterVersionSetting(
 		KeyVersionSetting,
-		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<unstable>,
+		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<internal>,
 		&s.VersionSetting)
 	s.SetVisibility(settings.Public)
 	s.SetReportable(true)
