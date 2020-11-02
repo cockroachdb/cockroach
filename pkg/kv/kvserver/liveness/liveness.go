@@ -824,8 +824,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 	// [*]: see TODO below about how errNodeAlreadyLive handling does not
 	//      enforce this guarantee.
 	beforeQueueTS := nl.clock.Now()
-	minExpiration := hlc.LegacyTimestamp(
-		beforeQueueTS.Add(nl.livenessThreshold.Nanoseconds(), 0))
+	minExpiration := beforeQueueTS.Add(nl.livenessThreshold.Nanoseconds(), 0)
 
 	// Before queueing, record the heartbeat as in-flight.
 	nl.metrics.HeartbeatsInFlight.Inc(1)
@@ -872,8 +871,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 	// Grab a new clock reading to compute the new expiration time,
 	// since we may have queued on the semaphore for a while.
 	afterQueueTS := nl.clock.Now()
-	newLiveness.Expiration = hlc.LegacyTimestamp(
-		afterQueueTS.Add(nl.livenessThreshold.Nanoseconds(), 0))
+	newLiveness.Expiration = afterQueueTS.Add(nl.livenessThreshold.Nanoseconds(), 0)
 	// This guards against the system clock moving backwards. As long
 	// as the cockroach process is running, checks inside hlc.Clock
 	// will ensure that the clock never moves backwards, but these

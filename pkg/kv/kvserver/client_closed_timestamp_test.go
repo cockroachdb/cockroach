@@ -68,7 +68,7 @@ func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) 
 		&livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      1000,
-			Expiration: hlc.LegacyTimestamp{WallTime: 1},
+			Expiration: hlc.Timestamp{WallTime: 1},
 		}))
 	tc.AddAndStartServer(t, serverArgs)
 
