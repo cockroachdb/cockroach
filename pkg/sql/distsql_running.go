@@ -852,14 +852,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.collectBundle {
-		subqueryPlanCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-			diagram, err := subqueryPlanCtx.flowSpecsToDiagram(ctx, flows)
-			if err != nil {
-				return err
-			}
-			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
-			return nil
-		}
+		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
@@ -1150,14 +1143,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
 	if planner.collectBundle {
-		postqueryPlanCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-			diagram, err := postqueryPlanCtx.flowSpecsToDiagram(ctx, flows)
-			if err != nil {
-				return err
-			}
-			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
-			return nil
-		}
+		postqueryPlanCtx.saveFlows = postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
 
 	postqueryPhysPlan, err := dsp.createPhysPlan(postqueryPlanCtx, postqueryPlan)

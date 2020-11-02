@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -965,14 +964,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
 		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
 	} else if planner.collectBundle {
-		planCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-			diagram, err := planCtx.flowSpecsToDiagram(ctx, flows)
-			if err != nil {
-				return err
-			}
-			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
-			return nil
-		}
+		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
 
 	var evalCtxFactory func() *extendedEvalContext

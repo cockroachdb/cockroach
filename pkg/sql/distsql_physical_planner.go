@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -634,6 +635,23 @@ func (p *PlanningCtx) IsLocal() bool {
 // will run, without actually running it.
 func (p *PlanningCtx) EvaluateSubqueries() bool {
 	return !p.noEvalSubqueries
+}
+
+// getDefaultSaveFlowsFunc returns the default function used to save physical
+// plans and their diagrams.
+func (p *PlanningCtx) getDefaultSaveFlowsFunc(
+	ctx context.Context, planner *planner, typ planComponentType,
+) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+		diagram, err := p.flowSpecsToDiagram(ctx, flows)
+		if err != nil {
+			return err
+		}
+		planner.curPlan.distSQLFlowInfos = append(
+			planner.curPlan.distSQLFlowInfos, flowInfo{typ: typ, diagram: diagram, analyzer: execstats.NewTraceAnalyzer(flows)},
+		)
+		return nil
+	}
 }
 
 // flowSpecsToDiagram is a helper function used to convert flowSpecs into a

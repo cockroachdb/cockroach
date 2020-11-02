@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -267,6 +268,15 @@ type planNodeSpooled interface {
 
 var _ planNodeSpooled = &spoolNode{}
 
+type flowInfo struct {
+	typ     planComponentType
+	diagram execinfrapb.FlowDiagram
+	// analyzer is a TraceAnalyzer that has been initialized with the
+	// corresponding flow. Users of this field will want to add a corresponding
+	// trace in order to calculate statistics.
+	analyzer *execstats.TraceAnalyzer
+}
+
 // planTop is the struct that collects the properties
 // of an entire plan.
 // Note: some additional per-statement state is also stored in
@@ -301,8 +311,9 @@ type planTop struct {
 	// results.
 	avoidBuffering bool
 
-	// If we are collecting query diagnostics, flow diagrams are saved here.
-	distSQLDiagrams []execinfrapb.FlowDiagram
+	// If we are collecting query diagnostics, flow information, including
+	// diagrams, are saved here.
+	distSQLFlowInfos []flowInfo
 
 	// If savePlanForStats is true, an ExplainTreePlanNode tree will be saved in
 	// planForStats when the plan is closed.
@@ -377,6 +388,28 @@ func (p *planMaybePhysical) Close(ctx context.Context) {
 	if p.physPlan != nil {
 		p.physPlan.Close(ctx)
 		p.physPlan = nil
+	}
+}
+
+type planComponentType int
+
+const (
+	planComponentTypeUnknown = iota
+	planComponentTypeMainQuery
+	planComponentTypeSubquery
+	planComponentTypePostquery
+)
+
+func (t planComponentType) String() string {
+	switch t {
+	case planComponentTypeMainQuery:
+		return "main-query"
+	case planComponentTypeSubquery:
+		return "subquery"
+	case planComponentTypePostquery:
+		return "postquery"
+	default:
+		return "unknownquerytype"
 	}
 }
 
