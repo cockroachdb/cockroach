@@ -2580,7 +2580,7 @@ func computeStats(
 	t.Helper()
 	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: to})
 	defer iter.Close()
-	s, err := ComputeStatsGo(iter, from, to, nowNanos)
+	s, err := ComputeStatsForRange(iter, from, to, nowNanos)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

@@ -387,7 +387,7 @@ func AddSSTable(
 
 	var stats enginepb.MVCCStats
 	if (ms == enginepb.MVCCStats{}) {
-		stats, err = storage.ComputeStatsGo(iter, start, end, now.UnixNano())
+		stats, err = storage.ComputeStatsForRange(iter, start, end, now.UnixNano())
 		if err != nil {
 			return 0, errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 		}
@@ -437,7 +437,7 @@ func AddSSTable(
 						return err
 					}
 
-					right.stats, err = storage.ComputeStatsGo(
+					right.stats, err = storage.ComputeStatsForRange(
 						iter, right.start, right.end, now.UnixNano(),
 					)
 					if err != nil {
