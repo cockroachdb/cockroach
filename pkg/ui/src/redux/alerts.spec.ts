@@ -40,7 +40,7 @@ import {
 import {
   livenessReducerObj, versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
 } from "./apiReducers";
-import MembershipStatus = cockroach.kv.kvserver.storagepb.MembershipStatus;
+import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 
 const sandbox = sinon.createSandbox();
 
