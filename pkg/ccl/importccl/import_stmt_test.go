@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -1166,7 +1165,7 @@ func TestImportUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	baseDir, cleanup := testutils.TempDir(t)
+	baseDir, cleanup := testutils.TestTempDir(t)
 	defer cleanup()
 	tc := testcluster.StartTestCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
@@ -1265,17 +1264,19 @@ func TestImportUserDefinedTypes(t *testing.T) {
 		},
 	}
 
-	// Set up a directory for the data files.
-	err := os.Mkdir(filepath.Join(baseDir, "test"), 0777)
-	require.NoError(t, err)
 	// Test IMPORT INTO.
 	for _, test := range tests {
 		// Write the test data into a file.
-		err := ioutil.WriteFile(filepath.Join(baseDir, "test", "data"), []byte(test.contents), 0666)
+		f, err := ioutil.TempFile(baseDir, "data")
 		require.NoError(t, err)
+		n, err := f.Write([]byte(test.contents))
+		require.NoError(t, err)
+		require.Equal(t, len(test.contents), n)
 		// Run the import statement.
 		sqlDB.Exec(t, fmt.Sprintf("CREATE TABLE t (%s)", test.create))
-		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t (%s) %s DATA ($1)", test.intoCols, test.typ), "nodelocal://0/test/data")
+		sqlDB.Exec(t,
+			fmt.Sprintf("IMPORT INTO t (%s) %s DATA ($1)", test.intoCols, test.typ),
+			fmt.Sprintf("nodelocal://0/%s", filepath.Base(f.Name())))
 		// Ensure that the table data is as we expect.
 		sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
 		// Clean up after the test.
@@ -1492,7 +1493,7 @@ func TestImportCSVStmt(t *testing.T) {
 	blockGC := make(chan struct{})
 
 	ctx := context.Background()
-	baseDir := filepath.Join("testdata", "csv")
+	baseDir := testutils.TestDataPath("testdata", "csv")
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
@@ -1532,27 +1533,7 @@ func TestImportCSVStmt(t *testing.T) {
 	}
 
 	// Table schema used in IMPORT TABLE tests.
-	tablePath := filepath.Join(baseDir, "table")
-	if err := ioutil.WriteFile(tablePath, []byte(`
-		CREATE TABLE t (
-			a int8 primary key,
-			b string,
-			index (b),
-			index (a, b)
-		)
-	`), 0666); err != nil {
-		t.Fatal(err)
-	}
 	schema := []interface{}{"nodelocal://0/table"}
-
-	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.csv"), nil, 0666); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.schema"), nil, 0666); err != nil {
-		t.Fatal(err)
-	}
-
 	empty := []string{"'nodelocal://0/empty.csv'"}
 	emptySchema := []interface{}{"nodelocal://0/empty.schema"}
 
@@ -2375,7 +2356,7 @@ func TestImportIntoCSV(t *testing.T) {
 	rowsPerRaceFile := 16
 
 	ctx := context.Background()
-	baseDir := filepath.Join("testdata", "csv")
+	baseDir := testutils.TestDataPath("testdata", "csv")
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
@@ -2418,9 +2399,6 @@ func TestImportIntoCSV(t *testing.T) {
 		rowsPerFile = rowsPerRaceFile
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.csv"), nil, 0666); err != nil {
-		t.Fatal(err)
-	}
 	empty := []string{"'nodelocal://0/empty.csv'"}
 
 	// Support subtests by keeping track of the number of jobs that are executed.
