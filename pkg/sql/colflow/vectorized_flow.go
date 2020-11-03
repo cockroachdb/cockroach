@@ -1071,6 +1071,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
+				Factory:              factory,
 			}
 			var result *colexec.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, flowCtx.NewEvalCtx(), args)
