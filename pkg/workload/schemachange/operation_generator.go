@@ -84,11 +84,12 @@ type opType int
 var opsWithExecErrorScreening = map[opType]bool{
 	addColumn: true,
 
-	createTable:   true,
-	createTableAs: true,
-	createView:    true,
-	createEnum:    true,
-	createSchema:  true,
+	createSequence: true,
+	createTable:    true,
+	createTableAs:  true,
+	createView:     true,
+	createEnum:     true,
+	createSchema:   true,
 
 	dropColumn:        true,
 	dropColumnDefault: true,
@@ -359,7 +360,27 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	ifNotExists := og.randIntn(2) == 0
+	schemaExists, err := schemaExists(tx, seqName.Schema())
+	if err != nil {
+		return "", err
+	}
+	sequenceExists, err := sequenceExists(tx, seqName)
+	if err != nil {
+		return "", err
+	}
+
+	// If the sequence exists and an error should be produced, then
+	// exclude the IF NOT EXISTS clause from the statement. Otherwise, default
+	// to including the clause prevent all pgcode.DuplicateRelation errors.
+	ifNotExists := true
+	if sequenceExists && og.produceError() {
+		ifNotExists = false
+	}
+
+	codesWithConditions{
+		{code: pgcode.UndefinedSchema, condition: !schemaExists},
+		{code: pgcode.DuplicateRelation, condition: sequenceExists && !ifNotExists},
+	}.add(og.expectedExecErrors)
 
 	var seqOptions tree.SequenceOptions
 	// Decide if the sequence should be owned by a column. If so, it can
@@ -369,18 +390,47 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		column, err := og.randColumn(tx, *table, og.pctExisting(true))
+		tableExists, err := tableExists(tx, table)
 		if err != nil {
 			return "", err
 		}
 
-		seqOptions = append(
-			seqOptions,
-			tree.SequenceOption{
-				Name:          tree.SeqOptOwnedBy,
-				ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: tree.Name(column)}},
-		)
+		if !tableExists {
+			// If a duplicate sequence exists, then a new sequence will not be created. In this case,
+			// a pgcode.UndefinedTable will not occur.
+			if !sequenceExists {
+				og.expectedExecErrors.add(pgcode.UndefinedTable)
+			}
+			seqOptions = append(
+				seqOptions,
+				tree.SequenceOption{
+					Name:          tree.SeqOptOwnedBy,
+					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: "IrrelevantColumnName"}},
+			)
+		} else {
+			column, err := og.randColumn(tx, *table, og.pctExisting(true))
+			if err != nil {
+				return "", err
+			}
+			columnExists, err := columnExistsOnTable(tx, table, column)
+			if err != nil {
+				return "", err
+			}
+			// If a duplicate sequence exists, then a new sequence will not be created. In this case,
+			// a pgcode.UndefinedColumn will not occur.
+			if !columnExists && !sequenceExists {
+				og.expectedExecErrors.add(pgcode.UndefinedColumn)
+			}
+
+			seqOptions = append(
+				seqOptions,
+				tree.SequenceOption{
+					Name:          tree.SeqOptOwnedBy,
+					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: tree.Name(column)}},
+			)
+		}
 	}
+
 	createSeq := &tree.CreateSequence{
 		IfNotExists: ifNotExists,
 		Name:        *seqName,
