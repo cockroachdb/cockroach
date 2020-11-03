@@ -1415,12 +1415,16 @@ func (nl *NodeLiveness) GetNodeCount() int {
 	return count
 }
 
+// TestingSetDrainingInternal is a testing helper to set the internal draining
+// state for a NodeLiveness instance.
 func (nl *NodeLiveness) TestingSetDrainingInternal(
 	ctx context.Context, liveness LivenessRecord, drain bool,
 ) error {
 	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
 }
 
+// TestingSetDecommissioningInternal is a testing helper to set the internal
+// decommissioning state for a NodeLiveness instance.
 func (nl *NodeLiveness) TestingSetDecommissioningInternal(
 	ctx context.Context, oldLivenessRec LivenessRecord, targetStatus livenesspb.MembershipStatus,
 ) (changeCommitted bool, err error) {
