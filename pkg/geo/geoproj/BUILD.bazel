@@ -13,7 +13,7 @@ go_library(
     # autogenerating them.
     #
     # keep
-    cdeps = ["@cockroach//:libproj"],
+    cdeps = ["@cockroach//c-deps:libproj"],
     cgo = True,
     # keep
     clinkopts = select({

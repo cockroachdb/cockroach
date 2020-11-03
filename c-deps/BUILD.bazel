@@ -1,0 +1,113 @@
+# Load the components that lets us use cmake/make in third party deps.
+load("@rules_foreign_cc//tools/build_defs:cmake.bzl", "cmake_external")
+load("@rules_foreign_cc//tools/build_defs:configure.bzl", "configure_make")
+
+# TODO(irfansharif): All the cmake cache entries below were cargo-culted from
+# the Makefile. We may need to programatically set them depending on the
+# machine bazel is being run on. For now the only tested variant are Macbooks.
+
+# Define the build target for libjemalloc.
+configure_make(
+    name = "libjemalloc",
+    autoconf = True,
+    configure_env_vars = {
+        "AR": "",
+    },
+    configure_in_place = True,
+    configure_options = [
+        "--enable-prof",
+    ],
+    lib_source = "@jemalloc//:all",
+    make_commands = [
+        "make build_lib_static",
+        "mkdir -p libjemalloc/lib",
+        "cp lib/libjemalloc.a libjemalloc/lib",
+        "cp -r include libjemalloc",
+    ],
+    static_libraries = ["libjemalloc.a"],
+    visibility = ["//visibility:public"],
+)
+
+# Define the build targets for libprotobuf and protoc.
+cmake_external(
+    name = "libprotobuf",
+    binaries = ["protoc"],
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TARGET_MESSAGES": "OFF",
+        "protobuf_BUILD_TESTS": "OFF",
+    },
+    lib_source = "@protobuf//:all",
+    static_libraries = ["libprotobuf.a"],
+    visibility = ["//visibility:public"],
+    working_directory = "cmake",
+)
+
+# Define the build target for libproj.
+cmake_external(
+    name = "libproj",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_LIBPROJ_SHARED": "OFF",
+    },
+    lib_source = "@proj//:all",
+    static_libraries = ["libproj.a"],
+    visibility = ["//visibility:public"],
+)
+
+# TODO(irfansharif): libgeos has not been worked out yet. We'll need to
+# similarly ensure the lib/libgeos.so and lib/libegeos_c.so are in the right
+# place.
+
+# Define the build target for libroach.
+#
+# Bazel also expects the library archive and the include headers to be placed
+# in a certain path, so we fix it all up accordingly within make_commands.
+cmake_external(
+    name = "libroach",
+    cache_entries = {
+        "CMAKE_TARGET_MESSAGES": "OFF",
+        "CMAKE_BUILD_TYPE": "Release",
+    },
+    lib_source = "@libroach//:all",
+    make_commands = [
+        "make roach",
+        "mkdir -p libroach/lib",
+        "cp libroach.a libroach/lib/libroach.a",
+        "cp -r $EXT_BUILD_ROOT/external/libroach/include libroach",
+    ],
+    static_libraries = ["libroach.a"],
+    tools_deps = [
+        "@libroach//:all",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+# Define the build target for kerberos.
+#
+# TODO(irfansharif): Kerboros is not used for anything other than Linux.
+# The following has not been tested as yet.
+configure_make(
+    name = "libkrb5",
+    autoreconf = True,
+    configure_command = "src/configure",
+    configure_env_vars = {
+        "CPFLAGS": "",
+        "CXXFLAGS": "",
+    },
+    configure_options = [
+        "--enable-static",
+        "--disable-shared",
+    ] + select({
+        "//conditions:default": ["AR=/usr/bin/ar"],
+    }),
+    lib_source = "@krb5//:all",
+    make_commands = [
+        "make",
+        "mkdir -p libkrb5/lib",
+        "cp libkrb5/libgssapi_krb5.a libkrb5/lib",
+    ],
+    static_libraries = ["libgssapi_krb5.a"],
+    visibility = ["//visibility:public"],
+)
