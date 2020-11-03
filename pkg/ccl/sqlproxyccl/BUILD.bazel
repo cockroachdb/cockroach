@@ -26,13 +26,22 @@ go_library(
 go_test(
     name = "sqlproxyccl_test",
     srcs = [
+        "main_test.go",
         "proxy_test.go",
         "server_test.go",
     ],
     embed = [":sqlproxyccl"],
     deps = [
+        "//pkg/base",
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/randutil",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/jackc/pgx/v4:pgx",
         "//vendor/github.com/stretchr/testify/require",

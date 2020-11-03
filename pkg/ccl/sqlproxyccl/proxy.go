@@ -25,12 +25,17 @@ var pgSSLRequest = []int32{8, 80877103}
 // Options are the options to the Proxy method.
 type Options struct {
 	IncomingTLSConfig *tls.Config // config used for client -> proxy connection
-	OutgoingTLSConfig *tls.Config // config used for proxy -> backend connection
 
 	// TODO(tbg): this is unimplemented and exists only to check which clients
 	// allow use of SNI. Should always return ("", nil).
-	OutgoingAddrFromSNI    func(serverName string) (addr string, clientErr error)
-	OutgoingAddrFromParams func(map[string]string) (addr string, clientErr error)
+	BackendFromSNI func(serverName string) (addr string, conf *tls.Config, clientErr error)
+	// BackendFromParams returns the address and TLS config to use for
+	// the proxy -> backend connection.
+	BackendFromParams func(map[string]string) (addr string, conf *tls.Config, clientErr error)
+
+	// If set, consulted to modify the parameters set by the frontend before
+	// forwarding them to the backend during startup.
+	ModifyRequestParams func(map[string]string)
 
 	// If set, consulted to decorate an error message to be sent to the client.
 	// The error passed to this method will contain no internal information.
@@ -80,15 +85,15 @@ func (s *Server) Proxy(conn net.Conn) error {
 			sniServerName = h.ServerName
 			return nil, nil
 		}
-		if s.opts.OutgoingAddrFromSNI != nil {
-			addr, clientErr := s.opts.OutgoingAddrFromSNI(sniServerName)
+		if s.opts.BackendFromSNI != nil {
+			addr, _, clientErr := s.opts.BackendFromSNI(sniServerName)
 			if clientErr != nil {
 				code := CodeSNIRoutingFailed
 				sendErrToClient(conn, code, clientErr.Error()) // won't actually be shown by most clients
 				return newErrorf(code, "rejected by OutgoingAddrFromSNI")
 			}
 			if addr != "" {
-				return newErrorf(CodeSNIRoutingFailed, "OutgoingAddrFromSNI is unimplemented")
+				return newErrorf(CodeSNIRoutingFailed, "BackendFromSNI is unimplemented")
 			}
 		}
 		conn = tls.Server(conn, cfg)
@@ -103,7 +108,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 		return newErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
 	}
 
-	outgoingAddr, clientErr := s.opts.OutgoingAddrFromParams(msg.Parameters)
+	outgoingAddr, outgoingTLS, clientErr := s.opts.BackendFromParams(msg.Parameters)
 	if clientErr != nil {
 		s.metrics.RoutingErrCount.Inc(1)
 		code := CodeParamsRoutingFailed
@@ -136,9 +141,13 @@ func (s *Server) Proxy(conn net.Conn) error {
 		return newErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
 	}
 
-	outCfg := s.opts.OutgoingTLSConfig.Clone()
+	outCfg := outgoingTLS.Clone()
 	outCfg.ServerName = outgoingAddr
 	crdbConn = tls.Client(crdbConn, outCfg)
+
+	if s.opts.ModifyRequestParams != nil {
+		s.opts.ModifyRequestParams(msg.Parameters)
+	}
 
 	if _, err := crdbConn.Write(msg.Encode(nil)); err != nil {
 		s.metrics.BackendDownCount.Inc(1)
