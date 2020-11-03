@@ -1007,7 +1007,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 ) (leaves []execinfra.OpNode, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
 		streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
-		factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
+		// The column factory will not change the eval context, so we can use
+		// the one we have in the flow context, without making a copy.
+		factory := coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
 		// queue is a queue of indices into processorSpecs, for topologically
 		// ordered processing.
 		queue := make([]int, 0, len(processorSpecs))
@@ -1077,7 +1079,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				ExprHelper:           s.exprHelper,
 			}
 			var result *colexec.NewColOperatorResult
-			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
+			result, err = colbuilder.NewColOperator(ctx, flowCtx, flowCtx.NewEvalCtx(), args)
 			if result != nil {
 				// Even when err is non-nil, it is possible that the buffering memory
 				// monitor and account have been created, so we always want to accumulate

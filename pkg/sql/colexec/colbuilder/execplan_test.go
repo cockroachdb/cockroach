@@ -102,7 +102,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		},
 		StreamingMemAccount: &streamingMemAcc,
 	}
-	r, err := NewColOperator(ctx, flowCtx, args)
+	r, err := NewColOperator(ctx, flowCtx, &evalCtx, args)
 	require.NoError(t, err)
 
 	args = &colexec.NewColOperatorArgs{
@@ -115,7 +115,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		Inputs:              []colexecbase.Operator{r.Op},
 		StreamingMemAccount: &streamingMemAcc,
 	}
-	r, err = NewColOperator(ctx, flowCtx, args)
+	r, err = NewColOperator(ctx, flowCtx, &evalCtx, args)
 	require.NoError(t, err)
 
 	m, err := colexec.NewMaterializer(

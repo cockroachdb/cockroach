@@ -351,6 +351,6 @@ func createDiskBackedSorter(
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
-	result, err := TestNewColOperator(ctx, flowCtx, args)
+	result, err := TestNewColOperator(ctx, flowCtx, flowCtx.NewEvalCtx(), args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

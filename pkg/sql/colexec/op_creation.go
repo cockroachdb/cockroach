@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/marusama/semaphore"
@@ -26,7 +27,7 @@ import (
 // TestNewColOperator is a test helper that's always aliased to builder.NewColOperator.
 // We inject this at test time, so tests can use NewColOperator from colexec
 // package.
-var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args *NewColOperatorArgs,
+var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, evalCtx *tree.EvalContext, args *NewColOperatorArgs,
 ) (r *NewColOperatorResult, err error)
 
 // NewColOperatorArgs is a helper struct that encompasses all of the input

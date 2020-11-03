@@ -1627,7 +1627,7 @@ func TestMergeJoiner(t *testing.T) {
 						}
 						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-						result, err := TestNewColOperator(ctx, flowCtx, args)
+						result, err := TestNewColOperator(ctx, flowCtx, flowCtx.NewEvalCtx(), args)
 						if err != nil {
 							return nil, err
 						}
