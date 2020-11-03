@@ -52,7 +52,7 @@ go_library(
     ],
     # keep
     cdeps = [
-        "@cockroach//:libjemalloc",
+        "@cockroach//c-deps:libjemalloc",
     ],
     cgo = True,
     # keep
@@ -201,7 +201,7 @@ go_library(
         "//vendor/golang.org/x/time/rate",
         "//vendor/google.golang.org/grpc",
         "//vendor/google.golang.org/grpc/codes",
-        "//vendor/google.golang.org/grpc/status",
+        "//vendor/google.golang.org/grpc/status"
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "//vendor/golang.org/x/sys/unix",
