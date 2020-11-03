@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -200,7 +201,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 		})
 	}
 	if nl := store.cfg.NodeLiveness; nl != nil { // node liveness is nil for some unittests
-		nl.RegisterCallback(func(_ kvserverpb.Liveness) {
+		nl.RegisterCallback(func(_ livenesspb.Liveness) {
 			updateFn()
 		})
 	}

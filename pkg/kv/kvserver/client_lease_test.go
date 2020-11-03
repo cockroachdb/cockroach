@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -123,12 +123,12 @@ func TestStoreGossipSystemData(t *testing.T) {
 		systemConfig := s.Gossip().GetSystemConfig()
 		return systemConfig
 	}
-	getNodeLiveness := func(s *kvserver.Store) kvserverpb.Liveness {
-		var liveness kvserverpb.Liveness
+	getNodeLiveness := func(s *kvserver.Store) livenesspb.Liveness {
+		var liveness livenesspb.Liveness
 		if err := s.Gossip().GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
 			return liveness
 		}
-		return kvserverpb.Liveness{}
+		return livenesspb.Liveness{}
 	}
 
 	// Restart the store and verify that both the system-config and node-liveness
@@ -140,7 +140,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		if !getSystemConfig(tc.GetFirstStoreFromServer(t, 1)).DefaultZoneConfig.Equal(zcfg) {
 			return errors.New("system config not gossiped")
 		}
-		if getNodeLiveness(tc.GetFirstStoreFromServer(t, 1)) == (kvserverpb.Liveness{}) {
+		if getNodeLiveness(tc.GetFirstStoreFromServer(t, 1)) == (livenesspb.Liveness{}) {
 			return errors.New("node liveness not gossiped")
 		}
 		return nil

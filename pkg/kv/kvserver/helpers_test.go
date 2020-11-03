@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -246,8 +247,8 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		func() int {
 			return 1
 		},
-		func(roachpb.NodeID, time.Time, time.Duration) kvserverpb.NodeLivenessStatus {
-			return kvserverpb.NodeLivenessStatus_LIVE
+		func(roachpb.NodeID, time.Time, time.Duration) livenesspb.NodeLivenessStatus {
+			return livenesspb.NodeLivenessStatus_LIVE
 		},
 		/* deterministic */ false,
 	)
@@ -505,18 +506,6 @@ func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ts = r.readProtectedTimestampsRLocked(ctx, nil /* f */)
-}
-
-func (nl *NodeLiveness) SetDrainingInternal(
-	ctx context.Context, liveness LivenessRecord, drain bool,
-) error {
-	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
-}
-
-func (nl *NodeLiveness) SetDecommissioningInternal(
-	ctx context.Context, oldLivenessRec LivenessRecord, targetStatus kvserverpb.MembershipStatus,
-) (changeCommitted bool, err error) {
-	return nl.setMembershipStatusInternal(ctx, oldLivenessRec, targetStatus)
 }
 
 // GetCircuitBreaker returns the circuit breaker controlling
