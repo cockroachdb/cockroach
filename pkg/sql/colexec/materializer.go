@@ -141,6 +141,8 @@ var materializerPool = sync.Pool{
 	},
 }
 
+var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
+
 // NewMaterializer creates a new Materializer processor which processes the
 // columnar data coming from input to return it as rows.
 // Arguments:
@@ -184,7 +186,7 @@ func NewMaterializer(
 		m,
 		// input must have handled any post-processing itself, so we pass in
 		// an empty post-processing spec.
-		&execinfrapb.PostProcessSpec{},
+		materializerEmptyPostProcessSpec,
 		typs,
 		flowCtx,
 		processorID,
