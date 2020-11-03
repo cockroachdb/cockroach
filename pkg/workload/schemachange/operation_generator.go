@@ -97,9 +97,10 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropView:          true,
 	dropSchema:        true,
 
-	renameColumn: true,
-	renameTable:  true,
-	renameView:   true,
+	renameColumn:   true,
+	renameSequence: true,
+	renameTable:    true,
+	renameView:     true,
 }
 
 func opScreensForExecErrors(op opType) bool {
@@ -1015,10 +1016,39 @@ func (og *operationGenerator) renameSequence(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	destSequenceName, err := og.randSequence(tx, og.pctExisting(false), "")
+	// Decide whether or not to produce a 'cannot change schema of table with RENAME' error
+	desiredSchema := ""
+	if !og.produceError() {
+		desiredSchema = srcSequenceName.Schema()
+	}
+
+	destSequenceName, err := og.randSequence(tx, og.pctExisting(false), desiredSchema)
 	if err != nil {
 		return "", err
 	}
+
+	srcSequenceExists, err := sequenceExists(tx, srcSequenceName)
+	if err != nil {
+		return "", err
+	}
+
+	destSchemaExists, err := schemaExists(tx, destSequenceName.Schema())
+	if err != nil {
+		return "", err
+	}
+
+	destSequenceExists, err := sequenceExists(tx, destSequenceName)
+	if err != nil {
+		return "", err
+	}
+
+	srcEqualsDest := srcSequenceName.String() == destSequenceName.String()
+	codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !srcSequenceExists},
+		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destSequenceExists},
+		{code: pgcode.InvalidName, condition: srcSequenceName.Schema() != destSequenceName.Schema()},
+	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER SEQUENCE %s RENAME TO %s`, srcSequenceName, destSequenceName), nil
 }
