@@ -42,7 +42,7 @@ go_library(
         "//vendor/github.com/golang/protobuf/proto",
         "//vendor/github.com/grpc-ecosystem/grpc-gateway/runtime",
         "//vendor/github.com/grpc-ecosystem/grpc-gateway/utilities",
-        "//vendor/go.etcd.io/etcd/raft/raftpb",
+        "//vendor/go.etcd.io/etcd/raft/v3/raftpb",
         "//vendor/google.golang.org/grpc",
         "//vendor/google.golang.org/grpc/codes",
         "//vendor/google.golang.org/grpc/grpclog",

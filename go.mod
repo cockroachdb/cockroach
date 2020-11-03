@@ -145,7 +145,7 @@ require (
 	github.com/twpayne/go-geom v1.3.6
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
-	go.etcd.io/etcd v0.0.0-00010101000000-000000000000
+	go.etcd.io/etcd/raft/v3 v3.0.0-20201109164711-01844fd28560
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
@@ -166,7 +166,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	gotest.tools v2.2.0+incompatible // indirect
-	honnef.co/go/tools v0.0.0-20190530104931-1f0868a609b7
+	honnef.co/go/tools v0.0.1-2019.2.3
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
@@ -182,6 +182,11 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v2.2.0-rc.1.0.20180830
 
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641
 
-replace go.etcd.io/etcd => github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955
-
 replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7
+
+// At the time of writing (i.e. as of this version below) the `etcd` repo is in the process of properly introducing
+// modules, and as part of that uses an unsatisfiable version for this dependency (v3.0.0-00010101000000-000000000000).
+// We just force it to the same SHA as the `go.etcd.io/etcd/raft/v3` module (they live in the same VCS root).
+//
+// While this is necessary, make sure that the require block above does not diverge.
+replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560

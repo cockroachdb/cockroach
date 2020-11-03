@@ -165,7 +165,7 @@ go_library(
         "//vendor/github.com/shirou/gopsutil/host",
         "//vendor/github.com/shirou/gopsutil/load",
         "//vendor/github.com/shirou/gopsutil/mem",
-        "//vendor/go.etcd.io/etcd/raft",
+        "//vendor/go.etcd.io/etcd/raft/v3:raft",
         "//vendor/google.golang.org/grpc",
         "//vendor/google.golang.org/grpc/codes",
         "//vendor/google.golang.org/grpc/metadata",
