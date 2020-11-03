@@ -14,7 +14,7 @@ option go_package = "kvserver";
 
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
-import "kv/kvserver/kvserverpb/liveness.proto";
+import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
@@ -34,7 +34,7 @@ message RaftHeartbeat {
   uint64 commit = 5;
   bool quiesce = 6;
   reserved 7;
-  repeated storagepb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
   bool lagging_followers_on_quiesce_accurate = 10;
 }
 
@@ -70,7 +70,7 @@ message RaftMessageRequest {
   // (leader or follower) becomes aware that a replica in this set has
   // become live, it should unquiesce the range so that the replica can
   // be caught back up.
-  repeated storagepb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
+  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
   // This field helps migrate in the lagging_followers_on_quiesce field. For
   // messages sent by versions of Cockroach that do not know about the
   // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all

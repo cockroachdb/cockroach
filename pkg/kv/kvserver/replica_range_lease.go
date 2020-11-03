@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -223,16 +224,16 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		*reqLease.Expiration = status.Timestamp.Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
-		liveness, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
+		l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
 		if !ok {
 			llHandle.resolve(roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  status.Lease,
 				Requested: reqLease,
-				Message:   fmt.Sprintf("couldn't request lease for %+v: %v", nextLeaseHolder, errLivenessRecordCacheMiss),
+				Message:   fmt.Sprintf("couldn't request lease for %+v: %v", nextLeaseHolder, liveness.ErrRecordCacheMiss),
 			}))
 			return llHandle
 		}
-		reqLease.Epoch = liveness.Epoch
+		reqLease.Epoch = l.Epoch
 	}
 
 	if transfer {
@@ -378,7 +379,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 						// so we don't log it as an error.
 						//
 						// https://github.com/cockroachdb/cockroach/issues/35986
-						if !errors.Is(err, ErrEpochAlreadyIncremented) {
+						if !errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
 							log.Errorf(ctx, "%v", err)
 						}
 					}
@@ -552,7 +553,7 @@ func (r *Replica) leaseStatus(
 				if leaseStatusLogLimiter.ShouldLog() {
 					ctx = r.AnnotateCtx(ctx)
 					log.Warningf(ctx, "can't determine lease status of %s due to node liveness error: %+v",
-						lease.Replica, errLivenessRecordCacheMiss)
+						lease.Replica, liveness.ErrRecordCacheMiss)
 				}
 			}
 			status.State = kvserverpb.LeaseState_ERROR

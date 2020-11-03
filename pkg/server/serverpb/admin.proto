@@ -16,7 +16,7 @@ import "config/zonepb/zone.proto";
 import "jobs/jobspb/jobs.proto";
 import "server/serverpb/status.proto";
 import "storage/enginepb/mvcc.proto";
-import "kv/kvserver/kvserverpb/liveness.proto";
+import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/log.proto";
 import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
@@ -436,7 +436,7 @@ message DecommissionStatusRequest {
 message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  cockroach.kv.kvserver.storagepb.MembershipStatus target_membership = 2;
+  kv.kvserver.liveness.livenesspb.MembershipStatus target_membership = 2;
 }
 
 // DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
@@ -448,7 +448,7 @@ message DecommissionStatusResponse {
     // The number of replicas on the node, computed by scanning meta2 ranges.
     int64 replica_count = 3;
     // The membership status of the given node.
-    cockroach.kv.kvserver.storagepb.MembershipStatus membership = 4;
+    kv.kvserver.liveness.livenesspb.MembershipStatus membership = 4;
     bool draining = 5;
   }
   // Status of all affected nodes.
@@ -515,8 +515,8 @@ message LivenessRequest {
 
 // LivenessResponse contains the liveness status of each node on the cluster.
 message LivenessResponse {
-  repeated cockroach.kv.kvserver.storagepb.Liveness livenesses = 1 [(gogoproto.nullable) = false];
-  map<int32, cockroach.kv.kvserver.storagepb.NodeLivenessStatus> statuses = 2 [
+  repeated kv.kvserver.liveness.livenesspb.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+  map<int32, kv.kvserver.liveness.livenesspb.NodeLivenessStatus> statuses = 2 [
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];

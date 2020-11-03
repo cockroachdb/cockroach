@@ -4,8 +4,6 @@ go_library(
     name = "kvserverpb",
     srcs = [
         "lease_status.pb.go",
-        "liveness.go",
-        "liveness.pb.go",
         "log.go",
         "log.pb.go",
         "proposer_kv.go",
@@ -15,15 +13,13 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
-        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/gogo/protobuf/sortkeys",
         "//vendor/github.com/gogo/protobuf/types",
-        "//vendor/google.golang.org/grpc/codes",
-        "//vendor/google.golang.org/grpc/status",
     ],
 )

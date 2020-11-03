@@ -40,7 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -296,7 +297,7 @@ type statusServer struct {
 	db                       *kv.DB
 	gossip                   *gossip.Gossip
 	metricSource             metricMarshaler
-	nodeLiveness             *kvserver.NodeLiveness
+	nodeLiveness             *liveness.NodeLiveness
 	storePool                *kvserver.StorePool
 	rpcCtx                   *rpc.Context
 	stores                   *kvserver.Stores
@@ -326,7 +327,7 @@ func newStatusServer(
 	db *kv.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
-	nodeLiveness *kvserver.NodeLiveness,
+	nodeLiveness *liveness.NodeLiveness,
 	storePool *kvserver.StorePool,
 	rpcCtx *rpc.Context,
 	stores *kvserver.Stores,
@@ -1294,7 +1295,7 @@ func (s *statusServer) nodesStatusWithLiveness(
 	for _, node := range nodes.Nodes {
 		nodeID := node.Desc.NodeID
 		livenessStatus := statusMap[nodeID]
-		if livenessStatus == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
+		if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 			// Skip over removed nodes.
 			continue
 		}
@@ -1309,7 +1310,7 @@ func (s *statusServer) nodesStatusWithLiveness(
 // nodeStatusWithLiveness combines a NodeStatus with a NodeLivenessStatus.
 type nodeStatusWithLiveness struct {
 	statuspb.NodeStatus
-	livenessStatus kvserverpb.NodeLivenessStatus
+	livenessStatus livenesspb.NodeLivenessStatus
 }
 
 // handleNodeStatus handles GET requests for a single node's status.

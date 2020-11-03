@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -305,7 +306,7 @@ type multiTestContext struct {
 	stores         []*kvserver.Store
 	stoppers       []*stop.Stopper
 	idents         []roachpb.StoreIdent
-	nodeLivenesses []*kvserver.NodeLiveness
+	nodeLivenesses []*liveness.NodeLiveness
 }
 
 func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
@@ -349,7 +350,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	m.idents = make([]roachpb.StoreIdent, numStores)
 	m.grpcServers = make([]*grpc.Server, numStores)
 	m.gossips = make([]*gossip.Gossip, numStores)
-	m.nodeLivenesses = make([]*kvserver.NodeLiveness, numStores)
+	m.nodeLivenesses = make([]*liveness.NodeLiveness, numStores)
 
 	if m.storeConfig != nil && m.storeConfig.Clock != nil {
 		require.Nil(t, m.manualClock, "can't use manual clock; storeConfig.Clock is set")
@@ -835,7 +836,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 }
 
 func (m *multiTestContext) populateStorePool(
-	idx int, cfg kvserver.StoreConfig, nodeLiveness *kvserver.NodeLiveness,
+	idx int, cfg kvserver.StoreConfig, nodeLiveness *liveness.NodeLiveness,
 ) {
 	m.storePools[idx] = kvserver.NewStorePool(
 		cfg.AmbientCtx,
@@ -911,7 +912,7 @@ func (m *multiTestContext) addStore(idx int) {
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	m.populateDB(idx, cfg.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
-	m.nodeLivenesses[idx] = kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+	m.nodeLivenesses[idx] = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx: ambient, Clock: m.clocks[idx], DB: m.dbs[idx], Gossip: m.gossips[idx],
 		LivenessThreshold: nlActive, RenewalDuration: nlRenewal, Settings: cfg.Settings,
 		HistogramWindowInterval: metric.TestSampleInterval,
@@ -1025,7 +1026,7 @@ func (m *multiTestContext) addStore(idx int) {
 		}
 	}
 	m.nodeLivenesses[idx].Start(ctx,
-		kvserver.NodeLivenessStartOptions{
+		liveness.NodeLivenessStartOptions{
 			Stopper: stopper,
 			Engines: m.engines[idx : idx+1],
 			OnSelfLive: func(ctx context.Context) {
@@ -1105,7 +1106,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	cfg := m.makeStoreConfig(i)
 	m.populateDB(i, m.storeConfig.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
-	m.nodeLivenesses[i] = kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+	m.nodeLivenesses[i] = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx: log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, Clock: m.clocks[i], DB: m.dbs[i],
 		Gossip: m.gossips[i], LivenessThreshold: nlActive, RenewalDuration: nlRenewal, Settings: cfg.Settings,
 		HistogramWindowInterval: metric.TestSampleInterval,
@@ -1126,7 +1127,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.DefaultClass).Reset()
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.SystemClass).Reset()
 	m.mu.Unlock()
-	cfg.NodeLiveness.Start(ctx, kvserver.NodeLivenessStartOptions{
+	cfg.NodeLiveness.Start(ctx, liveness.NodeLivenessStartOptions{
 		Stopper: stopper,
 		Engines: m.engines[i : i+1],
 		OnSelfLive: func(ctx context.Context) {
@@ -1449,7 +1450,7 @@ func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) err
 
 	var err error
 	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
-		if err = nl.Heartbeat(ctx, l); !errors.Is(err, kvserver.ErrEpochIncremented) {
+		if err = nl.Heartbeat(ctx, l); !errors.Is(err, liveness.ErrEpochIncremented) {
 			break
 		}
 	}

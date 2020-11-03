@@ -25,7 +25,7 @@ import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
 import "kv/kvserver/kvserverpb/lease_status.proto";
 import "kv/kvserver/kvserverpb/state.proto";
-import "kv/kvserver/kvserverpb/liveness.proto";
+import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 
@@ -112,7 +112,7 @@ message NodesRequest {}
 
 message NodesResponse {
   repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
-  map<int32, cockroach.kv.kvserver.storagepb.NodeLivenessStatus> liveness_by_node_id = 2 [
+  map<int32, kv.kvserver.liveness.livenesspb.NodeLivenessStatus> liveness_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "LivenessByNodeID"

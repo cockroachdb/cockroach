@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -98,7 +98,7 @@ var childMetricsEnabled = settings.RegisterBoolSetting("server.child_metrics.ena
 type MetricsRecorder struct {
 	*HealthChecker
 	gossip       *gossip.Gossip
-	nodeLiveness *kvserver.NodeLiveness
+	nodeLiveness *liveness.NodeLiveness
 	rpcContext   *rpc.Context
 	settings     *cluster.Settings
 	clock        *hlc.Clock
@@ -147,7 +147,7 @@ type MetricsRecorder struct {
 // given clock.
 func NewMetricsRecorder(
 	clock *hlc.Clock,
-	nodeLiveness *kvserver.NodeLiveness,
+	nodeLiveness *liveness.NodeLiveness,
 	rpcContext *rpc.Context,
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
