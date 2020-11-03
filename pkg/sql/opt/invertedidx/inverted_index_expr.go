@@ -15,7 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -44,4 +50,58 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 		return nil, nil, fmt.Errorf("pre-filtering not supported for type %s", typ)
 	}
 	return newGeoBoundPreFilterer(typ, expr)
+}
+
+// constrainPrefixColumns attempts to build a constraint for the non-inverted
+// prefix columns of the given index. If a constraint is successfully built, it
+// is returned along with remaining filters and ok=true. The function is only
+// successful if it can generate a constraint where all spans have the same
+// start and end keys for all non-inverted prefix columns. If the index is a
+// single-column inverted index, there are no prefix columns to constrain, and
+// ok=true is returned.
+func constrainPrefixColumns(
+	evalCtx *tree.EvalContext,
+	factory *norm.Factory,
+	filters memo.FiltersExpr,
+	tabID opt.TableID,
+	index cat.Index,
+) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
+	tabMeta := factory.Metadata().TableMeta(tabID)
+	prefixColumnCount := index.NonInvertedPrefixColumnCount()
+
+	// If this is a single-column inverted index, there are no prefix columns to
+	// constrain.
+	if prefixColumnCount == 0 {
+		return nil, filters, true
+	}
+
+	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
+	var notNullCols opt.ColSet
+	for i := range prefixColumns {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal())
+		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.IsNullable() {
+			notNullCols.Add(colID)
+		}
+	}
+
+	var ic idxconstraint.Instance
+	ic.Init(
+		filters, nil, /* optionalFilters */
+		prefixColumns, notNullCols, tabMeta.ComputedCols,
+		false /* isInverted */, evalCtx, factory,
+	)
+	constraint = ic.Constraint()
+	if constraint.Prefix(evalCtx) < prefixColumnCount {
+		// If all spans do not have the same start and end keys for all columns,
+		// the index cannot be used.
+		return nil, nil, false
+	}
+
+	// Make a copy of constraint so that the idxconstraint.Instance is not
+	// referenced.
+	copy := *constraint
+	remainingFilters = ic.RemainingFilters()
+	return &copy, remainingFilters, true
 }
