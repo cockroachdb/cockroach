@@ -36,6 +36,15 @@ func viewExists(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
    )`, tableName.Schema(), tableName.Object())
 }
 
+func sequenceExists(tx *pgx.Tx, seqName *tree.TableName) (bool, error) {
+	return scanBool(tx, `SELECT EXISTS (
+	SELECT sequence_name
+    FROM information_schema.sequences
+   WHERE sequence_schema = $1
+     AND sequence_name = $2
+   )`, seqName.Schema(), seqName.Object())
+}
+
 func columnExistsOnTable(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
 	return scanBool(tx, `SELECT EXISTS (
 	SELECT column_name
