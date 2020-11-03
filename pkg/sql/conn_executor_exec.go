@@ -738,7 +738,7 @@ func (ex *connExecutor) commitSQLTransaction(
 		return ex.makeErrEvent(err, stmt)
 	}
 	ex.phaseTimes[sessionEndTransactionCommit] = timeutil.Now()
-	return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
+	return eventTxnFinishCommitted{}, nil
 }
 
 func (ex *connExecutor) commitSQLTransactionInternal(
@@ -788,7 +788,7 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
 	// We're done with this txn.
-	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
+	return eventTxnFinishAborted{}, nil
 }
 
 // dispatchToExecutionEngine executes the statement, writes the result to res
@@ -1206,7 +1206,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
 		// get a COMMIT in state Aborted.
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
+		return eventTxnFinishCommitted{}, nil
 	default:
 		ev = eventNonRetriableErr{IsCommit: fsm.False}
 		payload = eventNonRetriableErrPayload{
@@ -1410,7 +1410,7 @@ func (ex *connExecutor) handleAutoCommit(
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
 		log.Event(ctx, "statement execution committed the txn")
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
+		return eventTxnFinishCommitted{}, nil
 	}
 
 	if knob := ex.server.cfg.TestingKnobs.BeforeAutoCommit; knob != nil {

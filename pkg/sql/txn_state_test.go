@@ -325,8 +325,8 @@ func TestTransitions(t *testing.T) {
 				}
 				return s, ts, nil
 			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
+			ev:        eventTxnFinishCommitted{},
+			evPayload: nil,
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -346,8 +346,8 @@ func TestTransitions(t *testing.T) {
 				}
 				return s, ts, nil
 			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
+			ev:        eventTxnFinishCommitted{},
+			evPayload: nil,
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -551,9 +551,8 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createAbortedState()
 				return s, ts, nil
 			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: false},
-			expState:  stateNoTxn{},
+			ev:       eventTxnFinishAborted{},
+			expState: stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnRollback,
@@ -622,12 +621,11 @@ func TestTransitions(t *testing.T) {
 			init: func() (fsm.State, *txnState, error) {
 				return testCon.createCommitWaitState()
 			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
-			expState:  stateNoTxn{},
+			ev:       eventTxnFinishCommitted{},
+			expState: stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
-				expEv:   txnCommit,
+				expEv:   noEvent,
 			},
 			expTxn: nil,
 		},
