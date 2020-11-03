@@ -315,12 +315,10 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		// key columns.
 		primaryIndex := mb.tab.Index(cat.PrimaryIndex)
 		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-			pkCol := mb.outScope.cols[primaryIndex.Column(i).Ordinal()]
-
 			// If the primary key column is hidden, then we don't need to use it
 			// for the distinct on.
-			if !pkCol.hidden {
-				pkCols.Add(pkCol.id)
+			if col := primaryIndex.Column(i); !col.IsHidden() {
+				pkCols.Add(mb.fetchColIDs[col.Ordinal()])
 			}
 		}
 
