@@ -9,6 +9,7 @@
 package utilccl
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSettingAndCheckingLicense(t *testing.T) {
@@ -122,5 +124,63 @@ func TestSettingBadLicenseStrings(t *testing.T) {
 		) {
 			t.Fatalf("%q: expected err %q, got %v", tc.lic, tc.err, err)
 		}
+	}
+}
+
+func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
+	id, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
+
+	t0 := timeutil.Unix(1603926294, 0)
+
+	lic1M, _ := (&licenseccl.License{
+		ClusterID:         []uuid.UUID{id},
+		Type:              licenseccl.License_Enterprise,
+		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
+	}).Encode()
+
+	lic2M, _ := (&licenseccl.License{
+		ClusterID:         []uuid.UUID{id},
+		Type:              licenseccl.License_Evaluation,
+		ValidUntilUnixSec: t0.AddDate(0, 2, 0).Unix(),
+	}).Encode()
+
+	lic0M, _ := (&licenseccl.License{
+		ClusterID:         []uuid.UUID{id},
+		Type:              licenseccl.License_Evaluation,
+		ValidUntilUnixSec: t0.AddDate(0, 0, 0).Unix(),
+	}).Encode()
+
+	licExpired, _ := (&licenseccl.License{
+		ClusterID:         []uuid.UUID{id},
+		Type:              licenseccl.License_Evaluation,
+		ValidUntilUnixSec: t0.AddDate(0, -1, 0).Unix(),
+	}).Encode()
+
+	st := cluster.MakeTestingClusterSettings()
+	updater := st.MakeUpdater()
+
+	for _, tc := range []struct {
+		desc     string
+		lic      string
+		ttlHours float64
+	}{
+		{"One Month", lic1M, 24 * 31},
+		{"Two Month", lic2M, 24*31 + 24*30},
+		{"Zero Month", lic0M, 0},
+		{"Expired", licExpired, -24 * 30},
+		{"No License", "", 0},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			if err := updater.Set("enterprise.license", tc.lic, "s"); err != nil {
+				t.Fatal(err)
+			}
+
+			actual, err := TimeToEnterpriseLicenseExpiry(context.Background(), st, t0)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			require.Equal(t, tc.ttlHours, actual.Hours())
+		})
 	}
 }
