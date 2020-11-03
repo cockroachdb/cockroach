@@ -250,7 +250,7 @@ func (u *versionUpgradeTest) uploadVersion(
 }
 
 // binaryVersion returns the binary running on the (one-indexed) node.
-// NB: version means major.minor[-unstable]; the patch level isn't returned. For example, a binary
+// NB: version means major.minor[-internal]; the patch level isn't returned. For example, a binary
 // of version 19.2.4 will return 19.2.
 func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) roachpb.Version {
 	db := u.conn(ctx, t, i)
@@ -274,7 +274,7 @@ func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) 
 // binaryVersion returns the cluster version active on the (one-indexed) node. Note that the
 // returned value might become stale due to the cluster auto-upgrading in the background plus
 // gossip asynchronicity.
-// NB: cluster versions are always major.minor[-unstable]; there isn't a patch level.
+// NB: cluster versions are always major.minor[-internal]; there isn't a patch level.
 func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int) roachpb.Version {
 	db := u.conn(ctx, t, i)
 

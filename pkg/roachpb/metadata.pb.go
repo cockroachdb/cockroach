@@ -110,7 +110,7 @@ func (x *ReplicaType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ReplicaType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{0}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{0}
 }
 
 // Attributes specifies a list of arbitrary strings describing
@@ -122,7 +122,7 @@ type Attributes struct {
 func (m *Attributes) Reset()      { *m = Attributes{} }
 func (*Attributes) ProtoMessage() {}
 func (*Attributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{0}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{0}
 }
 func (m *Attributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -156,7 +156,7 @@ type ReplicationTarget struct {
 func (m *ReplicationTarget) Reset()      { *m = ReplicationTarget{} }
 func (*ReplicationTarget) ProtoMessage() {}
 func (*ReplicationTarget) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{1}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{1}
 }
 func (m *ReplicationTarget) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -201,7 +201,7 @@ type ReplicaDescriptor struct {
 func (m *ReplicaDescriptor) Reset()      { *m = ReplicaDescriptor{} }
 func (*ReplicaDescriptor) ProtoMessage() {}
 func (*ReplicaDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{2}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{2}
 }
 func (m *ReplicaDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -236,7 +236,7 @@ func (m *ReplicaIdent) Reset()         { *m = ReplicaIdent{} }
 func (m *ReplicaIdent) String() string { return proto.CompactTextString(m) }
 func (*ReplicaIdent) ProtoMessage()    {}
 func (*ReplicaIdent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{3}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{3}
 }
 func (m *ReplicaIdent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -380,7 +380,7 @@ type RangeDescriptor struct {
 func (m *RangeDescriptor) Reset()      { *m = RangeDescriptor{} }
 func (*RangeDescriptor) ProtoMessage() {}
 func (*RangeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{4}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{4}
 }
 func (m *RangeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -419,7 +419,7 @@ type Percentiles struct {
 func (m *Percentiles) Reset()      { *m = Percentiles{} }
 func (*Percentiles) ProtoMessage() {}
 func (*Percentiles) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{5}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{5}
 }
 func (m *Percentiles) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -481,7 +481,7 @@ type StoreCapacity struct {
 func (m *StoreCapacity) Reset()      { *m = StoreCapacity{} }
 func (*StoreCapacity) ProtoMessage() {}
 func (*StoreCapacity) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{6}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{6}
 }
 func (m *StoreCapacity) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -526,7 +526,7 @@ func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
 func (m *NodeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*NodeDescriptor) ProtoMessage()    {}
 func (*NodeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{7}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{7}
 }
 func (m *NodeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -562,7 +562,7 @@ func (m *LocalityAddress) Reset()         { *m = LocalityAddress{} }
 func (m *LocalityAddress) String() string { return proto.CompactTextString(m) }
 func (*LocalityAddress) ProtoMessage()    {}
 func (*LocalityAddress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{8}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{8}
 }
 func (m *LocalityAddress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -600,7 +600,7 @@ func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
 func (m *StoreDescriptor) String() string { return proto.CompactTextString(m) }
 func (*StoreDescriptor) ProtoMessage()    {}
 func (*StoreDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{9}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{9}
 }
 func (m *StoreDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -637,7 +637,7 @@ func (m *StoreDeadReplicas) Reset()         { *m = StoreDeadReplicas{} }
 func (m *StoreDeadReplicas) String() string { return proto.CompactTextString(m) }
 func (*StoreDeadReplicas) ProtoMessage()    {}
 func (*StoreDeadReplicas) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{10}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{10}
 }
 func (m *StoreDeadReplicas) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -671,7 +671,7 @@ type Locality struct {
 func (m *Locality) Reset()      { *m = Locality{} }
 func (*Locality) ProtoMessage() {}
 func (*Locality) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{11}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{11}
 }
 func (m *Locality) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -707,7 +707,7 @@ type Tier struct {
 func (m *Tier) Reset()      { *m = Tier{} }
 func (*Tier) ProtoMessage() {}
 func (*Tier) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{12}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{12}
 }
 func (m *Tier) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -737,16 +737,17 @@ type Version struct {
 	Minor int32 `protobuf:"varint,2,opt,name=minor_val,json=minorVal" json:"minor_val"`
 	// Note that patch is a placeholder and will always be zero.
 	Patch int32 `protobuf:"varint,3,opt,name=patch" json:"patch"`
-	// The unstable version is used to migrate during development.
-	// Users of stable, public releases will only use binaries
-	// with unstable set to 0.
-	Unstable int32 `protobuf:"varint,4,opt,name=unstable" json:"unstable"`
+	// The internal version is used to introduce migrations during the development
+	// cycle. They are subversions that are never the end versions of a release,
+	// i.e. users of stable, public release will only use binaries with the
+	// internal version set to 0.
+	Internal int32 `protobuf:"varint,4,opt,name=internal" json:"internal"`
 }
 
 func (m *Version) Reset()      { *m = Version{} }
 func (*Version) ProtoMessage() {}
 func (*Version) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_0c98cdbced5f2e8b, []int{13}
+	return fileDescriptor_metadata_86ec0afcbf251d96, []int{13}
 }
 func (m *Version) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1050,7 +1051,7 @@ func (this *Version) Equal(that interface{}) bool {
 	if this.Patch != that1.Patch {
 		return false
 	}
-	if this.Unstable != that1.Unstable {
+	if this.Internal != that1.Internal {
 		return false
 	}
 	return true
@@ -1624,7 +1625,7 @@ func (m *Version) MarshalTo(dAtA []byte) (int, error) {
 	i = encodeVarintMetadata(dAtA, i, uint64(m.Patch))
 	dAtA[i] = 0x20
 	i++
-	i = encodeVarintMetadata(dAtA, i, uint64(m.Unstable))
+	i = encodeVarintMetadata(dAtA, i, uint64(m.Internal))
 	return i, nil
 }
 
@@ -2015,7 +2016,7 @@ func (m *Version) Size() (n int) {
 	n += 1 + sovMetadata(uint64(m.Major))
 	n += 1 + sovMetadata(uint64(m.Minor))
 	n += 1 + sovMetadata(uint64(m.Patch))
-	n += 1 + sovMetadata(uint64(m.Unstable))
+	n += 1 + sovMetadata(uint64(m.Internal))
 	return n
 }
 
@@ -4014,9 +4015,9 @@ func (m *Version) Unmarshal(dAtA []byte) error {
 			}
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Unstable", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Internal", wireType)
 			}
-			m.Unstable = 0
+			m.Internal = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMetadata
@@ -4026,7 +4027,7 @@ func (m *Version) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Unstable |= (int32(b) & 0x7F) << shift
+				m.Internal |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -4157,10 +4158,10 @@ var (
 	ErrIntOverflowMetadata   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_0c98cdbced5f2e8b) }
+func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_86ec0afcbf251d96) }
 
-var fileDescriptor_metadata_0c98cdbced5f2e8b = []byte{
-	// 1427 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_metadata_86ec0afcbf251d96 = []byte{
+	// 1425 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0xcd, 0x6f, 0x1b, 0x45,
 	0x14, 0xf7, 0xda, 0xeb, 0xd8, 0x7e, 0xce, 0x87, 0x3d, 0x82, 0xd6, 0x32, 0xc2, 0x76, 0x0d, 0x15,
 	0x69, 0x41, 0x49, 0x1a, 0x14, 0x55, 0x0d, 0x14, 0x29, 0x4e, 0xd2, 0x62, 0x9a, 0x2f, 0x36, 0x6e,
@@ -4241,14 +4242,14 @@ var fileDescriptor_metadata_0c98cdbced5f2e8b = []byte{
 	0x3b, 0x8c, 0xb6, 0x99, 0xb2, 0x44, 0x50, 0xca, 0xcb, 0xcf, 0x1a, 0x14, 0x54, 0xcb, 0x5f, 0x86,
 	0xd2, 0x00, 0x7f, 0xee, 0x53, 0xf3, 0x00, 0xbb, 0x32, 0x2f, 0x53, 0x32, 0x2f, 0xf9, 0x4d, 0x6e,
 	0x30, 0x8a, 0xc2, 0x7e, 0x07, 0xbb, 0x82, 0xeb, 0x78, 0x92, 0x9b, 0x3d, 0xc1, 0xe5, 0x06, 0xa3,
-	0x28, 0xec, 0x9c, 0x5b, 0x87, 0x7c, 0x80, 0x99, 0xb5, 0x3f, 0xb6, 0x31, 0x23, 0x88, 0x6f, 0xe6,
-	0xa1, 0x17, 0x32, 0xb1, 0x76, 0xd3, 0x9b, 0x32, 0x46, 0x93, 0x58, 0x2f, 0xbb, 0x50, 0x4e, 0xbd,
-	0x9c, 0xd1, 0x34, 0xc0, 0x9d, 0xed, 0xde, 0xba, 0x61, 0xde, 0xb8, 0xbd, 0xb1, 0x51, 0xc9, 0x20,
-	0x04, 0xd3, 0xd1, 0xef, 0xee, 0xd6, 0xea, 0xf6, 0x66, 0x77, 0xeb, 0x66, 0x25, 0x9b, 0x60, 0xdb,
-	0xb7, 0x7b, 0x37, 0xb7, 0x39, 0x96, 0x4b, 0xb0, 0xb5, 0xf5, 0xcd, 0xed, 0x1e, 0xc7, 0x74, 0x54,
-	0x86, 0xc2, 0xc6, 0xfa, 0x8a, 0xb1, 0xb5, 0x6e, 0x54, 0xb4, 0xba, 0xfe, 0xf5, 0x8f, 0x8d, 0x4c,
-	0xe7, 0xd2, 0xa3, 0xdf, 0x1a, 0x99, 0x47, 0x47, 0x0d, 0xed, 0xf1, 0x51, 0x43, 0x7b, 0x72, 0xd4,
-	0xd0, 0x7e, 0x3d, 0x6a, 0x68, 0xdf, 0x3d, 0x6d, 0x64, 0x1e, 0x3f, 0x6d, 0x64, 0x9e, 0x3c, 0x6d,
-	0x64, 0x3e, 0x2d, 0xc8, 0x6b, 0xfa, 0x3b, 0x00, 0x00, 0xff, 0xff, 0xf1, 0xbb, 0x1c, 0xba, 0xf7,
-	0x0d, 0x00, 0x00,
+	0x28, 0xec, 0x9c, 0x5b, 0x87, 0x7c, 0x80, 0x99, 0xb5, 0x3f, 0xb6, 0x31, 0x23, 0x88, 0x6f, 0x66,
+	0xf5, 0x04, 0x1b, 0xdb, 0x94, 0x31, 0x9a, 0xc4, 0x7a, 0xd9, 0x85, 0x72, 0xea, 0xe5, 0x8c, 0xa6,
+	0x01, 0xee, 0x6c, 0xf7, 0xd6, 0x0d, 0xf3, 0xc6, 0xed, 0x8d, 0x8d, 0x4a, 0x06, 0x21, 0x98, 0x8e,
+	0x7e, 0x77, 0xb7, 0x56, 0xb7, 0x37, 0xbb, 0x5b, 0x37, 0x2b, 0xd9, 0x04, 0xdb, 0xbe, 0xdd, 0xbb,
+	0xb9, 0xcd, 0xb1, 0x5c, 0x82, 0xad, 0xad, 0x6f, 0x6e, 0xf7, 0x38, 0xa6, 0xa3, 0x32, 0x14, 0x36,
+	0xd6, 0x57, 0x8c, 0xad, 0x75, 0xa3, 0xa2, 0xd5, 0xf5, 0xaf, 0x7f, 0x6c, 0x64, 0x3a, 0x97, 0x1e,
+	0xfd, 0xd6, 0xc8, 0x3c, 0x3a, 0x6a, 0x68, 0x8f, 0x8f, 0x1a, 0xda, 0x93, 0xa3, 0x86, 0xf6, 0xeb,
+	0x51, 0x43, 0xfb, 0xee, 0x69, 0x23, 0xf3, 0xf8, 0x69, 0x23, 0xf3, 0xe4, 0x69, 0x23, 0xf3, 0x69,
+	0x41, 0x5e, 0xd3, 0xdf, 0x01, 0x00, 0x00, 0xff, 0xff, 0x08, 0x52, 0x31, 0x35, 0xf7, 0x0d, 0x00,
+	0x00,
 }
