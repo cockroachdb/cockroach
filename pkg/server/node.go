@@ -349,48 +349,10 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
-	// stores, the NodeID is persisted in each of them. If not, then we'll need to
-	// use the KV store to get a NodeID assigned.
 	n.initialStart = initialStart
-	nodeID := state.nodeID
-	if nodeID == 0 {
-		// TODO(irfansharif): This codepath exists to maintain the legacy
-		// behavior of node ID allocation that was triggered on gossip
-		// connectivity. This was replaced by the Join RPC in 20.2, and can be
-		// removed in 21.1.
-		if !initialStart {
-			log.Fatalf(ctx, "node has no NodeID, but claims to not be joining cluster")
-		}
-		// Allocate NodeID. Note that Gossip is already connected because if there's
-		// no NodeID yet, this means that we had to connect Gossip to learn the ClusterID.
-		select {
-		case <-n.storeCfg.Gossip.Connected:
-		default:
-			log.Fatalf(ctx, "gossip is not connected yet")
-		}
-		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
-		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
-		if err != nil {
-			return err
-		}
-		log.Infof(ctxWithSpan, "new node allocated ID %d", newID)
-		span.Finish()
-		nodeID = newID
-
-		// We're joining via gossip, so we don't have a liveness record for
-		// ourselves yet. Let's create one while here.
-		if err := n.storeCfg.NodeLiveness.CreateLivenessRecord(ctx, nodeID); err != nil {
-			return err
-		}
-	}
-
-	// Inform the RPC context of the node ID.
-	n.storeCfg.RPCContext.NodeID.Set(ctx, nodeID)
-
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 	n.Descriptor = roachpb.NodeDescriptor{
-		NodeID:          nodeID,
+		NodeID:          state.nodeID,
 		Address:         util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		SQLAddress:      util.MakeUnresolvedAddr(sqlAddr.Network(), sqlAddr.String()),
 		Attrs:           attrs,
@@ -595,21 +557,45 @@ func (n *Node) bootstrapStores(
 		// each and invoking storage.Bootstrap() to persist it and the cluster
 		// version and to create stores. The -1 comes from the fact that our
 		// first store ID has already been pre-allocated for us.
+		//
+		// TODO(irfansharif): Is this sound? If we're restarting an already
+		// bootstrapped node (but now with additional stores), we haven't
+		// pre-allocated a store ID for any of the additional stores. Also see
+		// TODO below, the usage of firstStoreID is a bit confused.
 		storeIDAlloc := int64(len(emptyEngines)) - 1
-		if firstStoreID == 0 {
-			// We lied, we don't have a firstStoreID; we'll need to allocate for
-			// that too.
-			//
-			// TODO(irfansharif): We get here if we're falling back to
-			// gossip-based connectivity. This can be removed in 21.1.
-			storeIDAlloc++
-		}
 		startID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, storeIDAlloc, n.storeCfg.DB)
-		if firstStoreID == 0 {
-			firstStoreID = startID
-		}
 		if err != nil {
 			return errors.Errorf("error allocating store ids: %s", err)
+		}
+		if firstStoreID == 0 {
+			// TODO(irfansharif): Our usage of firstStoreID is pretty confused,
+			// but it just so happens to "work". firstStoreID, as threaded in
+			// from the caller, is non-zero in two cases:
+			// - When we starting up a node that was just bootstrapped
+			//   (firstStoreID == 1).
+			// - When we're joining an existing cluster (firstStoreID provided
+			//   to us via the join RPC).
+			//
+			// When we're restarting an already bootstrapped node, firstStoreID
+			// is zero. If we happen to be restarting with additional stores,
+			// we're starting the ID counter at what KV just told us about,
+			// which is probably what we want.
+			//
+			// Generally we're trying to do a few things, and our code structure
+			// doesn't make that obvious:
+			// - We're bootstrapping our first store after being handed a store
+			//   ID via the join RPC
+			// - We're not bootstrapping our first store here when we're the
+			//   node being bootstrapped, that already happens in
+			//   `bootstrapCluster`.
+			// - We're bootstrapping stores other than our first, after joining
+			//   an existing cluster via the join RPC.
+			// - We're bootstrapping additional stores after having our server
+			//   bootstrapped by the operator for the very first time.
+			// - We're bootstrapping additional stores after being restarted
+			//   with new stores (we were previously an already bootstrapped
+			//   node).
+			firstStoreID = startID
 		}
 		sIdent := roachpb.StoreIdent{
 			ClusterID: n.clusterID.Get(),

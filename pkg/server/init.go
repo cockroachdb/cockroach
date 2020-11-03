@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,13 +37,6 @@ import (
 // ErrClusterInitialized is reported when the Bootstrap RPC is run on
 // a node that is already part of an initialized cluster.
 var ErrClusterInitialized = fmt.Errorf("cluster has already been initialized")
-
-// errJoinRPCUnsupported is reported when the Join RPC is run against
-// a node that does not know about the join RPC (i.e. it is running 20.1 or
-// below).
-//
-// TODO(irfansharif): Remove this in 21.1.
-var errJoinRPCUnsupported = fmt.Errorf("node does not support the Join RPC")
 
 // ErrIncompatibleBinaryVersion is returned when a CRDB node with a binary version X
 // attempts to join a cluster with an active version that's higher. This is not
@@ -100,17 +92,9 @@ func newInitServer(
 
 // initDiskState contains the part of initState that is read from stable
 // storage.
-//
-// NB: The above is a lie in the case in which we join an existing mixed-version
-// cluster. In that case, the state returned from ServeAndWait will have the
-// clusterID set from Gossip (and there will be no NodeID). This is holdover
-// behavior that can be removed in 21.1, at which point the lie disappears.
 type initDiskState struct {
-	// nodeID is zero if joining an existing cluster.
-	//
-	// TODO(tbg): see TODO above.
-	nodeID roachpb.NodeID
 	// All fields below are always set.
+	nodeID             roachpb.NodeID
 	clusterID          uuid.UUID
 	clusterVersion     clusterversion.ClusterVersion
 	initializedEngines []storage.Engine
@@ -131,6 +115,18 @@ type initState struct {
 	initDiskState
 
 	firstStoreID roachpb.StoreID
+}
+
+// validate asserts that the init state is a fully fleshed out one (i.e. with a
+// non-empty cluster ID and node ID).
+func (s *initState) validate() error {
+	if (s.clusterID == uuid.UUID{}) {
+		return errors.New("missing cluster ID")
+	}
+	if s.nodeID == 0 {
+		return errors.New("missing node ID")
+	}
+	return nil
 }
 
 // NeedsInit is like needsInitLocked, except it acquires the necessary locks.
@@ -162,10 +158,9 @@ type joinResult struct {
 // restarting an existing node, this immediately returns. When starting with a
 // blank slate (i.e. only empty engines), it waits for incoming Bootstrap
 // request or for a successful outgoing Join RPC, whichever happens earlier.
-// See [1].
 //
 // The returned initState reflects a bootstrapped cluster (i.e. it has a cluster
-// ID and a node ID for this server). See [2].
+// ID and a node ID for this server). See [1].
 //
 // This method must be called only once.
 //
@@ -183,17 +178,11 @@ type joinResult struct {
 // functionally equivalent to one that restarted; any decisions should be made
 // on persisted data instead of this flag.
 //
-// [1]: In mixed version clusters it waits until Gossip connects (but this is
-// slated to be removed in 21.1).
-//
-// [2]: This is not technically true for mixed version clusters where we leave
+// [1]: This is not technically true for mixed version clusters where we leave
 // the node ID unassigned until later, but this too is part of the deprecated
 // init server behavior that is slated for removal in 21.1.
 func (s *initServer) ServeAndWait(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	sv *settings.Values,
-	startGossipFn func() *gossip.Gossip,
+	ctx context.Context, stopper *stop.Stopper, sv *settings.Values,
 ) (state *initState, initialBoot bool, err error) {
 	// If already bootstrapped, return early.
 	s.mu.Lock()
@@ -201,49 +190,54 @@ func (s *initServer) ServeAndWait(
 		diskState := *s.mu.inspectState
 		s.mu.Unlock()
 
-		return &initState{initDiskState: diskState}, false, nil
+		initState := &initState{initDiskState: diskState}
+		return initState, false, nil
 	}
 	s.mu.Unlock()
 
 	log.Info(ctx, "no stores bootstrapped")
 	log.Info(ctx, "awaiting `cockroach init` or join with an already initialized node")
 
-	joinCtx, cancelJoin := context.WithCancel(ctx)
-	defer cancelJoin()
-
+	// If we end up joining a bootstrapped cluster, the resulting init state
+	// will be passed through this channel.
+	var joinCh chan joinResult
+	var cancelJoin = func() {}
 	var wg sync.WaitGroup
-	wg.Add(1)
-	// If this CRDB node was able to join a bootstrapped cluster, the resulting
-	// init state will be passed through to this channel.
-	joinCh := make(chan joinResult, 1)
-	if err := stopper.RunTask(joinCtx, "init server: join loop", func(joinCtx context.Context) {
-		stopper.RunWorker(joinCtx, func(joinCtx context.Context) {
-			defer wg.Done()
 
-			state, err := s.startJoinLoop(joinCtx, stopper)
-			joinCh <- joinResult{
-				state: state,
-				err:   err,
-			}
-		})
-	}); err != nil {
-		return nil, false, err
+	if len(s.config.resolvers) == 0 {
+		// We're pointing to only ourselves or nothing at all, which (likely)
+		// suggests that we're going to be bootstrapped by the operator. Since
+		// we're not going to be sending out join RPCs, we don't bother spinning
+		// up the join loop.
+	} else {
+		joinCh = make(chan joinResult, 1)
+		wg.Add(1)
+
+		var joinCtx context.Context
+		joinCtx, cancelJoin = context.WithCancel(ctx)
+		defer cancelJoin()
+
+		err := stopper.RunTask(joinCtx, "init server: join loop",
+			func(joinCtx context.Context) {
+				stopper.RunWorker(joinCtx, func(joinCtx context.Context) {
+					defer wg.Done()
+
+					state, err := s.startJoinLoop(joinCtx, stopper)
+					joinCh <- joinResult{state: state, err: err}
+				})
+			})
+		if err != nil {
+			return nil, false, err
+		}
 	}
-
-	// gossipConnectedCh is used as a place holder for gossip.Connected. We
-	// don't trigger on gossip connectivity unless we have to, favoring instead
-	// the join RPC to discover the cluster ID (and node ID). If we're in a
-	// mixed-version cluster however (with 20.1 nodes), we'll fall back to using
-	// the legacy gossip connectivity mechanism to discover the cluster ID.
-	var gossipConnectedCh chan struct{}
-	var g *gossip.Gossip
 
 	for {
 		select {
 		case state := <-s.bootstrapReqCh:
-			// Ensure we're draining out the join attempt. We're not going to
-			// need it anymore and it had no chance of joining anywhere (since
-			// we are starting the new cluster and are not serving Join yet).
+			// Ensure we're draining out the join attempt, if any. We're not
+			// going to need it anymore and it had no chance of joining
+			// elsewhere (since we are the ones bootstrapping the new cluster
+			// and have not started serving Join yet).
 			cancelJoin()
 			wg.Wait()
 
@@ -277,26 +271,13 @@ func (s *initServer) ServeAndWait(
 			wg.Wait()
 
 			if err := result.err; err != nil {
-				if errors.Is(err, errJoinRPCUnsupported) {
-					// We're in a mixed-version cluster, we start gossip and wire up
-					// the gossip connectivity mechanism to discover the cluster ID.
-					g = startGossipFn()
-					gossipConnectedCh = g.Connected
-
-					// Let's nil out joinCh to prevent accidental re-use.
-					close(joinCh)
-					joinCh = nil
-
-					continue
-				}
-
 				if errors.Is(err, ErrIncompatibleBinaryVersion) {
 					return nil, false, err
 				}
 
 				if err != nil {
 					// We expect the join RPC to blindly retry on all errors
-					// save for the two above. This should be unreachable code.
+					// save for the one above. This should be unreachable code.
 					return nil, false, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error: %v", err)
 				}
 			}
@@ -315,36 +296,6 @@ func (s *initServer) ServeAndWait(
 			s.mu.inspectState.clusterID = state.clusterID
 			s.mu.Unlock()
 
-			return state, true, nil
-		case <-gossipConnectedCh:
-			// Ensure we're draining out the join attempt.
-			wg.Wait()
-
-			// We're in a mixed-version cluster, so we retain the legacy
-			// behavior of retrieving the cluster ID and deferring node ID
-			// allocation (happens in (*Node).start).
-			//
-			// TODO(irfansharif): Remove this in 21.1.
-
-			// Gossip connected, that is, we know a ClusterID. Due to the early
-			// return above, we know that all of our engines are empty, i.e. we
-			// don't have a NodeID yet (and the cluster version is the minimum we
-			// support). Commence startup; the Node will realize it's short a
-			// NodeID and will request one.
-			clusterID, err := g.GetClusterID()
-			if err != nil {
-				return nil, false, err
-			}
-
-			s.mu.Lock()
-			s.mu.inspectState.clusterID = clusterID
-			diskState := *s.mu.inspectState
-			s.mu.Unlock()
-
-			state := &initState{
-				initDiskState: diskState,
-			}
-			log.Infof(ctx, "joined cluster %s through gossip (legacy behavior)", state.clusterID)
 			return state, true, nil
 		case <-stopper.ShouldQuiesce():
 			return nil, false, stop.ErrUnavailable
@@ -399,11 +350,7 @@ func (s *initServer) Bootstrap(
 // running a binary that's too old to join the rest of the cluster.
 func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (*initState, error) {
 	if len(s.config.resolvers) == 0 {
-		// We're pointing to only ourselves, which is probably indicative of a
-		// node that's going to be bootstrapped by the operator. We could opt to
-		// not fall back to the gossip based connectivity mechanism, but we do
-		// it anyway.
-		return nil, errJoinRPCUnsupported
+		return nil, errors.AssertionFailedf("expected to find at least one resolver, found none")
 	}
 
 	// Iterate through all the resolvers at least once to reduce time taken to
@@ -424,9 +371,9 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 			return state, nil
 		}
 
-		if errors.Is(err, errJoinRPCUnsupported) || errors.Is(err, ErrIncompatibleBinaryVersion) {
-			// Propagate upwards; these are error conditions the caller knows to
-			// expect.
+		if errors.Is(err, ErrIncompatibleBinaryVersion) {
+			// Propagate upwards; these is an error condition the caller knows
+			// to expect.
 			return nil, err
 		}
 
@@ -456,8 +403,8 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 				return state, nil
 			}
 
-			if errors.Is(err, errJoinRPCUnsupported) || errors.Is(err, ErrIncompatibleBinaryVersion) {
-				// Propagate upwards; these are error conditions the caller
+			if errors.Is(err, ErrIncompatibleBinaryVersion) {
+				// Propagate upwards; this is an error condition the caller
 				// knows to expect.
 				return nil, err
 			}
@@ -516,11 +463,6 @@ func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState
 		// it. We should wrap the logged message with the right error instead.
 		// The caller code, as written, switches on the error type; that'll need
 		// to be changed as well.
-
-		if status.Code() == codes.Unimplemented {
-			log.Infof(ctx, "%s running an older version; falling back to gossip-based cluster join", addr)
-			return nil, errJoinRPCUnsupported
-		}
 
 		if status.Code() == codes.PermissionDenied {
 			log.Infof(ctx, "%s is running a version higher than our binary version %s", addr, req.BinaryVersion.String())
