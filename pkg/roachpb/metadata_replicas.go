@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // ReplicaTypeVoterFull returns a VOTER_FULL pointer suitable for use in a
