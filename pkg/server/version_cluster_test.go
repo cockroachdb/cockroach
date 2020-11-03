@@ -132,7 +132,7 @@ func setupMixedCluster(
 // eg. prev(20.1) = 19.2, prev(19.2) = 19.1, prev(19.1) = 2.1,
 // prev(2.0) = 1.0, prev(2.1) == 2.0, prev(2.1-5) == 2.1.
 func prev(version roachpb.Version) roachpb.Version {
-	if version.Unstable != 0 {
+	if version.Internal != 0 {
 		return roachpb.Version{Major: version.Major, Minor: version.Minor}
 	}
 

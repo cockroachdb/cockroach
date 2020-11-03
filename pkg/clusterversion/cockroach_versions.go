@@ -85,9 +85,9 @@ const (
 // with comments describing what backwards-incompatible features were
 // introduced.
 //
-// A roachpb.Version has the colloquial form MAJOR.MINOR[.PATCH][-UNSTABLE],
-// where the PATCH and UNSTABLE components can be omitted if zero. Keep in mind
-// that a version with an unstable component, like 1.1-2, represents a version
+// A roachpb.Version has the colloquial form MAJOR.MINOR[.PATCH][-INTERNAL],
+// where the PATCH and INTERNAL components can be omitted if zero. Keep in mind
+// that a version with an internal component, like 1.1-2, represents a version
 // that was developed AFTER v1.1 was released and is not slated for release
 // until the next stable version (either 1.2-0 or 2.0-0). Patch releases, like
 // 1.1.2, do not have associated migrations.
@@ -110,7 +110,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// It enables use of updated fields in ChangeReplicasTrigger that will
 		// support atomic replication changes.
 		Key:     VersionAtomicChangeReplicasTrigger,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 8},
+		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 8},
 	},
 	{
 		// VersionAtomicChangeReplicas is https://github.com/cockroachdb/cockroach/pull/39936.
@@ -121,12 +121,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// no atomic replication changes will be scheduled when it is set to
 		// 'false').
 		Key:     VersionAtomicChangeReplicas,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
+		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 9},
 	},
 	{
 		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
 		Key:     VersionPartitionedBackup,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 11},
+		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 11},
 	},
 	{
 		// Version19_2 is CockroachDB v19.2. It's used for all v19.2.x patch releases.
@@ -136,7 +136,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		// VersionStart20_1 demarcates work towards CockroachDB v20.1.
 		Key:     VersionStart20_1,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 1},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 1},
 	},
 	{
 		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
@@ -155,7 +155,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// behavior for ContainsEstimates=1 and the additive behavior for
 		// anything else.
 		Key:     VersionContainsEstimatesCounter,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 2},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 2},
 	},
 	{
 		// VersionChangeReplicasDemotion enables the use of voter demotions
@@ -189,14 +189,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// configuration change in their logs, the group won't lose availability
 		// when the leader instead crashes while removing the learner.
 		Key:     VersionChangeReplicasDemotion,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 3},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 3},
 	},
 	{
 		// VersionSecondaryIndexColumnFamilies is https://github.com/cockroachdb/cockroach/pull/42073.
 		//
 		// It allows secondary indexes to respect table level column family definitions.
 		Key:     VersionSecondaryIndexColumnFamilies,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 4},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 4},
 	},
 	{
 		// VersionNamespaceTableWithSchemas is https://github.com/cockroachdb/cockroach/pull/41977
@@ -205,7 +205,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// added parentSchemaID column. In addition to the new column, the table is
 		// no longer in the system config range -- implying it is no longer gossiped.
 		Key:     VersionNamespaceTableWithSchemas,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 5},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 5},
 	},
 	{
 		// VersionProtectedTimestamps introduces the system tables for the protected
@@ -215,14 +215,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// system.protected_ts_records tables are part of the system bootstap
 		// schema.
 		Key:     VersionProtectedTimestamps,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 6},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 6},
 	},
 	{
 		// VersionPrimaryKeyChanges is https://github.com/cockroachdb/cockroach/pull/42462
 		//
 		// It allows online primary key changes of tables.
 		Key:     VersionPrimaryKeyChanges,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 7},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 7},
 	},
 	{
 		// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
@@ -233,14 +233,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// introduced while previous-version nodes are still running, as
 		// this would block any new SQL client.
 		Key:     VersionAuthLocalAndTrustRejectMethods,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 8},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 8},
 	},
 	{
 		// VersionPrimaryKeyColumnsOutOfFamilyZero allows for primary key columns
 		// to exist in column families other than 0, in order to prepare for
 		// primary key changes that move primary key columns to different families.
 		Key:     VersionPrimaryKeyColumnsOutOfFamilyZero,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 9},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 9},
 	},
 	{
 		// VersionNoExplicitForeignKeyIndexIDs is https://github.com/cockroachdb/cockroach/pull/43332.
@@ -249,7 +249,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// key constraints, and instead allows all places that need these IDs to select
 		// an appropriate index to uphold the foreign key relationship.
 		Key:     VersionNoExplicitForeignKeyIndexIDs,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 11},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 11},
 	},
 	{
 		// VersionHashShardedIndexes is https://github.com/cockroachdb/cockroach/pull/42922
@@ -258,7 +258,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// shard column, computed from the set of index columns, and prefix the index's
 		// ranges with said shard column.
 		Key:     VersionHashShardedIndexes,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 12},
 	},
 	{
 		// VersionCreateRolePrivilege is https://github.com/cockroachdb/cockroach/pull/44232.
@@ -266,7 +266,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// It represents adding role management via CREATEROLE privilege.
 		// Added new column in system.users table to track hasCreateRole.
 		Key:     VersionCreateRolePrivilege,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 13},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 13},
 	},
 	{
 		// VersionStatementDiagnosticsSystemTables introduces the system tables for
@@ -275,7 +275,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// system.statement_diagnostics and system.statement_bundle_chunks tables
 		// are part of the system bootstap schema.
 		Key:     VersionStatementDiagnosticsSystemTables,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 14},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 14},
 	},
 	{
 		// VersionSchemaChangeJob is https://github.com/cockroachdb/cockroach/pull/45870.
@@ -283,14 +283,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// From this version on, schema changes are run as jobs instead of being
 		// scheduled by the SchemaChangeManager.
 		Key:     VersionSchemaChangeJob,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 15},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 15},
 	},
 	{
 		// VersionSavepoints enables the use of SQL savepoints, whereby
 		// the ignored seqnum list can become populated in transaction
 		// records.
 		Key:     VersionSavepoints,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 16},
+		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 16},
 	},
 	{
 		// Version20_1 is CockroachDB v20.1. It's used for all v20.1.x patch releases.
@@ -300,18 +300,18 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		// VersionStart20_2 demarcates work towards CockroachDB v20.2.
 		Key:     VersionStart20_2,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 1},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
 	},
 	{
 
 		// VersionGeospatialType enables the use of Geospatial features.
 		Key:     VersionGeospatialType,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 2},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 2},
 	},
 	{
 		// VersionEnums enables the use of ENUM types.
 		Key:     VersionEnums,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 3},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 3},
 	},
 	{
 
@@ -321,79 +321,79 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// schema lease subsystem. Nodes which start with this version finalized
 		// will not pass gossip to the SQL layer.
 		Key:     VersionRangefeedLeases,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 4},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 4},
 	},
 	{
 		// VersionAlterColumnTypeGeneral enables the use of alter column type for
 		// conversions that require the column data to be rewritten.
 		Key:     VersionAlterColumnTypeGeneral,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 5},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 5},
 	},
 	{
 		// VersionAlterSystemJobsTable is a version which modified system.jobs table.
 		Key:     VersionAlterSystemJobsAddCreatedByColumns,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 6},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 6},
 	},
 	{
 		// VersionAddScheduledJobsTable is a version which adds system.scheduled_jobs table.
 		Key:     VersionAddScheduledJobsTable,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 7},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 7},
 	},
 	{
 		// VersionUserDefinedSchemas enables the creation of user defined schemas.
 		Key:     VersionUserDefinedSchemas,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 8},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 8},
 	},
 	{
 		// VersionNoOriginFKIndexes allows for foreign keys to no longer need
 		// indexes on the origin side of the relationship.
 		Key:     VersionNoOriginFKIndexes,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 9},
 	},
 	{
 		// VersionClientRangeInfosOnBatchResponse moves the response RangeInfos from
 		// individual response headers to the batch header.
 		Key:     VersionClientRangeInfosOnBatchResponse,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 10},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 10},
 	},
 	{
 		// VersionNodeMembershipStatus gates the usage of the MembershipStatus
 		// enum in the Liveness proto. See comment on proto definition for more
 		// details.
 		Key:     VersionNodeMembershipStatus,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 11},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 11},
 	},
 	{
 		// VersionRangeStatsRespHasDesc adds the RangeStatsResponse.RangeInfo field.
 		Key:     VersionRangeStatsRespHasDesc,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 12},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 12},
 	},
 	{
 		// VersionMinPasswordLength adds the server.user_login.min_password_length setting.
 		Key:     VersionMinPasswordLength,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 13},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 13},
 	},
 	{
 		// VersionAbortSpanBytes adds a field to MVCCStats
 		// (MVCCStats.AbortSpanBytes) that tracks the size of a
 		// range's abort span.
 		Key:     VersionAbortSpanBytes,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 14},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 14},
 	},
 	{
 		// VersionAlterSystemJobsTableAddLeaseColumn is a version which modified system.jobs table.
 		Key:     VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 15},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 15},
 	},
 	{
 		// VersionMaterializedViews enables the use of materialized views.
 		Key:     VersionMaterializedViews,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 16},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 16},
 	},
 	{
 		// VersionBox2DType enables the use of the box2d type.
 		Key:     VersionBox2DType,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 17},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 17},
 	},
 	{
 		// VersionLeasedDatabasedDescriptors enables leased database descriptors.
@@ -401,12 +401,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// usages of this version gate have been removed, this version remains to
 		// gate a few miscellaneous database descriptor changes.
 		Key:     VersionLeasedDatabaseDescriptors,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 18},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 18},
 	},
 	{
 		// VersionUpdateScheduledJobsSchema drops schedule_changes and adds schedule_status.
 		Key:     VersionUpdateScheduledJobsSchema,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 19},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 19},
 	},
 	{
 		// VersionCreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN
@@ -415,13 +415,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// It represents adding authn principal management via CREATELOGIN
 		// role option.
 		Key:     VersionCreateLoginPrivilege,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 20},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 20},
 	},
 	{
 		// VersionHBAForNonTLS is when the 'hostssl' and 'hostnossl' HBA
 		// configs are introduced.
 		Key:     VersionHBAForNonTLS,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 21},
+		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 21},
 	},
 	{
 		// Version20_2 is CockroachDB v20.2. It's used for all v20.2.x patch releases.
@@ -431,13 +431,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		// VersionStart21_1 demarcates work towards CockroachDB v21.1.
 		Key:     VersionStart21_1,
-		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 1},
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 1},
 	},
 	{
 		// VersionEmptyArraysInInvertedIndexes is when empty arrays are added to
 		// array inverted indexes.
 		Key:     VersionEmptyArraysInInvertedIndexes,
-		Version: roachpb.Version{Major: 20, Minor: 2, Unstable: 2},
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
 	},
 
 	// Add new versions here (step two of two).
