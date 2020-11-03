@@ -14,8 +14,8 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -177,12 +177,12 @@ type quiescer interface {
 // quiescence had they been alive). If any replica (leader or follower) becomes
 // aware that a replica in this set has become live, it should unquiesce the
 // range so that the replica can be caught back up.
-type laggingReplicaSet []kvserverpb.Liveness
+type laggingReplicaSet []nodelivenesspb.Liveness
 
 // MemberStale returns whether the provided piece of liveness information is
 // related to a node contained in the set and is newer information than the
 // respective information in the set.
-func (s laggingReplicaSet) MemberStale(l kvserverpb.Liveness) bool {
+func (s laggingReplicaSet) MemberStale(l nodelivenesspb.Liveness) bool {
 	for _, laggingL := range s {
 		if laggingL.NodeID == l.NodeID {
 			return laggingL.Compare(l) < 0

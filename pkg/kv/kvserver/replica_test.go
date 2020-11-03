@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -9681,7 +9682,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		test(true, func(q *testQuiescer) *testQuiescer {
 			nodeID := roachpb.NodeID(i)
 			q.livenessMap[nodeID] = nodeliveness.IsLiveMapEntry{
-				Liveness: kvserverpb.Liveness{NodeID: nodeID},
+				Liveness: nodelivenesspb.Liveness{NodeID: nodeID},
 				IsLive:   false,
 			}
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
@@ -9776,7 +9777,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 	})
 	// Lagging replica with same liveness information.
 	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := nodelivenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
@@ -9785,12 +9786,12 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Liveness: l,
 			IsLive:   false,
 		}
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{l}
+		req.LaggingFollowersOnQuiesce = []nodelivenesspb.Liveness{l}
 		return q, req
 	})
 	// Lagging replica with older liveness information.
 	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := nodelivenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
@@ -9801,11 +9802,11 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		}
 		lOld := l
 		lOld.Epoch--
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{lOld}
+		req.LaggingFollowersOnQuiesce = []nodelivenesspb.Liveness{lOld}
 		return q, req
 	})
 	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := nodelivenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
@@ -9816,12 +9817,12 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		}
 		lOld := l
 		lOld.Expiration.WallTime--
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{lOld}
+		req.LaggingFollowersOnQuiesce = []nodelivenesspb.Liveness{lOld}
 		return q, req
 	})
 	// Lagging replica with newer liveness information.
 	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := nodelivenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
@@ -9832,11 +9833,11 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		}
 		lNew := l
 		lNew.Epoch++
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{lNew}
+		req.LaggingFollowersOnQuiesce = []nodelivenesspb.Liveness{lNew}
 		return q, req
 	})
 	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := nodelivenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
@@ -9847,7 +9848,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		}
 		lNew := l
 		lNew.Expiration.WallTime++
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{lNew}
+		req.LaggingFollowersOnQuiesce = []nodelivenesspb.Liveness{lNew}
 		return q, req
 	})
 }

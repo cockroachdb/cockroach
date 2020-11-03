@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -125,13 +125,13 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 					{Desc: roachpb.NodeDescriptor{NodeID: 5}},
 					{Desc: roachpb.NodeDescriptor{NodeID: 6}},
 				},
-				LivenessByNodeID: map[roachpb.NodeID]kvserverpb.NodeLivenessStatus{
-					1: kvserverpb.NodeLivenessStatus_DEAD,
-					2: kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
-					3: kvserverpb.NodeLivenessStatus_UNKNOWN,
-					4: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
-					5: kvserverpb.NodeLivenessStatus_LIVE,
-					6: kvserverpb.NodeLivenessStatus_DECOMMISSIONED,
+				LivenessByNodeID: map[roachpb.NodeID]nodelivenesspb.NodeLivenessStatus{
+					1: nodelivenesspb.NodeLivenessStatus_DEAD,
+					2: nodelivenesspb.NodeLivenessStatus_DECOMMISSIONING,
+					3: nodelivenesspb.NodeLivenessStatus_UNKNOWN,
+					4: nodelivenesspb.NodeLivenessStatus_UNAVAILABLE,
+					5: nodelivenesspb.NodeLivenessStatus_LIVE,
+					6: nodelivenesspb.NodeLivenessStatus_DECOMMISSIONED,
 				},
 			},
 			[]haProxyNodeInfo{

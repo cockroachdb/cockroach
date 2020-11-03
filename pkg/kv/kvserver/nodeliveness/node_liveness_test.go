@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -150,14 +150,14 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	decommissioningNodeID := tc.Server(2).NodeID()
 	log.Infof(ctx, "marking node %d as decommissioning", decommissioningNodeID)
-	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decommissioningNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, nodelivenesspb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decommissioningNodeID}); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "marked node %d as decommissioning", decommissioningNodeID)
 
 	removedNodeID := tc.Server(3).NodeID()
 	log.Infof(ctx, "marking node %d as decommissioning and shutting it down", removedNodeID)
-	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{removedNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, nodelivenesspb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{removedNodeID}); err != nil {
 		t.Fatal(err)
 	}
 	tc.StopServer(3)
@@ -174,16 +174,16 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	type testCase struct {
 		nodeID         roachpb.NodeID
-		expectedStatus kvserverpb.NodeLivenessStatus
+		expectedStatus nodelivenesspb.NodeLivenessStatus
 	}
 
 	// Below we're going to check that all statuses converge and stabilize
 	// to a known situation.
 	testData := []testCase{
-		{liveNodeID, kvserverpb.NodeLivenessStatus_LIVE},
-		{deadNodeID, kvserverpb.NodeLivenessStatus_DEAD},
-		{decommissioningNodeID, kvserverpb.NodeLivenessStatus_DECOMMISSIONING},
-		{removedNodeID, kvserverpb.NodeLivenessStatus_DECOMMISSIONED},
+		{liveNodeID, nodelivenesspb.NodeLivenessStatus_LIVE},
+		{deadNodeID, nodelivenesspb.NodeLivenessStatus_DEAD},
+		{decommissioningNodeID, nodelivenesspb.NodeLivenessStatus_DECOMMISSIONING},
+		{removedNodeID, nodelivenesspb.NodeLivenessStatus_DECOMMISSIONED},
 	}
 
 	for _, test := range testData {
@@ -233,12 +233,12 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 	tArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				OnDecommissionedCallback: func(rec kvserverpb.Liveness) {
+				OnDecommissionedCallback: func(rec nodelivenesspb.Liveness) {
 					cb.Lock()
 					if cb.m == nil {
 						cb.m = map[roachpb.NodeID]bool{}
 					}
-					cb.m[rec.NodeID] = rec.Membership == kvserverpb.MembershipStatus_DECOMMISSIONED
+					cb.m[rec.NodeID] = rec.Membership == nodelivenesspb.MembershipStatus_DECOMMISSIONED
 					cb.Unlock()
 
 				},
@@ -257,7 +257,7 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 
 	// Make sure the callback doesn't fire willy-nilly...
 	func() {
-		chg, err := nl1.SetMembershipStatus(ctx, 2, kvserverpb.MembershipStatus_DECOMMISSIONING)
+		chg, err := nl1.SetMembershipStatus(ctx, 2, nodelivenesspb.MembershipStatus_DECOMMISSIONING)
 		require.NoError(t, err)
 		require.True(t, chg)
 		cb.Lock()
@@ -267,7 +267,7 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 
 	// ... but only when a node actually gets decommissioned.
 	{
-		chg, err := nl1.SetMembershipStatus(ctx, 2, kvserverpb.MembershipStatus_DECOMMISSIONED)
+		chg, err := nl1.SetMembershipStatus(ctx, 2, nodelivenesspb.MembershipStatus_DECOMMISSIONED)
 		require.NoError(t, err)
 		require.True(t, chg)
 		testutils.SucceedsSoon(t, func() error {

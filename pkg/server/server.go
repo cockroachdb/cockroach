@@ -39,8 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -425,7 +425,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RenewalDuration:         nlRenewal,
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
-		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
+		OnNodeDecommissioned: func(liveness nodelivenesspb.Liveness) {
 			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
 				knobs.OnDecommissionedCallback(liveness)
 			}
@@ -2031,7 +2031,7 @@ func (s *sqlServer) startServeSQL(
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
 func (s *Server) Decommission(
-	ctx context.Context, targetStatus kvserverpb.MembershipStatus, nodeIDs []roachpb.NodeID,
+	ctx context.Context, targetStatus nodelivenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
 	if !s.st.Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
 		if targetStatus.Decommissioned() {
@@ -2040,7 +2040,7 @@ func (s *Server) Decommission(
 			// representation of membership state. We do the simple thing and
 			// simply disallow the setting of the fully decommissioned state until
 			// we're guaranteed to be on v20.2.
-			targetStatus = kvserverpb.MembershipStatus_DECOMMISSIONING
+			targetStatus = nodelivenesspb.MembershipStatus_DECOMMISSIONING
 		}
 	}
 

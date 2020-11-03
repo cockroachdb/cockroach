@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,22 +25,22 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	toMembershipStatus := func(membership string) kvserverpb.MembershipStatus {
+	toMembershipStatus := func(membership string) nodelivenesspb.MembershipStatus {
 		switch membership {
 		case "active":
-			return kvserverpb.MembershipStatus_ACTIVE
+			return nodelivenesspb.MembershipStatus_ACTIVE
 		case "decommissioning":
-			return kvserverpb.MembershipStatus_DECOMMISSIONING
+			return nodelivenesspb.MembershipStatus_DECOMMISSIONING
 		case "decommissioned":
-			return kvserverpb.MembershipStatus_DECOMMISSIONED
+			return nodelivenesspb.MembershipStatus_DECOMMISSIONED
 		default:
 			err := fmt.Sprintf("unexpected membership: %s", membership)
 			panic(err)
 		}
 	}
 
-	l := func(epo int64, expiration hlc.Timestamp, draining bool, membership string) kvserverpb.Liveness {
-		return kvserverpb.Liveness{
+	l := func(epo int64, expiration hlc.Timestamp, draining bool, membership string) nodelivenesspb.Liveness {
+		return nodelivenesspb.Liveness{
 			Epoch:      epo,
 			Expiration: hlc.LegacyTimestamp(expiration),
 			Draining:   draining,
@@ -54,7 +54,7 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	now := hlc.Timestamp{WallTime: 12345}
 
 	for _, test := range []struct {
-		old, new kvserverpb.Liveness
+		old, new nodelivenesspb.Liveness
 		exp      bool
 	}{
 		{
