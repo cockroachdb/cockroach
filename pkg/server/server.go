@@ -1350,30 +1350,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// provided.
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
 
-	// As of 21.1, we will no longer need gossip to start before the init
-	// server. We need it in 20.2 for backwards compatibility with 20.1 servers
-	// that use gossip connectivity to distribute the cluster ID. In 20.2 we
-	// introduced a dedicated Join RPC to do exactly this, and so we can defer
-	// gossip start to after bootstrap/initialization.
-	//
-	// In order to defer starting gossip until absolutely needed, we wrap up
-	// gossip start in an idempotent function that's provided to the init
-	// server. It'll get invoked if we detect we're in a mixed-version cluster.
-	// If we're starting off at 20.2, we'll start gossip later.
-	//
-	// TODO(irfansharif): Remove this callback in 21.1.
-	var startGossipFn func() *gossip.Gossip
-	{
-		var once sync.Once
-		startGossipFn = func() *gossip.Gossip {
-			once.Do(func() {
-				s.gossip.Start(advAddrU, filtered)
-				log.Event(ctx, "started gossip")
-			})
-			return s.gossip
-		}
-	}
-
 	if s.cfg.DelayedBootstrapFn != nil {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
@@ -1413,20 +1389,16 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// incoming connections.
 	startRPCServer(workersCtx)
 	onInitServerReady()
-	state, initialStart, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV, startGossipFn)
+	state, initialStart, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV)
 	if err != nil {
 		return errors.Wrap(err, "during init")
 	}
+	if err := state.validate(); err != nil {
+		return errors.Wrap(err, "invalid init state")
+	}
 
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
-	// If there's no NodeID here, then we didn't just bootstrap. The Node will
-	// read its ID from the stores or request a new one via KV.
-	//
-	// TODO(irfansharif): Make this unconditional once 20.2 is cut. This only
-	// exists to be compatible with 20.1 clusters.
-	if state.nodeID != 0 {
-		s.rpcContext.NodeID.Set(ctx, state.nodeID)
-	}
+	s.rpcContext.NodeID.Set(ctx, state.nodeID)
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another
 	// check here to make sure we've not been decommissioned away (if we're here
@@ -1461,36 +1433,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// the early stage of startup -- setting up listeners and determining the
 	// initState -- and everything after it is actually starting the server,
 	// using the listeners and init state.
-
-	// Defense in depth: set up an eager sanity check that we're not
-	// accidentally being pointed at a different cluster. We have checks for
-	// this in the RPC layer, but since the RPC layer gets set up before the
-	// clusterID is known, early connections won't validate the clusterID (at
-	// least not until the next Ping).
-	//
-	// The check is simple: listen for clusterID changes from Gossip. If we see
-	// one, make sure it's the clusterID we already know (and are guaranteed to
-	// know) at this point. If it's not the same, explode.
-	//
-	// TODO(irfansharif): The above is no longer applicable; in 21.1 we can
-	// always assume that the RPC layer will always get set up after having
-	// found out what the cluster ID is. The checks below can be removed then.
-	{
-		// We populated this above, so it should still be set. This is just to
-		// demonstrate that we're not doing anything functional here (and to
-		// prevent bugs during further refactors).
-		if s.rpcContext.ClusterID.Get() == uuid.Nil {
-			return errors.AssertionFailedf("expected cluster ID to be populated in rpc context")
-		}
-		unregister := s.gossip.RegisterCallback(gossip.KeyClusterID, func(string, roachpb.Value) {
-			clusterID, err := s.gossip.GetClusterID()
-			if err != nil {
-				log.Fatalf(ctx, "unable to read ClusterID: %v", err)
-			}
-			s.rpcContext.ClusterID.Set(ctx, clusterID) // fatals on mismatch
-		})
-		defer unregister()
-	}
 
 	// Spawn a goroutine that will print a nice message when Gossip connects.
 	// Note that we already know the clusterID, but we don't know that Gossip
@@ -1535,7 +1477,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	onSuccessfulReturnFn()
 
 	// We're going to need to start gossip before we spin up Node below.
-	startGossipFn()
+	s.gossip.Start(advAddrU, filtered)
+	log.Event(ctx, "started gossip")
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been initialized or
