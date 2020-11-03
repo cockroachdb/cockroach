@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package liveness
 
 import (
 	"context"
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,22 +25,22 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	toMembershipStatus := func(membership string) kvserverpb.MembershipStatus {
+	toMembershipStatus := func(membership string) livenesspb.MembershipStatus {
 		switch membership {
 		case "active":
-			return kvserverpb.MembershipStatus_ACTIVE
+			return livenesspb.MembershipStatus_ACTIVE
 		case "decommissioning":
-			return kvserverpb.MembershipStatus_DECOMMISSIONING
+			return livenesspb.MembershipStatus_DECOMMISSIONING
 		case "decommissioned":
-			return kvserverpb.MembershipStatus_DECOMMISSIONED
+			return livenesspb.MembershipStatus_DECOMMISSIONED
 		default:
 			err := fmt.Sprintf("unexpected membership: %s", membership)
 			panic(err)
 		}
 	}
 
-	l := func(epo int64, expiration hlc.Timestamp, draining bool, membership string) kvserverpb.Liveness {
-		return kvserverpb.Liveness{
+	l := func(epo int64, expiration hlc.Timestamp, draining bool, membership string) livenesspb.Liveness {
+		return livenesspb.Liveness{
 			Epoch:      epo,
 			Expiration: hlc.LegacyTimestamp(expiration),
 			Draining:   draining,
@@ -54,7 +54,7 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	now := hlc.Timestamp{WallTime: 12345}
 
 	for _, test := range []struct {
-		old, new kvserverpb.Liveness
+		old, new livenesspb.Liveness
 		exp      bool
 	}{
 		{

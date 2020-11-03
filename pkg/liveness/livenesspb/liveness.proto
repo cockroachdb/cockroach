@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.kv.kvserver.storagepb;
-option go_package = "kvserverpb";
+package cockroach.liveness.livenesspb;
+option go_package = "livenesspb";
 
 import "util/hlc/legacy_timestamp.proto";
 import "gogoproto/gogo.proto";

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -876,7 +877,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (remo
 
 // tick the Raft group, returning true if the raft group exists and is
 // unquiesced; false otherwise.
-func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
+func (r *Replica) tick(livenessMap liveness.IsLiveMap) (bool, error) {
 	ctx := r.AnnotateCtx(context.TODO())
 
 	r.unreachablesMu.Lock()

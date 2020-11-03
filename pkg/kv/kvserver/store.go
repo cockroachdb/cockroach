@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -645,7 +646,7 @@ type StoreConfig struct {
 	Clock                   *hlc.Clock
 	DB                      *kv.DB
 	Gossip                  *gossip.Gossip
-	NodeLiveness            *NodeLiveness
+	NodeLiveness            *liveness.NodeLiveness
 	StorePool               *StorePool
 	Transport               *RaftTransport
 	NodeDialer              *nodedialer.Dialer
@@ -2286,7 +2287,7 @@ func (s *Store) ClosedTimestamp() *container.Container {
 }
 
 // NodeLiveness accessor.
-func (s *Store) NodeLiveness() *NodeLiveness {
+func (s *Store) NodeLiveness() *liveness.NodeLiveness {
 	return s.cfg.NodeLiveness
 }
 
@@ -2485,7 +2486,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	)
 
 	timestamp := s.cfg.Clock.Now()
-	var livenessMap IsLiveMap
+	var livenessMap liveness.IsLiveMap
 	if s.cfg.NodeLiveness != nil {
 		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
 	}
