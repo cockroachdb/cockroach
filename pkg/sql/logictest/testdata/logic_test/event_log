@@ -3,6 +3,33 @@
 # TABLE DDL
 ##################
 
+# Verify events related to roles
+##################
+
+statement ok
+CREATE ROLE r
+
+statement ok
+CREATE ROLE IF NOT EXISTS r2
+
+statement ok
+ALTER ROLE r WITH CONTROLCHANGEFEED
+
+statement ok
+DROP ROLE r, r2
+
+query ITTT
+SELECT "reportingID", info::JSONB->>'RoleName', "eventType", user
+FROM system.eventlog
+WHERE "eventType" IN ('create_role', 'drop_role', 'alter_role')
+ORDER BY "eventType", 2
+----
+1 r          alter_role    root
+1 r          create_role   root
+1 r2         create_role   root
+1 testuser   create_role   root
+1 r, r2        drop_role   root
+
 # Create two tables + superfluous "IF NOT EXISTS"
 ##################
 

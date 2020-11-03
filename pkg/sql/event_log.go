@@ -134,6 +134,13 @@ const (
 	// EventLogRevokePrivilege is recorded when privileges are removed from a
 	// user for a database object.
 	EventLogRevokePrivilege EventLogType = "revoke_privilege"
+
+	// EventLogCreateRole is recorded when a role is created.
+	EventLogCreateRole EventLogType = "create_role"
+	// EventLogDropRole is recorded when a role is dropped.
+	EventLogDropRole EventLogType = "drop_role"
+	// EventLogAlterRole is recorded when a role is altered.
+	EventLogAlterRole EventLogType = "alter_role"
 )
 
 // EventLogSetClusterSettingDetail is the json details for a settings change.
