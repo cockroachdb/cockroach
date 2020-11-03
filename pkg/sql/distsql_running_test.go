@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -65,6 +66,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		security.RootUserName(),
 		&MemoryMetrics{},
 		&execCfg,
+		sessiondatapb.SessionData{},
 	)
 	defer cleanup()
 	p := internalPlanner.(*planner)
