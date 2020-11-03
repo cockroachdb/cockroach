@@ -1091,13 +1091,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
 				result.Op = colexec.NewPanicInjector(result.Op)
 			}
-			// We created a streaming memory account when calling NewColOperator above,
-			// so there is definitely at least one memory account, and it doesn't
-			// matter which one we grow.
-			if err = s.streamingMemAccounts[0].Grow(ctx, int64(result.InternalMemUsage)); err != nil {
-				err = errors.Wrapf(err, "not enough memory to setup vectorized plan")
-				return
-			}
 			metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
 				for _, closer := range result.ToClose {
