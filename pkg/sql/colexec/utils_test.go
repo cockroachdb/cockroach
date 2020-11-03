@@ -1600,7 +1600,7 @@ func createTestProjectingOperator(
 		args.ProcessorConstructor = rowexec.NewProcessor
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-	result, err := TestNewColOperator(ctx, flowCtx, args)
+	result, err := TestNewColOperator(ctx, flowCtx, flowCtx.NewEvalCtx(), args)
 	if err != nil {
 		return nil, err
 	}

@@ -182,7 +182,7 @@ func TestEval(t *testing.T) {
 				ProcessorConstructor: rowexec.NewProcessor,
 			}
 			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-			result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
+			result, err := colbuilder.NewColOperator(ctx, flowCtx, evalCtx, args)
 			require.NoError(t, err)
 
 			mat, err := colexec.NewMaterializer(

@@ -105,7 +105,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 					StreamingMemAccount: &acc,
 				}
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
+				result, err := colbuilder.NewColOperator(ctx, flowCtx, &evalCtx, args)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -248,7 +248,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				// if there was no error during planning. That is why we have
 				// two separate panic-catchers.
 				if err = colexecerror.CatchVectorizedRuntimeError(func() {
-					result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
+					result, err = colbuilder.NewColOperator(ctx, flowCtx, &evalCtx, args)
 					require.NoError(t, err)
 				}); err == nil {
 					err = colexecerror.CatchVectorizedRuntimeError(func() {

@@ -150,7 +150,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		constructorArgs.TestingKnobs.SpillingCallbackFn = func() { spilled = true }
 	}
 	constructorArgs.TestingKnobs.NumForcedRepartitions = args.numForcedRepartitions
-	result, err := colbuilder.NewColOperator(ctx, flowCtx, constructorArgs)
+	result, err := colbuilder.NewColOperator(ctx, flowCtx, &evalCtx, constructorArgs)
 	if err != nil {
 		return err
 	}

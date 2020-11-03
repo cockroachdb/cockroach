@@ -1014,7 +1014,7 @@ func TestHashJoiner(t *testing.T) {
 					}
 					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 					args.TestingKnobs.DiskSpillingDisabled = true
-					result, err := TestNewColOperator(ctx, flowCtx, args)
+					result, err := TestNewColOperator(ctx, flowCtx, flowCtx.NewEvalCtx(), args)
 					if err != nil {
 						return nil, err
 					}
@@ -1194,7 +1194,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	args.TestingKnobs.DiskSpillingDisabled = true
-	hjOp, err := TestNewColOperator(ctx, flowCtx, args)
+	hjOp, err := TestNewColOperator(ctx, flowCtx, flowCtx.NewEvalCtx(), args)
 	require.NoError(t, err)
 	hjOp.Op.Init()
 	for b := hjOp.Op.Next(ctx); b.Length() > 0; b = hjOp.Op.Next(ctx) {
