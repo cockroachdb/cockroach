@@ -31,7 +31,7 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.RENAME_DATABASE:
       return `Database Renamed: User ${info.User} renamed database ${info.DatabaseName} to ${info.NewDatabaseName}`;
     case eventTypes.ALTER_DATABASE_OWNER:
-      return `Database Owner Altered: User ${info.User} altered the owner of database ${info.SchemaName} to ${info.Owner}`;
+      return `Database Owner Altered: User ${info.User} altered the owner of database ${info.DatabaseName} to ${info.Owner}`;
     case eventTypes.CREATE_TABLE:
       return `Table Created: User ${info.User} created table ${info.TableName}`;
     case eventTypes.DROP_TABLE:
@@ -99,6 +99,12 @@ export function getEventDescription(e: Event$Properties): string {
       return `Schema Owner Altered: User ${info.User} altered the owner of schema ${info.SchemaName} to ${info.Owner}`;
     case eventTypes.CONVERT_TO_SCHEMA:
       return `Database Converted: User ${info.User} converted database ${info.DatabaseName} to a schema with parent database ${info.NewDatabaseName}`;
+    case eventTypes.CREATE_ROLE:
+      return `Role Created: User ${info.User} created role ${info.RoleName}`;
+    case eventTypes.DROP_ROLE:
+      return `Role Dropped: User ${info.User} dropped role(s) ${info.RoleName}`;
+    case eventTypes.ALTER_ROLE:
+      return `Role Altered: User ${info.User} altered role ${info.RoleName}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
   }
@@ -126,6 +132,7 @@ export interface EventInfo {
   SchemaName?: string;
   NewSchemaName?: string;
   Owner?: string;
+  RoleName?: string;
   // The following are three names for the same key (it was renamed twice).
   // All ar included for backwards compatibility.
   DroppedTables?: string[];
