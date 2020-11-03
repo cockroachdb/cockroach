@@ -999,6 +999,40 @@ func (nl *NodeLiveness) GetLivenesses() []livenesspb.Liveness {
 	return livenesses
 }
 
+// GetLivenessesFromKV returns a slice containing the liveness record of all
+// nodes that have ever been a part of the cluster. The records are read from
+// the KV layer in a KV transaction. This is in contrast to GetLivenesses above,
+// which consults a (possibly stale) in-memory cache.
+func (nl *NodeLiveness) GetLivenessesFromKV(ctx context.Context) ([]livenesspb.Liveness, error) {
+	kvs, err := nl.db.Scan(ctx, keys.NodeLivenessPrefix, keys.NodeLivenessKeyMax, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to get liveness")
+	}
+
+	var results []livenesspb.Liveness
+	for _, kv := range kvs {
+		if kv.Value == nil {
+			return nil, errors.AssertionFailedf("missing liveness record")
+		}
+		var liveness livenesspb.Liveness
+		if err := kv.Value.GetProto(&liveness); err != nil {
+			return nil, errors.Wrap(err, "invalid liveness record")
+		}
+
+		livenessRec := Record{
+			Liveness: liveness,
+			raw:      kv.Value.TagAndDataBytes(),
+		}
+
+		// Update our cache with the liveness record we just found.
+		nl.maybeUpdate(ctx, livenessRec)
+
+		results = append(results, liveness)
+	}
+
+	return results, nil
+}
+
 // GetLiveness returns the liveness record for the specified nodeID. If the
 // liveness record is not found (due to gossip propagation delays or due to the
 // node not existing), we surface that to the caller. The record returned also

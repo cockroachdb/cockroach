@@ -773,16 +773,16 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 
 		// If there's a statement currently being executed, we'll report
 		// on it.
-		if ex.curStmt != nil {
+		if ex.curStmtAST != nil {
 			// A warning header guaranteed to go to stderr.
 			log.Shoutf(ctx, log.Severity_ERROR,
 				"a SQL panic has occurred while executing the following statement:\n%s",
 				// For the log message, the statement is not anonymized.
-				truncateStatementStringForTelemetry(ex.curStmt.String()))
+				truncateStatementStringForTelemetry(ex.curStmtAST.String()))
 
 			// Embed the statement in the error object for the telemetry
 			// report below. The statement gets anonymized.
-			panicErr = WithAnonymizedStatement(panicErr, ex.curStmt)
+			panicErr = WithAnonymizedStatement(panicErr, ex.curStmtAST)
 		}
 
 		// Report the panic to telemetry in any case.
@@ -1095,9 +1095,9 @@ type connExecutor struct {
 		IdleInTransactionSessionTimeout timeout
 	}
 
-	// curStmt is the statement that's currently being prepared or executed, if
+	// curStmtAST is the statement that's currently being prepared or executed, if
 	// any. This is printed by high-level panic recovery.
-	curStmt tree.Statement
+	curStmtAST tree.Statement
 
 	sessionID ClusterWideID
 
@@ -1360,7 +1360,7 @@ func (ex *connExecutor) run(
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
 	for {
-		ex.curStmt = nil
+		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -1424,7 +1424,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				res = ex.clientComm.CreateEmptyQueryResult(pos)
 				return nil
 			}
-			ex.curStmt = tcmd.AST
+			ex.curStmtAST = tcmd.AST
 
 			stmtRes := ex.clientComm.CreateStatementResult(
 				tcmd.AST,
@@ -1438,10 +1438,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				ex.implicitTxn(),
 			)
 			res = stmtRes
-			curStmt := Statement{Statement: tcmd.Statement}
 
-			stmtCtx := withStatement(ctx, ex.curStmt)
-			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, nil /* pinfo */)
+			ev, payload, err = ex.execStmt(ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes)
 			return err
 		}()
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
@@ -1487,7 +1485,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.VEventf(ctx, 2, "portal resolved to: %s", portal.Stmt.AST.String())
 			}
-			ex.curStmt = portal.Stmt.AST
+			ex.curStmtAST = portal.Stmt.AST
 
 			pinfo := &tree.PlaceholderInfo{
 				PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
@@ -1525,9 +1523,9 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		}
 
 	case PrepareStmt:
-		ex.curStmt = tcmd.AST
+		ex.curStmtAST = tcmd.AST
 		res = ex.clientComm.CreatePrepareResult(pos)
-		stmtCtx := withStatement(ctx, ex.curStmt)
+		stmtCtx := withStatement(ctx, ex.curStmtAST)
 		ev, payload = ex.execPrepare(stmtCtx, tcmd)
 	case DescribeStmt:
 		descRes := ex.clientComm.CreateDescribeResult(pos)
@@ -1786,9 +1784,8 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
 // stmtDoesntNeedRetry returns true if the given statement does not need to be
 // retried when performing automatic retries. This means that the results of the
 // statement do not change with retries.
-func (ex *connExecutor) stmtDoesntNeedRetry(stmt tree.Statement) bool {
-	wrap := Statement{Statement: parser.Statement{AST: stmt}}
-	return isSavepoint(wrap) || isSetTransaction(wrap)
+func (ex *connExecutor) stmtDoesntNeedRetry(ast tree.Statement) bool {
+	return isSavepoint(ast) || isSetTransaction(ast)
 }
 
 func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
@@ -2180,7 +2177,7 @@ func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
 	p.txn = txn
-	p.stmt = nil
+	p.stmt = Statement{}
 
 	p.cancelChecker.Reset(ctx)
 
@@ -2213,7 +2210,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		implicitTxn = os.ImplicitTxn.Get()
 	}
 
-	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmt), ev, payload)
+	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)
 	if err != nil {
 		if errors.HasType(err, (*fsm.TransitionNotFoundError)(nil)) {
 			panic(err)
@@ -2310,14 +2307,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 //
 // If an error is returned, it is to be considered a query execution error.
 func (ex *connExecutor) initStatementResult(
-	ctx context.Context, res RestrictedCommandResult, stmt *Statement, cols colinfo.ResultColumns,
+	ctx context.Context, res RestrictedCommandResult, ast tree.Statement, cols colinfo.ResultColumns,
 ) error {
 	for _, c := range cols {
 		if err := checkResultType(c.Typ); err != nil {
 			return err
 		}
 	}
-	if stmt.AST.StatementType() == tree.Rows {
+	if ast.StatementType() == tree.Rows {
 		// Note that this call is necessary even if cols is nil.
 		res.SetColumns(ctx, cols)
 	}

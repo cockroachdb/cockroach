@@ -137,8 +137,8 @@ type planner struct {
 	// a SQL session.
 	isInternalPlanner bool
 
-	// Reference to the corresponding sql Statement for this query.
-	stmt *Statement
+	// Corresponding Statement for this query.
+	stmt Statement
 
 	// Contexts for different stages of planning and execution.
 	semaCtx         tree.SemaContext
@@ -308,7 +308,7 @@ func newInternalPlanner(
 	p := &planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}}
 
 	p.txn = txn
-	p.stmt = nil
+	p.stmt = Statement{}
 	p.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	p.isInternalPlanner = true
 

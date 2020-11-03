@@ -127,7 +127,7 @@
 
 # FoldNonNullIsNull replaces x IS NULL with False where x is a non-Null constant.
 [FoldNonNullIsNull, Normalize]
-(Is $left:^(Null) & (IsConstValueOrTuple $left) (Null))
+(Is $left:(IsNeverNull $left) (Null))
 =>
 (False)
 
@@ -153,7 +153,7 @@
 
 # FoldNonNullIsNotNull replaces x IS NOT NULL with True where x is a non-Null constant.
 [FoldNonNullIsNotNull, Normalize]
-(IsNot $left:^(Null) & (IsConstValueOrTuple $left) (Null))
+(IsNot $left:(IsNeverNull $left) (Null))
 =>
 (True)
 
@@ -198,7 +198,7 @@
     $right:(ConstValue) &
         (IsTimestampTZ $right) &
         (IsTimestamp $ts:(SecondScalarListExpr $args)) &
-        ^(IsConstValueOrTuple $ts)
+        ^(IsConstValueOrGroupOfConstValues $ts)
 )
 =>
 ((OpName)
@@ -227,7 +227,7 @@
     $right:(ConstValue) &
         (IsTimestamp $right) &
         (IsTimestampTZ $tz:(SecondScalarListExpr $args)) &
-        ^(IsConstValueOrTuple $tz)
+        ^(IsConstValueOrGroupOfConstValues $tz)
 )
 =>
 ((OpName)

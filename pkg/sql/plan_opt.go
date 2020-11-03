@@ -46,12 +46,10 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //  - AnonymizedStr
 //  - Memo (for reuse during exec, if appropriate).
 func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) {
-	stmt := p.stmt
+	stmt := &p.stmt
 
 	opc := &p.optPlanningCtx
 	opc.reset()
-
-	stmt.Prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
 
 	switch stmt.AST.(type) {
 	case *tree.AlterIndex, *tree.AlterTable, *tree.AlterSequence,
@@ -207,7 +205,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		}
 		err := opc.runExecBuilder(
 			&p.curPlan,
-			p.stmt,
+			&p.stmt,
 			newDistSQLSpecExecFactory(p, planningMode),
 			execMemo,
 			p.EvalContext(),
@@ -242,7 +240,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// execFactory.
 				err = opc.runExecBuilder(
 					&p.curPlan,
-					p.stmt,
+					&p.stmt,
 					newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning),
 					execMemo,
 					p.EvalContext(),
@@ -263,7 +261,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	// If we got here, we did not create a plan above.
 	return opc.runExecBuilder(
 		&p.curPlan,
-		p.stmt,
+		&p.stmt,
 		newExecFactory(p),
 		execMemo,
 		p.EvalContext(),
@@ -558,7 +556,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		// planning process could in principle modify the AST, resulting in a
 		// different statement signature.
 		planTop.savePlanForStats = planTop.appStats.shouldSaveLogicalPlanDescription(
-			planTop.stmt,
+			planTop.stmt.AnonymizedStr,
 			allowAutoCommit,
 		)
 	}

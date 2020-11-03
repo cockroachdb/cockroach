@@ -482,7 +482,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 	c.rows = c.rows[:0]
 	c.rowsMemAcc.Clear(ctx)
 
-	c.p.stmt = &Statement{}
+	c.p.stmt = Statement{}
 	c.p.stmt.AST = &tree.Insert{
 		Table:   c.table,
 		Columns: c.columns,
