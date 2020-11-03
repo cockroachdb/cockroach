@@ -686,7 +686,7 @@ func (tc *TestCluster) TransferRangeLease(
 	return nil
 }
 
-// TransferRangeLeaseOrFatal convinience version of TransferRangeLease
+// TransferRangeLeaseOrFatal is a convenience version of TransferRangeLease
 func (tc *TestCluster) TransferRangeLeaseOrFatal(
 	t testing.TB, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) {
