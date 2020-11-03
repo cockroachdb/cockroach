@@ -97,20 +97,6 @@ func (n *twoInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-// TODO(yuzefovich): audit all Operators to make sure that all internal memory
-// is accounted for.
-
-// InternalMemoryOperator is an interface that operators which use internal
-// memory need to implement. "Internal memory" is defined as memory that is
-// "private" to the operator and is not exposed to the outside; notably, it
-// does *not* include any coldata.Batch'es and coldata.Vec's.
-type InternalMemoryOperator interface {
-	colexecbase.Operator
-	// InternalMemoryUsage reports the internal memory usage (in bytes) of an
-	// operator.
-	InternalMemoryUsage() int
-}
-
 // resetter is an interface that operators can implement if they can be reset
 // either for reusing (to keep the already allocated memory) or during tests.
 type resetter interface {

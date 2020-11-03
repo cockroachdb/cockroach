@@ -78,11 +78,10 @@ type NewColOperatorArgs struct {
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op               colexecbase.Operator
-	IOReader         execinfra.IOReader
-	ColumnTypes      []*types.T
-	InternalMemUsage int
-	MetadataSources  []execinfrapb.MetadataSource
+	Op              colexecbase.Operator
+	IOReader        execinfra.IOReader
+	ColumnTypes     []*types.T
+	MetadataSources []execinfrapb.MetadataSource
 	// ToClose is a slice of components that need to be Closed.
 	ToClose     []colexecbase.Closer
 	OpMonitors  []*mon.BytesMonitor
