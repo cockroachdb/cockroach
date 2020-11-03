@@ -258,7 +258,10 @@ func (f *vectorizedFlow) Setup(
 		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
 		f.monitors = append(f.monitors, creator.monitors...)
 		f.accounts = append(f.accounts, creator.accounts...)
-		f.releasables = append(f.releasables, creator.releasables...)
+		f.releasables = append(f.releasables, creator)
+		creator.streamingMemAccounts = creator.streamingMemAccounts[:0]
+		creator.monitors = creator.monitors[:0]
+		creator.accounts = creator.accounts[:0]
 		if log.V(1) {
 			log.Info(ctx, "vectorized flow setup succeeded")
 		}
@@ -276,9 +279,7 @@ func (f *vectorizedFlow) Setup(
 	for _, mon := range creator.monitors {
 		mon.Stop(ctx)
 	}
-	for _, r := range creator.releasables {
-		r.Release()
-	}
+	creator.Release()
 	if log.V(1) {
 		log.Infof(ctx, "failed to vectorize: %s", err)
 	}
@@ -533,6 +534,14 @@ type vectorizedFlowCreator struct {
 	numClosed  int32
 }
 
+var vectorizedFlowCreatorPool = sync.Pool{
+	New: func() interface{} {
+		return &vectorizedFlowCreator{
+			streamIDToInputOp: make(map[execinfrapb.StreamID]opDAGWithMetaSources),
+		}
+	},
+}
+
 func newVectorizedFlowCreator(
 	helper flowCreatorHelper,
 	componentCreator remoteComponentCreator,
@@ -545,23 +554,48 @@ func newVectorizedFlowCreator(
 	fdSemaphore semaphore.Semaphore,
 	typeResolver *descs.DistSQLTypeResolver,
 ) *vectorizedFlowCreator {
-	creator := &vectorizedFlowCreator{
+	creator := vectorizedFlowCreatorPool.Get().(*vectorizedFlowCreator)
+	*creator = vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
 		remoteComponentCreator:         componentCreator,
-		streamIDToInputOp:              make(map[execinfrapb.StreamID]opDAGWithMetaSources),
+		streamIDToInputOp:              creator.streamIDToInputOp,
 		recordingStats:                 recordingStats,
-		vectorizedStatsCollectorsQueue: make([]colexec.VectorizedStatsCollector, 0, 2),
+		vectorizedStatsCollectorsQueue: creator.vectorizedStatsCollectorsQueue,
 		waitGroup:                      waitGroup,
 		syncFlowConsumer:               syncFlowConsumer,
 		nodeDialer:                     nodeDialer,
 		flowID:                         flowID,
+		exprHelper:                     creator.exprHelper,
+		typeResolver:                   typeResolver,
+		leaves:                         creator.leaves,
+		streamingMemAccounts:           creator.streamingMemAccounts,
+		monitors:                       creator.monitors,
+		accounts:                       creator.accounts,
+		releasables:                    creator.releasables,
 		diskQueueCfg:                   diskQueueCfg,
 		fdSemaphore:                    fdSemaphore,
-		exprHelper:                     colexec.NewExprHelper(),
-		typeResolver:                   typeResolver,
 	}
-	creator.releasables = append(creator.releasables, creator.exprHelper)
 	return creator
+}
+
+func (s *vectorizedFlowCreator) Release() {
+	for k := range s.streamIDToInputOp {
+		delete(s.streamIDToInputOp, k)
+	}
+	for _, r := range s.releasables {
+		r.Release()
+	}
+	*s = vectorizedFlowCreator{
+		streamIDToInputOp:              s.streamIDToInputOp,
+		vectorizedStatsCollectorsQueue: s.vectorizedStatsCollectorsQueue[:0],
+		exprHelper:                     s.exprHelper,
+		leaves:                         s.leaves[:0],
+		streamingMemAccounts:           s.streamingMemAccounts[:0],
+		monitors:                       s.monitors[:0],
+		accounts:                       s.accounts[:0],
+		releasables:                    s.releasables[:0],
+	}
+	vectorizedFlowCreatorPool.Put(s)
 }
 
 // createBufferingUnlimitedMemMonitor instantiates an unlimited memory monitor.
@@ -1336,12 +1370,7 @@ func ConvertToVecTree(
 		// return a cleanup function.
 	}()
 	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, fuseOpt)
-	cleanup = func() {
-		for _, r := range creator.releasables {
-			r.Release()
-		}
-	}
-	return leaves, cleanup, err
+	return leaves, creator.Release, err
 }
 
 // VectorizeAlwaysException is an object that returns whether or not execution
