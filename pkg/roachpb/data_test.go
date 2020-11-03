@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
@@ -1593,6 +1594,16 @@ func TestValuePrettyPrint(t *testing.T) {
 		if str := test.v.PrettyPrint(); str != test.expected {
 			t.Errorf("%d: got %q expected %q", i, str, test.expected)
 		}
+	}
+}
+
+func TestKeyFormat(t *testing.T) {
+	const sample = "\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98"
+	k := Key(sample)
+	expected := ` /Table/53/42/"=\xbc ⌘"`
+	actual := fmt.Sprintf(" %s", k)
+	if expected != actual {
+		t.Errorf("String formatting of key: got %q expected %q", actual, expected)
 	}
 }
 
