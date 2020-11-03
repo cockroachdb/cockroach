@@ -107,6 +107,7 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slprovider",
         "//pkg/sql/sqlutil",

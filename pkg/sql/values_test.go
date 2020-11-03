@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +49,7 @@ func makeTestPlanner() *planner {
 
 	// TODO(andrei): pass the cleanup along to the caller.
 	p, _ /* cleanup */ := newInternalPlanner(
-		"test", nil /* txn */, security.RootUserName(), &MemoryMetrics{}, &execCfg,
+		"test", nil /* txn */, security.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{},
 	)
 	return p
 }

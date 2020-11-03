@@ -94,7 +94,11 @@ func (lg *LatencyGetter) GetLatency(
 	if lg.latencyMap == nil {
 		lg.latencyMap = make(map[roachpb.NodeID]map[roachpb.NodeID]int64)
 	}
-	response, _ := ss.Nodes(ctx, &NodesRequest{})
+	response, err := ss.Nodes(ctx, &NodesRequest{})
+	if err != nil {
+		// When latency is 0, it is not shown on EXPLAIN ANALYZE diagrams.
+		return 0
+	}
 	for _, sendingNode := range response.Nodes {
 		sendingNodeID := sendingNode.Desc.NodeID
 		if lg.latencyMap[sendingNodeID] == nil {

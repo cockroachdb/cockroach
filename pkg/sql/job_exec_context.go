@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
 // plannerJobExecContext is a wrapper to implement JobExecContext with a planner
@@ -29,7 +30,7 @@ type plannerJobExecContext struct {
 func MakeJobExecContext(
 	opName string, user security.SQLUsername, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
 ) (JobExecContext, func()) {
-	p, close := newInternalPlanner(opName, nil /*txn*/, user, memMetrics, execCfg)
+	p, close := newInternalPlanner(opName, nil /*txn*/, user, memMetrics, execCfg, sessiondatapb.SessionData{})
 	return &plannerJobExecContext{p: p}, close
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,6 +61,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 				security.RootUserName(),
 				&MemoryMetrics{},
 				&execCfg,
+				sessiondatapb.SessionData{},
 			)
 			defer cleanup()
 			p := internalPlanner.(*planner)
