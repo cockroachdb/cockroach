@@ -635,7 +635,10 @@ func NewColOperator(
 	}()
 	spec := args.Spec
 	inputs := args.Inputs
-	factory := coldataext.NewExtendedColumnFactory(evalCtx)
+	factory := args.Factory
+	if factory == nil {
+		factory = coldataext.NewExtendedColumnFactory(evalCtx)
+	}
 	streamingMemAccount := args.StreamingMemAccount
 	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
