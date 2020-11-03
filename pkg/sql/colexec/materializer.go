@@ -309,6 +309,7 @@ func (m *Materializer) ConsumerClosed() {
 func (m *Materializer) Release() {
 	m.drainHelper.Release()
 	m.ProcessorBase.Reset()
+	m.converter.Release()
 	*m = Materializer{
 		// We're keeping the reference to the same ProcessorBase since it
 		// allows us to reuse some of the slices as well as ProcOutputHelper
