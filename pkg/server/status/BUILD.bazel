@@ -13,7 +13,7 @@ go_library(
     ],
     # keep
     cdeps = [
-        "@cockroach//:libjemalloc",
+        "@cockroach//c-deps:libjemalloc",
     ],
     cgo = True,
     # keep

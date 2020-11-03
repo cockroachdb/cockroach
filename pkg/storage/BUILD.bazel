@@ -37,7 +37,7 @@ go_library(
     ],
     # List out all the c-dependencies pkg/storage depends on.
     cdeps = [
-        "@cockroach//:libroach",
+        "@cockroach//c-deps:libroach",
     ],
     cgo = True,
 
