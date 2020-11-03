@@ -1088,9 +1088,7 @@ func (nl *NodeLiveness) getLivenessRecordFromKV(
 // to get stuck in a queue long enough for the dead node to make
 // another successful heartbeat, and a second increment to come in
 // after that)
-func (nl *NodeLiveness) IncrementEpoch(
-	ctx context.Context, liveness livenesspb.Liveness,
-) error {
+func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.Liveness) error {
 	// Allow only one increment at a time.
 	sem := nl.sem(liveness.NodeID)
 	select {
