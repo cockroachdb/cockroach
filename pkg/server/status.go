@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -296,7 +297,7 @@ type statusServer struct {
 	db                       *kv.DB
 	gossip                   *gossip.Gossip
 	metricSource             metricMarshaler
-	nodeLiveness             *kvserver.NodeLiveness
+	nodeLiveness             *nodeliveness.NodeLiveness
 	storePool                *kvserver.StorePool
 	rpcCtx                   *rpc.Context
 	stores                   *kvserver.Stores
@@ -326,7 +327,7 @@ func newStatusServer(
 	db *kv.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
-	nodeLiveness *kvserver.NodeLiveness,
+	nodeLiveness *nodeliveness.NodeLiveness,
 	storePool *kvserver.StorePool,
 	rpcCtx *rpc.Context,
 	stores *kvserver.Stores,

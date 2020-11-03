@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package nodeliveness
 
 import (
 	"context"
@@ -45,9 +45,9 @@ var (
 	// {d,r}ecommission a non-existent node.
 	ErrMissingLivenessRecord = errors.New("missing liveness record")
 
-	// errLivenessRecordCacheMiss is returned when asking for the liveness
+	// ErrLivenessRecordCacheMiss is returned when asking for the liveness
 	// record of a given node and it is not found in the in-memory cache.
-	errLivenessRecordCacheMiss = errors.New("liveness record not found in cache")
+	ErrLivenessRecordCacheMiss = errors.New("liveness record not found in cache")
 
 	// errChangeMembershipStatusFailed is returned when we're not able to
 	// conditionally write the target membership status. It's safe to retry
@@ -633,7 +633,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 		// should never find ourselves here. We should clean up this conditional
 		// once we re-visit the caching structure used within NodeLiveness;
 		// we should be able to return ErrMissingLivenessRecord instead.
-		return false, errLivenessRecordCacheMiss
+		return false, ErrLivenessRecordCacheMiss
 	}
 	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() in order to
 	// consider clock signals from other nodes.
@@ -1215,7 +1215,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			// TODO(irfansharif): See TODO in `NodeLiveness.IsLive`, the same
 			// applies to this conditional. We probably want to be able to
 			// return ErrMissingLivenessRecord here instead.
-			return LivenessRecord{}, errLivenessRecordCacheMiss
+			return LivenessRecord{}, ErrLivenessRecordCacheMiss
 		}
 		if l.Liveness != update.oldLiveness {
 			return LivenessRecord{}, handleCondFailed(l)
@@ -1392,7 +1392,7 @@ func (nl *NodeLiveness) AsLiveClock() closedts.LiveClockFn {
 		now := nl.clock.Now()
 		liveness, ok := nl.GetLiveness(nodeID)
 		if !ok {
-			return hlc.Timestamp{}, 0, errLivenessRecordCacheMiss
+			return hlc.Timestamp{}, 0, ErrLivenessRecordCacheMiss
 		}
 		if !liveness.IsLive(now.GoTime()) {
 			return hlc.Timestamp{}, 0, errLiveClockNotLive
@@ -1413,4 +1413,16 @@ func (nl *NodeLiveness) GetNodeCount() int {
 		}
 	}
 	return count
+}
+
+func (nl *NodeLiveness) TestingSetDrainingInternal(
+	ctx context.Context, liveness LivenessRecord, drain bool,
+) error {
+	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
+}
+
+func (nl *NodeLiveness) TestingSetDecommissioningInternal(
+	ctx context.Context, oldLivenessRec LivenessRecord, targetStatus kvserverpb.MembershipStatus,
+) (changeCommitted bool, err error) {
+	return nl.setMembershipStatusInternal(ctx, oldLivenessRec, targetStatus)
 }

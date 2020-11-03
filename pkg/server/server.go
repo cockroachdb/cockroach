@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -128,7 +129,7 @@ type Server struct {
 	grpc         *grpcServer
 	gossip       *gossip.Gossip
 	nodeDialer   *nodedialer.Dialer
-	nodeLiveness *kvserver.NodeLiveness
+	nodeLiveness *nodeliveness.NodeLiveness
 	storePool    *kvserver.StorePool
 	tcsFactory   *kvcoord.TxnCoordSenderFactory
 	distSender   *kvcoord.DistSender
@@ -415,7 +416,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
-	nodeLiveness := kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+	nodeLiveness := nodeliveness.NewNodeLiveness(nodeliveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
 		Clock:                   clock,
 		DB:                      db,
@@ -1637,7 +1638,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
-	s.nodeLiveness.Start(ctx, kvserver.NodeLivenessStartOptions{
+	s.nodeLiveness.Start(ctx, nodeliveness.NodeLivenessStartOptions{
 		Stopper: s.stopper,
 		Engines: s.engines,
 		OnSelfLive: func(ctx context.Context) {
@@ -2058,8 +2059,8 @@ func (s *Server) Decommission(
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
 		if err != nil {
-			if errors.Is(err, kvserver.ErrMissingLivenessRecord) {
-				return grpcstatus.Error(codes.NotFound, kvserver.ErrMissingLivenessRecord.Error())
+			if errors.Is(err, nodeliveness.ErrMissingLivenessRecord) {
+				return grpcstatus.Error(codes.NotFound, nodeliveness.ErrMissingLivenessRecord.Error())
 			}
 			return err
 		}

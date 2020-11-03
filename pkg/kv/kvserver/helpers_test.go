@@ -507,18 +507,6 @@ func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
 	ts = r.readProtectedTimestampsRLocked(ctx, nil /* f */)
 }
 
-func (nl *NodeLiveness) SetDrainingInternal(
-	ctx context.Context, liveness LivenessRecord, drain bool,
-) error {
-	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
-}
-
-func (nl *NodeLiveness) SetDecommissioningInternal(
-	ctx context.Context, oldLivenessRec LivenessRecord, targetStatus kvserverpb.MembershipStatus,
-) (changeCommitted bool, err error) {
-	return nl.setMembershipStatusInternal(ctx, oldLivenessRec, targetStatus)
-}
-
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(

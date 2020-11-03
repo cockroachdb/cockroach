@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1396,7 +1397,7 @@ func (s *adminServer) checkReadinessForHealthCheck() error {
 //
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
-	nl *kvserver.NodeLiveness, now time.Time, st *cluster.Settings,
+	nl *nodeliveness.NodeLiveness, now time.Time, st *cluster.Settings,
 ) map[roachpb.NodeID]kvserverpb.NodeLivenessStatus {
 	livenesses := nl.GetLivenesses()
 	threshold := kvserver.TimeUntilStoreDead.Get(&st.SV)

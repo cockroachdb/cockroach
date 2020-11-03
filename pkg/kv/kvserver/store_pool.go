@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -99,7 +100,7 @@ type NodeLivenessFunc func(
 // MakeStorePoolNodeLivenessFunc returns a function which determines
 // the status of a node based on information provided by the specified
 // NodeLiveness.
-func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc {
+func MakeStorePoolNodeLivenessFunc(nodeLiveness *nodeliveness.NodeLiveness) NodeLivenessFunc {
 	return func(
 		nodeID roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
 	) kvserverpb.NodeLivenessStatus {

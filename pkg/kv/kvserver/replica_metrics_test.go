@@ -13,6 +13,7 @@ package kvserver
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,8 +35,8 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		}))
 
 	{
-		ctr, down, under, over := calcRangeCounter(1100 /* storeID */, desc, IsLiveMap{
-			1000: IsLiveMapEntry{IsLive: true}, // by NodeID
+		ctr, down, under, over := calcRangeCounter(1100 /* storeID */, desc, nodeliveness.IsLiveMap{
+			1000: nodeliveness.IsLiveMapEntry{IsLive: true}, // by NodeID
 		}, 3, 3)
 
 		require.True(t, ctr)
@@ -45,8 +46,8 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	}
 
 	{
-		ctr, down, under, over := calcRangeCounter(1000, desc, IsLiveMap{
-			1000: IsLiveMapEntry{IsLive: false},
+		ctr, down, under, over := calcRangeCounter(1000, desc, nodeliveness.IsLiveMap{
+			1000: nodeliveness.IsLiveMapEntry{IsLive: false},
 		}, 3, 3)
 
 		// Does not confuse a non-live entry for a live one. In other words,
