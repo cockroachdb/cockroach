@@ -316,36 +316,64 @@ func TestStdDevPopDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalStdDevPopAggregate, makeDecimalTestDatum(10))
 }
 
-func TestCorrFloatFloatResultDeepCopy(t *testing.T) {
+func TestCorr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testAggregateResultDeepCopy(t, newCorrAggregate, makeFloatTestDatum(10), makeFloatTestDatum(10))
+	testRegressionAggregateFunctionResultDeepCopy(t, newCorrAggregate, newCorrAggregateDecimal)
 }
 
-func TestCorrIntIntResultDeepCopy(t *testing.T) {
+func TestCovarPop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeIntTestDatum(10))
+	testRegressionAggregateFunctionResultDeepCopy(t, newCovarPopAggregate, newCovarPopAggregateDecimal)
 }
 
-func TestCorrFloatIntResultDeepCopy(t *testing.T) {
+func TestCovarSamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testAggregateResultDeepCopy(t, newCorrAggregate, makeFloatTestDatum(10), makeIntTestDatum(10))
+	testRegressionAggregateFunctionResultDeepCopy(t, newCovarSampAggregate, newCovarSampAggregateDecimal)
 }
 
-func TestCorrIntFloatResultDeepCopy(t *testing.T) {
+// testRegressionAggregateFunctionResultDeepCopy is a helper function
+// for testing regression aggregate functions.
+func testRegressionAggregateFunctionResultDeepCopy(
+	t *testing.T,
+	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggFuncDecimal func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+) {
 	defer leaktest.AfterTest(t)()
-	testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeFloatTestDatum(10))
-}
-
-func TestCorrNullResultDeepCopy(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	t.Run("float float", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFunc, makeFloatTestDatum(10), makeFloatTestDatum(10))
+	})
+	t.Run("int int", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFunc, makeIntTestDatum(10), makeIntTestDatum(10))
+	})
+	t.Run("decimal decimal", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFuncDecimal, makeDecimalTestDatum(10), makeDecimalTestDatum(10))
+	})
+	t.Run("float int", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFunc, makeFloatTestDatum(10), makeIntTestDatum(10))
+	})
+	t.Run("float decimal", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFuncDecimal, makeFloatTestDatum(10), makeDecimalTestDatum(10))
+	})
+	t.Run("int float", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFunc, makeIntTestDatum(10), makeFloatTestDatum(10))
+	})
+	t.Run("int decimal", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFuncDecimal, makeIntTestDatum(10), makeDecimalTestDatum(10))
+	})
+	t.Run("decimal float", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFuncDecimal, makeDecimalTestDatum(10), makeFloatTestDatum(10))
+	})
+	t.Run("decimal int", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, aggFuncDecimal, makeDecimalTestDatum(10), makeIntTestDatum(10))
+	})
 	t.Run("all null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newCorrAggregate, makeNullTestDatum(10), makeNullTestDatum(10))
+		testAggregateResultDeepCopy(t, aggFunc, makeNullTestDatum(10), makeNullTestDatum(10))
 	})
 	t.Run("with first arg null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newCorrAggregate, makeTestWithNullDatum(10, makeIntTestDatum), makeIntTestDatum(10))
+		testAggregateResultDeepCopy(t, aggFunc, makeTestWithNullDatum(10, makeIntTestDatum), makeIntTestDatum(10))
 	})
 	t.Run("with other arg null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newCorrAggregate, makeIntTestDatum(10), makeTestWithNullDatum(10, makeIntTestDatum))
+		testAggregateResultDeepCopy(t, aggFunc, makeIntTestDatum(10), makeTestWithNullDatum(10, makeIntTestDatum))
 	})
 }
 
@@ -498,18 +526,26 @@ func testArrayAggAliasedTypeOverload(ctx context.Context, t *testing.T, expected
 func runBenchmarkAggregate(
 	b *testing.B,
 	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	vals []tree.Datum,
+	firstArgs []tree.Datum,
+	otherArgs ...[]tree.Datum,
 ) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	params := []*types.T{vals[0].ResolvedType()}
+	argTypes := []*types.T{firstArgs[0].ResolvedType()}
+	otherArgs = flattenArgs(otherArgs...)
+	if len(otherArgs) == 0 {
+		otherArgs = make([][]tree.Datum, len(firstArgs))
+	}
+	for i := range otherArgs[0] {
+		argTypes = append(argTypes, otherArgs[0][i].ResolvedType())
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			aggImpl := aggFunc(params, evalCtx, nil)
+			aggImpl := aggFunc(argTypes, evalCtx, nil)
 			defer aggImpl.Close(context.Background())
-			for i := range vals {
-				if err := aggImpl.Add(context.Background(), vals[i]); err != nil {
+			for i := range firstArgs {
+				if err := aggImpl.Add(context.Background(), firstArgs[i], otherArgs[i]...); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -521,258 +557,252 @@ func runBenchmarkAggregate(
 	}
 }
 
+const aggregateBuiltinsBenchmarkCount = 1000
+
 func BenchmarkAvgAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntAvgAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntAvgAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkAvgAggregateSmallInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntAvgAggregate, makeSmallIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntAvgAggregate, makeSmallIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkAvgAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newFloatAvgAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newFloatAvgAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkAvgAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newDecimalAvgAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newDecimalAvgAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkAvgAggregateInterval(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntervalAvgAggregate, makeIntervalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntervalAvgAggregate, makeIntervalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkCountAggregate(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newCountAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newCountAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkSumIntAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newSmallIntSumAggregate, makeSmallIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newSmallIntSumAggregate, makeSmallIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkSumAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntSumAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntSumAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkSumAggregateSmallInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntSumAggregate, makeSmallIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntSumAggregate, makeSmallIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkSumAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newFloatSumAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newFloatSumAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkSumAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newDecimalSumAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newDecimalSumAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkMaxAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newMaxAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newMaxAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkMaxAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newMaxAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newMaxAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkMaxAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newMaxAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newMaxAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkMinAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newMinAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newMinAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkMinAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newMinAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newMinAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkMinAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newMinAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newMinAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkVarianceAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntVarianceAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntVarianceAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkVarianceAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newFloatVarianceAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newFloatVarianceAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkVarianceAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newDecimalVarianceAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newDecimalVarianceAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkSqrDiffAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntSqrDiffAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntSqrDiffAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkSqrDiffAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newFloatSqrDiffAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newFloatSqrDiffAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkSqrDiffAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newDecimalSqrDiffAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newDecimalSqrDiffAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkVarPopAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntVarPopAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntVarPopAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkVarPopAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newFloatVarPopAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newFloatVarPopAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkVarPopAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newDecimalVarPopAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newDecimalVarPopAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkStdDevAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntStdDevAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntStdDevAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkStdDevAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newFloatStdDevAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newFloatStdDevAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkStdDevAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newDecimalStdDevAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newDecimalStdDevAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkStdDevPopAggregateInt(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newIntStdDevPopAggregate, makeIntTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newIntStdDevPopAggregate, makeIntTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkStdDevPopAggregateFloat(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newFloatStdDevPopAggregate, makeFloatTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newFloatStdDevPopAggregate, makeFloatTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
 }
 
 func BenchmarkStdDevPopAggregateDecimal(b *testing.B) {
-	for _, count := range []int{1000} {
-		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
-			runBenchmarkAggregate(b, newDecimalStdDevPopAggregate, makeDecimalTestDatum(count))
-		})
-	}
+	b.Run(fmt.Sprintf("count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(b, newDecimalStdDevPopAggregate, makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount))
+	})
+}
+
+func BenchmarkCorrAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newCorrAggregate, newCorrAggregateDecimal)
+}
+
+func BenchmarkCovarPopAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newCovarPopAggregate, newCovarPopAggregateDecimal)
+}
+
+func BenchmarkCovarSampAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newCovarSampAggregate, newCovarSampAggregateDecimal)
+}
+
+// runRegressionAggregateBenchmarks is a helper function for running
+// benchmarks for regression aggregate functions.
+func runRegressionAggregateBenchmarks(
+	b *testing.B,
+	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggDecimalFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+) {
+	b.Run(fmt.Sprintf("Ints count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(
+			b,
+			aggFunc,
+			makeIntTestDatum(aggregateBuiltinsBenchmarkCount),
+			makeIntTestDatum(aggregateBuiltinsBenchmarkCount),
+		)
+	})
+
+	b.Run(fmt.Sprintf("Floats count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(
+			b,
+			aggFunc,
+			makeFloatTestDatum(aggregateBuiltinsBenchmarkCount),
+			makeFloatTestDatum(aggregateBuiltinsBenchmarkCount),
+		)
+	})
+
+	b.Run(fmt.Sprintf("Int Float count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(
+			b,
+			aggFunc,
+			makeIntTestDatum(aggregateBuiltinsBenchmarkCount),
+			makeFloatTestDatum(aggregateBuiltinsBenchmarkCount),
+		)
+	})
+
+	b.Run(fmt.Sprintf("Decimals count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
+		runBenchmarkAggregate(
+			b,
+			aggDecimalFunc,
+			makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount),
+			makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount),
+		)
+	})
 }

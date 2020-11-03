@@ -9,13 +9,15 @@ CREATE TABLE kv (
 )
 
 query T
-EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
+EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), stddev(1), variance(1),
+bool_and(true), bool_or(false), xor_agg(b'\x01'), corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1)
+FROM kv
 ----
 distribution: local
 vectorized: true
 ·
 • group (scalar)
-│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)
+│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal)
 │ estimated row count: 1 (missing stats)
 │ aggregate 0: min(column7)
 │ aggregate 1: max(column7)
@@ -28,6 +30,10 @@ vectorized: true
 │ aggregate 8: bool_and(column17)
 │ aggregate 9: bool_or(column19)
 │ aggregate 10: xor_agg(column21)
+│ aggregate 11: corr(column7, column7)
+│ aggregate 12: covar_pop(column7, column7)
+│ aggregate 13: covar_samp(column7, column7)
+│ aggregate 14: sqrdiff(column7)
 │
 └── • render
     │ columns: (column7 int, column10 unknown, column17 bool, column19 bool, column21 bytes)
@@ -45,51 +51,57 @@ vectorized: true
           spans: FULL SCAN
 
 query T
-EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
+EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v),
+bool_and(v = 1), bool_or(v = 1), xor_agg(s::bytes), corr(v, k), covar_pop(v, k), covar_samp(v, k), sqrdiff(v)
+FROM kv
 ----
 distribution: local
 vectorized: true
 ·
-• project
-│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)
+• group (scalar)
+│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: min(v)
+│ aggregate 1: max(v)
+│ aggregate 2: count(v)
+│ aggregate 3: sum_int(column10)
+│ aggregate 4: avg(v)
+│ aggregate 5: sum(v)
+│ aggregate 6: stddev(v)
+│ aggregate 7: variance(v)
+│ aggregate 8: bool_and(column16)
+│ aggregate 9: bool_or(column16)
+│ aggregate 10: xor_agg(column19)
+│ aggregate 11: corr(v, k)
+│ aggregate 12: covar_pop(v, k)
+│ aggregate 13: covar_samp(v, k)
+│ aggregate 14: sqrdiff(v)
 │
-└── • group (scalar)
-    │ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, xor_agg bytes)
-    │ estimated row count: 1 (missing stats)
-    │ aggregate 0: min(v)
-    │ aggregate 1: max(v)
-    │ aggregate 2: count(v)
-    │ aggregate 3: sum_int(column10)
-    │ aggregate 4: avg(v)
-    │ aggregate 5: sum(v)
-    │ aggregate 6: stddev(v)
-    │ aggregate 7: variance(v)
-    │ aggregate 8: bool_and(column16)
-    │ aggregate 9: xor_agg(column18)
+└── • render
+    │ columns: (column10 int, column16 bool, column19 bytes, k int, v int)
+    │ estimated row count: 1000 (missing stats)
+    │ render 0: (1)[int]
+    │ render 1: ((v)[int] = (1)[int])[bool]
+    │ render 2: ((s)[string]::BYTES)[bytes]
+    │ render 3: (k)[int]
+    │ render 4: (v)[int]
     │
-    └── • render
-        │ columns: (column10 int, column16 bool, column18 bytes, v int)
-        │ estimated row count: 1000 (missing stats)
-        │ render 0: (1)[int]
-        │ render 1: ((v)[int] = (1)[int])[bool]
-        │ render 2: ((s)[string]::BYTES)[bytes]
-        │ render 3: (v)[int]
-        │
-        └── • scan
-              columns: (v int, s string)
-              estimated row count: 1000 (missing stats)
-              table: kv@primary
-              spans: FULL SCAN
+    └── • scan
+          columns: (k int, v int, s string)
+          estimated row count: 1000 (missing stats)
+          table: kv@primary
+          spans: FULL SCAN
 
 # Aggregate functions trigger aggregation and computation when there is no source.
 query T
-EXPLAIN (TYPES) SELECT min(1), count(NULL), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
+EXPLAIN (TYPES) SELECT min(1), count(NULL), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1),
+bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1)
 ----
 distribution: local
 vectorized: false
 ·
 • render
-│ columns: (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)
+│ columns: (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string, corr float, covar_pop float, covar_samp float, sqrdiff decimal)
 │ estimated row count: 1
 │ render 0: ((avg)[decimal]::FLOAT8)[float]
 │ render 1: (to_hex((xor_agg)[bytes]))[string]
@@ -102,9 +114,13 @@ vectorized: false
 │ render 8: (variance)[decimal]
 │ render 9: (bool_and)[bool]
 │ render 10: (bool_or)[bool]
+│ render 11: (corr)[float]
+│ render 12: (covar_pop)[float]
+│ render 13: (covar_samp)[float]
+│ render 14: (sqrdiff)[decimal]
 │
 └── • group (scalar)
-    │ columns: (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)
+    │ columns: (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal)
     │ estimated row count: 1
     │ aggregate 0: min(column1)
     │ aggregate 1: count(column3)
@@ -117,6 +133,10 @@ vectorized: false
     │ aggregate 8: bool_and(column11)
     │ aggregate 9: bool_or(column11)
     │ aggregate 10: xor_agg(column14)
+    │ aggregate 11: corr(column1, column1)
+    │ aggregate 12: covar_pop(column1, column1)
+    │ aggregate 13: covar_samp(column1, column1)
+    │ aggregate 14: sqrdiff(column1)
     │
     └── • values
           columns: (column1 int, column3 unknown, column11 bool, column14 bytes)
