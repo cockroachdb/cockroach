@@ -114,7 +114,7 @@ func (dsp *DistSQLPlanner) Exec(
 		return err
 	}
 	p := localPlanner.(*planner)
-	p.stmt = &Statement{Statement: stmt}
+	p.stmt = makeStatement(stmt, ClusterWideID{} /* queryID */)
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}

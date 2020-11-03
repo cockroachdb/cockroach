@@ -64,7 +64,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			defer cleanup()
 			p := internalPlanner.(*planner)
 
-			p.stmt = &Statement{Statement: stmt}
+			p.stmt = makeStatement(stmt, ClusterWideID{})
 			p.curPlan.savePlanString = true
 			p.curPlan.savePlanForStats = true
 			if err := p.makeOptimizerPlan(ctx); err != nil {

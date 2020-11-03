@@ -184,7 +184,7 @@ func (a *appStats) recordStatement(
 
 	// Get the statistics object.
 	s, stmtID := a.getStatsForStmt(
-		stmt, implicitTxn,
+		stmt.AnonymizedStr, implicitTxn,
 		err, createIfNonExistent,
 	)
 
@@ -236,19 +236,14 @@ func (a *appStats) recordStatement(
 // stat object is returned or not, we always return the correct stmtID
 // for the given stmt.
 func (a *appStats) getStatsForStmt(
-	stmt *Statement, implicitTxn bool, err error, createIfNonexistent bool,
+	anonymizedStmt string, implicitTxn bool, err error, createIfNonexistent bool,
 ) (*stmtStats, roachpb.StmtID) {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
 	key := stmtKey{
-		failed:      err != nil,
-		implicitTxn: implicitTxn,
-	}
-	if stmt.AnonymizedStr != "" {
-		// Use the cached anonymized string.
-		key.anonymizedStmt = stmt.AnonymizedStr
-	} else {
-		key.anonymizedStmt = anonymizeStmt(stmt.AST)
+		anonymizedStmt: anonymizedStmt,
+		failed:         err != nil,
+		implicitTxn:    implicitTxn,
 	}
 
 	// We first try and see if we can get by without creating a new entry for this
@@ -362,6 +357,9 @@ func (a *appStats) Add(other *appStats) {
 }
 
 func anonymizeStmt(ast tree.Statement) string {
+	if ast == nil {
+		return ""
+	}
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
@@ -446,14 +444,14 @@ func (a *appStats) recordTransaction(
 // sample logical plan for its corresponding fingerprint. We use
 // `logicalPlanCollectionPeriod` to assess how frequently to sample logical
 // plans.
-func (a *appStats) shouldSaveLogicalPlanDescription(stmt *Statement, implicitTxn bool) bool {
+func (a *appStats) shouldSaveLogicalPlanDescription(anonymizedStmt string, implicitTxn bool) bool {
 	if !sampleLogicalPlans.Get(&a.st.SV) {
 		return false
 	}
 	// We don't know yet if we will hit an error, so we assume we don't. The worst
 	// that can happen is that for statements that always error out, we will
 	// always save the tree plan.
-	stats, _ := a.getStatsForStmt(stmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
+	stats, _ := a.getStatsForStmt(anonymizedStmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
