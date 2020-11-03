@@ -211,13 +211,13 @@ query T colnames
 SHOW server_version
 ----
 server_version
-9.5.0
+13.0.0
 
 query T colnames
 SHOW server_version_num
 ----
 server_version_num
-90500
+130000
 
 # Test read-only variables
 statement error parameter "max_index_keys" cannot be changed
