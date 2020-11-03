@@ -11,15 +11,15 @@
 package optionalnodeliveness
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
 
 // Interface is the interface used in Container.
 type Interface interface {
-	Self() (nodelivenesspb.Liveness, bool)
-	GetLivenesses() []nodelivenesspb.Liveness
+	Self() (livenesspb.Liveness, bool)
+	GetLivenesses() []livenesspb.Liveness
 	IsLive(roachpb.NodeID) (bool, error)
 }
 

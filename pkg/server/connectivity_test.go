@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -352,8 +352,8 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
 
-	for _, status := range []nodelivenesspb.MembershipStatus{
-		nodelivenesspb.MembershipStatus_DECOMMISSIONING, nodelivenesspb.MembershipStatus_DECOMMISSIONED,
+	for _, status := range []livenesspb.MembershipStatus{
+		livenesspb.MembershipStatus_DECOMMISSIONING, livenesspb.MembershipStatus_DECOMMISSIONED,
 	} {
 		require.NoError(t, tc.Servers[0].Decommission(ctx, status, []roachpb.NodeID{3}))
 	}

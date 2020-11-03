@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"go.etcd.io/etcd/raft"
@@ -50,7 +50,7 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context, now hlc.Timestamp, livenessMap nodeliveness.IsLiveMap, clusterNodes int,
+	ctx context.Context, now hlc.Timestamp, livenessMap liveness.IsLiveMap, clusterNodes int,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
@@ -93,7 +93,7 @@ func calcReplicaMetrics(
 	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
 	zone *zonepb.ZoneConfig,
-	livenessMap nodeliveness.IsLiveMap,
+	livenessMap liveness.IsLiveMap,
 	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
@@ -157,7 +157,7 @@ func calcReplicaMetrics(
 func calcRangeCounter(
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
-	livenessMap nodeliveness.IsLiveMap,
+	livenessMap liveness.IsLiveMap,
 	numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
@@ -191,7 +191,7 @@ func calcRangeCounter(
 // replica is determined by checking its node in the provided liveness map. This
 // method is used when indicating under-replication so only voter replicas are
 // considered.
-func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap nodeliveness.IsLiveMap) int {
+func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap) int {
 	var live int
 	for _, rd := range desc.Replicas().Voters() {
 		if livenessMap[rd.NodeID].IsLive {
@@ -204,7 +204,7 @@ func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap nodelivene
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap nodeliveness.IsLiveMap,
+	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas().All() {

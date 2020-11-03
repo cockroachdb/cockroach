@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -389,8 +389,8 @@ func expectNodesDecommissioned(
 			// The user is expecting the node to not be
 			// decommissioned/decommissioning already.
 			switch liveness {
-			case nodelivenesspb.NodeLivenessStatus_DECOMMISSIONING,
-				nodelivenesspb.NodeLivenessStatus_DECOMMISSIONED:
+			case livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				livenesspb.NodeLivenessStatus_DECOMMISSIONED:
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is already decommissioning or decommissioned")
 			default:
 				// It's always possible to decommission a node that's either live
@@ -399,10 +399,10 @@ func expectNodesDecommissioned(
 		} else {
 			// The user is expecting the node to be recommissionable.
 			switch liveness {
-			case nodelivenesspb.NodeLivenessStatus_DECOMMISSIONING,
-				nodelivenesspb.NodeLivenessStatus_DECOMMISSIONED:
+			case livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				livenesspb.NodeLivenessStatus_DECOMMISSIONED:
 				// ok.
-			case nodelivenesspb.NodeLivenessStatus_LIVE:
+			case livenesspb.NodeLivenessStatus_LIVE:
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is not decommissioned")
 			default: // dead, unavailable, etc
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is in unexpected state", liveness)
@@ -435,7 +435,7 @@ func runDecommissionNodeImpl(
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:          nodeIDs,
-			TargetMembership: nodelivenesspb.MembershipStatus_DECOMMISSIONING,
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
 		}
 		resp, err := c.Decommission(ctx, req)
 		if err != nil {
@@ -464,7 +464,7 @@ func runDecommissionNodeImpl(
 			// We now mark the nodes as fully decommissioned.
 			req := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
-				TargetMembership: nodelivenesspb.MembershipStatus_DECOMMISSIONED,
+				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			}
 			resp, err := c.Decommission(ctx, req)
 			if err != nil {
@@ -572,7 +572,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	c := serverpb.NewAdminClient(conn)
 	req := &serverpb.DecommissionRequest{
 		NodeIDs:          nodeIDs,
-		TargetMembership: nodelivenesspb.MembershipStatus_ACTIVE,
+		TargetMembership: livenesspb.MembershipStatus_ACTIVE,
 	}
 	resp, err := c.Decommission(ctx, req)
 	if err != nil {

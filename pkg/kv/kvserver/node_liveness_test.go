@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/liveness"
+	"github.com/cockroachdb/cockroach/pkg/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -105,7 +105,7 @@ func TestNodeLiveness(t *testing.T) {
 			if err == nil {
 				break
 			}
-			if errors.Is(err, nodeliveness.ErrEpochIncremented) {
+			if errors.Is(err, liveness.ErrEpochIncremented) {
 				log.Warningf(context.Background(), "retrying after %s", err)
 				continue
 			}
@@ -246,7 +246,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 
 	var cbMu syncutil.Mutex
 	cbs := map[roachpb.NodeID]struct{}{}
-	mtc.nodeLivenesses[0].RegisterCallback(func(l nodelivenesspb.Liveness) {
+	mtc.nodeLivenesses[0].RegisterCallback(func(l livenesspb.Liveness) {
 		cbMu.Lock()
 		defer cbMu.Unlock()
 		cbs[l.NodeID] = struct{}{}
@@ -386,7 +386,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	// Verify error on incrementing an already-incremented epoch.
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(
 		ctx, oldLiveness.Liveness,
-	); !errors.Is(err, nodeliveness.ErrEpochAlreadyIncremented) {
+	); !errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
 		t.Fatalf("unexpected error incrementing a non-live node: %+v", err)
 	}
 
@@ -419,7 +419,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 		nodeID := g.NodeID.Get()
 		key := gossip.MakeNodeLivenessKey(nodeID)
 		expKeys = append(expKeys, key)
-		if err := g.AddInfoProto(key, &nodelivenesspb.Liveness{NodeID: nodeID}, 0); err != nil {
+		if err := g.AddInfoProto(key, &livenesspb.Liveness{NodeID: nodeID}, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -477,7 +477,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// Verify liveness is properly initialized. This needs to be wrapped in a
 	// SucceedsSoon because node liveness gets initialized via an async gossip
 	// callback.
-	var liveness nodeliveness.LivenessRecord
+	var liveness liveness.LivenessRecord
 	testutils.SucceedsSoon(t, func() error {
 		l, ok := mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
 		if !ok {
@@ -538,7 +538,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	l1, _ := mtc.nodeLivenesses[0].GetLiveness(1)
 	l2, _ := mtc.nodeLivenesses[0].GetLiveness(2)
 	l3, _ := mtc.nodeLivenesses[0].GetLiveness(3)
-	expectedLMap := nodeliveness.IsLiveMap{
+	expectedLMap := liveness.IsLiveMap{
 		1: {Liveness: l1.Liveness, IsLive: true},
 		2: {Liveness: l2.Liveness, IsLive: true},
 		3: {Liveness: l3.Liveness, IsLive: true},
@@ -549,7 +549,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	var liveness nodeliveness.LivenessRecord
+	var liveness liveness.LivenessRecord
 	testutils.SucceedsSoon(t, func() error {
 		livenessRec, ok := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
 		if !ok {
@@ -561,7 +561,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
-			if errors.Is(err, nodeliveness.ErrEpochIncremented) {
+			if errors.Is(err, liveness.ErrEpochIncremented) {
 				return err
 			}
 			t.Fatal(err)
@@ -574,7 +574,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	l1, _ = mtc.nodeLivenesses[0].GetLiveness(1)
 	l2, _ = mtc.nodeLivenesses[0].GetLiveness(2)
 	l3, _ = mtc.nodeLivenesses[0].GetLiveness(3)
-	expectedLMap = nodeliveness.IsLiveMap{
+	expectedLMap = liveness.IsLiveMap{
 		1: {Liveness: l1.Liveness, IsLive: true},
 		2: {Liveness: l2.Liveness, IsLive: false},
 		3: {Liveness: l3.Liveness, IsLive: false},
@@ -613,7 +613,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	var liveness nodeliveness.LivenessRecord
+	var liveness liveness.LivenessRecord
 	testutils.SucceedsSoon(t, func() error {
 		livenessRec, ok := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
 		if !ok {
@@ -705,7 +705,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 		}()
 	}
 	for i := 0; i < concurrency; i++ {
-		if err := <-errCh; err != nil && !errors.Is(err, nodeliveness.ErrEpochAlreadyIncremented) {
+		if err := <-errCh; err != nil && !errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
 			t.Fatalf("concurrent increment epoch %d failed: %+v", i, err)
 		}
 	}
@@ -740,7 +740,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	// Verify success on failed update of a liveness record that already has the
 	// given draining setting.
 	if err := mtc.nodeLivenesses[drainingNodeIdx].TestingSetDrainingInternal(
-		ctx, nodeliveness.LivenessRecord{Liveness: nodelivenesspb.Liveness{
+		ctx, liveness.LivenessRecord{Liveness: livenesspb.Liveness{
 			NodeID: drainingNodeID,
 		}}, false,
 	); err != nil {
@@ -893,14 +893,14 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	oldLivenessRec, ok := callerNodeLiveness.GetLiveness(nodeID)
 	assert.True(t, ok)
 	if _, err := callerNodeLiveness.TestingSetDecommissioningInternal(
-		ctx, oldLivenessRec, nodelivenesspb.MembershipStatus_ACTIVE,
+		ctx, oldLivenessRec, livenesspb.MembershipStatus_ACTIVE,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set a node to decommissioning state.
 	if _, err := callerNodeLiveness.SetMembershipStatus(
-		ctx, nodeID, nodelivenesspb.MembershipStatus_DECOMMISSIONING); err != nil {
+		ctx, nodeID, livenesspb.MembershipStatus_DECOMMISSIONING); err != nil {
 		t.Fatal(err)
 	}
 	verifyNodeIsDecommissioning(t, mtc, nodeID)
@@ -949,52 +949,52 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 
 	// When the node simply never existed, expect an error.
 	if _, err := mtc.nodeLivenesses[0].SetMembershipStatus(
-		ctx, goneNodeID, nodelivenesspb.MembershipStatus_DECOMMISSIONING,
-	); !errors.Is(err, nodeliveness.ErrMissingLivenessRecord) {
+		ctx, goneNodeID, livenesspb.MembershipStatus_DECOMMISSIONING,
+	); !errors.Is(err, liveness.ErrMissingLivenessRecord) {
 		t.Fatal(err)
 	}
 
 	// Pretend the node was once there but isn't gossiped anywhere.
-	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &nodelivenesspb.Liveness{
+	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &livenesspb.Liveness{
 		NodeID:     goneNodeID,
 		Epoch:      1,
 		Expiration: hlc.LegacyTimestamp(mtc.clock().Now()),
-		Membership: nodelivenesspb.MembershipStatus_ACTIVE,
+		Membership: livenesspb.MembershipStatus_ACTIVE,
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Decommission from second node.
 	if committed, err := mtc.nodeLivenesses[1].SetMembershipStatus(
-		ctx, goneNodeID, nodelivenesspb.MembershipStatus_DECOMMISSIONING); err != nil {
+		ctx, goneNodeID, livenesspb.MembershipStatus_DECOMMISSIONING); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Re-decommission from first node.
 	if committed, err := mtc.nodeLivenesses[0].SetMembershipStatus(
-		ctx, goneNodeID, nodelivenesspb.MembershipStatus_DECOMMISSIONING); err != nil {
+		ctx, goneNodeID, livenesspb.MembershipStatus_DECOMMISSIONING); err != nil {
 		t.Fatal(err)
 	} else if committed {
 		t.Fatal("spurious change committed")
 	}
 	// Recommission from first node.
 	if committed, err := mtc.nodeLivenesses[0].SetMembershipStatus(
-		ctx, goneNodeID, nodelivenesspb.MembershipStatus_ACTIVE); err != nil {
+		ctx, goneNodeID, livenesspb.MembershipStatus_ACTIVE); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Decommission from second node (a second time).
 	if committed, err := mtc.nodeLivenesses[1].SetMembershipStatus(
-		ctx, goneNodeID, nodelivenesspb.MembershipStatus_DECOMMISSIONING); err != nil {
+		ctx, goneNodeID, livenesspb.MembershipStatus_DECOMMISSIONING); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Recommission from third node.
 	if committed, err := mtc.nodeLivenesses[2].SetMembershipStatus(
-		ctx, goneNodeID, nodelivenesspb.MembershipStatus_ACTIVE); err != nil {
+		ctx, goneNodeID, livenesspb.MembershipStatus_ACTIVE); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")

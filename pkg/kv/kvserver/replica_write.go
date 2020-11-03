@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -245,7 +245,7 @@ func (r *Replica) executeWriteBatch(
 func rangeUnavailableMessage(
 	s *redact.StringBuilder,
 	desc *roachpb.RangeDescriptor,
-	lm nodeliveness.IsLiveMap,
+	lm liveness.IsLiveMap,
 	rs *raft.Status,
 	ba *roachpb.BatchRequest,
 	dur time.Duration,

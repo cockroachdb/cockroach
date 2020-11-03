@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/nodeliveness/nodelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -116,7 +116,7 @@ func WriteInitialClusterData(
 	//
 	// [1]: See `(*NodeLiveness).CreateLivenessRecord` and usages for where that happens.
 	// [2]: See `(*NodeLiveness).Start` for where that happens.
-	livenessRecord := nodelivenesspb.Liveness{NodeID: 1, Epoch: 0}
+	livenessRecord := livenesspb.Liveness{NodeID: 1, Epoch: 0}
 	if err := livenessVal.SetProto(&livenessRecord); err != nil {
 		return err
 	}

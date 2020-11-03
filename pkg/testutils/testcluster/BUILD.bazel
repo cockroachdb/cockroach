@@ -10,7 +10,7 @@ go_library(
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/nodeliveness/nodelivenesspb",
+        "//pkg/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/server",

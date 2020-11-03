@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.kv.kvserver.nodeliveness.nodelivenesspb;
-option go_package = "nodelivenesspb";
+package cockroach.liveness.livenesspb;
+option go_package = "livenesspb";
 
 import "util/hlc/legacy_timestamp.proto";
 import "gogoproto/gogo.proto";
