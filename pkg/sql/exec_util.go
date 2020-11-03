@@ -1178,15 +1178,15 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timesta
 	return &ts, err
 }
 
-// isSavepoint returns true if stmt is a SAVEPOINT statement.
-func isSavepoint(stmt Statement) bool {
-	_, isSavepoint := stmt.AST.(*tree.Savepoint)
+// isSavepoint returns true if ast is a SAVEPOINT statement.
+func isSavepoint(ast tree.Statement) bool {
+	_, isSavepoint := ast.(*tree.Savepoint)
 	return isSavepoint
 }
 
-// isSetTransaction returns true if stmt is a "SET TRANSACTION ..." statement.
-func isSetTransaction(stmt Statement) bool {
-	_, isSet := stmt.AST.(*tree.SetTransaction)
+// isSetTransaction returns true if ast is a "SET TRANSACTION ..." statement.
+func isSetTransaction(ast tree.Statement) bool {
+	_, isSet := ast.(*tree.SetTransaction)
 	return isSet
 }
 
