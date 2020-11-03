@@ -25,12 +25,13 @@ var pgSSLRequest = []int32{8, 80877103}
 // Options are the options to the Proxy method.
 type Options struct {
 	IncomingTLSConfig *tls.Config // config used for client -> proxy connection
-	OutgoingTLSConfig *tls.Config // config used for proxy -> backend connection
 
 	// TODO(tbg): this is unimplemented and exists only to check which clients
 	// allow use of SNI. Should always return ("", nil).
-	OutgoingAddrFromSNI    func(serverName string) (addr string, clientErr error)
-	OutgoingAddrFromParams func(map[string]string) (addr string, clientErr error)
+	OutgoingAddrFromSNI func(serverName string) (addr string, conf *tls.Config, clientErr error)
+	// OutgoingAddrFromParams returns the address and TLS config to use for
+	// the proxy -> backend connection.
+	OutgoingAddrFromParams func(map[string]string) (addr string, conf *tls.Config, clientErr error)
 
 	// If set, consulted to decorate an error message to be sent to the client.
 	// The error passed to this method will contain no internal information.
@@ -81,7 +82,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 			return nil, nil
 		}
 		if s.opts.OutgoingAddrFromSNI != nil {
-			addr, clientErr := s.opts.OutgoingAddrFromSNI(sniServerName)
+			addr, _, clientErr := s.opts.OutgoingAddrFromSNI(sniServerName)
 			if clientErr != nil {
 				code := CodeSNIRoutingFailed
 				sendErrToClient(conn, code, clientErr.Error()) // won't actually be shown by most clients
@@ -103,7 +104,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 		return newErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
 	}
 
-	outgoingAddr, clientErr := s.opts.OutgoingAddrFromParams(msg.Parameters)
+	outgoingAddr, outgoingTLS, clientErr := s.opts.OutgoingAddrFromParams(msg.Parameters)
 	if clientErr != nil {
 		s.metrics.RoutingErrCount.Inc(1)
 		code := CodeParamsRoutingFailed
@@ -136,7 +137,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 		return newErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
 	}
 
-	outCfg := s.opts.OutgoingTLSConfig.Clone()
+	outCfg := outgoingTLS.Clone()
 	outCfg.ServerName = outgoingAddr
 	crdbConn = tls.Client(crdbConn, outCfg)
 
