@@ -27,6 +27,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// The NetworkReader interface only exists to avoid an import cycle with
+// the colrpc file. This interface should only be implemented by the inbox.
+type NetworkReader interface {
+	GetDeserializationTime() time.Duration
+}
+
 // VectorizedStatsCollector exists so that the vectorizedStatsCollectorsQueue
 // in the colflow.vectorizedFlowCreator can hold both
 // VectorizedStatsCollectorBase and NetworkVectorizedStatsCollector types.
@@ -67,6 +73,7 @@ type VectorizedStatsCollectorBase struct {
 type NetworkVectorizedStatsCollector struct {
 	*VectorizedStatsCollectorBase
 	execpb.VectorizedInboxStats
+	networkReader NetworkReader
 }
 
 var _ colexecbase.Operator = &VectorizedStatsCollectorBase{}
@@ -143,6 +150,7 @@ func NewNetworkVectorizedStatsCollector(
 	idTagKey string,
 	inputWatch *timeutil.StopWatch,
 	latency int64,
+	networkReader NetworkReader,
 ) *NetworkVectorizedStatsCollector {
 	vscBase := initVectorizedStatsCollectorBase(op, ioReader, id, idTagKey, inputWatch)
 	return &NetworkVectorizedStatsCollector{
@@ -151,6 +159,7 @@ func NewNetworkVectorizedStatsCollector(
 			BaseVectorizedStats: &vscBase.VectorizedStats,
 			NetworkLatency:      latency,
 		},
+		networkReader: networkReader,
 	}
 }
 
@@ -193,6 +202,14 @@ func (vsc *VectorizedStatsCollectorBase) finalizeStats() {
 		// themselves).
 		vsc.RowsRead = vsc.ioReader.GetRowsRead()
 	}
+}
+
+// finalizeStats records the stats for the VectorizedStatsCollectorBase and
+// network latency. It also adjusts the time recorded to be the Inbox
+// deserialization time.
+func (nvsc *NetworkVectorizedStatsCollector) finalizeStats() {
+	nvsc.VectorizedStatsCollectorBase.finalizeStats()
+	nvsc.Time = nvsc.networkReader.GetDeserializationTime()
 }
 
 func (vsc *VectorizedStatsCollectorBase) createSpan(
