@@ -234,7 +234,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
-        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
         "//pkg/rpc",

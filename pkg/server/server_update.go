@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -105,8 +105,8 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	var newVersion string
 	var notRunningErr error
 	for nodeID, st := range nodesWithLiveness {
-		if st.livenessStatus != kvserverpb.NodeLivenessStatus_LIVE &&
-			st.livenessStatus != kvserverpb.NodeLivenessStatus_DECOMMISSIONING {
+		if st.livenessStatus != livenesspb.NodeLivenessStatus_LIVE &&
+			st.livenessStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
 			// We definitely won't be able to upgrade, but defer this error as
 			// we may find out that we are already at the latest version (the
 			// cluster may be up to date, but a node is down).

@@ -16,7 +16,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -514,7 +515,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	if !ok {
 		return false
 	}
-	livenessMap, _ := s.livenessMap.Load().(IsLiveMap)
+	livenessMap, _ := s.livenessMap.Load().(liveness.IsLiveMap)
 
 	start := timeutil.Now()
 	r := (*Replica)(value)
@@ -542,7 +543,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 // which may have a copy of the previous livenessMap where the now-live node is
 // down. Those instances should be rare, however, and we expect the newly live
 // node to eventually unquiesce the range.
-func (s *Store) nodeIsLiveCallback(l kvserverpb.Liveness) {
+func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	s.updateLivenessMap()
 
 	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {

@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1396,12 +1398,12 @@ func (s *adminServer) checkReadinessForHealthCheck() error {
 //
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
-	nl *kvserver.NodeLiveness, now time.Time, st *cluster.Settings,
-) map[roachpb.NodeID]kvserverpb.NodeLivenessStatus {
+	nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
+) map[roachpb.NodeID]livenesspb.NodeLivenessStatus {
 	livenesses := nl.GetLivenesses()
 	threshold := kvserver.TimeUntilStoreDead.Get(&st.SV)
 
-	statusMap := make(map[roachpb.NodeID]kvserverpb.NodeLivenessStatus, len(livenesses))
+	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
 		status := kvserver.LivenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status

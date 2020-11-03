@@ -158,7 +158,7 @@ The underlying response type is something we're looking to get rid of.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | key | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  |  |
-| value | [cockroach.kv.kvserver.storagepb.NodeLivenessStatus](#cockroach.server.serverpb.NodesResponse-cockroach.kv.kvserver.storagepb.NodeLivenessStatus) |  |  |
+| value | [cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus](#cockroach.server.serverpb.NodesResponse-cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus) |  |  |
 
 
 
