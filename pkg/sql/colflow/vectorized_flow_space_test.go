@@ -49,10 +49,6 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	oneInput := []execinfrapb.InputSyncSpec{
 		{ColumnTypes: []*types.T{types.Int}},
 	}
-	twoInputs := []execinfrapb.InputSyncSpec{
-		{ColumnTypes: []*types.T{types.Int}},
-		{ColumnTypes: []*types.T{types.Int}},
-	}
 
 	testCases := []struct {
 		desc string
@@ -69,16 +65,6 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 					RenderExprs: []execinfrapb.Expression{{Expr: "CASE WHEN @1 = 1 THEN 1 ELSE 2 END"}},
 				},
 				ResultTypes: rowenc.OneIntCol,
-			},
-		},
-		{
-			desc: "MERGE JOIN",
-			spec: &execinfrapb.ProcessorSpec{
-				Input: twoInputs,
-				Core: execinfrapb.ProcessorCoreUnion{
-					MergeJoiner: &execinfrapb.MergeJoinerSpec{},
-				},
-				ResultTypes: append(twoInputs[0].ColumnTypes, twoInputs[1].ColumnTypes...),
 			},
 		},
 	}
@@ -105,11 +91,13 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 					StreamingMemAccount: &acc,
 				}
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
-				if err != nil {
-					t.Fatal(err)
+				var setupErr error
+				err := colexecerror.CatchVectorizedRuntimeError(func() {
+					_, setupErr = colbuilder.NewColOperator(ctx, flowCtx, args)
+				})
+				if setupErr != nil {
+					t.Fatal(setupErr)
 				}
-				err = acc.Grow(ctx, int64(result.InternalMemUsage))
 				if success {
 					require.NoError(t, err, "expected success, found: ", err)
 				} else {
