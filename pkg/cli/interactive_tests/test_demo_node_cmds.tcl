@@ -76,6 +76,25 @@ eexpect "5 |  false   |      false      | active"
 send "\\demo recommission 4\r"
 eexpect "can only recommission a decommissioning node"
 
+send "\\demo add blah\r"
+eexpect "internal server error: tier must be in the form \"key=value\" not \"blah\""
+
+send "\\demo add region=ca-central,zone=a\r"
+eexpect "node 6 has been added with locality \"region=ca-central,zone=a\""
+
+send "show regions;\r"
+eexpect "ca-central | \{a\}"
+eexpect "us-east1   | \{b,c,d\}"
+eexpect "us-west1   | \{a,b\}"
+
+send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
+eexpect "1 |  false   |      false      | active"
+eexpect "2 |  false   |      false      | active"
+eexpect "3 |  false   |      false      | active"
+eexpect "4 |  false   |      true       | decommissioned"
+eexpect "5 |  false   |      false      | active"
+eexpect "6 |  false   |      false      | active"
+
 interrupt
 eexpect eof
 end_test
