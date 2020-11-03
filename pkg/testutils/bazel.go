@@ -20,7 +20,7 @@ import (
 )
 
 //
-// Utilities in this file are intended to provide utilities for tests
+// Utilities in this file are intended to provide helpers for tests
 // to access system resources in a correct way, when executing under bazel.
 //
 // See  https://docs.bazel.build/versions/master/test-encyclopedia.html for more details
