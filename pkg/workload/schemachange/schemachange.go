@@ -53,22 +53,24 @@ import (
 //For example, an attempt to do something we don't support should be swallowed (though if we can detect that maybe we should just not do it, e.g). It will be hard to use this test for anything more than liveness detection until we go through the tedious process of classifying errors.:
 
 const (
-	defaultMaxOpsPerWorker = 5
-	defaultErrorRate       = 10
-	defaultEnumPct         = 10
-	defaultMaxSourceTables = 3
+	defaultMaxOpsPerWorker    = 5
+	defaultErrorRate          = 10
+	defaultEnumPct            = 10
+	defaultMaxSourceTables    = 3
+	defaultSequenceOwnedByPct = 25
 )
 
 type schemaChange struct {
-	flags           workload.Flags
-	dbOverride      string
-	concurrency     int
-	maxOpsPerWorker int
-	errorRate       int
-	enumPct         int
-	verbose         int
-	dryRun          bool
-	maxSourceTables int
+	flags              workload.Flags
+	dbOverride         string
+	concurrency        int
+	maxOpsPerWorker    int
+	errorRate          int
+	enumPct            int
+	verbose            int
+	dryRun             bool
+	maxSourceTables    int
+	sequenceOwnedByPct int
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -92,6 +94,8 @@ var schemaChangeMeta = workload.Meta{
 		s.flags.BoolVarP(&s.dryRun, `dry-run`, `n`, false, ``)
 		s.flags.IntVar(&s.maxSourceTables, `max-source-tables`, defaultMaxSourceTables,
 			`Maximum tables or views that a newly created tables or views can depend on`)
+		s.flags.IntVar(&s.sequenceOwnedByPct, `seq-owned-pct`, defaultSequenceOwnedByPct,
+			`Percentage of times that a sequence is owned by column upon creation.`)
 		return s
 	},
 }
@@ -142,12 +146,13 @@ func (s *schemaChange) Ops(
 	for i := 0; i < s.concurrency; i++ {
 
 		opGeneratorParams := operationGeneratorParams{
-			seqNum:          seqNum,
-			errorRate:       s.errorRate,
-			enumPct:         s.enumPct,
-			rng:             rand.New(rand.NewSource(timeutil.Now().UnixNano())),
-			ops:             ops,
-			maxSourceTables: s.maxSourceTables,
+			seqNum:             seqNum,
+			errorRate:          s.errorRate,
+			enumPct:            s.enumPct,
+			rng:                rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+			ops:                ops,
+			maxSourceTables:    s.maxSourceTables,
+			sequenceOwnedByPct: s.sequenceOwnedByPct,
 		}
 
 		w := &schemaChangeWorker{
