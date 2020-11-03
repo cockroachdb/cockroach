@@ -549,18 +549,18 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	var liveness liveness.LivenessRecord
+	var livenessRec liveness.LivenessRecord
 	testutils.SucceedsSoon(t, func() error {
-		livenessRec, ok := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+		lr, ok := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
 		if !ok {
 			return errors.New("liveness not found")
 		}
-		liveness = livenessRec
+		livenessRec = lr
 		return nil
 	})
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
+		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), livenessRec.Liveness); err != nil {
 			if errors.Is(err, liveness.ErrEpochIncremented) {
 				return err
 			}
