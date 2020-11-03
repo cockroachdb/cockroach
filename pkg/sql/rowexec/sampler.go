@@ -321,7 +321,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 		}
 
 		for i := range s.sketches {
-			if err := s.sketches[i].addRow(row, s.outTypes, &buf, &da); err != nil {
+			if err := s.sketches[i].addRow(ctx, row, s.outTypes, &buf, &da); err != nil {
 				return false, err
 			}
 		}
@@ -351,7 +351,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			}
 			for _, key := range invKeys {
 				invRow[0].Datum = da.NewDBytes(tree.DBytes(key))
-				if err := s.invSketch[col].addRow(invRow, bytesRowType, &buf, &da); err != nil {
+				if err := s.invSketch[col].addRow(ctx, invRow, bytesRowType, &buf, &da); err != nil {
 					return false, err
 				}
 				if earlyExit, err = s.sampleRow(ctx, invSr, invRow, rng); earlyExit || err != nil {
@@ -486,10 +486,9 @@ func (s *samplerProcessor) DoesNotUseTxn() bool {
 
 // addRow adds a row to the sketch and updates row counts.
 func (s *sketchInfo) addRow(
-	row rowenc.EncDatumRow, typs []*types.T, buf *[]byte, da *rowenc.DatumAlloc,
+	ctx context.Context, row rowenc.EncDatumRow, typs []*types.T, buf *[]byte, da *rowenc.DatumAlloc,
 ) error {
 	var err error
-	var intbuf [8]byte
 	s.numRows++
 
 	var col uint32
@@ -501,6 +500,7 @@ func (s *sketchInfo) addRow(
 	}
 
 	if useFastPath {
+		var intbuf [8]byte
 		// Fast path for integers.
 		// TODO(radu): make this more general.
 		val, err := row[col].GetInt()
@@ -520,20 +520,22 @@ func (s *sketchInfo) addRow(
 		// order_line) with simplistic functions yielded bad results.
 		binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
 		s.sketch.Insert(intbuf[:])
-	} else {
-		isNull := true
-		*buf = (*buf)[:0]
-		for _, col := range s.spec.Columns {
-			*buf, err = row[col].Fingerprint(typs[col], da, *buf)
-			isNull = isNull && row[col].IsNull()
-			if err != nil {
-				return err
-			}
-		}
-		if isNull {
-			s.numNulls++
-		}
-		s.sketch.Insert(*buf)
+		return nil
 	}
+	isNull := true
+	*buf = (*buf)[:0]
+	for _, col := range s.spec.Columns {
+		// We choose to not perform the memory accounting for possibly decoded
+		// tree.Datum because we will lose the references to row very soon.
+		*buf, err = row[col].Fingerprint(ctx, typs[col], da, *buf, nil /* acc */)
+		if err != nil {
+			return err
+		}
+		isNull = isNull && row[col].IsNull()
+	}
+	if isNull {
+		s.numNulls++
+	}
+	s.sketch.Insert(*buf)
 	return nil
 }

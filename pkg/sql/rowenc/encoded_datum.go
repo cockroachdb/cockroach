@@ -12,6 +12,7 @@ package rowenc
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"unsafe"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -288,26 +290,44 @@ func (ed *EncDatum) Encode(
 // instead of encode. Additionally, Fingerprint has the property that if the
 // fingerprints of a set of datums are appended together, the resulting
 // fingerprint will uniquely identify the set.
-func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([]byte, error) {
+// It takes an optional (can be nil) memory account that should be updated if
+// we need to allocate a new tree.Datum to get the desired encoding (i.e. we
+// will do <other encoding> -> tree.Datum -> <desired encoding> transition).
+// The caller is still responsible for accounting for the memory under the
+// returned byte slice. Note that the context will only be used if acc is
+// non-nil.
+func (ed *EncDatum) Fingerprint(
+	ctx context.Context, typ *types.T, a *DatumAlloc, appendTo []byte, acc *mon.BoundAccount,
+) ([]byte, error) {
 	// Note: we don't ed.EnsureDecoded on top of this method, because the default
 	// case uses ed.Encode, which has a fast path if the encoded bytes are already
 	// the right encoding.
+	var fingerprint []byte
+	var err error
+	memUsageBefore := ed.Size()
 	switch typ.Family() {
 	case types.JsonFamily:
-		if err := ed.EnsureDecoded(typ, a); err != nil {
+		if err = ed.EnsureDecoded(typ, a); err != nil {
 			return nil, err
 		}
 		// We must use value encodings without a column ID even if the EncDatum already
 		// is encoded with the value encoding so that the hashes are indeed unique.
-		return EncodeTableValue(appendTo, descpb.ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
+		fingerprint, err = EncodeTableValue(appendTo, descpb.ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
 	default:
 		// For values that are key encodable, using the ascending key.
-		// TODO (rohany): However, there should be a knob for the hasher that sees
-		//  what kind of encoding already exists on the enc datums incoming to the
-		//  DistSQL operators, and should use that encoding to avoid re-encoding
-		//  datums into different encoding types as much as possible.
-		return ed.Encode(typ, a, descpb.DatumEncoding_ASCENDING_KEY, appendTo)
+		// Note that using a value encoding will not easily work in case when
+		// there already exists the encoded representation because that
+		// contains a value tag as a prefix which makes it unsuitable for
+		// equality checks. We could have reused the descending key encoding
+		// when already present, but it doesn't seem worth it at this point.
+		// TODO(yuzefovich): consider reusing the descending key encoding when
+		// already present.
+		fingerprint, err = ed.Encode(typ, a, descpb.DatumEncoding_ASCENDING_KEY, appendTo)
 	}
+	if err == nil && acc != nil {
+		return fingerprint, acc.Grow(ctx, int64(ed.Size()-memUsageBefore))
+	}
+	return fingerprint, err
 }
 
 // Compare returns:
