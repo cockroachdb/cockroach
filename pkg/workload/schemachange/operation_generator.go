@@ -93,6 +93,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropColumn:        true,
 	dropColumnDefault: true,
 	dropColumnNotNull: true,
+	dropSequence:      true,
 	dropTable:         true,
 	dropView:          true,
 	dropSchema:        true,
@@ -876,6 +877,14 @@ func (og *operationGenerator) dropSequence(tx *pgx.Tx) (string, error) {
 	dropSeq := &tree.DropSequence{
 		Names:    tree.TableNames{*sequenceName},
 		IfExists: ifExists,
+	}
+
+	sequenceExists, err := sequenceExists(tx, sequenceName)
+	if err != nil {
+		return "", err
+	}
+	if !sequenceExists && !ifExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
 	}
 	return tree.Serialize(dropSeq), nil
 }
