@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -96,11 +96,11 @@ func nodeStatusesToNodeInfos(nodes *serverpb.NodesResponse) []haProxyNodeInfo {
 		status := statusByID[nodeID]
 		liveness := nodes.LivenessByNodeID[nodeID]
 		switch liveness {
-		case kvserverpb.NodeLivenessStatus_DECOMMISSIONING:
+		case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
 			fmt.Fprintf(stderr, "warning: node %d status is %s, excluding from haproxy configuration\n",
 				nodeID, liveness)
 			fallthrough
-		case kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
+		case livenesspb.NodeLivenessStatus_DECOMMISSIONED:
 			continue
 		}
 

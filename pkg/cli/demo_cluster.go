@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -389,7 +389,7 @@ func (c *transientCluster) Recommission(nodeID roachpb.NodeID) error {
 
 	req := &serverpb.DecommissionRequest{
 		NodeIDs:          []roachpb.NodeID{nodeID},
-		TargetMembership: kvserverpb.MembershipStatus_ACTIVE,
+		TargetMembership: livenesspb.MembershipStatus_ACTIVE,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -432,7 +432,7 @@ func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
 	{
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{nodeID},
-			TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONING,
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
 		}
 		_, err = adminClient.Decommission(ctx, req)
 		if err != nil {
@@ -443,7 +443,7 @@ func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
 	{
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{nodeID},
-			TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONED,
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 		}
 		_, err = adminClient.Decommission(ctx, req)
 		if err != nil {

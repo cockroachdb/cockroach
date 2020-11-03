@@ -26,7 +26,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/security",

@@ -39,7 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -128,7 +129,7 @@ type Server struct {
 	grpc         *grpcServer
 	gossip       *gossip.Gossip
 	nodeDialer   *nodedialer.Dialer
-	nodeLiveness *kvserver.NodeLiveness
+	nodeLiveness *liveness.NodeLiveness
 	storePool    *kvserver.StorePool
 	tcsFactory   *kvcoord.TxnCoordSenderFactory
 	distSender   *kvcoord.DistSender
@@ -415,7 +416,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
-	nodeLiveness := kvserver.NewNodeLiveness(kvserver.NodeLivenessOptions{
+	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
 		Clock:                   clock,
 		DB:                      db,
@@ -424,7 +425,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RenewalDuration:         nlRenewal,
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
-		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
+		OnNodeDecommissioned: func(liveness livenesspb.Liveness) {
 			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
 				knobs.OnDecommissionedCallback(liveness)
 			}
@@ -1637,7 +1638,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
-	s.nodeLiveness.Start(ctx, kvserver.NodeLivenessStartOptions{
+	s.nodeLiveness.Start(ctx, liveness.NodeLivenessStartOptions{
 		Stopper: s.stopper,
 		Engines: s.engines,
 		OnSelfLive: func(ctx context.Context) {
@@ -2030,7 +2031,7 @@ func (s *sqlServer) startServeSQL(
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
 func (s *Server) Decommission(
-	ctx context.Context, targetStatus kvserverpb.MembershipStatus, nodeIDs []roachpb.NodeID,
+	ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
 	if !s.st.Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
 		if targetStatus.Decommissioned() {
@@ -2039,7 +2040,7 @@ func (s *Server) Decommission(
 			// representation of membership state. We do the simple thing and
 			// simply disallow the setting of the fully decommissioned state until
 			// we're guaranteed to be on v20.2.
-			targetStatus = kvserverpb.MembershipStatus_DECOMMISSIONING
+			targetStatus = livenesspb.MembershipStatus_DECOMMISSIONING
 		}
 	}
 
@@ -2058,8 +2059,8 @@ func (s *Server) Decommission(
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
 		if err != nil {
-			if errors.Is(err, kvserver.ErrMissingLivenessRecord) {
-				return grpcstatus.Error(codes.NotFound, kvserver.ErrMissingLivenessRecord.Error())
+			if errors.Is(err, liveness.ErrMissingRecord) {
+				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingRecord.Error())
 			}
 			return err
 		}
