@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,7 +42,7 @@ type mergeJoinIntersectAllOp struct {
 	*mergeJoinBase
 }
 
-var _ InternalMemoryOperator = &mergeJoinIntersectAllOp{}
+var _ colexecbase.Operator = &mergeJoinIntersectAllOp{}
 
 func (o *mergeJoinIntersectAllOp) probeBodyLSeltrueRSeltrue(ctx context.Context) {
 	lSel := o.proberState.lBatch.Selection()
