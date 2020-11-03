@@ -579,7 +579,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		cause := errors.UnwrapAll(err)
 		// If it's a specific illegal membership transition error, we try to
 		// surface a more readable message to the user. See
-		// ValidateLivenessTransition in nodeserverpb/liveness.go for where this
+		// ValidateTransition in nodeserverpb/liveness.go for where this
 		// error is generated.
 		if s, ok := status.FromError(cause); ok && s.Code() == codes.FailedPrecondition {
 			return errors.Newf("%s", s.Message())

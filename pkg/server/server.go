@@ -2059,8 +2059,8 @@ func (s *Server) Decommission(
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
 		if err != nil {
-			if errors.Is(err, liveness.ErrMissingLivenessRecord) {
-				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingLivenessRecord.Error())
+			if errors.Is(err, liveness.ErrMissingRecord) {
+				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingRecord.Error())
 			}
 			return err
 		}

@@ -229,7 +229,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			llHandle.resolve(roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  status.Lease,
 				Requested: reqLease,
-				Message:   fmt.Sprintf("couldn't request lease for %+v: %v", nextLeaseHolder, liveness.ErrLivenessRecordCacheMiss),
+				Message:   fmt.Sprintf("couldn't request lease for %+v: %v", nextLeaseHolder, liveness.ErrRecordCacheMiss),
 			}))
 			return llHandle
 		}
@@ -553,7 +553,7 @@ func (r *Replica) leaseStatus(
 				if leaseStatusLogLimiter.ShouldLog() {
 					ctx = r.AnnotateCtx(ctx)
 					log.Warningf(ctx, "can't determine lease status of %s due to node liveness error: %+v",
-						lease.Replica, liveness.ErrLivenessRecordCacheMiss)
+						lease.Replica, liveness.ErrRecordCacheMiss)
 				}
 			}
 			status.State = kvserverpb.LeaseState_ERROR

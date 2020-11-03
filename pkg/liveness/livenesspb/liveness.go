@@ -94,7 +94,7 @@ func (c MembershipStatus) String() string {
 	}
 }
 
-// ValidateLivenessTransition validates transitions of the liveness record,
+// ValidateTransition validates transitions of the liveness record,
 // returning an error if the proposed transition is invalid. Ignoring no-ops
 // (which also includes decommissioning a decommissioned node) the valid state
 // transitions for Membership are as follows:
@@ -104,7 +104,7 @@ func (c MembershipStatus) String() string {
 // 	  Decommissioning  => Decommissioned
 //
 // See diagram above the Membership type for more details.
-func ValidateLivenessTransition(old, new Liveness) error {
+func ValidateTransition(old, new Liveness) error {
 	if old.Membership == new.Membership {
 		// No-op.
 		return nil

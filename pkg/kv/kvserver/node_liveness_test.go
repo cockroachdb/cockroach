@@ -477,7 +477,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// Verify liveness is properly initialized. This needs to be wrapped in a
 	// SucceedsSoon because node liveness gets initialized via an async gossip
 	// callback.
-	var liveness liveness.LivenessRecord
+	var liveness liveness.Record
 	testutils.SucceedsSoon(t, func() error {
 		l, ok := mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
 		if !ok {
@@ -549,7 +549,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	var livenessRec liveness.LivenessRecord
+	var livenessRec liveness.Record
 	testutils.SucceedsSoon(t, func() error {
 		lr, ok := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
 		if !ok {
@@ -613,7 +613,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	var liveness liveness.LivenessRecord
+	var liveness liveness.Record
 	testutils.SucceedsSoon(t, func() error {
 		livenessRec, ok := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
 		if !ok {
@@ -740,7 +740,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	// Verify success on failed update of a liveness record that already has the
 	// given draining setting.
 	if err := mtc.nodeLivenesses[drainingNodeIdx].TestingSetDrainingInternal(
-		ctx, liveness.LivenessRecord{Liveness: livenesspb.Liveness{
+		ctx, liveness.Record{Liveness: livenesspb.Liveness{
 			NodeID: drainingNodeID,
 		}}, false,
 	); err != nil {
@@ -950,7 +950,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	// When the node simply never existed, expect an error.
 	if _, err := mtc.nodeLivenesses[0].SetMembershipStatus(
 		ctx, goneNodeID, livenesspb.MembershipStatus_DECOMMISSIONING,
-	); !errors.Is(err, liveness.ErrMissingLivenessRecord) {
+	); !errors.Is(err, liveness.ErrMissingRecord) {
 		t.Fatal(err)
 	}
 
