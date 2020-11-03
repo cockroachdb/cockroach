@@ -136,6 +136,7 @@ go_library(
         "reassign_owned_by.go",
         "recursive_cte.go",
         "refresh_materialized_view.go",
+        "region_util.go",
         "relocate.go",
         "rename_column.go",
         "rename_database.go",
