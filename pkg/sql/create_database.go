@@ -77,10 +77,6 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		)
 	}
 
-	if n.Regions != nil {
-		return nil, unimplemented.New("create database with region", "implementation pending")
-	}
-
 	if n.Survive != tree.SurviveDefault {
 		return nil, unimplemented.New("create database survive", "implementation pending")
 	}
