@@ -423,11 +423,7 @@ func (n *Node) start(
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
 		}
-		capacity, err := s.Capacity(ctx, false /* useCached */)
-		if err != nil {
-			return errors.Errorf("could not query store capacity: %s", err)
-		}
-		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
+		log.Infof(ctx, "initialized store s%s", s.StoreID())
 
 		n.addStore(ctx, s)
 	}
@@ -595,6 +591,11 @@ func (n *Node) bootstrapStores(
 		// each and invoking storage.Bootstrap() to persist it and the cluster
 		// version and to create stores. The -1 comes from the fact that our
 		// first store ID has already been pre-allocated for us.
+		//
+		// TODO(irfansharif): Is this sound? If we're restarting an already
+		// bootstrapped node (but now with additional stores), we haven't
+		// pre-allocated a store ID for any of the additional stores. Also see
+		// TODO below, the usage of firstStoreID is a bit confused.
 		storeIDAlloc := int64(len(emptyEngines)) - 1
 		if firstStoreID == 0 {
 			// We lied, we don't have a firstStoreID; we'll need to allocate for
@@ -606,11 +607,41 @@ func (n *Node) bootstrapStores(
 		}
 		startID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, storeIDAlloc, n.storeCfg.DB)
 		if firstStoreID == 0 {
+			// TODO(irfansharif): Our usage of firstStoreID is pretty confused,
+			// but it just so happens to "work". firstStoreID, as threaded in
+			// from the caller, is non-zero in two cases:
+			// - When we starting up a node that was just bootstrapped
+			//   (firstStoreID == 1).
+			// - When we're joining an existing cluster (firstStoreID provided
+			//   to us via the join RPC).
+			//
+			// When we're restarting an already bootstrapped node, firstStoreID
+			// is zero. If we happen to be restarting with additional stores,
+			// we're starting the ID counter at what KV just told us about,
+			// which is probably what we want.
+			//
+			// Generally we're trying to do a few things, and our code structure
+			// doesn't make that obvious:
+			// - We're bootstrapping our first store after being handed a store
+			//   ID via the join RPC
+			// - We're not bootstrapping our first store here when we're the
+			//   node being bootstrapped, that already happens in
+			//   `bootstrapCluster`.
+			// - We're bootstrapping stores other than our first, after joining
+			//   an existing cluster via the join RPC.
+			// - We're bootstrapping additional stores after having our server
+			//   bootstrapped by the operator for the very first time.
+			// - We're bootstrapping additional stores after being restarted
+			//   with new stores (we were previously an already bootstrapped
+			//   node).
 			firstStoreID = startID
 		}
 		if err != nil {
 			return errors.Errorf("error allocating store ids: %s", err)
 		}
+
+		log.Infof(ctx, "xxx: store-id-alloc=%d, first-store-id=%d, start-id=%d", storeIDAlloc, firstStoreID, startID)
+
 		sIdent := roachpb.StoreIdent{
 			ClusterID: n.clusterID.Get(),
 			NodeID:    n.Descriptor.NodeID,
@@ -625,8 +656,9 @@ func (n *Node) bootstrapStores(
 			if err := s.Start(ctx, stopper); err != nil {
 				return err
 			}
+			log.Infof(ctx, "initialized store s%s", s.StoreID())
+
 			n.addStore(ctx, s)
-			log.Infof(ctx, "bootstrapped store %s", s)
 			// Done regularly in Node.startGossiping, but this cuts down the time
 			// until this store is used for range allocations.
 			if err := s.GossipStore(ctx, false /* useCached */); err != nil {
