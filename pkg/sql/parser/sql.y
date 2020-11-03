@@ -2228,12 +2228,13 @@ alter_attribute_action:
 // %Text:
 // REFRESH MATERIALIZED VIEW [CONCURRENTLY] view_name [WITH [NO] DATA]
 refresh_stmt:
-  REFRESH MATERIALIZED VIEW opt_concurrently view_name opt_clear_data
+  REFRESH MATERIALIZED VIEW opt_concurrently view_name opt_clear_data opt_as_of_clause
   {
     $$.val = &tree.RefreshMaterializedView{
       Name: $5.unresolvedObjectName(),
       Concurrently: $4.bool(),
       RefreshDataOption: $6.refreshDataOption(),
+      AsOf: $7.asOfClause(),
     }
   }
 | REFRESH error // SHOW HELP: REFRESH

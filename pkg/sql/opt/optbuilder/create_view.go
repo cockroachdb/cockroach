@@ -58,6 +58,12 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	}
 
 	outScope = b.allocScope()
+	fmtFlags := tree.FmtParsable
+	if cv.Materialized {
+		// Don't include any AS OF SYSTEM TIME clauses here: our materialized view
+		// shouldn't get refreshed as of a particular time.
+		fmtFlags = fmtFlags | tree.FmtSkipAsOfSystemTimeClauses
+	}
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
 			Schema:       schID,
@@ -66,7 +72,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			Replace:      cv.Replace,
 			Persistence:  cv.Persistence,
 			Materialized: cv.Materialized,
-			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
+			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, fmtFlags),
 			Columns:      p,
 			Deps:         b.viewDeps,
 		},

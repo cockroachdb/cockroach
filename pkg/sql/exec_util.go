@@ -1132,13 +1132,23 @@ func ParseHLC(s string) (hlc.Timestamp, error) {
 	return tree.DecimalToHLC(dec)
 }
 
+type asOfTimestampType int
+
+const (
+	transactionTimestamp asOfTimestampType = iota + 1
+	backfillTimestamp
+)
+
 // isAsOf analyzes a statement to bypass the logic in newPlan(), since
 // that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
-func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timestamp, error) {
+func (p *planner) isAsOf(
+	ctx context.Context, stmt tree.Statement,
+) (*hlc.Timestamp, asOfTimestampType, error) {
 	var asOf tree.AsOfClause
+	timestampType := transactionTimestamp
 	switch s := stmt.(type) {
 	case *tree.Select:
 		selStmt := s.Select
@@ -1150,32 +1160,53 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timesta
 
 		sc, ok := selStmt.(*tree.SelectClause)
 		if !ok {
-			return nil, nil
+			return nil, 0, nil
 		}
 		if sc.From.AsOf.Expr == nil {
-			return nil, nil
+			return nil, 0, nil
 		}
 
 		asOf = sc.From.AsOf
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
-			return nil, nil
+			return nil, 0, nil
 		}
 		asOf = s.AsOf
 	case *tree.Export:
 		return p.isAsOf(ctx, s.Query)
 	case *tree.CreateStats:
 		if s.Options.AsOf.Expr == nil {
-			return nil, nil
+			return nil, 0, nil
 		}
 		asOf = s.Options.AsOf
 	case *tree.Explain:
 		return p.isAsOf(ctx, s.Statement)
+	case *tree.CreateTable:
+		if !s.As() {
+			return nil, 0, nil
+		}
+		ts, _, err := p.isAsOf(ctx, s.AsSource)
+		return ts, backfillTimestamp, err
+	case *tree.CreateView:
+		if !s.Materialized {
+			return nil, 0, nil
+		}
+		// N.B.: If the AS OF SYSTEM TIME value here is older than the most recent
+		// schema change to any of the tables that the view depends on, we should
+		// reject this update.
+		ts, _, err := p.isAsOf(ctx, s.AsSource)
+		return ts, backfillTimestamp, err
+	case *tree.RefreshMaterializedView:
+		if s.AsOf.Expr == nil {
+			return nil, 0, nil
+		}
+		asOf = s.AsOf
+		timestampType = backfillTimestamp
 	default:
-		return nil, nil
+		return nil, 0, nil
 	}
 	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
-	return &ts, err
+	return &ts, timestampType, err
 }
 
 // isSavepoint returns true if stmt is a SAVEPOINT statement.

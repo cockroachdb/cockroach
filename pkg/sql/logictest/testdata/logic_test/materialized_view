@@ -149,3 +149,28 @@ REFRESH MATERIALIZED VIEW with_options WITH NO DATA
 
 query I
 SELECT * FROM with_options
+
+statement ok
+CREATE TABLE a (a INT, b INT); INSERT INTO a VALUES (1, 2)
+
+let $ts
+SELECT now()
+
+statement ok
+ALTER TABLE a DROP COLUMN b
+
+# TODO (jordan): this should fail. We should not permit creating a
+# materialized view at a timestamp that's before the most recent modification
+# of the tables that it references.
+#
+# Alternatively, we should return an error at planning time of the REFRESH
+# statement, since its backfill query does not match the schema of the table
+# that it's inserting into.
+
+statement ok
+CREATE MATERIALIZED VIEW v5 AS SELECT a, b FROM a AS OF SYSTEM TIME '$ts'
+
+# This statement currently fails in a gross way. It either should not fail, or
+# should fail in a non-gross way.
+statement ok
+REFRESH MATERIALIZED VIEW v5

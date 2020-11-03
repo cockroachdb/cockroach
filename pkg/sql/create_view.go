@@ -192,7 +192,15 @@ func (n *createViewNode) startExec(params runParams) error {
 			// * use AllocateIDs to give the view descriptor a primary key
 			desc.IsMaterializedView = true
 			desc.State = descpb.DescriptorState_ADD
-			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
+
+			// If we're performing a CREATE MATERIALIZED VIEW ... AS OF SYSTEM TIME,
+			// set the CreateAsOfTime to be the user-specified timestamp. This will
+			// cause the backfill to be performed at that timestamp.
+			if params.p.semaCtx.AsOfTimestampForBackfill != nil {
+				desc.CreateAsOfTime = *params.p.semaCtx.AsOfTimestampForBackfill
+			} else {
+				desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
+			}
 			if err := desc.AllocateIDs(params.ctx); err != nil {
 				return err
 			}
