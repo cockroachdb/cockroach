@@ -59,7 +59,11 @@ type createViewNode struct {
 func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("view"))
+	if n.replace {
+		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("or_replace_view"))
+	} else {
+		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("view"))
+	}
 
 	viewName := n.viewName.Object()
 	persistence := n.persistence
