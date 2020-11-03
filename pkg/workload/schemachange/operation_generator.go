@@ -102,6 +102,8 @@ var opsWithExecErrorScreening = map[opType]bool{
 	renameSequence: true,
 	renameTable:    true,
 	renameView:     true,
+
+	insertRow: true,
 }
 
 func opScreensForExecErrors(op opType) bool {
@@ -1198,29 +1200,57 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting random table name")
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(
+			`INSERT INTO %s (IrrelevantColumnName) VALUES ("IrrelevantValue")`,
+			tableName,
+		), nil
+	}
 	cols, err := og.getTableColumns(tx, tableName.String())
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting table columns for insert row")
 	}
 	colNames := []string{}
-	rows := []string{}
+	rows := [][]string{}
 	for _, col := range cols {
-		colNames = append(colNames, fmt.Sprintf(`"%s"`, col.name))
+		colNames = append(colNames, col.name)
 	}
-	numRows := og.randIntn(10) + 1
+	numRows := og.randIntn(3) + 1
 	for i := 0; i < numRows; i++ {
 		var row []string
 		for _, col := range cols {
 			d := rowenc.RandDatum(og.params.rng, col.typ, col.nullable)
 			row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
 		}
-		rows = append(rows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
+
+		rows = append(rows, row)
 	}
+
+	// Verify if the new row will violate unique constraints by checking the constraints and
+	// existing rows in the database.
+	uniqueConstraintViolation, err := violatesUniqueConstraints(tx, tableName, colNames, rows)
+	if err != nil {
+		return "", err
+	}
+	if uniqueConstraintViolation {
+		og.expectedExecErrors.add(pgcode.UniqueViolation)
+	}
+
+	formattedRows := []string{}
+	for _, row := range rows {
+		formattedRows = append(formattedRows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
+	}
+
 	return fmt.Sprintf(
 		`INSERT INTO %s (%s) VALUES %s`,
 		tableName,
 		strings.Join(colNames, ","),
-		strings.Join(rows, ","),
+		strings.Join(formattedRows, ","),
 	), nil
 }
 
@@ -1280,8 +1310,10 @@ func (og *operationGenerator) getTableColumns(tx *pgx.Tx, tableName string) ([]c
 		if err != nil {
 			return nil, err
 		}
-		typNames = append(typNames, typName)
-		ret = append(ret, c)
+		if c.name != "rowid" {
+			typNames = append(typNames, typName)
+			ret = append(ret, c)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
