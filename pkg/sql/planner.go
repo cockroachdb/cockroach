@@ -242,8 +242,9 @@ func NewInternalPlanner(
 	user security.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
+	sessionData sessiondatapb.SessionData,
 ) (interface{}, func()) {
-	return newInternalPlanner(opName, txn, user, memMetrics, execCfg)
+	return newInternalPlanner(opName, txn, user, memMetrics, execCfg, sessionData)
 }
 
 // newInternalPlanner creates a new planner instance for internal usage. This
@@ -260,6 +261,7 @@ func newInternalPlanner(
 	user security.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
+	sessionData sessiondatapb.SessionData,
 ) (*planner, func()) {
 	// We need a context that outlives all the uses of the planner (since the
 	// planner captures it in the EvalCtx, and so does the cleanup function that
@@ -271,14 +273,13 @@ func newInternalPlanner(
 	ctx := logtags.AddTag(context.Background(), opName, "")
 
 	sd := &sessiondata.SessionData{
-		SessionData: sessiondatapb.SessionData{
-			Database:  "system",
-			UserProto: user.EncodeProto(),
-		},
+		SessionData:   sessionData,
 		SearchPath:    sessiondata.DefaultSearchPathForUser(user),
 		SequenceState: sessiondata.NewSequenceState(),
 		Location:      time.UTC,
 	}
+	sd.SessionData.Database = "system"
+	sd.SessionData.UserProto = user.EncodeProto()
 	// The table collection used by the internal planner does not rely on the
 	// deprecatedDatabaseCache and there are no subscribers to the
 	// deprecatedDatabaseCache, so we can leave it uninitialized.
