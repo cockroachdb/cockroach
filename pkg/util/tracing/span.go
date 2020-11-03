@@ -79,6 +79,36 @@ type SpanStats interface {
 	Stats() map[string]string
 }
 
+type crdbSpanMu struct {
+	syncutil.Mutex
+	// duration is initialized to -1 and set on Finish().
+	duration time.Duration
+
+	// recording maintains state once StartRecording() is called.
+	recording struct {
+		recordingType RecordingType
+		recordedLogs  []opentracing.LogRecord
+		// children contains the list of child spans started after this Span
+		// started recording.
+		children []*crdbSpan
+		// remoteSpan contains the list of remote child spans manually imported.
+		remoteSpans []tracingpb.RecordedSpan
+	}
+
+	// tags are only set when recording. These are tags that have been added to
+	// this Span, and will be appended to the tags in logTags when someone
+	// needs to actually observe the total set of tags that is a part of this
+	// Span.
+	// TODO(radu): perhaps we want a recording to capture all the tags (even
+	// those that were set before recording started)?
+	tags opentracing.Tags
+
+	stats SpanStats
+
+	// The Span's associated baggage.
+	Baggage map[string]string
+}
+
 type crdbSpan struct {
 	// The traceID, probabilistically unique.
 	traceID uint64
@@ -102,35 +132,7 @@ type crdbSpan struct {
 	// Atomic flag used to avoid taking the mutex in the hot path.
 	recording int32
 
-	mu struct {
-		syncutil.Mutex
-		// duration is initialized to -1 and set on Finish().
-		duration time.Duration
-
-		// recording maintains state once StartRecording() is called.
-		recording struct {
-			recordingType RecordingType
-			recordedLogs  []opentracing.LogRecord
-			// children contains the list of child spans started after this Span
-			// started recording.
-			children []*crdbSpan
-			// remoteSpan contains the list of remote child spans manually imported.
-			remoteSpans []tracingpb.RecordedSpan
-		}
-
-		// tags are only set when recording. These are tags that have been added to
-		// this Span, and will be appended to the tags in logTags when someone
-		// needs to actually observe the total set of tags that is a part of this
-		// Span.
-		// TODO(radu): perhaps we want a recording to capture all the tags (even
-		// those that were set before recording started)?
-		tags opentracing.Tags
-
-		stats SpanStats
-
-		// The Span's associated baggage.
-		Baggage map[string]string
-	}
+	mu crdbSpanMu
 }
 
 func (s *crdbSpan) isRecording() bool {
@@ -181,8 +183,10 @@ type otSpan struct {
 type Span struct {
 	tracer *Tracer // never nil
 
-	// Internal trace Span. Can be zero.
-	crdb crdbSpan
+	// Internal trace Span; nil if not tracing to crdb.
+	// When not-nil, allocated together with the surrounding Span for
+	// performance.
+	crdb *crdbSpan
 	// x/net/trace.Trace instance; nil if not tracing to x/net/trace.
 	netTr trace.Trace
 	// Shadow tracer and Span; zero if not using a shadow tracer.
@@ -194,10 +198,7 @@ func (s *Span) isBlackHole() bool {
 }
 
 func (s *Span) isNoop() bool {
-	// NB: this is the same as `s` being zero with the exception
-	// of the `tracer` field. However, `Span` is not comparable,
-	// so this can't be expressed easily.
-	return s.isBlackHole() && s.crdb.traceID == 0
+	return s.crdb == nil && s.netTr == nil && s.ot == (otSpan{})
 }
 
 // IsRecording returns true if the Span is recording its events.
@@ -405,22 +406,31 @@ func (s *Span) Finish() {
 
 // Meta returns the information which needs to be propagated across
 // process boundaries in order to derive child spans from this Span.
-//
-// TODO(andrei, radu): Should this return nil for a WithForceRealSpan Span
-// that's not currently recording? That might save work and allocations when
-// creating child spans.
+// This may return nil, which is a valid input to `WithRemoteParent`,
+// if the Span has been optimized out.
 func (s *Span) Meta() *SpanMeta {
-	s.crdb.mu.Lock()
-	defer s.crdb.mu.Unlock()
-	n := len(s.crdb.mu.Baggage)
-	// In the common case, we have no baggage, so avoid making an empty map.
-	var baggageCopy map[string]string
-	if n > 0 {
-		baggageCopy = make(map[string]string, n)
+	var traceID uint64
+	var spanID uint64
+	var recordingType RecordingType
+	var baggage map[string]string
+
+	if s.crdb != nil {
+		traceID, spanID = s.crdb.traceID, s.crdb.spanID
+		s.crdb.mu.Lock()
+		defer s.crdb.mu.Unlock()
+		n := len(s.crdb.mu.Baggage)
+		// In the common case, we have no baggage, so avoid making an empty map.
+		if n > 0 {
+			baggage = make(map[string]string, n)
+		}
+		for k, v := range s.crdb.mu.Baggage {
+			baggage[k] = v
+		}
+		if s.crdb.isRecording() {
+			recordingType = s.crdb.mu.recording.recordingType
+		}
 	}
-	for k, v := range s.crdb.mu.Baggage {
-		baggageCopy[k] = v
-	}
+
 	var shadowTrTyp string
 	var shadowCtx opentracing.SpanContext
 	if s.ot.shadowSpan != nil {
@@ -428,18 +438,13 @@ func (s *Span) Meta() *SpanMeta {
 		shadowCtx = s.ot.shadowSpan.Context()
 	}
 
-	var recordingType RecordingType
-	if s.crdb.isRecording() {
-		recordingType = s.crdb.mu.recording.recordingType
-	}
-
 	return &SpanMeta{
-		traceID:          s.crdb.traceID,
-		spanID:           s.crdb.spanID,
+		traceID:          traceID,
+		spanID:           spanID,
 		shadowTracerType: shadowTrTyp,
 		shadowCtx:        shadowCtx,
 		recordingType:    recordingType,
-		Baggage:          baggageCopy,
+		Baggage:          baggage,
 	}
 }
 
@@ -624,11 +629,9 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 		}
 	}
 	if s.logTags != nil {
-		tags := s.logTags.Get()
-		for i := range tags {
-			tag := &tags[i]
-			addTag(tagName(tag.Key()), tag.ValueStr())
-		}
+		setLogTags(s.logTags.Get(), func(remappedKey string, tag *logtags.Tag) {
+			addTag(remappedKey, tag.ValueStr())
+		})
 	}
 	if len(s.mu.tags) > 0 {
 		for k, v := range s.mu.tags {
