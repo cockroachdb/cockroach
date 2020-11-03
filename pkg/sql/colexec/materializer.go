@@ -180,13 +180,16 @@ func NewMaterializer(
 		closers:       toClose,
 	}
 
-	if err := m.ProcessorBase.Init(
+	if err := m.ProcessorBase.InitWithEvalCtx(
 		m,
 		// input must have handled any post-processing itself, so we pass in
 		// an empty post-processing spec.
 		&execinfrapb.PostProcessSpec{},
 		typs,
 		flowCtx,
+		// Materializer doesn't modify the eval context, so it is safe to reuse
+		// the one from the flow context.
+		flowCtx.EvalCtx,
 		processorID,
 		output,
 		nil, /* memMonitor */

@@ -1007,7 +1007,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 ) (leaves []execinfra.OpNode, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
 		streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
-		factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
+		// The column factory will not change the eval context, so we can use
+		// the one we have in the flow context, without making a copy.
+		factory := coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
 		// queue is a queue of indices into processorSpecs, for topologically
 		// ordered processing.
 		queue := make([]int, 0, len(processorSpecs))

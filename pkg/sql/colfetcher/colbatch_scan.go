@@ -145,6 +145,7 @@ func NewColBatchScan(
 	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
+	evalCtx *tree.EvalContext,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (*ColBatchScan, error) {
@@ -175,7 +176,6 @@ func NewColBatchScan(
 	}
 
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := flowCtx.NewEvalCtx()
 	// Before we can safely use types from the table descriptor, we need to
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are

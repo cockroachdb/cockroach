@@ -631,7 +631,8 @@ func NewColOperator(
 	}()
 	spec := args.Spec
 	inputs := args.Inputs
-	factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
+	evalCtx := flowCtx.NewEvalCtx()
+	factory := coldataext.NewExtendedColumnFactory(evalCtx)
 	streamingMemAccount := args.StreamingMemAccount
 	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
@@ -697,7 +698,7 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
-			scanOp, err := colfetcher.NewColBatchScan(ctx, streamingAllocator, flowCtx, core.TableReader, post)
+			scanOp, err := colfetcher.NewColBatchScan(ctx, streamingAllocator, flowCtx, evalCtx, core.TableReader, post)
 			if err != nil {
 				return r, err
 			}
@@ -752,7 +753,6 @@ func NewColOperator(
 			}
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
-			evalCtx := flowCtx.NewEvalCtx()
 			var constructors []execinfrapb.AggregateConstructor
 			var constArguments []tree.Datums
 			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
@@ -933,7 +933,7 @@ func NewColOperator(
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
 				if err =
 					result.planAndMaybeWrapOnExprAsFilter(
-						ctx, flowCtx, args, core.HashJoiner.OnExpr, factory,
+						ctx, flowCtx, evalCtx, args, core.HashJoiner.OnExpr, factory,
 					); err != nil {
 					return r, err
 				}
@@ -993,7 +993,7 @@ func NewColOperator(
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapOnExprAsFilter(
-					ctx, flowCtx, args, *onExpr, factory,
+					ctx, flowCtx, evalCtx, args, *onExpr, factory,
 				); err != nil {
 					return r, err
 				}
@@ -1150,7 +1150,7 @@ func NewColOperator(
 		Op:          result.Op,
 		ColumnTypes: result.ColumnTypes,
 	}
-	err = ppr.planPostProcessSpec(ctx, flowCtx, args, post, factory)
+	err = ppr.planPostProcessSpec(ctx, flowCtx, evalCtx, args, post, factory)
 	if err != nil {
 		if log.V(2) {
 			log.Infof(
@@ -1233,6 +1233,7 @@ func NewColOperator(
 func (r opResult) planAndMaybeWrapOnExprAsFilter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	evalCtx *tree.EvalContext,
 	args *colexec.NewColOperatorArgs,
 	onExpr execinfrapb.Expression,
 	factory coldata.ColumnFactory,
@@ -1247,7 +1248,7 @@ func (r opResult) planAndMaybeWrapOnExprAsFilter(
 		ColumnTypes: r.ColumnTypes,
 	}
 	if err := ppr.planFilterExpr(
-		ctx, flowCtx, flowCtx.NewEvalCtx(), onExpr, args.StreamingMemAccount, factory, args.ExprHelper,
+		ctx, flowCtx, evalCtx, onExpr, args.StreamingMemAccount, factory, args.ExprHelper,
 	); err != nil {
 		// ON expression planning failed. Fall back to planning the filter
 		// using row execution.
@@ -1298,13 +1299,14 @@ func (r opResult) wrapPostProcessSpec(
 func (r *postProcessResult) planPostProcessSpec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	evalCtx *tree.EvalContext,
 	args *colexec.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
 	factory coldata.ColumnFactory,
 ) error {
 	if !post.Filter.Empty() {
 		if err := r.planFilterExpr(
-			ctx, flowCtx, flowCtx.NewEvalCtx(), post.Filter, args.StreamingMemAccount, factory, args.ExprHelper,
+			ctx, flowCtx, evalCtx, post.Filter, args.StreamingMemAccount, factory, args.ExprHelper,
 		); err != nil {
 			return err
 		}
@@ -1326,7 +1328,7 @@ func (r *postProcessResult) planPostProcessSpec(
 			}
 			var outputIdx int
 			r.Op, outputIdx, r.ColumnTypes, renderInternalMem, err = planProjectionOperators(
-				ctx, flowCtx.NewEvalCtx(), expr, r.ColumnTypes, r.Op, args.StreamingMemAccount, factory,
+				ctx, evalCtx, expr, r.ColumnTypes, r.Op, args.StreamingMemAccount, factory,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "unable to columnarize render expression %q", expr)
