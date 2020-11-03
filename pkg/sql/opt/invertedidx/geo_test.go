@@ -504,8 +504,8 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 		// We're not testing that the correct SpanExpression is returned here;
 		// that is tested elsewhere. This is just testing that we are constraining
 		// the index when we expect to.
-		_, pfState, ok := invertedidx.TryConstrainGeoIndex(
-			evalCtx.Context, &f, filters, tab, md.Table(tab).Index(tc.indexOrd),
+		_, _, _, pfState, ok := invertedidx.TryConstrainGeoIndex(
+			evalCtx, &f, filters, tab, md.Table(tab).Index(tc.indexOrd),
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)

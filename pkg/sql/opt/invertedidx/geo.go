@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -120,16 +121,25 @@ func TryJoinGeoIndex(
 // derived, it is returned with ok=true. If no constraint can be derived,
 // then TryConstrainGeoIndex returns ok=false.
 func TryConstrainGeoIndex(
-	ctx context.Context,
+	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 	filters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
 ) (
 	invertedConstraint *invertedexpr.SpanExpression,
+	constraint *constraint.Constraint,
+	remainingFilters memo.FiltersExpr,
 	preFiltererState *invertedexpr.PreFiltererStateForInvertedFilterer,
 	ok bool,
 ) {
+	// Attempt to constrain the prefix columns, if there are any. If they cannot
+	// be constrained to single values, the index cannot be used.
+	constraint, filters, ok = constrainPrefixColumns(evalCtx, factory, filters, tabID, index)
+	if !ok {
+		return nil, nil, nil, nil, false
+	}
+
 	config := index.GeoConfig()
 	var getSpanExpr getSpanExprForGeoIndexFn
 	var typ *types.T
@@ -140,14 +150,14 @@ func TryConstrainGeoIndex(
 		getSpanExpr = getSpanExprForGeometryIndex
 		typ = types.Geometry
 	} else {
-		return nil, nil, false
+		return nil, nil, nil, nil, false
 	}
 
 	var invertedExpr invertedexpr.InvertedExpression
 	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 	for i := range filters {
 		invertedExprLocal, pfStateLocal := constrainGeoIndex(
-			ctx, factory, filters[i].Condition, tabID, index, getSpanExpr,
+			evalCtx.Context, factory, filters[i].Condition, tabID, index, getSpanExpr,
 		)
 		if invertedExpr == nil {
 			invertedExpr = invertedExprLocal
@@ -163,17 +173,17 @@ func TryConstrainGeoIndex(
 	}
 
 	if invertedExpr == nil {
-		return nil, nil, false
+		return nil, nil, nil, nil, false
 	}
 
 	spanExpr, ok := invertedExpr.(*invertedexpr.SpanExpression)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, nil, nil, false
 	}
 	if pfState != nil {
 		pfState.Typ = typ
 	}
-	return spanExpr, pfState, true
+	return spanExpr, constraint, filters, pfState, true
 }
 
 // getSpanExprForGeographyIndex gets a SpanExpression that constrains the given
@@ -601,7 +611,7 @@ func extractInfoFromExpr(
 	if !ok {
 		return 0, nil, nil, nil, false
 	}
-	if arg2.Col != tabID.ColumnID(index.Column(0).InvertedSourceColumnOrdinal()) {
+	if arg2.Col != tabID.ColumnID(index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()) {
 		// The column in the function does not match the index column.
 		return 0, nil, nil, nil, false
 	}

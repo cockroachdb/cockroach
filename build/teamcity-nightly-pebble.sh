@@ -34,7 +34,7 @@ make bin/roachprod bin/roachtest
 
 rm -fr vendor/github.com/cockroachdb/pebble
 git clone https://github.com/cockroachdb/pebble vendor/github.com/cockroachdb/pebble
-GOOS=linux go build -o pebble.linux github.com/cockroachdb/pebble/cmd/pebble
+GOOS=linux go build -v -mod=vendor -o pebble.linux github.com/cockroachdb/pebble/cmd/pebble
 export PEBBLE_BIN=pebble.linux
 
 # NB: We specify "true" for the --cockroach and --workload binaries to
