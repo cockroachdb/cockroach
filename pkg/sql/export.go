@@ -142,7 +142,7 @@ func (ef *execFactory) ConstructExport(
 		}
 	}
 
-	exportID := ef.planner.stmt.queryID.String()
+	exportID := ef.planner.stmt.QueryID.String()
 	namePattern := fmt.Sprintf("export%s-%s", exportID, exportFilePatternDefault)
 
 	return &exportNode{

@@ -671,7 +671,7 @@ func (p *PlanningCtx) flowSpecsToDiagram(
 	}
 	log.VEvent(ctx, 1, "creating plan diagram")
 	var stmtStr string
-	if p.planner != nil && p.planner.stmt != nil {
+	if p.planner != nil && p.planner.stmt.AST != nil {
 		stmtStr = p.planner.stmt.String()
 	}
 	diagram, err := execinfrapb.GeneratePlanDiagram(
