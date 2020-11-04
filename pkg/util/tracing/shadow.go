@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
@@ -76,55 +75,33 @@ func (st *shadowTracer) Close() {
 	st.manager.Close(st)
 }
 
-// otLogTagsOption is an opentracing.StartSpanOption that inserts the log
-// tags into newly created spans.
-type otLogTagsOption logtags.Buffer
-
-func (o *otLogTagsOption) Apply(opts *opentracing.StartSpanOptions) {
-	tags := (*logtags.Buffer)(o).Get()
-	if len(tags) == 0 {
-		return
-	}
-	if opts.Tags == nil {
-		opts.Tags = map[string]interface{}{}
-	}
-	for _, tag := range tags {
-		opts.Tags[tagName(tag.Key())] = tag.Value()
-	}
-}
-
-// linkShadowSpan creates and links a Shadow Span to the passed-in Span (i.e.
-// fills in s.shadowTr and s.shadowSpan). This should only be called when
-// shadow tracing is enabled.
+// makeShadowSpan creates an otSpan for construction of a Span.
+// This must be called with a non-nil shadowTr, which must have
+// been confirmed to be compatible with parentShadowCtx.
 //
-// The Shadow Span will have a parent if parentShadowCtx is not nil.
-// parentType is ignored if parentShadowCtx is nil.
-//
-// The tags (including logTags) from s are copied to the Shadow Span.
-func linkShadowSpan(
-	s *Span,
+// The span contained in `otSpan` will have a parent if parentShadowCtx
+// is not nil. parentType is ignored if parentShadowCtx is nil.
+func makeShadowSpan(
 	shadowTr *shadowTracer,
 	parentShadowCtx opentracing.SpanContext,
 	parentType opentracing.SpanReferenceType,
-) {
+	opName string,
+	startTime time.Time,
+) otSpan {
 	// Create the shadow lightstep Span.
-	var opts []opentracing.StartSpanOption
+	opts := make([]opentracing.StartSpanOption, 0, 2)
 	// Replicate the options, using the lightstep context in the reference.
-	opts = append(opts, opentracing.StartTime(s.crdb.startTime))
-	if s.crdb.logTags != nil {
-		opts = append(opts, (*otLogTagsOption)(s.crdb.logTags))
-	}
-	if s.crdb.mu.tags != nil {
-		opts = append(opts, s.crdb.mu.tags)
-	}
+	opts = append(opts, opentracing.StartTime(startTime))
 	if parentShadowCtx != nil {
 		opts = append(opts, opentracing.SpanReference{
 			Type:              parentType,
 			ReferencedContext: parentShadowCtx,
 		})
 	}
-	s.ot.shadowTr = shadowTr
-	s.ot.shadowSpan = shadowTr.StartSpan(s.crdb.operation, opts...)
+	return otSpan{
+		shadowTr:   shadowTr,
+		shadowSpan: shadowTr.StartSpan(opName, opts...),
+	}
 }
 
 func createLightStepTracer(token string) (shadowTracerManager, opentracing.Tracer) {

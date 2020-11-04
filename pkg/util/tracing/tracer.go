@@ -215,48 +215,102 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 		return t.noopSpan
 	}
 
-	s := &Span{
-		tracer: t,
-		crdb: crdbSpan{
-			operation:    opName,
-			startTime:    time.Now(),
-			parentSpanID: opts.parentSpanID(),
-			logTags:      opts.LogTags,
-		},
+	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.isNoop() {
+		// If no log tags are specified in the options, use the parent
+		// span's, if any. This behavior is the reason logTags are
+		// fundamentally different from tags, which are strictly per span,
+		// for better or worse.
+		opts.LogTags = opts.Parent.crdb.logTags
 	}
-	s.crdb.mu.duration = -1 // unfinished
 
-	traceID := opts.parentTraceID()
-	if traceID == 0 {
-		traceID = uint64(rand.Int63())
-	}
-	s.crdb.traceID = traceID
-	s.crdb.spanID = uint64(rand.Int63())
+	startTime := time.Now()
 
-	shadowTr := t.getShadowTracer()
+	// First, create any external spans that we may need (opentracing, net/trace).
+	// We do this early so that they are available when we construct the main Span,
+	// which makes it easier to avoid one-offs when populating the tags and baggage
+	// items for the top-level Span.
+	var ot otSpan
 	{
+		shadowTr := t.getShadowTracer()
+
 		// Make sure not to derive spans created using an old
 		// shadow tracer via a new one.
 		typ1, ok1 := opts.shadowTrTyp() // old
 		typ2, ok2 := shadowTr.Type()    // new
-		if ok1 && ok2 && typ1 != typ2 {
-			// If both are set and don't agree, ignore shadow tracer
-			// for the new span. It's fine if the old one isn't set
-			// but the new one is (we won't use it, though we could)
-			// or if the old one is and new one isn't (in which case
-			// the supposedly latest config has no shadow tracing
-			// enabled).
-			shadowTr = nil
+		// If both are set and don't agree, ignore shadow tracer
+		// for the new span to avoid compat issues between the
+		// two underlying tracers.
+		if ok2 && (!ok1 || typ1 == typ2) {
+			var shadowCtx opentracing.SpanContext
+			if opts.Parent != nil && opts.Parent.ot.shadowSpan != nil {
+				shadowCtx = opts.Parent.ot.shadowSpan.Context()
+			}
+			ot = makeShadowSpan(shadowTr, shadowCtx, opts.RefType, opName, startTime)
+			// If LogTags are given, pass them as tags to the shadow span.
+			// Regular tags are populated later, via the top-level Span.
+			if opts.LogTags != nil {
+				setLogTags(opts.LogTags.Get(), func(remappedKey string, tag *logtags.Tag) {
+					_ = ot.shadowSpan.SetTag(remappedKey, tag.Value())
+				})
+			}
 		}
 	}
 
-	if shadowTr != nil {
-		var shadowCtx opentracing.SpanContext
-		if opts.Parent != nil && opts.Parent.ot.shadowSpan != nil {
-			shadowCtx = opts.Parent.ot.shadowSpan.Context()
+	var netTr trace.Trace
+	if t.useNetTrace() {
+		netTr = trace.New("tracing", opName)
+		netTr.SetMaxEvents(maxLogsPerSpan)
+
+		// If LogTags are given, pass them as tags to the shadow span.
+		// Regular tags are populated later, via the top-level Span.
+		if opts.LogTags != nil {
+			setLogTags(opts.LogTags.Get(), func(remappedKey string, tag *logtags.Tag) {
+				netTr.LazyPrintf("%s:%v", remappedKey, tag)
+			})
 		}
-		linkShadowSpan(s, shadowTr, shadowCtx, opts.RefType)
 	}
+
+	// Now that `ot` and `netTr` are properly set up, make the Span.
+
+	traceID := opts.parentTraceID()
+	if traceID == 0 {
+		// NB: it is tempting to use the traceID and spanID from the
+		// possibly populated otSpan in this case, but the opentracing
+		// interface doesn't give us a good way to extract these.
+		traceID = uint64(rand.Int63())
+	}
+	spanID := uint64(rand.Int63())
+
+	// Now allocate the main *Span and contained crdbSpan.
+	// Allocate these together to save on individual allocs.
+	//
+	// NB: at the time of writing, it's not possible to start a Span
+	// that *only* contains `ot` or `netTr`. This is just an artifact
+	// of the history of this code and may change in the future.
+	helper := struct {
+		Span     Span
+		crdbSpan crdbSpan
+	}{}
+
+	helper.crdbSpan = crdbSpan{
+		traceID:      traceID,
+		spanID:       spanID,
+		operation:    opName,
+		startTime:    startTime,
+		parentSpanID: opts.parentSpanID(),
+		logTags:      opts.LogTags,
+		mu: crdbSpanMu{
+			duration: -1, // unfinished
+		},
+	}
+	helper.Span = Span{
+		tracer: t,
+		crdb:   &helper.crdbSpan,
+		ot:     ot,
+		netTr:  netTr,
+	}
+
+	s := &helper.Span
 
 	// Start recording if necessary. We inherit the recording type of the local parent, if any,
 	// over the remote parent, if any. If neither are specified, we're not recording.
@@ -265,34 +319,24 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 	if recordingType != NoRecording {
 		var p *crdbSpan
 		if opts.Parent != nil {
-			p = &opts.Parent.crdb
+			p = opts.Parent.crdb
 		}
 		s.crdb.enableRecording(p, recordingType, opts.SeparateRecording)
 	}
 
-	if t.useNetTrace() {
-		s.netTr = trace.New("tracing", opName)
-		s.netTr.SetMaxEvents(maxLogsPerSpan)
-		if opts.LogTags != nil {
-			tags := opts.LogTags.Get()
-			for i := range tags {
-				tag := &tags[i]
-				s.netTr.LazyPrintf("%s:%v", tagName(tag.Key()), tag.Value())
-			}
-		}
-	}
-
-	// Set initial tags.
+	// Set initial tags. These will propagate to the crdbSpan, ot, and netTr
+	// as appropriate.
 	//
 	// NB: this could be optimized.
 	for k, v := range opts.Tags {
 		s.SetTag(k, v)
 	}
 
-	// Copy baggage from parent.
+	// Copy baggage from parent. This similarly fans out over the various
+	// spans contained in Span.
 	//
 	// NB: this could be optimized.
-	if opts.Parent != nil {
+	if opts.Parent != nil && !opts.Parent.isNoop() {
 		opts.Parent.crdb.mu.Lock()
 		m := opts.Parent.crdb.mu.Baggage
 		for k, v := range m {
