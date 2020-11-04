@@ -66,18 +66,21 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			defer cleanup()
 			p := internalPlanner.(*planner)
 
+			ih := &p.instrumentation
+			ih.codec = execCfg.Codec
+			ih.collectBundle = true
+			ih.savePlanForStats = true
+
 			p.stmt = makeStatement(stmt, ClusterWideID{})
-			p.curPlan.savePlanString = true
-			p.curPlan.savePlanForStats = true
 			if err := p.makeOptimizerPlan(ctx); err != nil {
 				t.Fatal(err)
 			}
 			p.curPlan.flags.Set(planFlagExecDone)
 			p.curPlan.close(ctx)
 			if d.Cmd == "plan-string" {
-				return p.curPlan.planString
+				return ih.planString()
 			}
-			treeYaml, err := yaml.Marshal(p.curPlan.planForStats)
+			treeYaml, err := yaml.Marshal(ih.PlanForStats(ctx))
 			if err != nil {
 				t.Fatal(err)
 			}
