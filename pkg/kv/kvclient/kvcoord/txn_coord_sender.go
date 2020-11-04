@@ -1143,3 +1143,41 @@ func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.Stepp
 	}
 	return curMode
 }
+
+// NewChildTransaction is part of the TxnSender interface.
+func (tc *TxnCoordSender) NewChildTransaction() (id uuid.UUID, child kv.TxnSender, _ error) {
+	if status := tc.TxnStatus(); status != roachpb.PENDING {
+		return uuid.UUID{}, nil, errors.Errorf(
+			"illegal call to NewChildTransaction on non-%s (%s) transaction",
+			roachpb.PENDING, status)
+	}
+	if tc.typ != kv.RootTxn {
+		return uuid.UUID{}, nil, errors.Errorf(
+			"illegal call to NewChildTransaction on non-root transaction")
+	}
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.txn.CommitTimestampFixed {
+		return uuid.UUID{}, nil, errors.Errorf(
+			"illegal call to NewChildTransaction on fixed commit timestamp transaction")
+	}
+
+	// TODO(ajwerner): Consider stripping information from the parent proto like
+	// LockSpans or perhaps introducing a new proto altogether for parents. The
+	// latter is likely to be onerous.
+
+	parent := tc.mu.txn.Clone()
+	childTxn := roachpb.MakeTransaction(
+		parent.Name+" child",
+		nil,
+		tc.mu.userPriority,
+		parent.WriteTimestamp,
+		tc.clock.MaxOffset().Nanoseconds(),
+	)
+	childTxn.Parent = parent
+	childTxn.Priority = parent.Priority
+
+	child = newRootTxnCoordSender(tc.TxnCoordSenderFactory, &childTxn, tc.mu.userPriority)
+	return childTxn.ID, child, nil
+}
