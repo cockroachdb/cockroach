@@ -2198,6 +2198,15 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
+message UnsafeHealRangeRequest {
+  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID"];
+}
+
+message UnsafeHealRangeResponse {}
+
+
 // GossipSubscriptionRequest initiates a game of telephone. It establishes an
 // indefinite stream that proxies gossip information overheard by the recipient
 // node back to the caller. Gossip information is filtered down to just those
