@@ -498,6 +498,7 @@ func (a *avroInputReader) readFile(
 		source:   inputIdx,
 		skip:     resumePos,
 		rejected: rejected,
+		rowLimit: a.opts.RowLimit,
 	}
 	return runParallelImport(ctx, a.importContext, fileCtx, producer, consumer)
 }
