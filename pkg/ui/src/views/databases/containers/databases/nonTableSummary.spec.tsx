@@ -18,7 +18,7 @@ import "src/enzymeInit";
 import { NonTableSummary } from "./nonTableSummary";
 import { refreshNonTableStats } from "src/redux/apiReducers";
 import { cockroach } from "src/js/protos";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import NonTableStatsResponse = cockroach.server.serverpb.NonTableStatsResponse;
 
 describe("NonTableSummary", () => {
@@ -65,7 +65,7 @@ describe("NonTableSummary", () => {
 
       const loadingWrapper = wrapper.find(Loading);
       assert.isTrue(loadingWrapper.exists());
-      assert.equal(loadingWrapper.text(), error.message);
+      assert.isTrue(loadingWrapper.text().includes(error.message));
     });
   });
 });

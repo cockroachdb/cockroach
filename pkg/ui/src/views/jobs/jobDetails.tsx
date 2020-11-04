@@ -20,7 +20,7 @@ import { CachedDataReducerState, jobsKey, refreshJobs } from "src/redux/apiReduc
 import { AdminUIState } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
 import { showSetting, statusSetting, typeSetting } from ".";
-import Loading from "../shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import SqlBox from "../shared/components/sql/box";
 import { SummaryCard } from "../shared/components/summaryCard";
 

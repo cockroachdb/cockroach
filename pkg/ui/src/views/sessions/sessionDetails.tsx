@@ -12,7 +12,7 @@ import React from "react";
 import {getMatchParamByName} from "src/util/query";
 import {sessionAttr} from "src/util/constants";
 import {Helmet} from "react-helmet";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import _ from "lodash";
 import {Link, RouteComponentProps, withRouter} from "react-router-dom";
 import {createSelector} from "reselect";

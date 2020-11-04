@@ -1806,16 +1806,19 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/admin-ui-components@^0.1.21":
-  version "0.1.21"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.21.tgz#14f755dcfb818406535fde958a0f256f8cc3d2c3"
-  integrity sha512-A4tYNadiabPHGf2zAFl66UvNm175+/8FOWkms7VQ2mL23KDlp9xIgUDt3gLiwato2X2ilTeYA72JMr9e/nnRvg==
+"@cockroachlabs/admin-ui-components@^0.1.24":
+  version "0.1.24"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.24.tgz#bafee015ce2ed02fe5f142b16ab738d5e55fe14c"
+  integrity sha512-7M5e/BPQIsGKzCbN8i7So/YRLTSVH3CEW8rdubEJr1XAASeQ8UJRnpNru2bzcF7USRZeFTF8G0XlPjGxM73JWQ==
   dependencies:
     "@cockroachlabs/crdb-protobuf-client" "^0.0.3"
     "@cockroachlabs/icons" "^0.2.2"
-    "@cockroachlabs/ui-components" "^0.2.8"
+    "@cockroachlabs/ui-components" "^0.2.11"
     "@popperjs/core" "^2.4.0"
     babel-polyfill "^6.26.0"
+    d3-array "^2.8.0"
+    d3-format "^2.0.0"
+    d3-scale "^3.2.3"
     highlight.js "^10.2.0"
     long "^4.0.0"
     react-helmet "^5.2.0"
@@ -1838,10 +1841,10 @@
   resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.3.0.tgz#160573074396f266e92fcbe5e520c5ba1d8750f9"
   integrity sha512-GJxhlXy8Z3/PYFb9C3iM1dvU9wajGoaA/+VCj0an2ipfbkI2fhToq+h0b33vu7JuZ3dS4QMRjfVE4uhlyIUH2Q==
 
-"@cockroachlabs/ui-components@^0.2.8":
-  version "0.2.10"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.10.tgz#3c1492ae4397204fba8dcafc6fe09e2a0e1aaa57"
-  integrity sha512-m3csfYolWh6Rn0xuDRf0wqr1vErLgK1RVYywzM6k7Tld5O2XI993NyhCi5GNCBjOfbov7Ikq+UE6uc3S3Di9dQ==
+"@cockroachlabs/ui-components@^0.2.11":
+  version "0.2.12"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.12.tgz#617f97351606026a0a8e5f17730f313b6cc6000c"
+  integrity sha512-RHRvKAsaUDJpCefA3VqmQSbu1jc1/TM2cEKkhN9G4gg2KgePcaqHupUc4wTD+rw6OqZHwbOHQe9ESXBMhiMVLw==
   dependencies:
     "@cockroachlabs/icons" "^0.3.0"
     "@popperjs/core" "^2.4.3"
@@ -5042,6 +5045,21 @@ d3-array@1:
   version "1.2.4"
   resolved "https://registry.yarnpkg.com/d3-array/-/d3-array-1.2.4.tgz#635ce4d5eea759f6f605863dbcfc30edc737f71f"
 
+d3-array@^2.3.0, d3-array@^2.8.0:
+  version "2.8.0"
+  resolved "https://registry.yarnpkg.com/d3-array/-/d3-array-2.8.0.tgz#f76e10ad47f1f4f75f33db5fc322eb9ffde5ef23"
+  integrity sha512-6V272gsOeg7+9pTW1jSYOR1QE37g95I3my1hBmY+vOUNHRrk9yt4OTz/gK7PMkVAVDrYYq4mq3grTiZ8iJdNIw==
+
+"d3-color@1 - 2":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/d3-color/-/d3-color-2.0.0.tgz#8d625cab42ed9b8f601a1760a389f7ea9189d62e"
+  integrity sha512-SPXi0TSKPD4g9tw0NMZFnR95XVgUZiBH+uUTqQuDu1OsE2zomHU7ho0FISciaPvosimixwHFl3WHLGabv6dDgQ==
+
+"d3-format@1 - 2", d3-format@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/d3-format/-/d3-format-2.0.0.tgz#a10bcc0f986c372b729ba447382413aabf5b0767"
+  integrity sha512-Ab3S6XuE/Q+flY96HXT0jOXcM4EAClYFnRGY5zsjRGNy6qCYrQsMffs7cV5Q9xejb35zxW5hf/guKw34kvIKsA==
+
 d3-geo-projection@^2.5.0:
   version "2.5.0"
   resolved "https://registry.yarnpkg.com/d3-geo-projection/-/d3-geo-projection-2.5.0.tgz#15b3cd97cfbe5f1a309e0c63bd15fff67bb082f4"
@@ -5055,6 +5073,36 @@ d3-geo@^1.10.0:
   resolved "https://registry.yarnpkg.com/d3-geo/-/d3-geo-1.11.2.tgz#951129d17aef88332c856613368afa40f345bafd"
   dependencies:
     d3-array "1"
+
+"d3-interpolate@1.2.0 - 2":
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/d3-interpolate/-/d3-interpolate-2.0.1.tgz#98be499cfb8a3b94d4ff616900501a64abc91163"
+  integrity sha512-c5UhwwTs/yybcmTpAVqwSFl6vrQ8JZJoT5F7xNFK9pymv5C0Ymcc9/LIJHtYIggg/yS9YHw8i8O8tgb9pupjeQ==
+  dependencies:
+    d3-color "1 - 2"
+
+d3-scale@^3.2.3:
+  version "3.2.3"
+  resolved "https://registry.yarnpkg.com/d3-scale/-/d3-scale-3.2.3.tgz#be380f57f1f61d4ff2e6cbb65a40593a51649cfd"
+  integrity sha512-8E37oWEmEzj57bHcnjPVOBS3n4jqakOeuv1EDdQSiSrYnMCBdMd3nc4HtKk7uia8DUHcY/CGuJ42xxgtEYrX0g==
+  dependencies:
+    d3-array "^2.3.0"
+    d3-format "1 - 2"
+    d3-interpolate "1.2.0 - 2"
+    d3-time "1 - 2"
+    d3-time-format "2 - 3"
+
+"d3-time-format@2 - 3":
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/d3-time-format/-/d3-time-format-3.0.0.tgz#df8056c83659e01f20ac5da5fdeae7c08d5f1bb6"
+  integrity sha512-UXJh6EKsHBTjopVqZBhFysQcoXSv/5yLONZvkQ5Kk3qbwiUYkdX17Xa1PT6U1ZWXGGfB1ey5L8dKMlFq2DO0Ag==
+  dependencies:
+    d3-time "1 - 2"
+
+"d3-time@1 - 2":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/d3-time/-/d3-time-2.0.0.tgz#ad7c127d17c67bd57a4c61f3eaecb81108b1e0ab"
+  integrity sha512-2mvhstTFcMvwStWd9Tj3e6CEqtOivtD8AUiHT8ido/xmzrI9ijrUUihZ6nHuf/vsScRBonagOdj0Vv+SEL5G3Q==
 
 d3@<4.0.0, d3@^3.5.6:
   version "3.5.17"
