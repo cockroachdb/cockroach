@@ -844,7 +844,7 @@ type ExecutorTestingKnobs struct {
 
 	// WithStatementTrace is called after the statement is executed in
 	// execStmtInOpenState.
-	WithStatementTrace func(span *tracing.Span, stmt string)
+	WithStatementTrace func(trace tracing.Recording, stmt string)
 
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.

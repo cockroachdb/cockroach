@@ -443,7 +443,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		p.extendedEvalCtx.Context = ctx
 
 		defer func() {
-			ex.server.cfg.TestingKnobs.WithStatementTrace(sp, sql)
+			ex.server.cfg.TestingKnobs.WithStatementTrace(sp.GetRecording(), sql)
 		}()
 	}
 
