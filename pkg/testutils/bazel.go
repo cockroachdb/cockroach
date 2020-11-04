@@ -14,7 +14,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/errors"
 )
@@ -47,8 +46,8 @@ const testTmpDirEnv = "TEST_TMPDIR"
 // Name of the environment variable containing the bazel target path (//pkg/cmd/foo:bar).
 const testTargetEnv = "TEST_TARGET"
 
-// RunningUnderBazel returns true if the test is executed by bazel.
-func RunningUnderBazel() bool {
+// runningUnderBazel returns true if the test is executed by bazel.
+func runningUnderBazel() bool {
 	return os.Getenv(testSrcDirEnv) != ""
 }
 
@@ -74,15 +73,6 @@ func TestSrcDir() string {
 		return srcDir
 	}
 	return ""
-}
-
-// TestTempDir returns a temporary directory and a cleanup function for a test.
-func TestTempDir(t testing.TB) (string, func()) {
-	if RunningUnderBazel() {
-		// Bazel sets up private temp directories for each test.
-		return requireEnv(testTmpDirEnv), func() {}
-	}
-	return TempDir(t)
 }
 
 // bazeRelativeTargetPath returns relative path to the package
@@ -112,7 +102,7 @@ func bazelRelativeTargetPath() string {
 // containing test data files, given the relative (to the test) path components.
 //
 func TestDataPath(relative ...string) string {
-	if RunningUnderBazel() {
+	if runningUnderBazel() {
 		return path.Join(TestSrcDir(), requireEnv(testWorkspaceEnv), bazelRelativeTargetPath(),
 			path.Join(relative...))
 	}

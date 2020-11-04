@@ -47,7 +47,7 @@ func BenchmarkImportWorkload(b *testing.B) {
 	skip.WithIssue(b, 41932, "broken due to adding keys out-of-order to an sstable")
 	skip.UnderShort(b, "skipping long benchmark")
 
-	dir, cleanup := testutils.TestTempDir(b)
+	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
 
 	g := tpcc.FromWarehouses(1)
