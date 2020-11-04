@@ -5582,6 +5582,7 @@ SELECT ST_AsText(ST_UnaryUnion(ST_GeomFromText('MULTIPOLYGON(((0 0,4 0,4 4,0 4,0
 ----
 MULTIPOLYGON (((-1 -1, -1 -2, -2 -2, -2 -1, -1 -1)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 2 1, 2 2, 1 2, 1 1)))
 
+
 query T
 SELECT
    st_astext(st_transscale(geom,10,4,8,9)) as a
@@ -5599,3 +5600,17 @@ POINT EMPTY
 POLYGON ((72 36, 80 36, 80 45, 72 45, 72 36))
 POLYGON ((79.200000000000003 36, 88 36, 88 45, 79.200000000000003 45, 79.200000000000003 36))
 POLYGON ((80 36, 88 36, 88 45, 80 45, 80 36))
+
+
+subtest st_node
+
+query TT
+SELECT
+  ST_AsText(ST_Node(ST_GeomFromText('LINESTRING(1 1, 4 4, 1 4, 4 1)'))),
+  ST_AsText(ST_Node(ST_GeomFromText('MULTILINESTRING((0 0, 10 10, 0 10, 10 0), (1 1, 4 4), (1 3, 4 2), (0 0, 10 10, 0 10, 10 0))')));
+----
+MULTILINESTRING ((1 1, 2.5 2.5), (2.5 2.5, 4 4, 1 4, 2.5 2.5), (2.5 2.5, 4 1))
+MULTILINESTRING ((0 0, 1 1), (1 1, 2.5 2.5), (1 3, 2.5 2.5), (2.5 2.5, 4 4), (4 4, 5 5), (2.5 2.5, 4 2), (5 5, 10 10, 0 10, 5 5), (5 5, 10 0))
+
+statement error geometry type is unsupported. Please pass a LineString or a MultiLineString
+SELECT ST_AsText(ST_Node(ST_GeomFromText('POLYGON((1 1, 1 3, 3 3, 3 1, 1 1))')));
