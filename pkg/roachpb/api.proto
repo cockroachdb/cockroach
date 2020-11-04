@@ -2090,6 +2090,36 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
+// UnsafeHealRangeRequest sends a snapshot to help recover unavailable ranges.
+// This is a lower level primitive that is not called by the user directly and
+// is specific to a range (nothing distributed) as other logic should
+// be at a higher level that has more insight into state of the cluster.
+//
+// The caller should update meta2 and then call this RPC to update the range
+// snapshot. If this RPC only took a range ID, we would have to look up the
+// RangeDescriptor. As a result, RangeDescriptor should be passed in by the
+// caller. Higher level abstractions can use meta2 or a survivor to identify the
+// RangeDescriptor. Since the RangeDescriptor is precomputed and passed in,
+// returning the RangeDescriptor in the response is unnecessary.
+//
+// Two cases are covered by this RPC: the case where all replicas are lost and
+// the case where one or more relicas remain (resuscitation). For these two
+// cases, node_id and store_id are either the designated place we are recreating
+// the replica or the designated survivor that we are recovering from,
+// respectively. We cover both use cases in this RPC as most of the logic for
+// sending a snapshot are the same.
+//
+// TODO (thesamhuang and tbg): explain how this can be safely used and how the
+// orchestrator around this will work. In particular, restarting with a missing
+// node vs a missing store.
+message UnsafeHealRangeRequest {
+  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID"];
+}
+
+message UnsafeHealRangeResponse {}
+
 // GossipSubscriptionRequest initiates a game of telephone. It establishes an
 // indefinite stream that proxies gossip information overheard by the recipient
 // node back to the caller. Gossip information is filtered down to just those
@@ -2136,6 +2166,7 @@ service Internal {
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+  rpc UnsafeHealRange    (UnsafeHealRangeRequest)    returns (UnsafeHealRangeResponse)        {}
 
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
