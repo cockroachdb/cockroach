@@ -2198,6 +2198,15 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
+message UnsafeHealRangeRequest {
+  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID"];
+}
+
+message UnsafeHealRangeResponse {}
+
+
 // GossipSubscriptionRequest initiates a game of telephone. It establishes an
 // indefinite stream that proxies gossip information overheard by the recipient
 // node back to the caller. Gossip information is filtered down to just those
@@ -2244,6 +2253,7 @@ service Internal {
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+  rpc UnsafeHealRange (UnsafeHealRangeRequest) returns (UnsafeHealRangeResponse) {}
 
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.

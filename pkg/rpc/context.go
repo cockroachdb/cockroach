@@ -476,6 +476,12 @@ func (a internalClientAdapter) Join(
 	return a.InternalServer.Join(ctx, req)
 }
 
+func (a internalClientAdapter) UnsafeHealRange(
+	ctx context.Context, req *roachpb.UnsafeHealRangeRequest, _ ...grpc.CallOption,
+) (*roachpb.UnsafeHealRangeResponse, error) {
+	return a.InternalServer.UnsafeHealRange(ctx, req)
+}
+
 type respStreamClientAdapter struct {
 	ctx   context.Context
 	respC chan interface{}
