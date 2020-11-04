@@ -14,7 +14,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/errors"
 )
@@ -74,15 +73,6 @@ func TestSrcDir() string {
 		return srcDir
 	}
 	return ""
-}
-
-// TestTempDir returns a temporary directory and a cleanup function for a test.
-func TestTempDir(t testing.TB) (string, func()) {
-	if RunningUnderBazel() {
-		// Bazel sets up private temp directories for each test.
-		return requireEnv(testTmpDirEnv), func() {}
-	}
-	return TempDir(t)
 }
 
 // bazeRelativeTargetPath returns relative path to the package
