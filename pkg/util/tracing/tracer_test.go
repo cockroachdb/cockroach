@@ -144,11 +144,12 @@ func TestStartChildSpan(t *testing.T) {
 
 	sp1 = tr.StartSpan("parent", WithForceRealSpan())
 	sp1.StartRecording(SingleNodeRecording)
-	sp2 = tr.StartSpan("child", WithParent(sp1), WithSeparateRecording())
+	sp2 = tr.StartSpan("child", WithParent(sp1))
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span parent:
+		Span child:
 	`); err != nil {
 		t.Fatal(err)
 	}

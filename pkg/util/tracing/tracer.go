@@ -267,7 +267,7 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 		if opts.Parent != nil {
 			p = &opts.Parent.crdb
 		}
-		s.crdb.enableRecording(p, recordingType, opts.SeparateRecording)
+		s.crdb.enableRecording(p, recordingType)
 	}
 
 	if t.useNetTrace() {
@@ -501,12 +501,6 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 // closed via FinishSpan.
 func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	return childSpan(ctx, opName, spanOptions{})
-}
-
-// ChildSpanSeparateRecording is like ChildSpan but the new Span has separate
-// recording (see StartChildSpan).
-func ChildSpanSeparateRecording(ctx context.Context, opName string) (context.Context, *Span) {
-	return childSpan(ctx, opName, spanOptions{SeparateRecording: true})
 }
 
 func childSpan(ctx context.Context, opName string, opts spanOptions) (context.Context, *Span) {

@@ -912,9 +912,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 				metadataSourcesQueue,
 				execinfrapb.CallbackMetadataSource{
 					DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-						// Start a separate recording so that GetRecording will return
-						// the recordings for only the child spans containing stats.
-						ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
+						// Start a child span whose recording will only contain SpanStats.
+						ctx, span := tracing.ChildSpan(ctx, "stats")
 						finishVectorizedStatsCollectors(
 							ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs,
 						)

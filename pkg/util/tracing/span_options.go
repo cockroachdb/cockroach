@@ -183,18 +183,3 @@ func (forceRealSpanOption) apply(opts spanOptions) spanOptions {
 	opts.ForceRealSpan = true
 	return opts
 }
-
-type withSeparateRecordingOpt struct{}
-
-// WithSeparateRecording instructs StartSpan to configure any child span
-// started via WithParent to *not* share the recording with that parent.
-//
-// See WithParent and WithRemoteParent for details about recording inheritance.
-func WithSeparateRecording() SpanOption {
-	return withSeparateRecordingOpt{}
-}
-
-func (o withSeparateRecordingOpt) apply(opts spanOptions) spanOptions {
-	opts.SeparateRecording = true
-	return opts
-}
