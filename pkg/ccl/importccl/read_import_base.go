@@ -543,6 +543,8 @@ func runParallelImport(
 		ctx, span := tracing.ChildSpan(ctx, "inputconverter")
 		defer span.Finish()
 		return ctxgroup.GroupWorkers(ctx, parallelism, func(ctx context.Context, id int) error {
+
+			// mokaixu: this is where the sendBatch is being called
 			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmited)
 		})
 	})

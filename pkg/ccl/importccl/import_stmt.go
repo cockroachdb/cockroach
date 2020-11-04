@@ -158,9 +158,9 @@ var mysqlOutAllowedOptions = makeStringSet(
 	mysqlOutfileRowSep, mysqlOutfileFieldSep, mysqlOutfileEnclose,
 	mysqlOutfileEscape, csvNullIf, csvSkip, csvRowLimit,
 )
-var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs)
+var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
-var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs)
+var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit)
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
@@ -535,6 +535,18 @@ func importPlanHook(
 				return err
 			}
 			format.Format = roachpb.IOFileFormat_Mysqldump
+
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.MysqlDump.RowLimit = int64(rowLimit)
+			}
+
 		case "PGCOPY":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, pgCopyAllowedOptions); err != nil {
 				return err
@@ -583,6 +595,17 @@ func importPlanHook(
 				maxRowSize = int32(sz)
 			}
 			format.PgDump.MaxRowSize = maxRowSize
+
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.PgDump.RowLimit = int64(rowLimit)
+			}
 		case "AVRO":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, avroAllowedOptions); err != nil {
 				return err
@@ -826,7 +849,6 @@ func importPlanHook(
 			Oversample:        oversample,
 			SkipFKs:           skipFKs,
 			ParseBundleSchema: importStmt.Bundle,
-			Walltime:          walltime,
 		}
 
 		// Prepare the protected timestamp record.
@@ -885,7 +907,10 @@ func importPlanHook(
 }
 
 func parseAvroOptions(
-	ctx context.Context, opts map[string]string, p sql.PlanHookState, format *roachpb.IOFileFormat,
+	ctx context.Context,
+	opts map[string]string,
+	p sql.PlanHookState,
+	format *roachpb.IOFileFormat,
 ) error {
 	format.Format = roachpb.IOFileFormat_Avro
 	// Default input format is OCF.
@@ -1285,7 +1310,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 
 		var tableDescs []*tabledesc.Mutable
 		var err error
-		walltime := details.Walltime
+		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if tableDescs, err = parseAndCreateBundleTableDescs(
 			ctx, p, details, seqVals, skipFKs, parentID, files, format, walltime, owner); err != nil {
@@ -1322,7 +1347,6 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		//    this walltime value to persist.
 		// 2) Later stages of execution rely on walltime being zero for certain
 		//    conditions. We do not want to incorrectly alter behavior.
-		details.Walltime = 0
 		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
 			return err
 		}
@@ -1338,8 +1362,6 @@ func (r *importResumer) Resume(
 	if err := r.parseBundleSchemaIfNeeded(ctx, p); err != nil {
 		return err
 	}
-
-	// check walltime is zero here?
 
 	details := r.job.Details().(jobspb.ImportDetails)
 	files := details.URIs

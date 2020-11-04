@@ -14,6 +14,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -616,9 +617,15 @@ func (m *pgDumpReader) readFiles(
 }
 
 func (m *pgDumpReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	var inserts, count int64
+	rowLimit := int64(m.opts.RowLimit)
+	fmt.Println(fmt.Sprintf("the rowlimit is %d", rowLimit))
 	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
 	semaCtx := tree.MakeSemaContext()
 	for _, conv := range m.tables {
@@ -631,6 +638,7 @@ func (m *pgDumpReader) readFile(
 
 	for {
 		stmt, err := ps.Next()
+		fmt.Println(stmt)
 		if err == io.EOF {
 			break
 		}
@@ -638,6 +646,7 @@ func (m *pgDumpReader) readFile(
 			return errors.Wrap(err, "postgres parse error")
 		}
 		switch i := stmt.(type) {
+
 		case *tree.Insert:
 			n, ok := i.Table.(*tree.TableName)
 			if !ok {
@@ -690,10 +699,15 @@ func (m *pgDumpReader) readFile(
 					}
 				}
 			}
+			var countRowsPerTable int64
 			for _, tuple := range values.Rows {
 				count++
+				countRowsPerTable++
 				if count <= resumePos {
 					continue
+				}
+				if rowLimit != 0 && countRowsPerTable > rowLimit {
+					break
 				}
 				if got := len(tuple); expectedColLen != got {
 					return errors.Errorf("expected %d values, got %d: %v", expectedColLen, got, tuple)
@@ -718,6 +732,7 @@ func (m *pgDumpReader) readFile(
 				if err := conv.Row(ctx, inputIdx, count+int64(timestamp)); err != nil {
 					return err
 				}
+
 			}
 		case *tree.CopyFrom:
 			if !i.Stdin {
@@ -745,6 +760,7 @@ func (m *pgDumpReader) readFile(
 					targetColMapIdx[j] = idx
 				}
 			}
+			var countRowsPerTable int64
 			for {
 				row, err := ps.Next()
 				// We expect an explicit copyDone here. io.EOF is unexpected.
@@ -756,6 +772,7 @@ func (m *pgDumpReader) readFile(
 					break
 				}
 				count++
+				countRowsPerTable++
 				if err != nil {
 					return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
 				}
@@ -765,11 +782,15 @@ func (m *pgDumpReader) readFile(
 				if count <= resumePos {
 					continue
 				}
+		
 				switch row := row.(type) {
 				case copyData:
 					if expected, got := len(conv.IsTargetCol), len(row); expected != got {
 						return makeRowErr("", count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
+					}
+					if countRowsPerTable > rowLimit {
+						break
 					}
 					for i, s := range row {
 						idx := targetColMapIdx[i]

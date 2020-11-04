@@ -52,6 +52,7 @@ type mysqldumpReader struct {
 	kvCh     chan row.KVBatch
 	debugRow func(tree.Datums)
 	walltime int64
+	opts     roachpb.MysqldumpOptions
 }
 
 var _ inputConverter = &mysqldumpReader{}
@@ -62,8 +63,9 @@ func newMysqldumpReader(
 	walltime int64,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
+	opts roachpb.MysqldumpOptions,
 ) (*mysqldumpReader, error) {
-	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, walltime: walltime}
+	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, walltime: walltime, opts: opts}
 
 	converters := make(map[string]*row.DatumRowConverter, len(tables))
 	for name, table := range tables {
@@ -97,10 +99,15 @@ func (m *mysqldumpReader) readFiles(
 }
 
 func (m *mysqldumpReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)
+	rowLimit := m.opts.RowLimit
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
 
@@ -148,6 +155,9 @@ func (m *mysqldumpReader) readFile(
 
 				if count <= resumePos {
 					continue
+				}
+				if rowLimit != 0 && count-startingCount > rowLimit {
+					break
 				}
 				if expected, got := len(conv.VisibleCols), len(inputRow); expected != got {
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, inputRow)
