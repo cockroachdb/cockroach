@@ -311,10 +311,6 @@ func (s *initServer) ServeAndWait(
 			log.Infof(ctx, "joined cluster %s through join rpc", state.clusterID)
 			log.Infof(ctx, "received node ID %d", state.nodeID)
 
-			s.mu.Lock()
-			s.mu.inspectState.clusterID = state.clusterID
-			s.mu.Unlock()
-
 			return state, true, nil
 		case <-gossipConnectedCh:
 			// Ensure we're draining out the join attempt.
