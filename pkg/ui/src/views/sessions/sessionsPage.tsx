@@ -15,7 +15,7 @@ import {getMatchParamByName} from "src/util/query";
 import {appAttr} from "src/util/constants";
 import {makeSessionsColumns, SessionInfo, SessionsSortedTable} from "src/views/sessions/sessionsTable";
 import Helmet from "react-helmet";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import {Pick} from "src/util/pick";
 import {RouteComponentProps, withRouter} from "react-router-dom";
 import {connect} from "react-redux";
