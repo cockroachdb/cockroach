@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1052,6 +1053,46 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+// TODO (thesamhuang): add a comment describing this function and comments throughout.
+func (n *Node) UnsafeHealRange(
+	ctx context.Context, req *roachpb.UnsafeHealRangeRequest,
+) (_ *roachpb.UnsafeHealRangeResponse, rErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rErr = errors.Errorf("%v", r)
+		}
+	}()
+
+	desc := req.Desc
+
+	nodeID, storeID := roachpb.NodeID(req.NodeID), roachpb.StoreID(req.StoreID)
+
+	dead := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().All()...)
+	to := desc.AddReplica(nodeID, storeID, roachpb.VOTER_FULL)
+	for _, rd := range dead {
+		desc.RemoveReplica(rd.NodeID, rd.StoreID)
+	}
+
+	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
+	conn, err := n.storeCfg.NodeDialer.Dial(ctx, nodeID, rpc.SystemClass)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := kvserver.SendEmptySnapshot(
+		ctx,
+		n.storeCfg.Settings,
+		conn,
+		n.storeCfg.Clock.Now(),
+		desc,
+		to,
+	); err != nil {
+		return nil, err
+	}
+
+	return &roachpb.UnsafeHealRangeResponse{}, nil
 }
 
 // GossipSubscription implements the roachpb.InternalServer interface.
