@@ -47,9 +47,18 @@ func RegisterTagRemapping(logTag, spanTag string) {
 	tagRemap[logTag] = spanTag
 }
 
-func tagName(logTag string) string {
-	if v, ok := tagRemap[logTag]; ok {
-		return v
+// setLogTags calls the provided function for each tag pair from the provided log tags.
+// It takes into account any prior calls to RegisterTagRemapping.
+func setLogTags(logTags []logtags.Tag, setTag func(remappedKey string, value *logtags.Tag)) {
+	tagName := func(logTag string) string {
+		if v, ok := tagRemap[logTag]; ok {
+			return v
+		}
+		return logTag
 	}
-	return logTag
+
+	for i := range logTags {
+		tag := &logTags[i]
+		setTag(tagName(tag.Key()), tag)
+	}
 }
