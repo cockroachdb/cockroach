@@ -25,7 +25,7 @@ import { DATE_FORMAT } from "src/util/format";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import "./events.styl";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
@@ -178,7 +178,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
         <Loading
           loading={!events}
           error={lastError}
-          render={this.renderContent}
+          render={this.renderContent.bind(this)}
         />
       </section>
     </div>;
