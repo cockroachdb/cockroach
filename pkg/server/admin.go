@@ -906,15 +906,11 @@ func (s *adminServer) Events(
 ) (*serverpb.EventsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 
-	userName, isAdmin, err := s.getUserAndRole(ctx)
+	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	redactEvents := false
-	if isAdmin {
-		// We obey the redacted bit only if the user is admin.
-		redactEvents = !req.UnredactedEvents
-	}
+	redactEvents := !req.UnredactedEvents
 
 	limit := req.Limit
 	if limit == 0 {
