@@ -17,7 +17,6 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
-import {serverToClientErrorMessageMap} from "src/util/constants";
 
 export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
 export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;
@@ -212,8 +211,7 @@ function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends 
           } catch {
             respError = new ResponseError({error: res.statusText});
           }
-          const message = serverToClientErrorMessageMap.get(respError.error) || respError.error;
-          throw new RequestError(res.statusText, res.status, message);
+          throw new RequestError(res.statusText, res.status, respError.error);
         });
     }
     return res.arrayBuffer().then((buffer) => builder.decode(new Uint8Array(buffer)));
