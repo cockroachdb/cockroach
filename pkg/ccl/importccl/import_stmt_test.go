@@ -1165,7 +1165,7 @@ func TestImportUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	baseDir, cleanup := testutils.TestTempDir(t)
+	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	tc := testcluster.StartTestCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
