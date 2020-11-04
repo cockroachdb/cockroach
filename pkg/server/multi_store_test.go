@@ -12,16 +12,19 @@ package server_test
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,13 +74,20 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 	clusterID := tc.Server(0).ClusterID()
 	tc.Stopper().Stop(ctx)
 
-	// Add an additional store to each node.
+	// Add two additional stores to each node.
 	n1s2, n1cleanup2 := testutils.TempDir(t)
 	defer n1cleanup2()
 	n2s2, n2cleanup2 := testutils.TempDir(t)
 	defer n2cleanup2()
 	n3s2, n3cleanup2 := testutils.TempDir(t)
 	defer n3cleanup2()
+
+	n1s3, n1cleanup3 := testutils.TempDir(t)
+	defer n1cleanup3()
+	n2s3, n2cleanup3 := testutils.TempDir(t)
+	defer n2cleanup3()
+	n3s3, n3cleanup3 := testutils.TempDir(t)
+	defer n3cleanup3()
 
 	tcArgs = base.TestClusterArgs{
 		// We need ParallelStart since this is an existing cluster. If
@@ -89,17 +99,17 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
 				StoreSpecs: []base.StoreSpec{
-					{Path: n1s1}, {Path: n1s2},
+					{Path: n1s1}, {Path: n1s2}, {Path: n1s3},
 				},
 			},
 			1: {
 				StoreSpecs: []base.StoreSpec{
-					{Path: n2s1}, {Path: n2s2},
+					{Path: n2s1}, {Path: n2s2}, {Path: n2s3},
 				},
 			},
 			2: {
 				StoreSpecs: []base.StoreSpec{
-					{Path: n3s1}, {Path: n3s2},
+					{Path: n3s1}, {Path: n3s2}, {Path: n3s3},
 				},
 			},
 		},
@@ -115,23 +125,34 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 		require.Equal(t, clusterID, srv.ClusterID())
 	}
 
-	// Ensure all nodes have 2 stores available.
+	// Ensure all nodes have all stores available, and each store has a unique
+	// store ID.
 	testutils.SucceedsSoon(t, func() error {
+		var storeIDs []roachpb.StoreID
 		for _, server := range tc.Servers {
 			var storeCount = 0
-
-			err := server.GetStores().(*kvserver.Stores).VisitStores(
+			if err := server.GetStores().(*kvserver.Stores).VisitStores(
 				func(s *kvserver.Store) error {
 					storeCount++
+					storeIDs = append(storeIDs, s.StoreID())
 					return nil
 				},
-			)
-			if err != nil {
+			); err != nil {
 				return errors.Errorf("failed to visit all nodes, got %v", err)
 			}
 
-			if storeCount != 2 {
-				return errors.Errorf("expected two stores to be available on node %v, got %v stores instead", server.NodeID(), storeCount)
+			if storeCount != 3 {
+				return errors.Errorf("expected 3 stores to be available on n%s, got %d stores instead", server.NodeID(), storeCount)
+			}
+		}
+
+		sort.Slice(storeIDs, func(i, j int) bool {
+			return storeIDs[i] < storeIDs[j]
+		})
+		for i := range storeIDs {
+			expStoreID := roachpb.StoreID(i + 1)
+			if storeIDs[i] != expStoreID {
+				t.Fatalf("expected the %s store to have storeID s%s, found s%s", humanize.Ordinal(i+1), expStoreID, storeIDs[i])
 			}
 		}
 

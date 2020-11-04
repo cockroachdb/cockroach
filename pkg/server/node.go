@@ -276,7 +276,6 @@ func bootstrapCluster(
 			initializedEngines:   engines,
 			uninitializedEngines: nil,
 		},
-		firstStoreID: firstStoreID,
 	}
 	return state, nil
 }
@@ -480,7 +479,7 @@ func (n *Node) start(
 		// sequence ID generator stored in a system key.
 		n.additionalStoreInitCh = make(chan struct{})
 		if err := n.stopper.RunAsyncTask(ctx, "initialize-additional-stores", func(ctx context.Context) {
-			if err := n.initializeAdditionalStores(ctx, state.firstStoreID, state.uninitializedEngines, n.stopper); err != nil {
+			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines, n.stopper); err != nil {
 				log.Fatalf(ctx, "while initializing additional stores: %v", err)
 			}
 			close(n.additionalStoreInitCh)
@@ -584,10 +583,7 @@ func (n *Node) validateStores(ctx context.Context) error {
 // allocated via a sequence id generator stored at a system key per node. The
 // new stores are added to n.stores.
 func (n *Node) initializeAdditionalStores(
-	ctx context.Context,
-	firstStoreID roachpb.StoreID,
-	engines []storage.Engine,
-	stopper *stop.Stopper,
+	ctx context.Context, engines []storage.Engine, stopper *stop.Stopper,
 ) error {
 	if n.clusterID.Get() == uuid.Nil {
 		return errors.New("missing cluster ID during initialization of additional store")
@@ -597,28 +593,17 @@ func (n *Node) initializeAdditionalStores(
 		// Initialize all waiting stores by allocating a new store id for each
 		// and invoking kvserver.InitEngine() to persist it. We'll then
 		// construct a new store out of the initialized engine and attach it to
-		// ourselves. The -1 comes from the fact that our first store ID has
-		// already been pre-allocated for us.
-		storeIDAlloc := int64(len(engines)) - 1
-		if firstStoreID == 0 {
-			// We lied, we don't have a firstStoreID; we'll need to allocate for
-			// that too.
-			//
-			// TODO(irfansharif): We get here if we're falling back to
-			// gossip-based connectivity. This can be removed in 21.1.
-			storeIDAlloc++
-		}
+		// ourselves.
+		storeIDAlloc := int64(len(engines))
 		startID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, storeIDAlloc, n.storeCfg.DB)
-		if firstStoreID == 0 {
-			firstStoreID = startID
-		}
 		if err != nil {
 			return errors.Errorf("error allocating store ids: %s", err)
 		}
+
 		sIdent := roachpb.StoreIdent{
 			ClusterID: n.clusterID.Get(),
 			NodeID:    n.Descriptor.NodeID,
-			StoreID:   firstStoreID,
+			StoreID:   startID,
 		}
 		for _, eng := range engines {
 			if err := kvserver.InitEngine(ctx, eng, sIdent); err != nil {
