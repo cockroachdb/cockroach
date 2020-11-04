@@ -1665,9 +1665,14 @@ func verifyRangeStats(
 func verifyRecomputedStats(
 	reader storage.Reader, d *roachpb.RangeDescriptor, expMS enginepb.MVCCStats, nowNanos int64,
 ) error {
-	if ms, err := rditer.ComputeStatsForRange(d, reader, nowNanos); err != nil {
+	ms, err := rditer.ComputeStatsForRange(d, reader, nowNanos)
+	if err != nil {
 		return err
-	} else if expMS != ms {
+	}
+	// When used with a real wall clock these will not be the same, since it
+	// takes time to load stats.
+	expMS.AgeTo(ms.LastUpdateNanos)
+	if expMS != ms {
 		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
 	}
 	return nil
