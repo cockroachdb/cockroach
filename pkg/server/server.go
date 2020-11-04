@@ -739,50 +739,60 @@ func (l *ListenError) Error() string { return l.cause.Error() }
 // Unwrap is because ListenError is a wrapper.
 func (l *ListenError) Unwrap() error { return l.cause }
 
-// inspectEngines goes through engines and populates in initDiskState. It also
+// inspectEngines goes through engines and populates in inspectedDiskState. It also
 // calls SynthesizeClusterVersionFromEngines, which selects and backfills the
 // cluster version to all initialized engines.
 //
-// The initDiskState returned by this method will reflect a zero NodeID if none
+// The inspectedDiskState returned by this method will reflect a zero NodeID if none
 // has been assigned yet (i.e. if none of the engines is initialized).
 func inspectEngines(
 	ctx context.Context,
 	engines []storage.Engine,
 	binaryVersion, binaryMinSupportedVersion roachpb.Version,
-) (*initDiskState, error) {
-	state := &initDiskState{}
+) (*inspectedDiskState, error) {
+	var clusterID uuid.UUID
+	var nodeID roachpb.NodeID
+	var initializedEngines, uninitializedEngines []storage.Engine
 
 	for _, eng := range engines {
 		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
 		if errors.HasType(err, (*kvserver.NotBootstrappedError)(nil)) {
-			state.uninitializedEngines = append(state.uninitializedEngines, eng)
+			uninitializedEngines = append(uninitializedEngines, eng)
 			continue
 		} else if err != nil {
 			return nil, err
 		}
 
-		if state.clusterID != uuid.Nil && state.clusterID != storeIdent.ClusterID {
-			return nil, errors.Errorf("conflicting store ClusterIDs: %s, %s", storeIdent.ClusterID, state.clusterID)
+		if clusterID != uuid.Nil && clusterID != storeIdent.ClusterID {
+			return nil, errors.Errorf("conflicting store ClusterIDs: %s, %s", storeIdent.ClusterID, clusterID)
 		}
-		state.clusterID = storeIdent.ClusterID
+		clusterID = storeIdent.ClusterID
 
 		if storeIdent.StoreID == 0 || storeIdent.NodeID == 0 || storeIdent.ClusterID == uuid.Nil {
 			return nil, errors.Errorf("partially initialized store: %+v", storeIdent)
 		}
 
-		if state.nodeID != 0 && state.nodeID != storeIdent.NodeID {
-			return nil, errors.Errorf("conflicting store NodeIDs: %s, %s", storeIdent.NodeID, state.nodeID)
+		if nodeID != 0 && nodeID != storeIdent.NodeID {
+			return nil, errors.Errorf("conflicting store NodeIDs: %s, %s", storeIdent.NodeID, nodeID)
 		}
-		state.nodeID = storeIdent.NodeID
+		nodeID = storeIdent.NodeID
 
-		state.initializedEngines = append(state.initializedEngines, eng)
+		initializedEngines = append(initializedEngines, eng)
 	}
-
-	cv, err := kvserver.SynthesizeClusterVersionFromEngines(ctx, state.initializedEngines, binaryVersion, binaryMinSupportedVersion)
+	clusterVersion, err := kvserver.SynthesizeClusterVersionFromEngines(
+		ctx, initializedEngines, binaryVersion, binaryMinSupportedVersion,
+	)
 	if err != nil {
 		return nil, err
 	}
-	state.clusterVersion = cv
+
+	state := &inspectedDiskState{
+		clusterID:            clusterID,
+		nodeID:               nodeID,
+		initializedEngines:   initializedEngines,
+		uninitializedEngines: uninitializedEngines,
+		clusterVersion:       clusterVersion,
+	}
 	return state, nil
 }
 
@@ -1128,10 +1138,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 			return err
 		}
 
-		initServer, err = newInitServer(s.cfg.AmbientCtx, inspectState, initConfig)
-		if err != nil {
-			return err
-		}
+		initServer = newInitServer(s.cfg.AmbientCtx, inspectState, initConfig)
 	}
 
 	{
