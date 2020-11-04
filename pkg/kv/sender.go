@@ -290,6 +290,10 @@ type TxnSender interface {
 	// GetSteppingMode accompanies ConfigureStepping. It is provided
 	// for use in tests and assertion checks.
 	GetSteppingMode(ctx context.Context) (curMode SteppingMode)
+
+	// NewChildTransaction constructs a serialized transaction proto for a new
+	// child transaction.
+	NewChildTransaction() *roachpb.Transaction
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

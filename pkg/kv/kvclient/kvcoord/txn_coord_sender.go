@@ -1143,3 +1143,33 @@ func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.Stepp
 	}
 	return curMode
 }
+
+// NewChildTransaction is part of the TxnSender interface.
+func (m *TxnCoordSender) NewChildTransaction() *roachpb.Transaction {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// TODO(ajwerner): Consider stripping information from the parent proto like
+	// LockSpans or perhaps introducing a new proto altogether for parents. The
+	// latter is likely to be onerous.
+	parent := m.mu.txn.Clone()
+	child := roachpb.MakeTransaction(
+		parent.Name+" child",
+		nil,
+		m.mu.userPriority,
+		parent.WriteTimestamp,
+		m.clock.MaxOffset().Nanoseconds(),
+	)
+	child.Parent = parent
+	// TODO(ajwerner): Should we be setting the priority to exactly that of the
+	// parent or should we have some notion of effective priority? If it were
+	// left to be random, that definitely would not work. Imagine a case where
+	// we have two child transactions which have encountered intents of parents
+	// A1 (2) -> B (4) and B1 (3) -> A (5). In this case, neither child has
+	// greater priority than any parent. Given the parents are not actually
+	// pushing anything, we'd be in trouble because no pusher would break the
+	// deadlock. It seems that priority levels should only increase and thus
+	// we shouldn't have these scenarios so long as the priority starts at at
+	// least that of the parent.
+	child.Priority = parent.Priority
+	return &child
+}

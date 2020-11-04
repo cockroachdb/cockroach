@@ -1286,3 +1286,53 @@ func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
 	defer txn.mu.Unlock()
 	return txn.mu.sender.ReleaseSavepoint(ctx, s)
 }
+
+// ChildTxn executes retryable in the context of a distributed transaction. The
+// transaction is automatically aborted if retryable returns any error aside
+// from recoverable internal errors, and is automatically committed
+// otherwise. The retryable function should have no side effects which could
+// cause problems in the event it must be run more than once.
+//
+// If the child transaction commits, the parent transaction will be pushed to
+// the commit timestamp of the child. This means that if the child transaction
+// is not pushed, the parent won't be.
+//
+// Use of this method has rules:
+//
+//   * No concurrent operations may be performed on the parent transaction.
+//
+// Some notes:
+//
+//   * The child transaction may commit even if the parent is aborted, however
+//     if the parent is aborted during deadlock detection and the child observes
+//     that it has been aborted, the child will also be aborted and the parent
+//     will encounter a retry.
+//
+func (txn *Txn) ChildTxn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
+
+	// TODO(ajwerner): Validate the state of the parent transaction. It should be
+	// open (non-terminal), and a root transaction at the very least.
+
+	kvTxn := txn.Sender().NewChildTransaction()
+	childTxn := NewTxnFromProto(ctx, txn.db, txn.gatewayNodeID, kvTxn.ReadTimestamp, RootTxn, kvTxn)
+	err := childTxn.exec(ctx, retryable)
+	if err != nil {
+		childTxn.CleanupOnError(ctx, err)
+	}
+	if paErr := (*roachpb.ParentAbortedError)(nil); errors.As(err, &paErr) &&
+		paErr.ParentTxn.ID == txn.ID() {
+		return roachpb.NewTransactionRetryWithProtoRefreshError(
+			"child detected",
+			txn.ID(),
+			paErr.ParentTxn)
+	}
+	// Terminate TransactionRetryWithProtoRefreshError here, so it doesn't cause
+	// a higher-level txn to be retried. We don't do this in any of the other
+	// functions in DB; I guess we should.
+	if errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
+		return errors.Wrapf(err, "terminated retryable error")
+	}
+	// TODO(ajwerner): Push the parent transaction to the commit timestamp of the
+	// child.
+	return err
+}

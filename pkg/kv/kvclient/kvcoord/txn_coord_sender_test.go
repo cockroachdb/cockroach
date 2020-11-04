@@ -2392,3 +2392,23 @@ func TestPutsInStagingTxn(t *testing.T) {
 	// seen a batch with the STAGING status.
 	require.True(t, putInStagingSeen)
 }
+
+// TestNewChildTransaction is a very simplistic sanity check of the child
+// transaction code.
+func TestNewChildTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDBWithKnobs(t, nil /* knobs */)
+	defer s.Stop()
+	ctx := context.Background()
+
+	parentTxn := s.DB.NewTxn(ctx, "foo")
+	child := parentTxn.Sender().NewChildTransaction()
+	parent := parentTxn.Sender().TestingCloneTxn()
+	require.Equal(t, parent.Priority, child.Priority)
+	require.NotNil(t, child.Parent)
+	require.Equal(t, parent.ID, child.Parent.ID)
+	require.Equal(t, parent.Name+" child", child.Name)
+	require.NotEqual(t, parent.ID, child.ID)
+	require.Nil(t, child.Key)
+}
