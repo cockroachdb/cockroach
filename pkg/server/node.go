@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -993,6 +995,97 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+// ResetQuorum implements the roachpb.InternalServer interface.
+func (n *Node) ResetQuorum(
+	ctx context.Context, req *roachpb.ResetQuorumRequest,
+) (_ *roachpb.ResetQuorumResponse, rErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rErr = errors.Errorf("%v", r)
+		}
+	}()
+	// Get range descriptor and save original value of the descriptor for the input range id.
+	var desc roachpb.RangeDescriptor
+	var expValue roachpb.Value
+	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+			Key:    roachpb.KeyMin,
+			EndKey: roachpb.KeyMax,
+		})
+		if err != nil {
+			return err
+		}
+
+		for i := range kvs {
+			if err := kvs[i].Value.GetProto(&desc); err != nil {
+				return err
+			}
+			if desc.RangeID == roachpb.RangeID(req.RangeID) {
+				expValue = *kvs[i].Value
+				return nil
+			}
+		}
+		return errors.Errorf("r%d not found", req.RangeID)
+	}); err != nil {
+		return nil, err
+	}
+
+	// Check range has actually lost quorum.
+	livenessMap := n.storeCfg.NodeLiveness.GetIsLiveMap()
+	available := desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
+		return livenessMap[rDesc.NodeID].IsLive
+	})
+	if available {
+		return nil, errors.Errorf("targeted range to recover has not lost quorum.")
+	}
+	// Check range is not a metaX range.
+	if bytes.HasPrefix(desc.StartKey, keys.Meta1Prefix) || bytes.HasPrefix(desc.StartKey, keys.Meta2Prefix) {
+		return nil, errors.Errorf("targeted range to recover is a meta1 or meta2 range.")
+	}
+
+	//Update the range descriptor and update meta ranges for the descriptor, removing all replicas.
+	deadReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().All()...)
+	for _, rd := range deadReplicas {
+		desc.RemoveReplica(rd.NodeID, rd.StoreID)
+	}
+	// Add current node as new replica.
+	toReplicaDescriptor := desc.AddReplica(n.Descriptor.NodeID, roachpb.StoreID(req.StoreID), roachpb.VOTER_FULL)
+	// We should increment the generation so that the various caches will recognize this descriptor as newer.
+	desc.IncrementGeneration()
+
+	log.Infof(ctx, "starting recovery using desc %+v", desc)
+	// Update the meta2 entry. Note that we're intentionally
+	// eschewing updateRangeAddressing since the copy of the
+	// descriptor that resides on the range itself has lost quorum.
+	metaKey := keys.RangeMetaKey(desc.EndKey).AsRawKey()
+
+	if err := n.storeCfg.DB.CPut(ctx, metaKey, &desc, expValue.TagAndDataBytes()); err != nil {
+		return nil, err
+	}
+
+	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
+	conn, err := n.storeCfg.NodeDialer.Dial(ctx, n.Descriptor.NodeID, rpc.SystemClass)
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize and send an empty snapshot to self in order to use crdb
+	// internal upreplication and rebalancing mechanisms to create further
+	// replicas from this fresh snapshot.
+	if err := kvserver.SendEmptySnapshot(
+		ctx,
+		n.storeCfg.Settings,
+		conn,
+		n.storeCfg.Clock.Now(),
+		desc,
+		toReplicaDescriptor,
+	); err != nil {
+		return nil, err
+	}
+
+	return &roachpb.ResetQuorumResponse{}, nil
 }
 
 // GossipSubscription implements the roachpb.InternalServer interface.
