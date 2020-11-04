@@ -281,3 +281,15 @@ func RotateWithXY(g geo.Geometry, rotRadians, x, y float64) (geo.Geometry, error
 		},
 	)
 }
+
+// TransScale returns a modified Geometry whose coordinates are
+// translate by deltaX and deltaY and scale by xFactor and yFactor
+func TransScale(g geo.Geometry, deltaX, deltaY, xFactor, yFactor float64) (geo.Geometry, error) {
+	return Affine(g,
+		AffineMatrix([][]float64{
+			{xFactor, 0, 0, xFactor * deltaX},
+			{0, yFactor, 0, yFactor * deltaY},
+			{0, 0, 1, 0},
+			{0, 0, 0, 1},
+		}))
+}
