@@ -65,7 +65,7 @@ describe("NonTableSummary", () => {
 
       const loadingWrapper = wrapper.find(Loading);
       assert.isTrue(loadingWrapper.exists());
-      assert.equal(loadingWrapper.text(), error.message);
+      assert.isTrue(loadingWrapper.text().includes(error.message));
     });
   });
 });
