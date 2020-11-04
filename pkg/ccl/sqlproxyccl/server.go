@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/admitter"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,6 +32,7 @@ type Server struct {
 	mux             *http.ServeMux
 	metrics         *Metrics
 	metricsRegistry *metric.Registry
+	admitter        admitter.Service
 
 	promMu             syncutil.Mutex
 	prometheusExporter metric.PrometheusExporter
@@ -52,6 +54,7 @@ func NewServer(opts Options) *Server {
 		mux:                mux,
 		metrics:            &proxyMetrics,
 		metricsRegistry:    registry,
+		admitter:           admitter.NewLocalService(),
 		prometheusExporter: metric.MakePrometheusExporter(),
 	}
 

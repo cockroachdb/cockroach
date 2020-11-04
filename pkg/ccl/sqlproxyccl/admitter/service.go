@@ -18,7 +18,7 @@ type Service interface {
 	AllowRequest(ipAddress string, now time.Time) error
 
 	// RequestSuccess records the result of a successful request.
-	RequestSuccess(ipAddress string)
+	RequestSuccess(ipAddress string, tenID uint64)
 
 	// KnownClient checks if this client has connected successfully before.
 	KnownClient(ipAddress string, tenID uint64) bool

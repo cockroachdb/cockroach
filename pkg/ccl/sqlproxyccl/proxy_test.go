@@ -152,6 +152,7 @@ func TestFailedConnection(t *testing.T) {
 	ac := makeAssertCtx()
 	opts := Options{
 		OutgoingAddrFromParams: testingTenantIDFromDatabaseForAddr("undialable%$!@$", "29"),
+		TenantFromParams:       func(mm map[string]string) (uint64, error) { return 29, nil },
 		OnSendErrToClient:      ac.onSendErrToClient,
 	}
 	addr, done := setupTestProxyWithCerts(t, &opts)

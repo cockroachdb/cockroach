@@ -14,6 +14,8 @@ import (
 	"io"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/admitter"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -31,10 +33,13 @@ type Options struct {
 	// allow use of SNI. Should always return ("", nil).
 	OutgoingAddrFromSNI    func(serverName string) (addr string, clientErr error)
 	OutgoingAddrFromParams func(map[string]string) (addr string, clientErr error)
+	TenantFromParams       func(map[string]string) (tenID uint64, clientErr error)
 
 	// If set, consulted to decorate an error message to be sent to the client.
 	// The error passed to this method will contain no internal information.
 	OnSendErrToClient func(code ErrorCode, msg string) string
+
+	admitter admitter.Service
 }
 
 // Proxy takes an incoming client connection and relays it to a backend SQL
@@ -111,6 +116,29 @@ func (s *Server) Proxy(conn net.Conn) error {
 		return newErrorf(code, "rejected by OutgoingAddrFromParams: %v", clientErr)
 	}
 
+	var ip string
+	var tenID uint64
+	if s.admitter != nil {
+		ip := conn.RemoteAddr().String()
+		tenID, clientErr = s.opts.TenantFromParams(msg.Parameters)
+		if clientErr != nil {
+			s.metrics.RoutingErrCount.Inc(1)
+			code := CodeParamsRoutingFailed
+			sendErrToClient(conn, code, clientErr.Error())
+			return newErrorf(code, "rejected by TenantFromParams: %v", clientErr)
+		}
+
+		// If a previous successful connection from this IP to the given client was
+		// made then admit immediately.
+		if !s.admitter.KnownClient(ip, tenID) {
+			// Otherwise rate limit the attempt from an unknown client.
+			if err := s.admitter.AllowRequest(ip, timeutil.Now()); err != nil {
+				s.metrics.RefusedConnCount.Inc(1)
+				return newErrorf(CodeProxyRefusedConnection, "too many connection attempts")
+			}
+		}
+	}
+
 	crdbConn, err := net.Dial("tcp", outgoingAddr)
 	if err != nil {
 		s.metrics.BackendDownCount.Inc(1)
@@ -143,6 +171,10 @@ func (s *Server) Proxy(conn net.Conn) error {
 	if _, err := crdbConn.Write(msg.Encode(nil)); err != nil {
 		s.metrics.BackendDownCount.Inc(1)
 		return newErrorf(CodeBackendDown, "relaying StartupMessage to target server %v: %v", outgoingAddr, err)
+	}
+
+	if s.admitter != nil {
+		s.admitter.RequestSuccess(ip, tenID)
 	}
 
 	// These channels are buffered because we'll only consume one of them.

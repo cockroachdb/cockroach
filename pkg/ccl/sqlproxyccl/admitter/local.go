@@ -48,6 +48,8 @@ type localService struct {
 		sync.Mutex
 		// Map from IP address to limiter.
 		limiters map[string]*limiter
+		// Map from IP address to known tenant ids for this IP.
+		knownTenants map[string]map[uint64]bool
 		// Array of addresses, used for randomly evicting an address when the max
 		// entries is reached.
 		addrs []string
@@ -74,6 +76,7 @@ func NewLocalService(opts ...LocalOption) Service {
 		maxMapSize: maxMapSize,
 	}
 	s.mu.limiters = make(map[string]*limiter)
+	s.mu.knownTenants = make(map[string]map[uint64]bool)
 
 	for _, opt := range opts {
 		opt(s)
@@ -96,10 +99,25 @@ func (s *localService) AllowRequest(ipAddress string, now time.Time) error {
 	return nil
 }
 
-func (s *localService) RequestSuccess(ipAddress string) {
+func (s *localService) RequestSuccess(ipAddress string, tenID uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.evictLocked(ipAddress)
+	if _, ok := s.mu.knownTenants[ipAddress]; !ok {
+		s.mu.knownTenants[ipAddress] = map[uint64]bool{tenID: true}
+	} else {
+		s.mu.knownTenants[ipAddress][tenID] = true
+	}
+}
+
+func (s *localService) KnownClient(ipAddress string, tenID uint64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.mu.knownTenants[ipAddress]
+	if ok {
+		_, ok = s.mu.knownTenants[ipAddress][tenID]
+	}
+	return ok
 }
 
 func (s *localService) addLocked(addr string) *limiter {
