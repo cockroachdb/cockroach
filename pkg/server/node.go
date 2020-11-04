@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -993,6 +994,53 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+// UnsafeHealRange takes a context and a UnsafeHealRangeRequest which contains a
+// NodeID, a StoreID, and a RangeDescriptor. It removes all replicas from the
+// RangeDescriptor and adds the current node as the a full voter replica.
+// Finally, it calls SendEmptySnapshot to send an empty snapshot with this
+// RangeDescriptor to itself.
+//
+// By removing all unhealthy replicas and adding a designated survivor, we make
+// this range healthy again.
+func (n *Node) UnsafeHealRange(
+	ctx context.Context, req *roachpb.UnsafeHealRangeRequest,
+) (_ *roachpb.UnsafeHealRangeResponse, rErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rErr = errors.Errorf("%v", r)
+		}
+	}()
+
+	desc := req.Desc
+	nodeID, storeID := roachpb.NodeID(req.NodeID), roachpb.StoreID(req.StoreID)
+
+	dead := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().All()...)
+	to := desc.AddReplica(nodeID, storeID, roachpb.VOTER_FULL)
+	for _, rd := range dead {
+		desc.RemoveReplica(rd.NodeID, rd.StoreID)
+	}
+
+	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
+	conn, err := n.storeCfg.NodeDialer.Dial(ctx, nodeID, rpc.SystemClass)
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize and send an empty snapshot to self.
+	if err := kvserver.SendEmptySnapshot(
+		ctx,
+		n.storeCfg.Settings,
+		conn,
+		n.storeCfg.Clock.Now(),
+		desc,
+		to,
+	); err != nil {
+		return nil, err
+	}
+
+	return &roachpb.UnsafeHealRangeResponse{}, nil
 }
 
 // GossipSubscription implements the roachpb.InternalServer interface.

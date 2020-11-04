@@ -4231,9 +4231,7 @@ var (
 	ErrIntOverflowMvcc3   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() {
-	proto.RegisterFile("storage/enginepb/mvcc3.proto", fileDescriptor_mvcc3_7509a297d4cf653a)
-}
+func init() { proto.RegisterFile("storage/enginepb/mvcc3.proto", fileDescriptor_mvcc3_7509a297d4cf653a) }
 
 var fileDescriptor_mvcc3_7509a297d4cf653a = []byte{
 	// 1191 bytes of a gzipped FileDescriptorProto
