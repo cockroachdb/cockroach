@@ -80,7 +80,14 @@ func TestSrcDir() string {
 func TestTempDir(t testing.TB) (string, func()) {
 	if RunningUnderBazel() {
 		// Bazel sets up private temp directories for each test.
-		return requireEnv(testTmpDirEnv), func() {}
+		// Normally, this private temp directory will be cleaned up automatically.
+		// However, we do use external tools (such as stress) which re-execute the
+		// same test multiple times.  Bazel, on the other hand, does not know about
+		// this, and only creates this temporary directory once.  So, ensure we create
+		// a unique temporary directory underneath bazel TEST_TMPDIR.
+		if err := os.Setenv("TMPDIR", requireEnv(testTmpDirEnv)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return TempDir(t)
 }
