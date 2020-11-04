@@ -269,13 +269,11 @@ func bootstrapCluster(
 	}
 
 	state := &initState{
-		initDiskState: initDiskState{
-			nodeID:               FirstNodeID,
-			clusterID:            clusterID,
-			clusterVersion:       bootstrapVersion,
-			initializedEngines:   engines,
-			uninitializedEngines: nil,
-		},
+		nodeID:               FirstNodeID,
+		clusterID:            clusterID,
+		clusterVersion:       bootstrapVersion,
+		initializedEngines:   engines,
+		uninitializedEngines: nil,
 	}
 	return state, nil
 }
