@@ -649,6 +649,34 @@ func (t *RaftTransport) startProcessNewQueue(
 	return true
 }
 
+func initAndSendSnapshot(
+	ctx context.Context,
+	stream MultiRaft_RaftSnapshotClient,
+	st *cluster.Settings,
+	storePool SnapshotStorePool,
+	header SnapshotRequest_Header,
+	snap *OutgoingSnapshot,
+	newBatch func() storage.Batch,
+	sent func(),
+) error {
+	defer func() {
+		if err := stream.CloseSend(); err != nil {
+			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
+		}
+	}()
+
+	return sendSnapshot(
+		ctx,
+		st,
+		stream,
+		storePool,
+		header,
+		snap,
+		newBatch,
+		sent,
+	)
+}
+
 // SendSnapshot streams the given outgoing snapshot. The caller is responsible
 // for closing the OutgoingSnapshot.
 func (t *RaftTransport) SendSnapshot(

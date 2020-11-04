@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[126];
+  static const ::google::protobuf::internal::ParseTable schema[128];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -378,6 +378,12 @@ extern RequestLeaseResponseDefaultTypeInternal _RequestLeaseResponse_default_ins
 class RequestUnion;
 class RequestUnionDefaultTypeInternal;
 extern RequestUnionDefaultTypeInternal _RequestUnion_default_instance_;
+class ResetQuorumRequest;
+class ResetQuorumRequestDefaultTypeInternal;
+extern ResetQuorumRequestDefaultTypeInternal _ResetQuorumRequest_default_instance_;
+class ResetQuorumResponse;
+class ResetQuorumResponseDefaultTypeInternal;
+extern ResetQuorumResponseDefaultTypeInternal _ResetQuorumResponse_default_instance_;
 class ResolveIntentRangeRequest;
 class ResolveIntentRangeRequestDefaultTypeInternal;
 extern ResolveIntentRangeRequestDefaultTypeInternal _ResolveIntentRangeRequest_default_instance_;
@@ -546,6 +552,8 @@ template<> ::cockroach::roachpb::RequestHeader* Arena::CreateMaybeMessage<::cock
 template<> ::cockroach::roachpb::RequestLeaseRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::RequestLeaseRequest>(Arena*);
 template<> ::cockroach::roachpb::RequestLeaseResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::RequestLeaseResponse>(Arena*);
 template<> ::cockroach::roachpb::RequestUnion* Arena::CreateMaybeMessage<::cockroach::roachpb::RequestUnion>(Arena*);
+template<> ::cockroach::roachpb::ResetQuorumRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ResetQuorumRequest>(Arena*);
+template<> ::cockroach::roachpb::ResetQuorumResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ResetQuorumResponse>(Arena*);
 template<> ::cockroach::roachpb::ResolveIntentRangeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ResolveIntentRangeRequest>(Arena*);
 template<> ::cockroach::roachpb::ResolveIntentRangeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ResolveIntentRangeResponse>(Arena*);
 template<> ::cockroach::roachpb::ResolveIntentRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ResolveIntentRequest>(Arena*);
@@ -17335,6 +17343,206 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
 };
 // -------------------------------------------------------------------
 
+class ResetQuorumRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ResetQuorumRequest) */ {
+ public:
+  ResetQuorumRequest();
+  virtual ~ResetQuorumRequest();
+
+  ResetQuorumRequest(const ResetQuorumRequest& from);
+
+  inline ResetQuorumRequest& operator=(const ResetQuorumRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  ResetQuorumRequest(ResetQuorumRequest&& from) noexcept
+    : ResetQuorumRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline ResetQuorumRequest& operator=(ResetQuorumRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ResetQuorumRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const ResetQuorumRequest* internal_default_instance() {
+    return reinterpret_cast<const ResetQuorumRequest*>(
+               &_ResetQuorumRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    122;
+
+  void Swap(ResetQuorumRequest* other);
+  friend void swap(ResetQuorumRequest& a, ResetQuorumRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline ResetQuorumRequest* New() const final {
+    return CreateMaybeMessage<ResetQuorumRequest>(NULL);
+  }
+
+  ResetQuorumRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ResetQuorumRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const ResetQuorumRequest& from);
+  void MergeFrom(const ResetQuorumRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ResetQuorumRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_range_id();
+  static const int kRangeIdFieldNumber = 1;
+  ::google::protobuf::int32 range_id() const;
+  void set_range_id(::google::protobuf::int32 value);
+
+  void clear_store_id();
+  static const int kStoreIdFieldNumber = 2;
+  ::google::protobuf::int32 store_id() const;
+  void set_store_id(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResetQuorumRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::int32 range_id_;
+  ::google::protobuf::int32 store_id_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class ResetQuorumResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ResetQuorumResponse) */ {
+ public:
+  ResetQuorumResponse();
+  virtual ~ResetQuorumResponse();
+
+  ResetQuorumResponse(const ResetQuorumResponse& from);
+
+  inline ResetQuorumResponse& operator=(const ResetQuorumResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  ResetQuorumResponse(ResetQuorumResponse&& from) noexcept
+    : ResetQuorumResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline ResetQuorumResponse& operator=(ResetQuorumResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ResetQuorumResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const ResetQuorumResponse* internal_default_instance() {
+    return reinterpret_cast<const ResetQuorumResponse*>(
+               &_ResetQuorumResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    123;
+
+  void Swap(ResetQuorumResponse* other);
+  friend void swap(ResetQuorumResponse& a, ResetQuorumResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline ResetQuorumResponse* New() const final {
+    return CreateMaybeMessage<ResetQuorumResponse>(NULL);
+  }
+
+  ResetQuorumResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ResetQuorumResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const ResetQuorumResponse& from);
+  void MergeFrom(const ResetQuorumResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ResetQuorumResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResetQuorumResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class GossipSubscriptionRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.GossipSubscriptionRequest) */ {
  public:
   GossipSubscriptionRequest();
@@ -17369,7 +17577,7 @@ class GossipSubscriptionRequest : public ::google::protobuf::MessageLite /* @@pr
                &_GossipSubscriptionRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    122;
+    124;
 
   void Swap(GossipSubscriptionRequest* other);
   friend void swap(GossipSubscriptionRequest& a, GossipSubscriptionRequest& b) {
@@ -17486,7 +17694,7 @@ class GossipSubscriptionEvent : public ::google::protobuf::MessageLite /* @@prot
                &_GossipSubscriptionEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    123;
+    125;
 
   void Swap(GossipSubscriptionEvent* other);
   friend void swap(GossipSubscriptionEvent& a, GossipSubscriptionEvent& b) {
@@ -17635,7 +17843,7 @@ class JoinNodeRequest : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_JoinNodeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    124;
+    126;
 
   void Swap(JoinNodeRequest* other);
   friend void swap(JoinNodeRequest& a, JoinNodeRequest& b) {
@@ -17742,7 +17950,7 @@ class JoinNodeResponse : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_JoinNodeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    125;
+    127;
 
   void Swap(JoinNodeResponse* other);
   friend void swap(JoinNodeResponse& a, JoinNodeResponse& b) {
@@ -36127,6 +36335,40 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
 
 // -------------------------------------------------------------------
 
+// ResetQuorumRequest
+
+inline void ResetQuorumRequest::clear_range_id() {
+  range_id_ = 0;
+}
+inline ::google::protobuf::int32 ResetQuorumRequest::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResetQuorumRequest.range_id)
+  return range_id_;
+}
+inline void ResetQuorumRequest::set_range_id(::google::protobuf::int32 value) {
+  
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ResetQuorumRequest.range_id)
+}
+
+inline void ResetQuorumRequest::clear_store_id() {
+  store_id_ = 0;
+}
+inline ::google::protobuf::int32 ResetQuorumRequest::store_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResetQuorumRequest.store_id)
+  return store_id_;
+}
+inline void ResetQuorumRequest::set_store_id(::google::protobuf::int32 value) {
+  
+  store_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ResetQuorumRequest.store_id)
+}
+
+// -------------------------------------------------------------------
+
+// ResetQuorumResponse
+
+// -------------------------------------------------------------------
+
 // GossipSubscriptionRequest
 
 // repeated string patterns = 1;
@@ -36588,6 +36830,10 @@ inline void JoinNodeResponse::set_allocated_active_version(::cockroach::roachpb:
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
