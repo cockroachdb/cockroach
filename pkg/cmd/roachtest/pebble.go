@@ -81,10 +81,20 @@ func registerPebble(r *testRegistry) {
 					" --duration=%s > ycsb.log 2>&1",
 				benchDir, dataTar, benchDir, workload, size, keys, initialKeys, cache, duration))
 
+			runCmd(fmt.Sprintf("tar cvPf profiles_%s.tar *.prof", workload))
+
 			dest := filepath.Join(t.artifactsDir, fmt.Sprintf("ycsb_%s.log", workload))
 			if err := c.Get(ctx, c.l, "ycsb.log", dest, c.All()); err != nil {
 				t.Fatal(err)
 			}
+
+			profilesName := fmt.Sprintf("profiles_%s.tar", workload)
+			dest = filepath.Join(t.artifactsDir, profilesName)
+			if err := c.Get(ctx, c.l, profilesName, dest, c.All()); err != nil {
+				t.Fatal(err)
+			}
+
+			runCmd(fmt.Sprintf("rm -fr *.prof"))
 		}
 	}
 
