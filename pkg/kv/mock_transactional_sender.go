@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -196,6 +197,11 @@ func (m *MockTransactionalSender) ConfigureStepping(context.Context, SteppingMod
 // GetSteppingMode is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetSteppingMode(context.Context) SteppingMode {
 	return SteppingDisabled
+}
+
+// NewChildTransaction is part of the TxnSender interface.
+func (m *MockTransactionalSender) NewChildTransaction() (id uuid.UUID, child TxnSender, _ error) {
+	panic("unimplemented")
 }
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
