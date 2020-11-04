@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -992,6 +994,107 @@ func (n *Node) RangeFeed(
 		})
 		return stream.Send(&event)
 	}
+	return nil
+}
+
+func (n *Node) ResetQuorum(
+	ctx context.Context, req *roachpb.ResetQuorumRequest,
+) (_ *roachpb.ResetQuorumResponse, rErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rErr = errors.Errorf("%v", r)
+		}
+	}()
+	// Get range descriptor for the input range id.
+	var desc roachpb.RangeDescriptor
+	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+			Key:    roachpb.KeyMin,
+			EndKey: roachpb.KeyMax,
+		})
+		if err != nil {
+			return err
+		}
+
+		for i := range kvs {
+			if err := kvs[i].Value.GetProto(&desc); err != nil {
+				return err
+			}
+			if desc.RangeID == roachpb.RangeID(req.RangeID) {
+				return nil
+			}
+		}
+		return errors.Errorf("r%d not found", req.RangeID)
+	}); err != nil {
+		return nil, err
+	}
+
+	// TODO (thesamhuang): Add safety checks here
+	// Should check: range has actually lost quorum (descriptor+view of liveness), range is not a metaX range
+	// desc.Replicas().CanMakeProgress(liveness)
+	if bytes.HasPrefix(desc.StartKey, keys.Meta1Prefix) || bytes.HasPrefix(desc.StartKey, keys.Meta2Prefix) {
+		return nil, errors.Errorf("targeted range to recover is a meta1 or meta2 range.")
+	}
+
+	// Update range descriptor and update meta ranges for the descriptor.
+	// Remove all (dead) replicas.
+	deadReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().All()...)
+	for _, rd := range deadReplicas {
+		desc.RemoveReplica(rd.NodeID, rd.StoreID)
+	}
+	// Add current node as new replica.
+	toReplicaDescriptor := desc.AddReplica(n.Descriptor.NodeID, roachpb.StoreID(req.StoreID), roachpb.VOTER_FULL)
+	// We should increment the generation so that the various
+	// caches will recognize this descriptor as newer. This
+	// may not be necessary, but it can't hurt.
+	desc.IncrementGeneration()
+
+	log.Infof(ctx, "starting recovery using desc %+v", desc)
+	// Update the meta2 entry. Note that we're intentionally
+	// eschewing updateRangeAddressing since the copy of the
+	// descriptor that resides on the range itself has lost quorum.
+	metaKey := keys.RangeMetaKey(desc.EndKey).AsRawKey()
+	// TODO (thesamhuang): change to conditional put (CPut)
+	if err := n.storeCfg.DB.Put(ctx, metaKey, &desc); err != nil {
+		return nil, err
+	}
+
+	// Call UnsafeHealRange to send a snapshot to the designated survivor.
+	if err := n.unsafeHealRange(ctx, n.Descriptor.NodeID, roachpb.StoreID(req.StoreID), desc, toReplicaDescriptor); err != nil {
+		return nil, err
+	}
+
+	return &roachpb.ResetQuorumResponse{}, nil
+}
+
+// unsafeHealRange takes a context, a NodeID, a StoreID, and a RangeDescriptor.
+// It removes all replicas from the range descriptor and adds itself (input NodeID)
+// as a full voter replica. Finally, it calls SendEmptySnapshot to send an empty
+// snapshot with this modified range descriptor to itself.
+//
+// By removing all unhealthy replicas and adding a designated survivor, we make
+// this range healthy again.
+func (n *Node) unsafeHealRange(
+	ctx context.Context, nodeID roachpb.NodeID, storeID roachpb.StoreID, desc roachpb.RangeDescriptor, to roachpb.ReplicaDescriptor,
+) error {
+	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
+	conn, err := n.storeCfg.NodeDialer.Dial(ctx, nodeID, rpc.SystemClass)
+	if err != nil {
+		return err
+	}
+
+	// Initialize and send an empty snapshot to self.
+	if err := kvserver.SendEmptySnapshot(
+		ctx,
+		n.storeCfg.Settings,
+		conn,
+		n.storeCfg.Clock.Now(),
+		desc,
+		to,
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 

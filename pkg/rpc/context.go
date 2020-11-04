@@ -476,6 +476,12 @@ func (a internalClientAdapter) Join(
 	return a.InternalServer.Join(ctx, req)
 }
 
+func (a internalClientAdapter) ResetQuorum(
+	ctx context.Context, req *roachpb.ResetQuorumRequest, _ ...grpc.CallOption,
+) (*roachpb.ResetQuorumResponse, error) {
+	return a.InternalServer.ResetQuorum(ctx, req)
+}
+
 type respStreamClientAdapter struct {
 	ctx   context.Context
 	respC chan interface{}
