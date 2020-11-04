@@ -587,9 +587,9 @@ func TestTraceDistSQL(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WithStatementTrace: func(sp *tracing.Span, stmt string) {
+					WithStatementTrace: func(trace tracing.Recording, stmt string) {
 						if stmt == countStmt {
-							recCh <- sp.GetRecording()
+							recCh <- trace
 						}
 					},
 				},
