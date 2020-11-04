@@ -354,6 +354,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// meantime, some other operation removed the same replica.
 		} else if resultIsError(t.Result, `remote failed to apply snapshot for reason failed to apply snapshot: raft group deleted`) {
 			// Probably should be transparently retried.
+		} else if resultIsError(t.Result, `remote failed to apply snapshot for reason failed to apply snapshot: .* cannot add placeholder, have an existing placeholder`) {
+			// Probably should be transparently retried.
 		} else if resultIsError(t.Result, `cannot apply snapshot: snapshot intersects existing range`) {
 			// Probably should be transparently retried.
 		} else if resultIsError(t.Result, `snapshot of type LEARNER was sent to .* which did not contain it as a replica`) {
