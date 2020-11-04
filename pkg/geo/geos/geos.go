@@ -953,3 +953,17 @@ func SharedPaths(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
 	}
 	return cStringToSafeGoBytes(cEWKB), nil
 }
+
+// Node returns a EWKB containing a set of linestrings using the least possible number of nodes while preserving all of the input ones.
+func Node(a geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	err = statusToError(C.CR_GEOS_Node(g, goToCSlice(a), &cEWKB))
+	if err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
