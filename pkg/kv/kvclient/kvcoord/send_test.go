@@ -67,6 +67,12 @@ func (n Node) Join(context.Context, *roachpb.JoinNodeRequest) (*roachpb.JoinNode
 	panic("unimplemented")
 }
 
+func (n Node) ResetQuorum(
+	context.Context, *roachpb.ResetQuorumRequest,
+) (*roachpb.ResetQuorumResponse, error) {
+	panic("unimplemented")
+}
+
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {

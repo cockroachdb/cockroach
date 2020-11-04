@@ -58,6 +58,12 @@ func (m *mockServer) GossipSubscription(
 	return m.gossipSubFn(req, stream)
 }
 
+func (*mockServer) ResetQuorum(
+	context.Context, *roachpb.ResetQuorumRequest,
+) (*roachpb.ResetQuorumResponse, error) {
+	panic("unimplemented")
+}
+
 func (*mockServer) Batch(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	panic("unimplemented")
 }
