@@ -129,8 +129,6 @@ type initDiskState struct {
 // same we do when `cockroach init`-ialized).
 type initState struct {
 	initDiskState
-
-	firstStoreID roachpb.StoreID
 }
 
 // NeedsInit is like needsInitLocked, except it acquires the necessary locks.
@@ -531,18 +529,47 @@ func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState
 		return nil, err
 	}
 
-	s.mu.Lock()
-	s.mu.inspectState.clusterID = clusterID
-	s.mu.inspectState.nodeID = roachpb.NodeID(resp.NodeID)
-	s.mu.inspectState.clusterVersion = clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
-	diskState := *s.mu.inspectState
-	s.mu.Unlock()
+	nodeID, storeID := roachpb.NodeID(resp.NodeID), roachpb.StoreID(resp.StoreID)
+	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
 
-	state := &initState{
-		initDiskState: diskState,
-		firstStoreID:  roachpb.StoreID(resp.StoreID),
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.mu.inspectState.clusterID = clusterID
+	s.mu.inspectState.nodeID = nodeID
+	s.mu.inspectState.clusterVersion = clusterVersion
+
+	if len(s.mu.inspectState.uninitializedEngines) < 1 {
+		log.Fatal(ctx, "expected to find at least one uninitialized engine")
 	}
 
+	// We initialize the very first store here, using the store ID handed to us.
+	sIdent := roachpb.StoreIdent{
+		ClusterID: clusterID,
+		NodeID:    nodeID,
+		StoreID:   storeID,
+	}
+
+	firstEngine := s.mu.inspectState.uninitializedEngines[0]
+	if err := kvserver.InitEngine(ctx, firstEngine, sIdent); err != nil {
+		return nil, err
+	}
+
+	// We construct the appropriate initState to indicate that we've initialized
+	// the first engine. We similarly trim it off the uninitializedEngines list
+	// so that when initializing auxiliary stores, if any, we know to avoid
+	// re-initializing the first store.
+	initializedEngines := []storage.Engine{firstEngine}
+	uninitializedEngines := s.mu.inspectState.uninitializedEngines[1:]
+	state := &initState{
+		initDiskState: initDiskState{
+			nodeID:               nodeID,
+			clusterID:            clusterID,
+			clusterVersion:       clusterVersion,
+			initializedEngines:   initializedEngines,
+			uninitializedEngines: uninitializedEngines,
+		},
+	}
 	return state, nil
 }
 
