@@ -1577,3 +1577,89 @@ var _ error = OnePCNotAllowedError{}
 func (OnePCNotAllowedError) Error() string {
 	return "could not commit in one phase as requested"
 }
+
+// ChildTxn executes retryable in the context of a distributed transaction. The
+// transaction is automatically aborted if retryable returns any error aside
+// from recoverable internal errors, and is automatically committed
+// otherwise. The retryable function should have no side effects which could
+// cause problems in the event it must be run more than once.
+//
+// If the child transaction commits, the parent transaction will be pushed to
+// the commit timestamp of the child. This means that if the child transaction
+// is not pushed, the parent won't be.
+//
+// Use of this method has rules:
+//
+//   - No concurrent operations may be performed on the parent transaction.
+//   - The child transaction must not invalidate any reads of the parent.
+//     If it does, the parent will not be able to commit. In cases where the
+//     parent is reading large volumes of data, its read set may be compressed
+//     so the child should not write over any keys which may overlap with this
+//     compressed set.
+//   - The child transaction must not attempt to write to any key that the
+//     parent has written to or acquired an exclusive lock on. Doing so will
+//     result in an assertion failure error in the lock table.
+//   - The child may encounter writes of its ancestors and will read them as
+//     though they are committed values.
+//   - The child may not acquire exclusive locks over existing locks held by
+//     any of its ancestors.
+//
+// Some notes:
+//
+//   - The child transaction may commit even if the parent is aborted, however
+//     if the parent is aborted during deadlock detection and the child observes
+//     that it has been aborted, the child will also be aborted and the parent
+//     will encounter a retry.
+//   - Transactions with fixed timestamps may not be used with child
+//     transactions. Child transactions need to be able to move the commit
+//     timestamp of the parent.
+//   - The child may commit values which the parent subsequently reads. This is
+//     fine and can be desirable.
+//
+// TODO(ajwerner): Add a flag to indicate whether this child intends to read its
+// parents writes. In some use cases this is desirable but in many, if not most,
+// it should be disallowed. Ideally we'd have a flag to opt in to reading the
+// ancestor's writes, and, if not set, would result in an assertion failure
+// error.
+func (txn *Txn) ChildTxn(
+	ctx context.Context, retryable func(_ context.Context, childTxn *Txn) error,
+) error {
+
+	// TODO(ajwerner): Validate the state of the parent transaction. It should be
+	// open (non-terminal), and a root transaction at the very least.
+
+	var childTxn *Txn
+	{
+		childID, childSender, err := txn.Sender().NewChildTransaction()
+		if err != nil {
+			return err
+		}
+		childTxn = &Txn{
+			typ:           RootTxn,
+			gatewayNodeID: txn.gatewayNodeID,
+			db:            txn.db,
+		}
+		childTxn.mu.ID = childID
+		childTxn.mu.userPriority = txn.UserPriority()
+		childTxn.mu.sender = childSender
+	}
+	err := childTxn.exec(ctx, retryable)
+	if err != nil {
+		if rollbackErr := childTxn.Rollback(ctx); rollbackErr != nil {
+			return errors.CombineErrors(err, rollbackErr)
+		}
+	}
+
+	if paErr := (*kvpb.AncestorAbortedError)(nil); errors.As(err, &paErr) &&
+		paErr.AncestorTxn.ID == txn.ID() {
+		err = kvpb.NewTransactionRetryWithProtoRefreshError(
+			"child detected",
+			txn.ID(),
+			paErr.AncestorTxn)
+		return txn.UpdateStateOnRemoteRetryableErr(ctx, kvpb.NewError(err))
+
+	}
+	// TODO(ajwerner): Push the parent transaction to the commit timestamp of the
+	// child.
+	return err
+}

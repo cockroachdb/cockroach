@@ -33,8 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -834,4 +837,65 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+// TestChildTransactionMetadataPropagates is a very simple test to ensure
+// that requests issued in a child transaction carry the TxnMeta of the
+// parent.
+func TestChildTransactionMetadataPropagates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var state = struct {
+		syncutil.Mutex
+		childTxnUUID  uuid.UUID
+		parentTxnUUID uuid.UUID
+		called        bool
+	}{}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+						if request.Txn == nil {
+							return nil
+						}
+						state.Lock()
+						defer state.Unlock()
+						if state.childTxnUUID.Equal(uuid.UUID{}) {
+							return nil
+						}
+						if request.Txn.ID.Equal(state.childTxnUUID) {
+							if assert.NotNil(t, request.Txn.Parent) {
+								assert.Equal(t, state.parentTxnUUID, request.Txn.Parent.ID)
+								state.called = true
+							}
+						}
+						return nil
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratch := tc.ScratchRange(t)
+	// We want to create a transaction, then use it to create a child, then
+	// observe a child request carrying the parent's TxnMeta.
+	db := tc.Server(0).DB()
+	txn := db.NewTxn(ctx, "testing")
+	require.NoError(t, txn.ChildTxn(ctx, func(ctx context.Context, child *kv.Txn) error {
+		func() {
+			state.Lock()
+			defer state.Unlock()
+			state.parentTxnUUID = txn.ID()
+			state.childTxnUUID = child.ID()
+		}()
+
+		return child.Put(ctx, scratch, "foo")
+	}))
+	state.Lock()
+	defer state.Unlock()
+	require.True(t, state.called)
 }
