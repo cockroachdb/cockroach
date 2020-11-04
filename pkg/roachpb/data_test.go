@@ -531,6 +531,11 @@ var nonZeroTxn = Transaction{
 	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
 	CommitTimestampFixed: true,
 	IgnoredSeqNums:       []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
+	Parent: func() *Transaction {
+		t := MakeTransaction("foo", nil, MinUserPriority,
+			makeTS(20, 21), 1000, 1)
+		return &t
+	}(),
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -621,6 +626,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.IgnoredSeqNums = nil
 	expTxn5.WriteTooOld = false
 	expTxn5.CommitTimestampFixed = false
+	expTxn5.Parent = txn5.Parent
 	require.Equal(t, expTxn5, txn5)
 
 	// Updating a different transaction fatals.
@@ -731,6 +737,7 @@ func TestTransactionClone(t *testing.T) {
 		"LockSpans.EndKey",
 		"LockSpans.Key",
 		"ObservedTimestamps",
+		"Parent",
 		"TxnMeta.Key",
 	}
 	if !reflect.DeepEqual(expFields, fields) {

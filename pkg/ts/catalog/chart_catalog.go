@@ -479,6 +479,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.err.unsupportedrequesterrtype",
 					"distsender.rpc.err.writeintenterrtype",
 					"distsender.rpc.err.writetooolderrtype",
+					"distsender.rpc.err.ancestorabortederrtype",
 				},
 			},
 		},
