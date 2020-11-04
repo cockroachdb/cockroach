@@ -111,10 +111,10 @@ type initDiskState struct {
 	// TODO(tbg): see TODO above.
 	nodeID roachpb.NodeID
 	// All fields below are always set.
-	clusterID          uuid.UUID
-	clusterVersion     clusterversion.ClusterVersion
-	initializedEngines []storage.Engine
-	newEngines         []storage.Engine
+	clusterID            uuid.UUID
+	clusterVersion       clusterversion.ClusterVersion
+	initializedEngines   []storage.Engine
+	uninitializedEngines []storage.Engine
 }
 
 // initState contains the cluster and node IDs as well as the stores, from which
@@ -125,7 +125,7 @@ type initDiskState struct {
 // running server will be wholly reconstructed if reloading from disk. It
 // could if we always persisted any changes made to it back to disk. Right now
 // when initializing after a successful join attempt, we don't persist back the
-// disk state back to disk (we'd need to bootstrap the first store here, in the
+// disk state back to disk (we'd need to initialize the first store here, in the
 // same we do when `cockroach init`-ialized).
 type initState struct {
 	initDiskState
@@ -205,7 +205,7 @@ func (s *initServer) ServeAndWait(
 	}
 	s.mu.Unlock()
 
-	log.Info(ctx, "no stores bootstrapped")
+	log.Info(ctx, "no stores initialized")
 	log.Info(ctx, "awaiting `cockroach init` or join with an already initialized node")
 
 	joinCtx, cancelJoin := context.WithCancel(ctx)
@@ -549,11 +549,11 @@ func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState
 func (s *initServer) tryBootstrapLocked(ctx context.Context) (*initState, error) {
 	// We use our binary version to bootstrap the cluster.
 	cv := clusterversion.ClusterVersion{Version: s.config.binaryVersion}
-	if err := kvserver.WriteClusterVersionToEngines(ctx, s.mu.inspectState.newEngines, cv); err != nil {
+	if err := kvserver.WriteClusterVersionToEngines(ctx, s.mu.inspectState.uninitializedEngines, cv); err != nil {
 		return nil, err
 	}
 	return bootstrapCluster(
-		ctx, s.mu.inspectState.newEngines, &s.config.defaultZoneConfig, &s.config.defaultSystemZoneConfig,
+		ctx, s.mu.inspectState.uninitializedEngines, &s.config.defaultZoneConfig, &s.config.defaultSystemZoneConfig,
 	)
 }
 
