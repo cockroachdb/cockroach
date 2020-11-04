@@ -354,7 +354,6 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
 		{`SHOW SAVEPOINT STATUS ??`, `SHOW SAVEPOINT`},
-		{`SHOW LAST QUERY STATISTICS ??`, `SHOW LAST QUERY STATISTICS`},
 
 		{`SHOW RANGE ??`, `SHOW RANGE`},
 
