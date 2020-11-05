@@ -32,12 +32,10 @@ type flushSyncWriter interface {
 // user signal.
 func Flush() {
 	debugLog.lockAndFlushAndSync(true /*doSync*/)
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		// Some loggers (e.g. the audit log) want to keep all the files.
-		l.logger.lockAndFlushAndSync(true /*doSync*/)
-	}
+	_ = registry.iter(func(l *loggerT) error {
+		l.lockAndFlushAndSync(true /*doSync*/)
+		return nil
+	})
 }
 
 func init() {
@@ -89,11 +87,10 @@ func flushDaemon() {
 			debugLog.lockAndFlushAndSync(doSync)
 
 			// Flush the secondary logs.
-			secondaryLogRegistry.mu.Lock()
-			for _, l := range secondaryLogRegistry.mu.loggers {
-				l.logger.lockAndFlushAndSync(doSync)
-			}
-			secondaryLogRegistry.mu.Unlock()
+			_ = registry.iter(func(l *loggerT) error {
+				l.lockAndFlushAndSync(doSync)
+				return nil
+			})
 		}
 	}
 }
