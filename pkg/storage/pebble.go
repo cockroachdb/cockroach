@@ -724,15 +724,6 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 	return iter
 }
 
-// NewEngineIterator implements the Engine interface.
-func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
-	iter := newPebbleIterator(p.db, opts)
-	if iter == nil {
-		panic("couldn't create a new iterator")
-	}
-	return iter
-}
-
 // ApplyBatchRepr implements the Engine interface.
 func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 	// batch.SetRepr takes ownership of the underlying slice, so make a copy.
@@ -767,14 +758,6 @@ func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
 // ClearIntent implements the Engine interface.
 func (p *Pebble) ClearIntent(key roachpb.Key) error {
 	return p.clear(MVCCKey{Key: key})
-}
-
-// ClearEngineKey implements the Engine interface.
-func (p *Pebble) ClearEngineKey(key EngineKey) error {
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-	return p.db.Delete(key.Encode(), pebble.Sync)
 }
 
 func (p *Pebble) clear(key MVCCKey) error {
@@ -841,14 +824,6 @@ func (p *Pebble) PutUnversioned(key roachpb.Key, value []byte) error {
 // PutIntent implements the Engine interface.
 func (p *Pebble) PutIntent(key roachpb.Key, value []byte) error {
 	return p.put(MVCCKey{Key: key}, value)
-}
-
-// PutEngineKey implements the Engine interface.
-func (p *Pebble) PutEngineKey(key EngineKey, value []byte) error {
-	if len(key.Key) == 0 {
-		return emptyKeyError()
-	}
-	return p.db.Set(key.Encode(), value, pebble.Sync)
 }
 
 func (p *Pebble) put(key MVCCKey, value []byte) error {
@@ -1175,19 +1150,10 @@ func (p *Pebble) CreateCheckpoint(dir string) error {
 }
 
 type pebbleReadOnly struct {
-	parent *Pebble
-	// The iterator reuse optimization in pebbleReadOnly is for servicing a
-	// BatchRequest, such that the iterators get reused across different
-	// requests in the batch.
-	// Reuse iterators for {normal,prefix} x {MVCCKey,EngineKey} iteration. We
-	// need separate iterators for EngineKey and MVCCKey iteration since
-	// iterators that make separated locks/intents look as interleaved need to
-	// use both simultaneously.
-	prefixIter       pebbleIterator
-	normalIter       pebbleIterator
-	prefixEngineIter pebbleIterator
-	normalEngineIter pebbleIterator
-	closed           bool
+	parent     *Pebble
+	prefixIter pebbleIterator
+	normalIter pebbleIterator
+	closed     bool
 }
 
 var _ ReadWriter = &pebbleReadOnly{}
@@ -1199,8 +1165,6 @@ func (p *pebbleReadOnly) Close() {
 	p.closed = true
 	p.prefixIter.destroy()
 	p.normalIter.destroy()
-	p.prefixEngineIter.destroy()
-	p.normalEngineIter.destroy()
 }
 
 func (p *pebbleReadOnly) Closed() bool {
@@ -1243,7 +1207,6 @@ func (p *pebbleReadOnly) MVCCIterate(
 	return iterateOnReader(p, start, end, iterKind, f)
 }
 
-// NewMVCCIterator implements the Engine interface.
 func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
@@ -1257,31 +1220,6 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	iter := &p.normalIter
 	if opts.Prefix {
 		iter = &p.prefixIter
-	}
-	if iter.inuse {
-		panic("iterator already in use")
-	}
-
-	if iter.iter != nil {
-		iter.setOptions(opts)
-	} else {
-		iter.init(p.parent.db, opts)
-		iter.reusable = true
-	}
-
-	iter.inuse = true
-	return iter
-}
-
-// NewEngineIterator implements the Engine interface.
-func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
-	if p.closed {
-		panic("using a closed pebbleReadOnly")
-	}
-
-	iter := &p.normalEngineIter
-	if opts.Prefix {
-		iter = &p.prefixEngineIter
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -1318,10 +1256,6 @@ func (p *pebbleReadOnly) ClearIntent(key roachpb.Key) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearEngineKey(key EngineKey) error {
-	panic("not implemented")
-}
-
 func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key) error {
 	panic("not implemented")
 }
@@ -1351,10 +1285,6 @@ func (p *pebbleReadOnly) PutUnversioned(key roachpb.Key, value []byte) error {
 }
 
 func (p *pebbleReadOnly) PutIntent(key roachpb.Key, value []byte) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) PutEngineKey(key EngineKey, value []byte) error {
 	panic("not implemented")
 }
 
@@ -1448,11 +1378,6 @@ func (p *pebbleSnapshot) MVCCIterate(
 
 // NewMVCCIterator implements the Reader interface.
 func (p pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
-	return newPebbleIterator(p.snapshot, opts)
-}
-
-// NewEngineIterator implements the Reader interface.
-func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
 	return newPebbleIterator(p.snapshot, opts)
 }
 

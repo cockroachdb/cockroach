@@ -86,19 +86,15 @@ func ClearRange(
 	// instead of using a range tombstone (inefficient for small ranges).
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
-		iter := readWriter.NewEngineIterator(storage.IterOptions{UpperBound: to})
-		valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: from})
-		for ; valid; valid, err = iter.NextEngineKey() {
-			var k storage.EngineKey
-			if k, err = iter.UnsafeEngineKey(); err != nil {
-				break
+		if err := readWriter.MVCCIterate(from, to, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+			if kv.Key.Timestamp.IsEmpty() {
+				// It can be an intent or an inline MVCCMetadata -- we have no idea.
+				// TODO(sumeer): cannot clear separated intents in this manner. Write the iteration code
+				// here instead of using Reader.MVCCIterate.
+				return readWriter.ClearUnversioned(kv.Key.Key)
 			}
-			if err = readWriter.ClearEngineKey(k); err != nil {
-				return result.Result{}, err
-			}
-		}
-		iter.Close()
-		if err != nil {
+			return readWriter.ClearMVCC(kv.Key)
+		}); err != nil {
 			return result.Result{}, err
 		}
 		return pd, nil

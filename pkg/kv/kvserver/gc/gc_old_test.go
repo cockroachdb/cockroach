@@ -50,7 +50,7 @@ func runGCOld(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 ) (Info, error) {
 
-	iter := rditer.NewReplicaMVCCDataIterator(desc, snap,
+	iter := rditer.NewReplicaDataIterator(desc, snap,
 		true /* replicatedOnly */, false /* seekEnd */)
 	defer iter.Close()
 

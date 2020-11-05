@@ -442,7 +442,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		iter := cpEng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: []byte("\xff")})
 		defer iter.Close()
 
-		ms, err := storage.ComputeStatsForRange(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)
+		ms, err := storage.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)
 		assert.NoError(t, err)
 
 		assert.NotZero(t, ms.KeyBytes)
