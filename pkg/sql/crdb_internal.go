@@ -175,10 +175,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
 
 		node := p.ExecCfg().NodeInfo
 
-		dNodeID := tree.DNull
-		if nodeID, ok := node.NodeID.OptionalNodeID(); ok {
-			dNodeID = tree.NewDInt(tree.DInt(nodeID))
-		}
+		nodeID, _ := node.NodeID.OptionalNodeID() // zero if not available
 		dbURL, err := node.PGURL(url.User(security.RootUser))
 		if err != nil {
 			return err
@@ -208,7 +205,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
 			} {
 				k, v := kv[0], kv[1]
 				if err := addRow(
-					dNodeID,
+					tree.NewDInt(tree.DInt(nodeID)),
 					tree.NewDString(item.component),
 					tree.NewDString(k),
 					tree.NewDString(v),
@@ -501,10 +498,7 @@ CREATE TABLE crdb_internal.leases (
 	populate: func(
 		ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error,
 	) (err error) {
-		dNodeID := tree.DNull
-		if nodeID, ok := p.execCfg.NodeID.OptionalNodeID(); ok {
-			dNodeID = tree.NewDInt(tree.DInt(nodeID))
-		}
+		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 		p.LeaseMgr().VisitLeases(func(desc catalog.Descriptor, dropped bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
 			if p.CheckAnyPrivilege(ctx, desc) != nil {
 				// TODO(ajwerner): inspect what type of error got returned.
@@ -512,7 +506,7 @@ CREATE TABLE crdb_internal.leases (
 			}
 
 			err = addRow(
-				dNodeID,
+				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDInt(tree.DInt(int64(desc.GetID()))),
 				tree.NewDString(desc.GetName()),
 				tree.NewDInt(tree.DInt(int64(desc.GetParentID()))),
