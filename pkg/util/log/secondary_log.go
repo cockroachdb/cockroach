@@ -20,8 +20,7 @@ import (
 // whose logging events go to a different file than the main logging
 // facility.
 type SecondaryLogger struct {
-	logger          loggerT
-	forceSyncWrites bool
+	logger loggerT
 }
 
 var secondaryLogRegistry struct {
@@ -49,9 +48,6 @@ func NewSecondaryLogger(
 	forceSyncWrites bool,
 	enableMsgCount bool,
 ) *SecondaryLogger {
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
-
 	// Any consumption of configuration off the main logger
 	// makes the logging module "active" and prevents further
 	// configuration changes.
@@ -62,21 +58,21 @@ func NewSecondaryLogger(
 		dir = dirName.String()
 	}
 	if dir == "" {
-		dir = mainLog.logDir.String()
+		dir = logging.logDir.String()
 	}
 	l := &SecondaryLogger{
 		logger: loggerT{
-			logDir:          DirName{name: dir},
-			prefix:          program + "-" + fileNamePrefix,
-			fileThreshold:   Severity_INFO,
-			stderrThreshold: mainLog.stderrThreshold.get(),
-			logCounter:      EntryCounter{EnableMsgCount: enableMsgCount},
-			gcNotify:        make(chan struct{}, 1),
+			logDir:                  DirName{name: dir},
+			prefix:                  program + "-" + fileNamePrefix,
+			fileThreshold:           Severity_INFO,
+			logFileMaxSize:          logging.logFileMaxSize,
+			logFilesCombinedMaxSize: logging.logFilesCombinedMaxSize,
+			logCounter:              EntryCounter{EnableMsgCount: enableMsgCount},
+			gcNotify:                make(chan struct{}, 1),
+			syncWrites:              forceSyncWrites,
 		},
-		forceSyncWrites: forceSyncWrites,
 	}
-	l.logger.redactableLogs.Set(mainLog.redactableLogs.Get())
-	l.logger.mu.syncWrites = forceSyncWrites || mainLog.mu.syncWrites
+	l.logger.redactableLogs.Set(logging.redactableLogs)
 
 	// Ensure the registry knows about this logger.
 	secondaryLogRegistry.mu.Lock()
