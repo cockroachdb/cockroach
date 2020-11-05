@@ -20,7 +20,6 @@ go_library(
         "log_entry.go",
         "log_flush.go",
         "log_gc.go",
-        "loggers.go",
         "redact.go",
         "registry.go",
         "secondary_log.go",
