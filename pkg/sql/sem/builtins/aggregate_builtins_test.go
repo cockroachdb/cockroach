@@ -331,6 +331,21 @@ func TestCovarSamp(t *testing.T) {
 	testRegressionAggregateFunctionResultDeepCopy(t, newCovarSampAggregate, newCovarSampAggregateDecimal)
 }
 
+func TestRegressionIntercept(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionInterceptAggregate, newRegressionInterceptAggregateDecimal)
+}
+
+func TestRegressionR2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionR2Aggregate, newRegressionR2AggregateDecimal)
+}
+
+func TestRegressionSlope(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionSlopeAggregate, newRegressionSlopeAggregateDecimal)
+}
+
 // testRegressionAggregateFunctionResultDeepCopy is a helper function
 // for testing regression aggregate functions.
 func testRegressionAggregateFunctionResultDeepCopy(
@@ -761,6 +776,18 @@ func BenchmarkCovarPopAggregate(b *testing.B) {
 
 func BenchmarkCovarSampAggregate(b *testing.B) {
 	runRegressionAggregateBenchmarks(b, newCovarSampAggregate, newCovarSampAggregateDecimal)
+}
+
+func BenchmarkRegressionInterceptAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionInterceptAggregate, newRegressionInterceptAggregateDecimal)
+}
+
+func BenchmarkRegressionR2Aggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionR2Aggregate, newRegressionR2AggregateDecimal)
+}
+
+func BenchmarkRegressionSlopeAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionSlopeAggregate, newRegressionSlopeAggregateDecimal)
 }
 
 // runRegressionAggregateBenchmarks is a helper function for running

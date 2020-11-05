@@ -181,6 +181,21 @@ var aggregates = map[string]builtinDefinition{
 		"Calculates the sample covariance of the selected values.",
 	),
 
+	"regr_intercept": makeRegressionAggregateBuiltin(
+		newRegressionInterceptAggregate, newRegressionInterceptAggregateDecimal,
+		"Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs.",
+	),
+
+	"regr_r2": makeRegressionAggregateBuiltin(
+		newRegressionR2Aggregate, newRegressionR2AggregateDecimal,
+		"Calculates square of the correlation coefficient.",
+	),
+
+	"regr_slope": makeRegressionAggregateBuiltin(
+		newRegressionSlopeAggregate, newRegressionSlopeAggregateDecimal,
+		"Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs.",
+	),
+
 	"count": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements.", tree.VolatilityImmutable),
@@ -2238,6 +2253,195 @@ func (a *covarSampAggregateDecimal) Result() (tree.Datum, error) {
 
 	dd := &tree.DDecimal{}
 	a.ed.Quo(&dd.Decimal, &a.sxy, a.ed.Sub(&a.tmp, &a.n, decimalOne))
+	// Remove trailing zeros. Depending on the order in which the input
+	// is processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of order.
+	dd.Decimal.Reduce(&dd.Decimal)
+	return dd, a.ed.Err()
+}
+
+// regressionInterceptAggregate represents y-intercept for Ints and Floats.
+type regressionInterceptAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionInterceptAggregate(
+	[]*types.T, *tree.EvalContext, tree.Datums,
+) tree.AggregateFunc {
+	return &regressionInterceptAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionInterceptAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat((a.sy - a.sx*a.sxy/a.sxx) / a.n)), nil
+}
+
+// regressionInterceptAggregateDecimal represents y-intercept for Decimals.
+type regressionInterceptAggregateDecimal struct {
+	regressionAccumulatorDecimalBase
+}
+
+func newRegressionInterceptAggregateDecimal(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionInterceptAggregateDecimal{
+		newRegressionAccumulatorDecimalBase(ctx),
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionInterceptAggregateDecimal) Result() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+
+	if a.sxx.Cmp(decimalZero) == 0 {
+		return tree.DNull, nil
+	}
+
+	dd := &tree.DDecimal{}
+	a.ed.Quo(
+		&dd.Decimal,
+		a.ed.Sub(
+			&a.tmp,
+			&a.sy,
+			a.ed.Mul(&a.tmp, &a.sx, a.ed.Quo(&a.tmp, &a.sxy, &a.sxx)),
+		),
+		&a.n,
+	)
+	// Remove trailing zeros. Depending on the order in which the input
+	// is processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of order.
+	dd.Decimal.Reduce(&dd.Decimal)
+	return dd, a.ed.Err()
+}
+
+// regressionR2Aggregate represents square of the correlation coefficient
+// for Ints and Floats.
+type regressionR2Aggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionR2Aggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionR2Aggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionR2Aggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+	if a.syy == 0 {
+		return tree.NewDFloat(tree.DFloat(1.0)), nil
+	}
+
+	return tree.NewDFloat(tree.DFloat((a.sxy * a.sxy) / (a.sxx * a.syy))), nil
+}
+
+// regressionR2AggregateDecimal represents square of the correlation coefficient
+// for Decimals.
+type regressionR2AggregateDecimal struct {
+	regressionAccumulatorDecimalBase
+}
+
+func newRegressionR2AggregateDecimal(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionR2AggregateDecimal{
+		newRegressionAccumulatorDecimalBase(ctx),
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionR2AggregateDecimal) Result() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+	if a.sxx.Cmp(decimalZero) == 0 {
+		return tree.DNull, nil
+	}
+
+	dd := &tree.DDecimal{}
+
+	if a.syy.Cmp(decimalZero) == 0 {
+		dd.SetInt64(1)
+		return dd, nil
+	}
+
+	a.ed.Mul(
+		&dd.Decimal,
+		&a.sxy,
+		a.ed.Quo(
+			&a.tmp,
+			&a.sxy,
+			a.ed.Mul(&a.tmp, &a.sxx, &a.syy),
+		),
+	)
+	// Remove trailing zeros. Depending on the order in which the input
+	// is processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of order.
+	dd.Decimal.Reduce(&dd.Decimal)
+	return dd, a.ed.Err()
+}
+
+// regressionSlopeAggregate represents slope of the least-squares-fit linear
+// equation determined by the (X, Y) pairs for Ints and Floats.
+type regressionSlopeAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSlopeAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSlopeAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSlopeAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxy / a.sxx)), nil
+}
+
+// regressionSlopeAggregateDecimal represents slope of the least-squares-fit
+// linear equation determined by the (X, Y) pairs for Decimals.
+type regressionSlopeAggregateDecimal struct {
+	regressionAccumulatorDecimalBase
+}
+
+func newRegressionSlopeAggregateDecimal(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionSlopeAggregateDecimal{
+		newRegressionAccumulatorDecimalBase(ctx),
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSlopeAggregateDecimal) Result() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+
+	if a.sxx.Cmp(decimalZero) == 0 {
+		return tree.DNull, nil
+	}
+
+	dd := &tree.DDecimal{}
+	a.ed.Quo(&dd.Decimal, &a.sxy, &a.sxx)
 	// Remove trailing zeros. Depending on the order in which the input
 	// is processed, some number of trailing zeros could be added to the
 	// output. Remove them so that the results are the same regardless of order.
